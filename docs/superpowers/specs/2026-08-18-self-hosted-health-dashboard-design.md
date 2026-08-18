@@ -129,8 +129,15 @@ Three tiers, distinguished by whether they are truth or cache.
 
 ### Tier 3 - rollups
 
-- `daily` - person, local_date, metric, source (or `merged`), value, coverage,
+- `daily` - person, local_date, metric, **aggregate**, source (or `merged`), value, coverage,
   derivation_version.
+
+  The `aggregate` dimension is not optional detail: a heart-rate card shows minimum, mean and
+  maximum for the same day, and sleep carries duration, efficiency and per-stage totals. One
+  value per metric per day cannot express that. Aggregates are drawn from a fixed set (`min`,
+  `mean`, `max`, `last`, `sum`, `count`, `p50`, and stage- or phase-specific totals), and the
+  metric catalogue declares which are meaningful for each metric - summing heart rate is
+  meaningless, averaging steps across a day is not what anyone means by "steps".
 
 ### Sync bookkeeping
 
@@ -264,7 +271,10 @@ and any merge decision can be inspected against the untouched per-source data.
 Pure functions over rows, fixture-tested, stamped with `derivation_version`. A version bump
 triggers an automatic rebuild on boot.
 
-- **Daily rollups** per metric, computed per source and as `merged`, each with coverage.
+- **Daily rollups** per metric and aggregate, computed per source and as `merged`, each with
+  coverage. The metric catalogue is one module declaring, per metric, its unit, its meaningful
+  aggregates, and its display precision - including nutrition (calories, macronutrients, water)
+  and weight (value, trend), which otherwise tend to get bolted on inconsistently.
 - **Sleep**: stage durations, efficiency, bed and wake times, and nap detection (short sessions
   outside the person's main sleep window; thresholds configurable).
 - **Recovery**: resting heart rate, HRV, breathing rate.
@@ -339,16 +349,36 @@ a prev/next date stepper with calendar picker, the source selector, raw data dow
 manual sync. Every page resolves to the same (person, metric, range, sources) tuple, so this
 belongs in one component rather than per page.
 
-Chart set, drawn from what the data supports: intraday heart rate with a min-max band; SpO2 with
-confidence interval and sample count; sleep duration trend; a bed/wake schedule chart plotting
-each night as a span; the hypnogram as a step chart; activity heatmap; weight trend; KPI cards
-with sparklines; and insight cards.
+Chart set, drawn from what the data supports: intraday heart rate with a min-max band; a daily
+min/mean/max heart-rate series for period views; SpO2 with confidence interval and sample count;
+sleep duration trend; a bed/wake schedule chart plotting each night as a span, with detected
+naps marked on the same axis; the hypnogram as a step chart with per-stage totals; workout
+sessions as counts and total duration; activity heatmap; weight trend; KPI cards with
+sparklines; and insight cards phrased as a period-over-period delta.
 
 Daily notes and typed events surface as annotations on charts, so an unusual metric carries its
 context. Where a baseline exists, charts draw it as a band behind the series, turning an
 absolute reading into a relative one at a glance. Overridden points render as excluded rather
 than vanishing, with their reason on hover, so corrections stay visible instead of silently
 rewriting history.
+
+**UI conventions**, applied across every page rather than decided per card:
+
+- **Every headline number states its basis.** "7 h 25" is followed by "average over 29 nights,
+  July"; an SpO2 reading by its confidence interval and sample count; a recovery figure by "last
+  recorded value". This is the visual counterpart of the coverage invariant - a number whose
+  basis is unstated invites a conclusion the data may not support.
+- **Empty states are distinct and explicit.** "No naps detected in this period" is a different
+  statement from "device not worn" and from "insufficient data to summarise". Each renders
+  differently; none renders as zero or as a blank chart.
+- **Cards carry their own controls where the control is card-specific** - a min/max band toggle
+  on the heart-rate chart, a source selector on a card whose sources differ from the page
+  default - while the page control row holds what applies to the whole page.
+- **Dashboard cards deep-link to their detail page** ("view sleep", "view all activity"), so the
+  dashboard reads as a set of entry points rather than a terminus.
+- The navigation rail is collapsible to an icon strip, since chart pages benefit from the width.
+- A resources section links to the documentation, the changelog and the issue tracker. A
+  self-hosted tool has no in-app feedback channel and needs none.
 
 Theming via CSS custom properties. Strings are extracted for i18n from the start, shipping
 English and Dutch.
