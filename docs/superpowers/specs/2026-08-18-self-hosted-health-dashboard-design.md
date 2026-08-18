@@ -66,7 +66,7 @@ which lets an agent investigate long-range questions with real queries instead o
 | Stack | TypeScript monorepo, our own API client |
 | v1 emphasis | Ingest + store + genuinely good dashboard; MCP and CLI included as thin layers |
 | Storage strategy | Local mirror (raw archive + derived tables), not passthrough |
-| Database | SQLite (WAL) |
+| Database | SQLite (WAL), `better-sqlite3` - rationale and alternatives considered in section 6 |
 
 The passthrough model common to hosted dashboards (fetch per request, persist nothing) was
 considered and rejected. It is a coherent privacy stance for a hosted service, but on a
@@ -135,6 +135,42 @@ Three tiers, distinguished by whether they are truth or cache.
 ### Sync bookkeeping
 
 - `sync_state` - person, data type, high-water mark, last success, last error.
+
+### Storage engine rationale
+
+The workload is analytics-shaped, so SQLite deserves justification rather than assumption.
+
+**Why SQLite:** the topology decides it. Four processes touch the database - the server writing
+during sync, the MCP server (separate process, stdio), the CLI, and rebuilds. SQLite in WAL mode
+supports concurrent readers alongside a single writer across processes. DuckDB, despite far
+better aggregate performance, takes a single read-write process lock: an MCP query would fail
+while a sync was running, or the MCP server would have to proxy through HTTP and lose the direct
+SQL that makes `sql_query` worth having. Postgres or Timescale would win on concurrency and
+analytic SQL and lose the one file, no daemon, no ops property that a self-hosted tool depends
+on most.
+
+**Why the volume is manageable:** roughly 3.2M sample rows per person-year at 1-minute
+granularity across six intraday metrics, so five people over five years is on the order of 80M
+rows. That is only a problem if scanned. Tier 3 exists so the dashboard reads `daily` - a few
+thousand rows per person-year - and sample-level access is confined to a single day or night
+(~8 600 rows). The rollup design is what makes a row store the right call.
+
+**Consequences for implementation:**
+
+1. **Raw payload bodies are compressed** (gzip or zstd), or stored on disk with metadata in the
+   database. The JSON archive will otherwise dominate file size, likely exceeding all derived
+   tables combined.
+2. **The schema stays DuckDB-friendly** - integer timestamps, narrow types, no exotic
+   collations. DuckDB reads SQLite files directly through `sqlite_scanner`, so if agent SQL over
+   sample-level data ever becomes slow, DuckDB can be attached read-only for analytics while
+   SQLite remains the system of record. No migration and no format change. This escape hatch is
+   nearly free to preserve now and expensive to retrofit later.
+3. **Driver:** `better-sqlite3` (synchronous, fast, mature). Node 22's built-in `node:sqlite` is
+   the fallback if native builds prove awkward in Docker.
+
+**To verify in M1:** if the API returns intraday data at finer than 1-minute resolution for any
+metric, these estimates shift by an order of magnitude and a per-metric downsampling policy
+becomes a real decision. Measure against real payloads rather than assuming.
 
 ### Invariants
 
@@ -422,6 +458,10 @@ turns out to be more useful sooner than the charts.
    rather than stored, corrections are cheap.
 5. **Naming.** The product must not be called "Google Health <something>"; trademark exposure
    for no benefit. Positioning is "works with Google Health and Fitbit".
+6. **Intraday resolution and storage sizing.** Sizing assumes 1-minute granularity. Finer
+   resolution on any metric shifts volume by an order of magnitude and forces a per-metric
+   downsampling decision. Measured in M1 against real payloads; the DuckDB escape hatch in
+   section 6 bounds the consequences.
 
 ## 18. Deferred
 
