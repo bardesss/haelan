@@ -527,6 +527,7 @@ Initial values, recorded as a starting point rather than a fixed decision:
 | Surface - page / card / border | `#0A0E17` / `#121926` / `rgba(255,255,255,.06)` |
 | Text - primary / muted | `#EAF0FB` / `#7F8DA8` |
 | Accent | `#4F8FF7` |
+| Active navigation | tinted surface `rgba(79,143,247,.13)` with an accent icon, no leading stripe |
 
 ### Token system
 
