@@ -438,7 +438,31 @@ Test-driven throughout.
 - Binds to localhost or LAN. Reverse proxy or Tailscale for remote access.
 - No telemetry of any kind.
 
-## 16. Implementation milestones
+## 16. Offline operation
+
+The instance is not expected to be online. It must work through a flight, a dead router, an
+expired token or a month with no sync at all, degrading only in freshness.
+
+- **Every surface works offline.** Dashboard, CLI and MCP read from local SQLite. The only
+  component that needs the network is the sync worker.
+- **No third-party runtime dependencies.** Fonts, scripts, styles and icons are bundled and
+  served locally. No CDN, no external font host, no analytics, no license or update check. A
+  page that silently needs the internet to render correctly is not self-hosted.
+- **Sync failure is a state, not an error.** The UI shows what it has plus "last synced 4 days
+  ago". No error pages, no blocking modals, no retry walls.
+- **Offline is displayed, not hidden.** A stale instance says so, so nobody reads a three-day-old
+  number as today's.
+- **Nothing depends on network time.** Day boundaries and derivations use the local clock and
+  the person's timezone.
+- **Catching up is ordinary.** After an offline stretch, sync resumes from `sync_state` and
+  backfills the gap. The trailing re-fetch window means data that arrived late while the
+  instance was down is still collected.
+
+One genuine limit worth stating: refresh tokens expire after six months unused, so an instance
+offline for that long needs re-consent before syncing again. Local history stays readable
+throughout.
+
+## 17. Implementation milestones
 
 This design is larger than one implementation plan. It decomposes into milestones that each
 end at something usable, and each gets its own plan.
@@ -537,7 +561,7 @@ it costs little now and considerably more later.
 
 D1's output is the input to M3. M3 implements the design; it does not invent it.
 
-## 17. Risks and verification tasks
+## 18. Risks and verification tasks
 
 1. **Scope classification and token lifetime** (section 7). Verify first; it determines whether
    the household re-consents weekly or effectively never, and it shapes the setup guide.
@@ -556,7 +580,16 @@ D1's output is the input to M3. M3 implements the design; it does not invent it.
    downsampling decision. Measured in M1 against real payloads; the DuckDB escape hatch in
    section 6 bounds the consequences.
 
-## 18. Deferred
+## 19. Project conventions
+
+- **No em dashes** anywhere: prose, documentation, UI copy, code comments, commit messages.
+- **Comments are sparse and explain why, not what.** Name things well enough that the code
+  carries itself. A comment earns its place when it records a decision, a constraint or a
+  non-obvious reason, and nowhere else. Readers of an open source project judge it by how much
+  explanation the code needs.
+- Public interfaces are documented at their boundary rather than line by line.
+
+## 20. Deferred
 
 Deliberately out of v1, recorded here because the architecture is chosen so they stay cheap
 later rather than requiring rework.
