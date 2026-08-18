@@ -12,30 +12,31 @@ Fitbit endpoints into roughly 40 data-type bundles, and shares no field paths wi
 schema. Anyone building on Fitbit data is rewriting regardless, which makes this a good moment
 to start clean.
 
-The immediate prompt for this project is Lumida, a well-executed closed-source hosted dashboard
-for the same data. Its author documented the structural problem publicly: signups are capped at
-**100 users**, because that is Google's limit for OAuth clients that have not cleared
-verification, and clearing it can require a paid third-party CASA security audit that a free
-side project cannot fund.
+Third-party hosted dashboards for this data run into a structural ceiling. A hosted service
+authorises many people against one OAuth client, and Google caps clients that have not cleared
+verification at **100 users**. Clearing verification can require a paid third-party CASA
+security audit, which is out of reach for a free or small project - so these dashboards stall at
+a hundred signups regardless of how good they are.
 
-That cap is not a flaw in Lumida. It is what happens when one hosted client fans out to many
-people's accounts. **Self-hosting removes the condition that creates it:** when an instance's
-only users are the people who own the OAuth client, there is no verification to clear and no
-cap to hit. This is the central architectural argument of the project, and it carries one
-binding consequence:
+That ceiling is not a defect in any particular product. It is what happens when one hosted
+client fans out to many people's accounts. **Self-hosting removes the condition that creates
+it:** when an instance's only users are the people who own the OAuth client, there is no
+verification to clear and no cap to hit. This is the central architectural argument of the
+project, and it carries one binding consequence:
 
 > We must never operate a shared hosted instance. Doing so would inherit the exact constraint
 > this design exists to avoid.
 
-The second motivation is the agent surface. Lumida ships a CLI that can pipe data into an LLM.
-We go further with a **Model Context Protocol server over a complete local history**, which
-lets an agent investigate long-range questions with real queries instead of guesses.
+The second motivation is the agent surface. Existing tools at best pipe a snapshot of data into
+an LLM. We go further with a **Model Context Protocol server over a complete local history**,
+which lets an agent investigate long-range questions with real queries instead of guesses.
 
 ## 2. Goals
 
-1. A self-hosted dashboard whose visual and functional quality is comparable to Lumida's:
-   activity, sleep with stages and nap detection, recovery (HRV, resting heart rate), SpO2,
-   weight, nutrition, daily notes, activity heatmap, period-over-period insights.
+1. A self-hosted dashboard that matches the visual and functional quality of the best hosted
+   dashboards for this data: activity, sleep with stages and nap detection, recovery (HRV,
+   resting heart rate), SpO2, weight, nutrition, daily notes, activity heatmap,
+   period-over-period insights.
 2. A complete local mirror of the owner's health history that outlives Google's retention
    windows and survives API changes or loss of access.
 3. Context and calibration that a stateless dashboard cannot provide: typed personal events,
@@ -67,8 +68,9 @@ lets an agent investigate long-range questions with real queries instead of gues
 | Storage strategy | Local mirror (raw archive + derived tables), not passthrough |
 | Database | SQLite (WAL) |
 
-The passthrough model Lumida uses (fetch per request, persist nothing) was considered and
-rejected. It is a coherent privacy stance for a hosted service, but on a self-hosted box the
+The passthrough model common to hosted dashboards (fetch per request, persist nothing) was
+considered and rejected. It is a coherent privacy stance for a hosted service, but on a
+self-hosted box the
 rationale dissolves: the owner already is the database. Passthrough would buy a slower
 dashboard, exposure to rate limits, no history beyond the API window, no offline use, and
 expensive agent queries.
@@ -202,8 +204,9 @@ Per (person, data type) jobs, with a high-water mark in `sync_state`.
 
 ## 9. Provenance and merge policy
 
-The hardest correctness problem in this domain, and the one Lumida's author singles out as the
-worst. The rule that makes it tractable is invariant 4: never merge on write. Merging happens at
+The hardest correctness problem in this domain, and the one developers building on this data
+consistently report as the worst. The rule that makes it tractable is invariant 4: never merge
+on write. Merging happens at
 derivation and query time, from a per-metric source priority list that the user can configure.
 
 - **Sum within a source, choose between sources.** Two devices reporting steps are chosen
