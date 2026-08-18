@@ -33,10 +33,11 @@ which lets an agent investigate long-range questions with real queries instead o
 
 ## 2. Goals
 
-1. A self-hosted dashboard that matches the visual and functional quality of the best hosted
+1. A self-hosted dashboard that matches the functional and visual quality of the best hosted
    dashboards for this data: activity, sleep with stages and nap detection, recovery (HRV,
    resting heart rate), SpO2, weight, nutrition, daily notes, activity heatmap,
-   period-over-period insights.
+   period-over-period insights. **The visual design is developed from scratch** - the quality
+   bar is borrowed, the design is not.
 2. A complete local mirror of the owner's health history that outlives Google's retention
    windows and survives API changes or loss of access.
 3. Context and calibration that a stateless dashboard cannot provide: typed personal events,
@@ -473,6 +474,23 @@ which is why they come after it rather than before.
 
 M0 must run before M1 is planned in detail. M4 could be pulled ahead of M3 if the agent surface
 turns out to be more useful sooner than the charts.
+
+### D1 - Visual direction (parallel track)
+
+Runs alongside M0 and M1 rather than in the milestone chain, because it depends on nothing the
+backend produces and the backend depends on nothing it produces. Sequencing it either before or
+after would idle one of the two, and ingestion has a clock on it (see M1).
+
+Deliverables: design tokens (palette, type scale, spacing, elevation) in light **and** dark; a
+chart styling specification covering series colours, axis and grid treatment, tooltips, the
+basis line, empty and excluded states, and baseline bands; and two static reference pages -
+Dashboard and Sleep - built on hardcoded fixtures with no data layer.
+
+Two constraints the design must satisfy rather than discover: a **colour-blind-safe categorical
+palette**, since four sleep stages are colour-coded and read daily; and contrast that holds in
+both themes, verified rather than eyeballed.
+
+D1's output is the input to M3. M3 implements the design; it does not invent it.
 
 ## 17. Risks and verification tasks
 
