@@ -274,6 +274,12 @@ Two rules for this surface:
   discipline belongs in the tool contract, where every agent inherits it, rather than in a
   document nobody reads.
 
+**The MCP session is bound to exactly one person.** A stdio server is configured for a person; a
+bearer token belongs to a person. Every view the SQL surface can reach is filtered to that
+person, so `sql_query` cannot become a path around the account isolation in section 15. The
+binding is enforced in the query layer rather than by convention in the tool implementations,
+because a tool that forgets a `WHERE` clause must not be able to leak another member's data.
+
 Transport: stdio for local agents; optional bearer-token HTTP for remote ones. The documentation
 must state plainly that pointing an LLM at this sends health data to that agent's model
 provider. Self-hosting the store does not self-host the model.
@@ -347,7 +353,8 @@ Test-driven throughout.
   overridden points. Property
   tests are the right tool here because the failure mode is silently wrong numbers rather than
   crashes.
-- **Integration tests** against a temporary SQLite database.
+- **Integration tests** against a temporary SQLite database, including a person-isolation suite:
+  no surface - HTTP, MCP tools, `sql_query`, or CLI - can return another person's rows.
 - **End-to-end tests** (Playwright) against demo mode.
 
 ## 15. Operations and security
@@ -355,9 +362,12 @@ Test-driven throughout.
 - One Docker image, one volume, one SQLite file in WAL mode.
 - Drizzle migrations run on boot; a `derivation_version` bump triggers an automatic rebuild.
 - `health backup` performs `VACUUM INTO`.
-- Household accounts with argon2-hashed passwords and cookie sessions. Each account sees only
-  its own data in v1.
-- MCP bearer tokens are separate from session credentials.
+- Household accounts with argon2-hashed passwords and cookie sessions. **Each account sees only
+  its own data.** There is no sharing mechanism, no role hierarchy and no admin override in v1 -
+  visibility between household members is a consent question, not a configuration default. All
+  data is keyed by person already, so opt-in sharing can be added later without a schema change.
+- MCP bearer tokens are separate from session credentials, and each is bound to a single person
+  (see section 11).
 - Binds to localhost or LAN. Reverse proxy or Tailscale for remote access.
 - No telemetry of any kind.
 
