@@ -481,14 +481,59 @@ Runs alongside M0 and M1 rather than in the milestone chain, because it depends 
 backend produces and the backend depends on nothing it produces. Sequencing it either before or
 after would idle one of the two, and ingestion has a clock on it (see M1).
 
-Deliverables: design tokens (palette, type scale, spacing, elevation) in light **and** dark; a
-chart styling specification covering series colours, axis and grid treatment, tooltips, the
-basis line, empty and excluded states, and baseline bands; and two static reference pages -
-Dashboard and Sleep - built on hardcoded fixtures with no data layer.
+Deliverables: a design token system (below); a chart styling specification covering series
+colours, axis and grid treatment, tooltips, the basis line, empty and excluded states, and
+baseline bands; and two static reference pages - Dashboard and Sleep - built on hardcoded
+fixtures with no data layer.
 
-Two constraints the design must satisfy rather than discover: a **colour-blind-safe categorical
-palette**, since four sleep stages are colour-coded and read daily; and contrast that holds in
-both themes, verified rather than eyeballed.
+**Chosen direction: dark, luminous, with a recalibrated palette.** Explored as four directions
+(clinical light, luminous dark, editorial warm, monospace console) and settled on the dark
+register. Its original palette - violet, sky, green, amber for the four sleep stages - was
+rejected after simulation: under deuteranopia the first three collapse into near-identical
+violets, making the hypnogram unreadable for roughly one man in twenty. The replacement is a
+**blue depth-ramp plus amber for awake**, which survives every common form of colour blindness
+because it varies along the blue-yellow axis and by lightness, and which additionally makes the
+colour ordering carry meaning: deeper sleep, deeper blue.
+
+Initial values, recorded as a starting point rather than a fixed decision:
+
+| Role | Value |
+|---|---|
+| Sleep stage - deep / light / REM / awake | `#3730A3` / `#4F8FF7` / `#93D9F7` / `#F0A202` |
+| Surface - page / card / border | `#0A0E17` / `#121926` / `rgba(255,255,255,.06)` |
+| Text - primary / muted | `#EAF0FB` / `#7F8DA8` |
+| Accent | `#4F8FF7` |
+
+### Token system
+
+Three layers, and the discipline is that each layer may only reference the one below it.
+
+1. **Primitives** - raw scales with no meaning attached: colour ramps, the spacing scale, type
+   scale, radii, elevation.
+2. **Semantic** - `surface-page`, `surface-card`, `border-subtle`, `text-primary`,
+   `text-muted`, `accent`, `focus-ring`. **Themes are defined only at this layer**, as different
+   mappings onto the same primitives.
+3. **Component and chart** - `chart-series-*`, `chart-stage-deep|light|rem|awake`, `chart-grid`,
+   `chart-axis`, `chart-tooltip-bg`, `chart-band-baseline`, `state-excluded`, `state-no-data`.
+
+Rules that make the system hold rather than decay:
+
+- **Components never reference primitives directly.** A component that reaches past the semantic
+  layer is the thing that makes retheming a rewrite instead of a value swap.
+- **Charts resolve colours from tokens at render time**, not from values baked into chart option
+  objects. Otherwise a theme switch requires reconstructing every chart config, and the two
+  drift.
+- **One source of truth, two outputs**: tokens are authored once and emitted both as CSS custom
+  properties and as a typed object for the charting layer.
+- **Palette changes are tested, not reviewed by eye.** A test runs the categorical palette
+  through deuteranope, protanope and tritanope simulation and asserts a minimum perceptual
+  separation between stages, plus contrast minimums for text and UI surfaces. Changing a colour
+  and breaking accessibility should fail the build, not ship.
+
+**Theme scope:** dark is the reference theme and ships first. The semantic layer is built so a
+light theme is a remapping rather than a redesign; it ships when it can be done as a value swap.
+This is an assumption on my part - say so if light needs to be equally good from day one, since
+it costs little now and considerably more later.
 
 D1's output is the input to M3. M3 implements the design; it does not invent it.
 
