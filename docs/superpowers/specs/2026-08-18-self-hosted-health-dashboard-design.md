@@ -38,9 +38,11 @@ lets an agent investigate long-range questions with real queries instead of gues
    weight, nutrition, daily notes, activity heatmap, period-over-period insights.
 2. A complete local mirror of the owner's health history that outlives Google's retention
    windows and survives API changes or loss of access.
-3. First-class agent access via MCP, plus a scriptable CLI.
-4. Household multi-user: a few people, one instance, each with their own data.
-5. Open source, self-hosted, no telemetry, no hosted offering.
+3. Context and calibration that a stateless dashboard cannot provide: typed personal events,
+   per-person baselines, and user corrections to bad readings.
+4. First-class agent access via MCP, plus a scriptable CLI.
+5. Household multi-user: a few people, one instance, each with their own data.
+6. Open source, self-hosted, no telemetry, no hosted offering.
 
 ## 3. Non-goals
 
@@ -102,8 +104,17 @@ Three tiers, distinguished by whether they are truth or cache.
   per-person client override.
 - `sources` - per person: external id, display name, device or app type. Drives the source
   filter in the UI.
-- `notes` - per person and local date: user-authored daily annotations. User data, must survive
-  every rebuild.
+- `notes` - per person and local date: user-authored daily annotations, free text. User data,
+  must survive every rebuild.
+- `events` - per person: typed, dated occurrences with an optional value and end date
+  (`illness`, `travel`, `alcohol`, `medication`, `injury`, `caffeine`, user-definable types).
+  Structured siblings of notes. Free text is only readable by a human; a typed event is an
+  analysis variable, which is what makes "how do I sleep after a late flight" answerable at all.
+- `overrides` - per person: exclusions and corrections applied to specific samples, sessions or
+  day/metric pairs, each with a reason. A glitching strap reporting 210 bpm, or someone else
+  wearing the watch, would otherwise poison every baseline permanently. Overrides are **tier 1
+  truth, not edits**: the raw payload is never modified, the override is applied during
+  derivation, and removing it restores the original value.
 - `raw_payloads` - append-only. One row per API response: person, data type, request params,
   window start/end, fetched-at, HTTP status, body, body hash. Deduplicated by hash.
 
@@ -218,6 +229,12 @@ triggers an automatic rebuild on boot.
 - **Sleep**: stage durations, efficiency, bed and wake times, and nap detection (short sessions
   outside the person's main sleep window; thresholds configurable).
 - **Recovery**: resting heart rate, HRV, breathing rate.
+- **Personal baselines**: rolling central tendency and dispersion per person and metric (default
+  60-day window, excluding overridden values), so a reading can be expressed relative to that
+  person rather than in the abstract. "96 bpm" carries no information on its own; "1.4 standard
+  deviations above your 60-day baseline" does. Baselines need long history and cheap
+  recomputation, which is exactly what tier 1 plus `derivation_version` provides, and they
+  upgrade the meaning of every existing chart rather than adding a new one.
 - **Insights**: period-over-period deltas against the immediately preceding equal-length period,
   phrased as in "average sleep 7h35 over the last 7 days, against 7h53 in the previous period".
   **Insights are suppressed when coverage is too thin.** A delta computed over three missing
@@ -235,7 +252,8 @@ triggers an automatic rebuild on boot.
 The capability that does not exist elsewhere today.
 
 Tools: `list_people`, `query_series`, `get_daily`, `get_sleep`, `get_recovery`, `get_workouts`,
-`compare_periods`, `search_notes`, and `sql_query` - read-only SQL against documented views,
+`compare_periods`, `search_notes`, `get_events`, `get_baselines`, and `sql_query` - read-only
+SQL against documented views,
 with a hard row cap and statement timeout. `sql_query` is the point of the whole surface: it
 turns "why has my resting heart rate been climbing since June?" into something an agent can
 investigate across years of local history, at zero API cost.
@@ -245,8 +263,13 @@ Two rules for this surface:
 - **Outputs are token-budgeted.** Default to rollups; downsample dense series (LTTB) rather than
   emitting 86 000 samples into a context window; always return summary statistics alongside any
   series.
-- **Writes are opt-in.** `add_note` and `sync_now` exist but are disabled unless enabled in
-  configuration.
+- **Writes are opt-in.** `add_note`, `add_event` and `sync_now` exist but are disabled unless
+  enabled in configuration.
+- **Descriptive, not causal.** An agent with SQL over a hundred metrics and a few dozen event
+  types will find correlations that are not real. Tool descriptions instruct that findings be
+  reported with effect size and coverage, and phrased as association rather than cause. The
+  discipline belongs in the tool contract, where every agent inherits it, rather than in a
+  document nobody reads.
 
 Transport: stdio for local agents; optional bearer-token HTTP for remote ones. The documentation
 must state plainly that pointing an LLM at this sends health data to that agent's model
@@ -276,7 +299,11 @@ confidence interval and sample count; sleep duration trend; a bed/wake schedule 
 each night as a span; the hypnogram as a step chart; activity heatmap; weight trend; KPI cards
 with sparklines; and insight cards.
 
-Daily notes surface as annotations on charts, so an unusual metric carries its context.
+Daily notes and typed events surface as annotations on charts, so an unusual metric carries its
+context. Where a baseline exists, charts draw it as a band behind the series, turning an
+absolute reading into a relative one at a glance. Overridden points render as excluded rather
+than vanishing, with their reason on hover, so corrections stay visible instead of silently
+rewriting history.
 
 Theming via CSS custom properties. Strings are extracted for i18n from the start, shipping
 English and Dutch.
@@ -311,8 +338,10 @@ Test-driven throughout.
 
 - **Golden-file unit tests** for every derivation function.
 - **Contract tests** for the API client against recorded response fixtures.
-- **Property tests for merge invariants** - merged steps never exceed the maximum reported by any
-  single source; no session is double-counted; rebuild is deterministic and idempotent. Property
+- **Property tests for merge and override invariants** - merged steps never exceed the maximum
+  reported by any single source; no session is double-counted; rebuild is deterministic and
+  idempotent; removing an override restores exactly the pre-override value; baselines ignore
+  overridden points. Property
   tests are the right tool here because the failure mode is silently wrong numbers rather than
   crashes.
 - **Integration tests** against a temporary SQLite database.
@@ -343,12 +372,20 @@ costs an afternoon to find out. No production code is kept.
 table-driven field mapping, the sync engine (backfill, trailing window, backoff), and the raw
 archive. Done when a real account's history is on disk and re-syncing is idempotent.
 
-**M2 - Derivation and query layer.** Rollups, sleep and recovery derivation, nap detection, the
-merge policy with its property tests, `rebuild`, and the demo-mode generator. Done when the same
-questions can be answered from local data, correctly, with coverage tracked.
+M1 comes before the dashboard for a reason beyond dependency order: **sample-level data has a
+shelf life.** Intraday series are typically retained by the API only for a recent window, so
+every week without ingestion is a week of minute-level history permanently unavailable at that
+fidelity, no matter how good the charts are later. Charts can be improved retroactively;
+resolution cannot be recovered.
 
-**M3 - Dashboard.** Server, HTTP API, and the eight pages with their chart set, notes,
-theming and i18n scaffolding. The bulk of v1's visible work.
+**M2 - Derivation and query layer.** Rollups, sleep and recovery derivation, nap detection,
+personal baselines, the override mechanism, the merge policy with its property tests, `rebuild`,
+and the demo-mode generator. Done when the same questions can be answered from local data,
+correctly, with coverage tracked.
+
+**M3 - Dashboard.** Server, HTTP API, and the eight pages with their chart set, notes and typed
+events, baseline bands, override controls, theming and i18n scaffolding. The bulk of v1's
+visible work.
 
 **M4 - Agent surfaces.** MCP server (including `sql_query`) and the CLI. Both are thin over M2,
 which is why they come after it rather than before.
@@ -375,5 +412,22 @@ turns out to be more useful sooner than the charts.
 
 ## 18. Deferred
 
-Health Connect ingestion, Google Takeout import, write-back to Google, mobile apps, sharing
-between household members, additional languages, and any hosted offering.
+Deliberately out of v1, recorded here because the architecture is chosen so they stay cheap
+later rather than requiring rework.
+
+**Non-Google data sources.** Withings, Oura, Strava, continuous glucose monitors, lab results,
+or plain manual entry. The merge machinery already handles multiple sources, and combining
+vendors is something no vendor's own dashboard can do, since none of them holds the other half
+of the data. Deferred because each integration is real work, not because it needs a schema
+change - which is why the store must stay provider-agnostic.
+
+**Proactive alert rules.** "Resting heart rate elevated three days running" is a recognised
+early-illness signal, and the sync scheduler already runs on a timer. Rules plus a webhook to
+ntfy, Home Assistant, email or Telegram. Roughly M5-scale work.
+
+**Home-lab integration.** A Grafana datasource, Home Assistant sensors, and documented read-only
+views for anyone pointing DuckDB or a notebook at the file directly. Nearly free once the query
+views exist, and expected by the self-hosting audience.
+
+**Also deferred:** Health Connect ingestion, Google Takeout import, write-back to Google, mobile
+apps, sharing between household members, additional languages, and any hosted offering.
