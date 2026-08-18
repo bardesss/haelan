@@ -4,3 +4,4 @@ dist/
 *.sqlite-wal
 *.sqlite-shm
 .env
+.superpowers/
