@@ -36,3 +36,21 @@ Only the console settles it:
   consents once and never re-consents in normal use.
 - Production blocked without a security review: mitigation 2 applies. Weekly re-consent goes
   into the setup guide and the reconnect banner becomes a first class feature.
+
+## Rate limits, documented rather than observed
+
+developers.google.com/health/rate-limits, read 2026-08-19:
+
+| Interval | Limit |
+|---|---|
+| Per project, daily | 86.4M requests |
+| Per project, minutely | 120,000 requests |
+| Per user, minutely | 300 requests (5 QPS) |
+| Unverified client | 250 QPS total, across at most 100 users |
+
+Exceeding any of them returns 429. A household of a few people on a nightly sync is orders of
+magnitude below every line here, so the sync engine's backoff exists for correctness rather
+than for a limit anyone will reach.
+
+Worth noting for the publishing status question: the unverified cap is expressed here as
+throughput and user count, not as a restriction on running in production.
