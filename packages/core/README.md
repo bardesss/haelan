@@ -38,10 +38,12 @@ Three rules the schema exists to enforce:
 ## Heart rate is stored per minute
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all
-rows. `samples` holds one row per minute per aggregate, so a minute of heart rate is three rows
-(`min`, `mean`, `max`) rather than thirty. The 2-second payload stays untouched in
-`raw_payloads`, so this is a resolution choice in a cache, not a loss. See
-`probe/findings/volume.md`.
+rows. See `probe/findings/volume.md`. The schema already provides the shape for the fix:
+`samples.agg` lets a minute of heart rate be three rows (`min`, `mean`, `max`) rather than
+thirty. That shape is not yet exercised. The ingest policy that actually writes at one row per
+minute per aggregate has not landed; it arrives with the API client in M1b. Once it does, the
+2-second payload will stay untouched in `raw_payloads`, so this will be a resolution choice in a
+cache, not a loss, and a later rebuild will be able to widen it without re-fetching.
 
 ## Secrets
 
