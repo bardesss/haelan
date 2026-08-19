@@ -33,9 +33,11 @@ export const sessions = sqliteTable('sessions', {
   sourceId: text('source_id').notNull().references(() => sources.id),
   kind: text('kind', { enum: SESSION_KINDS }).notNull(),
   externalId: text('external_id').notNull(),
+  // A session can begin and end under different UTC offsets, so one offset cannot describe both ends.
   startMs: integer('start_ms').notNull(),
+  startOffsetMinutes: integer('start_offset_minutes').notNull(),
   endMs: integer('end_ms').notNull(),
-  tzOffsetMinutes: integer('tz_offset_minutes').notNull(),
+  endOffsetMinutes: integer('end_offset_minutes').notNull(),
   // A night spanning midnight belongs to the morning. Spec invariant 3.
   localDate: text('local_date').notNull(),
   attrs: text('attrs').notNull(),

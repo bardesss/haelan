@@ -12,8 +12,10 @@ describe('tier 2 and 3 schema', () => {
   })
 
   it('keeps every sample attributed to its source, because merging never happens on write', () => {
-    expect(columnNames(samples)).toContain('source_id')
-    expect(columnNames(sessions)).toContain('source_id')
+    const sampleSource = getTableConfig(samples).columns.find((c) => c.name === 'source_id')
+    const sessionSource = getTableConfig(sessions).columns.find((c) => c.name === 'source_id')
+    expect(sampleSource?.notNull).toBe(true)
+    expect(sessionSource?.notNull).toBe(true)
   })
 
   it('allows a null value, because missing is not zero', () => {
@@ -22,9 +24,10 @@ describe('tier 2 and 3 schema', () => {
   })
 
   it('carries coverage and a derivation version on every rollup', () => {
-    const cols = columnNames(daily)
-    expect(cols).toContain('coverage')
-    expect(cols).toContain('derivation_version')
+    const coverage = getTableConfig(daily).columns.find((c) => c.name === 'coverage')
+    const derivationVersion = getTableConfig(daily).columns.find((c) => c.name === 'derivation_version')
+    expect(coverage?.notNull).toBe(true)
+    expect(derivationVersion?.notNull).toBe(true)
   })
 
   it('tracks a high-water mark per person and data type', () => {
