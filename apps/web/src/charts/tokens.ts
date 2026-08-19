@@ -1,23 +1,45 @@
-export const CHART_VARS = [
-  '--chart-stage-deep', '--chart-stage-light', '--chart-stage-rem', '--chart-stage-awake',
-  '--chart-series', '--chart-grid', '--chart-axis', '--chart-band-baseline',
-  '--chart-state-excluded', '--chart-state-no-data',
-  '--text-muted', '--surface-card',
-] as const
+import { chartVar, semanticVar, type ChartToken, type SemanticToken } from '@vitals/tokens'
 
-export type ChartTokens = {
-  stageDeep: string; stageLight: string; stageRem: string; stageAwake: string
-  series: string; grid: string; axis: string; band: string
-  excluded: string; noData: string; muted: string; surface: string
-}
+// The app imports token *names* from the package that defines them and resolves
+// their *values* from getComputedStyle at render time. Names are compile-time
+// facts, so `satisfies` makes a rename in @vitals/tokens a type error here
+// rather than a blank string at first paint; values must stay late-bound or a
+// theme switch would not reach the charts.
+const CHART_SOURCES = {
+  stageDeep: 'stage-deep',
+  stageLight: 'stage-light',
+  stageRem: 'stage-rem',
+  stageAwake: 'stage-awake',
+  series: 'series',
+  seriesAlt: 'series-alt',
+  grid: 'grid',
+  axis: 'axis',
+  band: 'band-baseline',
+  excluded: 'state-excluded',
+  noData: 'state-no-data',
+  tooltipBg: 'tooltip-bg',
+  scale1: 'scale-1',
+  scale2: 'scale-2',
+  scale3: 'scale-3',
+  scale4: 'scale-4',
+  scale5: 'scale-5',
+} as const satisfies Record<string, ChartToken>
 
-const KEYS: [keyof ChartTokens, (typeof CHART_VARS)[number]][] = [
-  ['stageDeep', '--chart-stage-deep'], ['stageLight', '--chart-stage-light'],
-  ['stageRem', '--chart-stage-rem'], ['stageAwake', '--chart-stage-awake'],
-  ['series', '--chart-series'], ['grid', '--chart-grid'], ['axis', '--chart-axis'],
-  ['band', '--chart-band-baseline'], ['excluded', '--chart-state-excluded'],
-  ['noData', '--chart-state-no-data'], ['muted', '--text-muted'], ['surface', '--surface-card'],
+const SEMANTIC_SOURCES = {
+  muted: 'text-muted',
+  surface: 'surface-card',
+} as const satisfies Record<string, SemanticToken>
+
+export type ChartTokens = Record<keyof typeof CHART_SOURCES | keyof typeof SEMANTIC_SOURCES, string>
+
+// One author for both the property list and the field mapping: they cannot
+// drift apart because they are the same object read twice.
+const KEYS: [keyof ChartTokens, string][] = [
+  ...Object.entries(CHART_SOURCES).map(([k, t]) => [k, chartVar(t)] as [keyof ChartTokens, string]),
+  ...Object.entries(SEMANTIC_SOURCES).map(([k, t]) => [k, semanticVar(t)] as [keyof ChartTokens, string]),
 ]
+
+export const CHART_VARS: readonly string[] = KEYS.map(([, variable]) => variable)
 
 export function readChartTokens(style: Pick<CSSStyleDeclaration, 'getPropertyValue'>): ChartTokens {
   const out = {} as ChartTokens
@@ -31,4 +53,10 @@ export function readChartTokens(style: Pick<CSSStyleDeclaration, 'getPropertyVal
 
 export function currentChartTokens(): ChartTokens {
   return readChartTokens(getComputedStyle(document.documentElement))
+}
+
+// Low value first. Charts take the whole ramp rather than picking stops, so a
+// heatmap cannot quietly reintroduce a two-stop scale.
+export function scaleStops(t: ChartTokens): string[] {
+  return [t.scale1, t.scale2, t.scale3, t.scale4, t.scale5]
 }

@@ -13,6 +13,7 @@ import { formatClock, formatDuration, trend } from '../format.js'
 const worn = july.days.filter((d) => d.worn)
 const unworn = july.days.length - worn.length
 const totalSteps = worn.reduce((sum, d) => sum + (d.steps ?? 0), 0)
+const dates = july.days.map((d) => d.date)
 
 function numbers(pick: (d: (typeof worn)[number]) => number | null): number[] {
   return worn.map(pick).filter((v): v is number => v !== null)
@@ -22,6 +23,10 @@ const meanHrMin = numbers((d) => d.hrMin)
 const meanHrMean = numbers((d) => d.hrMean)
 const meanSleep = numbers((d) => d.sleepMinutes)
 const avg = (xs: number[]) => xs.reduce((sum, v) => sum + v, 0) / xs.length
+// The heatmap's colour scale runs from zero to the busiest recorded day, so the
+// top of the ramp is a number this month actually contains rather than a round
+// figure typed into the chart.
+const maxSteps = Math.max(...numbers((d) => d.steps))
 
 const lastNight = july.schedule.at(-1)
 const startLabel = lastNight?.bed != null ? `Bed ${formatClock(lastNight.bed)}` : 'Bed time not recorded'
@@ -44,45 +49,48 @@ export function Dashboard() {
           <StatTile label="Steps" value={totalSteps.toLocaleString('en-GB')}
             basis={`sum, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
             delta={trend(numbers((d) => d.steps), 'higher-is-better')}>
-            <Sparkline values={july.days.map((d) => d.steps)} />
+            <Sparkline values={july.days.map((d) => d.steps)} labels={dates}
+              label="Daily steps through July 2026" unit="Steps" />
           </StatTile>
         </Card>
         <Card span={3}>
           <StatTile label="Resting heart rate" value={String(Math.round(avg(meanHrMin)))} unit="bpm"
             basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
             delta={trend(meanHrMin, 'lower-is-better')}>
-            <Sparkline values={july.days.map((d) => d.hrMin)} />
+            <Sparkline values={july.days.map((d) => d.hrMin)} labels={dates}
+              label="Daily resting heart rate through July 2026" unit="Beats per minute" />
           </StatTile>
         </Card>
         <Card span={3}>
           <StatTile label="Sleep" value={formatDuration(avg(meanSleep))}
             basis={`mean, ${worn.length} of ${july.days.length} nights, ${unworn} nights not worn`}
             delta={trend(meanSleep, 'higher-is-better')}>
-            <Sparkline values={july.days.map((d) => d.sleepMinutes)} />
+            <Sparkline values={july.days.map((d) => d.sleepMinutes)} labels={dates}
+              label="Nightly sleep duration through July 2026" unit="Minutes asleep" />
           </StatTile>
         </Card>
         <Card span={3}>
           <StatTile label="Heart rate" value={String(Math.round(avg(meanHrMean)))} unit="bpm"
             basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
             delta={trend(meanHrMean, 'neutral')}>
-            <Sparkline values={july.days.map((d) => d.hrMean)} />
+            <Sparkline values={july.days.map((d) => d.hrMean)} labels={dates}
+              label="Daily mean heart rate through July 2026" unit="Beats per minute" />
           </StatTile>
         </Card>
 
-        <Card span={8}>
-          <span className="label">Heart rate</span>
-          <p className="basis">daily minimum, mean and maximum, shaded band is the 60 day baseline</p>
+        <Card span={8} label="Heart rate"
+          basis="daily minimum, mean and maximum, shaded band is the 60 day baseline">
           <HeartRateRange days={july.days} baseline={july.baselines.hrMean}
-            annotations={july.events.map((e) => ({ date: e.date, text: e.text }))} excluded={july.excluded} />
+            annotations={july.events.map((e) => ({ date: e.date, text: e.text }))} excluded={july.excluded}
+            label="Daily heart rate minimum, mean and maximum through July 2026" />
         </Card>
-        <Card span={4}>
-          <span className="label">Recovery notes</span>
-          <p className="basis">{july.events.length} of {july.days.length} days flagged, annotated on the heart rate chart</p>
+        <Card span={4} label="Flagged days"
+          basis={`${july.events.length} of ${july.days.length} days flagged, annotated on the heart rate chart`}>
           <ul style={{ margin: 'var(--space-2) 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {july.events.map((e) => (
               <li key={e.date} style={{ fontSize: 'var(--font-size-sm)' }}>
                 <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                  {e.date.slice(8)} Jul{e.endDate ? `–${e.endDate.slice(8)} Jul` : ''}
+                  {e.date.slice(8)} Jul{e.endDate ? ` to ${e.endDate.slice(8)} Jul` : ''}
                 </div>
                 <div style={{ color: 'var(--text-muted)' }}>{e.text}</div>
               </li>
@@ -90,30 +98,25 @@ export function Dashboard() {
           </ul>
         </Card>
 
-        <Card span={7}>
-          <span className="label">Sleep stages</span>
-          <p className="basis">last night, {lastDate}</p>
-          <Hypnogram segments={july.hypnogram} startLabel={startLabel} />
+        <Card span={7} label="Sleep stages" basis={`last night, ${lastDate}`}>
+          <Hypnogram segments={july.hypnogram} startLabel={startLabel}
+            label={`Sleep stages through the night of ${lastDate}`} />
         </Card>
-        <Card span={5}>
-          <span className="label">Sleep schedule</span>
-          <p className="basis">bed and wake time, {july.schedule.length} nights, dot marks a nap</p>
-          <SleepSchedule nights={july.schedule} />
+        <Card span={5} label="Sleep schedule"
+          basis={`bed and wake time, ${july.schedule.length} nights, dot marks a nap`}>
+          <SleepSchedule nights={july.schedule} label="Bed and wake times for each night of July 2026" />
         </Card>
 
-        <Card span={8}>
-          <span className="label">Daily steps</span>
-          <p className="basis">calendar heatmap, {worn.length} of {july.days.length} days worn, darker is more steps</p>
-          <ActivityHeatmap days={july.days} />
+        <Card span={8} label="Daily steps"
+          basis={`calendar heatmap, ${worn.length} of ${july.days.length} days worn, 0 to ${maxSteps.toLocaleString('en-GB')} steps, stronger colour is more steps, days with no reading carry an absence dot`}>
+          <ActivityHeatmap days={july.days} max={maxSteps} label="Steps per day through July 2026" />
         </Card>
-        <Card span={4}>
-          <span className="label">Recovery</span>
+        <Card span={4} label="Recovery">
           <EmptyState title="No source is providing this data."
             detail="Connect a device that reports heart rate variability to see recovery scores here." />
         </Card>
 
-        <Card span={12}>
-          <span className="label">Sleep anomalies</span>
+        <Card span={12} label="Sleep anomalies">
           {zeroSleepNights.length === 0 ? (
             <EmptyState title="No nights with zero recorded sleep in July."
               detail={`Checked ${worn.length} of ${july.days.length} nights the device was worn. The remaining ${unworn} nights have no reading at all, which is a different kind of gap.`} />

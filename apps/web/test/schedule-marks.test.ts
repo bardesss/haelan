@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { nightMark } from '../src/charts/schedule.js'
+import { AXIS_MIN, AXIS_MAX, NO_DATA_Y } from '../src/charts/SleepSchedule.js'
+import { july } from '../src/fixtures/july.js'
 import type { ChartTokens } from '../src/charts/tokens.js'
 
 const tokens = {
@@ -35,5 +37,23 @@ describe('night mark selection', () => {
     const noData = nightMark({ date: '2026-07-05', bed: null, wake: null, naps: [] }, tokens)
     const span = nightMark({ date: '2026-07-07', bed: 23 * 60, wake: 30 * 60, naps: [] }, tokens)
     expect(noData.color).not.toBe(span.color)
+  })
+})
+
+describe('no-data marker placement', () => {
+  const recorded = july.schedule.flatMap((n) => [n.bed, n.wake].filter((v): v is number => v !== null))
+
+  it('parks the absence dot clear of every real bed and wake time', () => {
+    // At 18:00 it sat ten minutes below a wake-time cluster spanning 1810 to
+    // 1951, which reads as an early morning rather than as a missing night.
+    for (const value of recorded) {
+      expect(Math.abs(NO_DATA_Y - value), `${value} is too close to the absence dot`).toBeGreaterThan(120)
+    }
+  })
+
+  it('keeps the absence dot inside the plotted axis', () => {
+    expect(NO_DATA_Y).toBeGreaterThan(AXIS_MIN)
+    expect(NO_DATA_Y).toBeLessThan(AXIS_MAX)
+    expect(AXIS_MAX - NO_DATA_Y).toBeGreaterThanOrEqual(60)
   })
 })

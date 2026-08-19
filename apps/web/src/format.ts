@@ -1,20 +1,21 @@
 // Shared display helpers for the reference pages. Kept here instead of inline
 // so Dashboard and Sleep format the same fields the same way.
 
+// Round to whole minutes before splitting, not after: splitting first turns
+// 419.6 into 6h and round(59.6)m, which renders as "6h 60m".
 export function formatDuration(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = Math.round(minutes % 60)
-  return `${h}h ${String(m).padStart(2, '0')}m`
+  const total = Math.round(minutes)
+  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`
 }
 
 export function formatClock(minutesPastMidnight: number): string {
-  const wrapped = Math.floor(minutesPastMidnight / 60) % 24
-  const mins = Math.round(minutesPastMidnight % 60)
-  return `${String(wrapped).padStart(2, '0')}:${String(mins).padStart(2, '0')}`
+  const total = Math.round(minutesPastMidnight)
+  const hours = Math.floor(total / 60) % 24
+  return `${String(hours).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
 export type Tone = 'good' | 'bad' | 'neutral'
-export type Delta = { text: string; dir: 'up' | 'down' | 'flat'; tone?: Tone }
+export type Delta = { text: string; dir: 'up' | 'down' | 'flat'; tone?: Tone; basis?: string }
 
 // Direction is a fact read off the data; tone is a judgement about whether
 // that direction is good news, and the two must stay separable. A caller
@@ -23,10 +24,16 @@ export type Delta = { text: string; dir: 'up' | 'down' | 'flat'; tone?: Tone }
 // no colour should assert an opinion the code was never given.
 export type Polarity = 'higher-is-better' | 'lower-is-better' | 'neutral'
 
-function toneFor(dir: Delta['dir'], polarity: Polarity): Tone {
+export function toneFor(dir: Delta['dir'], polarity: Polarity): Tone {
   if (dir === 'flat' || polarity === 'neutral') return 'neutral'
   const goodDirection = polarity === 'higher-is-better' ? 'up' : 'down'
   return dir === goodDirection ? 'good' : 'bad'
+}
+
+// The one place that decides what colour an unstated tone gets. A delta nobody
+// has claimed a polarity for is never coloured as if a judgement had been made.
+export function toneOf(delta: Delta | undefined): Tone {
+  return delta?.tone ?? 'neutral'
 }
 
 // Compares the mean of the first half of a run of worn-day values against the
@@ -41,5 +48,10 @@ export function trend(values: number[], polarity: Polarity = 'neutral'): Delta {
   const pct = ((meanSecond - meanFirst) / meanFirst) * 100
   const dir: Delta['dir'] = Math.abs(pct) < 1 ? 'flat' : pct > 0 ? 'up' : 'down'
   const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '→'
-  return { text: `${arrow} ${Math.abs(pct).toFixed(0)}%`, dir, tone: toneFor(dir, polarity) }
+  return {
+    text: `${arrow} ${Math.abs(pct).toFixed(0)}%`,
+    dir,
+    tone: toneFor(dir, polarity),
+    basis: `change is the mean of the last ${second.length} readings against the first ${first.length}`,
+  }
 }
