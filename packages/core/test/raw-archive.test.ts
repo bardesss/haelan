@@ -53,6 +53,13 @@ describe('RawArchive', () => {
     expect(db.all(sql`select 1 from raw_payloads`)).toHaveLength(1)
   })
 
+  it('resolves a conflicting insert to dedup instead of throwing', () => {
+    const first = archive.put({ ...base, body, fetchedAtMs: 10 })
+    const second = archive.put({ ...base, body, fetchedAtMs: 10 })
+    expect(second.id).toBe(first.id)
+    expect(second.deduplicated).toBe(true)
+  })
+
   it('keeps a changed body as a new row, because the archive is append only', () => {
     archive.put({ ...base, body, fetchedAtMs: 10 })
     const changed = archive.put({ ...base, body: JSON.stringify({ dataPoints: [] }), fetchedAtMs: 11 })

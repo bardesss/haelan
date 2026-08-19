@@ -22,18 +22,14 @@ export class RawArchive {
 
   put(input: PutInput): PutResult {
     const bodyHash = createHash('sha256').update(input.body).digest('hex')
-
-    const existing = this.db.select({ id: rawPayloads.id }).from(rawPayloads).where(and(
-      eq(rawPayloads.personId, input.personId),
-      eq(rawPayloads.dataType, input.dataType),
-      eq(rawPayloads.bodyHash, bodyHash),
-    )).get()
-    // The trailing re-fetch window means most runs re-read data already held. Returning the
-    // existing id keeps that cheap and keeps derived rows pointing at one payload.
-    if (existing) return { id: existing.id, deduplicated: true }
-
     const id = randomUUID()
-    this.db.insert(rawPayloads).values({
+
+    // Insert first and let the unique constraint decide, rather than select-then-insert: two
+    // processes racing on the same new body (WAL mode lets the MCP server, the CLI and a sync
+    // share the file) could both pass a prior select and then have the second insert throw. The
+    // trailing re-fetch window means this path is hot, so a lost race must resolve to dedup, not
+    // a crash.
+    const result = this.db.insert(rawPayloads).values({
       id,
       personId: input.personId,
       dataType: input.dataType,
@@ -45,9 +41,19 @@ export class RawArchive {
       bodyGzip: gzipSync(Buffer.from(input.body, 'utf8')),
       bodyHash,
       bodyBytes: Buffer.byteLength(input.body, 'utf8'),
+    }).onConflictDoNothing({
+      target: [rawPayloads.personId, rawPayloads.dataType, rawPayloads.bodyHash],
     }).run()
 
-    return { id, deduplicated: false }
+    if (result.changes > 0) return { id, deduplicated: false }
+
+    const existing = this.db.select({ id: rawPayloads.id }).from(rawPayloads).where(and(
+      eq(rawPayloads.personId, input.personId),
+      eq(rawPayloads.dataType, input.dataType),
+      eq(rawPayloads.bodyHash, bodyHash),
+    )).get()
+    if (!existing) throw new Error('insert conflicted but no existing row found')
+    return { id: existing.id, deduplicated: true }
   }
 
   getBody(id: string): string {
