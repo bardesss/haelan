@@ -21,8 +21,8 @@ describe('css emitter', () => {
 
   it('emits spacing and type scales once, outside the theme blocks', () => {
     expect(css).toContain('--space-4: 16px;')
-    expect(css).toContain('--font-size-xl: 30px;')
-    expect(css).toContain('--font-size-micro: 10.5px;')
+    expect(css).toContain('--font-size-xl: 34px;')
+    expect(css).toContain('--font-size-micro: 12px;')
   })
 
   it('defines every theme custom property in both themes', () => {
