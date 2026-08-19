@@ -29,27 +29,38 @@ The user-facing descriptions above are what a household member reads on the cons
 They are recorded verbatim because the M1 setup wizard should show the same wording rather
 than paraphrasing it.
 
-## The decisive observation
+## The decisive observation, resolved
 
-Google's setup page states that unverified clients carry a 100 user cap "for both testing and
-production purposes", and that verification is needed only to exceed 100 users. If that is
-accurate, an unverified client can sit in production status, which removes the 7 day refresh
-token expiry that testing status imposes. A third party integrator instead reports that every
-googlehealth scope is restricted and gated behind a security review.
+Publishing status switched to **In production** while unverified, with five restricted scopes
+attached. No security review was demanded and nothing blocked the switch.
 
-Only the console settles it:
-
-- [ ] Publishing status could be switched to In production while unverified: yes / no
-- [ ] If no, the exact blocking message:
-- [ ] Billing account demanded at any point: yes / no
-- [ ] Per request cost shown on any quota page: yes / no
+- [x] Publishing status could be switched to In production while unverified: **yes**
+- [x] The only warning shown was about branding: "Your branding needs to be verified before it
+      can be shown to users." That governs whether the app name and logo appear on the consent
+      screen, not whether the app may run.
+- [ ] Billing account demanded at any point: pending
+- [ ] Per request cost shown on any quota page: pending, see the documented limits below
 
 ## Verdict
 
-- Production reachable while unverified: spec section 7 mitigation 1 applies. The household
-  consents once and never re-consents in normal use.
-- Production blocked without a security review: mitigation 2 applies. Weekly re-consent goes
-  into the setup guide and the reconnect banner becomes a first class feature.
+**Spec section 7 mitigation 1 applies.** Restricted classification governs verification, which
+lifts the 100 user cap, not publishing, which is what controls token lifetime. The two are
+independent, and only the second one matters to a household instance.
+
+Consequences:
+
+- Refresh tokens do not carry the 7 day testing status expiry. The household consents once.
+- The reconnect banner and the invalid_grant pause stay in the design as the response to a
+  genuine revocation, not as a weekly ritual. Mitigation 3 survives, mitigation 2 is dead.
+- Every member sees an unverified app warning at consent. The setup guide must say so plainly
+  and in advance, because an unexpected security warning is where a self hoster abandons the
+  install.
+- Verification is permanently out of reach and permanently unnecessary. These two facts are
+  the same fact, stated from the two ends of spec section 1.
+
+Empirical confirmation still runs: task 5 logs a daily refresh for ten days, because a
+documented lifetime and an observed one are different kinds of evidence and the whole sync
+design rests on this one.
 
 ## Rate limits, documented rather than observed
 
