@@ -42,7 +42,10 @@ describe('downsampleToMinute', () => {
   })
 
   it('carries the offset of the first reading in the minute', () => {
-    expect(downsampleToMinute([at(0, 60)])[0]?.tzOffsetMinutes).toBe(120)
+    const first: SampleRow = { ...at(0, 60), tzOffsetMinutes: 60 }
+    const second: SampleRow = { ...at(30, 61), tzOffsetMinutes: 180 }
+    const out = downsampleToMinute([first, second])
+    expect(out.every((r) => r.tzOffsetMinutes === 60)).toBe(true)
   })
 
   it('is a thirty fold reduction on a real minute of 2 second sampling', () => {

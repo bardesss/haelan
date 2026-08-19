@@ -10,9 +10,9 @@ export type SessionKind = (typeof SESSION_KINDS)[number]
 
 // Long and narrow. Heart rate arrives every 2 seconds, and agg lets a minute collapse to three
 // rows (min, mean, max) rather than thirty, the reduction M0 measured. The ingest code that
-// actually writes at that per-minute policy has not landed yet; it arrives in M1b. The 2-second
-// truth stays in raw_payloads either way, so this table is a cache that a rebuild can widen
-// later without re-fetching.
+// writes at that per-minute policy landed in M1b, in mapWindowSamples. The 2-second truth stays
+// in raw_payloads either way, so this table is a cache that a rebuild can widen later without
+// re-fetching.
 export const samples = sqliteTable('samples', {
   personId: text('person_id').notNull().references(() => people.id),
   sourceId: text('source_id').notNull().references(() => sources.id),

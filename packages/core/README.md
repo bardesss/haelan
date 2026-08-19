@@ -4,8 +4,8 @@ The only package that issues SQL or talks to Google. `server`, `mcp`, `cli` and 
 adapters over it, which is what makes a dashboard card, a CLI table and an MCP tool answer the
 same question identically.
 
-This package currently covers the store: schema, migrations, encryption and the raw archive.
-The API client, sync engine and wizard land in M1b, M1c and M1d.
+This package currently covers the store (schema, migrations, encryption and the raw archive)
+and the API client, which landed in M1b. The sync engine and wizard land in M1c and M1d.
 
 ## Opening a database
 
@@ -40,8 +40,9 @@ Three rules the schema exists to enforce:
 Three layers, each ignorant of the next. `TokenProvider` turns a stored refresh token into a
 live access token and marks a person revoked when Google returns `invalid_grant`, which pauses
 sync for them alone. `HealthClient` builds filters, follows pagination, backs off on 429 and
-5xx, and archives every response before anything parses it. The mappers turn an archived body
-into rows.
+5xx, and archives every terminal response before anything parses it; a retriable response
+during backoff is deliberately not archived, since it is transient infrastructure noise rather
+than contract evidence. The mappers turn an archived body into rows.
 
 `HealthClient` and the mappers read one catalogue, `src/api/catalogue.ts`, which declares per
 data type what the API calls it and what we call it. `TokenProvider` does not need it: it deals
@@ -64,12 +65,13 @@ Fixtures are synthetic. Real payloads live in a gitignored directory and never b
 ## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all
-rows. See `probe/findings/volume.md`. The schema already provides the shape for the fix:
-`samples.agg` lets a minute of heart rate be three rows (`min`, `mean`, `max`) rather than
-thirty. That shape is not yet exercised. The ingest policy that actually writes at one row per
-minute per aggregate has not landed; it arrives with the API client in M1b. Once it does, the
-2-second payload will stay untouched in `raw_payloads`, so this will be a resolution choice in a
-cache, not a loss, and a later rebuild will be able to widen it without re-fetching.
+rows. See `probe/findings/volume.md`. The schema provides the shape for the fix: `samples.agg`
+lets a minute of heart rate be three rows (`min`, `mean`, `max`) rather than thirty. The ingest
+policy that writes at one row per minute per aggregate landed with the API client in M1b, in
+`mapWindowSamples`, which downsamples once over a whole fetched window rather than per page, so
+a minute split across a page boundary does not collide with itself. The 2-second payload stays
+untouched in `raw_payloads`, so this is a resolution choice in a cache, not a loss, and a later
+rebuild can widen it without re-fetching.
 
 ## Secrets
 
