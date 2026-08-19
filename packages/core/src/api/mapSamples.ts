@@ -26,6 +26,11 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
   const t = input.dataType
   if (t.target !== 'samples') throw new Error(`${t.id} is not a sample type`)
 
+  // Deferred types are fetched and archived but carry a sub-dimension a flat sample row cannot
+  // hold. M2 derives them from tier 1, so mapping them here would silently drop all but one
+  // point per interval.
+  if (t.mappingDeferred) return []
+
   let parsed: { dataPoints?: unknown[] }
   try {
     parsed = JSON.parse(input.body) as { dataPoints?: unknown[] }

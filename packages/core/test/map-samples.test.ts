@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { mapSamples } from '../src/api/mapSamples.ts'
-import { dataTypeById } from '../src/api/catalogue.ts'
+import { dataTypeById, DATA_TYPES } from '../src/api/catalogue.ts'
 import { samplePoint, intervalPoint, dailyPoint, body } from '../src/testing/payloads.ts'
 
 const ctx = { personId: 'p1', sourceId: 's1', rawPayloadId: 'r1' }
@@ -85,5 +85,30 @@ describe('mapSamples', () => {
   it('refuses a session type, which needs its own mapper', () => {
     const sleep = dataTypeById('sleep')!
     expect(() => mapSamples({ dataType: sleep, ...ctx, body: body([]) })).toThrow(/not a sample type/)
+  })
+
+  it('maps every deferred type to zero rows, driven from the catalogue', () => {
+    for (const t of DATA_TYPES.filter((d) => d.mappingDeferred)) {
+      const rows = mapSamples({
+        dataType: t, ...ctx,
+        body: body([samplePoint({
+          payloadKey: t.payloadKey, valuePath: t.valuePath, value: 1,
+          physicalTime: '2026-08-18T10:00:00Z',
+        })]),
+      })
+      expect(rows).toHaveLength(0)
+    }
+  })
+
+  it('maps nutrition-log to zero rows even given a well formed payload with a numeric calories field', () => {
+    const nutritionLog = dataTypeById('nutrition-log')!
+    const rows = mapSamples({
+      dataType: nutritionLog, ...ctx,
+      body: body([intervalPoint({
+        payloadKey: 'nutritionLog', valuePath: 'calories', value: 500,
+        physicalTime: '2026-08-18T10:00:00Z', endTime: '2026-08-18T10:30:00Z',
+      })]),
+    })
+    expect(rows).toHaveLength(0)
   })
 })
