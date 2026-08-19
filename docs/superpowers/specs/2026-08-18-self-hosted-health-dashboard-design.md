@@ -465,6 +465,34 @@ its database is empty. The wizard is the only supported setup path:
 Adding a household member is the same flow minus the Google Cloud steps: the admin creates an
 invite, the member sets a password and grants consent against the household's existing client.
 
+### Returning to the console
+
+The console visit is once per household, not once per deployment. Restarts, image upgrades,
+config changes and backup restores never involve Google. Only these do:
+
+| Situation | Why | Avoidable? |
+|---|---|---|
+| The instance URL changes and the new one is not registered | The redirect URI must match exactly | Yes, register them all up front |
+| Syncing a data type whose scope was never declared | Scopes come from the consent screen | Yes, declare the full set up front |
+| Adding a household member while the client is in Testing status | Testing mode requires each user on the test user list | Only by publishing to production |
+| Publishing status changes, or the volume and its client secret are lost | New credentials | No |
+
+Two wizard behaviours follow from that table, and both exist to prevent a second visit:
+
+- **Register every redirect URI you might use in one pass.** The wizard lists them for
+  copy-paste: `http://localhost:8080/oauth/callback`, the LAN hostname or IP, and a field for a
+  reverse proxy or Tailscale name if one is planned. Adding an unused URI costs nothing. Missing
+  one costs a return trip at the least convenient moment.
+- **Declare the full scope set at consent screen setup**, not just the data types being enabled
+  today. Granting is per person and can be a subset; declaring is once and is what a later trip
+  would be for.
+
+The member onboarding row is the interesting one, because it is the case a household actually
+hits. While the client sits in Testing status, every new member needs adding to the test user
+list in the console before consent will work. Publishing to production removes that, which makes
+publishing status a usability decision as well as the token lifetime decision in section 7. M0
+answers whether it is available to us.
+
 **The one unavoidable manual step:** somebody must create a Google Cloud project and an OAuth
 client once, in the console. Google exposes no API for creating OAuth clients or configuring a
 consent screen, and the credentials must belong to whoever owns the data, which is precisely
