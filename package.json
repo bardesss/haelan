@@ -2,7 +2,7 @@
   "name": "vitals",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": ">=22.6" },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
