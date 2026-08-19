@@ -17,6 +17,11 @@ export const rawPayloads = sqliteTable('raw_payloads', {
   bodyHash: text('body_hash').notNull(),
   bodyBytes: integer('body_bytes').notNull(),
 }, (t) => [
-  unique('raw_payloads_body_hash').on(t.personId, t.dataType, t.bodyHash),
+  // windowStartMs is part of the key so an empty day and an unfetched day stay distinguishable;
+  // without it, sixty unworn days collapse to one row and tier 3 can no longer be rebuilt from
+  // tier 1. This only dedups correctly if sync windows are day aligned, since a trailing
+  // "now minus seven days" window has a different start on every run and would defeat dedup
+  // entirely.
+  unique('raw_payloads_body_hash').on(t.personId, t.dataType, t.bodyHash, t.windowStartMs),
   index('raw_payloads_person_type_window').on(t.personId, t.dataType, t.windowStartMs),
 ])

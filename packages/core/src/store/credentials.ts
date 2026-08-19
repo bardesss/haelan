@@ -1,7 +1,7 @@
 import { eq, isNull } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import { oauthClient, credentials } from '../db/schema/index.ts'
-import { seal, open } from '../crypto/secretBox.ts'
+import { seal, unseal } from '../crypto/secretBox.ts'
 
 const CLIENT_ROW_ID = 'default'
 
@@ -30,7 +30,7 @@ export class CredentialStore {
   getClient(): ClientCredentials | null {
     const row = this.db.select().from(oauthClient).where(eq(oauthClient.id, CLIENT_ROW_ID)).get()
     if (!row) return null
-    return { clientId: row.clientId, clientSecret: open(this.key, row.clientSecretEncrypted) }
+    return { clientId: row.clientId, clientSecret: unseal(this.key, row.clientSecretEncrypted) }
   }
 
   putRefreshToken(input: { personId: string, refreshToken: string, scopes: string[], nowMs: number }): void {
@@ -52,7 +52,7 @@ export class CredentialStore {
     const row = this.db.select().from(credentials).where(eq(credentials.personId, personId)).get()
     if (!row) return null
     return {
-      refreshToken: open(this.key, row.refreshTokenEncrypted),
+      refreshToken: unseal(this.key, row.refreshTokenEncrypted),
       scopes: row.grantedScopes === '' ? [] : row.grantedScopes.split(' '),
       revokedAtMs: row.revokedAtMs ?? null,
     }

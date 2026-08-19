@@ -8,9 +8,11 @@ export type SampleAgg = (typeof SAMPLE_AGGS)[number]
 export const SESSION_KINDS = ['sleep', 'exercise'] as const
 export type SessionKind = (typeof SESSION_KINDS)[number]
 
-// Long and narrow. Heart rate arrives every 2 seconds and is stored per minute as min, mean and
-// max, which M0 measured as a thirty-fold reduction. The 2-second truth stays in raw_payloads,
-// so this table is a cache that a rebuild can widen later without re-fetching.
+// Long and narrow. Heart rate arrives every 2 seconds, and agg lets a minute collapse to three
+// rows (min, mean, max) rather than thirty, the reduction M0 measured. The ingest code that
+// actually writes at that per-minute policy has not landed yet; it arrives in M1b. The 2-second
+// truth stays in raw_payloads either way, so this table is a cache that a rebuild can widen
+// later without re-fetching.
 export const samples = sqliteTable('samples', {
   personId: text('person_id').notNull().references(() => people.id),
   sourceId: text('source_id').notNull().references(() => sources.id),

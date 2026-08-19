@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { loadOrCreateKey, KEY_FILENAME } from '../src/crypto/key.ts'
-import { seal, open } from '../src/crypto/secretBox.ts'
+import { seal, unseal } from '../src/crypto/secretBox.ts'
 
 describe('loadOrCreateKey', () => {
   let dir: string
@@ -39,24 +39,24 @@ describe('loadOrCreateKey', () => {
   })
 })
 
-describe('seal and open', () => {
+describe('seal and unseal', () => {
   const key = Buffer.alloc(32, 3)
 
   it('round-trips', () => {
-    expect(open(key, seal(key, 'a refresh token'))).toBe('a refresh token')
+    expect(unseal(key, seal(key, 'a refresh token'))).toBe('a refresh token')
   })
 
   it('produces different ciphertext each time, so equal secrets are not detectable', () => {
     expect(seal(key, 'same')).not.toBe(seal(key, 'same'))
   })
 
-  it('refuses to open with the wrong key', () => {
-    expect(() => open(Buffer.alloc(32, 4), seal(key, 'secret'))).toThrow()
+  it('refuses to unseal with the wrong key', () => {
+    expect(() => unseal(Buffer.alloc(32, 4), seal(key, 'secret'))).toThrow()
   })
 
-  it('refuses to open tampered ciphertext', () => {
+  it('refuses to unseal tampered ciphertext', () => {
     const sealed = seal(key, 'secret')
     const tampered = sealed.slice(0, -2) + (sealed.endsWith('A') ? 'B' : 'A')
-    expect(() => open(key, tampered)).toThrow()
+    expect(() => unseal(key, tampered)).toThrow()
   })
 })

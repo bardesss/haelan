@@ -10,7 +10,7 @@ export function seal(key: Buffer, plaintext: string): string {
   return Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64')
 }
 
-export function open(key: Buffer, sealed: string): string {
+export function unseal(key: Buffer, sealed: string): string {
   const raw = Buffer.from(sealed, 'base64')
   if (raw.length < IV_BYTES + TAG_BYTES) throw new Error('sealed value is truncated')
   const iv = raw.subarray(0, IV_BYTES)

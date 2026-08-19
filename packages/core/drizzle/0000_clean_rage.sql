@@ -89,7 +89,7 @@ CREATE TABLE `raw_payloads` (
 );
 --> statement-breakpoint
 CREATE INDEX `raw_payloads_person_type_window` ON `raw_payloads` (`person_id`,`data_type`,`window_start_ms`);--> statement-breakpoint
-CREATE UNIQUE INDEX `raw_payloads_body_hash` ON `raw_payloads` (`person_id`,`data_type`,`body_hash`);--> statement-breakpoint
+CREATE UNIQUE INDEX `raw_payloads_body_hash` ON `raw_payloads` (`person_id`,`data_type`,`body_hash`,`window_start_ms`);--> statement-breakpoint
 CREATE TABLE `samples` (
 	`person_id` text NOT NULL,
 	`source_id` text NOT NULL,

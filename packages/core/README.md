@@ -35,7 +35,7 @@ Three rules the schema exists to enforce:
   belongs to the wake date.
 - **Merging never happens on write.** Every sample and session keeps its `source_id`.
 
-## Heart rate is stored per minute
+## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all
 rows. See `probe/findings/volume.md`. The schema already provides the shape for the fix:

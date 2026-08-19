@@ -53,6 +53,22 @@ describe('RawArchive', () => {
     expect(db.all(sql`select 1 from raw_payloads`)).toHaveLength(1)
   })
 
+  it('keeps identical bodies from two different windows as separate rows, so an empty day stays distinguishable from an unfetched one', () => {
+    const first = archive.put({ ...base, windowStartMs: 1000, windowEndMs: 2000, body, fetchedAtMs: 10 })
+    const second = archive.put({ ...base, windowStartMs: 87400000, windowEndMs: 87500000, body, fetchedAtMs: 10 })
+    expect(second.deduplicated).toBe(false)
+    expect(second.id).not.toBe(first.id)
+    expect(db.all(sql`select 1 from raw_payloads`)).toHaveLength(2)
+  })
+
+  it('still dedups an identical body archived twice for the same window', () => {
+    const first = archive.put({ ...base, windowStartMs: 1000, windowEndMs: 2000, body, fetchedAtMs: 10 })
+    const second = archive.put({ ...base, windowStartMs: 1000, windowEndMs: 2000, body, fetchedAtMs: 99 })
+    expect(second.deduplicated).toBe(true)
+    expect(second.id).toBe(first.id)
+    expect(db.all(sql`select 1 from raw_payloads`)).toHaveLength(1)
+  })
+
   it('resolves a conflicting insert to dedup instead of throwing', () => {
     const first = archive.put({ ...base, body, fetchedAtMs: 10 })
     const second = archive.put({ ...base, body, fetchedAtMs: 10 })

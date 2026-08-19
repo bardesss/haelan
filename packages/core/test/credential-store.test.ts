@@ -7,7 +7,8 @@ import { openDatabase, closeDatabase } from '../src/db/open.ts'
 import { migrateToLatest } from '../src/db/migrate.ts'
 import { people } from '../src/db/schema/index.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
-import { open } from '../src/crypto/secretBox.ts'
+import { unseal } from '../src/crypto/secretBox.ts'
+import { loadOrCreateKey } from '../src/crypto/key.ts'
 import type { Database } from '../src/db/open.ts'
 
 const KEY = Buffer.alloc(32, 9)
@@ -40,8 +41,8 @@ describe('CredentialStore', () => {
     expect(stored).not.toContain('shh')
     // Rules out an encoding-only downgrade (e.g. plain base64) that would also fail to contain the plaintext.
     expect(stored).not.toBe(Buffer.from('shh', 'utf8').toString('base64'))
-    expect(open(KEY, stored ?? '')).toBe('shh')
-    expect(() => open(Buffer.alloc(32, 0), stored ?? '')).toThrow()
+    expect(unseal(KEY, stored ?? '')).toBe('shh')
+    expect(() => unseal(Buffer.alloc(32, 0), stored ?? '')).toThrow()
   })
 
   it('replaces the client rather than accumulating rows, because there is one per household', () => {
@@ -68,8 +69,8 @@ describe('CredentialStore', () => {
     expect(stored).not.toContain('rt-secret')
     // Rules out an encoding-only downgrade (e.g. plain base64) that would also fail to contain the plaintext.
     expect(stored).not.toBe(Buffer.from('rt-secret', 'utf8').toString('base64'))
-    expect(open(KEY, stored ?? '')).toBe('rt-secret')
-    expect(() => open(Buffer.alloc(32, 0), stored ?? '')).toThrow()
+    expect(unseal(KEY, stored ?? '')).toBe('rt-secret')
+    expect(() => unseal(Buffer.alloc(32, 0), stored ?? '')).toThrow()
   })
 
   it('reads an empty scope set back as empty, not as one empty scope', () => {
@@ -93,5 +94,32 @@ describe('CredentialStore', () => {
     store.putRefreshToken({ personId: 'p2', refreshToken: 'b', scopes: [], nowMs: 1 })
     store.markRevoked('p2', 50)
     expect(store.listConnectedPeople()).toEqual(['p1'])
+  })
+})
+
+describe('CredentialStore across a restart', () => {
+  it('reads back a secret written before restart, using a key reloaded from disk rather than held in memory', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-'))
+    try {
+      const key1 = loadOrCreateKey(dir, {})
+      const db1 = openDatabase(dir)
+      migrateToLatest(db1)
+      db1.insert(people).values({
+        id: 'p1', displayName: 'Test', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+      }).run()
+      const store1 = new CredentialStore(db1, key1)
+      store1.putClient({ clientId: 'cid', clientSecret: 'client-shh', nowMs: 1 })
+      store1.putRefreshToken({ personId: 'p1', refreshToken: 'rt-shh', scopes: ['a'], nowMs: 2 })
+      closeDatabase(db1)
+
+      const key2 = loadOrCreateKey(dir, {})
+      const db2 = openDatabase(dir)
+      const store2 = new CredentialStore(db2, key2)
+      expect(store2.getClient()).toEqual({ clientId: 'cid', clientSecret: 'client-shh' })
+      expect(store2.getRefreshToken('p1')?.refreshToken).toBe('rt-shh')
+      closeDatabase(db2)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
