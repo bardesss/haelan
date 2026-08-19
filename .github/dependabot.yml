@@ -13,11 +13,11 @@ updates:
     commit-message:
       prefix: 'ci'
 
+  # One entry for the whole workspace. Listing each package as its own directory
+  # makes Dependabot bump a manifest it cannot write a lockfile for, and CI then
+  # fails on --frozen-lockfile.
   - package-ecosystem: npm
-    directories:
-      - /
-      - /apps/web
-      - /packages/tokens
+    directory: /
     schedule:
       interval: weekly
       day: monday
