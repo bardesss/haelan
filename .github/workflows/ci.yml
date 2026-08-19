@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.6 is the engines floor, 26 is what development runs on. Testing both
+        # means the floor is verified rather than asserted.
+        node: ['22.6', '26']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      # Runs the token stylesheet generation through its prebuild hook, so a
+      # broken emitter fails here rather than in someone's browser.
+      - run: pnpm build
+
+      - name: Check the generated stylesheet is not committed
+        run: |
+          if git ls-files --error-unmatch apps/web/src/theme.generated.css > /dev/null 2>&1; then
+            echo "theme.generated.css is a build output and must not be tracked"
+            exit 1
+          fi
