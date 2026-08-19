@@ -1,23 +1,36 @@
 import { describe, it, expect } from 'vitest'
-import { emitCss } from '../src/emit.js'
+import { emitCss, themeVarNames, semanticVar, chartVar } from '../src/emit.js'
+import { resolveSemantic } from '../src/semantic.js'
+import { resolveChart } from '../src/chart.js'
 
 describe('css emitter', () => {
   const css = emitCss()
 
   it('defines dark values on :root', () => {
     expect(css).toMatch(/:root\s*\{/)
-    expect(css).toContain('--surface-card: #121926;')
-    expect(css).toContain('--chart-stage-deep: #3730A3;')
+    expect(css).toContain(`${semanticVar('surface-card')}: ${resolveSemantic('dark')['surface-card']};`)
+    expect(css).toContain(`${chartVar('stage-deep')}: ${resolveChart('dark')['stage-deep']};`)
   })
 
-  it('overrides only the semantic layer for the light theme', () => {
+  it('overrides only the semantic and chart layers for the light theme', () => {
     expect(css).toMatch(/\[data-theme='light'\]\s*\{/)
-    expect(css).toContain('--surface-card: #FFFFFF;')
+    const light = css.slice(css.indexOf("[data-theme='light']"))
+    expect(light).toContain(`${semanticVar('surface-card')}: ${resolveSemantic('light')['surface-card']};`)
+    expect(light).not.toContain('--space-4:')
   })
 
-  it('emits spacing and type scales', () => {
+  it('emits spacing and type scales once, outside the theme blocks', () => {
     expect(css).toContain('--space-4: 16px;')
     expect(css).toContain('--font-size-xl: 26px;')
+  })
+
+  it('defines every theme custom property in both themes', () => {
+    const dark = css.slice(css.indexOf(':root'), css.indexOf("[data-theme='light']"))
+    const light = css.slice(css.indexOf("[data-theme='light']"))
+    for (const name of themeVarNames()) {
+      expect(dark, `${name} missing from :root`).toContain(`${name}: `)
+      expect(light, `${name} missing from the light theme`).toContain(`${name}: `)
+    }
   })
 
   it('records that the file is generated', () => {

@@ -1,8 +1,7 @@
-node_modules/
+﻿node_modules/
 dist/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
 .env
 .superpowers/
-apps/web/src/theme.generated.css

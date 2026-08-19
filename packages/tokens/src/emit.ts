@@ -1,9 +1,24 @@
 import { primitives } from './primitives.js'
-import { resolveSemantic } from './semantic.js'
-import { resolveChart } from './chart.js'
+import { resolveSemantic, SEMANTIC_KEYS, type SemanticToken } from './semantic.js'
+import { resolveChart, CHART_KEYS, type ChartToken } from './chart.js'
 
 function block(selector: string, lines: string[]): string {
   return `${selector} {\n${lines.map((l) => `  ${l}`).join('\n')}\n}\n`
+}
+
+// The single authority on what a custom property is called. Anything that needs
+// to read a token by name imports these rather than retyping the string, so a
+// rename here is a compile error at the reader instead of a blank value at runtime.
+export function semanticVar(token: SemanticToken): string {
+  return `--${token}`
+}
+
+export function chartVar(token: ChartToken): string {
+  return `--chart-${token}`
+}
+
+export function themeVarNames(): string[] {
+  return [...SEMANTIC_KEYS.map(semanticVar), ...CHART_KEYS.map(chartVar)]
 }
 
 function scales(): string[] {
@@ -17,9 +32,11 @@ function scales(): string[] {
 }
 
 function themeLines(theme: 'dark' | 'light'): string[] {
+  const s = resolveSemantic(theme)
+  const c = resolveChart(theme)
   return [
-    ...Object.entries(resolveSemantic(theme)).map(([k, v]) => `--${k}: ${v};`),
-    ...Object.entries(resolveChart(theme)).map(([k, v]) => `--chart-${k}: ${v};`),
+    ...SEMANTIC_KEYS.map((k) => `${semanticVar(k)}: ${s[k]};`),
+    ...CHART_KEYS.map((k) => `${chartVar(k)}: ${c[k]};`),
   ]
 }
 

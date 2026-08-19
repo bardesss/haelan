@@ -1,49 +1,61 @@
-import { primitives } from './primitives.js'
+import { primitives, COLOR_GROUPS, type ColorPath } from './primitives.js'
 
 export type Theme = 'dark' | 'light'
-export const THEMES: Theme[] = ['dark', 'light']
+export const THEMES = ['dark', 'light'] as const satisfies readonly Theme[]
 
-export const semantic: Record<Theme, Record<string, string>> = {
+// Layer two: meaning, per theme, expressed only as references into layer one.
+// `satisfies` rather than a type annotation, so the key union below is derived
+// from what is actually here instead of widening to `string`.
+export const semantic = {
   dark: {
-    'surface-page': 'slate.950',
-    'surface-card': 'slate.850',
-    'surface-inset': 'slate.800',
-    'surface-rail': 'slate.900',
-    'text-primary': 'slate.paper',
+    'surface-page': 'slate.975',
+    'surface-card': 'slate.900',
+    'surface-inset': 'slate.925',
+    'surface-rail': 'slate.950',
+    'border-subtle': 'slate.850',
+    'text-primary': 'slate.150',
     'text-secondary': 'slate.300',
-    'text-muted': 'slate.500',
-    'text-faint': 'slate.600',
+    'text-muted': 'slate.400',
+    'text-faint': 'slate.500',
     accent: 'blue.500',
-    'accent-soft': 'blue.100',
-    focus: 'blue.300',
-    positive: 'signal.positive',
-    negative: 'signal.negative',
+    'accent-soft': 'blue.200',
+    focus: 'blue.100',
+    positive: 'mint.400',
+    negative: 'coral.400',
   },
   light: {
     'surface-page': 'slate.100',
     'surface-card': 'slate.50',
     'surface-inset': 'slate.200',
     'surface-rail': 'slate.50',
-    'text-primary': 'slate.ink',
-    'text-secondary': 'slate.inkSoft',
-    'text-muted': 'slate.600',
-    'text-faint': 'slate.500',
-    accent: 'blue.400',
+    'border-subtle': 'slate.200',
+    'text-primary': 'slate.900',
+    'text-secondary': 'slate.800',
+    'text-muted': 'slate.700',
+    'text-faint': 'slate.650',
+    accent: 'blue.600',
     'accent-soft': 'blue.900',
-    focus: 'blue.400',
-    positive: 'signal.positiveDark',
-    negative: 'signal.negativeDark',
+    focus: 'blue.600',
+    positive: 'mint.700',
+    negative: 'coral.700',
   },
-}
+} satisfies Record<Theme, Record<string, ColorPath>>
 
-export function lookup(path: string): string {
+export type SemanticToken = keyof (typeof semantic)['dark']
+export const SEMANTIC_KEYS = Object.keys(semantic.dark) as SemanticToken[]
+
+export const SURFACE_KEYS = ['surface-page', 'surface-card', 'surface-inset', 'surface-rail'] as const satisfies readonly SemanticToken[]
+export const TEXT_KEYS = ['text-primary', 'text-secondary', 'text-muted', 'text-faint'] as const satisfies readonly SemanticToken[]
+
+export function lookup(path: ColorPath): string {
   const [group, key] = path.split('.')
+  if (!COLOR_GROUPS.includes(group as never)) throw new Error(`unknown primitive: ${path}`)
   const value = (primitives as Record<string, Record<string, string>>)[group ?? '']?.[key ?? '']
   if (!value) throw new Error(`unknown primitive: ${path}`)
   return value
 }
 
-export function resolveSemantic(theme: Theme, extra?: Record<string, string>): Record<string, string> {
-  const source = extra ?? semantic[theme]
-  return Object.fromEntries(Object.entries(source).map(([name, path]) => [name, lookup(path)]))
+export function resolveSemantic(theme: Theme): Record<SemanticToken, string> {
+  const entries = Object.entries(semantic[theme]).map(([name, path]) => [name, lookup(path)])
+  return Object.fromEntries(entries) as Record<SemanticToken, string>
 }

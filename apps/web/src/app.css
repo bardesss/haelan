@@ -1,4 +1,4 @@
-@import './theme.generated.css';
+@import '@vitals/tokens/theme.css';
 
 * { box-sizing: border-box; }
 
