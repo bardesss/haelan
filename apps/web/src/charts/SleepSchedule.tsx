@@ -2,8 +2,7 @@ import { useCallback } from 'react'
 import type { EChartsOption, CustomSeriesRenderItemAPI, CustomSeriesRenderItemParams } from 'echarts'
 import { useChart } from './useChart.js'
 import type { ChartTokens } from './tokens.js'
-
-type Night = { date: string; bed: number | null; wake: number | null; naps: number[] }
+import { nightMark, type Night } from './schedule.js'
 
 // Sits mid-range so a no-data night reads as a distinct mark, not a stray dot
 // lost against an axis edge.
@@ -22,26 +21,27 @@ export function SleepSchedule({ nights }: { nights: Night[] }) {
         renderItem: (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
           const night = nights[params.dataIndex]
           if (!night) return { type: 'group' as const, children: [] }
+          const mark = nightMark(night, t)
           // A missing bed or wake time is absence, not a zero-length span: draw a
           // no-data mark instead of a line so the gap stays visible on the axis.
-          if (night.bed === null || night.wake === null) {
-            const mark = api.coord([Number(api.value(0)), NO_DATA_Y])
+          if (mark.kind === 'no-data') {
+            const point = api.coord([Number(api.value(0)), NO_DATA_Y])
             return {
               type: 'circle',
-              shape: { cx: mark[0] ?? 0, cy: mark[1] ?? 0, r: 3 },
-              style: { fill: t.noData },
+              shape: { cx: point[0] ?? 0, cy: point[1] ?? 0, r: 3 },
+              style: { fill: mark.color },
             }
           }
-          const top = api.coord([api.value(0), night.bed])
-          const bottom = api.coord([api.value(0), night.wake])
+          const top = api.coord([api.value(0), mark.bed])
+          const bottom = api.coord([api.value(0), mark.wake])
           return {
             type: 'line',
             shape: { x1: top[0] ?? 0, y1: top[1] ?? 0, x2: bottom[0] ?? 0, y2: bottom[1] ?? 0 },
-            style: { stroke: t.stageLight, lineWidth: 5, lineCap: 'round' },
+            style: { stroke: mark.color, lineWidth: 5, lineCap: 'round' },
           }
         },
         encode: { x: 0 },
-        data: nights.map((n, i) => [i, n.bed ?? 0]) },
+        data: nights.map((n, i) => [i, n.bed]) },
       { type: 'scatter' as const, symbolSize: 6, itemStyle: { color: t.stageAwake },
         data: nights.flatMap((n, i) => n.naps.map((nap) => [i, nap])) },
     ],
