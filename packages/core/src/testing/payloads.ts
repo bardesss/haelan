@@ -1,0 +1,50 @@
+// Shapes come from probe/findings/field-map.md, which records paths and types only. Every value
+// here is invented. Real payloads live in a gitignored directory and never enter a fixture.
+
+export interface SamplePointOptions {
+  payloadKey: string
+  valuePath: string
+  value: string | number
+  physicalTime: string
+  utcOffset?: string
+}
+
+const nest = (path: string, value: unknown): Record<string, unknown> => {
+  const segments = path.split('.')
+  return segments.reduceRight<unknown>((acc, key) => ({ [key]: acc }), value) as Record<string, unknown>
+}
+
+export function samplePoint(o: SamplePointOptions): Record<string, unknown> {
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
+    [o.payloadKey]: {
+      sampleTime: { physicalTime: o.physicalTime, utcOffset: o.utcOffset ?? '7200s' },
+      ...nest(o.valuePath, o.value),
+    },
+  }
+}
+
+export function intervalPoint(o: SamplePointOptions & { endTime: string }): Record<string, unknown> {
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    [o.payloadKey]: {
+      interval: {
+        startTime: o.physicalTime,
+        startUtcOffset: o.utcOffset ?? '7200s',
+        endTime: o.endTime,
+        endUtcOffset: o.utcOffset ?? '7200s',
+      },
+      ...nest(o.valuePath, o.value),
+    },
+  }
+}
+
+export function dailyPoint(o: { payloadKey: string, valuePath: string, value: string | number, date: { year: number, month: number, day: number } }): Record<string, unknown> {
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    [o.payloadKey]: { date: o.date, ...nest(o.valuePath, o.value) },
+  }
+}
+
+export const body = (points: unknown[], nextPageToken?: string): string =>
+  JSON.stringify({ dataPoints: points, ...(nextPageToken ? { nextPageToken } : {}) })
