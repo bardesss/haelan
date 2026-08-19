@@ -10,7 +10,7 @@ function scales(): string[] {
   return [
     ...Object.entries(primitives.space).map(([k, v]) => `--space-${k}: ${v};`),
     ...Object.entries(primitives.radius).map(([k, v]) => `--radius-${k}: ${v};`),
-    ...Object.entries(primitives.text).map(([k, v]) => `--text-${k}: ${v};`),
+    ...Object.entries(primitives.text).map(([k, v]) => `--font-size-${k}: ${v};`),
     `--font-sans: ${primitives.font.sans};`,
     `--font-mono: ${primitives.font.mono};`,
   ]

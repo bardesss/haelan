@@ -14,7 +14,7 @@ export function StatTile({ label, value, unit, basis, delta, children }: {
         <span className="label">{label}</span>
         {delta && <span className="delta" data-dir={delta.dir}>{delta.text}</span>}
       </header>
-      <div className="value">{value}{unit && <span style={{ fontSize: 'var(--text-lg)', color: 'var(--text-muted)' }}> {unit}</span>}</div>
+      <div className="value">{value}{unit && <span style={{ fontSize: 'var(--font-size-lg)', color: 'var(--text-muted)' }}> {unit}</span>}</div>
       <p className="basis">{basis}</p>
       {children}
     </>
