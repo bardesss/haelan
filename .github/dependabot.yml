@@ -1,0 +1,34 @@
+version: 2
+
+updates:
+  # Grouped per ecosystem per week; ungrouped updates on this workspace would bury security updates in noise.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: 'ci'
+
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /apps/web
+      - /packages/tokens
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      production:
+        dependency-type: production
+        patterns: ['*']
+      development:
+        dependency-type: development
+        patterns: ['*']
+    commit-message:
+      prefix: 'deps'
+      prefix-development: 'deps(dev)'
