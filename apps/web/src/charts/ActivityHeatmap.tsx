@@ -8,12 +8,7 @@ import { ChartFigure } from './ChartFigure.js'
 import type { DayRow } from '../fixtures/july.js'
 
 export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: number; label: string }) {
-  // calendarLayout(...) is a pure function of the dates, but called bare in the
-  // component body it returns a new `cells` array identity every render. That
-  // identity feeds the `useCallback` below, so without memoising here `build`
-  // is unstable and useChart's effect disposes and recreates the ECharts
-  // instance (and its MutationObserver and resize listener) on every render,
-  // not just when the data actually changes.
+  // Memoised: an unstable build identity makes useChart dispose and recreate the chart.
   const { weeks, cells } = useMemo(() => calendarLayout(days.map((d) => d.date)), [days])
 
   const build = useCallback((t: ChartTokens): EChartsOption => {
@@ -22,9 +17,7 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
       const steps = days[i]?.steps
       return steps === null || steps === undefined ? [] : [[c.week, c.weekday, steps]]
     })
-    // Absence gets its own mark rather than an unpainted cell. A cell that is
-    // simply not drawn is indistinguishable from a cell at the bottom of the
-    // scale, which is the failure this whole ramp exists to avoid.
+    // Absence gets its own mark: an unpainted cell would be indistinguishable from the bottom of the scale.
     const absent = cells.flatMap((c, i) => (days[i]?.steps === null ? [[c.week, c.weekday]] : []))
     return {
       grid: base.grid({ left: 30, top: 10, bottom: 20 }),
@@ -38,9 +31,7 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
         type: 'category' as const, data: [...WEEKDAY_LABELS],
         axisLabel: base.axisLabel, ...base.hiddenAxis,
       },
-      // seriesIndex is load-bearing: visualMap applies to every series by
-      // default, so without it the absence dots would be repainted with the
-      // value scale, which is the exact confusion they exist to prevent.
+      // seriesIndex: visualMap applies to every series by default and would repaint the absence dots too.
       visualMap: { min: 0, max, show: false, seriesIndex: 0, inRange: { color: scaleStops(t) } },
       series: [
         {

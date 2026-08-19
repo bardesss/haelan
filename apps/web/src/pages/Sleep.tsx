@@ -12,12 +12,7 @@ import type { Delta } from '../format.js'
 
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
 const STAGE_LABEL: Record<Stage, string> = { deep: 'Deep', light: 'Light', rem: 'REM', awake: 'Awake' }
-// Token names, not literal custom-property strings: chartVar()'s ChartToken
-// parameter makes a rename in packages/tokens/src/chart.ts a compile error
-// here rather than a swatch quietly pointing at a variable nothing defines.
-// Reference the token by name rather than resolving it in JS, so the swatch
-// follows a theme switch through ordinary CSS custom-property inheritance
-// instead of needing its own render-time read.
+// Token names, not literal strings: a rename in chart.ts becomes a compile error, and the swatch follows theme switches via CSS inheritance.
 const STAGE_TOKEN: Record<Stage, ChartToken> = {
   deep: 'stage-deep', light: 'stage-light', rem: 'stage-rem', awake: 'stage-awake',
 }
@@ -31,9 +26,7 @@ const lastDay = july.days.at(-1)
 const lastNight = july.schedule.at(-1)
 const baseline = july.baselines.sleepMinutes
 
-// Sleep duration has an unambiguous polarity: more of it, up to the baseline
-// band, is the outcome the reader wants. Saying so beats letting the tone
-// default to neutral on a metric nobody is actually neutral about.
+// Sleep duration's polarity is unambiguous: more, up to the baseline band, is always the good direction.
 function baselineDelta(minutes: number, low: number, high: number): Delta {
   const range = `the ${formatDuration(low)} to ${formatDuration(high)} baseline`
   const basis = `baseline is this sleeper's own ${formatDuration(low)} to ${formatDuration(high)} range`

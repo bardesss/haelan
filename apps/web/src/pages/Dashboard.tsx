@@ -23,20 +23,13 @@ const meanHrMin = numbers((d) => d.hrMin)
 const meanHrMean = numbers((d) => d.hrMean)
 const meanSleep = numbers((d) => d.sleepMinutes)
 const avg = (xs: number[]) => xs.reduce((sum, v) => sum + v, 0) / xs.length
-// The heatmap's colour scale runs from zero to the busiest recorded day, so the
-// top of the ramp is a number this month actually contains rather than a round
-// figure typed into the chart.
 const maxSteps = Math.max(0, ...numbers((d) => d.steps))
 
 const lastNight = july.schedule.at(-1)
 const startLabel = lastNight?.bed != null ? `Bed ${formatClock(lastNight.bed)}` : 'Bed time not recorded'
 const lastDate = july.days.at(-1)?.date ?? ''
 
-// Verified rather than assumed: some nights this month have naps, so a
-// month-wide "no naps" empty state would misreport real data. There is no
-// naturally zero event count in this fixture at the monthly grain, so the
-// two required empty states below use metrics that are genuinely absent,
-// and the "verified zero" one below actually checks rather than asserting.
+// Verified, not assumed: this is the only metric that naturally hits zero in the fixture, so this branch is real.
 const zeroSleepNights = worn.filter((d) => d.sleepMinutes === 0)
 
 export function Dashboard() {

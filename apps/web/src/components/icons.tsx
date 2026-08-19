@@ -1,5 +1,4 @@
-// Inline so nothing is fetched at runtime. currentColor lets the rail's active
-// state recolour the icon without a second token.
+// Inline so nothing is fetched at runtime; currentColor lets the active state recolour icons without a second token.
 const PATHS: Record<string, React.ReactNode> = {
   dashboard: (
     <>

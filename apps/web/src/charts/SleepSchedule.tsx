@@ -7,19 +7,11 @@ import { nightMark, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
 
-// Noon through noon the next day, not 18:00 through 18:00: the window was
-// already a full 24 hours, so the fixture's naps (13:00-16:00, well before any
-// recorded bedtime) only needed the window shifted six hours earlier, not
-// widened. Widening it would have compressed the bed-to-wake band this chart
-// exists to show; shifting it costs nothing because the span stays 1440
-// minutes either way. See schedule-marks.test.ts for the coverage this fixes.
+// Noon to noon: shifted rather than widened, so naps at 13:00 fit without compressing the sleep band.
 export const AXIS_MIN = 12 * 60
 export const AXIS_MAX = 36 * 60
 
-// Parked above every real span rather than inside the range they occupy: at
-// the axis floor the absence dot once sat ten minutes under a wake-time
-// cluster, which reads as an unusually early morning rather than as a night
-// with no reading at all.
+// Parked above every real span: inside the range it once read as an unusually early wake time.
 export const NO_DATA_Y = 35 * 60
 
 export function SleepSchedule({ nights, label }: { nights: Night[]; label: string }) {
@@ -38,8 +30,7 @@ export function SleepSchedule({ nights, label }: { nights: Night[]; label: strin
             const night = nights[params.dataIndex]
             if (!night) return { type: 'group' as const, children: [] }
             const mark = nightMark(night, t)
-            // A missing bed or wake time is absence, not a zero-length span: draw a
-            // no-data mark instead of a line so the gap stays visible on the axis.
+            // Missing bed/wake is absence, not a zero-length span: draw a no-data mark so the gap stays visible.
             if (mark.kind === 'no-data') {
               const point = api.coord([Number(api.value(0)), NO_DATA_Y])
               return {

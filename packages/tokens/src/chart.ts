@@ -3,14 +3,10 @@ import type { ColorPath } from './primitives.js'
 
 export const STAGE_KEYS = ['stage-deep', 'stage-light', 'stage-rem', 'stage-awake'] as const
 
-// The sequential scale, low value first. Both themes walk the same five-stop
-// perceptual ramp; they walk it in opposite directions so "more" always moves
-// away from that theme's own card. Any continuous quantity (steps per day,
-// minutes per hour) uses these and nothing else.
+// Low value first; each theme walks the ramp in the opposite direction so "more" moves away from its own card.
 export const SCALE_KEYS = ['scale-1', 'scale-2', 'scale-3', 'scale-4', 'scale-5'] as const
 
-// Layer three: chart roles. Sleep depth reads as colour depth, and the blue to
-// amber axis survives every common dichromacy. See spec section 17, track D1.
+// Chart roles: sleep depth reads as colour depth; the blue-to-amber axis survives common dichromacy (spec section 17, track D1).
 export const chartTokens = {
   dark: {
     'stage-deep': 'blue.800',
