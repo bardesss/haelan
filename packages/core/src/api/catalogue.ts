@@ -31,8 +31,6 @@ export interface DataType {
   unit: string
   /** Path within the payload object to the raw value, dotted. */
   valuePath: string
-  /** Source values arrive as JSON strings for integer fields. */
-  parse: 'number' | 'string'
   /** Written per minute rather than per sample. Only heart rate needs it today. */
   downsampleToMinute: boolean
 }
@@ -63,7 +61,6 @@ const listable = (
   agg,
   unit,
   valuePath,
-  parse: 'number',
   downsampleToMinute: false,
   ...extra,
 })
