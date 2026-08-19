@@ -51,4 +51,21 @@ describe('data type catalogue', () => {
   it('has no duplicate ids', () => {
     expect(new Set(DATA_TYPES.map((t) => t.id)).size).toBe(DATA_TYPES.length)
   })
+
+  it('points hrv value paths at the field the API actually returns', () => {
+    expect(dataTypeById('heart-rate-variability')?.valuePath).toBe('rootMeanSquareOfSuccessiveDifferencesMilliseconds')
+    expect(dataTypeById('daily-heart-rate-variability')?.valuePath).toBe('averageHeartRateVariabilityMilliseconds')
+  })
+
+  it('keeps every mapping-deferred type listable, since it is still fetched and archived', () => {
+    for (const t of DATA_TYPES.filter((t) => t.mappingDeferred)) {
+      expect(t.listSupported, t.id).toBe(true)
+    }
+  })
+
+  it('never defers mapping for a session target, which would be meaningless', () => {
+    for (const t of DATA_TYPES.filter((t) => t.mappingDeferred)) {
+      expect(t.target, t.id).not.toBe('sessions')
+    }
+  })
 })
