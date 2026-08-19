@@ -1,8 +1,25 @@
 import { useEffect, useRef } from 'react'
-import * as echarts from 'echarts'
+import type { EChartsOption } from 'echarts'
+import * as echarts from 'echarts/core'
+import { CustomChart, HeatmapChart, LineChart, ScatterChart } from 'echarts/charts'
+import {
+  GraphicComponent, GridComponent, MarkAreaComponent, MarkLineComponent,
+  MarkPointComponent, TooltipComponent, VisualMapComponent,
+} from 'echarts/components'
+import { SVGRenderer } from 'echarts/renderers'
 import { currentChartTokens, type ChartTokens } from './tokens.js'
 
-export function useChart(build: (t: ChartTokens) => echarts.EChartsOption, height: number) {
+// Registering only what the six charts use, rather than importing the `echarts`
+// barrel, is what keeps the bundle proportional to the charts that exist. Adding
+// a chart type means adding it here, deliberately.
+echarts.use([
+  CustomChart, HeatmapChart, LineChart, ScatterChart,
+  GraphicComponent, GridComponent, MarkAreaComponent, MarkLineComponent,
+  MarkPointComponent, TooltipComponent, VisualMapComponent,
+  SVGRenderer,
+])
+
+export function useChart(build: (t: ChartTokens) => EChartsOption, height: number) {
   const host = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

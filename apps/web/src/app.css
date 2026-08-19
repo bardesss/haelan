@@ -21,16 +21,24 @@ body {
 
 .main { flex: 1; padding: var(--space-5); min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
-.card { background: var(--surface-card); border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+.card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
 
 .label { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
-.delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
 .delta[data-tone='good'] { color: var(--positive); }
 .delta[data-tone='bad'] { color: var(--negative); }
 .delta[data-tone='neutral'] { color: var(--text-secondary); }
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
+
+/* Every chart ships its numbers as a table for readers who cannot see the shape.
+   Clipped rather than display:none, which would take it out of the accessibility
+   tree along with the pixels. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;
+}
 
 @media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }

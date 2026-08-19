@@ -1,7 +1,10 @@
 import { useCallback } from 'react'
 import type { EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
+import { chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
+import { hrTooltip } from './hrTooltip.js'
+import { ChartFigure } from './ChartFigure.js'
 import type { DayRow } from '../fixtures/july.js'
 
 type Props = {
@@ -9,57 +12,59 @@ type Props = {
   baseline: { low: number; high: number }
   annotations: { date: string; text: string }[]
   excluded: string[]
+  label: string
 }
 
-export function HeartRateRange({ days, baseline, annotations, excluded }: Props) {
-  const build = useCallback((t: ChartTokens): EChartsOption => ({
-    grid: { left: 34, right: 12, top: 18, bottom: 24 },
-    tooltip: {
-      trigger: 'axis' as const, backgroundColor: t.surface, borderColor: t.grid, textStyle: { color: t.muted },
-      // The min/max band is a stacked area under the hood, so the default axis
-      // tooltip would show the stacked delta instead of the true max. Rebuild
-      // the real values from the day row instead of trusting series data.
-      formatter: (params) => {
-        const first = Array.isArray(params) ? params[0] : params
-        const day = first ? days[first.dataIndex] : undefined
-        if (!day) return ''
-        if (!day.worn) return `${day.date}<br/>not worn`
-        // worn is true but the type still permits a null metric; never let a null
-        // reach the string as the literal text "null".
-        if (day.hrMean === null || day.hrMin === null || day.hrMax === null) return `${day.date}<br/>no data`
-        return `${day.date}<br/>mean ${day.hrMean} bpm<br/>range ${day.hrMin}–${day.hrMax} bpm`
+export function HeartRateRange({ days, baseline, annotations, excluded, label }: Props) {
+  const build = useCallback((t: ChartTokens): EChartsOption => {
+    const base = chartBase(t)
+    return {
+      grid: base.grid({ top: 18 }),
+      tooltip: {
+        ...base.tooltip,
+        trigger: 'axis' as const,
+        formatter: (params) => hrTooltip(days, (Array.isArray(params) ? params[0] : params)?.dataIndex),
       },
-    },
-    xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)),
-      axisLine: { lineStyle: { color: t.grid } }, axisLabel: { color: t.axis, fontSize: 9 } },
-    yAxis: { type: 'value' as const, scale: true, splitLine: { lineStyle: { color: t.grid } },
-      axisLabel: { color: t.axis, fontSize: 9 } },
-    series: [
-      { name: 'min', type: 'line' as const, data: days.map((d) => d.hrMin), showSymbol: false, connectNulls: false,
-        lineStyle: { opacity: 0 }, stack: 'range', areaStyle: { opacity: 0 } },
-      { name: 'range', type: 'line' as const, data: days.map((d) => (d.hrMax !== null && d.hrMin !== null ? d.hrMax - d.hrMin : null)),
-        showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 }, stack: 'range',
-        areaStyle: { color: t.stageLight, opacity: 0.22 } },
-      { name: 'mean', type: 'line' as const, data: days.map((d) => d.hrMean), showSymbol: false, connectNulls: false,
-        lineStyle: { width: 1.9, color: t.series },
-        markArea: { silent: true, itemStyle: { color: t.band, opacity: 0.5 },
-          data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] },
-        markPoint: { symbolSize: 7, itemStyle: { color: t.excluded },
-          // markPoint items with explicit coordinates skip axis extent calculation,
-          // so a placeholder yAxis lands off the fitted range. Anchor each marker
-          // at the day's actual mean instead, and drop it rather than guess if
-          // that day has no reading at all.
-          data: excluded.flatMap((date) => {
-            const day = days.find((d) => d.date === date)
-            if (!day || day.hrMean === null) return []
-            return [{ name: 'excluded', xAxis: date.slice(8), yAxis: day.hrMean }]
-          }) },
-        markLine: { symbol: 'circle', lineStyle: { color: t.stageAwake, type: 'dashed' as const },
-          label: { color: t.stageAwake, fontSize: 9, formatter: (p: { name: string }) => p.name },
-          data: annotations.map((a) => ({ name: a.text, xAxis: a.date.slice(8) })) } },
-    ],
-  }), [days, baseline, annotations, excluded])
+      xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },
+      yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
+      series: [
+        { name: 'min', type: 'line' as const, data: days.map((d) => d.hrMin), showSymbol: false, connectNulls: false,
+          lineStyle: { opacity: 0 }, stack: 'range', areaStyle: { opacity: 0 } },
+        { name: 'range', type: 'line' as const, data: days.map((d) => (d.hrMax !== null && d.hrMin !== null ? d.hrMax - d.hrMin : null)),
+          showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 }, stack: 'range',
+          areaStyle: { color: t.stageLight, opacity: OPACITY.rangeBand } },
+        { name: 'mean', type: 'line' as const, data: days.map((d) => d.hrMean), showSymbol: false, connectNulls: false,
+          lineStyle: { width: STROKE.series, color: t.series },
+          markArea: { silent: true, itemStyle: { color: t.band, opacity: OPACITY.baselineBand },
+            data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] },
+          markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: t.excluded },
+            // markPoint items with explicit coordinates skip axis extent calculation,
+            // so a placeholder yAxis lands off the fitted range. Anchor each marker
+            // at the day's actual mean instead, and drop it rather than guess if
+            // that day has no reading at all.
+            data: excluded.flatMap((date) => {
+              const day = days.find((d) => d.date === date)
+              if (!day || day.hrMean === null) return []
+              return [{ name: 'excluded', xAxis: date.slice(8), yAxis: day.hrMean }]
+            }) },
+          markLine: { symbol: 'circle', lineStyle: { color: t.stageAwake, type: 'dashed' as const },
+            label: { color: t.stageAwake, fontSize: base.axisLabel.fontSize, formatter: (p: { name: string }) => p.name },
+            data: annotations.map((a) => ({ name: a.text, xAxis: a.date.slice(8) })) } },
+      ],
+    }
+  }, [days, baseline, annotations, excluded])
 
   const { host, style } = useChart(build, 170)
-  return <div ref={host} style={style} />
+  return (
+    <ChartFigure label={label} host={host} style={style}
+      table={{
+        columns: ['Date', 'Minimum', 'Mean', 'Maximum', 'Note'],
+        rows: days.map((d) => [
+          d.date,
+          d.hrMin ?? 'no reading', d.hrMean ?? 'no reading', d.hrMax ?? 'no reading',
+          [!d.worn ? 'not worn' : '', excluded.includes(d.date) ? 'excluded' : '',
+            annotations.find((a) => a.date === d.date)?.text ?? ''].filter(Boolean).join(', '),
+        ]),
+      }} />
+  )
 }

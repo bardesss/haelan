@@ -6,7 +6,7 @@ import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
 import { july } from '../fixtures/july.js'
 import type { Stage } from '../fixtures/july.js'
-import { formatClock, formatDuration } from '../format.js'
+import { formatClock, formatDuration, toneFor } from '../format.js'
 import type { Delta } from '../format.js'
 
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
@@ -27,10 +27,15 @@ const lastDay = july.days.at(-1)
 const lastNight = july.schedule.at(-1)
 const baseline = july.baselines.sleepMinutes
 
+// Sleep duration has an unambiguous polarity: more of it, up to the baseline
+// band, is the outcome the reader wants. Saying so beats letting the tone
+// default to neutral on a metric nobody is actually neutral about.
 function baselineDelta(minutes: number, low: number, high: number): Delta {
-  if (minutes < low) return { text: `↓ below the ${formatDuration(low)}–${formatDuration(high)} baseline`, dir: 'down' }
-  if (minutes > high) return { text: `↑ above the ${formatDuration(low)}–${formatDuration(high)} baseline`, dir: 'up' }
-  return { text: `→ within the ${formatDuration(low)}–${formatDuration(high)} baseline`, dir: 'flat' }
+  const range = `the ${formatDuration(low)} to ${formatDuration(high)} baseline`
+  const basis = `baseline is this sleeper's own ${formatDuration(low)} to ${formatDuration(high)} range`
+  if (minutes < low) return { text: `↓ below ${range}`, dir: 'down', tone: toneFor('down', 'higher-is-better'), basis }
+  if (minutes > high) return { text: `↑ above ${range}`, dir: 'up', tone: toneFor('up', 'higher-is-better'), basis }
+  return { text: `→ within ${range}`, dir: 'flat', tone: toneFor('flat', 'higher-is-better'), basis }
 }
 
 export function Sleep() {
@@ -53,11 +58,10 @@ export function Sleep() {
           )}
         </Card>
 
-        <Card span={8}>
-          <span className="label">Sleep stages</span>
-          <p className="basis">last night, {lastDay?.date ?? 'no date'}, per minute</p>
+        <Card span={8} label="Sleep stages" basis={`last night, ${lastDay?.date ?? 'no date'}, per minute`}>
           <Hypnogram segments={july.hypnogram}
-            startLabel={lastNight?.bed != null ? `Bed ${formatClock(lastNight.bed)}` : 'Bed time not recorded'} />
+            startLabel={lastNight?.bed != null ? `Bed ${formatClock(lastNight.bed)}` : 'Bed time not recorded'}
+            label={`Sleep stages through the night of ${lastDay?.date ?? 'the last recorded night'}`} />
           <ul style={{ display: 'flex', gap: 'var(--space-4)', margin: 'var(--space-2) 0 0', padding: 0, listStyle: 'none' }}>
             {STAGE_ORDER.map((stage) => (
               <li key={stage} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
@@ -68,8 +72,7 @@ export function Sleep() {
           </ul>
         </Card>
 
-        <Card span={12}>
-          <span className="label">Nap</span>
+        <Card span={12} label="Nap">
           {lastNight && lastNight.naps.length > 0 ? (
             <p className="basis">
               recorded {lastNight.naps.length === 1 ? 'a nap' : `${lastNight.naps.length} naps`} starting at{' '}
@@ -83,10 +86,9 @@ export function Sleep() {
           )}
         </Card>
 
-        <Card span={12}>
-          <span className="label">Sleep schedule, month</span>
-          <p className="basis">bed and wake time, {july.schedule.length} nights, dot marks a nap</p>
-          <SleepSchedule nights={july.schedule} />
+        <Card span={12} label="Sleep schedule, month"
+          basis={`bed and wake time, ${july.schedule.length} nights, dot marks a nap`}>
+          <SleepSchedule nights={july.schedule} label="Bed and wake times for each night of July 2026" />
         </Card>
       </div>
     </>
