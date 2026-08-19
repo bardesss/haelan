@@ -9,7 +9,7 @@ function App() {
   const [page, setPage] = useState('dashboard')
   return (
     <div className="layout">
-      <Sidebar active={page} onNavigate={setPage} />
+      <Sidebar active={page} person="Bartus" onNavigate={setPage} />
       <main className="main">{page === 'sleep' ? <Sleep /> : <Dashboard />}</main>
     </div>
   )

@@ -1,4 +1,4 @@
-import { chartVar, type ChartToken } from '@vitals/tokens'
+import { chartVar, type ChartToken } from '@haelan/tokens'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
@@ -30,9 +30,9 @@ const baseline = july.baselines.sleepMinutes
 function baselineDelta(minutes: number, low: number, high: number): Delta {
   const range = `the ${formatDuration(low)} to ${formatDuration(high)} baseline`
   const basis = `baseline is this sleeper's own ${formatDuration(low)} to ${formatDuration(high)} range`
-  if (minutes < low) return { text: `↓ below ${range}`, dir: 'down', tone: toneFor('down', 'higher-is-better'), basis }
-  if (minutes > high) return { text: `↑ above ${range}`, dir: 'up', tone: toneFor('up', 'higher-is-better'), basis }
-  return { text: `→ within ${range}`, dir: 'flat', tone: toneFor('flat', 'higher-is-better'), basis }
+  if (minutes < low) return { text: `â†“ below ${range}`, dir: 'down', tone: toneFor('down', 'higher-is-better'), basis }
+  if (minutes > high) return { text: `â†‘ above ${range}`, dir: 'up', tone: toneFor('up', 'higher-is-better'), basis }
+  return { text: `â†’ within ${range}`, dir: 'flat', tone: toneFor('flat', 'higher-is-better'), basis }
 }
 
 export function Sleep() {

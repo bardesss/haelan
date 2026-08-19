@@ -47,13 +47,34 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 7.2V12l3.2 1.9" />
     </>
   ),
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.4a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 2.6 7a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 7 3.6h.1A1.7 1.7 0 0 0 8.4 2V1a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 2.6a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0 1.2 2.9H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.4Z" />
+    </>
+  ),
+  sources: (
+    <>
+      <path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z" />
+      <path d="M3.5 16.5 12 21l8.5-4.5M3.5 12 12 16.5 20.5 12" />
+    </>
+  ),
+  download: <path d="M12 3.5v11m0 0 4-4m-4 4-4-4M4 17.5v1.5a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5v-1.5" />,
+  sync: (
+    <>
+      <path d="M20.5 12a8.5 8.5 0 0 1-14.6 5.9M3.5 12a8.5 8.5 0 0 1 14.6-5.9" />
+      <path d="M18.1 2.5v3.6h-3.6M5.9 21.5v-3.6h3.6" />
+    </>
+  ),
+  chevronLeft: <path d="M14.5 5.5 8 12l6.5 6.5" />,
+  chevronRight: <path d="M9.5 5.5 16 12l-6.5 6.5" />,
 }
 
 export function Icon({ name }: { name: string }) {
   const path = PATHS[name]
   if (!path) return null
   return (
-    <svg className="rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {path}
     </svg>

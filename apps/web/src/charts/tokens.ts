@@ -1,4 +1,4 @@
-import { chartVar, semanticVar, type ChartToken, type SemanticToken } from '@vitals/tokens'
+import { chartVar, semanticVar, type ChartToken, type SemanticToken } from '@haelan/tokens'
 
 // Token names are imported (satisfies catches a rename as a type error); values are read late via getComputedStyle so a theme switch reaches the charts.
 const CHART_SOURCES = {

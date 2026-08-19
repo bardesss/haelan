@@ -23,7 +23,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@vitals/tokens':
+      '@haelan/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens
       echarts:
