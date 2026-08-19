@@ -32,7 +32,10 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
         type: 'category' as const, data: [...WEEKDAY_LABELS],
         axisLabel: base.axisLabel, ...base.hiddenAxis,
       },
-      visualMap: { min: 0, max, show: false, inRange: { color: scaleStops(t) } },
+      // seriesIndex is load-bearing: visualMap applies to every series by
+      // default, so without it the absence dots would be repainted with the
+      // value scale, which is the exact confusion they exist to prevent.
+      visualMap: { min: 0, max, show: false, seriesIndex: 0, inRange: { color: scaleStops(t) } },
       series: [
         {
           type: 'heatmap' as const,

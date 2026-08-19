@@ -26,7 +26,7 @@ const avg = (xs: number[]) => xs.reduce((sum, v) => sum + v, 0) / xs.length
 // The heatmap's colour scale runs from zero to the busiest recorded day, so the
 // top of the ramp is a number this month actually contains rather than a round
 // figure typed into the chart.
-const maxSteps = Math.max(...numbers((d) => d.steps))
+const maxSteps = Math.max(0, ...numbers((d) => d.steps))
 
 const lastNight = july.schedule.at(-1)
 const startLabel = lastNight?.bed != null ? `Bed ${formatClock(lastNight.bed)}` : 'Bed time not recorded'
@@ -70,7 +70,7 @@ export function Dashboard() {
           </StatTile>
         </Card>
         <Card span={3}>
-          <StatTile label="Heart rate" value={String(Math.round(avg(meanHrMean)))} unit="bpm"
+          <StatTile label="Mean heart rate" value={String(Math.round(avg(meanHrMean)))} unit="bpm"
             basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
             delta={trend(meanHrMean, 'neutral')}>
             <Sparkline values={july.days.map((d) => d.hrMean)} labels={dates}
@@ -78,7 +78,7 @@ export function Dashboard() {
           </StatTile>
         </Card>
 
-        <Card span={8} label="Heart rate"
+        <Card span={8} label="Heart rate range"
           basis="daily minimum, mean and maximum, shaded band is the 60 day baseline">
           <HeartRateRange days={july.days} baseline={july.baselines.hrMean}
             annotations={july.events.map((e) => ({ date: e.date, text: e.text }))} excluded={july.excluded}
