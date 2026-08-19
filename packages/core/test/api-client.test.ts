@@ -10,7 +10,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 const page = (points: unknown[], nextPageToken?: string) =>
   new Response(JSON.stringify({ dataPoints: points, ...(nextPageToken ? { nextPageToken } : {}) }), { status: 200 })
 
-const WINDOW = { windowStartMs: Date.UTC(2026, 7, 18), windowEndMs: Date.UTC(2026, 7, 19) }
+const WINDOW = { windowStartMs: Date.UTC(2026, 7, 18), windowEndMs: Date.UTC(2026, 7, 19), timezone: 'UTC' }
 
 describe('HealthClient', () => {
   let ctx: TestDatabase
@@ -40,6 +40,34 @@ describe('HealthClient', () => {
     const filter = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get('filter') ?? ''
     expect(filter).toContain('daily_resting_heart_rate.date >= "2026-08-18"')
     expect(filter).not.toContain('T00:00:00')
+  })
+
+  it('names the local date for a date filtered type, not the UTC one', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(page([]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {} })
+    // 2026-08-17 22:30 UTC is 2026-08-18 00:30 in Amsterdam (CEST, UTC+2): UTC and local
+    // digits genuinely disagree on which day this instant belongs to.
+    const start = Date.UTC(2026, 7, 17, 22, 30)
+    const end = Date.UTC(2026, 7, 18, 22, 30)
+    await client.listDataPoints({
+      personId: 'p1', dataType: dataTypeById('daily-resting-heart-rate')!,
+      windowStartMs: start, windowEndMs: end, timezone: 'Europe/Amsterdam',
+    })
+    const filter = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get('filter') ?? ''
+    expect(filter).toContain('daily_resting_heart_rate.date >= "2026-08-18"')
+  })
+
+  it('carries local wall clock digits for a civil timestamp type, not the UTC ones', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(page([]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {} })
+    const start = Date.UTC(2026, 7, 17, 22, 30)
+    const end = Date.UTC(2026, 7, 18, 22, 30)
+    await client.listDataPoints({
+      personId: 'p1', dataType: dataTypeById('exercise')!,
+      windowStartMs: start, windowEndMs: end, timezone: 'Europe/Amsterdam',
+    })
+    const filter = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get('filter') ?? ''
+    expect(filter).toContain('exercise.interval.civil_start_time >= "2026-08-18T00:30:00"')
   })
 
   it('follows pagination until the token runs out', async () => {

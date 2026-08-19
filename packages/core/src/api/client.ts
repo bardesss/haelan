@@ -11,6 +11,8 @@ export interface ListInput {
   dataType: DataType
   windowStartMs: number
   windowEndMs: number
+  /** IANA zone name, e.g. 'Europe/Amsterdam'. Required: see buildFilter. */
+  timezone: string
 }
 
 export interface ListResult {
@@ -28,13 +30,31 @@ export interface ClientDeps {
 interface Tokens { accessTokenFor(personId: string): Promise<string> }
 
 const iso = (ms: number) => new Date(ms).toISOString()
-const day = (ms: number) => new Date(ms).toISOString().slice(0, 10)
-const civil = (ms: number) => new Date(ms).toISOString().slice(0, 19)
 
-function buildFilter(t: DataType, startMs: number, endMs: number): string {
+// en-CA yields ISO ordered parts (year, month, day), so formatToParts assembles a civil
+// date and time without string-slicing a UTC instant and without a date library.
+function civilParts(ms: number, timeZone: string): { date: string, time: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(ms)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}:${get('second')}` }
+}
+
+const day = (ms: number, timeZone: string) => civilParts(ms, timeZone).date
+const civil = (ms: number, timeZone: string) => {
+  const { date, time } = civilParts(ms, timeZone)
+  return `${date}T${time}`
+}
+
+function buildFilter(t: DataType, startMs: number, endMs: number, timezone: string): string {
   const member = `${t.filterRoot}.${t.filterMember}`
-  const fmt = t.filterMember === 'date' ? day
-    : t.filterMember === 'interval.civil_start_time' ? civil
+  // date and interval.civil_start_time carry no offset, so the same instant names a different
+  // day depending on where the person is. iso is an absolute instant and is zone independent.
+  const fmt = t.filterMember === 'date' ? (ms: number) => day(ms, timezone)
+    : t.filterMember === 'interval.civil_start_time' ? (ms: number) => civil(ms, timezone)
     : iso
   return `${member} >= "${fmt(startMs)}" AND ${member} < "${fmt(endMs)}"`
 }
@@ -52,7 +72,7 @@ export class HealthClient {
       throw new Error(`${t.id} does not support list, only rollup and dailyRollup`)
     }
 
-    const filter = buildFilter(t, input.windowStartMs, input.windowEndMs)
+    const filter = buildFilter(t, input.windowStartMs, input.windowEndMs, input.timezone)
     const payloadIds: string[] = []
     let pointCount = 0
     let pagesFetched = 0
@@ -101,6 +121,10 @@ export class HealthClient {
       lastStatus = res.status
       lastBody = await res.text()
 
+      // Contract evidence, a shape or filter Google changed, only ever arrives on a terminal
+      // response, so only a terminal response reaches the archive call in listDataPoints. A
+      // retriable status here is transient infrastructure noise, not schema drift, and is
+      // deliberately left unarchived; sync_state.last_error is its home instead.
       const retriable = res.status === 429 || res.status >= 500
       if (!retriable) return { body: lastBody, status: lastStatus }
 
