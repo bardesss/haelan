@@ -31,8 +31,19 @@ describe('person isolation', () => {
       personId: 'alice', dataType: 'steps', requestParams: {}, windowStartMs: 0,
       windowEndMs: 1, fetchedAtMs: 1, httpStatus: 200, body: '{"dataPoints":[]}',
     })
+    archive.put({
+      personId: 'bob', dataType: 'steps', requestParams: {}, windowStartMs: 0,
+      windowEndMs: 1, fetchedAtMs: 1, httpStatus: 200, body: '{"dataPoints":[1]}',
+    })
+
+    const aliceRows = ctx.db.select().from(rawPayloads).where(eq(rawPayloads.personId, 'alice')).all()
     const bobRows = ctx.db.select().from(rawPayloads).where(eq(rawPayloads.personId, 'bob')).all()
-    expect(bobRows).toHaveLength(0)
+
+    expect(aliceRows).toHaveLength(1)
+    expect(aliceRows[0]?.personId).toBe('alice')
+    expect(bobRows).toHaveLength(1)
+    expect(bobRows[0]?.personId).toBe('bob')
+    expect(aliceRows[0]?.id).not.toBe(bobRows[0]?.id)
   })
 
   it('refuses a row for a person who does not exist, so a typo cannot orphan data', () => {
