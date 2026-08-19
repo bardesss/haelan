@@ -45,20 +45,28 @@ describe('client and mapper together', () => {
 
   it('maps a night end to end', async () => {
     const sleep = dataTypeById('sleep')!
+    // The end instant is deliberately chosen so UTC and Amsterdam disagree on the calendar
+    // date: 22:30 UTC on the 17th is 00:30 CEST on the 18th. The offset is passed explicitly
+    // (rather than relying on sleepPoint's default) so the fixture reads as a deliberate
+    // choice, not an accident of the default. Only applying +7200s (2 hours) moves the wake
+    // date from the 17th to the 18th, so the assertion below can only pass if the offset is
+    // actually used rather than the payload's UTC instant read as-is.
     const night = sleepPoint({
-      startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z',
-      stages: [{ type: 'DEEP', startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T00:30:00Z' }],
+      startTime: '2026-08-17T19:30:00Z', endTime: '2026-08-17T22:30:00Z', utcOffset: '7200s',
+      stages: [{ type: 'DEEP', startTime: '2026-08-17T20:30:00Z', endTime: '2026-08-17T21:15:00Z' }],
     })
     const fetchMock = vi.fn().mockResolvedValue(new Response(body([night]), { status: 200 }))
     const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {} })
 
     // A night belonging to its wake date is exactly what this test is about, so a real zone
-    // rather than UTC is the point.
+    // rather than UTC is the point, even though the client's timezone argument only shapes the
+    // outgoing filter and does not itself reach the mapper below.
     const result = await client.listDataPoints({ personId: 'p1', dataType: sleep, timezone: 'Europe/Amsterdam', ...WINDOW })
     const stored = archive.getBody('p1', result.payloadIds[0]!)
     const { sessions, segments } = mapSessions({
       dataType: sleep, body: stored, personId: 'p1', sourceId: 's1', rawPayloadId: result.payloadIds[0]!,
     })
+    expect(sessions[0]?.endOffsetMinutes).toBe(120)
     expect(sessions[0]?.localDate).toBe('2026-08-18')
     expect(segments).toHaveLength(1)
   })

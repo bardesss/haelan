@@ -43,8 +43,9 @@ sync for them alone. `HealthClient` builds filters, follows pagination, backs of
 5xx, and archives every response before anything parses it. The mappers turn an archived body
 into rows.
 
-All three read one catalogue, `src/api/catalogue.ts`, which declares per data type what the API
-calls it and what we call it. That module exists because the v4 API is irregular in ways no
+`HealthClient` and the mappers read one catalogue, `src/api/catalogue.ts`, which declares per
+data type what the API calls it and what we call it. `TokenProvider` does not need it: it deals
+in credentials, not data types. That module exists because the v4 API is irregular in ways no
 amount of naming discipline hides: a single data type wears kebab case in the URL path, snake
 case in the filter and camel case in the response, the filterable member differs across five
 shapes with nothing documenting which applies, and two types reject `list` entirely in favour of
