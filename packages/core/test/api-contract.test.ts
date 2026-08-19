@@ -1,0 +1,82 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { RawArchive } from '../src/store/rawArchive.ts'
+import { HealthClient } from '../src/api/client.ts'
+import { dataTypeById, DATA_TYPES } from '../src/api/catalogue.ts'
+import { mapSamples } from '../src/api/mapSamples.ts'
+import { mapSessions } from '../src/api/mapSessions.ts'
+import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
+import type { TestDatabase } from '../src/testing/fixtures.ts'
+
+const WINDOW = { windowStartMs: Date.UTC(2026, 7, 18), windowEndMs: Date.UTC(2026, 7, 19) }
+
+describe('client and mapper together', () => {
+  let ctx: TestDatabase
+  let archive: RawArchive
+  const tokens = { accessTokenFor: async () => 'at' }
+
+  beforeEach(() => {
+    ctx = createTestDatabase()
+    seedPerson(ctx.db, 'p1')
+    archive = new RawArchive(ctx.db)
+  })
+  afterEach(() => { ctx.cleanup(); vi.restoreAllMocks() })
+
+  it('fetches, archives, reads back and maps without the body ever being passed in memory', async () => {
+    const hr = dataTypeById('heart-rate')!
+    const points = Array.from({ length: 30 }, (_, i) => samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(60 + i),
+      physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
+    }))
+    const fetchMock = vi.fn().mockResolvedValue(new Response(body(points), { status: 200 }))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {} })
+
+    // Not a test about local time, so UTC keeps the filter window unambiguous.
+    const result = await client.listDataPoints({ personId: 'p1', dataType: hr, timezone: 'UTC', ...WINDOW })
+    expect(result.payloadIds).toHaveLength(1)
+
+    const stored = archive.getBody('p1', result.payloadIds[0]!)
+    const rows = mapSamples({
+      dataType: hr, body: stored, personId: 'p1', sourceId: 's1', rawPayloadId: result.payloadIds[0]!,
+    })
+    expect(rows).toHaveLength(3)
+    expect(rows[0]?.n).toBe(30)
+  })
+
+  it('maps a night end to end', async () => {
+    const sleep = dataTypeById('sleep')!
+    const night = sleepPoint({
+      startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z',
+      stages: [{ type: 'DEEP', startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T00:30:00Z' }],
+    })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(body([night]), { status: 200 }))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {} })
+
+    // A night belonging to its wake date is exactly what this test is about, so a real zone
+    // rather than UTC is the point.
+    const result = await client.listDataPoints({ personId: 'p1', dataType: sleep, timezone: 'Europe/Amsterdam', ...WINDOW })
+    const stored = archive.getBody('p1', result.payloadIds[0]!)
+    const { sessions, segments } = mapSessions({
+      dataType: sleep, body: stored, personId: 'p1', sourceId: 's1', rawPayloadId: result.payloadIds[0]!,
+    })
+    expect(sessions[0]?.localDate).toBe('2026-08-18')
+    expect(segments).toHaveLength(1)
+  })
+
+  it('every listable type produces a filter the API would accept', () => {
+    for (const t of DATA_TYPES.filter((t) => t.listSupported)) {
+      expect(t.filterRoot, t.id).not.toMatch(/[A-Z]/)
+      expect(t.payloadKey, t.id).not.toMatch(/[-_]/)
+    }
+  })
+
+  it('no fixture in this suite contains a real measurement', () => {
+    // The values above are invented. This test exists to make that a checked property rather
+    // than a convention, since the archived M0 payloads are one careless copy away.
+    const fixtures = [body([samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: '60',
+      physicalTime: '2026-08-18T10:00:00Z',
+    })])]
+    for (const f of fixtures) expect(f).not.toContain('probe/samples')
+  })
+})

@@ -35,6 +35,31 @@ Three rules the schema exists to enforce:
   belongs to the wake date.
 - **Merging never happens on write.** Every sample and session keeps its `source_id`.
 
+## Reading the API
+
+Three layers, each ignorant of the next. `TokenProvider` turns a stored refresh token into a
+live access token and marks a person revoked when Google returns `invalid_grant`, which pauses
+sync for them alone. `HealthClient` builds filters, follows pagination, backs off on 429 and
+5xx, and archives every response before anything parses it. The mappers turn an archived body
+into rows.
+
+All three read one catalogue, `src/api/catalogue.ts`, which declares per data type what the API
+calls it and what we call it. That module exists because the v4 API is irregular in ways no
+amount of naming discipline hides: a single data type wears kebab case in the URL path, snake
+case in the filter and camel case in the response, the filterable member differs across five
+shapes with nothing documenting which applies, and two types reject `list` entirely in favour of
+rollups. Every one of those values was measured against the live API in M0 and is recorded in
+`probe/findings/field-map.md`. When one turns out to be wrong, correct it in the catalogue and
+nowhere else.
+
+Two parsing traps are handled once, in `src/api/parse.ts`, rather than in each mapper: integer
+fields arrive as JSON strings, and proto3 omits zero-valued fields entirely, so a nested time
+object can arrive as `{}` and a date missing its day is not a date.
+
+Fixtures are synthetic. Real payloads live in a gitignored directory and never become test data;
+`probe/findings/field-map.md` records the shapes without the measurements, which is what makes
+`src/testing/payloads.ts` possible.
+
 ## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all
