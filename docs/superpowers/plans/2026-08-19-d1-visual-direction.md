@@ -14,7 +14,7 @@
 
 - **No em dashes** in prose, code, comments, UI copy or commit messages.
 - **Comments are sparse** and record why, never what. Public interfaces documented at their boundary.
-- Node 22.6 or later (the CSS build script is TypeScript run through native type stripping), pnpm as package manager.
+- Node 22.13 or later (the floor comes from pnpm 11, not from our own code), pnpm as package manager.
 - **No CDN, no external font host, no network at runtime.** The app must render fully offline. Typography uses a system font stack so no font files are shipped or fetched.
 - **Components never reference primitive tokens.** They use semantic or component tokens only.
 - **Charts resolve colours from CSS custom properties at render time**, never from hardcoded values in chart option objects.

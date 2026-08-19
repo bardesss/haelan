@@ -15,9 +15,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.6 is the engines floor, 26 is what development runs on. Testing both
-        # means the floor is verified rather than asserted.
-        node: ['22.6', '26']
+        # 22.13 is the engines floor, set by pnpm 11 rather than by our own code,
+        # and 26 is what development runs on. Testing both means the floor is
+        # verified rather than asserted: the first CI run caught it declared as
+        # 22.6, which pnpm refuses to install on.
+        node: ['22.13', '26']
 
     steps:
       - uses: actions/checkout@v4
