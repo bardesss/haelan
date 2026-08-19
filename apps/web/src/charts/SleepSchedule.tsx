@@ -7,13 +7,20 @@ import { nightMark, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
 
-export const AXIS_MIN = 18 * 60
-export const AXIS_MAX = 42 * 60
+// Noon through noon the next day, not 18:00 through 18:00: the window was
+// already a full 24 hours, so the fixture's naps (13:00-16:00, well before any
+// recorded bedtime) only needed the window shifted six hours earlier, not
+// widened. Widening it would have compressed the bed-to-wake band this chart
+// exists to show; shifting it costs nothing because the span stays 1440
+// minutes either way. See schedule-marks.test.ts for the coverage this fixes.
+export const AXIS_MIN = 12 * 60
+export const AXIS_MAX = 36 * 60
 
 // Parked above every real span rather than inside the range they occupy: at
-// 18:00 the absence dot sat ten minutes under the wake-time cluster, which reads
-// as an unusually early morning rather than as a night with no reading at all.
-export const NO_DATA_Y = 40 * 60
+// the axis floor the absence dot once sat ten minutes under a wake-time
+// cluster, which reads as an unusually early morning rather than as a night
+// with no reading at all.
+export const NO_DATA_Y = 35 * 60
 
 export function SleepSchedule({ nights, label }: { nights: Night[]; label: string }) {
   const build = useCallback((t: ChartTokens): EChartsOption => {

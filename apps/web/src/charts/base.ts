@@ -33,7 +33,9 @@ export function chartBase(t: ChartTokens) {
   return {
     axisLabel,
     // Gridlines and axis lines are the same colour: they are the same thing to a
-    // reader, a faint rule that says where a value sits.
+    // reader, a faint division of the plot area, not a mark precise enough to
+    // read a value off of (see chart-styling.md section 2 on the dark theme's
+    // 1.04:1 contrast here).
     splitLine: { lineStyle: { color: t.grid } },
     axisLine: { lineStyle: { color: t.grid } },
     hiddenAxis: { axisLine: { show: false }, axisTick: { show: false } },

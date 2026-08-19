@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { chartBase, SYMBOL } from './base.js'
@@ -8,7 +8,13 @@ import { ChartFigure } from './ChartFigure.js'
 import type { DayRow } from '../fixtures/july.js'
 
 export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: number; label: string }) {
-  const { weeks, cells } = calendarLayout(days.map((d) => d.date))
+  // calendarLayout(...) is a pure function of the dates, but called bare in the
+  // component body it returns a new `cells` array identity every render. That
+  // identity feeds the `useCallback` below, so without memoising here `build`
+  // is unstable and useChart's effect disposes and recreates the ECharts
+  // instance (and its MutationObserver and resize listener) on every render,
+  // not just when the data actually changes.
+  const { weeks, cells } = useMemo(() => calendarLayout(days.map((d) => d.date)), [days])
 
   const build = useCallback((t: ChartTokens): EChartsOption => {
     const base = chartBase(t)
