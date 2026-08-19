@@ -23,3 +23,17 @@ Three corrections, each verified against developers.google.com/health:
    `/dataTypes/{type}/data`. The rollup methods are POST, so `api()` takes a method and body.
 3. Data type ids are kebab-case (`heart-rate`, `oxygen-saturation`), not the snake_case the
    plan's fetch list used.
+
+## The refresh check runs on a schedule
+
+Registered 2026-08-19, daily at 09:00, logging to `findings/token-log.jsonl`:
+
+    schtasks /query /tn "haelan-refresh-check"
+
+Remove it when this directory goes, or it keeps firing against a deleted script:
+
+    schtasks /delete /tn "haelan-refresh-check" /f
+
+Git Bash rewrites a leading slash into a Windows path, so `schtasks /create` arrives as
+`C:/Program Files/Git/create` and fails. Prefix with `MSYS_NO_PATHCONV=1`. Any setup
+instruction that hands a Windows user a `schtasks` or `reg` command hits this.
