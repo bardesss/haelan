@@ -1,7 +1,7 @@
 # Chart styling specification
 
 **Date:** 2026-08-19
-**Status:** Implemented and current as of D1 Task 10 (`Dashboard.tsx`, `Sleep.tsx`)
+**Status:** Implemented and current as of the D1 final fix round (`Dashboard.tsx`, `Sleep.tsx`)
 **Scope:** every chart in `apps/web/src/charts/`, plus the card/legend conventions the two
 reference pages establish for anything that carries a chart-adjacent colour.
 
@@ -35,6 +35,41 @@ array of the chart's own props, never of token values, so `useChart` is the sing
 decides when a chart needs to redraw for colour and it is the same code path for a prop change
 and a theme change.
 
+**Names come from the package, values come from the DOM.** `apps/web/src/charts/tokens.ts`
+imports `chartVar`, `semanticVar`, `ChartToken` and `SemanticToken` from `@vitals/tokens` and
+declares its mapping as `... as const satisfies Record<string, ChartToken>`. A token renamed in
+`packages/tokens/src/chart.ts` is therefore a **compile error in the app**, not a blank string at
+first paint; `apps/web/test/chart-tokens.test.ts` additionally asserts that `emitCss()` defines
+every custom property the app reads. The same object produces both the property-name list and the
+field mapping, so those two cannot drift apart. What the app must *never* import is a resolved
+colour: values stay late-bound through `getComputedStyle` or the theme switch would not reach the
+charts.
+
+## 1a. Where the shared fragments live
+
+`apps/web/src/charts/base.ts` holds everything that is house style rather than chart-specific:
+
+- `chartBase(t)` returns `axisLabel`, `splitLine`, `axisLine`, `hiddenAxis`, `tooltip`,
+  `labelledAxis`, and `grid(inset)` which fills in the constant `right: 12` / `top: 12` /
+  `bottom: 24` and takes overrides for what varies.
+- `STROKE`, `OPACITY`, `SYMBOL` and `AXIS_FONT_SIZE` name every weight, fill opacity and marker
+  size in the chart layer.
+
+A chart states only what makes it that chart. This is not tidiness: the six charts previously
+retyped the same four blocks, and the copies had already drifted (one chart's axis labels were a
+point larger than the specification claimed they all were). A number that lives inside one
+chart's option object is a number the next chart copies slightly wrong.
+
+**Spacing and type scales follow the same rule as colour, by convention rather than by guard.**
+`--space-*`, `--radius-*` and `--font-size-*` exist for the same reason the colour tokens do.
+Reach for them in any inline `style` or CSS rule; do not type a pixel value that one of them
+already names. This is deliberately *not* enforced by a build failure, because charts legitimately
+need raw numbers ECharts cannot read a custom property for (grid insets, symbol sizes, stroke
+widths), and those live in `base.ts` instead. The guard covers colour only
+(`apps/web/test/no-raw-color.test.ts`), and it covers hex, `rgb()`/`hsl()`/`lab()`/`oklch()`/
+`color()` and the CSS named colours; `color-mix()` is allowed because it composes tokens rather
+than stating a colour.
+
 **Ordinary DOM is different and does not need this.** The Sleep page's stage-total legend
 (`apps/web/src/pages/Sleep.tsx`) is plain HTML, not an ECharts option object, so its swatches
 reference the custom property directly in `style`: `background: 'var(--chart-stage-deep)'`. CSS
@@ -53,11 +88,20 @@ from `currentChartTokens()`, for instance, would defeat the observer).
 | `HeartRateRange` | `{ left: 34, right: 12, top: 18, bottom: 24 }` | Category x (dates), value y (`scale: true` so the axis fits the data rather than forcing a zero baseline). |
 | `Hypnogram` | `{ left: 46, right: 12, top: 10, bottom: 24 }` | Value x in minutes, category y (4 stage lanes). `axisLabel.formatter` converts minutes to `Nh`. |
 | `SleepSchedule` | `{ left: 40, right: 12, top: 12, bottom: 24 }` | Category x (dates), value y fixed to `[18*60, 42*60]` (18:00 through 18:00 two days later) so every night's bed/wake pair sits on a stable clock-time axis regardless of how late the night ran. |
-| `ActivityHeatmap` | `{ left: 30, right: 12, top: 10, bottom: 20 }` | Category x (week index), category y (weekday initials). Axis line and ticks hidden on both axes; the heatmap cells carry all the information. |
+| `ActivityHeatmap` | `{ left: 30, right: 12, top: 10, bottom: 20 }` | Category x, **one entry per calendar week** (five for July 2026); category y, seven weekday names, Monday first. Axis line and ticks hidden on both axes; the heatmap cells carry all the information. |
 
 Grid lines (`splitLine`) and axis lines use `t.grid`; axis labels use `t.axis`, always at
-`fontSize: 9`. No chart draws a border around its own plot area beyond `splitLine`; the
-containing `Card` supplies the visual boundary.
+`AXIS_FONT_SIZE` (9) from `base.ts`, which is the smallest text the app renders. No chart draws a
+border around its own plot area beyond `splitLine`; the containing `Card` supplies the visual
+boundary.
+
+**A calendar axis is derived from dates, never from array positions.** `charts/calendar.ts`
+computes each cell's week and weekday from the date itself. The first version of the heatmap used
+`i % 7` for the weekday and `Math.floor(i / 7)` for the week, which is day-of-month modulo seven:
+2026-07-01 is a Wednesday and rendered in the Monday row, so every label was off by two for the
+whole month, and the x axis carried 31 categories for a series that plots 5 columns, squeezing
+every cell into the leftmost sixth of the card. Both are invisible without checking a real date
+against a real calendar, which is what `apps/web/test/calendar.test.ts` now does.
 
 **Tick density.** Two strategies are in use, chosen by how wide the chart typically renders:
 
@@ -73,14 +117,19 @@ containing `Card` supplies the visual boundary.
 
 ## 3. Series stroke weights
 
-| Element | Width | Where |
-|---|---|---|
-| Sparkline line | `1.6` | `Sparkline.tsx`, colour `t.series` |
-| HeartRateRange mean line | `1.9` | `HeartRateRange.tsx`, colour `t.series` |
-| SleepSchedule night span | `5`, `lineCap: 'round'` | `SleepSchedule.tsx`, colour from `nightMark` (`t.stageLight` for a real night) |
-| HeartRateRange min/max band | fill only, `opacity: 0.22`, colour `t.stageLight` | drawn as a stacked area (min invisible, max-min visible), not a stroke |
-| HeartRateRange baseline `markArea` | fill only, `opacity: 0.5`, colour `t.band` | see section 4 |
-| Event annotation `markLine` | dashed, colour `t.stageAwake` | see section 6 |
+All of these are named constants in `base.ts`, not literals in the option objects.
+
+| Element | Constant | Value | Where |
+|---|---|---|---|
+| Sparkline line | `STROKE.sparkline` | `1.6` | `Sparkline.tsx`, colour `t.series` |
+| HeartRateRange mean line | `STROKE.series` | `1.9` | `HeartRateRange.tsx`, colour `t.series` |
+| SleepSchedule night span | `STROKE.nightSpan` | `5`, `lineCap: 'round'` | `SleepSchedule.tsx`, colour from `nightMark` (`t.stageLight` for a real night) |
+| HeartRateRange min/max band | `OPACITY.rangeBand` | fill only, `0.22`, colour `t.stageLight` | drawn as a stacked area (min invisible, max-min visible), not a stroke |
+| HeartRateRange baseline `markArea` | `OPACITY.baselineBand` | fill only, `0.5`, colour `t.band` | see section 4 |
+| Nap marker | `SYMBOL.nap` | `6` | `SleepSchedule.tsx`, colour `t.stageAwake` |
+| Excluded reading marker | `SYMBOL.excluded` | `7` | `HeartRateRange.tsx`, colour `t.excluded` |
+| No-data marker radius | `SYMBOL.noData` | `3` | `SleepSchedule.tsx` and `ActivityHeatmap.tsx`, colour `t.noData` |
+| Event annotation `markLine` | dashed | colour `t.stageAwake` | see section 6 |
 
 The ordering is deliberate: the sparkline is the thinnest line in the system (a glance, not a
 measurement); the heart-rate mean line is slightly heavier because it is the thing a reader is
@@ -108,11 +157,17 @@ to consult the axis numbers.
 
 ## 5. Tooltip styling
 
-Every tooltip shares the same three properties, read from tokens:
+Every tooltip is `chartBase(t).tooltip`, which is:
 
 ```ts
-tooltip: { backgroundColor: t.surface, borderColor: t.grid, textStyle: { color: t.muted } }
+tooltip: { backgroundColor: t.tooltipBg, borderColor: t.grid, textStyle: { color: t.muted } }
 ```
+
+`--chart-tooltip-bg` is its own token rather than a borrowed `--surface-card`: a tooltip is drawn
+*over* a card, so painting it the card's own colour leaves only the border to say a panel is
+there. It is one step off the card in each theme (`#192937` dark, `#EAF0FB` light), and the
+accessibility suite asserts both that it differs from `--surface-card` (deltaE 7.9 dark, 9.1
+light) and that `--text-muted` clears 4.5:1 on it (6.10 dark, 7.60 light).
 
 `HeartRateRange` uses `trigger: 'axis'` with a custom `formatter`; `ActivityHeatmap` uses the
 default per-item tooltip. `Sparkline`, `Hypnogram` and `SleepSchedule` currently ship no tooltip.
@@ -126,13 +181,13 @@ mistake for the day's peak. The fix is to ignore series values entirely and look
 `dataIndex` from the same prop the chart was built from:
 
 ```ts
-formatter: (params) => {
-  const first = Array.isArray(params) ? params[0] : params
-  const day = first ? days[first.dataIndex] : undefined
+// apps/web/src/charts/hrTooltip.ts
+export function hrTooltip(days: DayRow[], index: number | undefined): string {
+  const day = index === undefined ? undefined : days[index]
   if (!day) return ''
   if (!day.worn) return `${day.date}<br/>not worn`
   if (day.hrMean === null || day.hrMin === null || day.hrMax === null) return `${day.date}<br/>no data`
-  return `${day.date}<br/>mean ${day.hrMean} bpm<br/>range ${day.hrMin}–${day.hrMax} bpm`
+  return `${day.date}<br/>mean ${day.hrMean} bpm<br/>range ${day.hrMin} to ${day.hrMax} bpm`
 }
 ```
 
@@ -141,6 +196,11 @@ must write a formatter that reads the source data by index rather than trusting 
 series' own values**, and that formatter must handle the "worn but the specific metric is
 null" case explicitly rather than letting a null reach the template string as the literal text
 `"null"`.
+
+The formatter lives in its own module rather than inside the option object, because it is the
+only branching logic in the chart layer and the three branches are exactly the ones a copy would
+get wrong. `apps/web/test/hr-tooltip.test.ts` covers all three plus the out-of-range index.
+A copied formatter should be copied *with* its test.
 
 ## 6. The basis line convention
 
@@ -175,6 +235,14 @@ about whether that direction is welcome, and the two are kept as separate fields
   genuinely ambiguous without more context than a month of fixture data provides, and `neutral`
   is the honest answer rather than a guessed verdict.
 
+**A delta states its window too.** `trend()` returns a `basis` field naming what it compared
+(`change is the mean of the last 13 readings against the first 13`), and `StatTile` appends it to
+the tile's own basis line. A bare "up 4 per cent" on a page whose stated rule is that every
+headline number states its basis was the rule's only exception; the comparison window is part of
+the number, not a footnote. `Sleep.tsx`'s baseline delta does the same and states its polarity
+explicitly (`higher-is-better`) rather than falling through to a neutral default: sleep duration
+is not a metric anyone is actually neutral about.
+
 `StatTile`'s `delta` prop renders both: `data-dir` carries the arrow (unstyled by CSS, present as
 a semantic hook), `data-tone` carries the colour (`.delta[data-tone]` in `app.css`, mapping
 `good` to `--positive`, `bad` to `--negative`, `neutral` to `--text-secondary`), and **`tone`
@@ -187,9 +255,10 @@ not by dropping deltas from the metrics where the polarity is inverted.
 
 ## 7. Empty state wording patterns
 
-`EmptyState` (`title`, `detail`) renders `{title}<br/><small>{detail}</small></p>`. Two distinct
-templates are in use, and they must never be interchangeable, because they answer different
-questions:
+`EmptyState` (`title`, `detail`) renders `{title}<br/><small>{detail}</small></p>`. The design
+spec names three kinds of empty, and they must never be interchangeable, because they answer
+different questions. Two are in use on the reference pages; the third is specified here for M3,
+which will hit it as soon as a page offers a range shorter than a metric's own window.
 
 **Template A: verified absence.** The metric is tracked, coverage is full or explicitly stated,
 and the checked result is genuinely zero.
@@ -220,6 +289,23 @@ sentence do not collapse into one.
 Template B never states a coverage count, because stating one would imply the app looked and
 found nothing, when in fact it never had the capability to look. This is the one line in the
 whole system that is allowed to omit a basis, precisely because there is no basis to state.
+
+**Template C: insufficient data to summarise.** Readings exist, but not enough of them to make
+the claim the card would otherwise make. This is the kind that is easiest to get wrong, because
+the honest answer is neither "nothing here" nor a number computed off two days and presented as
+though it were a month.
+
+```
+"Not enough data to summarise this range."
+"3 of 31 days have a reading. A monthly mean needs at least 14; the three readings are
+plotted below without one."
+```
+
+The detail always states **how many readings exist, what the threshold is, and what the card is
+doing instead**. It is the only template that names a threshold, because a threshold is exactly
+what makes this case different from Template A: A says the answer is genuinely zero, C says the
+question cannot be answered yet. A card in state C still plots whatever data it has; suppressing
+the points as well would throw away real readings to avoid stating a summary.
 
 **A finding worth recording for M3: do not assume a count is zero without checking the
 fixture.** The Dashboard originally planned a month-wide "no naps detected" card, mirroring a
@@ -268,13 +354,27 @@ shape:
 |---|---|
 | `Sparkline`, `HeartRateRange` | `connectNulls: false`. A `null` in the data array breaks the line; the gap is a visible discontinuity, never an interpolated bridge across the missing day. |
 | `SleepSchedule` | A night with a `null` bed or wake time (`nightMark` in `schedule.ts`) renders as a small circle in `--chart-state-no-data` at a fixed y-position (the axis domain's midpoint), not as a missing bar and not as a zero-length span. A bar that simply is not drawn is indistinguishable from "no column here"; the no-data mark exists specifically so an absent night is visible rather than silently skipped. |
-| `ActivityHeatmap` | Unworn days carry `steps: null`; ECharts' `heatmap` series skips a `null` cell outright rather than colouring it at the low end of the `visualMap` scale, so an unworn day reads as an empty cell, not a "zero steps" cell. |
+| `ActivityHeatmap` | Unworn days are excluded from the heatmap series *and* plotted as a scatter point in `--chart-state-no-data` at the same cell. An unpainted cell is not an absence marker, it is the absence of a marker. |
 | `Hypnogram` | No gap case currently exists in the fixture (one continuous night, every lane accounted for). If a future night has an unrecorded stretch, the pattern to follow is `SleepSchedule`'s: a distinct no-data mark on the affected lane, not a shortened bar that silently omits the missing minutes. |
 
 The common discipline: **a gap is drawn, never omitted and never interpolated across.** A chart
 that simply fails to plot a null value (rather than plotting a visible absence marker) has
 satisfied the letter of "don't show a fake zero" while still failing the actual requirement,
 since a reader cannot distinguish "no data" from "chart still loading" or "off by one."
+
+**This document used to contradict itself here**, describing the heatmap's unpainted cell as an
+acceptable rendering in the table above while the paragraph below said that exact behaviour fails
+the requirement. The paragraph was right, and the heatmap has been changed to match it rather than
+the table being softened: an unworn day now carries a visible dot in the same token
+`SleepSchedule` uses, so the two charts answer "why is there nothing here" the same way. The
+sequential scale's low end also sits close to the card by design (a near-zero day *should* be a
+faint cell), which is precisely why absence cannot be signalled by absence of paint. The
+accessibility suite asserts the marker stays separable from every stop of the scale it sits among:
+worst case 21.9 dark, 28.9 light, against a floor of 20.
+
+**Line charts are the exception, and only because a break in a line is itself a mark.**
+`connectNulls: false` produces a visible discontinuity; nothing further is needed. A *cell* or a
+*bar* has no equivalent, because "not drawn" and "not there" look the same.
 
 ## 10. Stage colour mapping
 
@@ -288,10 +388,14 @@ export function stageColor(stage: Stage, t: ChartTokens): string {
 
 | Stage | Token | Dark | Light |
 |---|---|---|---|
-| Deep | `--chart-stage-deep` | `#3730A3` | `#312E81` |
-| Light | `--chart-stage-light` | `#4F8FF7` | `#3B82F6` |
-| REM | `--chart-stage-rem` | `#B3E4FA` | `#ADE5FD` |
+| Deep | `--chart-stage-deep` | `#3730A3` | `#1E2A78` |
+| Light | `--chart-stage-light` | `#4F8FF7` | `#2376E9` |
+| REM | `--chart-stage-rem` | `#B3E4FA` | `#B3E4FA` |
 | Awake | `--chart-stage-awake` | `#F0A202` | `#B45309` |
+
+Measured worst-case separation across normal vision and all three simulations: 21.8 dark, 27.8
+light, against a floor of 18 (and 25 in normal vision, where the worst pair measures 41.3 dark,
+35.7 light).
 
 This is the blue depth-ramp plus amber described in the design spec: deeper sleep gets a darker
 blue, so the ordering itself carries meaning, and awake is amber specifically so it survives
@@ -317,35 +421,121 @@ design-review one.
   visually adjacent to an actual awake-stage mark on the same chart (which would make the two
   indistinguishable).
 
-## 11. The no-data token, and why it is not a plain grey
-
-`--chart-state-no-data` originally resolved to the exact same value as `--chart-grid` in both
-themes (`#0E1520` dark, `#E3E8EF` light), which made `SleepSchedule`'s no-data marker the same
-colour as the chart's own gridlines: present, per section 9's "a gap is drawn, never omitted,"
-but not reading as a distinct state against the grid it sits among. This was found during review
-of this task and fixed in `packages/tokens` (D1 Task 10's fix round) rather than left for M3.
-
-The fix is not a third step of the existing achromatic slate ramp. `--chart-state-excluded`
-(`#5A6880`, both themes) already occupies the "clearly visible against the near-black grid and
-card" position on that ramp; any new blue-grey step light enough to clear a 3:1 contrast ratio
-against `--chart-grid`/`--surface-card` converges toward that same value, verified by computing
-WCAG contrast for a range of candidates rather than by eye. `--chart-state-no-data` is instead a
-dedicated, slightly violet swatch (`primitives.slate.noDataDark` / `noDataLight`, `#7C5B95` dark,
-`#8A749E` light) that does not collide with any hue already in the system (blue for stages/series,
-amber for awake/annotations, plain slate-grey for excluded/grid/axis) and clears three checks in
-`packages/tokens/test/accessibility.test.ts`:
-
-- **Non-text contrast (WCAG 1.4.11) >= 3:1** against `--chart-grid` and `--surface-card`, in both
-  themes: the mark is legible against the surfaces it actually appears on.
-- **`deltaE` >= 18** against `--chart-state-excluded`: a no-data mark and an excluded-reading mark
-  read as two different states, not the same "something is wrong here" grey.
-- (Verified but not asserted in the test, since no chart currently needs it: `deltaE` >= 40
-  against `--chart-stage-deep`, so a future chart that shows no-data markers alongside sleep
-  stages would not read the mark as a fifth, off-palette stage colour.)
+## 11. The no-data token, and why lightness is the only lever left
 
 Absence and exclusion are different concepts (no-data: no reading was ever taken; excluded: a
-reading exists and was thrown out), and now have visually distinct tokens to match, on top of
-already being drawn as different shapes (a plain circle versus a `markPoint`).
+reading exists and was thrown out), so they must be **separable, not merely different**, and
+separable to a reader with any common dichromacy.
+
+The first version of this token failed that, and failed it invisibly: the test asserted
+`deltaE(state-no-data, state-excluded)` in normal vision only, while the stage test next to it ran
+the same comparison through three simulations. Measured under simulation, the violet swatch it
+picked (`#7C5B95` / `#8A749E`) scored 9.3 / 6.1 / 10.0 dark and 16.5 / 13.8 / 13.8 light against
+the suite's own floor of 18. Five of six failed. **An assertion that omits the condition the rest
+of the suite tests under is worse than no assertion, because it reads as coverage.**
+
+The reason a violet could not work is worth stating, because it constrains every future token:
+**under deuteranopia and protanopia the only axes that survive are lightness and blue-yellow.**
+Blue is spoken for (stages, series, the sequential scale), amber is spoken for (awake, event
+annotations), and neutral grey is spoken for (grid, axis, excluded). There is no third hue
+available to a dichromat. A no-data marker therefore has to be separated **by lightness**, and its
+hue is free to be whatever reads well in normal vision.
+
+So `--chart-state-no-data` is a muted plum placed by bounded numeric search at the lightness that
+maximises its worst-case separation while still clearing contrast against the surfaces it sits on:
+`#C1A2BC` (Lab L 70.0) in dark, `#523145` (L 25.0) in light, against `--chart-state-excluded` at
+`#647484` (L 48.1) in both. It is lighter than the excluded marker in the dark theme and darker in
+the light theme, in each case moving away from the card rather than toward it.
+
+`packages/tokens/test/accessibility.test.ts` asserts, in both themes:
+
+- **Non-text contrast (WCAG 1.4.11) >= 3:1** against `--chart-grid` and `--surface-card`, for both
+  state markers. Measured: no-data 7.99 / 7.68 dark, 9.05 / 11.15 light; excluded 3.81 / 3.67
+  dark, 3.90 / 4.80 light.
+- **Worst-case deltaE >= 20 across normal vision and all three simulations**, against every colour
+  that can share a chart with the marker: `state-excluded`, `series`, `series-alt`, all four sleep
+  stages, and all five stops of the sequential scale. Measured worst case: **21.9 dark** (against
+  `scale-5`) and **22.7 light** (against `state-excluded`), against a floor of 20, which is the
+  categorical floor of 18 plus the margin a deliberately-consulted marker earns.
+
+The two markers are also drawn as different shapes (a plain circle versus a `markPoint`), but
+shape is a second line of defence, not the first: a chart legend, a swatch or a one-pixel mark
+carries colour and nothing else.
+
+## 11a. The sequential scale
+
+`--chart-scale-1` through `--chart-scale-5`, **low value first in both themes**. Any continuous
+quantity uses these and nothing else.
+
+| Stop | Dark | Light |
+|---|---|---|
+| `--chart-scale-1` (lowest) | `#003E5D` | `#B7E4F7` |
+| `--chart-scale-2` | `#156588` | `#74BAD8` |
+| `--chart-scale-3` | `#3B8FB3` | `#3B8FB3` |
+| `--chart-scale-4` | `#74BAD8` | `#156588` |
+| `--chart-scale-5` (highest) | `#B7E4F7` | `#003E5D` |
+
+It is **one** five-stop perceptual ramp (`primitives.azure`, evenly spaced at roughly 16 Lab L per
+step), read in opposite directions per theme so that "more" always moves *away* from that theme's
+own card: brighter on dark, deeper on light. That is why a caption can say "stronger colour is
+more steps" and be true in both themes, and why the previous caption ("darker is more steps") was
+false in one of them.
+
+The suite asserts the scale is **monotonic in lightness with at least 8 L per step** and that its
+ends are at least 40 deltaE apart (measured 64.6, both themes), plus that `scale-1` differs from
+`--surface-card` by at least 10 deltaE (21.6 dark, 21.1 light) so a zero-value cell still reads as
+a cell.
+
+**Why this token set exists at all.** `ActivityHeatmap` previously built its ramp out of three
+categorical tokens, `[band-baseline, stage-light, stage-rem]`. In the light theme those measured
+L 84.7, 55.6, 88.0: light, dark, light, so an 18,000-step day and a zero-step day rendered 13.2
+deltaE apart, which is to say nearly identically, with the middle of the range darker than both
+ends. The root cause was not the chart's choice; it was that the system had no sequential ramp, so
+the chart improvised one, and a categorical palette is defined by *not* being ordered.
+
+**The rule for M3: never assemble a continuous scale out of categorical tokens.** If a chart needs
+more or fewer than five stops, interpolate between these, or add stops to `primitives.azure` and
+extend `SCALE_KEYS`; do not reach sideways into the stage or series colours.
+
+## 11b. Two categorical series
+
+`--chart-series` is the default line colour; `--chart-series-alt` is the second one, for a chart
+that plots two things at once. They are separated by lightness (worst case across normal vision
+and all three simulations: 25.3 dark, 22.6 light), for the reason given above: there is no third
+hue a dichromat can see, and amber is reserved for "something notable happened here."
+
+A chart needing a *third* categorical colour has run out of safe options and should be asked
+whether it wants small multiples instead. Do not solve it by adding a green.
+
+## 11c. What the contrast assertions actually cover
+
+The suite loops **every text tier over every surface** and **every non-text token over every
+surface**, not one tier against one surface. The reason is that a rail label and a card label are
+the same text at the same size, and the reader does not know which surface the designer had in
+mind. Measured worst case per tier, across all four surfaces:
+
+| Token | Floor | Dark worst | Light worst |
+|---|---|---|---|
+| `--text-primary` | 7 | 15.39 | 14.30 |
+| `--text-secondary` | 4.5 | 10.31 | 10.03 |
+| `--text-muted` | 4.5 | 7.22 | 7.06 |
+| `--text-faint` | 4.5 | 4.85 | 4.87 |
+| `--accent` | 3 | 5.54 | 3.52 |
+| `--focus` | 3 | 12.91 | 3.52 |
+| `--positive` | 3 | 8.67 | 4.97 |
+| `--negative` | 3 | 6.66 | 4.40 |
+| `--chart-axis` on the card | 4.5 (it is text) | 4.85 | 5.99 |
+| `--chart-series` vs `--chart-grid` | 3 | 5.76 | 3.52 |
+
+Two of these are worth calling out for M3:
+
+- **`--text-faint` renders real text** (rail group labels, the `EmptyState` detail line), so it
+  answers to the 4.5:1 text floor and not the 3:1 non-text one. It previously measured 2.72 to
+  3.42 and the neutral ramp has been redistributed around it. Four tiers is the most this palette
+  can carry at that floor; a fifth would have to sit inside 4 L of one of these.
+- **`--focus` is constrained even though nothing consumes it yet.** M3 will build focus rings
+  against it, and a token that gets its first constraint from the milestone that consumes it gets
+  constrained to whatever that milestone already shipped.
 
 ## 12. Card and grid conventions the pages establish
 
@@ -354,8 +544,41 @@ Not chart-specific, but every chart lives inside these, so M3's eight pages inhe
 - 12-column grid (`.grid` in `app.css`), each card a `<Card span={n}>` (`grid-column: span n`).
   Below 900px every card collapses to `span 12` (`app.css`'s single media query).
 - A card (`.card`) never states a colour of its own beyond `--surface-card` and a
-  `color-mix(in srgb, var(--text-primary) 7%, transparent)` border; every chart inside inherits
-  the page's theme purely through the tokens its own `build` callback resolves.
-- A card's structural label (`<span className="label">`) is the eyebrow above every chart card
-  that is not a `StatTile`; it names the chart, and the `.basis` paragraph beneath it states
-  coverage, per section 6.
+  `--border-subtle` border; every chart inside inherits the page's theme purely through the tokens
+  its own `build` callback resolves. `--border-subtle` replaced a
+  `color-mix(in srgb, var(--text-primary) 7%, transparent)`, and the delta chip's background
+  replaced a second one at 6%: a percentage tuned by eye in one rule is a value the next rule
+  guesses differently, which is what a token is for.
+- `Card` takes `label` and `basis` props and renders both itself, rather than each page repeating
+  the `<span className="label">` / `<p className="basis">` pair. It also publishes the basis
+  paragraph's id through `BasisContext`, which is what makes section 13 work.
+
+## 13. Every chart has a name, a description and a table
+
+A chart that renders as a bare `<div>` is a chart only for people who can see it. For a milestone
+that enforces colour-blind safety by build failure, having no screen-reader path to the same
+numbers is the same requirement dropped at the last step.
+
+`ChartFigure` (`apps/web/src/charts/ChartFigure.tsx`) is the wrapper every chart returns:
+
+```tsx
+<figure>
+  <div ref={host} role="img" aria-label={label} aria-describedby={describedBy} style={style} />
+  <table className="sr-only">…</table>
+</figure>
+```
+
+Three parts, each with a rule:
+
+1. **An accessible name** (`aria-label`), passed in by the page as the `label` prop. It names the
+   metric and the period, in a sentence that stands alone when read out of context: "Steps per day
+   through July 2026", not "Steps" and not "chart".
+2. **A description**, which is the card's basis line, reached through `BasisContext` rather than
+   restated. The sentence that tells a sighted reader what the coverage was is the same sentence a
+   screen reader should hear; writing it twice is how the two versions start disagreeing.
+3. **A table alternative**, `.sr-only`, carrying the same numbers the chart draws, in reading
+   order, with the absence cases spelled out as words (`not worn`, `no reading`, `none`) rather
+   than as blanks. A blank cell in a table has the same defect as an unpainted heatmap cell.
+
+`.sr-only` clips rather than using `display: none`, which would take the table out of the
+accessibility tree along with the pixels.

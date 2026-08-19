@@ -2,12 +2,22 @@
 
 Reference pages for the visual direction. Fixtures only, no data layer, no network.
 
-    pnpm --filter @vitals/tokens build:css
+    pnpm install
     pnpm dev
 
-Colours come from `theme.generated.css`. Never write a literal colour in this package:
-`apps/web/test/no-raw-color.test.ts` fails the build if you do. To change a colour, edit
-`packages/tokens` and regenerate.
+`predev` and `prebuild` regenerate `@vitals/tokens/theme.css` first, so a fresh clone builds
+without a manual step. To regenerate it on its own:
+
+    pnpm --filter @vitals/tokens build:css
+
+Colours come from that stylesheet. Never write a literal colour in this package:
+`apps/web/test/no-raw-color.test.ts` fails the build if you do, and it knows about hex,
+`rgb()`, `hsl()`, `lab()`, `oklch()`, `color()` and the CSS named colours. To change a colour,
+edit `packages/tokens` and regenerate.
+
+Charts read token *names* from `@vitals/tokens` and resolve their *values* from
+`getComputedStyle` at render time, so a rename in the tokens package is a compile error here and
+a theme switch needs no reload.
 
 ## Pages
 
