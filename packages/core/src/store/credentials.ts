@@ -58,6 +58,30 @@ export class CredentialStore {
     }
   }
 
+  putClientOverride(input: { personId: string, clientId: string, clientSecret: string }): void {
+    this.db.update(credentials).set({
+      clientIdOverride: input.clientId,
+      clientSecretOverrideEncrypted: seal(this.key, input.clientSecret),
+    }).where(eq(credentials.personId, input.personId)).run()
+  }
+
+  // Refresh has to use the client the token was issued against. Reading the household client
+  // for a person who configured their own project fails as invalid_client, for exactly the
+  // person who took the trouble to set it up. Spec section 7 calls the override an escape
+  // hatch, so it has to be on the path everything takes.
+  getClientFor(personId: string): ClientCredentials {
+    const row = this.db.select().from(credentials).where(eq(credentials.personId, personId)).get()
+    if (row?.clientIdOverride && row.clientSecretOverrideEncrypted) {
+      return {
+        clientId: row.clientIdOverride,
+        clientSecret: unseal(this.key, row.clientSecretOverrideEncrypted),
+      }
+    }
+    const household = this.getClient()
+    if (!household) throw new Error(`no OAuth client configured for person ${personId}`)
+    return household
+  }
+
   // The token is kept rather than deleted: the reconnect banner needs to distinguish "this
   // person revoked access" from "this person was never connected". Spec section 13.
   markRevoked(personId: string, nowMs: number): void {

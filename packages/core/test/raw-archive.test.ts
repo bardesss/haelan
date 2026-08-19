@@ -33,7 +33,16 @@ describe('RawArchive', () => {
 
   it('stores a payload and reads the body back unchanged', () => {
     const { id } = archive.put({ ...base, body, fetchedAtMs: 10 })
-    expect(archive.getBody(id)).toBe(body)
+    expect(archive.getBody('p1', id)).toBe(body)
+  })
+
+  it('refuses to return a body to a person who does not own it', () => {
+    db.insert(people).values({
+      id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+    }).run()
+    const { id } = archive.put({ ...base, body, fetchedAtMs: 10 })
+    expect(archive.getBody('p1', id)).toBe(body)
+    expect(() => archive.getBody('p2', id)).toThrow(/not found/)
   })
 
   it('compresses the body, because heart rate alone is 23 MB per person-day', () => {
@@ -95,6 +104,6 @@ describe('RawArchive', () => {
 
   it('archives a failed response too, because schema drift must not lose the payload', () => {
     const { id } = archive.put({ ...base, body: '{"error":{"code":400}}', httpStatus: 400, fetchedAtMs: 10 })
-    expect(archive.getBody(id)).toContain('400')
+    expect(archive.getBody('p1', id)).toContain('400')
   })
 })

@@ -57,10 +57,12 @@ export class RawArchive {
     return { id: existing.id, deduplicated: true }
   }
 
-  getBody(id: string): string {
+  // The person is part of the lookup rather than checked after it, so a caller cannot forget.
+  // Every surface in section 11 reads through this, and there is no sharing mechanism in v1.
+  getBody(personId: string, id: string): string {
     const row = this.db.select({ bodyGzip: rawPayloads.bodyGzip }).from(rawPayloads)
-      .where(eq(rawPayloads.id, id)).get()
-    if (!row) throw new Error(`no raw payload ${id}`)
+      .where(and(eq(rawPayloads.id, id), eq(rawPayloads.personId, personId))).get()
+    if (!row) throw new Error(`raw payload ${id} not found for person ${personId}`)
     return gunzipSync(row.bodyGzip).toString('utf8')
   }
 }
