@@ -1,3 +1,5 @@
+import { Icon } from './icons.js'
+
 const GROUPS = [
   { label: 'Overview', items: [['dashboard', 'Dashboard']] },
   { label: 'Tracking', items: [['activity', 'Activity'], ['sleep', 'Sleep'], ['recovery', 'Recovery'], ['health', 'Health'], ['weight', 'Weight'], ['nutrition', 'Nutrition'], ['notes', 'Notes']] },
@@ -14,7 +16,7 @@ export function Sidebar({ active, onNavigate }: { active: string; onNavigate: (i
           {g.items.map(([id, name]) => (
             <a key={id} className="rail-item" href={`#${id}`} aria-current={active === id ? 'page' : undefined}
                onClick={() => onNavigate(id)}>
-              <i className="rail-icon" />{name}
+              <Icon name={id} />{name}
             </a>
           ))}
         </div>
