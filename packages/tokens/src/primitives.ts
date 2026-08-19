@@ -1,8 +1,4 @@
-// Layer one: raw scales with no meaning attached. A step number here says only
-// "this is the Nth stop on a lightness ramp"; what it is *for* is decided in
-// semantic.ts and chart.ts. Numbers rise as measured Lab lightness falls, which
-// packages/tokens/test/layering.test.ts asserts against the colour maths rather
-// than trusting the names.
+// Layer one: raw scales with no meaning attached (meaning lives in semantic.ts, chart.ts). Numbers rise as measured Lab lightness falls (layering.test.ts asserts this).
 export const primitives = {
   blue: {
     100: '#B3E4FA',
@@ -12,8 +8,7 @@ export const primitives = {
     800: '#3730A3',
     900: '#1E2A78',
   },
-  // One shared sequential ramp, even in perceived lightness. Each theme reads it
-  // in the direction that puts "more" furthest from its own page: see chart.ts.
+  // Shared sequential ramp, even in perceived lightness; each theme reads it in the direction that suits its own page (see chart.ts).
   azure: {
     100: '#B7E4F7',
     300: '#74BAD8',
@@ -22,8 +17,7 @@ export const primitives = {
     900: '#003E5D',
   },
   amber: { 500: '#F0A202', 700: '#B45309' },
-  // Reserved for the absence marker. Its separation from every other chart
-  // colour is a computed result, not a preference: see chart.ts.
+  // Reserved for the absence marker; its separation from every other chart colour is measured, not chosen by eye (see chart.ts).
   plum: { 300: '#C1A2BC', 800: '#523145' },
   mint: { 400: '#5EC9A0', 700: '#166F52' },
   coral: { 400: '#E8846B', 700: '#B4472C' },
@@ -57,8 +51,7 @@ export const primitives = {
 export const COLOR_GROUPS = ['blue', 'azure', 'amber', 'plum', 'mint', 'coral', 'slate'] as const
 export type ColorGroup = (typeof COLOR_GROUPS)[number]
 
-// The set of strings layer two and layer three are allowed to reference, so a
-// typo in a token definition is a compile error rather than a runtime throw.
+// The set of strings layer two and layer three may reference, so a typo in a token definition is a compile error, not a runtime throw.
 export type ColorPath = {
   [G in ColorGroup]: `${G}.${keyof (typeof primitives)[G] & (string | number)}`
 }[ColorGroup]

@@ -6,9 +6,7 @@ function block(selector: string, lines: string[]): string {
   return `${selector} {\n${lines.map((l) => `  ${l}`).join('\n')}\n}\n`
 }
 
-// The single authority on what a custom property is called. Anything that needs
-// to read a token by name imports these rather than retyping the string, so a
-// rename here is a compile error at the reader instead of a blank value at runtime.
+// The single authority for custom-property names: importing these instead of retyping catches a rename as a compile error.
 export function semanticVar(token: SemanticToken): string {
   return `--${token}`
 }

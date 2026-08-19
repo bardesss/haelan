@@ -20,9 +20,7 @@ export function simulate(kind: CvdKind, hex: string): string {
   return rgbToHex(out.map(fromLinear) as [number, number, number])
 }
 
-// The worst case a reader could see: normal vision plus every simulated
-// dichromacy. Every "these two must not be confusable" assertion uses this
-// rather than the normal-vision deltaE alone.
+// Worst case across normal vision and every simulated dichromacy; every confusability assertion uses this, not plain deltaE.
 export function minSeparation(hexA: string, hexB: string): number {
   return Math.min(deltaE(hexA, hexB), ...CVD_KINDS.map((k) => deltaE(simulate(k, hexA), simulate(k, hexB))))
 }

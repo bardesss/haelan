@@ -9,9 +9,7 @@ import {
 import { SVGRenderer } from 'echarts/renderers'
 import { currentChartTokens, type ChartTokens } from './tokens.js'
 
-// Registering only what the six charts use, rather than importing the `echarts`
-// barrel, is what keeps the bundle proportional to the charts that exist. Adding
-// a chart type means adding it here, deliberately.
+// Registers only what's used, not the echarts barrel, so the bundle stays proportional; add new chart types here deliberately.
 echarts.use([
   CustomChart, HeatmapChart, LineChart, ScatterChart,
   GraphicComponent, GridComponent, MarkAreaComponent, MarkLineComponent,

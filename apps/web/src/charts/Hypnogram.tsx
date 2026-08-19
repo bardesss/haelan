@@ -32,8 +32,7 @@ export function Hypnogram({ segments, startLabel, label }: {
           const stage = LANES[LANES.length - 1 - laneIndex] ?? 'light'
           const start = api.coord([Number(api.value(0)), laneIndex])
           const end = api.coord([Number(api.value(1)), laneIndex])
-          // size() is typed as number | number[] since some coord systems return a
-          // scalar; a category/value grid always gives the [x, y] pair we want.
+          // api.size() is typed number | number[] for other coord systems; a category/value grid always returns [x, y].
           const laneSize = api.size?.([0, 1]) ?? 20
           const laneHeight = (Array.isArray(laneSize) ? laneSize[1] : laneSize) ?? 20
           const height = laneHeight * 0.45

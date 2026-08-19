@@ -11,8 +11,6 @@ export function StatTile({ label, value, unit, basis, delta, children }: {
   children?: React.ReactNode
 }) {
   const basisId = useId()
-  // A delta with no stated basis is a number without a claim attached; the
-  // window it compares is part of the number, not a footnote.
   const fullBasis = delta?.basis ? `${basis}; ${delta.basis}` : basis
   return (
     <>

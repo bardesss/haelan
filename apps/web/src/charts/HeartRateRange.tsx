@@ -38,10 +38,8 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label }:
           markArea: { silent: true, itemStyle: { color: t.band, opacity: OPACITY.baselineBand },
             data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] },
           markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: t.excluded },
-            // markPoint items with explicit coordinates skip axis extent calculation,
-            // so a placeholder yAxis lands off the fitted range. Anchor each marker
-            // at the day's actual mean instead, and drop it rather than guess if
-            // that day has no reading at all.
+            // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands off the fitted range.
+            // Anchor each marker at the day's actual mean instead, and drop it if that day has no reading.
             data: excluded.flatMap((date) => {
               const day = days.find((d) => d.date === date)
               if (!day || day.hrMean === null) return []

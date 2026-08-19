@@ -5,9 +5,7 @@ import { STROKE } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 
-// No grid, no ticks, no labels: a sparkline is a shape, not a chart with a
-// coordinate system a reader is meant to consult. The table alternative carries
-// the numbers the shape stands in for.
+// No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({ values, labels, label, unit, height = 34 }: {
   values: (number | null)[]
   labels: string[]

@@ -1,15 +1,12 @@
 import type { RefObject, CSSProperties } from 'react'
 import { useBasisId } from '../components/basis.js'
 
-// The numbers a chart draws, in the order a reader would read them out.
 export type ChartTable = {
   columns: string[]
   rows: (string | number)[][]
 }
 
-// Every chart gets a name, the card's basis line as its description, and the
-// same numbers as a table. A canvas or an SVG blob with no accessible name is a
-// chart only for the people who can see it.
+// Accessible chart: a name, the card's basis line as description, and the same numbers as a table.
 export function ChartFigure({ label, table, host, style }: {
   label: string
   table: ChartTable

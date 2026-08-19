@@ -3,9 +3,7 @@ import { primitives, COLOR_GROUPS, type ColorPath } from './primitives.js'
 export type Theme = 'dark' | 'light'
 export const THEMES = ['dark', 'light'] as const satisfies readonly Theme[]
 
-// Layer two: meaning, per theme, expressed only as references into layer one.
-// `satisfies` rather than a type annotation, so the key union below is derived
-// from what is actually here instead of widening to `string`.
+// `satisfies` rather than a type annotation, so the key union below is derived from what's actually here, not widened to `string`.
 export const semantic = {
   dark: {
     'surface-page': 'slate.975',

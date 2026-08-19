@@ -1,5 +1,4 @@
-// Monday first, because the reference pages are British and a week that starts
-// on Sunday puts the weekend in two different columns.
+// Monday first: the reference pages are British, and Sunday-first splits the weekend across two columns.
 export const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
 export type CalendarCell = { date: string; week: number; weekday: number }
@@ -10,9 +9,7 @@ function epochDay(date: string): number {
   return Math.floor(ms / 86_400_000)
 }
 
-// The weekday has to come from the calendar, not from the row's position in the
-// array: an offset of one column is a wrong claim about which day a reading
-// belongs to, and it is invisible without checking a real date.
+// Weekday comes from the calendar, not array position: an off-by-one here is invisible without checking a real date.
 export function weekdayIndex(date: string): number {
   const sundayFirst = new Date(`${date}T00:00:00Z`).getUTCDay()
   return (sundayFirst + 6) % 7
