@@ -15,7 +15,7 @@ export const chartTokens: Record<Theme, Record<string, string>> = {
     axis: 'slate.600',
     'band-baseline': 'blue.900',
     'state-excluded': 'slate.600',
-    'state-no-data': 'slate.800',
+    'state-no-data': 'slate.noDataDark',
   },
   light: {
     'stage-deep': 'blue.700',
@@ -27,7 +27,7 @@ export const chartTokens: Record<Theme, Record<string, string>> = {
     axis: 'slate.600',
     'band-baseline': 'blue.100',
     'state-excluded': 'slate.600',
-    'state-no-data': 'slate.200',
+    'state-no-data': 'slate.noDataLight',
   },
 }
 

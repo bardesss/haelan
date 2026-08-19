@@ -27,8 +27,9 @@ body {
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
-.delta[data-dir='up'] { color: var(--positive); }
-.delta[data-dir='down'] { color: var(--negative); }
+.delta[data-tone='good'] { color: var(--positive); }
+.delta[data-tone='bad'] { color: var(--negative); }
+.delta[data-tone='neutral'] { color: var(--text-secondary); }
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 

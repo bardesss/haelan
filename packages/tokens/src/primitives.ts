@@ -24,6 +24,14 @@ export const primitives = {
     ink: '#0F172A',
     inkSoft: '#334155',
     paper: '#EAF0FB',
+    // Dedicated no-data swatches. A neutral blue-grey step that also clears
+    // grid/card contrast collides with state-excluded (#5A6880 sits right at
+    // the edge of that same achromatic band), so these lean slightly violet:
+    // verified by computation (WCAG contrast >= 3 against grid and card,
+    // deltaE >= 18 against state-excluded and stage-deep, in both themes),
+    // not chosen by eye.
+    noDataDark: '#7C5B95',
+    noDataLight: '#8A749E',
   },
   signal: { positive: '#5EC9A0', negative: '#E8846B', positiveDark: '#166F52', negativeDark: '#B4472C' },
   space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px', 6: '24px' },
