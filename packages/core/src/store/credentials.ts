@@ -59,10 +59,15 @@ export class CredentialStore {
   }
 
   putClientOverride(input: { personId: string, clientId: string, clientSecret: string }): void {
-    this.db.update(credentials).set({
+    const result = this.db.update(credentials).set({
       clientIdOverride: input.clientId,
       clientSecretOverrideEncrypted: seal(this.key, input.clientSecret),
     }).where(eq(credentials.personId, input.personId)).run()
+    // An UPDATE against a missing row matches nothing and returns void, which would bury the
+    // failure. RawArchive.put checks changes for the same reason.
+    if (result.changes === 0) {
+      throw new Error(`no credentials row for person ${input.personId}; connect the person before setting a client override`)
+    }
   }
 
   // Refresh has to use the client the token was issued against. Reading the household client

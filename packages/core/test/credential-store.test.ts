@@ -112,6 +112,12 @@ describe('CredentialStore', () => {
     expect(() => store.getClientFor('p1')).toThrow(/no OAuth client/)
   })
 
+  it('throws setting an override for a person with no credentials row, instead of silently discarding it', () => {
+    expect(() => store.putClientOverride({ personId: 'p1', clientId: 'own', clientSecret: 'own-secret' }))
+      .toThrow(/no credentials row for person p1/)
+    expect(db.all(sql`select 1 from credentials`)).toHaveLength(0)
+  })
+
   it('lists only people whose credentials are not revoked, because sync pauses per person', () => {
     db.insert(people).values({
       id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', createdAtMs: 0,
