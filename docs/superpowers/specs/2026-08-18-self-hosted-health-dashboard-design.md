@@ -465,6 +465,25 @@ its database is empty. The wizard is the only supported setup path:
 Adding a household member is the same flow minus the Google Cloud steps: the admin creates an
 invite, the member sets a password and grants consent against the household's existing client.
 
+### Where the credentials live
+
+Three things, three places, and none of them is the repository:
+
+- The **project, OAuth client and consent screen** live in Google Cloud, owned by the household.
+- The **client ID and secret, and each person's refresh token**, live encrypted in the
+  instance's data volume, written by the wizard.
+- The **repository and the published image** contain only configuration: the wizard's
+  instructions, the scopes we know how to request, and the callback route. **No credentials are
+  shipped and none can be.** Every instance brings its own.
+
+That is the direct cost of avoiding the verification ceiling in section 1: the project trades
+"works immediately on install" for "never hits a user cap". A shipped shared client would undo
+the entire argument.
+
+Publishing status starts at **Testing**, because that is what a new client is, and it is what
+M0 runs against. Moving to production later is a console setting, not new credentials, and
+invalidates nothing already issued.
+
 ### Returning to the console
 
 The console visit is once per household, not once per deployment. Restarts, image upgrades,
@@ -663,7 +682,11 @@ D1's output is the input to M3. M3 implements the design; it does not invent it.
    rather than stored, corrections are cheap.
 5. **Naming.** The product must not be called "Google Health <something>"; trademark exposure
    for no benefit. Positioning is "works with Google Health and Fitbit".
-6. **Intraday resolution and storage sizing.** Sizing assumes 1-minute granularity. Finer
+6. **Whether a Google Cloud billing account is required** to enable the Health API, and whether
+   any request quota carries a cost. Every instance repeats the setup, so a credit card
+   requirement would be the single largest barrier to anyone adopting this, and it belongs in
+   the README rather than being discovered at step three of the wizard. Answered by M0.
+7. **Intraday resolution and storage sizing.** Sizing assumes 1-minute granularity. Finer
    resolution on any metric shifts volume by an order of magnitude and forces a per-metric
    downsampling decision. Measured in M1 against real payloads; the DuckDB escape hatch in
    section 6 bounds the consequences.
