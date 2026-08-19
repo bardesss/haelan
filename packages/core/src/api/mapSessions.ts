@@ -96,12 +96,18 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
       endMs: end.utcMs,
       endOffsetMinutes: end.tzOffsetMinutes,
       localDate: localDateOfEnd(end.utcMs, end.tzOffsetMinutes),
+      // One shape covers both kinds rather than a per-kind attrs structure. A sleep point
+      // resolves the exercise fields to null and vice versa; tier 2 still knows what kind of
+      // exercise a session was, and shortAwakenings survives instead of being silently dropped
+      // between tier 1 and the stage segments it deliberately does not become.
       attrs: JSON.stringify({
         type: valueAt(payload, 'type') ?? null,
         mainSleep: valueAt(payload, 'metadata.mainSleep') ?? null,
         stagesStatus: valueAt(payload, 'metadata.stagesStatus') ?? null,
         summary: valueAt(payload, 'summary') ?? null,
         metricsSummary: valueAt(payload, 'metricsSummary') ?? null,
+        shortAwakenings: valueAt(payload, 'shortAwakenings') ?? null,
+        exerciseType: valueAt(payload, 'exerciseType') ?? null,
       }),
       rawPayloadId: input.rawPayloadId,
     })
