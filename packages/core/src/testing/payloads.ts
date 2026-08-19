@@ -48,3 +48,29 @@ export function dailyPoint(o: { payloadKey: string, valuePath: string, value: st
 
 export const body = (points: unknown[], nextPageToken?: string): string =>
   JSON.stringify({ dataPoints: points, ...(nextPageToken ? { nextPageToken } : {}) })
+
+export interface SleepStage { type: string, startTime: string, endTime: string }
+
+export function sleepPoint(o: {
+  name?: string
+  startTime: string
+  endTime: string
+  utcOffset?: string
+  stages: SleepStage[]
+  mainSleep?: boolean
+}): Record<string, unknown> {
+  const offset = o.utcOffset ?? '7200s'
+  return {
+    name: o.name ?? 'users/me/dataTypes/sleep/dataPoints/abc',
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    sleep: {
+      interval: {
+        startTime: o.startTime, startUtcOffset: offset,
+        endTime: o.endTime, endUtcOffset: offset,
+      },
+      type: 'STAGES',
+      metadata: { mainSleep: o.mainSleep ?? true, processed: true, stagesStatus: 'SUCCEEDED' },
+      stages: o.stages.map((s) => ({ ...s, startUtcOffset: offset, endUtcOffset: offset })),
+    },
+  }
+}

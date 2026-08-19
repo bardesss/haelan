@@ -1,0 +1,131 @@
+import { createHash } from 'node:crypto'
+import type { DataType } from './catalogue.ts'
+import type { SessionKind } from '../db/schema/derived.ts'
+import { parseInstant, valueAt } from './parse.ts'
+
+export interface SessionRow {
+  id: string
+  personId: string
+  sourceId: string
+  kind: SessionKind
+  externalId: string
+  startMs: number
+  startOffsetMinutes: number
+  endMs: number
+  endOffsetMinutes: number
+  localDate: string
+  attrs: string
+  rawPayloadId: string
+}
+
+export interface SegmentRow {
+  id: string
+  sessionId: string
+  stage: string
+  startMs: number
+  endMs: number
+}
+
+export interface MapSessionsInput {
+  dataType: DataType
+  body: string
+  personId: string
+  sourceId: string
+  rawPayloadId: string
+}
+
+// Derived from the natural key rather than random, so the trailing re-fetch window upserts the
+// same night instead of accumulating a copy of it every run.
+const stableId = (...parts: string[]) =>
+  createHash('sha256').update(parts.join(' ')).digest('hex').slice(0, 32)
+
+// A night belongs to the morning it ended in. Spec invariant 3: "last night" on the 31st means
+// the 30th to 31st night, so the local date comes from the end instant and its own offset.
+function localDateOfEnd(endMs: number, endOffsetMinutes: number): string {
+  return new Date(endMs + endOffsetMinutes * 60_000).toISOString().slice(0, 10)
+}
+
+export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], segments: SegmentRow[] } {
+  const t = input.dataType
+  if (t.target !== 'sessions') throw new Error(`${t.id} is not a session type`)
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(input.body)
+  } catch {
+    return { sessions: [], segments: [] }
+  }
+
+  // JSON.parse accepts "null", "42", and other scalars without throwing, so the type still
+  // needs checking before anything reaches into it for dataPoints.
+  if (typeof parsed !== 'object' || parsed === null) return { sessions: [], segments: [] }
+
+  const dataPoints = (parsed as { dataPoints?: unknown }).dataPoints
+  // A drifted payload might carry dataPoints as a number or a cursor-keyed object rather than
+  // an array. Iterating that throws "not iterable"; treating it as no data does not.
+  const points = Array.isArray(dataPoints) ? dataPoints : []
+
+  const sessions: SessionRow[] = []
+  const segments: SegmentRow[] = []
+
+  for (const point of points) {
+    const payload = valueAt(point, t.payloadKey)
+    if (payload === undefined) continue
+
+    const interval = valueAt(payload, 'interval')
+    const start = parseInstant(interval)
+    const end = parseInstant({
+      physicalTime: valueAt(interval, 'endTime'),
+      utcOffset: valueAt(interval, 'endUtcOffset'),
+    })
+    if (!start || !end) continue
+
+    const externalId = typeof valueAt(point, 'name') === 'string'
+      ? String(valueAt(point, 'name'))
+      : `${t.id}:${start.utcMs}`
+    const id = stableId(input.personId, input.sourceId, t.id, externalId)
+
+    sessions.push({
+      id,
+      personId: input.personId,
+      sourceId: input.sourceId,
+      kind: t.id === 'sleep' ? 'sleep' : 'exercise',
+      externalId,
+      startMs: start.utcMs,
+      startOffsetMinutes: start.tzOffsetMinutes,
+      endMs: end.utcMs,
+      endOffsetMinutes: end.tzOffsetMinutes,
+      localDate: localDateOfEnd(end.utcMs, end.tzOffsetMinutes),
+      attrs: JSON.stringify({
+        type: valueAt(payload, 'type') ?? null,
+        mainSleep: valueAt(payload, 'metadata.mainSleep') ?? null,
+        stagesStatus: valueAt(payload, 'metadata.stagesStatus') ?? null,
+        summary: valueAt(payload, 'summary') ?? null,
+        metricsSummary: valueAt(payload, 'metricsSummary') ?? null,
+      }),
+      rawPayloadId: input.rawPayloadId,
+    })
+
+    const stages = valueAt(payload, 'stages')
+    if (!Array.isArray(stages)) continue
+    for (const stage of stages) {
+      const stageStart = parseInstant({
+        physicalTime: valueAt(stage, 'startTime'), utcOffset: valueAt(stage, 'startUtcOffset'),
+      })
+      const stageEnd = parseInstant({
+        physicalTime: valueAt(stage, 'endTime'), utcOffset: valueAt(stage, 'endUtcOffset'),
+      })
+      const kind = valueAt(stage, 'type')
+      if (!stageStart || !stageEnd || typeof kind !== 'string') continue
+      segments.push({
+        id: stableId(id, kind, String(stageStart.utcMs)),
+        sessionId: id,
+        stage: kind,
+        startMs: stageStart.utcMs,
+        endMs: stageEnd.utcMs,
+      })
+    }
+  }
+
+  return { sessions, segments }
+}
