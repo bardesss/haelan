@@ -704,6 +704,9 @@ D1's output is the input to M3. M3 implements the design; it does not invent it.
   non-obvious reason, and nowhere else. Readers of an open source project judge it by how much
   explanation the code needs.
 - Public interfaces are documented at their boundary rather than line by line.
+- **Every change reaches `master` through a pull request, and nothing is ever force pushed.**
+  History on `master` is append-only. Server-side enforcement needs a public repository or a
+  paid plan, so until one of those is true this holds by convention rather than by rule.
 
 ## 20. Deferred
 
