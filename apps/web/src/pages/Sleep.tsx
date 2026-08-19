@@ -1,3 +1,4 @@
+import { chartVar, type ChartToken } from '@vitals/tokens'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
@@ -11,11 +12,14 @@ import type { Delta } from '../format.js'
 
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
 const STAGE_LABEL: Record<Stage, string> = { deep: 'Deep', light: 'Light', rem: 'REM', awake: 'Awake' }
+// Token names, not literal custom-property strings: chartVar()'s ChartToken
+// parameter makes a rename in packages/tokens/src/chart.ts a compile error
+// here rather than a swatch quietly pointing at a variable nothing defines.
 // Reference the token by name rather than resolving it in JS, so the swatch
 // follows a theme switch through ordinary CSS custom-property inheritance
 // instead of needing its own render-time read.
-const STAGE_VAR: Record<Stage, string> = {
-  deep: '--chart-stage-deep', light: '--chart-stage-light', rem: '--chart-stage-rem', awake: '--chart-stage-awake',
+const STAGE_TOKEN: Record<Stage, ChartToken> = {
+  deep: 'stage-deep', light: 'stage-light', rem: 'stage-rem', awake: 'stage-awake',
 }
 
 const stageTotals = july.hypnogram.reduce<Record<Stage, number>>(
@@ -65,7 +69,7 @@ export function Sleep() {
           <ul style={{ display: 'flex', gap: 'var(--space-4)', margin: 'var(--space-2) 0 0', padding: 0, listStyle: 'none' }}>
             {STAGE_ORDER.map((stage) => (
               <li key={stage} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: `var(${STAGE_VAR[stage]})`, display: 'inline-block' }} />
+                <span style={{ width: 9, height: 9, borderRadius: 2, background: `var(${chartVar(STAGE_TOKEN[stage])})`, display: 'inline-block' }} />
                 {STAGE_LABEL[stage]} {formatDuration(stageTotals[stage])}
               </li>
             ))}
