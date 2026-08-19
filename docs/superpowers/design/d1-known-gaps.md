@@ -4,76 +4,55 @@ Findings that survived the final review's fix wave. Each was adjudicated rather 
 because the process allows one fix wave and these arrived after it. They are recorded here so
 M3 inherits them as known work rather than rediscovering them.
 
-Ordered by what should be fixed first.
+Six gaps were fixed in a follow-up pass (commit noted below); the remaining section records
+deliberate deferrals that are still open and out of scope for that pass.
 
-## 1. Nap markers can never render
+## Fixed
 
-`apps/web/src/fixtures/july.ts` generates naps between 780 and 960 minutes (13:00 to 16:00).
-`apps/web/src/charts/SleepSchedule.tsx` fixes the y axis to `[1080, 2520]`. All six nap values
-in the fixture fall below the axis minimum, so ECharts clips every one of them.
+1. **Nap markers could never render.** `apps/web/src/fixtures/july.ts` generates naps between
+   780 and 960 minutes (13:00 to 16:00); `SleepSchedule.tsx`'s y axis was fixed to `[1080,
+   2520]` (18:00 through 18:00 the next day), clipping every one. Fixed by shifting the domain
+   to `[720, 2160]` (noon through noon the next day) rather than widening it: the window was
+   already a full 24 hours, so the naps only needed it moved six hours earlier, which costs no
+   compression of the bed-to-wake band the chart exists to show. `NO_DATA_Y` moved with it, from
+   `40*60` to `35*60`, to stay clear of the new wake-time cluster and inside the new axis max.
+   `apps/web/test/schedule-marks.test.ts` gained a dedicated "every plotted value falls inside
+   the axis domain" suite (bed, wake and nap, each checked against `[AXIS_MIN, AXIS_MAX]`), plus
+   naps added to the existing no-data-marker-clearance check. `chart-styling.md` section 2's
+   `SleepSchedule` row updated to match.
 
-Both reference pages state "dot marks a nap" in their basis lines, and the styling
-specification documents a `SYMBOL.nap`. The chart cannot satisfy either claim.
+2. **Dark theme gridlines' contrast disclosure was wrong, not the colour.** `--chart-grid` still
+   measures 1.04:1 (deltaE 2.54) against `--surface-card` in the dark theme, left alone because
+   raising it would ripple into contrast pairs already tuned close to their floor (excluded vs
+   grid sits at 3.81, floor 3). Fixed by amending `chart-styling.md` section 2 to describe
+   gridlines as structure a reader's eye can use to keep a row straight, not a mark precise
+   enough to read a value off of, and by updating the matching comment in
+   `apps/web/src/charts/base.ts` to the same effect.
 
-This is pre-existing, untouched by the fix wave, and missed by every earlier review including
-the per-task one. It is first on this list because it is the only item where the shipped
-artefact makes a statement that is false.
+3. **`Sleep.tsx` hand-typed four chart token names.** Fixed: `STAGE_VAR: Record<Stage, string>`
+   (raw `--chart-stage-*` strings) replaced with `STAGE_TOKEN: Record<Stage, ChartToken>` plus
+   `chartVar()` from `@vitals/tokens` at the point of use. A rename in
+   `packages/tokens/src/chart.ts` is now a compile error at `Sleep.tsx`, not a silent broken
+   swatch; the four token names were already covered by `apps/web/test/chart-tokens.test.ts`'s
+   `emitCss()` loop via `apps/web/src/charts/tokens.ts`'s own `CHART_SOURCES` entries, so no new
+   test was needed for stylesheet coverage.
 
-Fix: either extend the axis domain to include daytime, or plot naps on a separate lane. Then
-extend `apps/web/test/schedule-marks.test.ts`, whose placement assertions currently cover only
-bed and wake values, so the same gap cannot reopen.
+4. **`ActivityHeatmap` re-initialised its chart on every render.** Fixed: `calendarLayout(...)`
+   moved into a `useMemo` keyed on `days`, so `cells` (and the `build` callback that depends on
+   it) keeps a stable identity across renders that do not change the underlying data.
 
-## 2. Dark theme gridlines are effectively invisible
+5. **The accessibility suite's thresholds read as perceptually calibrated when they are not.**
+   Fixed by documentation only, per the ruling that the metric and floors are M3's decision, not
+   this pass's: `chart-styling.md` section 10 gained a "What these floors are, and are not"
+   paragraph, stating plainly that every separation number is CIE76 deltaE over Vienot
+   1999-simulated colour, that both choices are defensible but not perceptually calibrated, and
+   that the floors of 18 and 25 are internally consistent within this palette and this metric
+   rather than a perceptual guarantee or a figure portable to a different metric.
 
-`--chart-grid` measures 1.04:1 against `--surface-card` in the dark theme, a colour difference
-of 2.54. The fix wave deliberately left the value alone: it is outside every finding, it was
-not made worse by the renumbering, and moving it would ripple through the contrast figures the
-wave had just tuned. That reasoning holds.
-
-What does not hold is the disclosure. `chart-styling.md` section 2 still tells M3 that gridlines
-"say where a value sits", which they cannot do at this contrast. Either raise the value and
-retune the affected pairs, or amend the document to describe gridlines as decorative structure
-rather than a reading aid.
-
-## 3. Sleep.tsx hand-types four chart token names
-
-`apps/web/src/pages/Sleep.tsx` declares `'--chart-stage-deep' | '-light' | '-rem' | '-awake'`
-as plain strings. `chartVar()` exists for exactly this and is not used there, and nothing
-asserts those four names appear in the emitted stylesheet.
-
-This is the same defect class as the final review's C3, at a third of the size: rename a stage
-token and this page breaks at runtime with a green suite. C3's fix removed the twelve-name
-duplicate and left this four-name one.
-
-## 4. ActivityHeatmap re-initialises its chart on every render
-
-`calendarLayout(...)` runs in the component body, so `cells` has a new identity each render.
-It is in the `useCallback` dependency list, which makes `build` unstable, and `useChart`'s
-effect keys on `build`, so every re-render disposes and recreates the ECharts instance along
-with its MutationObserver and resize listener.
-
-No user-visible impact today, because the reference pages render once and never update. It
-becomes real the moment M3 adds a date picker or a source filter to a page carrying a heatmap.
-A `useMemo` on the layout closes it.
-
-## 5. The accessibility suite's thresholds are a house metric
-
-The suite measures separation with CIE76 over Vienot-simulated colour. Both choices are
-defensible and neither is perceptually calibrated: CIE76 overstates differences in saturated
-regions, and neither model captures a dichromat's reduced discrimination along the axis that
-survives. The floors of 18 and 25 are therefore internally consistent and comparable across
-this palette, but they are not perceptual guarantees, and the styling document currently
-implies otherwise.
-
-The suite is still worth what it costs: it has twice caught real collapses that no reviewer
-noticed. The gap is in what it claims, not in what it does. M3 should either move to CIE2000
-with re-derived floors, or state plainly in the document that the numbers are relative.
-
-## 6. One transcription error in the styling specification
-
-`chart-styling.md` section 5 gives tooltip background against card as "deltaE 7.9 dark, 9.1
-light". The light figure is 8.03; 9.11 is the light theme's grid against card, one row above.
-Every other number in that document was independently reproduced and is correct.
+6. **Transcription error in `chart-styling.md` section 5.** "deltaE 7.9 dark, 9.1 light" for
+   tooltip background against card corrected to "7.9 dark, 8.03 light" (independently
+   recomputed from the actual token values). 9.11 remains, correctly, the light theme's grid
+   against card figure one row above.
 
 ## Deferred by earlier ruling, still open
 
