@@ -47,7 +47,7 @@ export const primitives = {
   },
   space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px', 6: '24px' },
   radius: { sm: '3px', md: '8px', lg: '11px', xl: '14px' },
-  text: { micro: '10.5px', xs: '12px', sm: '13.5px', md: '15px', lg: '21px', xl: '30px' },
+  text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px' },
   font: {
     sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     mono: 'ui-monospace, "Cascadia Mono", Consolas, monospace',
