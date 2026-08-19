@@ -59,6 +59,15 @@ In the Google Cloud Console:
 3. Open **APIs and Services > OAuth consent screen**, configure it as **External**, publishing status **Testing**.
 4. Add your own Google account under **Test users**.
 
+- [ ] **Step 3b: Record whether a billing account is required**
+
+While enabling the API, note whether the console demands a billing account, and whether any
+quota page shows a cost per request. Write the answer into `probe/findings/scopes.md`.
+
+Every self-hosted instance repeats this setup, so "requires a credit card on file" and "free with
+a Google account" are very different onboarding stories and change how the project is described
+to people considering it. Do not assume, look.
+
 - [ ] **Step 4: Human step, add scopes and record exactly how Google labels each one**
 
 While adding scopes on the consent screen, the console shows a classification column for every scope. Record verbatim what it says for each health scope you add. This single observation decides whether production status is reachable without a CASA audit, so copy the labels rather than paraphrasing them.
