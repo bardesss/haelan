@@ -17,6 +17,7 @@
 - Node 22 or later.
 - **Real health data never gets committed.** `probe/samples/`, `probe/.tokens.json` and `.env.local` are gitignored. Only sanitised field maps and findings go into git.
 - This milestone produces **no production code**. Everything under `probe/` is labelled throwaway and is deleted after M1 lands.
+- **The Google Cloud side is not throwaway.** The project, OAuth client, consent screen and declared scopes created here are the household's permanent credentials and are reused by the production instance. Set them up as if for production, because they are.
 
 ## Human-in-the-loop notice
 
@@ -79,9 +80,23 @@ Write `probe/findings/scopes.md`:
   only. Spec section 7 mitigation 1 applies.
 ```
 
-- [ ] **Step 5: Human step, create the OAuth client**
+- [ ] **Step 5: Human step, create the OAuth client and register every redirect URI at once**
 
-**APIs and Services > Credentials > Create credentials > OAuth client ID**, type **Web application**, authorised redirect URI `http://localhost:8899/callback`. Copy the client ID and secret into `.env.local`:
+**APIs and Services > Credentials > Create credentials > OAuth client ID**, type **Web application**.
+
+The Google side of this setup is **not throwaway**. This project, client and consent screen are the household's permanent credentials, reused unchanged by the production instance. Only the probe scripts get deleted. So register every redirect URI now, in one pass, rather than returning later:
+
+```
+http://localhost:8899/callback        probe scripts, delete after M1
+http://localhost:8080/oauth/callback  the instance on the machine running it
+http://<lan-hostname>:8080/oauth/callback
+```
+
+Add any reverse proxy or Tailscale hostname you expect to use. Unused entries cost nothing. A missing one costs a console visit at the moment you least want it, per spec section 15.
+
+Apply the same logic to scopes on the consent screen: declare **every** health scope the project may ever sync, not only the ones the probe reads. Declaring is a one-time console action; granting stays per person and can be a subset.
+
+Copy the client ID and secret into `.env.local`:
 
 ```
 GOOGLE_CLIENT_ID=...
