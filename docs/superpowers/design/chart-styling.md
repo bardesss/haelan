@@ -91,7 +91,8 @@ from `currentChartTokens()`, for instance, would defeat the observer).
 | `ActivityHeatmap` | `{ left: 30, right: 12, top: 10, bottom: 20 }` | Category x, **one entry per calendar week** (five for July 2026); category y, seven weekday names, Monday first. Axis line and ticks hidden on both axes; the heatmap cells carry all the information. |
 
 Grid lines (`splitLine`) and axis lines use `t.grid`; axis labels use `t.axis`, always at
-`AXIS_FONT_SIZE` (9) from `base.ts`, which is the smallest text the app renders. No chart draws a
+`AXIS_FONT_SIZE` (11) from `base.ts`, which sits one step below the `--font-size-xs` body
+minimum and above the `--font-size-micro` step reserved for uppercase labels. No chart draws a
 border around its own plot area beyond `splitLine`; the containing `Card` supplies the visual
 boundary.
 

@@ -22,7 +22,7 @@ export const SYMBOL = {
 
 // Axis labels are the smallest text the app renders. One size everywhere, so a
 // reader never has to decide whether a size difference means something.
-export const AXIS_FONT_SIZE = 9
+export const AXIS_FONT_SIZE = 11
 
 type Inset = { left?: number; right?: number; top?: number; bottom?: number }
 
