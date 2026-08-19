@@ -2,3 +2,5 @@ export { openDatabase, closeDatabase, tableExists, DATABASE_FILENAME } from './d
 export type { Database } from './db/open.ts'
 export { migrateToLatest } from './db/migrate.ts'
 export * as schema from './db/schema/index.ts'
+export { loadOrCreateKey, KEY_FILENAME, KEY_ENV_VAR } from './crypto/key.ts'
+export { seal, open } from './crypto/secretBox.ts'
