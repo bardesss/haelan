@@ -24,6 +24,9 @@ export function HeartRateRange({ days, baseline, annotations, excluded }: Props)
         const day = first ? days[first.dataIndex] : undefined
         if (!day) return ''
         if (!day.worn) return `${day.date}<br/>not worn`
+        // worn is true but the type still permits a null metric; never let a null
+        // reach the string as the literal text "null".
+        if (day.hrMean === null || day.hrMin === null || day.hrMax === null) return `${day.date}<br/>no data`
         return `${day.date}<br/>mean ${day.hrMean} bpm<br/>range ${day.hrMin}–${day.hrMax} bpm`
       },
     },
@@ -42,7 +45,15 @@ export function HeartRateRange({ days, baseline, annotations, excluded }: Props)
         markArea: { silent: true, itemStyle: { color: t.band, opacity: 0.5 },
           data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] },
         markPoint: { symbolSize: 7, itemStyle: { color: t.excluded },
-          data: excluded.map((date) => ({ name: 'excluded', xAxis: date.slice(8), yAxis: 0 })) },
+          // markPoint items with explicit coordinates skip axis extent calculation,
+          // so a placeholder yAxis lands off the fitted range. Anchor each marker
+          // at the day's actual mean instead, and drop it rather than guess if
+          // that day has no reading at all.
+          data: excluded.flatMap((date) => {
+            const day = days.find((d) => d.date === date)
+            if (!day || day.hrMean === null) return []
+            return [{ name: 'excluded', xAxis: date.slice(8), yAxis: day.hrMean }]
+          }) },
         markLine: { symbol: 'circle', lineStyle: { color: t.stageAwake, type: 'dashed' as const },
           label: { color: t.stageAwake, fontSize: 9, formatter: (p: { name: string }) => p.name },
           data: annotations.map((a) => ({ name: a.text, xAxis: a.date.slice(8) })) } },
