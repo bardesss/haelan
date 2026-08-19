@@ -629,11 +629,16 @@ Initial values, recorded as a starting point rather than a fixed decision:
 
 | Role | Value |
 |---|---|
-| Sleep stage - deep / light / REM / awake | `#3730A3` / `#4F8FF7` / `#93D9F7` / `#F0A202` |
+| Sleep stage - deep / light / REM / awake | `#3730A3` / `#4F8FF7` / `#B3E4FA` / `#F0A202` |
 | Surface - page / card / border | `#0A0E17` / `#121926` / `rgba(255,255,255,.06)` |
 | Text - primary / muted | `#EAF0FB` / `#7F8DA8` |
 | Accent | `#4F8FF7` |
 | Active navigation | tinted surface `rgba(79,143,247,.13)` with an accent icon, no leading stripe |
+
+The REM value was lightened from #93D9F7 after the accessibility suite's first run: the
+original blue ramp fell below the minimum separation under tritanopia, the blue-yellow
+deficiency, which the palette had not been checked against. Lightness carries the
+separation that hue cannot.
 
 ### Token system
 
