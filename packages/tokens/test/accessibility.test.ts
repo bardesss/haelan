@@ -40,4 +40,20 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
   it('meets non-text contrast for the accent on cards', () => {
     expect(contrast(s.accent!, s['surface-card']!)).toBeGreaterThanOrEqual(3)
   })
+
+  // A no-data marker that shares its colour with the gridlines it sits among
+  // fails "absence is visible" even though the mark is technically drawn.
+  // Non-text contrast (WCAG 1.4.11) is the right tool for "visible against
+  // its background"; deltaE is the right tool for "not confusable with the
+  // other state marker", which is a foreground-vs-foreground question.
+  it('meets non-text contrast for the no-data marker against the grid and the card surface', () => {
+    const noData = chart['state-no-data']!
+    expect(contrast(noData, chart.grid!), 'no-data vs grid').toBeGreaterThanOrEqual(3)
+    expect(contrast(noData, s['surface-card']!), 'no-data vs surface-card').toBeGreaterThanOrEqual(3)
+  })
+
+  it('keeps the no-data marker distinguishable from the excluded-state marker', () => {
+    const noData = chart['state-no-data']!
+    expect(deltaE(noData, chart['state-excluded']!), 'no-data vs state-excluded').toBeGreaterThanOrEqual(MIN_SIMULATED)
+  })
 })

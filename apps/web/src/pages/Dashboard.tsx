@@ -43,28 +43,28 @@ export function Dashboard() {
         <Card span={3}>
           <StatTile label="Steps" value={totalSteps.toLocaleString('en-GB')}
             basis={`sum, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
-            delta={trend(numbers((d) => d.steps))}>
+            delta={trend(numbers((d) => d.steps), 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.steps)} />
           </StatTile>
         </Card>
         <Card span={3}>
           <StatTile label="Resting heart rate" value={String(Math.round(avg(meanHrMin)))} unit="bpm"
             basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
-            delta={trend(meanHrMin)}>
+            delta={trend(meanHrMin, 'lower-is-better')}>
             <Sparkline values={july.days.map((d) => d.hrMin)} />
           </StatTile>
         </Card>
         <Card span={3}>
           <StatTile label="Sleep" value={formatDuration(avg(meanSleep))}
             basis={`mean, ${worn.length} of ${july.days.length} nights, ${unworn} nights not worn`}
-            delta={trend(meanSleep)}>
+            delta={trend(meanSleep, 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.sleepMinutes)} />
           </StatTile>
         </Card>
         <Card span={3}>
           <StatTile label="Heart rate" value={String(Math.round(avg(meanHrMean)))} unit="bpm"
             basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
-            delta={trend(meanHrMean)}>
+            delta={trend(meanHrMean, 'neutral')}>
             <Sparkline values={july.days.map((d) => d.hrMean)} />
           </StatTile>
         </Card>

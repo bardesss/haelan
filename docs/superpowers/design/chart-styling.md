@@ -161,18 +161,29 @@ The `.basis` CSS class (`app.css`): `font-size: var(--font-size-xs)`, `color: va
 everywhere a basis line appears, so a reader learns once that small muted text under a number is
 always the coverage statement, never decoration.
 
-**Deltas carry the same discipline plus an arrow.** `apps/web/src/format.ts` exports `trend()`,
-which compares the mean of the first half of a run of worn-day values against the second half and
-returns `{ text: '↑ 9%', dir: 'up' }` (or `↓`/`→` for down/flat, flat below a 1% swing). The arrow
-is part of the string, not a separate icon, so `StatTile`'s `delta` prop needs nothing extra to
-carry it: colour (via `.delta[data-dir]`, mapping `up` to `--positive` and `down` to `--negative`)
-and the arrow glyph both encode direction, so the reading survives colour blindness or a
-greyscale printout. **Known caveat, not fixed by this task**: `StatTile` colours every `up` delta
-positive and every `down` delta negative regardless of what the metric is. That is correct for
-steps and sleep duration; it is backwards for resting heart rate, where a rising trend is not
-good news. Nothing in the current component makes that distinction. A metric where "up" is bad
-should either omit the delta or (a change for M3) extend `StatTile` with a per-tile
-"higher is better" flag rather than always trusting `dir`.
+**Deltas carry the same discipline plus an arrow, and direction is not the same fact as
+judgement.** `apps/web/src/format.ts` exports `trend(values, polarity)`, which compares the mean
+of the first half of a run of worn-day values against the second half and returns
+`{ text: '↑ 9%', dir: 'up', tone: 'good' }` (arrow and `↓`/`→` for down/flat, flat below a 1%
+swing). `dir` is a fact read off the data; `tone` (`'good' | 'bad' | 'neutral'`) is a judgement
+about whether that direction is welcome, and the two are kept as separate fields on purpose:
+
+- `polarity: 'higher-is-better'` (steps, sleep duration): `up` is `good`, `down` is `bad`.
+- `polarity: 'lower-is-better'` (resting heart rate): `up` is `bad`, `down` is `good`.
+- `polarity: 'neutral'` (the default, and what the Dashboard's mean-heart-rate tile uses
+  deliberately): every direction reports `tone: 'neutral'`. A rising daily mean heart rate is
+  genuinely ambiguous without more context than a month of fixture data provides, and `neutral`
+  is the honest answer rather than a guessed verdict.
+
+`StatTile`'s `delta` prop renders both: `data-dir` carries the arrow (unstyled by CSS, present as
+a semantic hook), `data-tone` carries the colour (`.delta[data-tone]` in `app.css`, mapping
+`good` to `--positive`, `bad` to `--negative`, `neutral` to `--text-secondary`), and **`tone`
+defaults to `neutral` when a caller omits it**, so a delta nobody has stated a polarity for is
+never coloured as if a judgement had been made. This closes a defect the first version of this
+task shipped: `StatTile` used to colour every `up` green and every `down` red regardless of the
+metric, which put a green rising arrow beside a climbing resting heart rate on the reference
+dashboard other pages will be copied from. Fixed at the component (`StatTile.tsx`, `app.css`),
+not by dropping deltas from the metrics where the polarity is inverted.
 
 ## 7. Empty state wording patterns
 
@@ -306,15 +317,35 @@ design-review one.
   visually adjacent to an actual awake-stage mark on the same chart (which would make the two
   indistinguishable).
 
-## 11. Known limitation to verify before M3 relies on it
+## 11. The no-data token, and why it is not a plain grey
 
-`--chart-state-no-data` and `--chart-grid` currently resolve to the same value in both themes
-(`#0E1520` dark, `#E3E8EF` light; see `packages/tokens`' semantic mapping). `SleepSchedule`'s
-no-data marker is therefore the same colour as the chart's own gridlines, which weakens "a gap is
-drawn, never omitted" from section 9: the mark is present, but may read as low-contrast against
-the grid it sits among rather than as a clearly distinct state. This is a token-package decision
-(D1 Tasks 2 to 5), out of scope for this task to change, but worth resolving before M3 leans on
-`--chart-state-no-data` reading as visually distinct from `--chart-grid` on a denser chart.
+`--chart-state-no-data` originally resolved to the exact same value as `--chart-grid` in both
+themes (`#0E1520` dark, `#E3E8EF` light), which made `SleepSchedule`'s no-data marker the same
+colour as the chart's own gridlines: present, per section 9's "a gap is drawn, never omitted,"
+but not reading as a distinct state against the grid it sits among. This was found during review
+of this task and fixed in `packages/tokens` (D1 Task 10's fix round) rather than left for M3.
+
+The fix is not a third step of the existing achromatic slate ramp. `--chart-state-excluded`
+(`#5A6880`, both themes) already occupies the "clearly visible against the near-black grid and
+card" position on that ramp; any new blue-grey step light enough to clear a 3:1 contrast ratio
+against `--chart-grid`/`--surface-card` converges toward that same value, verified by computing
+WCAG contrast for a range of candidates rather than by eye. `--chart-state-no-data` is instead a
+dedicated, slightly violet swatch (`primitives.slate.noDataDark` / `noDataLight`, `#7C5B95` dark,
+`#8A749E` light) that does not collide with any hue already in the system (blue for stages/series,
+amber for awake/annotations, plain slate-grey for excluded/grid/axis) and clears three checks in
+`packages/tokens/test/accessibility.test.ts`:
+
+- **Non-text contrast (WCAG 1.4.11) >= 3:1** against `--chart-grid` and `--surface-card`, in both
+  themes: the mark is legible against the surfaces it actually appears on.
+- **`deltaE` >= 18** against `--chart-state-excluded`: a no-data mark and an excluded-reading mark
+  read as two different states, not the same "something is wrong here" grey.
+- (Verified but not asserted in the test, since no chart currently needs it: `deltaE` >= 40
+  against `--chart-stage-deep`, so a future chart that shows no-data markers alongside sleep
+  stages would not read the mark as a fifth, off-palette stage colour.)
+
+Absence and exclusion are different concepts (no-data: no reading was ever taken; excluded: a
+reading exists and was thrown out), and now have visually distinct tokens to match, on top of
+already being drawn as different shapes (a plain circle versus a `markPoint`).
 
 ## 12. Card and grid conventions the pages establish
 
