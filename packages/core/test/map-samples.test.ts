@@ -155,4 +155,25 @@ describe('mapSamples', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ value: 96 })
   })
+
+  it('downsamples heart rate on the way in, because 2 second sampling is 95 percent of all rows', () => {
+    const hr = dataTypeById('heart-rate')!
+    const points = Array.from({ length: 30 }, (_, i) => samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(60 + i),
+      physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
+    }))
+    const rows = mapSamples({ dataType: hr, ...ctx, body: body(points) })
+    expect(rows).toHaveLength(3)
+    expect(new Set(rows.map((r) => r.agg))).toEqual(new Set(['min', 'mean', 'max']))
+    expect(rows[0]?.n).toBe(30)
+  })
+
+  it('leaves a type that is not downsampled alone', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const points = Array.from({ length: 5 }, (_, i) => samplePoint({
+      payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 95 + i,
+      physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
+    }))
+    expect(mapSamples({ dataType: spo2, ...ctx, body: body(points) })).toHaveLength(5)
+  })
 })

@@ -1,6 +1,7 @@
 import type { DataType } from './catalogue.ts'
 import type { SampleAgg } from '../db/schema/derived.ts'
 import { parseInstant, parseCivilDate, parseNumeric, valueAt } from './parse.ts'
+import { downsampleToMinute } from './downsample.ts'
 
 export interface SampleRow {
   personId: string
@@ -90,5 +91,5 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
     })
   }
 
-  return rows
+  return t.downsampleToMinute ? downsampleToMinute(rows) : rows
 }
