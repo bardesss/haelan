@@ -111,4 +111,48 @@ describe('mapSamples', () => {
     })
     expect(rows).toHaveLength(0)
   })
+
+  it('tolerates a body that parses to a JSON null rather than an object', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    expect(() => mapSamples({ dataType: spo2, ...ctx, body: 'null' })).not.toThrow()
+    expect(mapSamples({ dataType: spo2, ...ctx, body: 'null' })).toEqual([])
+  })
+
+  it('tolerates a body that parses to a bare JSON number rather than an object', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    expect(() => mapSamples({ dataType: spo2, ...ctx, body: '42' })).not.toThrow()
+    expect(mapSamples({ dataType: spo2, ...ctx, body: '42' })).toEqual([])
+  })
+
+  it('tolerates dataPoints arriving as a number instead of an array', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const rows = mapSamples({ dataType: spo2, ...ctx, body: JSON.stringify({ dataPoints: 7 }) })
+    expect(() => rows).not.toThrow()
+    expect(rows).toEqual([])
+  })
+
+  it('tolerates dataPoints arriving as a cursor-keyed object instead of an array', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const rows = mapSamples({
+      dataType: spo2, ...ctx,
+      body: JSON.stringify({ dataPoints: { cursor1: { oxygenSaturation: { percentage: 97 } } } }),
+    })
+    expect(rows).toEqual([])
+  })
+
+  it('skips a bare string entry inside dataPoints while mapping its well formed siblings', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const rows = mapSamples({
+      dataType: spo2, ...ctx,
+      body: body([
+        'not a point',
+        samplePoint({
+          payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 96,
+          physicalTime: '2026-08-18T10:00:00Z',
+        }),
+      ]),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ value: 96 })
+  })
 })

@@ -31,15 +31,24 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
   // point per interval.
   if (t.mappingDeferred) return []
 
-  let parsed: { dataPoints?: unknown[] }
+  let parsed: unknown
   try {
-    parsed = JSON.parse(input.body) as { dataPoints?: unknown[] }
+    parsed = JSON.parse(input.body)
   } catch {
     return []
   }
 
+  // JSON.parse accepts "null", "42", and other scalars without throwing, so the type still
+  // needs checking before anything reaches into it for dataPoints.
+  if (typeof parsed !== 'object' || parsed === null) return []
+
+  const dataPoints = (parsed as { dataPoints?: unknown }).dataPoints
+  // A drifted payload might carry dataPoints as a number or a cursor-keyed object rather than
+  // an array. Iterating that throws "not iterable"; treating it as no data does not.
+  const points = Array.isArray(dataPoints) ? dataPoints : []
+
   const rows: SampleRow[] = []
-  for (const point of parsed.dataPoints ?? []) {
+  for (const point of points) {
     const payload = valueAt(point, t.payloadKey)
     if (payload === undefined) continue
 
@@ -59,6 +68,10 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
       tzOffsetMinutes = instant.tzOffsetMinutes
     } else if (civil) {
       utcMs = Date.parse(`${civil}T00:00:00Z`)
+      // This 0 is an absence of offset, not an observed one: daily types carry no zone at all,
+      // the source's own local clock already resolved which day this is, and the pair
+      // reconstructs the reported calendar date exactly. It is not comparable to the measured
+      // offsets on sample-time rows in this same column.
       tzOffsetMinutes = 0
     } else {
       continue
