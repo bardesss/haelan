@@ -25,7 +25,7 @@ export function chartBase(t: ChartTokens) {
   const axisLabel = { color: t.axis, fontSize: AXIS_FONT_SIZE }
   return {
     axisLabel,
-    // Gridlines and axis lines share a colour deliberately: dark theme contrast here is 1.04:1 (chart-styling.md section 2).
+    // Gridlines and axis lines share a colour deliberately; at 1.04:1 in the dark theme they are structure, not a mark to read a value off.
     splitLine: { lineStyle: { color: t.grid } },
     axisLine: { lineStyle: { color: t.grid } },
     hiddenAxis: { axisLine: { show: false }, axisTick: { show: false } },
