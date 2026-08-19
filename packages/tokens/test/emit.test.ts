@@ -17,7 +17,7 @@ describe('css emitter', () => {
 
   it('emits spacing and type scales', () => {
     expect(css).toContain('--space-4: 16px;')
-    expect(css).toContain('--text-xl: 26px;')
+    expect(css).toContain('--font-size-xl: 26px;')
   })
 
   it('records that the file is generated', () => {
