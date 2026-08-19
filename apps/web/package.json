@@ -1,16 +1,16 @@
 {
-  "name": "@vitals/web",
+  "name": "@haelan/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --filter @vitals/tokens build:css",
+    "predev": "pnpm --filter @haelan/tokens build:css",
     "dev": "vite",
-    "prebuild": "pnpm --filter @vitals/tokens build:css",
+    "prebuild": "pnpm --filter @haelan/tokens build:css",
     "build": "vite build"
   },
   "dependencies": {
-    "@vitals/tokens": "workspace:*",
+    "@haelan/tokens": "workspace:*",
     "echarts": "^6.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

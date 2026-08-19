@@ -1,3 +1,5 @@
+import { Icon } from './icons.js'
+
 const RANGES = ['Day', 'Week', 'Month', '3 months', 'Year'] as const
 
 export function ControlRow({ range, label, sources, syncedAgo }: {
@@ -7,19 +9,27 @@ export function ControlRow({ range, label, sources, syncedAgo }: {
   syncedAgo: string
 }) {
   return (
-    <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
-      <div style={{ display: 'flex', background: 'var(--surface-inset)', borderRadius: 'var(--radius-md)', padding: 2 }}>
+    <div className="controls">
+      <div className="segmented" role="group" aria-label="Time range">
         {RANGES.map((r) => (
-          <span key={r} className="basis" style={{ padding: '4px 10px', borderRadius: 6, margin: 0,
-            background: r === range ? 'var(--surface-card)' : undefined,
-            color: r === range ? 'var(--text-primary)' : undefined }}>{r}</span>
+          <button key={r} type="button" className="segment" aria-pressed={r === range}>{r}</button>
         ))}
       </div>
-      <div className="basis" style={{ margin: 0, padding: '4px 10px' }}>&lsaquo; {label} &rsaquo;</div>
-      <div className="basis" style={{ margin: 0, marginLeft: 'auto' }}>Sources {sources}</div>
-      <div className="basis" style={{ margin: 0 }}>Download raw</div>
-      <div className="basis" style={{ margin: 0 }}>Sync</div>
-      <div className="basis" style={{ margin: 0, color: 'var(--text-faint)' }}>{syncedAgo}</div>
+
+      <div className="stepper">
+        <button type="button" className="icon-button" aria-label="Previous period"><Icon name="chevronLeft" /></button>
+        <span className="stepper-label">{label}</span>
+        <button type="button" className="icon-button" aria-label="Next period"><Icon name="chevronRight" /></button>
+      </div>
+
+      <div className="controls-end">
+        <button type="button" className="button">
+          <Icon name="sources" />Sources<span className="button-count">{sources}</span>
+        </button>
+        <button type="button" className="button"><Icon name="download" />Download raw</button>
+        <button type="button" className="button button-primary"><Icon name="sync" />Sync</button>
+        <span className="synced">Synced {syncedAgo}</span>
+      </div>
     </div>
   )
 }
