@@ -5,3 +5,4 @@ dist/
 *.sqlite-shm
 .env
 .superpowers/
+apps/web/src/theme.generated.css

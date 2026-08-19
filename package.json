@@ -8,10 +8,11 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "dev": "pnpm --filter @vitals/web dev"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
     "vite-node": "^6.0.0",
     "vitest": "^2.1.0"

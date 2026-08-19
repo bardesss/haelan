@@ -1,0 +1,35 @@
+@import './theme.generated.css';
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.layout { display: flex; min-height: 100vh; }
+
+.rail { width: 186px; flex: none; background: var(--surface-rail); padding: var(--space-4) var(--space-3); }
+.rail-group { font-size: 9px; letter-spacing: .15em; text-transform: uppercase; color: var(--text-faint); padding: var(--space-3) var(--space-3) var(--space-1); }
+.rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 7px var(--space-3); border-radius: 7px; font-size: var(--text-sm); color: var(--text-secondary); }
+.rail-item[aria-current='page'] { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-soft); font-weight: 600; }
+.rail-item[aria-current='page'] .rail-icon { color: var(--accent); opacity: 1; }
+.rail-icon { width: 13px; height: 13px; border-radius: var(--radius-sm); background: currentColor; opacity: .5; }
+
+.main { flex: 1; padding: var(--space-5); min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
+.card { background: var(--surface-card); border: 1px solid color-mix(in srgb, var(--text-primary) 7%, transparent); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+
+.label { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.value { font-size: var(--text-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
+.basis { font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.delta { font-size: var(--text-xs); padding: 2px 7px; border-radius: 20px; background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.delta[data-dir='up'] { color: var(--positive); }
+.delta[data-dir='down'] { color: var(--negative); }
+.empty { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
+.empty small { color: var(--text-faint); }
+
+@media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
