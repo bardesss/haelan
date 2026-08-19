@@ -6,10 +6,15 @@ const GROUPS = [
   { label: 'Resources', items: [['docs', 'Docs'], ['changelog', 'Changelog']] },
 ] as const
 
-export function Sidebar({ active, onNavigate }: { active: string; onNavigate: (id: string) => void }) {
+export function Sidebar({ active, person, onNavigate }: {
+  active: string
+  person: string
+  onNavigate: (id: string) => void
+}) {
   return (
     <nav className="rail" aria-label="Sections">
-      <div style={{ fontWeight: 700, padding: '4px 12px 16px' }}>Vitals</div>
+      <div className="brand">haelan</div>
+
       {GROUPS.map((g) => (
         <div key={g.label}>
           <div className="rail-group">{g.label}</div>
@@ -21,6 +26,17 @@ export function Sidebar({ active, onNavigate }: { active: string; onNavigate: (i
           ))}
         </div>
       ))}
+
+      <div className="rail-foot">
+        <a className="rail-item" href="#account" aria-current={active === 'account' ? 'page' : undefined}
+           onClick={() => onNavigate('account')}>
+          <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
+        </a>
+        <a className="rail-item" href="#settings" aria-current={active === 'settings' ? 'page' : undefined}
+           onClick={() => onNavigate('settings')}>
+          <Icon name="settings" />Settings
+        </a>
+      </div>
     </nav>
   )
 }

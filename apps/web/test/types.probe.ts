@@ -1,4 +1,4 @@
-import { chartVar, semanticVar } from '@vitals/tokens'
+import { chartVar, semanticVar } from '@haelan/tokens'
 
 // Not a vitest file: `pnpm typecheck` runs it. The app does not define these
 // names, so the only thing stopping it drifting from the package that does is

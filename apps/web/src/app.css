@@ -1,4 +1,4 @@
-@import '@vitals/tokens/theme.css';
+@import '@haelan/tokens/theme.css';
 
 * { box-sizing: border-box; }
 
@@ -12,12 +12,45 @@ body {
 
 .layout { display: flex; min-height: 100vh; }
 
-.rail { width: 186px; flex: none; background: var(--surface-rail); padding: var(--space-4) var(--space-3); }
+.rail { width: 186px; flex: none; display: flex; flex-direction: column; background: var(--surface-rail); padding: var(--space-4) var(--space-3); }
 .rail-group { font-size: var(--font-size-micro); letter-spacing: .15em; text-transform: uppercase; color: var(--text-faint); padding: var(--space-3) var(--space-3) var(--space-1); }
 .rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px var(--space-3); border-radius: 7px; font-size: var(--font-size-sm); color: var(--text-secondary); text-decoration: none; }
 .rail-item[aria-current='page'] { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-soft); font-weight: 600; }
-.rail-item[aria-current='page'] .rail-icon { color: var(--accent); opacity: 1; }
-.rail-icon { width: 17px; height: 17px; flex: none; opacity: .7; }
+.brand { font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; padding: 4px 12px 16px; }
+.rail-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
+.rail-item[aria-current='page'] svg { opacity: 1; color: var(--accent); }
+.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.avatar {
+  width: 19px; height: 19px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; text-transform: uppercase;
+  font-size: var(--font-size-micro); font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-primary);
+}
+
+.controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.controls-end { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+
+.segmented { display: flex; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.segment { appearance: none; border: 0; background: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-muted); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
+.segment:hover { color: var(--text-primary); }
+.segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: 600; }
+
+.stepper { display: flex; align-items: center; padding: 2px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.stepper-label { font-size: var(--font-size-xs); color: var(--text-secondary); padding: 0 var(--space-2); min-width: 96px; text-align: center; }
+
+.button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
+.button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
+.button:hover { color: var(--text-primary); border-color: var(--text-faint); }
+.button svg, .icon-button svg { width: 15px; height: 15px; }
+.button-count { color: var(--text-faint); }
+.button-primary { color: var(--accent-soft); background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: color-mix(in srgb, var(--accent) 34%, transparent); }
+.button-primary:hover { color: var(--text-primary); background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.button-primary svg { color: var(--accent); }
+.icon-button { display: inline-flex; padding: 5px; background: none; border: 0; color: var(--text-muted); }
+.icon-button:hover { color: var(--text-primary); }
+.synced { font-size: var(--font-size-micro); color: var(--text-faint); }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .main { flex: 1; padding: var(--space-5); min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }

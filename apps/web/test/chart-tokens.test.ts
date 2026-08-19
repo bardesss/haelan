@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { emitCss } from '@vitals/tokens'
+import { emitCss } from '@haelan/tokens'
 import { readChartTokens, CHART_VARS, scaleStops } from '../src/charts/tokens.js'
 
 function styleWith(values: Record<string, string>) {
@@ -28,7 +28,7 @@ describe('chart token resolution', () => {
   })
 
   // The app reads names it does not define. Without this, renaming a token in
-  // @vitals/tokens leaves every test passing and the first render throwing.
+  // @haelan/tokens leaves every test passing and the first render throwing.
   it('reads only custom properties the generated stylesheet defines', () => {
     const css = emitCss()
     for (const variable of CHART_VARS) {
