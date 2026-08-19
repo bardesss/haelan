@@ -91,5 +91,28 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
     })
   }
 
+  return rows
+}
+
+export interface MapWindowSamplesInput {
+  dataType: DataType
+  personId: string
+  sourceId: string
+  pages: { body: string, rawPayloadId: string }[]
+}
+
+// A minute can straddle a page boundary. Downsampling inside mapSamples only ever sees one
+// page, so a split minute would produce two aggregates under the one natural key that has no
+// room to tell them apart. Mapping every page first and downsampling once over the union keeps
+// the key one aggregate per minute regardless of how the window was paginated.
+export function mapWindowSamples(input: MapWindowSamplesInput): SampleRow[] {
+  const t = input.dataType
+  const rows = input.pages.flatMap((page) => mapSamples({
+    dataType: t,
+    body: page.body,
+    personId: input.personId,
+    sourceId: input.sourceId,
+    rawPayloadId: page.rawPayloadId,
+  }))
   return t.downsampleToMinute ? downsampleToMinute(rows) : rows
 }

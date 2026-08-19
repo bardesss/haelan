@@ -58,6 +58,7 @@ describe('package barrel', () => {
     expect(typeof core.RevokedError).toBe('function')
     expect(typeof core.HealthClient).toBe('function')
     expect(typeof core.mapSamples).toBe('function')
+    expect(typeof core.mapWindowSamples).toBe('function')
     expect(typeof core.mapSessions).toBe('function')
   })
 

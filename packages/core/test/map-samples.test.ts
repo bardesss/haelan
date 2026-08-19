@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapSamples } from '../src/api/mapSamples.ts'
+import { mapSamples, mapWindowSamples } from '../src/api/mapSamples.ts'
 import { dataTypeById, DATA_TYPES } from '../src/api/catalogue.ts'
 import { samplePoint, intervalPoint, dailyPoint, body } from '../src/testing/payloads.ts'
 
@@ -55,7 +55,8 @@ describe('mapSamples', () => {
         physicalTime: '2026-08-18T10:00:00Z',
       })]),
     })
-    expect(rows.every((r) => typeof r.value === 'number')).toBe(true)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.value).toBe(62)
   })
 
   it('skips a point whose value is missing rather than writing a zero', () => {
@@ -156,16 +157,15 @@ describe('mapSamples', () => {
     expect(rows[0]).toMatchObject({ value: 96 })
   })
 
-  it('downsamples heart rate on the way in, because 2 second sampling is 95 percent of all rows', () => {
+  it('does not downsample on its own; a page is not a minute', () => {
     const hr = dataTypeById('heart-rate')!
     const points = Array.from({ length: 30 }, (_, i) => samplePoint({
       payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(60 + i),
       physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
     }))
     const rows = mapSamples({ dataType: hr, ...ctx, body: body(points) })
-    expect(rows).toHaveLength(3)
-    expect(new Set(rows.map((r) => r.agg))).toEqual(new Set(['min', 'mean', 'max']))
-    expect(rows[0]?.n).toBe(30)
+    expect(rows).toHaveLength(30)
+    expect(rows.every((r) => r.n === 1)).toBe(true)
   })
 
   it('leaves a type that is not downsampled alone', () => {
@@ -175,5 +175,46 @@ describe('mapSamples', () => {
       physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
     }))
     expect(mapSamples({ dataType: spo2, ...ctx, body: body(points) })).toHaveLength(5)
+  })
+})
+
+describe('mapWindowSamples', () => {
+  it('downsamples heart rate collected over a single page, because 2 second sampling is 95 percent of all rows', () => {
+    const hr = dataTypeById('heart-rate')!
+    const points = Array.from({ length: 30 }, (_, i) => samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(60 + i),
+      physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
+    }))
+    const rows = mapWindowSamples({
+      dataType: hr, personId: ctx.personId, sourceId: ctx.sourceId,
+      pages: [{ body: body(points), rawPayloadId: ctx.rawPayloadId }],
+    })
+    expect(rows).toHaveLength(3)
+    expect(new Set(rows.map((r) => r.agg))).toEqual(new Set(['min', 'mean', 'max']))
+    expect(rows[0]?.n).toBe(30)
+  })
+
+  it('downsamples once over the whole window rather than once per page, when a minute straddles a page boundary', () => {
+    const hr = dataTypeById('heart-rate')!
+    const values = [60, 61, 62, 63, 64, 65]
+    const firstPage = values.slice(0, 4).map((v, i) => samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(v),
+      physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 10)).toISOString(),
+    }))
+    const secondPage = values.slice(4).map((v, i) => samplePoint({
+      payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(v),
+      physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, 40 + i * 10)).toISOString(),
+    }))
+    const rows = mapWindowSamples({
+      dataType: hr, personId: ctx.personId, sourceId: ctx.sourceId,
+      pages: [
+        { body: body(firstPage), rawPayloadId: 'r1' },
+        { body: body(secondPage), rawPayloadId: 'r2' },
+      ],
+    })
+    expect(rows).toHaveLength(3)
+    expect(rows.every((r) => r.n === 6)).toBe(true)
+    const mean = values.reduce((a, b) => a + b, 0) / values.length
+    expect(rows.find((r) => r.agg === 'mean')?.value).toBeCloseTo(mean, 10)
   })
 })
