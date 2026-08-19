@@ -93,4 +93,44 @@ describe('TokenProvider', () => {
     const body = fetchMock.mock.calls[0]?.[1]?.body as URLSearchParams
     expect(body.get('client_id')).toBe('own')
   })
+
+  it('refuses a cached token once revoked elsewhere, instead of serving it for up to an hour', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse('at-1'))
+    const provider = new TokenProvider(store, { fetch: fetchMock, now: () => 1000 })
+    await provider.accessTokenFor('p1')
+    store.markRevoked('p1', 1500)
+    await expect(provider.accessTokenFor('p1')).rejects.toBeInstanceOf(RevokedError)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('refreshes for real after a revoke, clear and reconnect, rather than the pre-revocation token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse('at-1'))
+    const provider = new TokenProvider(store, { fetch: fetchMock, now: () => 1000 })
+    await provider.accessTokenFor('p1')
+    store.markRevoked('p1', 1500)
+    await expect(provider.accessTokenFor('p1')).rejects.toBeInstanceOf(RevokedError)
+    store.clearRevoked('p1')
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt-new', scopes: [], nowMs: 2000 })
+    fetchMock.mockResolvedValueOnce(okResponse('at-2'))
+    expect(await provider.accessTokenFor('p1')).toBe('at-2')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not revoke on an unrelated error whose description merely mentions invalid_grant', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'invalid_request', error_description: 'looks like invalid_grant to a substring match' }),
+        { status: 400 },
+      ),
+    )
+    const provider = new TokenProvider(store, { fetch: fetchMock, now: () => 7000 })
+    await expect(provider.accessTokenFor('p1')).rejects.not.toBeInstanceOf(RevokedError)
+    expect(store.getRefreshToken('p1')?.revokedAtMs).toBeNull()
+  })
+
+  it('rejects a malformed token response rather than caching an undefined access token', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ expires_in: 3600 }), { status: 200 }))
+    const provider = new TokenProvider(store, { fetch: fetchMock, now: () => 1000 })
+    await expect(provider.accessTokenFor('p1')).rejects.toThrow(/malformed/)
+  })
 })
