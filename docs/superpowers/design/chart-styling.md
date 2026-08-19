@@ -87,13 +87,24 @@ from `currentChartTokens()`, for instance, would defeat the observer).
 | `Sparkline` | `{ left: 0, right: 0, top: 4, bottom: 4 }` | Both axes `show: false`. No grid, no ticks, no labels: the sparkline is a shape, not a chart with a coordinate system a reader is meant to consult. |
 | `HeartRateRange` | `{ left: 34, right: 12, top: 18, bottom: 24 }` | Category x (dates), value y (`scale: true` so the axis fits the data rather than forcing a zero baseline). |
 | `Hypnogram` | `{ left: 46, right: 12, top: 10, bottom: 24 }` | Value x in minutes, category y (4 stage lanes). `axisLabel.formatter` converts minutes to `Nh`. |
-| `SleepSchedule` | `{ left: 40, right: 12, top: 12, bottom: 24 }` | Category x (dates), value y fixed to `[18*60, 42*60]` (18:00 through 18:00 two days later) so every night's bed/wake pair sits on a stable clock-time axis regardless of how late the night ran. |
+| `SleepSchedule` | `{ left: 40, right: 12, top: 12, bottom: 24 }` | Category x (dates), value y fixed to `[12*60, 36*60]` (noon through noon the next day) so every night's bed/wake pair sits on a stable clock-time axis regardless of how late the night ran, and so the fixture's daytime naps (13:00-16:00) fall inside the domain instead of being clipped below it. The window is still exactly 24 hours; only its start moved, so the bed-to-wake band is no more compressed than before. |
 | `ActivityHeatmap` | `{ left: 30, right: 12, top: 10, bottom: 20 }` | Category x, **one entry per calendar week** (five for July 2026); category y, seven weekday names, Monday first. Axis line and ticks hidden on both axes; the heatmap cells carry all the information. |
 
 Grid lines (`splitLine`) and axis lines use `t.grid`; axis labels use `t.axis`, always at
 `AXIS_FONT_SIZE` (9) from `base.ts`, which is the smallest text the app renders. No chart draws a
 border around its own plot area beyond `splitLine`; the containing `Card` supplies the visual
 boundary.
+
+**Gridlines are structure, not a reading aid, and the dark theme is the reason this distinction
+matters.** `--chart-grid` measures only 1.04:1 contrast (deltaE 2.54) against `--surface-card` in
+the dark theme, which is not enough for a reader to trace a value back to an axis by following the
+line. The value is left as-is deliberately: raising it would ripple into every contrast pair
+tuned against `t.grid` in `packages/tokens/test/accessibility.test.ts` (the excluded-marker-vs-grid
+pair sits at 3.81, barely over its own floor of 3), and none of those pairs were the ones found
+wanting. Treat a gridline as a faint division of the plot area that a reader's eye can use to keep
+a row straight, not as a mark precise enough to read a value off of; nothing in this system asks a
+reader to do that by gridline alone; a chart with a value a reader needs to read exactly should
+render it as a label, a tooltip or the accessible table, not rely on grid alignment.
 
 **A calendar axis is derived from dates, never from array positions.** `charts/calendar.ts`
 computes each cell's week and weekday from the date itself. The first version of the heatmap used
@@ -166,7 +177,7 @@ tooltip: { backgroundColor: t.tooltipBg, borderColor: t.grid, textStyle: { color
 `--chart-tooltip-bg` is its own token rather than a borrowed `--surface-card`: a tooltip is drawn
 *over* a card, so painting it the card's own colour leaves only the border to say a panel is
 there. It is one step off the card in each theme (`#192937` dark, `#EAF0FB` light), and the
-accessibility suite asserts both that it differs from `--surface-card` (deltaE 7.9 dark, 9.1
+accessibility suite asserts both that it differs from `--surface-card` (deltaE 7.9 dark, 8.03
 light) and that `--text-muted` clears 4.5:1 on it (6.10 dark, 7.60 light).
 
 `HeartRateRange` uses `trigger: 'axis'` with a custom `formatter`; `ActivityHeatmap` uses the
@@ -396,6 +407,20 @@ export function stageColor(stage: Stage, t: ChartTokens): string {
 Measured worst-case separation across normal vision and all three simulations: 21.8 dark, 27.8
 light, against a floor of 18 (and 25 in normal vision, where the worst pair measures 41.3 dark,
 35.7 light).
+
+**What these floors are, and are not.** Every separation number in this document, and every floor
+in `packages/tokens/test/accessibility.test.ts`, is CIE76 deltaE (`deltaE` in
+`packages/tokens/src/color/convert.ts`, plain Euclidean distance in Lab space) measured over colour
+run through the Vienot 1999 dichromat matrices (`packages/tokens/src/color/cvd.ts`). Both choices
+are defensible and neither is a perceptual measurement: CIE76 overstates differences in saturated
+regions relative to CIE2000, and the Vienot matrices are a linear approximation of a dichromat's
+vision, not a model of the reduced discrimination that survives along the axis a dichromat still
+sees. The floors of 18 and 25 were derived against this exact metric and this exact simulation, so
+they are internally consistent and comparable across this palette, but they are not a guarantee
+that a real reader perceives "18 units" of separation as any particular felt difference, and they
+are not comparable to a deltaE figure computed a different way. A future milestone moving to
+CIE2000 would need to re-derive every floor in this document rather than reuse these numbers
+against the new metric.
 
 This is the blue depth-ramp plus amber described in the design spec: deeper sleep gets a darker
 blue, so the ordering itself carries meaning, and awake is amber specifically so it survives
