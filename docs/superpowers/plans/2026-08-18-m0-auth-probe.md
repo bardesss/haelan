@@ -88,6 +88,17 @@ GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 ```
 
+- [ ] **Step 5b: Record every console action, in order, as wizard input**
+
+While doing Steps 3 to 5, keep a running list in `probe/findings/console-steps.md`: every page
+visited, every field filled, every value that had to match something else, and every place the
+console wording was confusing or the option was hard to find.
+
+This file is the source material for the setup wizard's guided instructions in M1. The wizard
+cannot remove the console visit, since Google exposes no API for creating OAuth clients, so the
+only lever available is making those clicks unambiguous. Doing the setup once by hand while
+writing down the friction is how that gets written accurately rather than from memory.
+
 - [ ] **Step 6: Write probe/README.md**
 
 ```markdown
