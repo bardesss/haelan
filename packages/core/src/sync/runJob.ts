@@ -161,9 +161,21 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
       body: page.body, rawPayloadId: page.rawPayloadId,
     })
     for (const row of rows) {
+      // Every field the mapper derives, not a subset: localDate is computed from the end offset,
+      // so refreshing one without the other leaves a row whose local date and its own offset
+      // disagree. rawPayloadId follows the correction for the same reason the sample upsert
+      // refreshes it, so the row points at the payload it actually came from.
       tx.insert(sessions).values(row).onConflictDoUpdate({
         target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
-        set: { startMs: row.startMs, endMs: row.endMs, localDate: row.localDate, attrs: row.attrs },
+        set: {
+          startMs: row.startMs,
+          startOffsetMinutes: row.startOffsetMinutes,
+          endMs: row.endMs,
+          endOffsetMinutes: row.endOffsetMinutes,
+          localDate: row.localDate,
+          attrs: row.attrs,
+          rawPayloadId: row.rawPayloadId,
+        },
       }).run()
       written++
     }

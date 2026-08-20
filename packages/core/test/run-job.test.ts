@@ -9,8 +9,8 @@ import { HealthClient } from '../src/api/client.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { runJob } from '../src/sync/runJob.ts'
 import { RevokedError } from '../src/api/tokens.ts'
-import { samplePoint, body } from '../src/testing/payloads.ts'
-import { samples, syncState } from '../src/db/schema/index.ts'
+import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
+import { samples, sessions, syncState } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const AMS = 'Europe/Amsterdam'
@@ -120,6 +120,33 @@ describe('runJob', () => {
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
     })
     expect(result.skipped).toBe('revoked')
+  })
+
+  it('corrects every field of a session on a re-fetch, so no row contradicts itself', async () => {
+    // Google finishes processing a night after it first serves it, and a corrected offset is one
+    // of the things that changes. localDate is derived from the end offset, so a row that keeps
+    // the old offset beside the new local date disagrees with itself.
+    const night = (utcOffset: string) => body([sleepPoint({
+      startTime: '2026-08-18T21:00:00Z', endTime: '2026-08-18T22:30:00Z', utcOffset,
+      stages: [{ type: 'DEEP', startTime: '2026-08-18T21:00:00Z', endTime: '2026-08-18T22:30:00Z' }],
+    })])
+    const args = {
+      personId: 'p1', dataType: dataTypeById('sleep')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+    }
+
+    await runJob({ ...args, deps: build(vi.fn().mockImplementation(async () => new Response(night('7200s'), { status: 200 }))) })
+    const first = ctx.db.select().from(sessions).all()[0]
+    expect(first?.endOffsetMinutes).toBe(120)
+    expect(first?.localDate).toBe('2026-08-19')
+
+    await runJob({ ...args, deps: build(vi.fn().mockImplementation(async () => new Response(night('3600s'), { status: 200 }))) })
+    const rows = ctx.db.select().from(sessions).all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.startOffsetMinutes).toBe(60)
+    expect(rows[0]?.endOffsetMinutes).toBe(60)
+    expect(rows[0]?.localDate).toBe('2026-08-18')
+    expect(rows[0]?.rawPayloadId).not.toBe(first?.rawPayloadId)
   })
 
   it('skips a type the API cannot list without calling it', async () => {
