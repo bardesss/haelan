@@ -60,8 +60,10 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       // the cursor behind rather than ahead. That is safe because the trailing re-fetch never
       // consults the cursor to decide what to fetch, so a lagging cursor only costs a re-fetch.
       rowsWritten += deps.db.transaction((tx) => {
+        // Through tx, not the outer handle: the sources row a point resolves has to commit and
+        // roll back with the rows whose foreign keys point at it.
         const resolveSource = (dataSource: unknown) =>
-          deps.sources.resolve(input.personId, dataSource, deps.now())
+          deps.sources.resolve(input.personId, dataSource, deps.now(), tx)
         const pages = listed.payloadIds.map((id) => ({
           body: deps.archive.getBody(input.personId, id), rawPayloadId: id,
         }))
@@ -72,6 +74,10 @@ export async function runJob(input: JobInput): Promise<JobResult> {
 
       highWaterMs = Math.max(highWaterMs, window.endMs)
     } catch (error) {
+      // A rolled back window takes its sources rows with it, so the ids this person's cache
+      // still holds may no longer exist. Every later write referencing one would fail the
+      // foreign key, turning one bad window into a run of them.
+      deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
       if (error instanceof RevokedError) return { windows: windows.length, points, rowsWritten, skipped: 'revoked' }

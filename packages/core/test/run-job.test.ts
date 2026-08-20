@@ -133,6 +133,30 @@ describe('runJob', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('lets the next window write after one window rolled back, rather than cascading', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    const deps = build(fetchMock)
+    const args = { personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS }
+
+    // SQLITE_BUSY shaped, and deliberately raised by SQLite itself: the throw lands inside the
+    // window's transaction after the source row has been inserted and cached, so the rollback
+    // takes the source row away and leaves the cache entry pointing at nothing. WAL means the
+    // MCP server, the CLI and a sync share the file, so a busy writer is not hypothetical.
+    ctx.db.$client.exec("CREATE TRIGGER haelan_test_busy BEFORE INSERT ON samples BEGIN SELECT RAISE(ABORT, 'database is locked'); END")
+    const first = await runJob({
+      ...args, fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-18T00:00:00Z'), deps,
+    })
+    expect(first.rowsWritten).toBe(0)
+    ctx.db.$client.exec('DROP TRIGGER haelan_test_busy')
+
+    const second = await runJob({
+      ...args, fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
+    })
+    expect(second.rowsWritten).toBeGreaterThan(0)
+    expect(ctx.db.select().from(samples).all().length).toBeGreaterThan(0)
+    expect(ctx.db.select().from(syncState).all()[0]?.lastError ?? '').not.toContain('FOREIGN KEY')
+  })
+
   it('writes nothing for a deferred type, but still archives what it fetched', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
     const result = await runJob({

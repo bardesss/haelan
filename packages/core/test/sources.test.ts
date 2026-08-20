@@ -68,4 +68,21 @@ describe('SourceRegistry', () => {
     ctx.db.delete(sources).run()
     expect(registry.resolve('p1', fitbitWatch, 1000)).toBe(id)
   })
+
+  it('forgets one person cached ids and leaves another person cache alone', () => {
+    seedPerson(ctx.db, 'p2')
+    const a = registry.resolve('p1', fitbitWatch, 1000)
+    const b = registry.resolve('p2', fitbitWatch, 1000)
+    // Standing in for the rollback that takes both rows away while both cache entries survive.
+    ctx.db.delete(sources).run()
+
+    registry.forget('p1')
+
+    // p1 was forgotten, so it goes back to the database, finds nothing and writes the row again.
+    expect(registry.resolve('p1', fitbitWatch, 2000)).toBe(a)
+    expect(ctx.db.select().from(sources).all()).toHaveLength(1)
+    // p2 was not, so it answers from the cache without writing anything.
+    expect(registry.resolve('p2', fitbitWatch, 2000)).toBe(b)
+    expect(ctx.db.select().from(sources).all()).toHaveLength(1)
+  })
 })
