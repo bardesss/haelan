@@ -96,8 +96,9 @@ life, since the API only retains them for a recent window, so every week without
 week of minute-level history permanently unavailable at that resolution. Charts can be improved
 retroactively; resolution cannot be recovered.
 
-**Every pull request updates this table.** A roadmap that is only accurate on the day it was
-written is worse than none, because it still looks authoritative.
+**Every pull request that changes a milestone's status updates this table**, in the same pull
+request rather than afterwards. A roadmap that is only accurate on the day it was written is worse
+than none, because it still looks authoritative.
 
 ## Layout
 
