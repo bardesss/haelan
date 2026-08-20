@@ -89,12 +89,33 @@ rather than ahead. That lag is deliberately the safe direction: the trailing win
 consults the cursor to decide what to fetch, so a lagging cursor costs re-fetching a day already
 written, not missing a day that was never fetched.
 
+**A failing window ends its job, and the next run picks that day up again.** A window whose fetch
+or write fails records the failure and returns; the job does not carry on to the window after it.
+Nothing is lost by that: the trailing re-fetch window covers the failed day again next run, so the
+day is retried rather than skipped. Continuing past a window that drifted, which spec section 13
+names, is deferred to M1d along with the backfill it matters for, because it needs a decision about
+what the high water mark means when a window in the middle of a job failed.
+
 **A failure stops one job, not the household.** A revoked person pauses alone and the rest keep
-syncing. `sync_state` has no separate column for a failure's class; `HaelanError`'s `[kind]` prefix
-survives as the first token of `sync_state.last_error`, so a caller can tell a rate limit from a
-schema change by reading that prefix rather than the message after it. The client deliberately does
-not archive the bodies of retries it recovered from; `sync_state.last_error` records the episode
-instead.
+syncing, and a person id with no row is reported back in the run's `unknownPersonIds` rather than
+thrown out of the loop. `sync_state` has no separate column for a failure's class; `HaelanError`'s
+`[kind]` prefix survives as the first token of `sync_state.last_error`, so a caller can tell a rate
+limit from a schema change by reading that prefix rather than the message after it. A throw that
+carries no class of its own, from SQLite or zlib, is recorded as `transient`, which is what the
+engine does with it anyway.
+
+**A retry the client recovered from is recorded rather than lost.** The client deliberately does
+not archive the bodies of a 429 or 5xx it retried past, so `ListResult` carries the attempt count
+and the last retried status out instead, and `runJob` writes an episode to `sync_state.last_error`
+whenever a window's fetch needed more than one attempt. That column holds one string, so the
+episode is written at the point the fetch finished: a real failure recorded later in the same job
+replaces it, never the other way round.
+
+**Rate limiting has a seat and no occupant yet.** `probe/findings/scopes.md` measured the real
+limit at 300 requests per minute per user, and a trailing week for a five person household is
+roughly 720 requests. `JobDeps.limiter` is optional, `runJob` takes one token before each window it
+fetches, and `TokenBucket` satisfies it. Nothing sets it today, because choosing the rate is a
+settings decision and belongs with the scheduler in M1d.
 
 ## Heart rate volume and the downsampling decision
 
