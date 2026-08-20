@@ -9,3 +9,4 @@ docs/
 probe/samples/
 probe/.tokens.json
 .env.local
+*.tsbuildinfo
