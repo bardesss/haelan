@@ -17,13 +17,20 @@ export interface Instance {
 // the migration or read the key from a different directory than the database.
 export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): Instance {
   const db = openDatabase(dir)
-  migrateToLatest(db)
-  const key = loadOrCreateKey(dir, env)
-  return {
-    db,
-    key,
-    credentials: new CredentialStore(db, key),
-    archive: new RawArchive(db),
-    close: () => closeDatabase(db),
+  try {
+    migrateToLatest(db)
+    const key = loadOrCreateKey(dir, env)
+    return {
+      db,
+      key,
+      credentials: new CredentialStore(db, key),
+      archive: new RawArchive(db),
+      close: () => closeDatabase(db),
+    }
+  } catch (err) {
+    // openDatabase already holds the file handle and WAL lock; a migration or key failure
+    // here must not leave it open, or a later open of the same directory can block on Windows.
+    closeDatabase(db)
+    throw err
   }
 }

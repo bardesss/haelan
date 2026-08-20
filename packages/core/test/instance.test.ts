@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -53,5 +53,18 @@ describe('openHaelan', () => {
 
     expect(instance.db.select().from(rawPayloads).all()).toHaveLength(0)
     instance.close()
+  })
+
+  it('closes the database if a step after opening it throws, so a later open is not blocked', () => {
+    openHaelan(dir).close()
+    // corrupt the key file after a successful first open, so the second call's openDatabase
+    // succeeds and only loadOrCreateKey throws, exercising the cleanup path
+    writeFileSync(join(dir, KEY_FILENAME), 'not-a-valid-key', 'utf8')
+
+    expect(() => openHaelan(dir)).toThrow()
+
+    // a leaked handle holds the WAL lock on Windows; if openHaelan left it open, removing the
+    // directory right after would throw or hang instead of succeeding
+    expect(() => rmSync(dir, { recursive: true, force: true })).not.toThrow()
   })
 })
