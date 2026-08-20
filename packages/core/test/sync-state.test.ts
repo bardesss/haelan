@@ -50,9 +50,15 @@ describe('SyncStateStore', () => {
   it('records a retry episode that eventually succeeded, because the client discards those bodies', () => {
     store.recordRetryEpisode({ personId: 'p1', dataType: 'steps', attempts: 3, lastStatus: 429, nowMs: 6000 })
     const state = store.get('p1', 'steps')
-    expect(state?.lastError).toContain('429')
-    expect(state?.lastError).toContain('3')
+    expect(state?.lastError).toBe('[transient] recovered after 3 attempts, last status 429')
     expect(state?.consecutiveFailures).toBe(0)
+  })
+
+  it('leaves an existing failure count untouched on a retry episode, since it did not fail', () => {
+    store.recordFailure({ personId: 'p1', dataType: 'steps', error: new TransientError('try 1'), nowMs: 1 })
+    store.recordFailure({ personId: 'p1', dataType: 'steps', error: new TransientError('try 2'), nowMs: 2 })
+    store.recordRetryEpisode({ personId: 'p1', dataType: 'steps', attempts: 3, lastStatus: 429, nowMs: 6000 })
+    expect(store.get('p1', 'steps')?.consecutiveFailures).toBe(2)
   })
 
   it('tracks a backfill cursor and its completion separately from the forward cursor', () => {
