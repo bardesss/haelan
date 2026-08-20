@@ -71,14 +71,15 @@ describe('TokenBucket', () => {
     expect(bucket.available(c.deps.now())).toBeGreaterThanOrEqual(0)
   })
 
-  it('concurrent takes wait serially, not in parallel, so the second does not pay for the first\'s refill', async () => {
+  it('concurrent takes queue and complete in order, not out of order when the queue is skipped', async () => {
     const c = controllable()
     const bucket = new TokenBucket({ capacity: 1, refillPerMinute: 60 }, c.deps)
     await bucket.take()
-    const promise1 = bucket.take(1)
-    const promise2 = bucket.take(1)
+    const completionOrder: number[] = []
+    const promise1 = bucket.take(1).then(() => { completionOrder.push(1) })
+    const promise2 = bucket.take(1).then(() => { completionOrder.push(2) })
     await Promise.all([promise1, promise2])
-    expect(c.slept).toEqual([1000, 1000])
+    expect(completionOrder).toEqual([1, 2])
   })
 
   it('available() with future timestamp does not bank unearned quota', async () => {
