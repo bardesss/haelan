@@ -10,7 +10,7 @@ import { dataTypeById } from '../src/api/catalogue.ts'
 import { runJob } from '../src/sync/runJob.ts'
 import { RevokedError } from '../src/api/tokens.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
-import { samples, sessions, syncState } from '../src/db/schema/index.ts'
+import { samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const AMS = 'Europe/Amsterdam'
@@ -59,14 +59,35 @@ describe('runJob', () => {
   })
 
   it('attributes every row to a source derived from its own payload', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    // The field map records platform taking both values inside single payloads, and spec
+    // invariant 4 requires every row to keep its own source. One body, two platforms, so a
+    // runner that stamped one source per call could not pass this.
+    const watch = {
+      platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED',
+      device: { displayName: 'Sense 2', formFactor: 'WATCH' },
+    }
+    const phone = { platform: 'HEALTH_CONNECT', recordingMethod: 'ACTIVELY_MEASURED' }
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([
+      samplePoint({ payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 97, physicalTime: '2026-08-18T10:00:00Z', dataSource: watch }),
+      samplePoint({ payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 95, physicalTime: '2026-08-18T11:00:00Z', dataSource: phone }),
+    ]), { status: 200 }))
     await runJob({
       personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
       deps: build(fetchMock),
     })
+
+    const sourceRows = ctx.db.select().from(sources).all()
+    expect(sourceRows.map((r) => r.displayName).sort()).toEqual(['HEALTH_CONNECT', 'Sense 2'])
+    expect(sourceRows.find((r) => r.displayName === 'Sense 2')?.kind).toBe('device')
+    expect(sourceRows.find((r) => r.displayName === 'HEALTH_CONNECT')?.kind).toBe('app')
+
     const rows = ctx.db.select().from(samples).all()
-    expect(rows.every((r) => r.sourceId.length > 0)).toBe(true)
+    expect(rows).toHaveLength(2)
+    const sourceOf = (value: number) => rows.find((r) => r.value === value)?.sourceId
+    expect(sourceOf(97)).toBe(sourceRows.find((r) => r.displayName === 'Sense 2')?.id)
+    expect(sourceOf(95)).toBe(sourceRows.find((r) => r.displayName === 'HEALTH_CONNECT')?.id)
+    expect(sourceOf(97)).not.toBe(sourceOf(95))
   })
 
   it('is idempotent, so a second run over the same window changes nothing', async () => {
@@ -75,10 +96,21 @@ describe('runJob', () => {
       personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
     }
+    const shape = () => ctx.db.select().from(samples).all()
+      .map((r) => ({ value: r.value, n: r.n, tzOffsetMinutes: r.tzOffsetMinutes }))
+
     await runJob({ ...args, deps: build(fetchMock) })
-    const after = ctx.db.select().from(samples).all().length
+    const after = shape()
+    expect(after.length).toBeGreaterThan(0)
+
     await runJob({ ...args, deps: build(fetchMock) })
-    expect(ctx.db.select().from(samples).all().length).toBe(after)
+    // Row counts alone cannot tell a correct no op from a second run whose transaction rolled
+    // back on a constraint violation, since the first run's rows are still there either way.
+    expect(shape()).toEqual(after)
+    expect(ctx.db.select().from(sources).all().length).toBeGreaterThan(0)
+    const state = ctx.db.select().from(syncState).all()[0]
+    expect(state?.consecutiveFailures).toBe(0)
+    expect(state?.lastError).toBeNull()
   })
 
   it('advances the high water mark on success', async () => {
