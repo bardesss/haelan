@@ -4,3 +4,7 @@ packages:
 allowBuilds:
   better-sqlite3: true
   esbuild: true
+overrides:
+  # The deprecated @esbuild-kit chain, reached only through drizzle-kit, pins esbuild 0.18,
+  # which carries the dev server advisory. Scoped so vite's own newer esbuild is untouched.
+  '@esbuild-kit/core-utils>esbuild': ^0.25.0

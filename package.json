@@ -17,6 +17,6 @@
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0",
     "vite-node": "^6.0.0",
-    "vitest": "^3.2.6"
+    "vitest": "^4.1.11"
   }
 }
