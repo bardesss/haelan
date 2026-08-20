@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { dayWindows } from '../src/sync/windows.ts'
 
 const AMS = 'Europe/Amsterdam'
+const KTM = 'Asia/Kathmandu'
 
 describe('dayWindows', () => {
   it('produces one window per local day, aligned to local midnight', () => {
@@ -46,6 +47,26 @@ describe('dayWindows', () => {
     })
     const day = w.find((x) => x.localDate === '2026-10-25')
     expect(day && (day.endMs - day.startMs) / 3_600_000).toBe(25)
+  })
+
+  it('finds true local midnight even when fromMs carries sub-minute residue, as Date.now() always does', () => {
+    const [withResidue] = dayWindows({
+      fromMs: Date.parse('2026-08-18T12:00:37.482Z'), toMs: Date.parse('2026-08-18T13:00:37.482Z'), timezone: AMS,
+    })
+    expect(new Date(withResidue!.startMs).toISOString()).toBe('2026-08-17T22:00:00.000Z')
+  })
+
+  it('gives the same window start for a jittered seed as for a round one on the same local day, in a zone with a whole hour offset', () => {
+    const rounded = dayWindows({ fromMs: Date.parse('2026-08-18T06:00:00.000Z'), toMs: Date.parse('2026-08-18T07:00:00Z'), timezone: AMS })
+    const jittered = dayWindows({ fromMs: Date.parse('2026-08-18T06:00:37.482Z'), toMs: Date.parse('2026-08-18T07:00:37.482Z'), timezone: AMS })
+    expect(jittered[0]?.startMs).toBe(rounded[0]?.startMs)
+  })
+
+  it('gives the same window start for a jittered seed as for a round one on the same local day, in a zone whose UTC offset is not a whole hour', () => {
+    const rounded = dayWindows({ fromMs: Date.parse('2026-08-18T06:00:00.000Z'), toMs: Date.parse('2026-08-18T07:00:00Z'), timezone: KTM })
+    const jittered = dayWindows({ fromMs: Date.parse('2026-08-18T12:00:37.482Z'), toMs: Date.parse('2026-08-18T13:00:37.482Z'), timezone: KTM })
+    expect(jittered[0]?.startMs).toBe(rounded[0]?.startMs)
+    expect(new Date(jittered[0]!.startMs).toISOString()).toBe('2026-08-17T18:15:00.000Z')
   })
 
   it('returns nothing for a reversed range rather than looping', () => {
