@@ -78,6 +78,17 @@ describe('runSync', () => {
     expect(report.succeeded).toBeGreaterThan(0)
   })
 
+  it('skips a person id with no row and reports it, rather than aborting the household run', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const report = await runSync({
+      personIds: ['ghost', 'alice'], trailingDays: 1, deps: build(fetchMock),
+    })
+    expect(report.unknownPersonIds).toEqual(['ghost'])
+    // Alice comes after the bad id, so a throw would have cost her the whole run.
+    expect(report.jobs).toBeGreaterThan(0)
+    expect(fetchMock).toHaveBeenCalled()
+  })
+
   it('reports what it did, so a caller can show progress without reading the database', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
     const report = await runSync({ personIds: ['alice'], trailingDays: 1, deps: build(fetchMock) })
