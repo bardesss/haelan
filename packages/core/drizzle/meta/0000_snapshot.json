@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "385cd158-8fdd-43a0-b811-08be1c734b65",
+  "id": "c6df7f86-52e7-4a3f-90ec-edfa96f9f398",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "credentials": {
@@ -596,7 +596,8 @@
             "person_id",
             "data_type",
             "body_hash",
-            "window_start_ms"
+            "window_start_ms",
+            "window_end_ms"
           ],
           "isUnique": true
         }

@@ -68,4 +68,12 @@ describe('data type catalogue', () => {
       expect(t.target, t.id).not.toBe('sessions')
     }
   })
+
+  it('declares every type raw, because agg records what we did, not what M2 should do', () => {
+    for (const t of DATA_TYPES) expect(t.agg, t.id).toBe('raw')
+  })
+
+  it('leaves the downsample triple to the downsampler, so no entry claims an aggregate it never writes', () => {
+    for (const t of DATA_TYPES) expect(['min', 'mean', 'max'], t.id).not.toContain(t.agg)
+  })
 })

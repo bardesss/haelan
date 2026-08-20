@@ -1,12 +1,12 @@
 import type { CredentialStore } from '../store/credentials.ts'
+import { AuthError, ConfigError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const EXPIRY_MARGIN_MS = 60_000
 
-export class RevokedError extends Error {
+export class RevokedError extends AuthError {
   constructor(readonly personId: string) {
     super(`refresh token for person ${personId} is no longer valid`)
-    this.name = 'RevokedError'
   }
 }
 
@@ -40,7 +40,7 @@ export class TokenProvider {
     // wizard flow) must stop this instance from handing out data now, not once the cached
     // token happens to expire.
     const stored = this.credentials.getRefreshToken(personId)
-    if (!stored) throw new Error(`person ${personId} is not connected`)
+    if (!stored) throw new ConfigError(`person ${personId} is not connected`)
     if (stored.revokedAtMs !== null) {
       this.cache.delete(personId)
       throw new RevokedError(personId)
@@ -76,7 +76,9 @@ export class TokenProvider {
         this.cache.delete(personId)
         throw new RevokedError(personId)
       }
-      throw new Error(`token refresh failed ${res.status}: ${body.slice(0, 200)}`)
+      const kind = classifyHttp(res.status)
+      const message = `token refresh failed ${res.status}: ${body.slice(0, 200)}`
+      throw kind === 'transient' ? new TransientError(message) : new AuthError(message)
     }
 
     const json: unknown = await res.json()
@@ -85,7 +87,7 @@ export class TokenProvider {
       || !('access_token' in json) || typeof json.access_token !== 'string' || json.access_token === ''
       || !('expires_in' in json) || typeof json.expires_in !== 'number' || !Number.isFinite(json.expires_in)
     ) {
-      throw new Error('token response was malformed')
+      throw new SchemaDriftError('token response was malformed')
     }
 
     this.cache.set(personId, {

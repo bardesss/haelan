@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { and, eq } from 'drizzle-orm'
-import type { Database } from '../db/open.ts'
+import type { DbOrTx } from '../db/open.ts'
 import { rawPayloads } from '../db/schema/index.ts'
+import { ConfigError, TransientError } from '../errors.ts'
 
 export interface PutInput {
   personId: string
@@ -18,7 +19,7 @@ export interface PutInput {
 export interface PutResult { id: string, deduplicated: boolean }
 
 export class RawArchive {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: DbOrTx) {}
 
   put(input: PutInput): PutResult {
     const bodyHash = createHash('sha256').update(input.body).digest('hex')
@@ -42,7 +43,10 @@ export class RawArchive {
       bodyHash,
       bodyBytes: Buffer.byteLength(input.body, 'utf8'),
     }).onConflictDoNothing({
-      target: [rawPayloads.personId, rawPayloads.dataType, rawPayloads.bodyHash, rawPayloads.windowStartMs],
+      target: [
+        rawPayloads.personId, rawPayloads.dataType, rawPayloads.bodyHash,
+        rawPayloads.windowStartMs, rawPayloads.windowEndMs,
+      ],
     }).run()
 
     if (result.changes > 0) return { id, deduplicated: false }
@@ -52,8 +56,9 @@ export class RawArchive {
       eq(rawPayloads.dataType, input.dataType),
       eq(rawPayloads.bodyHash, bodyHash),
       eq(rawPayloads.windowStartMs, input.windowStartMs),
+      eq(rawPayloads.windowEndMs, input.windowEndMs),
     )).get()
-    if (!existing) throw new Error('insert conflicted but no existing row found')
+    if (!existing) throw new TransientError('insert conflicted but no existing row found')
     return { id: existing.id, deduplicated: true }
   }
 
@@ -62,7 +67,7 @@ export class RawArchive {
   getBody(personId: string, id: string): string {
     const row = this.db.select({ bodyGzip: rawPayloads.bodyGzip }).from(rawPayloads)
       .where(and(eq(rawPayloads.id, id), eq(rawPayloads.personId, personId))).get()
-    if (!row) throw new Error(`raw payload ${id} not found for person ${personId}`)
+    if (!row) throw new ConfigError(`raw payload ${id} not found for person ${personId}`)
     return gunzipSync(row.bodyGzip).toString('utf8')
   }
 }

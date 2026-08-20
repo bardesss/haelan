@@ -67,4 +67,27 @@ describe('package barrel', () => {
     expect(api['parseInstant']).toBeUndefined()
     expect(api['downsampleToMinute']).toBeUndefined()
   })
+
+  it('exports the error taxonomy', () => {
+    expect(typeof core.HaelanError).toBe('function')
+    expect(typeof core.AuthError).toBe('function')
+    expect(typeof core.TransientError).toBe('function')
+    expect(typeof core.SchemaDriftError).toBe('function')
+    expect(typeof core.DataQualityError).toBe('function')
+    expect(typeof core.ConfigError).toBe('function')
+    expect(typeof core.classifyHttp).toBe('function')
+  })
+
+  it('exports the composition root', () => {
+    expect(typeof core.openHaelan).toBe('function')
+  })
+
+  it('exports the sync engine', () => {
+    expect(typeof core.SourceRegistry).toBe('function')
+    expect(typeof core.SyncStateStore).toBe('function')
+    expect(typeof core.dayWindows).toBe('function')
+    expect(typeof core.TokenBucket).toBe('function')
+    expect(typeof core.runJob).toBe('function')
+    expect(typeof core.runSync).toBe('function')
+  })
 })

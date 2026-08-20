@@ -7,6 +7,7 @@ export interface SamplePointOptions {
   value: string | number
   physicalTime: string
   utcOffset?: string
+  dataSource?: Record<string, unknown>
 }
 
 const nest = (path: string, value: unknown): Record<string, unknown> => {
@@ -16,7 +17,7 @@ const nest = (path: string, value: unknown): Record<string, unknown> => {
 
 export function samplePoint(o: SamplePointOptions): Record<string, unknown> {
   return {
-    dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
+    dataSource: o.dataSource ?? { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
     [o.payloadKey]: {
       sampleTime: { physicalTime: o.physicalTime, utcOffset: o.utcOffset ?? '7200s' },
       ...nest(o.valuePath, o.value),
@@ -26,7 +27,7 @@ export function samplePoint(o: SamplePointOptions): Record<string, unknown> {
 
 export function intervalPoint(o: SamplePointOptions & { endTime: string }): Record<string, unknown> {
   return {
-    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    dataSource: o.dataSource ?? { platform: 'FITBIT', recordingMethod: 'DERIVED' },
     [o.payloadKey]: {
       interval: {
         startTime: o.physicalTime,
@@ -58,11 +59,12 @@ export function sleepPoint(o: {
   utcOffset?: string
   stages: SleepStage[]
   mainSleep?: boolean
+  dataSource?: Record<string, unknown>
 }): Record<string, unknown> {
   const offset = o.utcOffset ?? '7200s'
   return {
     name: o.name ?? 'users/me/dataTypes/sleep/dataPoints/abc',
-    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    dataSource: o.dataSource ?? { platform: 'FITBIT', recordingMethod: 'DERIVED' },
     sleep: {
       interval: {
         startTime: o.startTime, startUtcOffset: offset,

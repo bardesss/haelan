@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { DataType } from './catalogue.ts'
 import type { SessionKind } from '../db/schema/derived.ts'
 import { parseInstant, valueAt } from './parse.ts'
+import { ConfigError } from '../errors.ts'
 
 export interface SessionRow {
   id: string
@@ -30,7 +31,7 @@ export interface MapSessionsInput {
   dataType: DataType
   body: string
   personId: string
-  sourceId: string
+  resolveSource: (dataSource: unknown) => string
   rawPayloadId: string
 }
 
@@ -47,7 +48,7 @@ function localDateOfEnd(endMs: number, endOffsetMinutes: number): string {
 
 export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], segments: SegmentRow[] } {
   const t = input.dataType
-  if (t.target !== 'sessions') throw new Error(`${t.id} is not a session type`)
+  if (t.target !== 'sessions') throw new ConfigError(`${t.id} is not a session type`)
 
   let parsed: unknown
   try {
@@ -83,12 +84,13 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     const externalId = typeof valueAt(point, 'name') === 'string'
       ? String(valueAt(point, 'name'))
       : `${t.id}:${start.utcMs}`
-    const id = stableId(input.personId, input.sourceId, t.id, externalId)
+    const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+    const id = stableId(input.personId, sourceId, t.id, externalId)
 
     sessions.push({
       id,
       personId: input.personId,
-      sourceId: input.sourceId,
+      sourceId,
       kind: t.id === 'sleep' ? 'sleep' : 'exercise',
       externalId,
       startMs: start.utcMs,

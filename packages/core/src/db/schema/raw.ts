@@ -21,7 +21,8 @@ export const rawPayloads = sqliteTable('raw_payloads', {
   // without it, sixty unworn days collapse to one row and tier 3 can no longer be rebuilt from
   // tier 1. This only dedups correctly if sync windows are day aligned, since a trailing
   // "now minus seven days" window has a different start on every run and would defeat dedup
-  // entirely.
-  unique('raw_payloads_body_hash').on(t.personId, t.dataType, t.bodyHash, t.windowStartMs),
+  // entirely. windowEndMs is also part of the key: two windows can share a start but differ in
+  // end, and collapsing them would discard the wider fetch's record of having happened.
+  unique('raw_payloads_body_hash').on(t.personId, t.dataType, t.bodyHash, t.windowStartMs, t.windowEndMs),
   index('raw_payloads_person_type_window').on(t.personId, t.dataType, t.windowStartMs),
 ])

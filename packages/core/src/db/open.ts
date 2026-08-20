@@ -4,8 +4,14 @@ import BetterSqlite3 from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { sql } from 'drizzle-orm'
+import type { BaseSQLiteDatabase } from 'drizzle-orm/sqlite-core'
+import type { RunResult } from 'better-sqlite3'
 
 export type Database = BetterSQLite3Database<Record<string, never>> & { $client: BetterSqlite3.Database }
+
+// A Drizzle transaction handle has no $client, so a store typed against Database cannot run
+// inside one. Stores take this instead; only closeDatabase needs the real thing.
+export type DbOrTx = BaseSQLiteDatabase<'sync', RunResult, Record<string, never>>
 
 export const DATABASE_FILENAME = 'haelan.sqlite'
 
