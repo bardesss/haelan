@@ -29,7 +29,8 @@ describe('the catalogue tells the truth about where a value lives', () => {
   const mappable = DATA_TYPES.filter((t) => t.listSupported && t.target === 'samples' && !t.mappingDeferred)
 
   it('covers every mappable type, so this test cannot quietly shrink', () => {
-    expect(mappable.length).toBeGreaterThanOrEqual(10)
+    // Pinned exactly: a looser floor would not notice the set losing an entry.
+    expect(mappable.length).toBe(13)
   })
 
   for (const t of mappable) {
