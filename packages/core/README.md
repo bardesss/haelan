@@ -62,6 +62,30 @@ Fixtures are synthetic. Real payloads live in a gitignored directory and never b
 `probe/findings/field-map.md` records the shapes without the measurements, which is what makes
 `src/testing/payloads.ts` possible.
 
+## Syncing
+
+A job is one person, one data type, one window. `runSync` walks the household, `runJob` walks a
+job's windows, and `sync_state` records where each job got to.
+
+**Windows are day aligned in the person's own timezone.** That is not cosmetic. The raw archive
+deduplicates on the window start, so an unworn day and an unfetched day stay distinguishable, and
+a rolling window with a different start on every run would defeat that and grow the archive
+without bound. `dayWindows` handles the 23 and 25 hour days a daylight saving transition produces,
+so a household spanning zones syncs each person's real days.
+
+**Every run re-fetches a trailing window** rather than only the range since the cursor, because
+devices upload late: last night's sleep can arrive at noon, and a watch left on a charger
+backfills days afterwards. Re-fetched payloads deduplicate by body hash and derived rows upsert on
+their natural keys, so overlap is cheap.
+
+**One window is one transaction.** Rows and the cursor move together, because a crash between them
+would leave a window that looks synced and is not.
+
+**A failure stops one job, not the household.** A revoked person pauses alone and the rest keep
+syncing, and every failure is recorded with its class, so a caller can tell a rate limit from a
+schema change without reading a message. The client deliberately does not archive the bodies of
+retries it recovered from; `sync_state.last_error` records the episode instead.
+
 ## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all
