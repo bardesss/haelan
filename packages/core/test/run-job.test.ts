@@ -133,6 +133,43 @@ describe('runJob', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('records a retry episode the client recovered from, because those bodies are never archived', async () => {
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => new Response('slow down', { status: 429 }))
+      .mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: build(fetchMock),
+    })
+    const state = ctx.db.select().from(syncState).all()[0]
+    expect(state?.lastError).toContain('2 attempts')
+    expect(state?.lastError).toContain('429')
+    // A recovered retry is not a failure, so the count that pauses a person must not move.
+    expect(state?.consecutiveFailures).toBe(0)
+    expect(state?.highWaterMs).toBeGreaterThan(0)
+  })
+
+  it('leaves a failure recorded after a recovered retry in place, because last_error holds one string', async () => {
+    let call = 0
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      call++
+      // First window: one 429 then a good page. Second window: a settled 400.
+      if (call === 1) return new Response('slow down', { status: 429 })
+      if (call === 2) return new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 })
+      return new Response('{"error":{"code":400}}', { status: 400 })
+    })
+    await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: build(fetchMock),
+    })
+    const state = ctx.db.select().from(syncState).all()[0]
+    expect(state?.lastError).toContain('schema_drift')
+    expect(state?.lastError).not.toContain('recovered')
+    expect(state?.consecutiveFailures).toBe(1)
+  })
+
   it('records a class for a failure that is not a HaelanError, because last_error promises one', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
     // SqliteError, not a HaelanError, and neither is anything zlib or a mapper throws.

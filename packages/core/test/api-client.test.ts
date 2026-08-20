@@ -109,6 +109,27 @@ describe('HealthClient', () => {
     expect(slept[0]).toBeGreaterThan(0)
   })
 
+  it('reports the retry it recovered from, since those bodies are deliberately never archived', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('slow down', { status: 429 }))
+      .mockResolvedValueOnce(page([{ a: 1 }]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    expect(result.pagesFetched).toBe(1)
+    expect(result.attempts).toBe(2)
+    expect(result.lastRetriedStatus).toBe(429)
+  })
+
+  it('reports no retry when every page answered first time', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(page([{ a: 1 }], 'tok-2'))
+      .mockResolvedValueOnce(page([{ a: 2 }]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    expect(result.attempts).toBe(result.pagesFetched)
+    expect(result.lastRetriedStatus).toBeNull()
+  })
+
   it('gives up after the retry budget rather than hammering', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response('still sad', { status: 503 }))
     const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })

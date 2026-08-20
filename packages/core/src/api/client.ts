@@ -23,6 +23,14 @@ export interface ListResult {
   payloadIds: string[]
   pointCount: number
   pagesFetched: number
+  /** Fetch attempts across every page, including the ones a backoff retried. */
+  attempts: number
+  /**
+   * The status of the most recent response that triggered a backoff, or null if none did.
+   * Null with `attempts` above `pagesFetched` means the retries were on the token endpoint,
+   * which answers with no data plane status of its own.
+   */
+  lastRetriedStatus: number | null
 }
 
 export interface ClientDeps {
@@ -93,6 +101,8 @@ export class HealthClient {
     const payloadIds: string[] = []
     let pointCount = 0
     let pagesFetched = 0
+    let attempts = 0
+    let lastRetriedStatus: number | null = null
     let pageToken: string | undefined
 
     do {
@@ -107,7 +117,12 @@ export class HealthClient {
       url.searchParams.set('pageSize', String(PAGE_SIZE))
       if (pageToken) url.searchParams.set('pageToken', pageToken)
 
-      const { body, status } = await this.fetchWithRetry(url, input.personId)
+      const fetched = await this.fetchWithRetry(url, input.personId)
+      const { body, status } = fetched
+      // Carried out rather than discarded: the retried bodies are deliberately not archived, so
+      // sync_state.last_error is the only place the episode can be recorded at all.
+      attempts += fetched.attempts
+      if (fetched.retriedStatus !== null) lastRetriedStatus = fetched.retriedStatus
 
       // Archived before parsing, so a payload Google changed the shape of is kept as evidence
       // rather than lost with the exception. Spec section 13, schema drift.
@@ -144,14 +159,19 @@ export class HealthClient {
       pageToken = json.nextPageToken
     } while (pageToken)
 
-    return { payloadIds, pointCount, pagesFetched }
+    return { payloadIds, pointCount, pagesFetched, attempts, lastRetriedStatus }
   }
 
-  private async fetchWithRetry(url: URL, personId: string): Promise<{ body: string, status: number }> {
+  private async fetchWithRetry(url: URL, personId: string): Promise<{
+    body: string, status: number, attempts: number, retriedStatus: number | null,
+  }> {
     let lastStatus = 0
     let lastBody = ''
+    let attempts = 0
+    let retriedStatus: number | null = null
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      attempts++
       let token: string
       try {
         token = await this.tokens.accessTokenFor(personId)
@@ -178,7 +198,8 @@ export class HealthClient {
       // retriable status here is transient infrastructure noise, not schema drift, and is
       // deliberately left unarchived; sync_state.last_error is its home instead.
       const retriable = res.status === 429 || res.status >= 500
-      if (!retriable) return { body: lastBody, status: lastStatus }
+      if (!retriable) return { body: lastBody, status: lastStatus, attempts, retriedStatus }
+      retriedStatus = res.status
 
       // Jittered, because the household shares one project quota and a fleet of syncs
       // retrying in lockstep is how a transient 429 becomes a sustained one.
@@ -187,7 +208,7 @@ export class HealthClient {
       }
     }
 
-    return { body: lastBody, status: lastStatus }
+    return { body: lastBody, status: lastStatus, attempts, retriedStatus }
   }
 
   private backoffMs(attempt: number): number {

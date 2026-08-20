@@ -55,6 +55,20 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       })
       points += listed.pointCount
 
+      // Recorded here, at the point the fetch finished, rather than saved up for the end of the
+      // job. last_error holds one string, and a failure recorded later in this same job has to
+      // be the one that survives: a retry the client already recovered from must never be the
+      // reason a real failure went unreported.
+      if (listed.attempts > listed.pagesFetched) {
+        deps.syncState.recordRetryEpisode({
+          personId: input.personId, dataType: t.id,
+          attempts: listed.attempts,
+          // 0 when the retries were on the token endpoint, which answers with no status of its own.
+          lastStatus: listed.lastRetriedStatus ?? 0,
+          nowMs: deps.now(),
+        })
+      }
+
       // One transaction per window, but the cursor is not part of it: recordSuccess runs once
       // after the whole loop, below, so a crash mid-loop commits this window's rows and leaves
       // the cursor behind rather than ahead. That is safe because the trailing re-fetch never
