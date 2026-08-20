@@ -1,5 +1,5 @@
 import { eq, isNull } from 'drizzle-orm'
-import type { Database } from '../db/open.ts'
+import type { DbOrTx } from '../db/open.ts'
 import { oauthClient, credentials } from '../db/schema/index.ts'
 import { seal, unseal } from '../crypto/secretBox.ts'
 
@@ -9,7 +9,7 @@ export interface ClientCredentials { clientId: string, clientSecret: string }
 export interface StoredRefreshToken { refreshToken: string, scopes: string[], revokedAtMs: number | null }
 
 export class CredentialStore {
-  constructor(private readonly db: Database, private readonly key: Buffer) {}
+  constructor(private readonly db: DbOrTx, private readonly key: Buffer) {}
 
   putClient(input: ClientCredentials & { nowMs: number }): void {
     this.db.insert(oauthClient).values({

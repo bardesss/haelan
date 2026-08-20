@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { and, eq } from 'drizzle-orm'
-import type { Database } from '../db/open.ts'
+import type { DbOrTx } from '../db/open.ts'
 import { rawPayloads } from '../db/schema/index.ts'
 
 export interface PutInput {
@@ -18,7 +18,7 @@ export interface PutInput {
 export interface PutResult { id: string, deduplicated: boolean }
 
 export class RawArchive {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: DbOrTx) {}
 
   put(input: PutInput): PutResult {
     const bodyHash = createHash('sha256').update(input.body).digest('hex')
