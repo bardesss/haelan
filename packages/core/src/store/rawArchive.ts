@@ -42,7 +42,10 @@ export class RawArchive {
       bodyHash,
       bodyBytes: Buffer.byteLength(input.body, 'utf8'),
     }).onConflictDoNothing({
-      target: [rawPayloads.personId, rawPayloads.dataType, rawPayloads.bodyHash, rawPayloads.windowStartMs],
+      target: [
+        rawPayloads.personId, rawPayloads.dataType, rawPayloads.bodyHash,
+        rawPayloads.windowStartMs, rawPayloads.windowEndMs,
+      ],
     }).run()
 
     if (result.changes > 0) return { id, deduplicated: false }
@@ -52,6 +55,7 @@ export class RawArchive {
       eq(rawPayloads.dataType, input.dataType),
       eq(rawPayloads.bodyHash, bodyHash),
       eq(rawPayloads.windowStartMs, input.windowStartMs),
+      eq(rawPayloads.windowEndMs, input.windowEndMs),
     )).get()
     if (!existing) throw new Error('insert conflicted but no existing row found')
     return { id: existing.id, deduplicated: true }
