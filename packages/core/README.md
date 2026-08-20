@@ -78,13 +78,23 @@ devices upload late: last night's sleep can arrive at noon, and a watch left on 
 backfills days afterwards. Re-fetched payloads deduplicate by body hash and derived rows upsert on
 their natural keys, so overlap is cheap.
 
-**One window is one transaction.** Rows and the cursor move together, because a crash between them
-would leave a window that looks synced and is not.
+**Each window's rows commit as one transaction, but the cursor does not move with them.** A crash
+mid-window cannot leave that window's rows half written. The job's cursor, `sync_state.highWaterMs`,
+advances once, after every window in the job has committed, not per window: `recordSuccess` also
+resets the job's consecutive failure count, and `runSync` infers a job's outcome by comparing that
+count before and after the job runs, so resetting it after only some windows had committed would
+make a job that failed partway through look like a clean success. A crash between two windows
+therefore commits those windows' rows but leaves the cursor where the previous run left it, behind
+rather than ahead. That lag is deliberately the safe direction: the trailing window re-fetch never
+consults the cursor to decide what to fetch, so a lagging cursor costs re-fetching a day already
+written, not missing a day that was never fetched.
 
 **A failure stops one job, not the household.** A revoked person pauses alone and the rest keep
-syncing, and every failure is recorded with its class, so a caller can tell a rate limit from a
-schema change without reading a message. The client deliberately does not archive the bodies of
-retries it recovered from; `sync_state.last_error` records the episode instead.
+syncing. `sync_state` has no separate column for a failure's class; `HaelanError`'s `[kind]` prefix
+survives as the first token of `sync_state.last_error`, so a caller can tell a rate limit from a
+schema change by reading that prefix rather than the message after it. The client deliberately does
+not archive the bodies of retries it recovered from; `sync_state.last_error` records the episode
+instead.
 
 ## Heart rate volume and the downsampling decision
 

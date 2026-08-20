@@ -55,8 +55,10 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       })
       points += listed.pointCount
 
-      // One transaction per window: a crash between writing rows and moving the cursor would
-      // otherwise leave a window that looks synced and is not.
+      // One transaction per window, but the cursor is not part of it: recordSuccess runs once
+      // after the whole loop, below, so a crash mid-loop commits this window's rows and leaves
+      // the cursor behind rather than ahead. That is safe because the trailing re-fetch never
+      // consults the cursor to decide what to fetch, so a lagging cursor only costs a re-fetch.
       rowsWritten += deps.db.transaction((tx) => {
         const resolveSource = (dataSource: unknown) =>
           deps.sources.resolve(input.personId, dataSource, deps.now())
