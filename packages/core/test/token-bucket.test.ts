@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TokenBucket } from '../src/sync/tokenBucket.ts'
+import { ConfigError } from '../src/errors.ts'
 
 const controllable = () => {
   let now = 0
@@ -91,5 +92,19 @@ describe('TokenBucket', () => {
     expect(bucket.available(c.deps.now())).toBe(0)
     c.advance(1000)
     expect(bucket.available(c.deps.now())).toBe(futureAvailable)
+  })
+
+  it('refuses a non positive refill rate rather than waiting for a token that never arrives', () => {
+    // The wait for a token would be Infinity, which Node clamps to a millisecond, so take would
+    // spin instead of either succeeding or failing. M1d configures this from settings.
+    expect(() => new TokenBucket({ capacity: 5, refillPerMinute: 0 })).toThrow(ConfigError)
+    expect(() => new TokenBucket({ capacity: 5, refillPerMinute: 0 })).toThrow(/refillPerMinute/)
+    expect(() => new TokenBucket({ capacity: 5, refillPerMinute: -1 })).toThrow(/refillPerMinute/)
+  })
+
+  it('refuses a non positive capacity, which no cost could ever fit inside', () => {
+    expect(() => new TokenBucket({ capacity: 0, refillPerMinute: 60 })).toThrow(ConfigError)
+    expect(() => new TokenBucket({ capacity: 0, refillPerMinute: 60 })).toThrow(/capacity/)
+    expect(() => new TokenBucket({ capacity: -1, refillPerMinute: 60 })).toThrow(/capacity/)
   })
 })

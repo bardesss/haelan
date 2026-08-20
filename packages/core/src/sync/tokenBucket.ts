@@ -13,6 +13,15 @@ export class TokenBucket {
     private readonly config: { capacity: number, refillPerMinute: number },
     private readonly deps: TokenBucketDeps = { now: Date.now, sleep: (ms) => new Promise((r) => setTimeout(r, ms)) },
   ) {
+    // A zero or negative rate makes the wait for a token Infinity, which Node clamps to a
+    // millisecond, so acquireTokens would spin without ever gaining one. M1d configures this
+    // from settings, which is exactly where a zero arrives from.
+    if (!(config.refillPerMinute > 0)) {
+      throw new ConfigError(`refillPerMinute must be positive, got ${config.refillPerMinute}`)
+    }
+    if (!(config.capacity > 0)) {
+      throw new ConfigError(`capacity must be positive, got ${config.capacity}`)
+    }
     this.tokens = config.capacity
     this.lastRefillMs = deps.now()
   }

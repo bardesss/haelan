@@ -12,6 +12,11 @@ import { mapWindowSamples } from '../api/mapSamples.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
 
+/** What runJob needs of a rate limiter. TokenBucket satisfies it. */
+export interface RateLimiter {
+  take(cost?: number): Promise<void>
+}
+
 export interface JobDeps {
   db: Database
   archive: RawArchive
@@ -19,6 +24,14 @@ export interface JobDeps {
   syncState: SyncStateStore
   client: HealthClient
   now: () => number
+  /**
+   * Optional, and unset by every caller today. dueJobs returns eighteen listable types per
+   * person, so a trailing week for a five person household is roughly 720 requests issued as
+   * fast as the event loop allows, against the 300 per minute per user probe/findings/scopes.md
+   * measured. Choosing the rate is a settings decision and belongs to M1d; the seat is here so
+   * filling it then is not a breaking change to a published interface.
+   */
+  limiter?: RateLimiter
 }
 
 export interface JobInput {
@@ -49,6 +62,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
 
   for (const window of windows) {
     try {
+      await deps.limiter?.take()
       const listed = await deps.client.listDataPoints({
         personId: input.personId, dataType: t, timezone: input.timezone,
         windowStartMs: window.startMs, windowEndMs: window.endMs,

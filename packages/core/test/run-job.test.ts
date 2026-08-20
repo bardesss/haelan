@@ -133,6 +133,21 @@ describe('runJob', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('takes a limiter token before each window it fetches, not after', async () => {
+    const events: string[] = []
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      events.push('fetch')
+      return new Response(body([]), { status: 200 })
+    })
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: { ...build(fetchMock), limiter: { take: async () => { events.push('take') } } },
+    })
+    expect(result.windows).toBeGreaterThan(1)
+    expect(events).toEqual(Array.from({ length: result.windows }, () => ['take', 'fetch']).flat())
+  })
+
   it('records a retry episode the client recovered from, because those bodies are never archived', async () => {
     const fetchMock = vi.fn()
       .mockImplementationOnce(async () => new Response('slow down', { status: 429 }))
