@@ -4,6 +4,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { RevokedError } from '../src/api/tokens.ts'
+import { ConfigError, TransientError } from '../src/errors.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { rawPayloads } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -128,13 +129,44 @@ describe('HealthClient', () => {
     const fetchMock = vi.fn().mockResolvedValue(page([{ a: 1 }]))
     const tokensMock = {
       accessTokenFor: vi.fn()
-        .mockRejectedValueOnce(new Error('token refresh failed 503: upstream is sad'))
+        // TransientError is what TokenProvider throws for a 503 from the token endpoint, so
+        // this is the class the loop actually meets rather than a stand-in for it.
+        .mockRejectedValueOnce(new TransientError('token refresh failed 503: upstream is sad'))
         .mockResolvedValueOnce('at-1'),
     }
     const client = new HealthClient(tokensMock, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
     const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
     expect(result.pointCount).toBe(1)
     expect(tokensMock.accessTokenFor).toHaveBeenCalledTimes(2)
+  })
+
+  it('still retries a token failure carrying no class, because an unclassified one may be transient', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(page([{ a: 1 }]))
+    const tokensMock = {
+      accessTokenFor: vi.fn()
+        .mockRejectedValueOnce(new Error('socket hang up'))
+        .mockResolvedValueOnce('at-1'),
+    }
+    const client = new HealthClient(tokensMock, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    expect(result.pointCount).toBe(1)
+    expect(tokensMock.accessTokenFor).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not spend the retry budget on a token failure the taxonomy says retrying cannot fix', async () => {
+    const fetchMock = vi.fn()
+    const slept: number[] = []
+    // What accessTokenFor throws for a person who never connected. Eighteen listable types
+    // times four backoff sleeps is minutes per run of waiting to reach the same answer.
+    const tokensMock = { accessTokenFor: vi.fn().mockRejectedValue(new ConfigError('person p1 is not connected')) }
+    const client = new HealthClient(tokensMock, archive, {
+      fetch: fetchMock, now: () => 1, sleep: async (ms) => { slept.push(ms) }, random: () => 0,
+    })
+    await expect(client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW }))
+      .rejects.toThrow(/is not connected/)
+    expect(tokensMock.accessTokenFor).toHaveBeenCalledTimes(1)
+    expect(slept).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('lets a RevokedError through immediately, without consuming the retry budget', async () => {

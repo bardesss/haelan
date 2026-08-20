@@ -2,6 +2,7 @@ import type { DataType } from './catalogue.ts'
 import type { SampleAgg } from '../db/schema/derived.ts'
 import { parseInstant, parseCivilDate, parseNumeric, valueAt } from './parse.ts'
 import { downsampleToMinute } from './downsample.ts'
+import { ConfigError } from '../errors.ts'
 
 export interface SampleRow {
   personId: string
@@ -25,7 +26,7 @@ export interface MapSamplesInput {
 
 export function mapSamples(input: MapSamplesInput): SampleRow[] {
   const t = input.dataType
-  if (t.target !== 'samples') throw new Error(`${t.id} is not a sample type`)
+  if (t.target !== 'samples') throw new ConfigError(`${t.id} is not a sample type`)
 
   // Deferred types are fetched and archived but carry a sub-dimension a flat sample row cannot
   // hold. M2 derives them from tier 1, so mapping them here would silently drop all but one

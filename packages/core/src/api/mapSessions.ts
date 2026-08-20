@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { DataType } from './catalogue.ts'
 import type { SessionKind } from '../db/schema/derived.ts'
 import { parseInstant, valueAt } from './parse.ts'
+import { ConfigError } from '../errors.ts'
 
 export interface SessionRow {
   id: string
@@ -47,7 +48,7 @@ function localDateOfEnd(endMs: number, endOffsetMinutes: number): string {
 
 export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], segments: SegmentRow[] } {
   const t = input.dataType
-  if (t.target !== 'sessions') throw new Error(`${t.id} is not a session type`)
+  if (t.target !== 'sessions') throw new ConfigError(`${t.id} is not a session type`)
 
   let parsed: unknown
   try {

@@ -6,7 +6,7 @@ import type { RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { HaelanError } from '../errors.ts'
+import { HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { mapSessions } from '../api/mapSessions.ts'
@@ -83,7 +83,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       if (error instanceof RevokedError) return { windows: windows.length, points, rowsWritten, skipped: 'revoked' }
       deps.syncState.recordFailure({
         personId: input.personId, dataType: t.id,
-        error: error instanceof HaelanError ? error : new Error(String(error)),
+        error: classify(error),
         nowMs: deps.now(),
       })
       return { windows: windows.length, points, rowsWritten, skipped: null }
@@ -96,6 +96,16 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     })
   }
   return { windows: windows.length, points, rowsWritten, skipped: null }
+}
+
+// last_error's first token is documented as the failure's class, so an unclassified throw from
+// SQLite, zlib or a store still has to arrive with one. transient is the honest default: it is
+// what the engine does with such a failure anyway, retrying the window on the next run, whereas
+// schema_drift or data_quality would assert a diagnosis nobody has made.
+function classify(error: unknown): HaelanError {
+  if (error instanceof HaelanError) return error
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+  return new TransientError(message, { cause: error })
 }
 
 function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {

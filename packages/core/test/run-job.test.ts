@@ -133,6 +133,21 @@ describe('runJob', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
+  it('records a class for a failure that is not a HaelanError, because last_error promises one', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    // SqliteError, not a HaelanError, and neither is anything zlib or a mapper throws.
+    ctx.db.$client.exec("CREATE TRIGGER haelan_test_busy BEFORE INSERT ON samples BEGIN SELECT RAISE(ABORT, 'database is locked'); END")
+    await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: build(fetchMock),
+    })
+    ctx.db.$client.exec('DROP TRIGGER haelan_test_busy')
+    const state = ctx.db.select().from(syncState).all()[0]
+    expect(state?.lastError).toMatch(/^\[(auth|transient|schema_drift|data_quality|config)\] /)
+    expect(state?.lastError).toContain('database is locked')
+  })
+
   it('lets the next window write after one window rolled back, rather than cascading', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
     const deps = build(fetchMock)

@@ -3,6 +3,7 @@ import { gzipSync, gunzipSync } from 'node:zlib'
 import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { rawPayloads } from '../db/schema/index.ts'
+import { ConfigError, TransientError } from '../errors.ts'
 
 export interface PutInput {
   personId: string
@@ -57,7 +58,7 @@ export class RawArchive {
       eq(rawPayloads.windowStartMs, input.windowStartMs),
       eq(rawPayloads.windowEndMs, input.windowEndMs),
     )).get()
-    if (!existing) throw new Error('insert conflicted but no existing row found')
+    if (!existing) throw new TransientError('insert conflicted but no existing row found')
     return { id: existing.id, deduplicated: true }
   }
 
@@ -66,7 +67,7 @@ export class RawArchive {
   getBody(personId: string, id: string): string {
     const row = this.db.select({ bodyGzip: rawPayloads.bodyGzip }).from(rawPayloads)
       .where(and(eq(rawPayloads.id, id), eq(rawPayloads.personId, personId))).get()
-    if (!row) throw new Error(`raw payload ${id} not found for person ${personId}`)
+    if (!row) throw new ConfigError(`raw payload ${id} not found for person ${personId}`)
     return gunzipSync(row.bodyGzip).toString('utf8')
   }
 }

@@ -2,6 +2,7 @@ import { eq, isNull } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { oauthClient, credentials } from '../db/schema/index.ts'
 import { seal, unseal } from '../crypto/secretBox.ts'
+import { ConfigError } from '../errors.ts'
 
 const CLIENT_ROW_ID = 'default'
 
@@ -66,7 +67,7 @@ export class CredentialStore {
     // An UPDATE against a missing row matches nothing and returns void, which would bury the
     // failure. RawArchive.put checks changes for the same reason.
     if (result.changes === 0) {
-      throw new Error(`no credentials row for person ${input.personId}; connect the person before setting a client override`)
+      throw new ConfigError(`no credentials row for person ${input.personId}; connect the person before setting a client override`)
     }
   }
 
@@ -83,7 +84,7 @@ export class CredentialStore {
       }
     }
     const household = this.getClient()
-    if (!household) throw new Error(`no OAuth client configured for person ${personId}`)
+    if (!household) throw new ConfigError(`no OAuth client configured for person ${personId}`)
     return household
   }
 

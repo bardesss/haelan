@@ -1,7 +1,6 @@
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
-import { RevokedError } from './tokens.ts'
-import { ConfigError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
+import { ConfigError, HaelanError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const API_ROOT = 'https://health.googleapis.com/v4'
 const PAGE_SIZE = 10_000
@@ -157,11 +156,14 @@ export class HealthClient {
       try {
         token = await this.tokens.accessTokenFor(personId)
       } catch (err) {
-        // Revocation means the person must reconsent; no retry fixes that, so it escapes the
-        // loop immediately rather than burning the budget on a request that will never succeed.
-        if (err instanceof RevokedError) throw err
-        // Anything else here is Google's token endpoint having a bad day, the same shape of
-        // failure the data endpoint below already gets five attempts for.
+        // Only a transient class is worth another attempt. Revocation, a person who is not
+        // connected and a malformed token response are all settled answers, and retrying each
+        // of eighteen listable types through four backoff sleeps is minutes of sleeping per
+        // person per run to reach the same conclusion. RevokedError is an AuthError, so this
+        // covers it too.
+        if (err instanceof HaelanError && err.kind !== 'transient') throw err
+        // An unclassified failure here is Google's token endpoint having a bad day, the same
+        // shape the data endpoint below already gets five attempts for.
         if (attempt === MAX_ATTEMPTS - 1) throw err
         await this.deps.sleep(this.backoffMs(attempt))
         continue
