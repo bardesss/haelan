@@ -10,6 +10,20 @@ it is. An instance whose only users are the people who own its OAuth client neve
 The direct cost is that every household brings its own Google Cloud project; the direct benefit is
 that no ceiling exists.
 
+## The name
+
+*Haelan* is Old English **hǣlan**, "to heal, to cure, to make whole". It shares a root with
+**hāl**, "whole, sound, hale", and it is the word English later turned into *health* by way of
+**hǣlþ**, literally the state of being whole.
+
+That is the right idea for this project. A dashboard that shows you today's numbers is reporting
+on a fragment. The point of keeping a complete local history, with your own notes and events
+beside it, is to see the whole rather than the reading.
+
+The name also stays deliberately clear of the API it reads. Calling this "Google Health
+something" would borrow a trademark for no benefit; the positioning is that haelan works with the
+Google Health API, not that it is part of it.
+
 > **Not installable yet.** haelan is under active development and there is no release. The
 > sections below describe what v1 is being built to do; the roadmap tells you what actually
 > exists today. Nothing here is a promise about a date.
