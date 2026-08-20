@@ -19,7 +19,7 @@ export interface MapSamplesInput {
   dataType: DataType
   body: string
   personId: string
-  sourceId: string
+  resolveSource: (dataSource: unknown) => string
   rawPayloadId: string
 }
 
@@ -78,9 +78,13 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
       continue
     }
 
+    // Per point, not once per call: a single payload carries more than one platform, and spec
+    // invariant 4 requires every row to keep its own source.
+    const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+
     rows.push({
       personId: input.personId,
-      sourceId: input.sourceId,
+      sourceId,
       metric: t.metric,
       utcMs,
       tzOffsetMinutes,
@@ -97,7 +101,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
 export interface MapWindowSamplesInput {
   dataType: DataType
   personId: string
-  sourceId: string
+  resolveSource: (dataSource: unknown) => string
   pages: { body: string, rawPayloadId: string }[]
 }
 
@@ -111,7 +115,7 @@ export function mapWindowSamples(input: MapWindowSamplesInput): SampleRow[] {
     dataType: t,
     body: page.body,
     personId: input.personId,
-    sourceId: input.sourceId,
+    resolveSource: input.resolveSource,
     rawPayloadId: page.rawPayloadId,
   }))
   return t.downsampleToMinute ? downsampleToMinute(rows) : rows

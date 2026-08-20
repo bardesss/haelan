@@ -30,7 +30,7 @@ export interface MapSessionsInput {
   dataType: DataType
   body: string
   personId: string
-  sourceId: string
+  resolveSource: (dataSource: unknown) => string
   rawPayloadId: string
 }
 
@@ -83,12 +83,13 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     const externalId = typeof valueAt(point, 'name') === 'string'
       ? String(valueAt(point, 'name'))
       : `${t.id}:${start.utcMs}`
-    const id = stableId(input.personId, input.sourceId, t.id, externalId)
+    const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+    const id = stableId(input.personId, sourceId, t.id, externalId)
 
     sessions.push({
       id,
       personId: input.personId,
-      sourceId: input.sourceId,
+      sourceId,
       kind: t.id === 'sleep' ? 'sleep' : 'exercise',
       externalId,
       startMs: start.utcMs,

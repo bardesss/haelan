@@ -3,7 +3,7 @@ import { mapSamples, mapWindowSamples } from '../src/api/mapSamples.ts'
 import { dataTypeById, DATA_TYPES } from '../src/api/catalogue.ts'
 import { samplePoint, intervalPoint, dailyPoint, body } from '../src/testing/payloads.ts'
 
-const ctx = { personId: 'p1', sourceId: 's1', rawPayloadId: 'r1' }
+const ctx = { personId: 'p1', resolveSource: () => 's1', rawPayloadId: 'r1' }
 
 describe('mapSamples', () => {
   it('maps an instantaneous reading to one row at its own instant', () => {
@@ -176,6 +176,25 @@ describe('mapSamples', () => {
     }))
     expect(mapSamples({ dataType: spo2, ...ctx, body: body(points) })).toHaveLength(5)
   })
+
+  it('attributes each row to its own point source rather than one source for the whole body', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const fitbitPoint = samplePoint({
+      payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 97,
+      physicalTime: '2026-08-18T10:00:00Z', dataSource: { platform: 'FITBIT' },
+    })
+    const healthConnectPoint = samplePoint({
+      payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 96,
+      physicalTime: '2026-08-18T11:00:00Z', dataSource: { platform: 'HEALTH_CONNECT' },
+    })
+    const rows = mapSamples({
+      dataType: spo2, personId: 'p1', rawPayloadId: 'r1',
+      resolveSource: (dataSource) => (dataSource as { platform: string }).platform,
+      body: body([fitbitPoint, healthConnectPoint]),
+    })
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.sourceId)).toEqual(['FITBIT', 'HEALTH_CONNECT'])
+  })
 })
 
 describe('mapWindowSamples', () => {
@@ -186,7 +205,7 @@ describe('mapWindowSamples', () => {
       physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, i * 2)).toISOString(),
     }))
     const rows = mapWindowSamples({
-      dataType: hr, personId: ctx.personId, sourceId: ctx.sourceId,
+      dataType: hr, personId: ctx.personId, resolveSource: ctx.resolveSource,
       pages: [{ body: body(points), rawPayloadId: ctx.rawPayloadId }],
     })
     expect(rows).toHaveLength(3)
@@ -206,7 +225,7 @@ describe('mapWindowSamples', () => {
       physicalTime: new Date(Date.UTC(2026, 7, 18, 10, 0, 40 + i * 10)).toISOString(),
     }))
     const rows = mapWindowSamples({
-      dataType: hr, personId: ctx.personId, sourceId: ctx.sourceId,
+      dataType: hr, personId: ctx.personId, resolveSource: ctx.resolveSource,
       pages: [
         { body: body(firstPage), rawPayloadId: 'r1' },
         { body: body(secondPage), rawPayloadId: 'r2' },
