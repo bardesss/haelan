@@ -1,6 +1,7 @@
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
 import { RevokedError } from './tokens.ts'
+import { ConfigError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const API_ROOT = 'https://health.googleapis.com/v4'
 const PAGE_SIZE = 10_000
@@ -80,13 +81,13 @@ export class HealthClient {
   async listDataPoints(input: ListInput): Promise<ListResult> {
     const { dataType: t } = input
     if (!t.listSupported) {
-      throw new Error(`${t.id} does not support list, only rollup and dailyRollup`)
+      throw new ConfigError(`${t.id} does not support list, only rollup and dailyRollup`)
     }
     // A reversed or empty window builds a filter that is always false. The API would answer it
     // with a legitimate looking empty page, and an empty page recorded as "no data" for a range
     // never actually queried is a wrong answer a rebuild has no way to tell from a real one.
     if (input.windowStartMs >= input.windowEndMs) {
-      throw new Error(`window must be ordered and non-empty: start ${input.windowStartMs}, end ${input.windowEndMs}`)
+      throw new ConfigError(`window must be ordered and non-empty: start ${input.windowStartMs}, end ${input.windowEndMs}`)
     }
 
     const filter = buildFilter(t, input.windowStartMs, input.windowEndMs, input.timezone)
@@ -99,7 +100,7 @@ export class HealthClient {
       // A nextPageToken that never advances would otherwise archive and grow payloadIds
       // forever. In M1c this runs unattended, so a hang here is worse than a thrown error.
       if (pagesFetched >= MAX_PAGES) {
-        throw new Error(`${t.id} exceeded ${MAX_PAGES} pages without exhausting pagination`)
+        throw new TransientError(`${t.id} exceeded ${MAX_PAGES} pages without exhausting pagination`)
       }
 
       const url = new URL(`${API_ROOT}/users/me/dataTypes/${t.id}/dataPoints`)
@@ -122,7 +123,10 @@ export class HealthClient {
         body,
       })
 
-      if (status !== 200) throw new Error(`${status} listing ${t.id}: ${body.slice(0, 200)}`)
+      if (status !== 200) {
+        const message = `${status} listing ${t.id}: ${body.slice(0, 200)}`
+        throw classifyHttp(status) === 'transient' ? new TransientError(message) : new SchemaDriftError(message)
+      }
 
       payloadIds.push(id)
       pagesFetched++
