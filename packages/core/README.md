@@ -62,6 +62,61 @@ Fixtures are synthetic. Real payloads live in a gitignored directory and never b
 `probe/findings/field-map.md` records the shapes without the measurements, which is what makes
 `src/testing/payloads.ts` possible.
 
+## Syncing
+
+A job is one person, one data type, one window. `runSync` walks the household, `runJob` walks a
+job's windows, and `sync_state` records where each job got to.
+
+**Windows are day aligned in the person's own timezone.** That is not cosmetic. The raw archive
+deduplicates on the window start, so an unworn day and an unfetched day stay distinguishable, and
+a rolling window with a different start on every run would defeat that and grow the archive
+without bound. `dayWindows` handles the 23 and 25 hour days a daylight saving transition produces,
+so a household spanning zones syncs each person's real days.
+
+**Every run re-fetches a trailing window** rather than only the range since the cursor, because
+devices upload late: last night's sleep can arrive at noon, and a watch left on a charger
+backfills days afterwards. Re-fetched payloads deduplicate by body hash and derived rows upsert on
+their natural keys, so overlap is cheap.
+
+**Each window's rows commit as one transaction, but the cursor does not move with them.** A crash
+mid-window cannot leave that window's rows half written. The job's cursor, `sync_state.highWaterMs`,
+advances once, after every window in the job has committed, not per window: `recordSuccess` also
+resets the job's consecutive failure count, and `runSync` infers a job's outcome by comparing that
+count before and after the job runs, so resetting it after only some windows had committed would
+make a job that failed partway through look like a clean success. A crash between two windows
+therefore commits those windows' rows but leaves the cursor where the previous run left it, behind
+rather than ahead. That lag is deliberately the safe direction: the trailing window re-fetch never
+consults the cursor to decide what to fetch, so a lagging cursor costs re-fetching a day already
+written, not missing a day that was never fetched.
+
+**A failing window ends its job, and the next run picks that day up again.** A window whose fetch
+or write fails records the failure and returns; the job does not carry on to the window after it.
+Nothing is lost by that: the trailing re-fetch window covers the failed day again next run, so the
+day is retried rather than skipped. Continuing past a window that drifted, which spec section 13
+names, is deferred to M1d along with the backfill it matters for, because it needs a decision about
+what the high water mark means when a window in the middle of a job failed.
+
+**A failure stops one job, not the household.** A revoked person pauses alone and the rest keep
+syncing, and a person id with no row is reported back in the run's `unknownPersonIds` rather than
+thrown out of the loop. `sync_state` has no separate column for a failure's class; `HaelanError`'s
+`[kind]` prefix survives as the first token of `sync_state.last_error`, so a caller can tell a rate
+limit from a schema change by reading that prefix rather than the message after it. A throw that
+carries no class of its own, from SQLite or zlib, is recorded as `transient`, which is what the
+engine does with it anyway.
+
+**A retry the client recovered from is recorded rather than lost.** The client deliberately does
+not archive the bodies of a 429 or 5xx it retried past, so `ListResult` carries the attempt count
+and the last retried status out instead, and `runJob` writes an episode to `sync_state.last_error`
+whenever a window's fetch needed more than one attempt. That column holds one string, so the
+episode is written at the point the fetch finished: a real failure recorded later in the same job
+replaces it, never the other way round.
+
+**Rate limiting has a seat and no occupant yet.** `probe/findings/scopes.md` measured the real
+limit at 300 requests per minute per user, and a trailing week for a five person household is
+roughly 720 requests. `JobDeps.limiter` is optional, `runJob` takes one token before each window it
+fetches, and `TokenBucket` satisfies it. Nothing sets it today, because choosing the rate is a
+settings decision and belongs with the scheduler in M1d.
+
 ## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all

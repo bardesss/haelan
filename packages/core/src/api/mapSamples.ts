@@ -2,6 +2,7 @@ import type { DataType } from './catalogue.ts'
 import type { SampleAgg } from '../db/schema/derived.ts'
 import { parseInstant, parseCivilDate, parseNumeric, valueAt } from './parse.ts'
 import { downsampleToMinute } from './downsample.ts'
+import { ConfigError } from '../errors.ts'
 
 export interface SampleRow {
   personId: string
@@ -19,13 +20,13 @@ export interface MapSamplesInput {
   dataType: DataType
   body: string
   personId: string
-  sourceId: string
+  resolveSource: (dataSource: unknown) => string
   rawPayloadId: string
 }
 
 export function mapSamples(input: MapSamplesInput): SampleRow[] {
   const t = input.dataType
-  if (t.target !== 'samples') throw new Error(`${t.id} is not a sample type`)
+  if (t.target !== 'samples') throw new ConfigError(`${t.id} is not a sample type`)
 
   // Deferred types are fetched and archived but carry a sub-dimension a flat sample row cannot
   // hold. M2 derives them from tier 1, so mapping them here would silently drop all but one
@@ -78,9 +79,13 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
       continue
     }
 
+    // Per point, not once per call: a single payload carries more than one platform, and spec
+    // invariant 4 requires every row to keep its own source.
+    const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+
     rows.push({
       personId: input.personId,
-      sourceId: input.sourceId,
+      sourceId,
       metric: t.metric,
       utcMs,
       tzOffsetMinutes,
@@ -97,7 +102,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
 export interface MapWindowSamplesInput {
   dataType: DataType
   personId: string
-  sourceId: string
+  resolveSource: (dataSource: unknown) => string
   pages: { body: string, rawPayloadId: string }[]
 }
 
@@ -111,7 +116,7 @@ export function mapWindowSamples(input: MapWindowSamplesInput): SampleRow[] {
     dataType: t,
     body: page.body,
     personId: input.personId,
-    sourceId: input.sourceId,
+    resolveSource: input.resolveSource,
     rawPayloadId: page.rawPayloadId,
   }))
   return t.downsampleToMinute ? downsampleToMinute(rows) : rows

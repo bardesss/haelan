@@ -3,7 +3,7 @@ import { mapSessions } from '../src/api/mapSessions.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { sleepPoint, body } from '../src/testing/payloads.ts'
 
-const ctx = { personId: 'p1', sourceId: 's1', rawPayloadId: 'r1' }
+const ctx = { personId: 'p1', resolveSource: () => 's1', rawPayloadId: 'r1' }
 const sleep = dataTypeById('sleep')!
 const exercise = dataTypeById('exercise')!
 
@@ -163,5 +163,26 @@ describe('mapSessions', () => {
   it('refuses a sample type, which needs the other mapper', () => {
     const spo2 = dataTypeById('oxygen-saturation')!
     expect(() => mapSessions({ dataType: spo2, ...ctx, body: body([]) })).toThrow(/not a session type/)
+  })
+
+  it('attributes each session to its own point source rather than one source for the whole body', () => {
+    const fitbitNight = sleepPoint({
+      name: 'users/me/dataTypes/sleep/dataPoints/fitbit',
+      startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z',
+      stages: [], dataSource: { platform: 'FITBIT' },
+    })
+    const healthConnectNight = sleepPoint({
+      name: 'users/me/dataTypes/sleep/dataPoints/hc',
+      startTime: '2026-08-18T21:30:00Z', endTime: '2026-08-19T05:15:00Z',
+      stages: [], dataSource: { platform: 'HEALTH_CONNECT' },
+    })
+    const { sessions } = mapSessions({
+      dataType: sleep, personId: 'p1', rawPayloadId: 'r1',
+      resolveSource: (dataSource) => (dataSource as { platform: string }).platform,
+      body: body([fitbitNight, healthConnectNight]),
+    })
+    expect(sessions).toHaveLength(2)
+    expect(sessions.map((s) => s.sourceId)).toEqual(['FITBIT', 'HEALTH_CONNECT'])
+    expect(sessions[0]?.id).not.toBe(sessions[1]?.id)
   })
 })

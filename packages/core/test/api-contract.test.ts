@@ -38,7 +38,7 @@ describe('client and mapper together', () => {
     // Every fetched page, not just the last: a minute can straddle a page boundary, and
     // mapSamples alone only ever sees one page.
     const rows = mapWindowSamples({
-      dataType: hr, personId: 'p1', sourceId: 's1',
+      dataType: hr, personId: 'p1', resolveSource: () => 's1',
       pages: result.payloadIds.map((id) => ({ body: archive.getBody('p1', id), rawPayloadId: id })),
     })
     expect(rows).toHaveLength(3)
@@ -66,7 +66,7 @@ describe('client and mapper together', () => {
     const result = await client.listDataPoints({ personId: 'p1', dataType: sleep, timezone: 'Europe/Amsterdam', ...WINDOW })
     const stored = archive.getBody('p1', result.payloadIds[0]!)
     const { sessions, segments } = mapSessions({
-      dataType: sleep, body: stored, personId: 'p1', sourceId: 's1', rawPayloadId: result.payloadIds[0]!,
+      dataType: sleep, body: stored, personId: 'p1', resolveSource: () => 's1', rawPayloadId: result.payloadIds[0]!,
     })
     expect(sessions[0]?.endOffsetMinutes).toBe(120)
     expect(sessions[0]?.localDate).toBe('2026-08-18')
