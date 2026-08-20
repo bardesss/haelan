@@ -81,7 +81,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **D1** Visual direction | Design tokens, chart styling spec, Dashboard and Sleep reference pages, app shell | Done, [#10](https://github.com/bardesss/haelan/pull/10) |
 | **M0** Auth probe | Scope classification, token lifetime, real v4 payload shapes. Throwaway code, lasting findings | Done, [#11](https://github.com/bardesss/haelan/pull/11) |
 | **M1a** Store and credentials | Three-tier SQLite schema, migrations, instance key, encrypted credentials, compressed raw archive | Done, [#12](https://github.com/bardesss/haelan/pull/12) |
-| **M1b** API client and mapping | v4 client, the data type catalogue, payload parsers, sample and session mappers | In review, [#14](https://github.com/bardesss/haelan/pull/14) |
+| **M1b** API client and mapping | v4 client, the data type catalogue, payload parsers, sample and session mappers | Done, [#14](https://github.com/bardesss/haelan/pull/14) |
 | **M1c** Sync engine | Day aligned windows, per person jobs, sync state, token bucket, transactional writes | Planned |
 | **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | Not started |
 | **M2** Derivation and query layer | Rollups, sleep and recovery derivation, nap detection, baselines, merge policy, rebuild, demo mode | Not started |
@@ -89,8 +89,9 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish | Not started |
 
-M1 is split into four plans because store, client, sync and wizard each produce working, testable
-software on their own. M1 comes before the dashboard deliberately: intraday samples have a shelf
+M1a through M1d are a decomposition of the spec's single M1, not phases the spec names: store,
+client, sync and wizard each produce working, testable software on their own. D1 and M0 through
+M5 are the only phases the design defines. M1 comes before the dashboard deliberately: intraday samples have a shelf
 life, since the API only retains them for a recent window, so every week without ingestion is a
 week of minute-level history permanently unavailable at that resolution. Charts can be improved
 retroactively; resolution cannot be recovered.
