@@ -17,7 +17,7 @@ describe('mapSamples', () => {
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
-      personId: 'p1', sourceId: 's1', metric: 'spo2', agg: 'mean', value: 97, n: 1,
+      personId: 'p1', sourceId: 's1', metric: 'spo2', agg: 'raw', value: 97, n: 1,
       utcMs: Date.UTC(2026, 7, 18, 22, 30), tzOffsetMinutes: 120, rawPayloadId: 'r1',
     })
   })
@@ -31,7 +31,7 @@ describe('mapSamples', () => {
         physicalTime: '2026-08-18T10:00:00Z', endTime: '2026-08-18T10:01:00Z',
       })]),
     })
-    expect(rows[0]).toMatchObject({ metric: 'steps', agg: 'sum', value: 128, utcMs: Date.UTC(2026, 7, 18, 10, 0) })
+    expect(rows[0]).toMatchObject({ metric: 'steps', agg: 'raw', value: 128, utcMs: Date.UTC(2026, 7, 18, 10, 0) })
   })
 
   it('maps a daily type onto the start of its civil date', () => {
