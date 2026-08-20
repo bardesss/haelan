@@ -46,4 +46,25 @@ describe('package barrel', () => {
     expect(typeof core.createTestDatabase).toBe('function')
     expect(typeof core.seedPerson).toBe('function')
   })
+
+  it('exports the API catalogue', () => {
+    expect(Array.isArray(core.DATA_TYPES)).toBe(true)
+    expect(typeof core.dataTypeById).toBe('function')
+    expect(Array.isArray(core.FILTER_MEMBERS)).toBe(true)
+  })
+
+  it('exports the token provider, client and mappers', () => {
+    expect(typeof core.TokenProvider).toBe('function')
+    expect(typeof core.RevokedError).toBe('function')
+    expect(typeof core.HealthClient).toBe('function')
+    expect(typeof core.mapSamples).toBe('function')
+    expect(typeof core.mapWindowSamples).toBe('function')
+    expect(typeof core.mapSessions).toBe('function')
+  })
+
+  it('does not export the mappers internals, which are not a consumer concern', async () => {
+    const api = await import('../src/index.ts') as Record<string, unknown>
+    expect(api['parseInstant']).toBeUndefined()
+    expect(api['downsampleToMinute']).toBeUndefined()
+  })
 })

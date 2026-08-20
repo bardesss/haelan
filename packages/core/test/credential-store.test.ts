@@ -86,6 +86,38 @@ describe('CredentialStore', () => {
     expect(store.getRefreshToken('p1')?.revokedAtMs).toBeNull()
   })
 
+  it('prefers a person client override over the household client, because that is what an override is', () => {
+    store.putClient({ clientId: 'household', clientSecret: 'household-secret', nowMs: 1 })
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt', scopes: [], nowMs: 1 })
+    expect(store.getClientFor('p1')).toEqual({ clientId: 'household', clientSecret: 'household-secret' })
+
+    store.putClientOverride({ personId: 'p1', clientId: 'own', clientSecret: 'own-secret' })
+    expect(store.getClientFor('p1')).toEqual({ clientId: 'own', clientSecret: 'own-secret' })
+  })
+
+  it('never stores an override secret in the clear', () => {
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt', scopes: [], nowMs: 1 })
+    store.putClientOverride({ personId: 'p1', clientId: 'own', clientSecret: 'override-secret' })
+    const rows = db.all<{ client_secret_override_encrypted: string }>(
+      sql`select client_secret_override_encrypted from credentials`,
+    )
+    const stored = rows[0]?.client_secret_override_encrypted
+    expect(stored).not.toContain('override-secret')
+    expect(stored).not.toBe(Buffer.from('override-secret', 'utf8').toString('base64'))
+    expect(unseal(KEY, stored ?? '')).toBe('override-secret')
+  })
+
+  it('throws when no client is configured at all, because a refresh cannot proceed without one', () => {
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt', scopes: [], nowMs: 1 })
+    expect(() => store.getClientFor('p1')).toThrow(/no OAuth client/)
+  })
+
+  it('throws setting an override for a person with no credentials row, instead of silently discarding it', () => {
+    expect(() => store.putClientOverride({ personId: 'p1', clientId: 'own', clientSecret: 'own-secret' }))
+      .toThrow(/no credentials row for person p1/)
+    expect(db.all(sql`select 1 from credentials`)).toHaveLength(0)
+  })
+
   it('lists only people whose credentials are not revoked, because sync pauses per person', () => {
     db.insert(people).values({
       id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', createdAtMs: 0,
