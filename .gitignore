@@ -8,5 +8,6 @@ dist/
 docs/
 probe/samples/
 probe/.tokens.json
+probe/findings/token-log.jsonl
 .env.local
 *.tsbuildinfo

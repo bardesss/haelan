@@ -14,7 +14,9 @@ expiry that testing status imposes therefore never applies to this instance.
 
 **Refresh token lifetime:** Refresh succeeds. The ten day daily check is logged in
 `token-log.jsonl` and is confirmation rather than discovery, since production status removes
-the documented expiry.
+the documented expiry. That log is machine local and gitignored: it is one line per run of a
+scheduled task on whoever registered it, so committing it would mean a working tree that goes
+dirty every morning to record an answer this file already states.
 
 **Resolution and volume:** Heart rate samples every **2 seconds**, not the assumed minute:
 37,370 rows and 23 MB of raw JSON per person-day, which is 95 percent of all rows. Every other
