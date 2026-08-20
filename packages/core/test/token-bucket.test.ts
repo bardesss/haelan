@@ -56,4 +56,38 @@ describe('TokenBucket', () => {
     const bucket = new TokenBucket({ capacity: 5, refillPerMinute: 60 }, c.deps)
     await expect(bucket.take(6)).rejects.toThrow(/capacity/)
   })
+
+  it('underdelivering sleep does not grant tokens early or drive negative balance', async () => {
+    const c = controllable()
+    const underdeliveringDeps = {
+      now: c.deps.now,
+      sleep: async (ms: number) => {
+        c.advance(Math.ceil(ms / 3))
+      },
+    }
+    const bucket = new TokenBucket({ capacity: 1, refillPerMinute: 60 }, underdeliveringDeps)
+    await bucket.take()
+    await bucket.take()
+    expect(bucket.available(c.deps.now())).toBeGreaterThanOrEqual(0)
+  })
+
+  it('two concurrent takes against one token do not both proceed without waiting', async () => {
+    const c = controllable()
+    const bucket = new TokenBucket({ capacity: 1, refillPerMinute: 60 }, c.deps)
+    const promise1 = bucket.take()
+    const promise2 = bucket.take()
+    await Promise.all([promise1, promise2])
+    expect(c.slept.length).toBeGreaterThan(0)
+  })
+
+  it('available() with future timestamp does not bank unearned quota', async () => {
+    const c = controllable()
+    const bucket = new TokenBucket({ capacity: 5, refillPerMinute: 60 }, c.deps)
+    for (let i = 0; i < 5; i++) await bucket.take()
+    const futureTime = c.deps.now() + 1000
+    const futureAvailable = bucket.available(futureTime)
+    expect(bucket.available(c.deps.now())).toBe(0)
+    c.advance(1000)
+    expect(bucket.available(c.deps.now())).toBe(futureAvailable)
+  })
 })
