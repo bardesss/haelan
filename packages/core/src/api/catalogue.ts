@@ -61,8 +61,13 @@ const NUTRITION = 'googlehealth.nutrition.readonly'
  * measuring 29 days of one person's real data put active-energy-burned at 932 rows a day
  * against a 1825-day horizon: 759 MB, 56 percent of a 1.35 GB projection. Heart rate was capped
  * for being densest per day; these four were never capped at all.
+ *
+ * The cap itself is a storage choice, not a limit the API imposes: a live account measured
+ * intraday heart rate at full resolution across all 209 days it has existed, with no thinning by
+ * age, so 365 was chosen to give a year of minute-level history while still bounding disk. At the
+ * 2-year default horizon this costs 1.05 GB per person, up from 0.26 GB at the old 90-day cap.
  */
-export const INTRADAY_HORIZON_DAYS = 90
+export const INTRADAY_HORIZON_DAYS = 365
 export const USER_HORIZON_CHOICES = [365, 730, 1825] as const
 export const DEFAULT_USER_HORIZON_DAYS = 730
 

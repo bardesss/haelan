@@ -62,7 +62,7 @@ describe('the sync runner', () => {
     const summary = harness.app.haelan.runner.status().backfill
     expect(summary.length).toBeGreaterThan(0)
     const heartRate = summary.find((s) => s.dataType === 'heart-rate')
-    expect(heartRate?.horizonDays).toBe(90)
+    expect(heartRate?.horizonDays).toBe(365)
     // The walk actually moved: a cursor still null after a run would mean the backfill was
     // scheduled and never took a step.
     expect(heartRate?.cursorMs).not.toBeNull()
@@ -76,8 +76,30 @@ describe('the sync runner', () => {
     const status = harness.app.haelan.runner.status()
     expect(status.userHorizonDays).toBe(1825)
     // Intraday stays capped however deep the operator asked to go; daily follows them.
-    expect(status.backfill.find((s) => s.dataType === 'heart-rate')?.horizonDays).toBe(90)
+    expect(status.backfill.find((s) => s.dataType === 'heart-rate')?.horizonDays).toBe(365)
     expect(status.backfill.find((s) => s.dataType === 'weight')?.horizonDays).toBe(1825)
+  })
+
+  it('re-opens an intraday type completed at an old, shallower horizon and walks it further', async () => {
+    // The regression this exists for: raising INTRADAY_HORIZON_DAYS (90 to 365 today, but the
+    // point is general) does nothing for an instance where heart-rate already finished walking
+    // to the old cap, unless something clears the stale completion mark - runBackfill returns
+    // immediately once backfillCompleteAtMs is set, and nothing else ever clears it. Simulates
+    // that pre-existing state directly, the state a real instance would already be in, rather
+    // than running a real 90 day backfill first just to arrive there.
+    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
+    await harness.connectPerson()
+    const stores = harness.app.haelan.stores
+    const oldFloorMs = harness.clock.nowMs - 90 * 86_400_000
+    stores.syncState.setBackfillCursor({ personId: 'p1', dataType: 'heart-rate', cursorMs: oldFloorMs, nowMs: harness.clock.nowMs })
+    stores.syncState.markBackfillComplete({ personId: 'p1', dataType: 'heart-rate', nowMs: harness.clock.nowMs })
+
+    await harness.app.haelan.runner.trigger('scheduled')
+
+    // Walked strictly past the old floor rather than sitting there silently complete at 90 days
+    // forever, which is what a raised cap would otherwise do nothing for.
+    const heartRate = harness.app.haelan.runner.status().backfill.find((s) => s.dataType === 'heart-rate')
+    expect(heartRate?.cursorMs).toBeLessThan(oldFloorMs)
   })
 
   it('takes the mutex synchronously, so a second caller cannot slip in before the first awaits', async () => {

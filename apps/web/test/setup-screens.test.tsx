@@ -154,8 +154,8 @@ describe('the wizard screens', () => {
     expect(html).toContain('5 years')
     // The figures are the point: they are close together because intraday types are capped, and
     // showing them is what makes that visible instead of asking the reader to trust it.
-    expect(html).toContain('0.17 GB')
-    expect(html).toContain('0.18 GB')
+    expect(html).toContain('1.05 GB')
+    expect(html).toContain('1.06 GB')
   })
 
   it('marks the horizon currently chosen', () => {

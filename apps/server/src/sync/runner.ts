@@ -1,6 +1,6 @@
 ﻿import {
   DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync,
-  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, INTRADAY_HORIZON_DAYS,
+  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
 } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -19,11 +19,15 @@ const DAY_MS = 86_400_000
 /**
  * How much history the first run fills before settling into the hourly batch. Measured at 2,250
  * requests, about thirteen minutes at 180 a minute, against the 5.4 days the hourly batch alone
- * took to walk a five-year horizon. It equals INTRADAY_HORIZON_DAYS, so intraday types finish
- * inside the sprint and never enter the trickle at all. This is the production value; tests
- * override it through ServerDeps.sprintDays (see run()) rather than shrinking this constant.
+ * took to walk a five-year horizon. Deliberately its own literal rather than INTRADAY_HORIZON_DAYS:
+ * this is the window that makes the dashboard usable quickly, and tying it to the intraday cap
+ * would mean any future rise in that cap silently turns a thirteen-minute sprint into a much
+ * longer one. With the cap at 365 days, intraday types reach the sprint floor (below) but not
+ * their full horizon, so they carry on in the trickle after the sprint at the normal batch rate
+ * like everything else. This is the production value; tests override it through
+ * ServerDeps.sprintDays (see run()) rather than shrinking this constant.
  */
-const SPRINT_DAYS = INTRADAY_HORIZON_DAYS
+const SPRINT_DAYS = 90
 /**
  * A pass that keeps fetching without moving a cursor is a type failing every window. Bounded so
  * that case ends the sprint rather than looping on it; 90 days at the smallest useful batch
@@ -300,6 +304,19 @@ export class SyncRunner {
         if (!dataType.listSupported) continue
         if (this.#aborted) return cursorAdvanced
         const resolved = horizonDaysFor(dataType, userHorizonDays)
+        // A stored completion mark pins a type to whatever horizon was in force on the day it
+        // happened to finish, and horizons move - both when an operator raises theirs (see
+        // routes/settings.ts, which clears daily types on a raise) and when a measurement moves
+        // the policy default itself, as INTRADAY_HORIZON_DAYS just did. Either way the mark would
+        // otherwise silently strand the type at its old, shallower floor: runBackfill returns
+        // immediately once backfillCompleteAtMs is set, and nothing else ever clears it. Checking
+        // it here, against the type's *current* resolved horizon, catches both directions
+        // generally instead of teaching each policy change its own special case.
+        const state = this.#context.stores.syncState.get(personId, dataType.id)
+        if (state?.backfillCompleteAtMs != null && state.backfillCursorMs != null
+          && state.backfillCursorMs > this.#context.now() - resolved * DAY_MS) {
+          this.#context.stores.syncState.clearBackfillComplete(personId, dataType.id)
+        }
         // A type whose real horizon reaches past the sprint cap needs a floor of its own, kept
         // separate from the horizonDays runBackfill is given below. Passing a *capped*
         // horizonDays would work for one call, but a batch that doesn't divide evenly into
@@ -313,7 +330,7 @@ export class SyncRunner {
         // never reaching horizonDays this way is not.
         if (capDays !== null && resolved > capDays) {
           const floorMs = this.#context.now() - capDays * DAY_MS
-          const cursor = this.#context.stores.syncState.get(personId, dataType.id)?.backfillCursorMs
+          const cursor = state?.backfillCursorMs
           if (cursor != null && cursor <= floorMs) continue
         }
         try {
