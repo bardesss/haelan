@@ -235,6 +235,24 @@ describe('HealthClient', () => {
       .rejects.toThrow(/exceeded/)
   })
 
+  it('calls the injected api root, which is how the server tests avoid Google', async () => {
+    const seen: string[] = []
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      seen.push(url)
+      return page([{ a: 1 }], seen.length === 1 ? 'page-2' : undefined)
+    })
+    const client = new HealthClient(tokens, archive, {
+      fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0,
+      apiRoot: 'http://127.0.0.1:9/v4',
+    })
+    await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    // Every page, not just the first: a root read once and then cached from the constant would
+    // send the second page to Google with a test's bearer token on it.
+    expect(seen).toHaveLength(2)
+    expect(seen.every((url) => url.startsWith('http://127.0.0.1:9/v4/'))).toBe(true)
+    expect(seen.some((url) => url.includes('health.googleapis.com'))).toBe(false)
+  })
+
   it('throws on a reversed window rather than silently querying nothing', async () => {
     const fetchMock = vi.fn()
     const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })

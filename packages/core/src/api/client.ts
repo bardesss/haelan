@@ -39,6 +39,8 @@ export interface ClientDeps {
   sleep: (ms: number) => Promise<void>
   /** Defaults to Math.random. Overridable so a test can pin or compare jitter sequences. */
   random: () => number
+  /** Defaults to Google's v4 root. Overridable so a test can point the client at a stub. */
+  apiRoot?: string
 }
 
 interface Tokens { accessTokenFor(personId: string): Promise<string> }
@@ -112,7 +114,7 @@ export class HealthClient {
         throw new TransientError(`${t.id} exceeded ${MAX_PAGES} pages without exhausting pagination`)
       }
 
-      const url = new URL(`${API_ROOT}/users/me/dataTypes/${t.id}/dataPoints`)
+      const url = new URL(`${this.deps.apiRoot ?? API_ROOT}/users/me/dataTypes/${t.id}/dataPoints`)
       url.searchParams.set('filter', filter)
       url.searchParams.set('pageSize', String(PAGE_SIZE))
       if (pageToken) url.searchParams.set('pageToken', pageToken)

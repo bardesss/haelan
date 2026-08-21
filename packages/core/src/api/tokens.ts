@@ -13,6 +13,8 @@ export class RevokedError extends AuthError {
 export interface TokenProviderDeps {
   fetch: typeof globalThis.fetch
   now: () => number
+  /** Defaults to Google's token endpoint. Overridable so a test can point refresh at a stub. */
+  tokenEndpoint?: string
 }
 
 interface CachedToken { accessToken: string, expiresAtMs: number }
@@ -50,7 +52,7 @@ export class TokenProvider {
     if (cached && cached.expiresAtMs > this.deps.now() + EXPIRY_MARGIN_MS) return cached.accessToken
 
     const client = this.credentials.getClientFor(personId)
-    const res = await this.deps.fetch(TOKEN_ENDPOINT, {
+    const res = await this.deps.fetch(this.deps.tokenEndpoint ?? TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
