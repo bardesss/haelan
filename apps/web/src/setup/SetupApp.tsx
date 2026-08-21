@@ -4,7 +4,9 @@ import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
-import { getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus } from './api.js'
+import {
+  getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus, putBackfillHorizon,
+} from './api.js'
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 
 const STEPS = [
@@ -99,7 +101,15 @@ export function SetupApp() {
               />
             )
             : onBackfill
-              ? (status ? <BackfillStep status={status} nowMs={Date.now()} /> : <p className="empty">Loading progress</p>)
+              ? (status
+                ? <BackfillStep
+                    status={status}
+                    nowMs={Date.now()}
+                    onHorizonChange={(days) => {
+                      void putBackfillHorizon(days).then(() => getSyncStatus().then(setStatus))
+                    }}
+                  />
+                : <p className="empty">Loading progress</p>)
               : <AccountStep onDone={refresh} />}
       </div>
     </div>

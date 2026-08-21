@@ -19,6 +19,7 @@ export interface SyncStatus {
   reason: string | null
   startedAtMs: number | null
   lastFinishedAtMs: number | null
+  userHorizonDays: number
   backfill: BackfillSummary[]
 }
 
@@ -60,3 +61,8 @@ export const putInstanceUrl = (body: { baseUrl: string, consentPath: string }) =
 
 export const putGoogleClient = (body: { clientId: string, clientSecret: string }) =>
   send<{ step: string }>('POST', '/api/setup/google-client', body)
+
+// Under /api/settings/, not /api/setup/: the backfill screen is the step after setup is
+// 'done', and the setup gate answers every /api/setup/* path with 409 once it is.
+export const putBackfillHorizon = (days: number) =>
+  send<{ backfillHorizonDays: number }>('PUT', '/api/settings/backfill-horizon', { days })

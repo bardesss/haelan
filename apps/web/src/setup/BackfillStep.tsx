@@ -2,6 +2,15 @@ import type { SyncStatus } from './api.js'
 
 const DAY_MS = 86_400_000
 
+// Measured on 29 days of one real person's data and projected to each horizon: intraday types
+// are capped at 90 days, which is why five years costs barely more than one. The numbers are
+// shown because nobody can derive them from the page.
+const HORIZON_CHOICES = [
+  { days: 365, label: '1 year', disk: '0.17 GB' },
+  { days: 730, label: '2 years', disk: '0.18 GB' },
+  { days: 1825, label: '5 years', disk: '0.18 GB' },
+]
+
 // How far back this type has walked, as a fraction of the horizon it is walking to. A cursor
 // still null after a run means it has not started rather than that it is at zero, and those
 // read differently to somebody watching a bar.
@@ -11,9 +20,18 @@ function reached(cursorMs: number | null, horizonDays: number, nowMs: number): n
   return Math.max(0, Math.min(1, walked / horizonDays))
 }
 
-export function BackfillStep({ status, nowMs }: { status: SyncStatus, nowMs?: number }) {
+export function BackfillStep({ status, nowMs, onHorizonChange }: {
+  status: SyncStatus
+  nowMs?: number
+  onHorizonChange: (days: number) => void
+}) {
   const now = nowMs ?? status.startedAtMs ?? status.lastFinishedAtMs ?? 0
   const finished = status.backfill.filter((row) => row.complete).length
+  // The intraday cap is a server fact, not a constant this bundle can import (apps/web does not
+  // depend on @haelan/core). The rows already say it: intraday types are the ones walking to
+  // something shorter than the operator's chosen horizon, so the smallest horizonDays present is
+  // the cap.
+  const intradayDays = Math.min(...status.backfill.map((row) => row.horizonDays))
 
   return (
     <section className="setup-step">
@@ -51,6 +69,25 @@ export function BackfillStep({ status, nowMs }: { status: SyncStatus, nowMs?: nu
           )
         })}
       </ul>
+
+      <div className="setup-horizon">
+        <h2>How far back should haelan go?</h2>
+        <p className="setup-note">
+          Minute level detail is kept for the last {intradayDays} days whichever you pick, because
+          it is most of the size. This chooses how far back the daily history goes. Changing it
+          later re-aims the walk and never deletes anything already fetched.
+        </p>
+        <ul>
+          {HORIZON_CHOICES.map((choice) => (
+            <li key={choice.days} data-chosen={String(choice.days === status.userHorizonDays)}>
+              <button type="button" onClick={() => onHorizonChange(choice.days)}>
+                {choice.label}
+              </button>
+              <span className="field-hint">{choice.disk}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   )
 }

@@ -10,6 +10,15 @@ const CANDIDATES = [
   { uri: 'http://127.0.0.1:4235/oauth/callback', label: 'This machine, literal loopback', registrable: true },
 ]
 
+const HORIZON_STATUS = {
+  running: true, reason: 'setup', startedAtMs: 1_770_000_000_000, lastFinishedAtMs: null,
+  userHorizonDays: 730,
+  backfill: [
+    { dataType: 'heart-rate', complete: false, cursorMs: 1_769_000_000_000, horizonDays: 90 },
+    { dataType: 'weight', complete: false, cursorMs: 1_769_000_000_000, horizonDays: 730 },
+  ],
+}
+
 // Colour discipline is not asserted here: no-raw-color.test.ts already walks the whole of
 // src/ recursively, so these files are covered by it the moment they exist. A second copy of
 // that assertion here would be two tests claiming one fact.
@@ -114,11 +123,12 @@ describe('the wizard screens', () => {
   it('names every data type it is backfilling and how far back it is going', () => {
     const html = renderToStaticMarkup(<BackfillStep status={{
       running: true, reason: 'setup', startedAtMs: 1, lastFinishedAtMs: null,
+      userHorizonDays: 1825,
       backfill: [
         { dataType: 'heart-rate', complete: false, cursorMs: 1_770_000_000_000, horizonDays: 60 },
         { dataType: 'weight', complete: true, cursorMs: null, horizonDays: 1825 },
       ],
-    }} />)
+    }} onHorizonChange={() => {}} />)
     expect(html).toContain('heart-rate')
     expect(html).toContain('60')
     expect(html).toContain('weight')
@@ -127,11 +137,40 @@ describe('the wizard screens', () => {
   it('says a finished type is finished rather than showing it as stalled at nothing', () => {
     const html = renderToStaticMarkup(<BackfillStep status={{
       running: false, reason: null, startedAtMs: null, lastFinishedAtMs: 2,
+      userHorizonDays: 1825,
       backfill: [{ dataType: 'weight', complete: true, cursorMs: null, horizonDays: 1825 }],
-    }} />)
+    }} onHorizonChange={() => {}} />)
     // complete with a null cursor is the finished state, and it must not read as "no progress".
     expect(html).toContain('data-complete="true"')
     expect(html).toMatch(/complete/i)
+  })
+
+  it('offers the three horizons with the disk each one costs', () => {
+    const html = renderToStaticMarkup(
+      <BackfillStep status={HORIZON_STATUS} nowMs={1_770_000_000_000} onHorizonChange={() => {}} />,
+    )
+    expect(html).toContain('1 year')
+    expect(html).toContain('2 years')
+    expect(html).toContain('5 years')
+    // The figures are the point: they are close together because intraday types are capped, and
+    // showing them is what makes that visible instead of asking the reader to trust it.
+    expect(html).toContain('0.17 GB')
+    expect(html).toContain('0.18 GB')
+  })
+
+  it('marks the horizon currently chosen', () => {
+    const html = renderToStaticMarkup(
+      <BackfillStep status={HORIZON_STATUS} nowMs={1_770_000_000_000} onHorizonChange={() => {}} />,
+    )
+    expect(html).toContain('data-chosen="true"')
+  })
+
+  it('says a capped type is capped rather than letting it read as stalled', () => {
+    const html = renderToStaticMarkup(
+      <BackfillStep status={HORIZON_STATUS} nowMs={1_770_000_000_000} onHorizonChange={() => {}} />,
+    )
+    expect(html).toContain('90 days back')
+    expect(html).toContain('730 days back')
   })
 
   it('tells the owner the instance URL is not a LAN IP before they try one', () => {
