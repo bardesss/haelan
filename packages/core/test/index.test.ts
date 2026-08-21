@@ -108,9 +108,12 @@ describe('package barrel', () => {
     expect(core.SCOPES).toHaveLength(6)
   })
 
-  it('exports the backfill and its horizon default', () => {
+  it('exports the backfill and its horizon controls', () => {
     expect(typeof core.runBackfill).toBe('function')
-    expect(typeof core.DEFAULT_BACKFILL_HORIZON_DAYS).toBe('number')
+    expect(typeof core.horizonDaysFor).toBe('function')
+    expect(typeof core.INTRADAY_HORIZON_DAYS).toBe('number')
+    expect(typeof core.DEFAULT_USER_HORIZON_DAYS).toBe('number')
+    expect(Array.isArray(core.USER_HORIZON_CHOICES)).toBe(true)
   })
 
   it('exports the synthetic payload builders the server stub is built from', () => {

@@ -39,6 +39,10 @@ export const instanceSettings = sqliteTable('instance_settings', {
   baseUrl: text('base_url').notNull(),
   consentPath: text('consent_path', { enum: CONSENT_PATHS }).notNull(),
   syncIntervalMinutes: integer('sync_interval_minutes').notNull().default(60),
+  // The literal below must stay 730: a drizzle default has to be a constant the migration
+  // generator can serialise, so it cannot reference DEFAULT_USER_HORIZON_DAYS in catalogue.ts.
+  // A test pins the two together so they cannot drift apart.
+  backfillHorizonDays: integer('backfill_horizon_days').notNull().default(730),
   setupCompletedAtMs: integer('setup_completed_at_ms'),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })

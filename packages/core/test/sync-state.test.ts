@@ -69,6 +69,14 @@ describe('SyncStateStore', () => {
     expect(store.get('p1', 'steps')?.backfillCompleteAtMs).toBe(2000)
   })
 
+  it('clears a completion mark without touching the cursor, so a raised horizon can resume the walk', () => {
+    store.setBackfillCursor({ personId: 'p1', dataType: 'steps', cursorMs: 1000, nowMs: 1 })
+    store.markBackfillComplete({ personId: 'p1', dataType: 'steps', nowMs: 2000 })
+    store.clearBackfillComplete('p1', 'steps')
+    expect(store.get('p1', 'steps')?.backfillCompleteAtMs).toBeNull()
+    expect(store.get('p1', 'steps')?.backfillCursorMs).toBe(1000)
+  })
+
   it('lists a job for every listable data type and every person given', () => {
     seedPerson(ctx.db, 'p2')
     const jobs = store.dueJobs(['p1', 'p2'], 1000)

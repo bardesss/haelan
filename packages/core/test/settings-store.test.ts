@@ -4,6 +4,7 @@ import { loadOrCreateKey } from '../src/crypto/key.ts'
 import { AccountStore } from '../src/store/accounts.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
 import { SettingsStore, setupStep } from '../src/store/settings.ts'
+import { DEFAULT_USER_HORIZON_DAYS } from '../src/api/catalogue.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 let fixture: TestDatabase
@@ -61,5 +62,27 @@ describe('setupStep', () => {
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', syncIntervalMinutes: 15, nowMs: 1 })
     settings.put({ baseUrl: 'http://localhost:9090', consentPath: 'localhost', nowMs: 2 })
     expect(settings.get()?.syncIntervalMinutes).toBe(15)
+  })
+})
+
+describe('the backfill horizon setting', () => {
+  it('defaults to two years for an instance that never chose', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(settings.get()?.backfillHorizonDays).toBe(DEFAULT_USER_HORIZON_DAYS)
+  })
+
+  it('keeps a chosen horizon when a later put states only the URL', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.putBackfillHorizon(1825, 2)
+    settings.put({ baseUrl: 'http://host:4235', consentPath: 'localhost', nowMs: 3 })
+    expect(settings.get()?.backfillHorizonDays).toBe(1825)
+  })
+
+  it('round-trips each offered choice', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    for (const days of [365, 730, 1825]) {
+      settings.putBackfillHorizon(days, 2)
+      expect(settings.get()?.backfillHorizonDays).toBe(days)
+    }
   })
 })

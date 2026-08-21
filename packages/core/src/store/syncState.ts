@@ -72,6 +72,15 @@ export class SyncStateStore {
     this.upsert(input.personId, input.dataType, { backfillCompleteAtMs: input.nowMs })
   }
 
+  // The inverse of markBackfillComplete, for a horizon raised past a floor a type already
+  // finished at. It touches nothing but the mark: the cursor stays where it was and nothing
+  // archived is deleted, so runBackfill just resumes walking from it. If the cursor is already
+  // past the new floor too, runBackfill re-marks the type complete on its very next call, which
+  // is what makes clearing safe to call even when it turns out to be a no-op.
+  clearBackfillComplete(personId: string, dataType: string): void {
+    this.upsert(personId, dataType, { backfillCompleteAtMs: null })
+  }
+
   dueJobs(personIds: string[], _nowMs: number): SyncJob[] {
     return personIds.flatMap((personId) =>
       DATA_TYPES.filter((t) => t.listSupported).map((t) => ({ personId, dataType: t.id })))

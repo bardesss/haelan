@@ -138,6 +138,24 @@ body {
 .setup-progress .progress-state { color: var(--text-muted); }
 .setup-progress li[data-complete='true'] .progress-state { color: var(--positive); }
 
+/* The horizon picker sits below the per-type list it affects, so it borrows that list's row
+   rhythm rather than inventing a second one; the chosen row is the one visual departure. */
+.setup-horizon { margin-top: var(--space-5); }
+.setup-horizon h2 { font-size: var(--font-size-sm); margin: 0 0 var(--space-2); }
+.setup-horizon ul { list-style: none; padding: 0; margin: 0; }
+.setup-horizon li { display: flex; align-items: center; gap: var(--space-3); padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-xs); }
+.setup-horizon li:last-child { border-bottom: 0; }
+.setup-horizon li button {
+  appearance: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-secondary);
+  background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  padding: 6px var(--space-3); cursor: pointer;
+}
+.setup-horizon li button:hover { border-color: var(--text-faint); }
+.setup-horizon li[data-chosen='true'] button {
+  color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 44%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 @media (max-width: 620px) {
   .copy-field { flex-wrap: wrap; }
   .copy-field .label { width: auto; }

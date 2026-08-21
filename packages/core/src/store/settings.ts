@@ -11,6 +11,7 @@ export interface InstanceSettingsRow {
   baseUrl: string
   consentPath: ConsentPath
   syncIntervalMinutes: number
+  backfillHorizonDays: number
   setupCompletedAtMs: number | null
 }
 
@@ -18,6 +19,7 @@ export interface PutSettingsInput {
   baseUrl: string
   consentPath: ConsentPath
   syncIntervalMinutes?: number
+  backfillHorizonDays?: number
   nowMs: number
 }
 
@@ -33,17 +35,19 @@ export class SettingsStore {
       baseUrl: row.baseUrl,
       consentPath: row.consentPath,
       syncIntervalMinutes: row.syncIntervalMinutes,
+      backfillHorizonDays: row.backfillHorizonDays,
       setupCompletedAtMs: row.setupCompletedAtMs ?? null,
     }
   }
 
   put(input: PutSettingsInput): void {
-    // The interval is omitted from the update when the caller did not state one, so saving the
-    // URL from the wizard cannot silently reset an interval somebody chose later.
+    // The interval and the horizon are both omitted from the update when the caller did not
+    // state them, so saving the URL from the wizard cannot silently reset a value chosen later.
     const set = {
       baseUrl: input.baseUrl,
       consentPath: input.consentPath,
       ...(input.syncIntervalMinutes === undefined ? {} : { syncIntervalMinutes: input.syncIntervalMinutes }),
+      ...(input.backfillHorizonDays === undefined ? {} : { backfillHorizonDays: input.backfillHorizonDays }),
       updatedAtMs: input.nowMs,
     }
     this.#db.insert(instanceSettings)
@@ -54,6 +58,11 @@ export class SettingsStore {
 
   markSetupComplete(nowMs: number): void {
     this.#db.update(instanceSettings).set({ setupCompletedAtMs: nowMs, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  putBackfillHorizon(days: number, nowMs: number): void {
+    this.#db.update(instanceSettings).set({ backfillHorizonDays: days, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 }

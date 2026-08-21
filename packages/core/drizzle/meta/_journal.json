@@ -15,6 +15,13 @@
       "when": 1787292552515,
       "tag": "0001_powerful_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787310413190,
+      "tag": "0002_tense_mysterio",
+      "breakpoints": true
     }
   ]
 }

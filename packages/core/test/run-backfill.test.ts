@@ -62,7 +62,7 @@ describe('runBackfill', () => {
     const { deps, windows } = buildDeps(fixture)
     await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 3, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 3, deps,
     })
     expect(windows).toHaveLength(3)
     // Descending: the most recent day is fetched first, so an interrupted backfill has the
@@ -75,7 +75,7 @@ describe('runBackfill', () => {
     const { deps, windows } = buildDeps(fixture)
     await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 3, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 3, deps,
     })
     const cursor = syncState.get('p1', 'weight')?.backfillCursorMs
     expect(cursor).toBe(windows.at(-1)!.startMs)
@@ -86,16 +86,16 @@ describe('runBackfill', () => {
     const { deps, windows } = buildDeps(fixture)
     await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 2, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 2, deps,
     })
     expect(windows[0]!.endMs).toBeLessThanOrEqual(NOW_MS - 10 * DAY_MS)
   })
 
-  it('stops at the type horizon and marks the backfill complete', async () => {
-    const weight = { ...dataTypeById('weight')!, backfillHorizonDays: 2 }
+  it('stops at the horizon it was handed rather than one baked into the type', async () => {
     const { deps, windows } = buildDeps(fixture)
     const result = await runBackfill({
-      personId: 'p1', timezone: AMS, dataType: weight, nowMs: NOW_MS, batchDays: 50, deps,
+      personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
+      nowMs: NOW_MS, horizonDays: 2, batchDays: 50, deps,
     })
     expect(windows.length).toBeLessThanOrEqual(3)
     expect(result).toMatchObject({ complete: true, stoppedBecause: 'horizon' })
@@ -107,7 +107,7 @@ describe('runBackfill', () => {
     const { deps, windows } = buildDeps(fixture)
     const result = await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 3, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 3, deps,
     })
     expect(windows).toHaveLength(0)
     expect(result).toMatchObject({ complete: true, stoppedBecause: 'horizon' })
@@ -117,7 +117,7 @@ describe('runBackfill', () => {
     const { deps, windows } = buildDeps(fixture)
     const result = await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 4, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 4, deps,
     })
     expect(windows).toHaveLength(4)
     expect(result).toMatchObject({ complete: false, stoppedBecause: 'batch' })
@@ -129,7 +129,7 @@ describe('runBackfill', () => {
     const { deps } = buildDeps(fixture)
     await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 3, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 3, deps,
     })
     // recordSuccess takes the max, and every backfill window is in the past. A mark that went
     // backwards here would make the trailing sync re-fetch the whole gap every night.
@@ -141,7 +141,7 @@ describe('runBackfill', () => {
     deps.client.failNextWith = new Error('boom')
     const result = await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 10, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 10, deps,
     })
     expect(result.stoppedBecause).toBe('error')
     expect(windows.length).toBeLessThan(10)
@@ -151,7 +151,7 @@ describe('runBackfill', () => {
     const { deps, windows } = buildDeps(fixture)
     const result = await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('floors')!,
-      nowMs: NOW_MS, batchDays: 10, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 10, deps,
     })
     expect(windows).toHaveLength(0)
     expect(result.complete).toBe(true)
@@ -163,7 +163,7 @@ describe('runBackfill', () => {
     deps.onProgress = (event) => seen.push(event.kind)
     await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 2, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 2, deps,
     })
     expect(seen.filter((kind) => kind === 'window_done')).toHaveLength(2)
   })
@@ -173,7 +173,7 @@ describe('runBackfill', () => {
     deps.onProgress = () => { throw new Error('the SSE client went away') }
     const result = await runBackfill({
       personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
-      nowMs: NOW_MS, batchDays: 2, deps,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 2, deps,
     })
     expect(windows).toHaveLength(2)
     expect(result.stoppedBecause).toBe('batch')

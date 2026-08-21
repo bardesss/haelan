@@ -6,12 +6,34 @@ import type { RateLimiter } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
 
-export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled'
+export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails'
+
+// list_fails fails this one type and no other, so a test can prove a healthy type keeps
+// advancing while this one is retried and never does - "a type that fails every window", not
+// every type failing every window. Picked for no reason beyond being listable and daily tiered;
+// tests that need a "the rest is healthy" reference type use weight instead, so the two never
+// collide.
+export const LIST_FAILS_TYPE = 'body-fat'
+const typeIdFrom = (url: string): string => url.match(/\/dataTypes\/([^/]+)\/dataPoints/)?.[1] ?? ''
 
 export interface WithServerOptions {
   google?: GoogleMode
   /** Replaces the pass through limiter, so a test can park a run mid flight and release it. */
   limiter?: RateLimiter
+  /**
+   * See ServerDeps.sprintDays. Defaults small below so a run that merely completes consent -
+   * and so starts a sprint of its own, since oauth.ts's callback calls tryStart('setup') -
+   * finishes in a pass or two instead of paying for the real 90 day depth in every such test's
+   * cleanup. The tests that are actually about the sprint's own depth override this to the real
+   * production number.
+   */
+  sprintDays?: number
+  /**
+   * See ServerDeps.backfillBatchDays. Defaults small below; the sprint depth tests override
+   * this too, to the real batch size, so their pass count lines up with production rather than
+   * this suite's speed-picked default.
+   */
+  backfillBatchDays?: number
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -41,6 +63,14 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
         }), { status: 403 })
       }
       return new Response(JSON.stringify({ displayName: 'Bartus' }), { status: 200 })
+    }
+    // list_fails answers LIST_FAILS_TYPE's data windows with a status the client does not retry
+    // (only 429 and 5xx get a backoff sleep; see fetchWithRetry), so a sprint that hits it fails
+    // fast instead of dragging the test through retry backoff. It is recorded through runJob's
+    // catch as an immediate per-type failure rather than swallowed. Every other type answers
+    // normally, so a test can assert a healthy type is unaffected by the broken one.
+    if (url.includes('/dataPoints') && mode === 'list_fails' && typeIdFrom(url) === LIST_FAILS_TYPE) {
+      return new Response(JSON.stringify({ error: 'the stub is failing every list request' }), { status: 400 })
     }
     // An empty page in the shape the mappers expect. These tests are about the runner's
     // scheduling and progress, not its mapping; Task 16's end to end run is where real points
@@ -82,11 +112,14 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
     // tests; making every server test wait on it would only make them slow.
     limiter: options.limiter ?? { take: async () => {} },
-    // One window per type, not fourteen. Enough to prove the walk moved and recorded a cursor,
-    // which is all any server test asserts; the ordering of a longer walk is run-backfill's
-    // own test. A real batch is eighteen types of gzip per trigger and turns this suite into
-    // minutes when it runs alongside the others.
-    backfillBatchDays: 1,
+    // One window per type, not fourteen, by default. Enough to prove the walk moved and
+    // recorded a cursor, which is all most server tests assert; the ordering of a longer walk
+    // is run-backfill's own test. A real batch is eighteen types of gzip per trigger and turns
+    // this suite into minutes when it runs alongside the others.
+    backfillBatchDays: options.backfillBatchDays ?? 1,
+    // How deep a sprint walks before this instance settles into the trickle. See
+    // WithServerOptions.sprintDays above for why this defaults small.
+    sprintDays: options.sprintDays ?? 2,
   })
   await app.ready()
 
