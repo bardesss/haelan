@@ -6,7 +6,11 @@ import { readConfig } from './config.ts'
 import { buildServer } from './app.ts'
 
 const config = readConfig(process.env)
-const instance = openHaelan(config.dataDir)
+// Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working
+// directory happened to be, and "where is my data" is the first question an operator asks and
+// the last one a log should leave ambiguous.
+const dataDir = resolve(config.dataDir)
+const instance = openHaelan(dataDir)
 
 // The built bundle sits beside the server in the workspace and in the image. Absent during a
 // server only dev run, where Vite serves the app on its own port and proxies back here, so a
@@ -33,3 +37,4 @@ process.on('SIGINT', () => void shutdown())
 await app.listen({ port: config.port, host: config.host })
 app.haelan.runner.start()
 console.log(`haelan listening on http://${config.host}:${config.port}`)
+console.log(`data directory ${dataDir}`)
