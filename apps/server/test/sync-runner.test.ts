@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { withServer } from './harness.ts'
+import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
 let harness: Harness | null = null
@@ -110,8 +110,10 @@ describe('the sync runner', () => {
   })
 
   it('stops at the sprint window and leaves the deep history to later runs', async () => {
-    // The real sprintDays, so the 90 day floor this test is about is the one production uses.
-    harness = await withServer({ google: 'ok', sprintDays: 90 })
+    // The real sprintDays and real batch size: at the harness's default batch of 1, forty
+    // passes only reaches 40 days and the sprint-floor skip this test is actually about never
+    // fires - the test would pass because MAX_SPRINT_PASSES ran out, not because the cap held.
+    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
     await harness.connectPerson()
     harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
     await harness.app.haelan.runner.trigger('setup')
@@ -148,9 +150,31 @@ describe('the sync runner', () => {
     await runner.settle()
     expect(runner.status().running).toBe(false)
     // The regression this exists for: a sprint that ran to completion under a closing database
-    // surfaced as "the database connection is not open" from somewhere unrelated.
-    const weight = runner.status().backfill.find((s) => s.dataType === 'weight')
-    expect(weight?.complete).toBe(false)
+    // surfaced as "the database connection is not open" from somewhere unrelated. stop() lands
+    // before the first await inside runSync resolves, and runSync writes no backfill cursors of
+    // its own, so #aborted is already true by the time run() would otherwise enter the sprint
+    // loop - no cursor at all is what proves the sprint never took a single step, not merely
+    // that weight in particular fell short of some deep horizon it was never asked to reach here.
+    const status = runner.status()
+    expect(status.backfill.every((row) => row.cursorMs === null)).toBe(true)
+  })
+
+  it('refuses to start once stopped, so a request racing shutdown cannot restart the sprint settle() is waiting out', async () => {
+    // shutdown() calls stop() then awaits settle() while the HTTP server is still accepting
+    // requests (apps/server/src/index.ts); routes/sync.ts's tryStart('manual') and
+    // routes/oauth.ts's tryStart('setup') are both entrances a request could reach in that
+    // window. If stop() only cleared #aborted for the run already in flight, the aborted run
+    // finishing would make trigger() reset #aborted back to false and let a new one start,
+    // and settle()'s while loop would then wait out that new run's whole sprint instead of
+    // returning. Both tryStart and trigger have to refuse, since the scheduler calls trigger
+    // directly.
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const runner = harness.app.haelan.runner
+    runner.stop()
+    expect(runner.tryStart('manual')).toMatchObject({ started: false, reason: 'shutting_down' })
+    expect(await runner.trigger('manual')).toMatchObject({ started: false, reason: 'shutting_down' })
+    expect(runner.status().running).toBe(false)
   })
 
   it('does not spin forever on a type that fails every window', async () => {
@@ -161,5 +185,32 @@ describe('the sync runner', () => {
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     expect(harness.app.haelan.runner.status().running).toBe(false)
+  })
+
+  it('does not let one broken type block a healthy type from advancing past the sprint floor', async () => {
+    // LIST_FAILS_TYPE (body-fat) never advances and is never marked complete, so #sprintPending
+    // stays true forever - the regression this guards is that run() used to return right after
+    // the sprint loop whenever that was still true, so the trickle never ran and weight, a
+    // perfectly healthy daily type, stayed pinned at the sprint floor right alongside the type
+    // that was actually broken, on every run from then on.
+    harness = await withServer({ google: 'list_fails', sprintDays: 90, backfillBatchDays: 14 })
+    await harness.connectPerson()
+    const sprintFloor = harness.clock.nowMs - 90 * 86_400_000
+
+    await harness.app.haelan.runner.trigger('setup')
+    const afterFirst = harness.app.haelan.runner.status().backfill
+      .find((s) => s.dataType === 'weight')!.cursorMs!
+    expect(afterFirst).toBeLessThanOrEqual(sprintFloor)
+
+    await harness.app.haelan.runner.trigger('scheduled')
+    const afterSecond = harness.app.haelan.runner.status().backfill
+      .find((s) => s.dataType === 'weight')!.cursorMs!
+    // Strictly deeper, not just "still at the floor": the second run's trickle pass had to do
+    // real work, which only happens if run() reached it despite #sprintPending staying true.
+    expect(afterSecond).toBeLessThan(afterFirst)
+
+    const brokenType = harness.app.haelan.runner.status().backfill
+      .find((s) => s.dataType === LIST_FAILS_TYPE)
+    expect(brokenType?.complete).toBe(false)
   })
 })

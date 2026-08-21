@@ -8,6 +8,14 @@ import type { FastifyInstance } from 'fastify'
 
 export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails'
 
+// list_fails fails this one type and no other, so a test can prove a healthy type keeps
+// advancing while this one is retried and never does - "a type that fails every window", not
+// every type failing every window. Picked for no reason beyond being listable and daily tiered;
+// tests that need a "the rest is healthy" reference type use weight instead, so the two never
+// collide.
+export const LIST_FAILS_TYPE = 'body-fat'
+const typeIdFrom = (url: string): string => url.match(/\/dataTypes\/([^/]+)\/dataPoints/)?.[1] ?? ''
+
 export interface WithServerOptions {
   google?: GoogleMode
   /** Replaces the pass through limiter, so a test can park a run mid flight and release it. */
@@ -56,11 +64,12 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
       }
       return new Response(JSON.stringify({ displayName: 'Bartus' }), { status: 200 })
     }
-    // list_fails answers every data window with a status the client does not retry (only 429
-    // and 5xx get a backoff sleep; see fetchWithRetry), so a sprint that hits it fails fast
-    // instead of dragging the test through retry backoff. It is recorded through runJob's
-    // catch as an immediate per-type failure rather than swallowed.
-    if (url.includes('/dataPoints') && mode === 'list_fails') {
+    // list_fails answers LIST_FAILS_TYPE's data windows with a status the client does not retry
+    // (only 429 and 5xx get a backoff sleep; see fetchWithRetry), so a sprint that hits it fails
+    // fast instead of dragging the test through retry backoff. It is recorded through runJob's
+    // catch as an immediate per-type failure rather than swallowed. Every other type answers
+    // normally, so a test can assert a healthy type is unaffected by the broken one.
+    if (url.includes('/dataPoints') && mode === 'list_fails' && typeIdFrom(url) === LIST_FAILS_TYPE) {
       return new Response(JSON.stringify({ error: 'the stub is failing every list request' }), { status: 400 })
     }
     // An empty page in the shape the mappers expect. These tests are about the runner's

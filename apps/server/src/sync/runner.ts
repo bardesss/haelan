@@ -35,7 +35,7 @@ export type RunReason = 'manual' | 'scheduled' | 'setup'
 
 export interface RunOutcome {
   started: boolean
-  reason?: 'already_running'
+  reason?: 'already_running' | 'shutting_down'
 }
 
 export interface BackfillSummary {
@@ -67,6 +67,16 @@ export class SyncRunner {
   #inFlight: Promise<unknown> | null = null
   /** Set by stop(), checked between batches, so a sprint cannot outlive a shutdown. */
   #aborted = false
+  /**
+   * Set by stop() and never cleared, unlike #aborted which trigger() resets at the start of
+   * every run. shutdown() calls stop() then awaits settle() while the HTTP server is still up,
+   * so a request racing that window (routes/sync.ts, routes/oauth.ts) can reach tryStart after
+   * the aborted run has already finished — at which point #aborted alone would have been reset
+   * to false by trigger() and the new run would start, and settle()'s while loop would pick up
+   * its promise and wait out a full sprint instead of returning. This flag latches so neither
+   * tryStart nor trigger can start anything once stop() has been called, for good.
+   */
+  #stopped = false
 
   constructor(context: ServerContext) { this.#context = context }
 
@@ -125,6 +135,7 @@ export class SyncRunner {
    * stream are how it follows the rest.
    */
   tryStart(reason: RunReason): RunOutcome {
+    if (this.#stopped) return { started: false, reason: 'shutting_down' }
     if (this.running) return { started: false, reason: 'already_running' }
     this.#inFlight = this.trigger(reason).catch(() => undefined)
     return { started: true }
@@ -133,6 +144,7 @@ export class SyncRunner {
   // Refuses rather than queues. A queued second run would still be running when the next tick
   // arrives, and the useful answer to "sync now" while a sync runs is that one is already going.
   async trigger(reason: RunReason): Promise<RunOutcome> {
+    if (this.#stopped) return { started: false, reason: 'shutting_down' }
     if (this.running) return { started: false, reason: 'already_running' }
     this.running = true
     this.#aborted = false
@@ -164,6 +176,7 @@ export class SyncRunner {
 
   stop(): void {
     this.#aborted = true
+    this.#stopped = true
     if (this.timer) clearInterval(this.timer)
     this.timer = null
   }
@@ -223,11 +236,22 @@ export class SyncRunner {
     if (this.#sprintPending(personIds, userHorizonDays, sprintDays)) {
       for (let pass = 0; pass < MAX_SPRINT_PASSES; pass++) {
         if (this.#aborted) return
-        const fetched = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays)
-        if (fetched === 0) break
+        // A pass that advances no cursor at all means whatever is left is either converged
+        // (complete, or already past its own sprint floor) or a type failing every window -
+        // either way another pass buys nothing. windowsFetched used to be the signal here, but
+        // runBackfill counts a failed window as fetched too, so a type failing every window
+        // never produced a zero and burned every remaining pass alone.
+        const advanced = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays)
+        if (!advanced) break
       }
-      return
     }
+    // Falls through to the trickle regardless of how the sprint ended - converged, exhausted
+    // its passes, or was never entered because nothing was pending. A type failing every window
+    // is never marked complete and its cursor never moves, so #sprintPending stays true forever;
+    // returning here instead, as an earlier version of this method did, meant that one broken
+    // type held every other, healthy type at the sprint floor for good, since the sprint branch
+    // above was the only place any of them ever got a chance to walk.
+    if (this.#aborted) return
     await this.#backfillPass(deps, personIds, userHorizonDays, null)
   }
 
@@ -251,18 +275,20 @@ export class SyncRunner {
    * the sprint a bounded phase rather than a run to the full horizon; null means the type's own
    * resolved horizon, which is the trickle. The cap is enforced by skipping a type that has
    * already reached it, not by shrinking the horizonDays passed to runBackfill — see the comment
-   * at the skip below for why that distinction is load-bearing.
+   * at the skip below for why that distinction is load-bearing. Returns whether any type's
+   * cursor actually moved, which is what the sprint loop above uses to decide whether another
+   * pass is worth taking.
    */
   async #backfillPass(
     deps: JobDeps, personIds: string[], userHorizonDays: number, capDays: number | null,
-  ): Promise<number> {
-    let windowsFetched = 0
+  ): Promise<boolean> {
+    let cursorAdvanced = false
     for (const personId of personIds) {
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of DATA_TYPES) {
         if (!dataType.listSupported) continue
-        if (this.#aborted) return windowsFetched
+        if (this.#aborted) return cursorAdvanced
         const resolved = horizonDaysFor(dataType, userHorizonDays)
         // A type whose real horizon reaches past the sprint cap needs a floor of its own, kept
         // separate from the horizonDays runBackfill is given below. Passing a *capped*
@@ -289,7 +315,14 @@ export class SyncRunner {
               : { batchDays: this.#context.backfillBatchDays }),
             deps,
           })
-          windowsFetched += result.windowsFetched
+          // stoppedBecause 'error' or 'revoked' means runBackfill returned before ever calling
+          // setBackfillCursor, so windowsFetched having counted the attempt is not the same as
+          // the cursor having moved. That distinction is what stops a type failing every window
+          // from looking like progress to the sprint loop above.
+          if (result.windowsFetched > 0
+            && result.stoppedBecause !== 'error' && result.stoppedBecause !== 'revoked') {
+            cursorAdvanced = true
+          }
         } catch (error) {
           if (error instanceof RevokedError) break
           // runBackfill records the failures it expects through runJob, so anything arriving
@@ -304,7 +337,7 @@ export class SyncRunner {
         }
       }
     }
-    return windowsFetched
+    return cursorAdvanced
   }
 }
 
