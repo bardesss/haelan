@@ -66,6 +66,82 @@ body {
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
+/* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
+   the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
+.field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
+.field > .label { margin-bottom: var(--space-1); }
+.input {
+  appearance: none; font: inherit; font-size: var(--font-size-sm);
+  color: var(--text-primary); background: var(--surface-inset);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  padding: 9px var(--space-3); width: 100%;
+}
+.input:hover { border-color: var(--text-faint); }
+.input::placeholder { color: var(--text-faint); }
+.field-hint { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; }
+.field-error, .form-error {
+  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+}
+.form-error {
+  background: color-mix(in srgb, var(--negative) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
+  border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.form-actions { display: flex; gap: var(--space-2); align-items: center; margin-top: var(--space-4); }
+
+/* A radio whose whole row is the target, because these choices carry a sentence of consequence
+   each and a bare 13px dot is not a fair thing to ask someone to hit. */
+.choice { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); cursor: pointer; margin-bottom: var(--space-2); }
+.choice:hover { border-color: var(--text-faint); }
+.choice:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 44%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.choice input { margin-top: 3px; flex: none; accent-color: var(--accent); }
+.choice-title { font-size: var(--font-size-sm); color: var(--text-primary); display: block; }
+.choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; display: block; margin-top: var(--space-1); }
+
+/* The wizard. No rail: there is no dashboard to navigate to until this finishes, so the whole
+   viewport is the one thing being asked for. */
+.setup-shell { min-height: 100vh; display: flex; justify-content: center; padding: var(--space-6) var(--space-4); }
+.setup-column { width: 100%; max-width: 640px; }
+.setup-brand { font-weight: 700; font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
+
+/* The steps are a real sequence the server derives from what is in the database, so showing
+   position states a fact rather than decorating one. */
+.setup-rail { display: flex; gap: var(--space-1); margin-bottom: var(--space-5); list-style: none; padding: 0; }
+.setup-rail li { flex: 1; font-size: var(--font-size-micro); color: var(--text-faint); padding-top: var(--space-2); border-top: 2px solid var(--border-subtle); }
+.setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: 600; }
+.setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+
+.setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
+.setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-4); }
+.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; padding-left: var(--space-5); margin: 0 0 var(--space-4); }
+.setup-instructions li { margin-bottom: var(--space-2); }
+.setup-instructions li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
+.setup-uris { margin-bottom: var(--space-4); }
+
+/* The signature of this whole surface. Every value here is complete and concrete: the rule the
+   wizard exists to keep is that nothing copyable ever contains a placeholder, so a value that
+   Google would refuse is shown refused rather than dressed up as copyable. */
+.copy-field { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
+.copy-field .label { flex: none; width: 148px; }
+.copy-value { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-primary); background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 6px var(--space-2); flex: 1; overflow-x: auto; white-space: nowrap; }
+.setup-rejected { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; border-left: 2px solid var(--negative); padding: var(--space-1) 0 var(--space-1) var(--space-3); margin: var(--space-2) 0; }
+.setup-rejected code { font-family: var(--font-mono); color: var(--text-faint); text-decoration: line-through; }
+
+.setup-progress { list-style: none; padding: 0; margin: 0; }
+.setup-progress li { display: flex; align-items: baseline; gap: var(--space-3); padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-xs); }
+.setup-progress li:last-child { border-bottom: 0; }
+.setup-progress .progress-type { font-family: var(--font-mono); color: var(--text-secondary); flex: 1; }
+.setup-progress .progress-state { color: var(--text-muted); }
+.setup-progress li[data-complete='true'] .progress-state { color: var(--positive); }
+
+@media (max-width: 620px) {
+  .copy-field { flex-wrap: wrap; }
+  .copy-field .label { width: auto; }
+  .setup-rail li { font-size: 0; padding-top: var(--space-1); }
+}
+
 /* Clipped rather than display:none, which would take it out of the accessibility tree along with the pixels. */
 .sr-only {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
