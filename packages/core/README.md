@@ -128,6 +128,38 @@ a minute split across a page boundary does not collide with itself. The 2-second
 untouched in `raw_payloads`, so this is a resolution choice in a cache, not a loss, and a later
 rebuild can widen it without re-fetching.
 
+## Accounts, sessions and the setup step
+
+`AccountStore` hashes with argon2id at OWASP's second recommended configuration, 19 MiB over two
+passes. That cost is the security property, so if it makes a test suite unpleasant, lower it
+through an injected option in the test rather than in production. Ten failures lock an account
+for fifteen minutes, and a success clears the counter so a slow typist is not locked out
+tomorrow. A login against an unknown username still runs a real verification against a decoy
+hash, so response time does not answer a question the caller was not allowed to ask.
+
+`SessionStore` stores the sha256 of the cookie value and never the value, so a copied database
+is a list of expiry times rather than a set of live sessions. Lifetimes are fixed at 30 days and
+do not slide: using a session moves `lastSeen` but not `expiresAt`, so a stolen cookie cannot be
+kept alive indefinitely by using it.
+
+`setupStep` is derived from the database on every call rather than stored as a counter, because
+a resumed setup has to land where the data actually is. A refresh token present without the
+completion mark means consent was interrupted, and the step is `consent` rather than `done`.
+
+The auth session table is `auth_sessions`, not `sessions`: `sessions` is a tier 2 table holding
+sleep and exercise, and the collision would read as a typo forever after.
+
+## Backfill
+
+`runBackfill` walks backwards a day at a time from the stored cursor, or from today on the first
+run, writing the cursor after every window. It takes its day windows from `dayWindows` rather
+than stepping 24 hours, so the alignment matches the archive's dedup key on DST days too, and it
+only ever takes a window that ends at or before the cursor: a cursor mid-day would otherwise
+produce a first window ending in the future and push the high water mark past now.
+
+Horizons are per data type, on the catalogue. See `apps/server/README.md` for the numbers and
+the volumes behind them.
+
 ## Secrets
 
 `loadOrCreateKey` generates 32 bytes into the data directory on first boot, or reads

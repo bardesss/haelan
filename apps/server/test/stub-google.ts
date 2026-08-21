@@ -1,0 +1,88 @@
+import { createServer } from 'node:http'
+import type { Server } from 'node:http'
+import { SCOPES, body, dailyPoint, dataTypeById, intervalPoint, samplePoint, sleepPoint } from '@haelan/core'
+
+export interface StubGoogle {
+  origin: string
+  requests: string[]
+  /** Authorization headers seen, so a test can prove nothing went out unauthenticated. */
+  authHeaders: Array<string | undefined>
+  close: () => Promise<void>
+}
+
+// Fixed instants rather than anything derived from the clock. Every window the backfill walks
+// asks for the same day, so the upsert key is stable and a second run writes no new rows,
+// which is what makes the idempotency assertion mean something.
+const PHYSICAL_TIME = '2026-02-28T10:00:00Z'
+const END_TIME = '2026-02-28T10:01:00Z'
+const DATE = { year: 2026, month: 2, day: 28 }
+
+// One point shaped the way the catalogue says this type's value is shaped. Built from the
+// catalogue's own valuePath, exactly as catalogue-truth.test.ts does, so the stub cannot
+// drift from what the mappers expect.
+function pointFor(id: string): Record<string, unknown> | null {
+  const type = dataTypeById(id)
+  if (!type || !type.listSupported || type.mappingDeferred) return null
+  if (type.target === 'sessions') {
+    return sleepPoint({
+      startTime: '2026-02-27T23:00:00Z', endTime: '2026-02-28T06:30:00Z',
+      stages: [{ type: 'DEEP', startTime: '2026-02-27T23:00:00Z', endTime: '2026-02-28T01:00:00Z' }],
+    })
+  }
+  if (type.filterMember === 'date') {
+    return dailyPoint({ payloadKey: type.payloadKey, valuePath: type.valuePath, value: 7, date: DATE })
+  }
+  if (type.filterMember === 'sample_time.physical_time') {
+    return samplePoint({
+      payloadKey: type.payloadKey, valuePath: type.valuePath, value: 7, physicalTime: PHYSICAL_TIME,
+    })
+  }
+  return intervalPoint({
+    payloadKey: type.payloadKey, valuePath: type.valuePath, value: 7,
+    physicalTime: PHYSICAL_TIME, endTime: END_TIME,
+  })
+}
+
+const typeIdFrom = (url: string): string =>
+  url.match(/\/dataTypes\/([^/]+)\/dataPoints/)?.[1] ?? ''
+
+export async function startStubGoogle(): Promise<StubGoogle> {
+  const requests: string[] = []
+  const authHeaders: Array<string | undefined> = []
+
+  const server: Server = createServer((request, response) => {
+    const url = request.url ?? ''
+    requests.push(url)
+    const json = (status: number, payload: unknown) => {
+      response.writeHead(status, { 'content-type': 'application/json' })
+      response.end(JSON.stringify(payload))
+    }
+
+    if (url.startsWith('/token')) {
+      return json(200, {
+        refresh_token: 'stub-refresh-token', access_token: 'stub-access-token',
+        expires_in: 3599, scope: SCOPES.join(' '),
+      })
+    }
+
+    authHeaders.push(request.headers.authorization)
+    if (url.startsWith('/v4/users/me/profile')) return json(200, { displayName: 'Bartus' })
+    if (url.includes('/dataPoints')) {
+      const point = pointFor(typeIdFrom(url))
+      return response.writeHead(200, { 'content-type': 'application/json' })
+        && response.end(body(point ? [point] : []))
+    }
+    return json(404, { error: 'the stub does not serve that' })
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('the stub did not get a port')
+  return {
+    origin: `http://127.0.0.1:${address.port}`,
+    requests,
+    authHeaders,
+    close: () => new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))),
+  }
+}

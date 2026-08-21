@@ -90,4 +90,47 @@ describe('package barrel', () => {
     expect(typeof core.runJob).toBe('function')
     expect(typeof core.runSync).toBe('function')
   })
+
+  it('exports the account, session and settings stores the wizard writes through', () => {
+    expect(typeof core.PeopleStore).toBe('function')
+    expect(typeof core.AccountStore).toBe('function')
+    expect(typeof core.SessionStore).toBe('function')
+    expect(typeof core.SettingsStore).toBe('function')
+    expect(typeof core.SESSION_TTL_MS).toBe('number')
+    expect(typeof core.setupStep).toBe('function')
+    expect(Array.isArray(core.CONSENT_PATHS)).toBe(true)
+  })
+
+  it('exports the consent round trip', () => {
+    expect(typeof core.buildConsentUrl).toBe('function')
+    expect(typeof core.exchangeAuthorizationCode).toBe('function')
+    expect(typeof core.probeAccess).toBe('function')
+    expect(core.SCOPES).toHaveLength(6)
+  })
+
+  it('exports the backfill and its horizon default', () => {
+    expect(typeof core.runBackfill).toBe('function')
+    expect(typeof core.DEFAULT_BACKFILL_HORIZON_DAYS).toBe('number')
+  })
+
+  it('exports the synthetic payload builders the server stub is built from', () => {
+    expect(typeof core.samplePoint).toBe('function')
+    expect(typeof core.intervalPoint).toBe('function')
+    expect(typeof core.dailyPoint).toBe('function')
+    expect(typeof core.sleepPoint).toBe('function')
+    expect(typeof core.body).toBe('function')
+  })
+
+  it('is callable, not merely present: setupStep answers on a real empty instance', () => {
+    // A barrel test that only checks typeof passes on an export wired to the wrong module.
+    const fixture = core.createTestDatabase()
+    try {
+      const step = core.setupStep({
+        accounts: new core.AccountStore(fixture.db),
+        settings: new core.SettingsStore(fixture.db),
+        credentials: new core.CredentialStore(fixture.db, core.loadOrCreateKey(fixture.dir, {})),
+      })
+      expect(step).toBe('account')
+    } finally { fixture.cleanup() }
+  })
 })

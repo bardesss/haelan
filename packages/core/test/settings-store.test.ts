@@ -1,0 +1,65 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { loadOrCreateKey } from '../src/crypto/key.ts'
+import { AccountStore } from '../src/store/accounts.ts'
+import { CredentialStore } from '../src/store/credentials.ts'
+import { SettingsStore, setupStep } from '../src/store/settings.ts'
+import type { TestDatabase } from '../src/testing/fixtures.ts'
+
+let fixture: TestDatabase
+let accounts: AccountStore
+let credentials: CredentialStore
+let settings: SettingsStore
+
+beforeEach(() => {
+  fixture = createTestDatabase()
+  seedPerson(fixture.db, 'p1')
+  accounts = new AccountStore(fixture.db)
+  credentials = new CredentialStore(fixture.db, loadOrCreateKey(fixture.dir, {}))
+  settings = new SettingsStore(fixture.db)
+})
+afterEach(() => fixture.cleanup())
+
+const addAccount = () => accounts.create({
+  id: 'a1', personId: 'p1', username: 'bartus', password: 'a good long password', isAdmin: true, nowMs: 0,
+})
+
+describe('setupStep', () => {
+  it('starts at the account step on an empty instance', () => {
+    expect(setupStep({ accounts, settings, credentials })).toBe('account')
+  })
+
+  it('asks for the instance URL once an account exists', async () => {
+    await addAccount()
+    expect(setupStep({ accounts, settings, credentials })).toBe('instance-url')
+  })
+
+  it('asks for the Google client once the URL is known', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(setupStep({ accounts, settings, credentials })).toBe('google-client')
+  })
+
+  it('treats a refresh token without the completion mark as an interrupted consent', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 1 })
+    credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 1 })
+    expect(setupStep({ accounts, settings, credentials })).toBe('consent')
+    settings.markSetupComplete(2)
+    expect(setupStep({ accounts, settings, credentials })).toBe('done')
+  })
+
+  it('keeps the settings row single, so a second put updates rather than duplicates', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.put({ baseUrl: 'https://box.tail1234.ts.net', consentPath: 'tailscale', nowMs: 2 })
+    expect(settings.get()?.baseUrl).toBe('https://box.tail1234.ts.net')
+    expect(fixture.db.$client.prepare('select count(*) as n from instance_settings').get()).toEqual({ n: 1 })
+  })
+
+  it('does not lose the sync interval when only the URL is updated', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', syncIntervalMinutes: 15, nowMs: 1 })
+    settings.put({ baseUrl: 'http://localhost:9090', consentPath: 'localhost', nowMs: 2 })
+    expect(settings.get()?.syncIntervalMinutes).toBe(15)
+  })
+})

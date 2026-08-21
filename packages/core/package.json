@@ -4,11 +4,14 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.1.0",
     "better-sqlite3": "^12.2.0",
     "drizzle-orm": "^0.45.2"
   },

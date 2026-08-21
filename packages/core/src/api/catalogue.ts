@@ -34,6 +34,12 @@ export interface DataType {
   /** Written per minute rather than per sample. Only heart rate needs it today. */
   downsampleToMinute: boolean
   /**
+   * How far back the first backfill walks for this type, in days. Per type because the volumes
+   * differ by three orders of magnitude: M0 measured heart rate at 23 MB of raw JSON per
+   * person-day and every other type together under 0.8M rows per person-year.
+   */
+  backfillHorizonDays: number
+  /**
    * Fetched and archived, but not mapped to tier 2 yet. Set when a type carries a
    * sub-dimension a flat sample row cannot hold without a derivation decision.
    */
@@ -48,6 +54,10 @@ const ACTIVITY = 'googlehealth.activity_and_fitness.readonly'
 const METRICS = 'googlehealth.health_metrics_and_measurements.readonly'
 const SLEEP = 'googlehealth.sleep.readonly'
 const NUTRITION = 'googlehealth.nutrition.readonly'
+
+export const DEFAULT_BACKFILL_HORIZON_DAYS = 1825
+const DENSE_HORIZON_DAYS = 60
+const NIGHTLY_HORIZON_DAYS = 365
 
 const listable = (
   id: string, payloadKey: string, filterMember: FilterMember, scope: string,
@@ -66,6 +76,7 @@ const listable = (
   unit,
   valuePath,
   downsampleToMinute: false,
+  backfillHorizonDays: DEFAULT_BACKFILL_HORIZON_DAYS,
   ...extra,
 })
 
@@ -83,9 +94,9 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', 'activeZoneMinutes', { mappingDeferred: true }),
   listable('active-energy-burned', 'activeEnergyBurned', 'interval.start_time', ACTIVITY, 'active_energy', 'kcal', 'kcal'),
 
-  listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true }),
-  listable('heart-rate-variability', 'heartRateVariability', 'sample_time.physical_time', METRICS, 'hrv', 'milliseconds', 'rootMeanSquareOfSuccessiveDifferencesMilliseconds'),
-  listable('oxygen-saturation', 'oxygenSaturation', 'sample_time.physical_time', METRICS, 'spo2', 'percent', 'percentage'),
+  listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true, backfillHorizonDays: DENSE_HORIZON_DAYS }),
+  listable('heart-rate-variability', 'heartRateVariability', 'sample_time.physical_time', METRICS, 'hrv', 'milliseconds', 'rootMeanSquareOfSuccessiveDifferencesMilliseconds', { backfillHorizonDays: NIGHTLY_HORIZON_DAYS }),
+  listable('oxygen-saturation', 'oxygenSaturation', 'sample_time.physical_time', METRICS, 'spo2', 'percent', 'percentage', { backfillHorizonDays: NIGHTLY_HORIZON_DAYS }),
   listable('weight', 'weight', 'sample_time.physical_time', METRICS, 'weight', 'grams', 'weightGrams'),
   listable('body-fat', 'bodyFat', 'sample_time.physical_time', METRICS, 'body_fat', 'percent', 'percentage'),
 
