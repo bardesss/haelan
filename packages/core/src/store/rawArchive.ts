@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto'
+﻿import { createHash, randomUUID } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
@@ -19,7 +19,9 @@ export interface PutInput {
 export interface PutResult { id: string, deduplicated: boolean }
 
 export class RawArchive {
-  constructor(private readonly db: DbOrTx) {}
+  readonly #db: DbOrTx
+
+  constructor(db: DbOrTx) { this.#db = db }
 
   put(input: PutInput): PutResult {
     const bodyHash = createHash('sha256').update(input.body).digest('hex')
@@ -30,7 +32,7 @@ export class RawArchive {
     // share the file) could both pass a prior select and then have the second insert throw. The
     // trailing re-fetch window means this path is hot, so a lost race must resolve to dedup, not
     // a crash.
-    const result = this.db.insert(rawPayloads).values({
+    const result = this.#db.insert(rawPayloads).values({
       id,
       personId: input.personId,
       dataType: input.dataType,
@@ -51,7 +53,7 @@ export class RawArchive {
 
     if (result.changes > 0) return { id, deduplicated: false }
 
-    const existing = this.db.select({ id: rawPayloads.id }).from(rawPayloads).where(and(
+    const existing = this.#db.select({ id: rawPayloads.id }).from(rawPayloads).where(and(
       eq(rawPayloads.personId, input.personId),
       eq(rawPayloads.dataType, input.dataType),
       eq(rawPayloads.bodyHash, bodyHash),
@@ -65,7 +67,7 @@ export class RawArchive {
   // The person is part of the lookup rather than checked after it, so a caller cannot forget.
   // Every surface in section 11 reads through this, and there is no sharing mechanism in v1.
   getBody(personId: string, id: string): string {
-    const row = this.db.select({ bodyGzip: rawPayloads.bodyGzip }).from(rawPayloads)
+    const row = this.#db.select({ bodyGzip: rawPayloads.bodyGzip }).from(rawPayloads)
       .where(and(eq(rawPayloads.id, id), eq(rawPayloads.personId, personId))).get()
     if (!row) throw new ConfigError(`raw payload ${id} not found for person ${personId}`)
     return gunzipSync(row.bodyGzip).toString('utf8')

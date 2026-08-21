@@ -1,12 +1,15 @@
-import type { CredentialStore } from '../store/credentials.ts'
+﻿import type { CredentialStore } from '../store/credentials.ts'
 import { AuthError, ConfigError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const EXPIRY_MARGIN_MS = 60_000
 
 export class RevokedError extends AuthError {
-  constructor(readonly personId: string) {
+  readonly personId: string
+
+  constructor(personId: string) {
     super(`refresh token for person ${personId} is no longer valid`)
+    this.personId = personId
   }
 }
 
@@ -29,30 +32,35 @@ function parseErrorBody(body: string): { error?: string } | null {
 }
 
 export class TokenProvider {
-  private readonly cache = new Map<string, CachedToken>()
+  readonly #cache = new Map<string, CachedToken>()
+  readonly #credentials: CredentialStore
+  readonly #deps: TokenProviderDeps
 
   constructor(
-    private readonly credentials: CredentialStore,
-    private readonly deps: TokenProviderDeps = { fetch: globalThis.fetch, now: Date.now },
-  ) {}
+    credentials: CredentialStore,
+    deps: TokenProviderDeps = { fetch: globalThis.fetch, now: Date.now },
+  ) {
+    this.#credentials = credentials
+    this.#deps = deps
+  }
 
   async accessTokenFor(personId: string): Promise<string> {
     // The stored credential is the source of truth and is read before the cache on every
     // call: a revocation from another path (admin disconnect, another process, a future
     // wizard flow) must stop this instance from handing out data now, not once the cached
     // token happens to expire.
-    const stored = this.credentials.getRefreshToken(personId)
+    const stored = this.#credentials.getRefreshToken(personId)
     if (!stored) throw new ConfigError(`person ${personId} is not connected`)
     if (stored.revokedAtMs !== null) {
-      this.cache.delete(personId)
+      this.#cache.delete(personId)
       throw new RevokedError(personId)
     }
 
-    const cached = this.cache.get(personId)
-    if (cached && cached.expiresAtMs > this.deps.now() + EXPIRY_MARGIN_MS) return cached.accessToken
+    const cached = this.#cache.get(personId)
+    if (cached && cached.expiresAtMs > this.#deps.now() + EXPIRY_MARGIN_MS) return cached.accessToken
 
-    const client = this.credentials.getClientFor(personId)
-    const res = await this.deps.fetch(this.deps.tokenEndpoint ?? TOKEN_ENDPOINT, {
+    const client = this.#credentials.getClientFor(personId)
+    const res = await this.#deps.fetch(this.#deps.tokenEndpoint ?? TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -74,8 +82,8 @@ export class TokenProvider {
       // revoking only costs a retry.
       const parsed = parseErrorBody(body)
       if (parsed?.error === 'invalid_grant') {
-        this.credentials.markRevoked(personId, this.deps.now())
-        this.cache.delete(personId)
+        this.#credentials.markRevoked(personId, this.#deps.now())
+        this.#cache.delete(personId)
         throw new RevokedError(personId)
       }
       const kind = classifyHttp(res.status)
@@ -92,9 +100,9 @@ export class TokenProvider {
       throw new SchemaDriftError('token response was malformed')
     }
 
-    this.cache.set(personId, {
+    this.#cache.set(personId, {
       accessToken: json.access_token,
-      expiresAtMs: this.deps.now() + json.expires_in * 1000,
+      expiresAtMs: this.#deps.now() + json.expires_in * 1000,
     })
     return json.access_token
   }
