@@ -51,8 +51,8 @@ An hour 200 days old comes back as densely as an hour from this week. Nothing is
 ## What this establishes, and what it does not
 
 **Establishes:** retention is at least 209 days, and there is no observable degradation within it.
-The 90-day intraday cap currently forgoes **119 days of minute-level history that the API is
-willing to serve today.**
+The 90-day intraday cap in force when this was measured was giving up **119 days of minute-level
+history that the API serves today.**
 
 **Does not establish:** the retention limit itself. The account is younger than the window, so the
 measurement bottoms out on the account rather than on Google. Retention could be 210 days or
@@ -65,12 +65,18 @@ ages out. The claim that minute-level history becomes permanently unavailable ma
 beyond 209 days, but no evidence in this repository supports it, and the sequencing argument that
 put M1 before the dashboard rests on it.
 
-## The decision this hands back
+## The decision taken
 
-Raising the intraday cap from 90 days to cover the full available history costs roughly 0.26 GB
-per person instead of 0.60 GB, extrapolating from the measured 468 bytes per sample row. That is
-the whole trade: about a third of a gigabyte per person against 119 days of minute-level history
-that exists right now and might not later.
+Raised to a year, in [#28](https://github.com/bardesss/haelan/pull/28). Measured cost at the
+two-year default horizon, 1.05 GB per person against 0.26 GB at the old cap. A year was chosen
+over the 210 days that would exactly cover what exists today, because it also covers
+season-over-season comparison and does not need revisiting the moment an account outgrows it.
+
+Two things had to move with it. The sprint was literally defined as the intraday cap, so raising
+one would have stretched the first run from about thirteen minutes to about fifty; it is now its
+own number. And a completion mark had to stop being permanent: an instance whose heart rate had
+already finished at 90 days would never have walked further, so the raise would have done nothing
+for exactly the people who already had data.
 
 Re-running this is one throwaway script: open the instance, take an access token, request one day
 of `heart-rate` and one of `daily-resting-heart-rate` at each depth, and read the pair. The script
