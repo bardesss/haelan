@@ -53,9 +53,6 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
         {status.running
           ? `Running. ${finished} of ${status.backfill.length} data types have reached their horizon.`
           : `Idle. ${finished} of ${status.backfill.length} data types have reached their horizon.`}
-        {' '}Heart rate walks a shorter horizon than everything else on purpose: it is roughly
-        95 percent of all rows, and a day of it is three orders of magnitude denser than a day
-        of weight.
       </p>
 
       <ul className="setup-progress">
