@@ -10,6 +10,7 @@ import { registerSetupGate } from './routes/setupGate.ts'
 import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
+import { registerSync } from './routes/sync.ts'
 import { SyncRunner } from './sync/runner.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
@@ -89,6 +90,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerAuth(app)
   registerSetup(app)
   registerOauth(app)
+  registerSync(app)
   registerSetupGate(app)
 
   return app

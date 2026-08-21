@@ -2,12 +2,17 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AccountStore, SCOPES, SettingsStore, body, openHaelan, seedPerson } from '@haelan/core'
+import type { RateLimiter } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
 
 export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled'
 
-export interface WithServerOptions { google?: GoogleMode }
+export interface WithServerOptions {
+  google?: GoogleMode
+  /** Replaces the pass through limiter, so a test can park a run mid flight and release it. */
+  limiter?: RateLimiter
+}
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
 
@@ -76,7 +81,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // A pass through, because these tests drive hundreds of stubbed windows and the real
     // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
     // tests; making every server test wait on it would only make them slow.
-    limiter: { take: async () => {} },
+    limiter: options.limiter ?? { take: async () => {} },
     // Two windows per type, not fourteen. Enough to prove the walk moved and stayed ordered,
     // and it keeps a run to tens of archived payloads rather than hundreds.
     backfillBatchDays: 2,
