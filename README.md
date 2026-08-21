@@ -85,7 +85,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M1a** Store and credentials | Three-tier SQLite schema, migrations, instance key, encrypted credentials, compressed raw archive | Done, [#12](https://github.com/bardesss/haelan/pull/12) |
 | **M1b** API client and mapping | v4 client, the data type catalogue, payload parsers, sample and session mappers | Done, [#14](https://github.com/bardesss/haelan/pull/14) |
 | **M1c** Sync engine | Day aligned windows, per person jobs, sync state, token bucket, transactional writes | Done, [#19](https://github.com/bardesss/haelan/pull/19) |
-| **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | In review |
+| **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | In review, [#21](https://github.com/bardesss/haelan/pull/21) |
 | **M2** Derivation and query layer | Rollups, sleep and recovery derivation, nap detection, baselines, merge policy, rebuild, demo mode | Not started |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
