@@ -41,7 +41,7 @@ async function listeningServer(options: { webRoot?: string } = {}): Promise<{
     backfillBatchDays: 2,
     ...(options.webRoot === undefined ? {} : { webRoot: options.webRoot }),
   })
-  teardown.push(() => app.close())
+  teardown.push(async () => { await app.haelan.runner.settle(); await app.close() })
   await app.listen({ port: 0, host: '127.0.0.1' })
   const base = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`
   return { app, base, instance, google }
@@ -98,8 +98,9 @@ describe('empty volume to syncing instance', () => {
       .prepare('select refresh_token_encrypted from credentials').get() as { refresh_token_encrypted: string }
     expect(stored.refresh_token_encrypted).not.toContain('stub-refresh-token')
 
-    // 6. Backfill, driven synchronously so the assertion is about data rather than timing.
-    await app.haelan.runner.trigger('setup')
+    // 6. Backfill. The callback starts it, which is what makes the screen it redirects to
+    // truthful, so this waits for that run rather than starting one of its own.
+    await app.haelan.runner.settle()
     const samples = instance.db.$client.prepare('select count(*) as n from samples').get() as { n: number }
     expect(samples.n).toBeGreaterThan(0)
 
