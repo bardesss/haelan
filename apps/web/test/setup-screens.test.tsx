@@ -173,6 +173,30 @@ describe('the wizard screens', () => {
     expect(html).toContain('730 days back')
   })
 
+  it('shows a horizon change that failed, rather than leaving the click looking like nothing happened', () => {
+    // A rejected putBackfillHorizon has nowhere else to go: BackfillStep is presentational, so
+    // the message has to reach the screen through this prop or it never reaches the screen at all.
+    const html = renderToStaticMarkup(
+      <BackfillStep
+        status={HORIZON_STATUS} nowMs={1_770_000_000_000} onHorizonChange={() => {}}
+        failure="days must be one of 365, 730, 1825"
+      />,
+    )
+    expect(html).toContain('days must be one of 365, 730, 1825')
+    expect(html).toContain('role="alert"')
+  })
+
+  it('does not render "Infinity days" if the backfill list is ever empty', () => {
+    // Unreachable through the real setup flow today (a session implies a person, which implies
+    // at least one row), but Math.min() of an empty list is Infinity, and a future reordering
+    // should not be able to put that literal word on screen.
+    const html = renderToStaticMarkup(<BackfillStep status={{
+      running: false, reason: null, startedAtMs: null, lastFinishedAtMs: null,
+      userHorizonDays: 730, backfill: [],
+    }} nowMs={1_770_000_000_000} onHorizonChange={() => {}} />)
+    expect(html).not.toContain('Infinity')
+  })
+
   it('tells the owner the instance URL is not a LAN IP before they try one', () => {
     const html = renderToStaticMarkup(<InstanceUrlStep onDone={() => {}} />)
     expect(html).toMatch(/IP address/i)

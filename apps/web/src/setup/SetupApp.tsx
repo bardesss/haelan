@@ -42,6 +42,7 @@ export function SetupApp() {
   const [scopes, setScopes] = useState<string[]>([])
   const [callbackError, setCallbackError] = useState<SetupError | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
+  const [horizonFailure, setHorizonFailure] = useState<string | null>(null)
 
   // The server owns which step is due, so the browser asks rather than remembers. A reload
   // mid wizard, or a callback that landed on the wrong path, both resolve here.
@@ -105,8 +106,18 @@ export function SetupApp() {
                 ? <BackfillStep
                     status={status}
                     nowMs={Date.now()}
+                    failure={horizonFailure}
                     onHorizonChange={(days) => {
-                      void putBackfillHorizon(days).then(() => getSyncStatus().then(setStatus))
+                      // Mirrors AccountStep/InstanceUrlStep's clear-then-catch shape: BackfillStep
+                      // is presentational, so the failure lives here and is handed down to render,
+                      // rather than silently leaving an unhandled rejection and a clicked button
+                      // that appears to do nothing.
+                      setHorizonFailure(null)
+                      putBackfillHorizon(days)
+                        .then(() => getSyncStatus().then(setStatus))
+                        .catch((cause: unknown) => {
+                          setHorizonFailure(cause instanceof Error ? cause.message : 'that did not work')
+                        })
                     }}
                   />
                 : <p className="empty">Loading progress</p>)
