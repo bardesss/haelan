@@ -1,4 +1,7 @@
-﻿import { DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync } from '@haelan/core'
+﻿import {
+  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync,
+  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
+} from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
 
@@ -31,6 +34,7 @@ export interface RunnerStatus {
   reason: RunReason | null
   startedAtMs: number | null
   lastFinishedAtMs: number | null
+  userHorizonDays: number
   backfill: BackfillSummary[]
 }
 
@@ -66,7 +70,14 @@ export class SyncRunner {
     return () => { this.listeners.delete(listener) }
   }
 
+  // The operator's choice, not the type's: it lives on the settings row because it is a single
+  // number chosen once for the account, and horizonDaysFor turns it into a per-type ceiling.
+  #userHorizonDays(): number {
+    return this.#context.stores.settings.get()?.backfillHorizonDays ?? DEFAULT_USER_HORIZON_DAYS
+  }
+
   status(): RunnerStatus {
+    const userHorizonDays = this.#userHorizonDays()
     const backfill: BackfillSummary[] = []
     for (const person of this.#context.stores.people.list()) {
       for (const type of DATA_TYPES) {
@@ -76,7 +87,7 @@ export class SyncRunner {
           dataType: type.id,
           complete: state?.backfillCompleteAtMs != null,
           cursorMs: state?.backfillCursorMs ?? null,
-          horizonDays: type.backfillHorizonDays,
+          horizonDays: horizonDaysFor(type, userHorizonDays),
         })
       }
     }
@@ -85,6 +96,7 @@ export class SyncRunner {
       reason: this.reason,
       startedAtMs: this.startedAtMs,
       lastFinishedAtMs: this.lastFinishedAtMs,
+      userHorizonDays,
       backfill,
     }
   }
@@ -180,6 +192,11 @@ export class SyncRunner {
     // takes an hour must not delay it.
     await runSync({ personIds, trailingDays: TRAILING_DAYS, deps })
 
+    // Resolved once per run rather than per type: it is one operator setting, and reading it
+    // fresh for every (person, type) pair would let a mid-run settings change produce a run
+    // that walked different types to different depths for no reason a user could explain.
+    const userHorizonDays = this.#userHorizonDays()
+
     for (const personId of personIds) {
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
@@ -188,6 +205,7 @@ export class SyncRunner {
         try {
           await runBackfill({
             personId, timezone: person.timezone, dataType, nowMs: this.#context.now(),
+            horizonDays: horizonDaysFor(dataType, userHorizonDays),
             ...(this.#context.backfillBatchDays === undefined
               ? {}
               : { batchDays: this.#context.backfillBatchDays }),

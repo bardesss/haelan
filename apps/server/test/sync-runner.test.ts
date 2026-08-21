@@ -62,10 +62,22 @@ describe('the sync runner', () => {
     const summary = harness.app.haelan.runner.status().backfill
     expect(summary.length).toBeGreaterThan(0)
     const heartRate = summary.find((s) => s.dataType === 'heart-rate')
-    expect(heartRate?.horizonDays).toBe(60)
+    expect(heartRate?.horizonDays).toBe(90)
     // The walk actually moved: a cursor still null after a run would mean the backfill was
     // scheduled and never took a step.
     expect(heartRate?.cursorMs).not.toBeNull()
+  })
+
+  it('reports the resolved horizon per type and the operator choice behind it', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
+    await harness.app.haelan.runner.trigger('manual')
+    const status = harness.app.haelan.runner.status()
+    expect(status.userHorizonDays).toBe(1825)
+    // Intraday stays capped however deep the operator asked to go; daily follows them.
+    expect(status.backfill.find((s) => s.dataType === 'heart-rate')?.horizonDays).toBe(90)
+    expect(status.backfill.find((s) => s.dataType === 'weight')?.horizonDays).toBe(1825)
   })
 
   it('takes the mutex synchronously, so a second caller cannot slip in before the first awaits', async () => {
