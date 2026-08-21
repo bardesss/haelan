@@ -1,10 +1,13 @@
 import Fastify from 'fastify'
+import cookie from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
 import {
-  AccountStore, CredentialStore, RawArchive, SessionStore, SettingsStore, SourceRegistry, SyncStateStore,
+  AccountStore, CredentialStore, PeopleStore, RawArchive, SessionStore, SettingsStore, SourceRegistry,
+  SyncStateStore,
 } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import { registerSetupGate } from './routes/setupGate.ts'
+import { registerAuth } from './routes/auth.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
 export interface EndpointOverrides {
@@ -24,6 +27,7 @@ export interface ServerDeps {
 
 export interface Stores {
   accounts: AccountStore
+  people: PeopleStore
   sessions: SessionStore
   settings: SettingsStore
   credentials: CredentialStore
@@ -42,6 +46,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false })
   const stores: Stores = {
     accounts: new AccountStore(deps.instance.db),
+    people: new PeopleStore(deps.instance.db),
     sessions: new SessionStore(deps.instance.db),
     settings: new SettingsStore(deps.instance.db),
     credentials: deps.instance.credentials,
@@ -51,7 +56,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   }
   app.decorate('haelan', { ...deps, stores })
 
+  // Not awaited: Fastify queues plugin registration and resolves it during ready(), which the
+  // harness awaits and listen() reaches. Awaiting here would make buildServer async for no gain.
+  void app.register(cookie)
+
   app.get('/api/health', async () => ({ ok: true }))
+  registerAuth(app)
   registerSetupGate(app)
 
   return app

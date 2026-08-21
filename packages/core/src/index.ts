@@ -36,6 +36,8 @@ export type { JobDeps, JobInput, JobResult, RateLimiter } from './sync/runJob.ts
 export { runSync } from './sync/runSync.ts'
 export type { SyncInput, SyncReport } from './sync/runSync.ts'
 export type { DbOrTx } from './db/open.ts'
+export { PeopleStore } from './store/people.ts'
+export type { PersonRow } from './store/people.ts'
 export { AccountStore } from './store/accounts.ts'
 export type { AccountRow, CreateAccountInput, LoginInput, LoginResult } from './store/accounts.ts'
 export { SessionStore, SESSION_TTL_MS } from './store/sessions.ts'
