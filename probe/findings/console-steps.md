@@ -1,19 +1,36 @@
-# Console steps, recorded <date>
+# Console steps, recorded 2026-08-21
 
 Source material for the M1 setup wizard. Google exposes no API for creating an OAuth client,
 so every self-hoster repeats these clicks. The only lever available is making them unambiguous,
 which means recording the friction while it is fresh rather than from memory.
 
-| # | Page | Action | Value | Friction |
-|---|---|---|---|---|
-| 1 | | | | |
+**Walked on 2026-08-21**, from an empty data directory against a real Google project and a real
+account, in a browser. The console side produced no friction worth a table: the redirect URIs the
+wizard offered were accepted verbatim with no editing, publishing reached In production with a
+branding warning and nothing else, and **no billing account was demanded at any point** — which
+closes the question M0 left open at `scopes.md`. The numbered copy in
+`apps/web/src/setup/GoogleStep.tsx` needed no correction against what the console actually showed.
 
-**Still empty, and M1d did not fill it.** The wizard's numbered console copy in
-`apps/web/src/setup/GoogleStep.tsx` is derived from Google's documentation, not from a recorded
-run, and documentation is not the console. Filling this in needs somebody to walk the real thing
-in a browser against a real project, which no test can stand in for.
+The friction was all on haelan's side, and the walk is the only reason it was found. Three
+defects, none of which any test was positioned to catch, fixed in
+[#25](https://github.com/bardesss/haelan/pull/25):
 
-To do it, from an empty data directory:
+- The Google step said to declare all six scopes and never said which six, leaving the reader in
+  the console with no way forward from the page they were following.
+- Consent completed, the callback redirected, and nothing synced: `runner.start` only set an
+  interval, and `setInterval` waits a whole interval before its first tick, so the screen saying
+  haelan was walking backwards through the history would have said nothing had started for an hour.
+- The backfill screen rendered white, because a rebuilt bundle kept being served against routes
+  enumerated at registration, and the not-found handler answered the resulting asset requests with
+  `index.html` and a 200.
+
+A fourth, milder one: the documented acceptance command is
+`HAELAN_DATA_DIR=./.local-data pnpm start`, and running plain `pnpm start` resolves the default
+`/data` to `C:\data` on Windows — real health data at a drive root, outside the repository. The
+absolute path printed at boot ([#24](https://github.com/bardesss/haelan/pull/24)) is what caught
+it, working exactly as intended.
+
+To repeat this run, from an empty data directory:
 
 ```
 rm -rf ./.local-data
@@ -25,23 +42,45 @@ Run it from the repository root. The server prints the data directory it resolve
 line is worth reading before starting: an acceptance run that quietly reopened a database from
 an earlier attempt is not an empty volume, and would prove nothing.
 
-Then walk the wizard end to end, filling one row above per console page as you go, and correct
-`GoogleStep.tsx` wherever the recorded reality differs from what the copy claims.
+Then walk the wizard end to end, recording any console page that fought back, and correct
+`GoogleStep.tsx` wherever the reality differs from what the copy claims. On the 2026-08-21 run
+none did, which is why there is no table here: an empty table of friction reads as unrecorded,
+where a sentence saying there was none reads as a result.
 
-### Acceptance, unverified
+### Acceptance, verified 2026-08-21
 
-Nothing below has been confirmed against the real console. These are the questions the run has
-to answer, recorded as questions so that a later reader cannot mistake them for results.
+Each line records what was observed, not what was expected. Two carry the caveat that the first
+attempt failed and the box is checked against the re-walk after [#25](https://github.com/bardesss/haelan/pull/25);
+saying so is the point of keeping this file.
 
-- [ ] An empty data directory put the wizard on screen with no configuration.
-- [ ] The redirect URIs the wizard offered were accepted by the console verbatim, with no editing.
-- [ ] Publishing status reached In production, and the warning shown was about branding only.
-- [ ] Consent completed and the callback landed on the backfill screen.
-- [ ] The profile probe passed. If it did not, the message named the actual cause.
-- [ ] Backfill started, progress was visible, and it survived a container restart mid run.
-- [ ] `sqlite3 .local-data/haelan.sqlite "select count(*) from samples"` returned a real count.
-- [ ] Nothing in the logs contained the client secret or a refresh token.
-- [ ] The billing question M0 left open, answered: was a billing account demanded at any point?
+- [x] An empty data directory put the wizard on screen with no configuration.
+- [x] The redirect URIs the wizard offered were accepted by the console verbatim, with no editing.
+- [x] Publishing status reached In production, and the warning shown was about branding only.
+- [x] Consent completed and the callback landed on the backfill screen. *First attempt: the screen
+      rendered white. Checked against the re-walk after the static-asset fix.*
+- [x] The profile probe passed. The callback probes access before storing anything, so a stored
+      refresh token is itself the evidence.
+- [x] Backfill started, progress was visible, and it survived a restart mid run. *First attempt:
+      nothing started, because the first sync was never triggered on consent. After the fix, the
+      instance was stopped mid backfill, its data directory moved, and restarted: the walk resumed
+      from its stored cursors rather than from today, 76,969 → 114,027 → 160,263 samples across
+      the restarts.*
+- [x] `select count(*) from samples` returned a real count: **160,263**, plus 46 sessions and 725
+      archived payloads, from a real account.
+- [x] Nothing in the logs contained the client secret or a refresh token. Thirty-two captured
+      server output files searched for the literal secret and for refresh token shapes.
+- [x] The billing question M0 left open, answered: **no billing account was demanded at any
+      point.** `scopes.md` is corrected to match.
+
+Re-syncing is idempotent, measured on the same instance rather than inferred: the trailing week is
+re-fetched every run, and 29 window and type pairs have been fetched more than once — 725 archived
+payloads carry only 586 distinct body hashes, so 139 were bytes the instance already held. Against
+that, zero duplicate sample natural keys and zero duplicate session keys.
+
+**What this run did not establish** was how far back the API actually serves intraday data. That
+was measured separately the same day and is recorded in `retention.md`: at least 209 days, at
+undegraded resolution, which is the whole span this account has existed. The 90-day intraday cap
+therefore forgoes 119 days of minute-level history the API is willing to serve today.
 
 `.local-data/` is gitignored. It holds a real refresh token and real health data, and neither
 belongs in this repository.

@@ -85,14 +85,19 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M1a** Store and credentials | Three-tier SQLite schema, migrations, instance key, encrypted credentials, compressed raw archive | Done, [#12](https://github.com/bardesss/haelan/pull/12) |
 | **M1b** API client and mapping | v4 client, the data type catalogue, payload parsers, sample and session mappers | Done, [#14](https://github.com/bardesss/haelan/pull/14) |
 | **M1c** Sync engine | Day aligned windows, per person jobs, sync state, token bucket, transactional writes | Done, [#19](https://github.com/bardesss/haelan/pull/19) |
-| **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | In review, [#21](https://github.com/bardesss/haelan/pull/21) |
+| **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | Done, [#21](https://github.com/bardesss/haelan/pull/21) |
 | **M2** Derivation and query layer | Rollups, sleep and recovery derivation, nap detection, baselines, merge policy, rebuild, demo mode | Not started |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish | Not started |
 
 M1a through M1d are a decomposition of the spec's single M1, not phases the spec names: store,
-client, sync and wizard each produce working, testable software on their own. D1 and M0 through
+client, sync and wizard each produce working, testable software on their own. **M1 itself is
+done**: the design calls it done when a real account's history is on disk, re-syncing is
+idempotent, and the whole route from empty database to syncing data ran through the browser. That
+run happened on 2026-08-21 and is recorded, including what it broke, in
+`probe/findings/console-steps.md`. Two things that run did not settle are listed there rather than
+here, because an unanswered question belongs next to its evidence. D1 and M0 through
 M5 are the only phases the design defines. M1 comes before the dashboard deliberately: intraday samples have a shelf
 life, since the API only retains them for a recent window, so every week without ingestion is a
 week of minute-level history permanently unavailable at that resolution. Charts can be improved
@@ -102,6 +107,13 @@ retroactively; resolution cannot be recovered.
 afterwards. Everything else leaves it alone: a dependency bump or a documentation fix has no row
 to touch. A roadmap that is only accurate on the day it was written is worse than none, because it
 still looks authoritative.
+
+That rule had one gap, which this line closes: a milestone's own pull request records the status
+it has **on the day it is opened**, and "in review" stops being true the moment it merges. Nothing
+was then allowed to correct it, since the next milestone's pull request has no business touching
+another row. **A pull request may correct a status this table gets wrong**, and only that. M1d
+carried "In review" for a day after [#21](https://github.com/bardesss/haelan/pull/21) merged
+because of it.
 
 ## Layout
 
