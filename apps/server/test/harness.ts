@@ -82,9 +82,11 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
     // tests; making every server test wait on it would only make them slow.
     limiter: options.limiter ?? { take: async () => {} },
-    // Two windows per type, not fourteen. Enough to prove the walk moved and stayed ordered,
-    // and it keeps a run to tens of archived payloads rather than hundreds.
-    backfillBatchDays: 2,
+    // One window per type, not fourteen. Enough to prove the walk moved and recorded a cursor,
+    // which is all any server test asserts; the ordering of a longer walk is run-backfill's
+    // own test. A real batch is eighteen types of gzip per trigger and turns this suite into
+    // minutes when it runs alongside the others.
+    backfillBatchDays: 1,
   })
   await app.ready()
 

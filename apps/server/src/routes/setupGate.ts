@@ -12,6 +12,11 @@ export function registerSetupGate(app: FastifyInstance): void {
   app.addHook('preHandler', async (request, reply) => {
     const path = request.url.split('?')[0] ?? ''
     if (ALWAYS_OPEN.has(path)) return
+    // The gate governs the API, not the browser. A document request for /setup/google is how
+    // the wizard is reached in the first place, and answering it with a 409 JSON body makes
+    // an unconfigured instance impossible to configure.
+    if (!path.startsWith('/api/') && !path.startsWith('/oauth/')) return
+
     const step = currentStep(app)
     const isSetupRoute = path.startsWith('/api/setup/') || path.startsWith('/oauth/')
 

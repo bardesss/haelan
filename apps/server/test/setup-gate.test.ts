@@ -25,6 +25,15 @@ describe('the setup gate', () => {
     expect((await harness.app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200)
   })
 
+  it('leaves a browser navigation alone, because that is how the wizard is reached at all', async () => {
+    harness = await withServer()
+    // No webRoot in the harness, so this falls through to Fastify's own 404. What matters is
+    // that it is not a 409: the gate answering a document request would make an unconfigured
+    // instance impossible to configure, since /setup/account is where the browser must land.
+    const response = await harness.app.inject({ method: 'GET', url: '/setup/account' })
+    expect(response.statusCode).not.toBe(409)
+  })
+
   it('still reports the step after setup is finished, because the SPA asks on every load', async () => {
     harness = await withServer()
     await harness.completeSetup()
