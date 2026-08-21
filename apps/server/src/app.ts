@@ -9,6 +9,7 @@ import type { Instance } from '@haelan/core'
 import { registerSetupGate } from './routes/setupGate.ts'
 import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
+import { registerOauth } from './routes/oauth.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
 export interface EndpointOverrides {
@@ -64,6 +65,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   app.get('/api/health', async () => ({ ok: true }))
   registerAuth(app)
   registerSetup(app)
+  registerOauth(app)
   registerSetupGate(app)
 
   return app
