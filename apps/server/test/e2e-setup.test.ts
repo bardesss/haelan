@@ -136,6 +136,25 @@ describe('empty volume to syncing instance', () => {
     const index = await fetch(`${base}/index.html`)
     expect(index.status).toBe(200)
 
+    // A file written after the server booted is served. @fastify/static's wildcard:false
+    // enumerates the directory once at registration, so a bundle rebuilt underneath a running
+    // instance would serve routes for filenames that no longer exist while the new hashed ones
+    // fell through to the shell.
+    writeFileSync(join(webRoot, 'late.js'), 'export const late = 1')
+    const late = await fetch(`${base}/late.js`)
+    expect(late.status).toBe(200)
+    expect(await late.text()).toContain('export const late')
+
+    // A missing asset is a 404, not the shell. Answering a module script with index.html gives
+    // the browser a MIME type error that names neither the file nor the cause, which is what
+    // sent a real setup run looking in the wrong place entirely.
+    const missingAsset = await fetch(`${base}/assets/index-DoesNotExist.js`)
+    expect(missingAsset.status).toBe(404)
+    expect(missingAsset.headers.get('content-type')).toContain('application/json')
+
+    const missingFile = await fetch(`${base}/favicon.ico`)
+    expect(missingFile.status).toBe(404)
+
     // With setup finished the gate steps aside, so this reaches the not found handler itself.
     seedPerson(instance.db, 'p1', { displayName: 'Bartus', timezone: 'Europe/Amsterdam' })
     const settings = new SettingsStore(instance.db)
