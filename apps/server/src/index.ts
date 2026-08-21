@@ -24,9 +24,10 @@ const app = buildServer({
 })
 
 const shutdown = async () => {
-  // Before close, so a scheduled tick cannot start a run against a database that is about to
-  // be closed underneath it.
+  // Stop scheduling first so nothing new begins, then wait for whatever is already running.
+  // Closing SQLite under a backfill mid-window is how a shutdown turns into a stack trace.
   app.haelan.runner.stop()
+  await app.haelan.runner.settle()
   await app.close()
   instance.close()
   process.exit(0)

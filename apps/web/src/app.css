@@ -119,6 +119,8 @@ body {
 .setup-instructions li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
 .setup-uris { margin-bottom: var(--space-4); }
+.setup-scopes { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.setup-scopes .copy-value { display: block; }
 
 /* The signature of this whole surface. Every value here is complete and concrete: the rule the
    wizard exists to keep is that nothing copyable ever contains a placeholder, so a value that

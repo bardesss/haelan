@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
-import { setupStep, CONSENT_PATHS } from '@haelan/core'
+import { setupStep, CONSENT_PATHS, SCOPES } from '@haelan/core'
 import type { ConsentPath } from '@haelan/core'
 import { setSessionCookie } from '../auth/cookie.ts'
 import { candidateFor, loopbackCandidates, redirectUriFor } from '../oauth/redirectUri.ts'
@@ -64,6 +64,11 @@ export function registerSetup(app: FastifyInstance): void {
     if (typeof host === 'string' && host.trim() !== '') candidates.push(candidateFor(host))
     return reply.send({ candidates })
   })
+
+  // Served rather than restated in the browser bundle, so the list the wizard shows and the
+  // list buildConsentUrl requests are the same array. A wizard that told somebody to declare
+  // five scopes and then asked for six would fail at consent, having been the reason.
+  app.get('/api/setup/scopes', async (_request, reply) => reply.send({ scopes: [...SCOPES] }))
 }
 
 function portOf(hostHeader: string | undefined): number {

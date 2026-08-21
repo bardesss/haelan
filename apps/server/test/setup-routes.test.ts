@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
+import { SCOPES } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -91,6 +92,31 @@ describe('setup routes', () => {
     const body = response.json() as { candidates: Array<{ uri: string }> }
     expect(body.candidates.map((c) => c.uri)).toContain('https://box.tail1234.ts.net/oauth/callback')
     for (const candidate of body.candidates) expect(candidate.uri).not.toMatch(/[<>]/)
+  })
+
+  it('serves the scopes the consent screen has to declare, complete and copyable', async () => {
+    harness = await withServer()
+    await createAccount(harness)
+    const response = await harness.app.inject({ method: 'GET', url: '/api/setup/scopes', headers })
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as { scopes: string[] }
+    // Six, because the wizard's copy says six. A list that disagreed with the number in the
+    // instructions would send somebody to the console to declare the wrong set.
+    expect(body.scopes).toHaveLength(6)
+    for (const scope of body.scopes) {
+      expect(scope.startsWith('https://www.googleapis.com/auth/googlehealth.')).toBe(true)
+    }
+  })
+
+  it('asks Google for exactly the scopes it told the owner to declare', async () => {
+    harness = await withServer()
+    await createAccount(harness)
+    const listed = (await harness.app.inject({
+      method: 'GET', url: '/api/setup/scopes', headers,
+    })).json() as { scopes: string[] }
+    // The failure this prevents: declaring five in the console because the wizard listed five,
+    // then failing at consent because the request asked for six. One array, two readers.
+    expect([...SCOPES].sort()).toEqual([...listed.scopes].sort())
   })
 
   it('refuses the setup routes once setup is finished', async () => {

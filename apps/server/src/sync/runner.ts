@@ -43,8 +43,23 @@ export class SyncRunner {
   private readonly listeners = new Set<(event: SyncProgress) => void>()
 
   readonly #context: ServerContext
+  /** The run tryStart left going, so a shutdown can wait for it rather than close under it. */
+  #inFlight: Promise<unknown> | null = null
 
   constructor(context: ServerContext) { this.#context = context }
+
+  /**
+   * Resolves once no run started by tryStart is still going. A run outliving the process that
+   * started it means SQLite closing mid-write, which surfaces as "the database connection is
+   * not open" from somewhere unrelated to whatever actually went wrong.
+   */
+  async settle(): Promise<void> {
+    while (this.#inFlight) {
+      const pending = this.#inFlight
+      await pending
+      if (this.#inFlight === pending) this.#inFlight = null
+    }
+  }
 
   subscribe(listener: (event: SyncProgress) => void): () => void {
     this.listeners.add(listener)
@@ -81,7 +96,7 @@ export class SyncRunner {
    */
   tryStart(reason: RunReason): RunOutcome {
     if (this.running) return { started: false, reason: 'already_running' }
-    void this.trigger(reason)
+    this.#inFlight = this.trigger(reason).catch(() => undefined)
     return { started: true }
   }
 
@@ -106,6 +121,10 @@ export class SyncRunner {
   start(): void {
     if (this.timer) return
     const minutes = this.#context.stores.settings.get()?.syncIntervalMinutes ?? 60
+    // setInterval waits a whole interval before its first tick, so an instance restarted more
+    // often than its interval would never sync at all. A boot catches up first, then settles
+    // into the schedule. tryStart, so a boot during a run is a no-op rather than a queue.
+    this.tryStart('scheduled')
     this.timer = setInterval(() => { void this.trigger('scheduled') }, minutes * 60_000)
     // Without unref, an idle timer keeps the process alive through a shutdown that has already
     // closed the server.

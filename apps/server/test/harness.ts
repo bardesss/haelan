@@ -124,6 +124,9 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     completeSetup,
     connectPerson,
     cleanup: async () => {
+      // A route or a callback may have left a run going. Closing the database under it turns
+      // teardown into an unhandled error attributed to whichever test happened to be next.
+      await app.haelan.runner.settle()
       await app.close()
       instance.close()
       rmSync(dir, { recursive: true, force: true })

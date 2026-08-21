@@ -60,6 +60,38 @@ describe('the wizard screens', () => {
     expect(html).not.toContain(`data-copy-for="${rejected.uri}"`)
   })
 
+  it('lists every scope it tells the owner to declare', () => {
+    // Found by walking the real console: the copy said "declare all six scopes" and then never
+    // said which six, which stops somebody mid setup with no way forward from the screen.
+    const scopes = [
+      'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
+      'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
+    ]
+    const html = renderToStaticMarkup(
+      <GoogleStep candidates={CANDIDATES} scopes={scopes} error={null} onDone={() => {}} />,
+    )
+    for (const scope of scopes) expect(html).toContain(scope)
+  })
+
+  it('counts the scopes it was given rather than claiming a number', () => {
+    const html = renderToStaticMarkup(
+      <GoogleStep candidates={CANDIDATES} scopes={['a', 'b', 'c']} error={null} onDone={() => {}} />,
+    )
+    // The instruction has to agree with the list under it. A hard coded "six" beside a list of
+    // three is how somebody declares the wrong set and finds out at consent.
+    expect(html).toContain('declare the 3 scopes')
+    expect(html).not.toMatch(/all six scopes/i)
+  })
+
+  it('offers the whole scope list as one copyable value', () => {
+    const scopes = ['https://example.invalid/a', 'https://example.invalid/b']
+    const html = renderToStaticMarkup(
+      <GoogleStep candidates={CANDIDATES} scopes={scopes} error={null} onDone={() => {}} />,
+    )
+    // Pasting them one at a time into the console is six round trips through this page.
+    expect(html).toContain(`data-copy-for="${scopes.join('\n')}"`)
+  })
+
   it('says the unverified app warning is expected, because that is where installs are abandoned', () => {
     const html = renderToStaticMarkup(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
     expect(html).toMatch(/unverified/i)
