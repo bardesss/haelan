@@ -1,4 +1,4 @@
-import type { RawArchive } from '../store/rawArchive.ts'
+﻿import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
 import { ConfigError, HaelanError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
@@ -76,16 +76,24 @@ function buildFilter(t: DataType, startMs: number, endMs: number, timezone: stri
 }
 
 export class HealthClient {
+  readonly #tokens: Tokens
+  readonly #archive: RawArchive
+  readonly #deps: ClientDeps
+
   constructor(
-    private readonly tokens: Tokens,
-    private readonly archive: RawArchive,
-    private readonly deps: ClientDeps = {
+    tokens: Tokens,
+    archive: RawArchive,
+    deps: ClientDeps = {
       fetch: globalThis.fetch,
       now: Date.now,
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
       random: Math.random,
     },
-  ) {}
+  ) {
+    this.#tokens = tokens
+    this.#archive = archive
+    this.#deps = deps
+  }
 
   async listDataPoints(input: ListInput): Promise<ListResult> {
     const { dataType: t } = input
@@ -114,7 +122,7 @@ export class HealthClient {
         throw new TransientError(`${t.id} exceeded ${MAX_PAGES} pages without exhausting pagination`)
       }
 
-      const url = new URL(`${this.deps.apiRoot ?? API_ROOT}/users/me/dataTypes/${t.id}/dataPoints`)
+      const url = new URL(`${this.#deps.apiRoot ?? API_ROOT}/users/me/dataTypes/${t.id}/dataPoints`)
       url.searchParams.set('filter', filter)
       url.searchParams.set('pageSize', String(PAGE_SIZE))
       if (pageToken) url.searchParams.set('pageToken', pageToken)
@@ -128,13 +136,13 @@ export class HealthClient {
 
       // Archived before parsing, so a payload Google changed the shape of is kept as evidence
       // rather than lost with the exception. Spec section 13, schema drift.
-      const { id } = this.archive.put({
+      const { id } = this.#archive.put({
         personId: input.personId,
         dataType: t.id,
         requestParams: { filter, pageSize: PAGE_SIZE, pageToken: pageToken ?? null },
         windowStartMs: input.windowStartMs,
         windowEndMs: input.windowEndMs,
-        fetchedAtMs: this.deps.now(),
+        fetchedAtMs: this.#deps.now(),
         httpStatus: status,
         body,
       })
@@ -176,7 +184,7 @@ export class HealthClient {
       attempts++
       let token: string
       try {
-        token = await this.tokens.accessTokenFor(personId)
+        token = await this.#tokens.accessTokenFor(personId)
       } catch (err) {
         // Only a transient class is worth another attempt. Revocation, a person who is not
         // connected and a malformed token response are all settled answers, and retrying each
@@ -187,11 +195,11 @@ export class HealthClient {
         // An unclassified failure here is Google's token endpoint having a bad day, the same
         // shape the data endpoint below already gets five attempts for.
         if (attempt === MAX_ATTEMPTS - 1) throw err
-        await this.deps.sleep(this.backoffMs(attempt))
+        await this.#deps.sleep(this.backoffMs(attempt))
         continue
       }
 
-      const res = await this.deps.fetch(url.toString(), { headers: { authorization: `Bearer ${token}` } })
+      const res = await this.#deps.fetch(url.toString(), { headers: { authorization: `Bearer ${token}` } })
       lastStatus = res.status
       lastBody = await res.text()
 
@@ -206,7 +214,7 @@ export class HealthClient {
       // Jittered, because the household shares one project quota and a fleet of syncs
       // retrying in lockstep is how a transient 429 becomes a sustained one.
       if (attempt < MAX_ATTEMPTS - 1) {
-        await this.deps.sleep(this.backoffMs(attempt))
+        await this.#deps.sleep(this.backoffMs(attempt))
       }
     }
 
@@ -215,6 +223,6 @@ export class HealthClient {
 
   private backoffMs(attempt: number): number {
     const backoff = BASE_BACKOFF_MS * 2 ** attempt
-    return backoff + Math.floor(backoff * this.deps.random())
+    return backoff + Math.floor(backoff * this.#deps.random())
   }
 }

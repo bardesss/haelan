@@ -3,8 +3,14 @@
 export type ErrorKind = 'auth' | 'transient' | 'schema_drift' | 'data_quality' | 'config'
 
 export class HaelanError extends Error {
-  constructor(readonly kind: ErrorKind, message: string, options?: { cause?: unknown }) {
+  // Declared and assigned rather than written as a constructor parameter property. Node's
+  // type stripping is strip-only and rejects parameter properties outright, so the shorthand
+  // would compile here and fail to boot the server. See apps/server/test/boot.test.ts.
+  readonly kind: ErrorKind
+
+  constructor(kind: ErrorKind, message: string, options?: { cause?: unknown }) {
     super(`[${kind}] ${message}`, options)
+    this.kind = kind
     this.name = new.target.name
   }
 }
