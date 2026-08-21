@@ -85,7 +85,11 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
         <ul>
           {HORIZON_CHOICES.map((choice) => (
             <li key={choice.days} data-chosen={String(choice.days === status.userHorizonDays)}>
-              <button type="button" onClick={() => onHorizonChange(choice.days)}>
+              <button
+                type="button"
+                aria-pressed={choice.days === status.userHorizonDays}
+                onClick={() => onHorizonChange(choice.days)}
+              >
                 {choice.label}
               </button>
               <span className="field-hint">{choice.disk}</span>

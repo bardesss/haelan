@@ -26,6 +26,9 @@ describe('settings routes', () => {
       method: 'GET', url: '/api/settings/backfill-horizon', headers, cookies: { haelan_session: cookie },
     })
     expect(response.statusCode).toBe(200)
+    // The body shape is otherwise unasserted anywhere in this suite, and the wizard never calls
+    // this GET itself - only the PUT it drives - so nothing else here would catch it drifting.
+    expect(response.json()).toMatchObject({ days: 730, choices: [365, 730, 1825] })
   })
 
   it('accepts each offered horizon and rejects anything else', async () => {

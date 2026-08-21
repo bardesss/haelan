@@ -1,6 +1,6 @@
 ﻿import {
   DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync,
-  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
+  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, INTRADAY_HORIZON_DAYS,
 } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -23,7 +23,7 @@ const DAY_MS = 86_400_000
  * inside the sprint and never enter the trickle at all. This is the production value; tests
  * override it through ServerDeps.sprintDays (see run()) rather than shrinking this constant.
  */
-const SPRINT_DAYS = 90
+const SPRINT_DAYS = INTRADAY_HORIZON_DAYS
 /**
  * A pass that keeps fetching without moving a cursor is a type failing every window. Bounded so
  * that case ends the sprint rather than looping on it; 90 days at the smallest useful batch
@@ -162,6 +162,7 @@ export class SyncRunner {
   }
 
   start(): void {
+    if (this.#stopped) return
     if (this.timer) return
     const minutes = this.#context.stores.settings.get()?.syncIntervalMinutes ?? 60
     // setInterval waits a whole interval before its first tick, so an instance restarted more
@@ -234,7 +235,8 @@ export class SyncRunner {
     // userHorizonDays above, so #sprintPending and the pass loop below can't disagree on depth.
     const sprintDays = this.#context.sprintDays ?? SPRINT_DAYS
     if (this.#sprintPending(personIds, userHorizonDays, sprintDays)) {
-      for (let pass = 0; pass < MAX_SPRINT_PASSES; pass++) {
+      let pass = 0
+      for (; pass < MAX_SPRINT_PASSES; pass++) {
         if (this.#aborted) return
         // A pass that advances no cursor at all means whatever is left is either converged
         // (complete, or already past its own sprint floor) or a type failing every window -
@@ -243,6 +245,13 @@ export class SyncRunner {
         // never produced a zero and burned every remaining pass alone.
         const advanced = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays)
         if (!advanced) break
+      }
+      // Reaching MAX_SPRINT_PASSES without ever seeing a pass that failed to advance means every
+      // single pass still had real work in it - the sprint did not converge, it simply ran out of
+      // passes. That is the sprint's promise (fill sprintDays in one run) not holding, which is
+      // worth an operator seeing rather than discovering only as a slower-than-expected trickle.
+      if (pass === MAX_SPRINT_PASSES) {
+        console.log(`sync: sprint used all ${MAX_SPRINT_PASSES} passes without converging on the ${sprintDays} day floor`)
       }
     }
     // Falls through to the trickle regardless of how the sprint ended - converged, exhausted
@@ -259,6 +268,7 @@ export class SyncRunner {
   #sprintPending(personIds: string[], userHorizonDays: number, sprintDays: number): boolean {
     const floorMs = this.#context.now() - sprintDays * DAY_MS
     for (const personId of personIds) {
+      if (!this.#context.stores.people.get(personId)) continue
       for (const type of DATA_TYPES) {
         if (!type.listSupported) continue
         const state = this.#context.stores.syncState.get(personId, type.id)
@@ -315,10 +325,14 @@ export class SyncRunner {
               : { batchDays: this.#context.backfillBatchDays }),
             deps,
           })
-          // stoppedBecause 'error' or 'revoked' means runBackfill returned before ever calling
-          // setBackfillCursor, so windowsFetched having counted the attempt is not the same as
-          // the cursor having moved. That distinction is what stops a type failing every window
-          // from looking like progress to the sprint loop above.
+          // stoppedBecause 'error' or 'revoked' does not mean the cursor never moved - runBackfill
+          // writes the cursor after every window it completes and only reports the error from a
+          // later one, so a call that walked four windows before failing on the fifth already has
+          // real progress on disk. It is still counted as not-advanced here regardless, because
+          // this signal only decides whether the sprint loop above takes another pass: treating a
+          // failing type as progress would let it look converged when it is really stuck, while
+          // treating real progress as "no advance" only costs one extra pass over a type that was
+          // going to need one anyway. Conservative in the safe direction, and it stays that way.
           if (result.windowsFetched > 0
             && result.stoppedBecause !== 'error' && result.stoppedBecause !== 'revoked') {
             cursorAdvanced = true
