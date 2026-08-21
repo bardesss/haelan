@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useRoute, navigate } from '../router.js'
 import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
-import { getLastError, getRedirectUris, getSetupState, getSyncStatus } from './api.js'
+import { getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus } from './api.js'
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 
 const STEPS = [
@@ -37,6 +37,7 @@ export function SetupApp() {
   const route = useRoute()
   const [step, setStep] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<RedirectCandidate[]>([])
+  const [scopes, setScopes] = useState<string[]>([])
   const [callbackError, setCallbackError] = useState<SetupError | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
 
@@ -55,6 +56,7 @@ export function SetupApp() {
   useEffect(() => {
     if (!onGoogleRoute) return
     void getRedirectUris(window.location.hostname).then((r) => setCandidates(r.candidates))
+    void getScopes().then((r) => setScopes(r.scopes))
     // The callback redirects here with an error code in the query, and the message that goes
     // with it lives on the server. Fetching it is what puts the console fix on screen.
     if (route.includes('error=')) void getLastError().then(setCallbackError)
@@ -91,6 +93,7 @@ export function SetupApp() {
             ? (
               <GoogleStep
                 candidates={candidates}
+                scopes={scopes}
                 error={callbackError}
                 onDone={() => { window.location.assign('/oauth/start') }}
               />

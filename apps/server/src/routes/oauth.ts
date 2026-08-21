@@ -93,6 +93,10 @@ export function registerOauth(app: FastifyInstance): void {
       })
       stores().settings.markSetupComplete(app.haelan.now())
       lastError = null
+      // The wizard's next screen says haelan is walking backwards through the history, so
+      // something has to be. Without this the scheduler's first tick is a whole interval away
+      // and the backfill screen truthfully reports that nothing has started, for an hour.
+      app.haelan.runner.tryStart('setup')
       return reply.redirect('/setup/backfill', 302)
     } catch (error) {
       return fail('exchange_failed', error instanceof Error ? error.message : 'the exchange failed')

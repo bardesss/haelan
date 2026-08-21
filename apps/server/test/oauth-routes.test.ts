@@ -77,6 +77,23 @@ describe('the consent handoff', () => {
     expect(harness.app.haelan.stores.settings.get()?.setupCompletedAtMs).not.toBeNull()
   })
 
+  it('starts the first sync itself, rather than leaving the backfill screen empty for an hour', async () => {
+    harness = await withServer({ google: 'ok' })
+    const cookie = await readyForConsent(harness)
+    const start = await harness.app.inject({
+      method: 'GET', url: '/oauth/start', headers, cookies: { haelan_session: cookie },
+    })
+    const state = new URL(start.headers.location as string).searchParams.get('state')!
+    await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers,
+    })
+    // The scheduler's first tick is a whole interval away, so without a kick here the screen
+    // the callback redirects to would say nothing had started, and be right.
+    const runner = harness.app.haelan.runner
+    expect(runner.status().running || runner.status().lastFinishedAtMs !== null).toBe(true)
+    while (runner.status().running) await new Promise((resolve) => setImmediate(resolve))
+  })
+
   it('sends a rejected state back to the connect step rather than exchanging it', async () => {
     harness = await withServer({ google: 'ok' })
     await readyForConsent(harness)

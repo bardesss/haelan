@@ -47,6 +47,10 @@ export const getSyncStatus = () => send<SyncStatus>('GET', '/api/sync/status')
 export const getRedirectUris = (host: string) =>
   send<{ candidates: RedirectCandidate[] }>('GET', `/api/setup/redirect-uris?host=${encodeURIComponent(host)}`)
 
+// Fetched rather than hard coded in this bundle, so the list on screen is the list the server
+// will actually request at consent.
+export const getScopes = () => send<{ scopes: string[] }>('GET', '/api/setup/scopes')
+
 export const createAccount = (body: {
   username: string, password: string, displayName: string, timezone: string
 }) => send<{ personId: string, step: string }>('POST', '/api/setup/account', body)

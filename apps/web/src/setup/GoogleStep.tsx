@@ -3,8 +3,9 @@ import { CopyField } from './CopyField.js'
 import { putGoogleClient } from './api.js'
 import type { RedirectCandidate, SetupError } from './api.js'
 
-export function GoogleStep({ candidates, error, onDone }: {
+export function GoogleStep({ candidates, scopes = [], error, onDone }: {
   candidates: RedirectCandidate[]
+  scopes?: string[]
   error: SetupError | null
   onDone: () => void
 }) {
@@ -25,9 +26,16 @@ export function GoogleStep({ candidates, error, onDone }: {
         <li>Open console.cloud.google.com and create a project, or pick an existing one.</li>
         <li>Under APIs and services, enable the Google Health API.</li>
         <li>
-          Configure the OAuth consent screen. Declare all six scopes haelan requests, even the
-          data types you do not want today: declaring is once, granting is per person, and a
-          scope you skip now means a second visit later.
+          Configure the OAuth consent screen and declare the {scopes.length} scopes listed
+          below, even the data types you do not want today: declaring is once, granting is per
+          person, and a scope you skip now means a second visit later. The console sorts them
+          into sensitive and restricted groups by itself, which is expected.
+          <ul className="setup-scopes">
+            {scopes.map((scope) => (
+              <li key={scope}><code className="copy-value">{scope}</code></li>
+            ))}
+          </ul>
+          {scopes.length > 0 && <CopyField label="All of them" value={scopes.join('\n')} />}
         </li>
         <li>
           Set publishing status to <strong>In production</strong>. Leaving it in Testing gives
