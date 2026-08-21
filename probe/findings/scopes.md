@@ -38,7 +38,9 @@ attached. No security review was demanded and nothing blocked the switch.
 - [x] The only warning shown was about branding: "Your branding needs to be verified before it
       can be shown to users." That governs whether the app name and logo appear on the consent
       screen, not whether the app may run.
-- [ ] Billing account demanded at any point: pending
+- [x] Billing account demanded at any point: **no**, answered by the 2026-08-21 acceptance walk
+  in `console-steps.md`. A project with no billing account attached completed client creation,
+  publishing to In production, consent, and a full backfill.
 - [ ] Per request cost shown on any quota page: pending, see the documented limits below
 
 ## Verdict
