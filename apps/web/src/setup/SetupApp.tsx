@@ -4,7 +4,9 @@ import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
-import { getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus } from './api.js'
+import {
+  getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus, putBackfillHorizon,
+} from './api.js'
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 
 const STEPS = [
@@ -40,6 +42,7 @@ export function SetupApp() {
   const [scopes, setScopes] = useState<string[]>([])
   const [callbackError, setCallbackError] = useState<SetupError | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
+  const [horizonFailure, setHorizonFailure] = useState<string | null>(null)
 
   // The server owns which step is due, so the browser asks rather than remembers. A reload
   // mid wizard, or a callback that landed on the wrong path, both resolve here.
@@ -99,7 +102,25 @@ export function SetupApp() {
               />
             )
             : onBackfill
-              ? (status ? <BackfillStep status={status} nowMs={Date.now()} /> : <p className="empty">Loading progress</p>)
+              ? (status
+                ? <BackfillStep
+                    status={status}
+                    nowMs={Date.now()}
+                    failure={horizonFailure}
+                    onHorizonChange={(days) => {
+                      // Mirrors AccountStep/InstanceUrlStep's clear-then-catch shape: BackfillStep
+                      // is presentational, so the failure lives here and is handed down to render,
+                      // rather than silently leaving an unhandled rejection and a clicked button
+                      // that appears to do nothing.
+                      setHorizonFailure(null)
+                      putBackfillHorizon(days)
+                        .then(() => getSyncStatus().then(setStatus))
+                        .catch((cause: unknown) => {
+                          setHorizonFailure(cause instanceof Error ? cause.message : 'that did not work')
+                        })
+                    }}
+                  />
+                : <p className="empty">Loading progress</p>)
               : <AccountStep onDone={refresh} />}
       </div>
     </div>

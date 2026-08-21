@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `backfill_horizon_days` integer DEFAULT 730 NOT NULL;

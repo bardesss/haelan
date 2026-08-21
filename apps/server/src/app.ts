@@ -11,6 +11,7 @@ import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
+import { registerSettings } from './routes/settings.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
 
@@ -41,6 +42,13 @@ export interface ServerDeps {
    * a cursor moved at all.
    */
   backfillBatchDays?: number
+  /**
+   * How much history the first run sprints through before settling into the trickle. Unset in
+   * production, which takes the runner's own SPRINT_DAYS (90). Tests lower it so a run that
+   * merely completes consent — and so starts a sprint of its own — doesn't pay for a 90 day walk
+   * in its cleanup; the tests that are actually about sprint depth pass the real 90 explicitly.
+   */
+  sprintDays?: number
 }
 
 export interface Stores {
@@ -92,6 +100,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerSetup(app)
   registerOauth(app)
   registerSync(app)
+  registerSettings(app)
   registerSetupGate(app)
   if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
 

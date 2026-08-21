@@ -39,6 +39,12 @@ async function listeningServer(options: { webRoot?: string } = {}): Promise<{
     },
     limiter: { take: async () => {} },
     backfillBatchDays: 2,
+    // This suite builds the server directly rather than through harness.ts, so without this it
+    // runs at the production SPRINT_DAYS (90) against a batch of 2 - 45 passes needed against
+    // MAX_SPRINT_PASSES's 40, silently exercising the give-up path instead of the convergence
+    // this test means to prove. 4 converges in two passes (ceil(4 / 2) = 2) and says nothing
+    // about the production depth, which is asserted in sync-runner.test.ts instead.
+    sprintDays: 4,
     ...(options.webRoot === undefined ? {} : { webRoot: options.webRoot }),
   })
   teardown.push(async () => { await app.haelan.runner.settle(); await app.close() })

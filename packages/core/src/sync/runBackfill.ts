@@ -14,6 +14,8 @@ export interface BackfillInput {
   timezone: string
   dataType: DataType
   nowMs: number
+  /** Resolved by the caller through horizonDaysFor, because the operator's setting lives above core's sync layer. */
+  horizonDays: number
   /** Windows to fetch before yielding, so one type cannot hold the runner indefinitely. */
   batchDays?: number
   deps: JobDeps
@@ -45,7 +47,7 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
   const state = deps.syncState.get(input.personId, t.id)
   if (state?.backfillCompleteAtMs != null) return done('horizon', true, 0, 0)
 
-  const floorMs = input.nowMs - t.backfillHorizonDays * DAY_MS
+  const floorMs = input.nowMs - input.horizonDays * DAY_MS
   const batchDays = input.batchDays ?? DEFAULT_BATCH_DAYS
   let cursorMs = state?.backfillCursorMs ?? input.nowMs
   let windowsFetched = 0

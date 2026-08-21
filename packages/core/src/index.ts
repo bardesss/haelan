@@ -10,8 +10,11 @@ export { RawArchive } from './store/rawArchive.ts'
 export type { PutInput, PutResult } from './store/rawArchive.ts'
 export { createTestDatabase, seedPerson } from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
-export { DATA_TYPES, dataTypeById, FILTER_MEMBERS } from './api/catalogue.ts'
-export type { DataType, FilterMember, MappingTarget } from './api/catalogue.ts'
+export {
+  DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor,
+  INTRADAY_HORIZON_DAYS, USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS,
+} from './api/catalogue.ts'
+export type { DataType, FilterMember, MappingTarget, TypeTier } from './api/catalogue.ts'
 export { TokenProvider, RevokedError } from './api/tokens.ts'
 export type { TokenProviderDeps } from './api/tokens.ts'
 export { HealthClient } from './api/client.ts'
@@ -54,7 +57,6 @@ export type { ConsentUrlInput, ExchangeInput, ExchangeResult, ProbeInput } from 
 export { runBackfill } from './sync/runBackfill.ts'
 export type { BackfillInput, BackfillResult } from './sync/runBackfill.ts'
 export type { SyncProgress } from './sync/runJob.ts'
-export { DEFAULT_BACKFILL_HORIZON_DAYS } from './api/catalogue.ts'
 // Synthetic payload builders, exported for the server's Google stub. Test-only in intent, and
 // the file they come from invents every value it emits: nothing here reads real health data.
 export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body } from './testing/payloads.ts'
