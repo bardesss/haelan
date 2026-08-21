@@ -3,12 +3,12 @@ import type { SyncStatus } from './api.js'
 const DAY_MS = 86_400_000
 
 // Measured on 29 days of one real person's data and projected to each horizon: intraday types
-// are capped at 90 days, which is why five years costs barely more than one. The numbers are
+// are capped at 365 days, which is why five years costs barely more than one. The numbers are
 // shown because nobody can derive them from the page.
 const HORIZON_CHOICES = [
-  { days: 365, label: '1 year', disk: '0.17 GB' },
-  { days: 730, label: '2 years', disk: '0.18 GB' },
-  { days: 1825, label: '5 years', disk: '0.18 GB' },
+  { days: 365, label: '1 year', disk: '1.05 GB' },
+  { days: 730, label: '2 years', disk: '1.05 GB' },
+  { days: 1825, label: '5 years', disk: '1.06 GB' },
 ]
 
 // How far back this type has walked, as a fraction of the horizon it is walking to. A cursor
@@ -38,7 +38,7 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
   // branch is currently unreachable.
   const intradayDays = status.backfill.length > 0
     ? Math.min(...status.backfill.map((row) => row.horizonDays))
-    : 90
+    : 365
 
   return (
     <section className="setup-step">
