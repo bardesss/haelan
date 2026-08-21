@@ -15,6 +15,21 @@ const BUCKET_CAPACITY = 10
 
 const TRAILING_DAYS = 7
 
+const DAY_MS = 86_400_000
+/**
+ * How much history the first run fills before settling into the hourly batch. Measured at 2,250
+ * requests, about thirteen minutes at 180 a minute, against the 5.4 days the hourly batch alone
+ * took to walk a five-year horizon. It equals INTRADAY_HORIZON_DAYS, so intraday types finish
+ * inside the sprint and never enter the trickle at all.
+ */
+const SPRINT_DAYS = 90
+/**
+ * A pass that keeps fetching without moving a cursor is a type failing every window. Bounded so
+ * that case ends the sprint rather than looping on it; 90 days at the smallest useful batch
+ * needs far fewer passes than this.
+ */
+const MAX_SPRINT_PASSES = 40
+
 export type RunReason = 'manual' | 'scheduled' | 'setup'
 
 export interface RunOutcome {
@@ -49,6 +64,8 @@ export class SyncRunner {
   readonly #context: ServerContext
   /** The run tryStart left going, so a shutdown can wait for it rather than close under it. */
   #inFlight: Promise<unknown> | null = null
+  /** Set by stop(), checked between batches, so a sprint cannot outlive a shutdown. */
+  #aborted = false
 
   constructor(context: ServerContext) { this.#context = context }
 
@@ -117,6 +134,7 @@ export class SyncRunner {
   async trigger(reason: RunReason): Promise<RunOutcome> {
     if (this.running) return { started: false, reason: 'already_running' }
     this.running = true
+    this.#aborted = false
     this.reason = reason
     this.startedAtMs = this.#context.now()
     try {
@@ -144,6 +162,7 @@ export class SyncRunner {
   }
 
   stop(): void {
+    this.#aborted = true
     if (this.timer) clearInterval(this.timer)
     this.timer = null
   }
@@ -196,21 +215,76 @@ export class SyncRunner {
     // fresh for every (person, type) pair would let a mid-run settings change produce a run
     // that walked different types to different depths for no reason a user could explain.
     const userHorizonDays = this.#userHorizonDays()
+    if (this.#sprintPending(personIds, userHorizonDays)) {
+      for (let pass = 0; pass < MAX_SPRINT_PASSES; pass++) {
+        if (this.#aborted) return
+        const fetched = await this.#backfillPass(deps, personIds, userHorizonDays, SPRINT_DAYS)
+        if (fetched === 0) break
+      }
+      return
+    }
+    await this.#backfillPass(deps, personIds, userHorizonDays, null)
+  }
 
+  /** True while any connected person has a type that has not yet reached the sprint depth. */
+  #sprintPending(personIds: string[], userHorizonDays: number): boolean {
+    const floorMs = this.#context.now() - SPRINT_DAYS * DAY_MS
+    for (const personId of personIds) {
+      for (const type of DATA_TYPES) {
+        if (!type.listSupported) continue
+        const state = this.#context.stores.syncState.get(personId, type.id)
+        if (state?.backfillCompleteAtMs != null) continue
+        const cursor = state?.backfillCursorMs
+        if (cursor == null || cursor > floorMs) return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * One batch for every type. capDays limits how deep this pass may walk, which is what makes
+   * the sprint a bounded phase rather than a run to the full horizon; null means the type's own
+   * resolved horizon, which is the trickle. The cap is enforced by skipping a type that has
+   * already reached it, not by shrinking the horizonDays passed to runBackfill — see the comment
+   * at the skip below for why that distinction is load-bearing.
+   */
+  async #backfillPass(
+    deps: JobDeps, personIds: string[], userHorizonDays: number, capDays: number | null,
+  ): Promise<number> {
+    let windowsFetched = 0
     for (const personId of personIds) {
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of DATA_TYPES) {
         if (!dataType.listSupported) continue
+        if (this.#aborted) return windowsFetched
+        const resolved = horizonDaysFor(dataType, userHorizonDays)
+        // A type whose real horizon reaches past the sprint cap needs a floor of its own, kept
+        // separate from the horizonDays runBackfill is given below. Passing a *capped*
+        // horizonDays would work for one call, but a batch that doesn't divide evenly into
+        // capDays (fourteen into ninety, say) can walk straight past the cap and hit
+        // runBackfill's own "reached the floor" check in the same call — and that check (frozen,
+        // from Task 5) reads it as "done" and marks the type complete for good, permanently
+        // stunting a type whose operator asked for years of history at the sprint's 90 days.
+        // Checking the cap here instead, before ever calling runBackfill, and always handing it
+        // the type's real horizon, means the only way runBackfill marks something complete is by
+        // genuinely reaching it — overshooting the sprint cap by a few days is harmless, a type
+        // never reaching horizonDays this way is not.
+        if (capDays !== null && resolved > capDays) {
+          const floorMs = this.#context.now() - capDays * DAY_MS
+          const cursor = this.#context.stores.syncState.get(personId, dataType.id)?.backfillCursorMs
+          if (cursor != null && cursor <= floorMs) continue
+        }
         try {
-          await runBackfill({
+          const result = await runBackfill({
             personId, timezone: person.timezone, dataType, nowMs: this.#context.now(),
-            horizonDays: horizonDaysFor(dataType, userHorizonDays),
+            horizonDays: resolved,
             ...(this.#context.backfillBatchDays === undefined
               ? {}
               : { batchDays: this.#context.backfillBatchDays }),
             deps,
           })
+          windowsFetched += result.windowsFetched
         } catch (error) {
           if (error instanceof RevokedError) break
           // runBackfill records the failures it expects through runJob, so anything arriving
@@ -225,6 +299,7 @@ export class SyncRunner {
         }
       }
     }
+    return windowsFetched
   }
 }
 

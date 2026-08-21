@@ -6,7 +6,7 @@ import type { RateLimiter } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
 
-export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled'
+export type GoogleMode = 'ok' | 'redirect_uri_mismatch' | 'service_disabled' | 'list_fails'
 
 export interface WithServerOptions {
   google?: GoogleMode
@@ -41,6 +41,13 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
         }), { status: 403 })
       }
       return new Response(JSON.stringify({ displayName: 'Bartus' }), { status: 200 })
+    }
+    // list_fails answers every data window with a status the client does not retry (only 429
+    // and 5xx get a backoff sleep; see fetchWithRetry), so a sprint that hits it fails fast
+    // instead of dragging the test through retry backoff. It is recorded through runJob's
+    // catch as an immediate per-type failure rather than swallowed.
+    if (url.includes('/dataPoints') && mode === 'list_fails') {
+      return new Response(JSON.stringify({ error: 'the stub is failing every list request' }), { status: 400 })
     }
     // An empty page in the shape the mappers expect. These tests are about the runner's
     // scheduling and progress, not its mapping; Task 16's end to end run is where real points
@@ -82,11 +89,14 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
     // tests; making every server test wait on it would only make them slow.
     limiter: options.limiter ?? { take: async () => {} },
-    // One window per type, not fourteen. Enough to prove the walk moved and recorded a cursor,
-    // which is all any server test asserts; the ordering of a longer walk is run-backfill's
-    // own test. A real batch is eighteen types of gzip per trigger and turns this suite into
-    // minutes when it runs alongside the others.
-    backfillBatchDays: 1,
+    // The real batch size (runBackfill's own DEFAULT_BATCH_DAYS), not a smaller one picked for
+    // speed. The sync runner's sprint (Task 6) loops batches until every type reaches a 90 day
+    // floor, and since Task 6 that first loop runs on every trigger() call from a fresh
+    // connection regardless of reason - not just the ones this file's tests are actually about.
+    // A batch of 1 or 3 needs 90 or 30 passes to reach the floor; fourteen needs 7, which is the
+    // difference between a sprint the suite can afford under full-run parallelism and one it
+    // cannot. See vitest.config.ts for the timeout budget this still needs.
+    backfillBatchDays: 14,
   })
   await app.ready()
 

@@ -92,4 +92,63 @@ describe('the sync runner', () => {
     // out from under it.
     while (runner.status().running) await new Promise((resolve) => setImmediate(resolve))
   })
+
+  it('fills the sprint window in one run rather than one batch an hour', async () => {
+    // backfillBatchDays is 14 in the harness, so a single-batch run would leave every cursor
+    // fourteen days back. Reaching the sprint depth proves the run looped rather than yielded.
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await harness.app.haelan.runner.trigger('setup')
+    const status = harness.app.haelan.runner.status()
+    const sprintFloor = harness.clock.nowMs - 90 * 86_400_000
+    for (const row of status.backfill) {
+      expect(row.complete || (row.cursorMs !== null && row.cursorMs <= sprintFloor)).toBe(true)
+    }
+  })
+
+  it('stops at the sprint window and leaves the deep history to later runs', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
+    await harness.app.haelan.runner.trigger('setup')
+    const weight = harness.app.haelan.runner.status().backfill.find((s) => s.dataType === 'weight')
+    // Daily types were asked for five years; the sprint must not have walked them there.
+    expect(weight?.complete).toBe(false)
+    expect(weight?.cursorMs).toBeGreaterThan(harness.clock.nowMs - 1825 * 86_400_000)
+  })
+
+  it('reverts to one batch per type once the sprint window is filled', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await harness.app.haelan.runner.trigger('setup')
+    const before = harness.app.haelan.runner.status().backfill
+      .find((s) => s.dataType === 'weight')!.cursorMs!
+    await harness.app.haelan.runner.trigger('scheduled')
+    const after = harness.app.haelan.runner.status().backfill
+      .find((s) => s.dataType === 'weight')!.cursorMs!
+    // One batch of fourteen days (backfillBatchDays in the harness), not another sprint.
+    expect(before - after).toBeLessThanOrEqual(16 * 86_400_000)
+    expect(after).toBeLessThan(before)
+  })
+
+  it('abandons a sprint promptly when asked to stop, so shutdown does not wait for it', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const runner = harness.app.haelan.runner
+    runner.tryStart('setup')
+    runner.stop()
+    await runner.settle()
+    expect(runner.status().running).toBe(false)
+    // The regression this exists for: a sprint that ran to completion under a closing database
+    // surfaced as "the database connection is not open" from somewhere unrelated.
+    const weight = runner.status().backfill.find((s) => s.dataType === 'weight')
+    expect(weight?.complete).toBe(false)
+  })
+
+  it('does not spin forever on a type that fails every window', async () => {
+    harness = await withServer({ google: 'list_fails' })
+    await harness.connectPerson()
+    await harness.app.haelan.runner.trigger('setup')
+    expect(harness.app.haelan.runner.status().running).toBe(false)
+  })
 })
