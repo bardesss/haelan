@@ -80,7 +80,8 @@ that, zero duplicate sample natural keys and zero duplicate session keys.
 **What this run did not establish** was how far back the API actually serves intraday data. That
 was measured separately the same day and is recorded in `retention.md`: at least 209 days, at
 undegraded resolution, which is the whole span this account has existed. The 90-day intraday cap
-therefore forgoes 119 days of minute-level history the API is willing to serve today.
+was therefore giving up 119 days of minute-level history the API serves today, and was raised to a
+year in [#28](https://github.com/bardesss/haelan/pull/28) as a result.
 
 `.local-data/` is gitignored. It holds a real refresh token and real health data, and neither
 belongs in this repository.
