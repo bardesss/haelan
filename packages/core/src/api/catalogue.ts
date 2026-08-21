@@ -13,6 +13,8 @@ export type FilterMember = (typeof FILTER_MEMBERS)[number]
 
 export type MappingTarget = 'samples' | 'sessions'
 
+export type TypeTier = 'intraday' | 'daily'
+
 export interface DataType {
   /** Kebab case, as it appears in the URL path. */
   id: string
@@ -34,11 +36,10 @@ export interface DataType {
   /** Written per minute rather than per sample. Only heart rate needs it today. */
   downsampleToMinute: boolean
   /**
-   * How far back the first backfill walks for this type, in days. Per type because the volumes
-   * differ by three orders of magnitude: M0 measured heart rate at 23 MB of raw JSON per
-   * person-day and every other type together under 0.8M rows per person-year.
+   * Which horizon this type walks to. Intraday types report many times a day and are capped;
+   * daily types are one row a day, so five years of them is a rounding error on disk.
    */
-  backfillHorizonDays: number
+  tier: TypeTier
   /**
    * Fetched and archived, but not mapped to tier 2 yet. Set when a type carries a
    * sub-dimension a flat sample row cannot hold without a derivation decision.
@@ -55,9 +56,23 @@ const METRICS = 'googlehealth.health_metrics_and_measurements.readonly'
 const SLEEP = 'googlehealth.sleep.readonly'
 const NUTRITION = 'googlehealth.nutrition.readonly'
 
-export const DEFAULT_BACKFILL_HORIZON_DAYS = 1825
-const DENSE_HORIZON_DAYS = 60
-const NIGHTLY_HORIZON_DAYS = 365
+/**
+ * The cap on types that report many times a day. Cost is density multiplied by horizon, and
+ * measuring 29 days of one person's real data put active-energy-burned at 932 rows a day
+ * against a 1825-day horizon: 759 MB, 56 percent of a 1.35 GB projection. Heart rate was capped
+ * for being densest per day; these four were never capped at all.
+ */
+export const INTRADAY_HORIZON_DAYS = 90
+export const USER_HORIZON_CHOICES = [365, 730, 1825] as const
+export const DEFAULT_USER_HORIZON_DAYS = 730
+
+/**
+ * The only place either horizon is read. Status, the backfill walk and the wizard all resolve
+ * through this, so the number on screen cannot diverge from the number being walked.
+ */
+export function horizonDaysFor(type: DataType, userHorizonDays: number): number {
+  return type.tier === 'intraday' ? INTRADAY_HORIZON_DAYS : userHorizonDays
+}
 
 const listable = (
   id: string, payloadKey: string, filterMember: FilterMember, scope: string,
@@ -76,27 +91,27 @@ const listable = (
   unit,
   valuePath,
   downsampleToMinute: false,
-  backfillHorizonDays: DEFAULT_BACKFILL_HORIZON_DAYS,
+  tier: 'daily',
   ...extra,
 })
 
 export const DATA_TYPES: readonly DataType[] = [
-  listable('steps', 'steps', 'interval.start_time', ACTIVITY, 'steps', 'count', 'count'),
-  listable('distance', 'distance', 'interval.start_time', ACTIVITY, 'distance', 'millimeters', 'millimeters'),
+  listable('steps', 'steps', 'interval.start_time', ACTIVITY, 'steps', 'count', 'count', { tier: 'intraday' }),
+  listable('distance', 'distance', 'interval.start_time', ACTIVITY, 'distance', 'millimeters', 'millimeters', { tier: 'intraday' }),
   // Sub-dimension: activity level. The payload holds an array,
   // activeMinutes.activeMinutesByActivityLevel[], one point per level per interval, which a
   // flat sample row cannot resolve. Archived at tier 1; summing across levels or encoding the
   // level into the metric name is a derivation decision for M2, not this catalogue.
-  listable('active-minutes', 'activeMinutes', 'interval.start_time', ACTIVITY, 'active_minutes', 'minutes', 'activeMinutesByActivityLevel', { mappingDeferred: true }),
+  listable('active-minutes', 'activeMinutes', 'interval.start_time', ACTIVITY, 'active_minutes', 'minutes', 'activeMinutesByActivityLevel', { mappingDeferred: true, tier: 'intraday' }),
   // Sub-dimension: heart rate zone. activeZoneMinutes.heartRateZone varies within one interval,
   // so several points would share the samples natural key and collide on upsert. Same deferral
   // as active-minutes above.
-  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', 'activeZoneMinutes', { mappingDeferred: true }),
-  listable('active-energy-burned', 'activeEnergyBurned', 'interval.start_time', ACTIVITY, 'active_energy', 'kcal', 'kcal'),
+  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', 'activeZoneMinutes', { mappingDeferred: true, tier: 'intraday' }),
+  listable('active-energy-burned', 'activeEnergyBurned', 'interval.start_time', ACTIVITY, 'active_energy', 'kcal', 'kcal', { tier: 'intraday' }),
 
-  listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true, backfillHorizonDays: DENSE_HORIZON_DAYS }),
-  listable('heart-rate-variability', 'heartRateVariability', 'sample_time.physical_time', METRICS, 'hrv', 'milliseconds', 'rootMeanSquareOfSuccessiveDifferencesMilliseconds', { backfillHorizonDays: NIGHTLY_HORIZON_DAYS }),
-  listable('oxygen-saturation', 'oxygenSaturation', 'sample_time.physical_time', METRICS, 'spo2', 'percent', 'percentage', { backfillHorizonDays: NIGHTLY_HORIZON_DAYS }),
+  listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true, tier: 'intraday' }),
+  listable('heart-rate-variability', 'heartRateVariability', 'sample_time.physical_time', METRICS, 'hrv', 'milliseconds', 'rootMeanSquareOfSuccessiveDifferencesMilliseconds', { tier: 'intraday' }),
+  listable('oxygen-saturation', 'oxygenSaturation', 'sample_time.physical_time', METRICS, 'spo2', 'percent', 'percentage', { tier: 'intraday' }),
   listable('weight', 'weight', 'sample_time.physical_time', METRICS, 'weight', 'grams', 'weightGrams'),
   listable('body-fat', 'bodyFat', 'sample_time.physical_time', METRICS, 'body_fat', 'percent', 'percentage'),
 
