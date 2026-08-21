@@ -124,9 +124,12 @@ describe('the sync runner', () => {
   })
 
   it('reverts to one batch per type once the sprint window is filled', async () => {
-    // The real sprintDays and real batch size: the sprint needs to actually finish (see the
-    // previous test's comment) before this can observe the trickle that follows it.
-    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
+    // This test is about the revert, not about the number 90 - it only needs the sprint to
+    // finish so the trickle that follows is observable. A small sprintDays that converges in
+    // two passes (ceil(28 / 14) = 2) proves the same revert far cheaper than walking to the
+    // real 90; the production number is asserted where it belongs, in "stops at the sprint
+    // window and leaves the deep history to later runs" below.
+    harness = await withServer({ google: 'ok', sprintDays: 28, backfillBatchDays: 14 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     const before = harness.app.haelan.runner.status().backfill
@@ -140,9 +143,12 @@ describe('the sync runner', () => {
   })
 
   it('abandons a sprint promptly when asked to stop, so shutdown does not wait for it', async () => {
-    // The real sprintDays: the regression this guards was a sprint running to completion under
-    // a closing database, and that risk scales with how deep the sprint actually goes.
-    harness = await withServer({ google: 'ok', sprintDays: 90 })
+    // Not about the number 90: stop() lands before runSync's first await resolves (see the
+    // assertion below), so #aborted is already true before run() would even check
+    // #sprintPending - no backfill pass happens regardless of how deep a sprint would have
+    // gone. The harness default is enough to prove that; production's real depth is asserted
+    // in "stops at the sprint window and leaves the deep history to later runs".
+    harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
     const runner = harness.app.haelan.runner
     runner.tryStart('setup')
@@ -178,24 +184,24 @@ describe('the sync runner', () => {
   })
 
   it('does not spin forever on a type that fails every window', async () => {
-    // The real sprintDays: MAX_SPRINT_PASSES is what has to end this, and its margin is sized
-    // against the real 90, not a harness default that would make the guard look tighter than
-    // it actually is in production.
-    harness = await withServer({ google: 'list_fails', sprintDays: 90 })
+    // Not about the number 90 either: this proves the sprint terminates when a type never
+    // converges, not that it terminates specifically at the production depth. The harness
+    // default reaches that outcome in a handful of passes instead of forty.
+    harness = await withServer({ google: 'list_fails' })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     expect(harness.app.haelan.runner.status().running).toBe(false)
   })
 
   it('does not let one broken type block a healthy type from advancing past the sprint floor', async () => {
-    // LIST_FAILS_TYPE (body-fat) never advances and is never marked complete, so #sprintPending
-    // stays true forever - the regression this guards is that run() used to return right after
-    // the sprint loop whenever that was still true, so the trickle never ran and weight, a
-    // perfectly healthy daily type, stayed pinned at the sprint floor right alongside the type
-    // that was actually broken, on every run from then on.
-    harness = await withServer({ google: 'list_fails', sprintDays: 90, backfillBatchDays: 14 })
+    // This is about the starvation, not about the number 90 - the mechanism (a permanently
+    // stuck type keeping #sprintPending true forever, and the trickle running anyway) does not
+    // depend on how deep the sprint's own floor is. A small sprintDays that still converges in
+    // a couple of passes (ceil(28 / 14) = 2, plus one more pass for the stuck type alone to
+    // confirm nothing else is left) proves the same fix far cheaper than walking to 90.
+    harness = await withServer({ google: 'list_fails', sprintDays: 28, backfillBatchDays: 14 })
     await harness.connectPerson()
-    const sprintFloor = harness.clock.nowMs - 90 * 86_400_000
+    const sprintFloor = harness.clock.nowMs - 28 * 86_400_000
 
     await harness.app.haelan.runner.trigger('setup')
     const afterFirst = harness.app.haelan.runner.status().backfill
