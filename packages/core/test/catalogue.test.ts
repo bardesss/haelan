@@ -77,3 +77,26 @@ describe('data type catalogue', () => {
     for (const t of DATA_TYPES) expect(['min', 'mean', 'max'], t.id).not.toContain(t.agg)
   })
 })
+
+describe('backfill horizons', () => {
+  it('gives every type a horizon, so the backfill never has to invent one', () => {
+    for (const type of DATA_TYPES) {
+      expect(type.backfillHorizonDays, type.id).toBeGreaterThan(0)
+      expect(Number.isInteger(type.backfillHorizonDays), type.id).toBe(true)
+    }
+  })
+
+  it('keeps heart rate far shorter than everything else, because M0 measured why', () => {
+    // 37,370 rows and 23 MB of raw JSON per person-day, 95 percent of all rows. Every other
+    // type together is under 0.8M rows per person-year. See probe/findings/volume.md.
+    const heartRate = dataTypeById('heart-rate')!
+    const steps = dataTypeById('steps')!
+    expect(heartRate.backfillHorizonDays).toBeLessThan(steps.backfillHorizonDays / 4)
+  })
+
+  it('gives the sparse types years rather than weeks', () => {
+    for (const id of ['weight', 'sleep', 'daily-resting-heart-rate']) {
+      expect(dataTypeById(id)!.backfillHorizonDays, id).toBeGreaterThanOrEqual(365)
+    }
+  })
+})
