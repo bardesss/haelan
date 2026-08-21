@@ -42,8 +42,10 @@ Run it from the repository root. The server prints the data directory it resolve
 line is worth reading before starting: an acceptance run that quietly reopened a database from
 an earlier attempt is not an empty volume, and would prove nothing.
 
-Then walk the wizard end to end, filling one row above per console page as you go, and correct
-`GoogleStep.tsx` wherever the recorded reality differs from what the copy claims.
+Then walk the wizard end to end, recording any console page that fought back, and correct
+`GoogleStep.tsx` wherever the reality differs from what the copy claims. On the 2026-08-21 run
+none did, which is why there is no table here: an empty table of friction reads as unrecorded,
+where a sentence saying there was none reads as a result.
 
 ### Acceptance, verified 2026-08-21
 
@@ -68,18 +70,17 @@ saying so is the point of keeping this file.
 - [x] Nothing in the logs contained the client secret or a refresh token. Thirty-two captured
       server output files searched for the literal secret and for refresh token shapes.
 - [x] The billing question M0 left open, answered: **no billing account was demanded at any
-      point.** `scopes.md` still records this as pending and should be corrected.
+      point.** `scopes.md` is corrected to match.
 
 Re-syncing is idempotent, measured on the same instance rather than inferred: the trailing week is
 re-fetched every run, and 29 window and type pairs have been fetched more than once — 725 archived
 payloads carry only 586 distinct body hashes, so 139 were bytes the instance already held. Against
 that, zero duplicate sample natural keys and zero duplicate session keys.
 
-**What this run does not establish:** how far back Google actually serves intraday data. The
-design's argument for building ingestion before the dashboard is that minute-level history ages
-out of Google's window irrecoverably, and the backfill now caps intraday types at 90 days. Whether
-that cap forgoes data Google would still have served is unmeasured, and every day it stays
-unmeasured the answer gets worse and cannot be recovered.
+**What this run did not establish** was how far back the API actually serves intraday data. That
+was measured separately the same day and is recorded in `retention.md`: at least 209 days, at
+undegraded resolution, which is the whole span this account has existed. The 90-day intraday cap
+therefore forgoes 119 days of minute-level history the API is willing to serve today.
 
 `.local-data/` is gitignored. It holds a real refresh token and real health data, and neither
 belongs in this repository.
