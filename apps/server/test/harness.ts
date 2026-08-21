@@ -12,6 +12,20 @@ export interface WithServerOptions {
   google?: GoogleMode
   /** Replaces the pass through limiter, so a test can park a run mid flight and release it. */
   limiter?: RateLimiter
+  /**
+   * See ServerDeps.sprintDays. Defaults small below so a run that merely completes consent -
+   * and so starts a sprint of its own, since oauth.ts's callback calls tryStart('setup') -
+   * finishes in a pass or two instead of paying for the real 90 day depth in every such test's
+   * cleanup. The tests that are actually about the sprint's own depth override this to the real
+   * production number.
+   */
+  sprintDays?: number
+  /**
+   * See ServerDeps.backfillBatchDays. Defaults small below; the sprint depth tests override
+   * this too, to the real batch size, so their pass count lines up with production rather than
+   * this suite's speed-picked default.
+   */
+  backfillBatchDays?: number
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -89,14 +103,14 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
     // tests; making every server test wait on it would only make them slow.
     limiter: options.limiter ?? { take: async () => {} },
-    // The real batch size (runBackfill's own DEFAULT_BATCH_DAYS), not a smaller one picked for
-    // speed. The sync runner's sprint (Task 6) loops batches until every type reaches a 90 day
-    // floor, and since Task 6 that first loop runs on every trigger() call from a fresh
-    // connection regardless of reason - not just the ones this file's tests are actually about.
-    // A batch of 1 or 3 needs 90 or 30 passes to reach the floor; fourteen needs 7, which is the
-    // difference between a sprint the suite can afford under full-run parallelism and one it
-    // cannot. See vitest.config.ts for the timeout budget this still needs.
-    backfillBatchDays: 14,
+    // One window per type, not fourteen, by default. Enough to prove the walk moved and
+    // recorded a cursor, which is all most server tests assert; the ordering of a longer walk
+    // is run-backfill's own test. A real batch is eighteen types of gzip per trigger and turns
+    // this suite into minutes when it runs alongside the others.
+    backfillBatchDays: options.backfillBatchDays ?? 1,
+    // How deep a sprint walks before this instance settles into the trickle. See
+    // WithServerOptions.sprintDays above for why this defaults small.
+    sprintDays: options.sprintDays ?? 2,
   })
   await app.ready()
 

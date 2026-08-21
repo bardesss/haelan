@@ -94,9 +94,12 @@ describe('the sync runner', () => {
   })
 
   it('fills the sprint window in one run rather than one batch an hour', async () => {
-    // backfillBatchDays is 14 in the harness, so a single-batch run would leave every cursor
-    // fourteen days back. Reaching the sprint depth proves the run looped rather than yielded.
-    harness = await withServer({ google: 'ok' })
+    // The real sprintDays (90) and the real batch size (14, runBackfill's own default), not the
+    // harness's speed-picked defaults, so this asserts against production's own numbers: at 14
+    // a single-batch run would leave every cursor fourteen days back, and MAX_SPRINT_PASSES (40)
+    // comfortably covers the ceil(90 / 14) = 7 passes a real sprint needs. Reaching the sprint
+    // depth proves the run looped rather than yielded.
+    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     const status = harness.app.haelan.runner.status()
@@ -107,7 +110,8 @@ describe('the sync runner', () => {
   })
 
   it('stops at the sprint window and leaves the deep history to later runs', async () => {
-    harness = await withServer({ google: 'ok' })
+    // The real sprintDays, so the 90 day floor this test is about is the one production uses.
+    harness = await withServer({ google: 'ok', sprintDays: 90 })
     await harness.connectPerson()
     harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
     await harness.app.haelan.runner.trigger('setup')
@@ -118,7 +122,9 @@ describe('the sync runner', () => {
   })
 
   it('reverts to one batch per type once the sprint window is filled', async () => {
-    harness = await withServer({ google: 'ok' })
+    // The real sprintDays and real batch size: the sprint needs to actually finish (see the
+    // previous test's comment) before this can observe the trickle that follows it.
+    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     const before = harness.app.haelan.runner.status().backfill
@@ -126,13 +132,15 @@ describe('the sync runner', () => {
     await harness.app.haelan.runner.trigger('scheduled')
     const after = harness.app.haelan.runner.status().backfill
       .find((s) => s.dataType === 'weight')!.cursorMs!
-    // One batch of fourteen days (backfillBatchDays in the harness), not another sprint.
+    // One batch of fourteen days (backfillBatchDays passed above), not another sprint.
     expect(before - after).toBeLessThanOrEqual(16 * 86_400_000)
     expect(after).toBeLessThan(before)
   })
 
   it('abandons a sprint promptly when asked to stop, so shutdown does not wait for it', async () => {
-    harness = await withServer({ google: 'ok' })
+    // The real sprintDays: the regression this guards was a sprint running to completion under
+    // a closing database, and that risk scales with how deep the sprint actually goes.
+    harness = await withServer({ google: 'ok', sprintDays: 90 })
     await harness.connectPerson()
     const runner = harness.app.haelan.runner
     runner.tryStart('setup')
@@ -146,7 +154,10 @@ describe('the sync runner', () => {
   })
 
   it('does not spin forever on a type that fails every window', async () => {
-    harness = await withServer({ google: 'list_fails' })
+    // The real sprintDays: MAX_SPRINT_PASSES is what has to end this, and its margin is sized
+    // against the real 90, not a harness default that would make the guard look tighter than
+    // it actually is in production.
+    harness = await withServer({ google: 'list_fails', sprintDays: 90 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     expect(harness.app.haelan.runner.status().running).toBe(false)

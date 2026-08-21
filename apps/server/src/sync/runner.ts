@@ -20,7 +20,8 @@ const DAY_MS = 86_400_000
  * How much history the first run fills before settling into the hourly batch. Measured at 2,250
  * requests, about thirteen minutes at 180 a minute, against the 5.4 days the hourly batch alone
  * took to walk a five-year horizon. It equals INTRADAY_HORIZON_DAYS, so intraday types finish
- * inside the sprint and never enter the trickle at all.
+ * inside the sprint and never enter the trickle at all. This is the production value; tests
+ * override it through ServerDeps.sprintDays (see run()) rather than shrinking this constant.
  */
 const SPRINT_DAYS = 90
 /**
@@ -215,10 +216,14 @@ export class SyncRunner {
     // fresh for every (person, type) pair would let a mid-run settings change produce a run
     // that walked different types to different depths for no reason a user could explain.
     const userHorizonDays = this.#userHorizonDays()
-    if (this.#sprintPending(personIds, userHorizonDays)) {
+    // Unset in production, so this is SPRINT_DAYS there; tests override it so a run that merely
+    // completes consent doesn't pay for a 90 day sprint in its cleanup. Resolved once here, like
+    // userHorizonDays above, so #sprintPending and the pass loop below can't disagree on depth.
+    const sprintDays = this.#context.sprintDays ?? SPRINT_DAYS
+    if (this.#sprintPending(personIds, userHorizonDays, sprintDays)) {
       for (let pass = 0; pass < MAX_SPRINT_PASSES; pass++) {
         if (this.#aborted) return
-        const fetched = await this.#backfillPass(deps, personIds, userHorizonDays, SPRINT_DAYS)
+        const fetched = await this.#backfillPass(deps, personIds, userHorizonDays, sprintDays)
         if (fetched === 0) break
       }
       return
@@ -227,8 +232,8 @@ export class SyncRunner {
   }
 
   /** True while any connected person has a type that has not yet reached the sprint depth. */
-  #sprintPending(personIds: string[], userHorizonDays: number): boolean {
-    const floorMs = this.#context.now() - SPRINT_DAYS * DAY_MS
+  #sprintPending(personIds: string[], userHorizonDays: number, sprintDays: number): boolean {
+    const floorMs = this.#context.now() - sprintDays * DAY_MS
     for (const personId of personIds) {
       for (const type of DATA_TYPES) {
         if (!type.listSupported) continue
