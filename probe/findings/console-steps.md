@@ -21,6 +21,10 @@ pnpm build
 HAELAN_DATA_DIR=./.local-data pnpm start
 ```
 
+Run it from the repository root. The server prints the data directory it resolved, and that
+line is worth reading before starting: an acceptance run that quietly reopened a database from
+an earlier attempt is not an empty volume, and would prove nothing.
+
 Then walk the wizard end to end, filling one row above per console page as you go, and correct
 `GoogleStep.tsx` wherever the recorded reality differs from what the copy claims.
 

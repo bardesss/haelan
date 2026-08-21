@@ -56,6 +56,11 @@ function devCommand(): string[] {
   return parts.slice(1)
 }
 
+/** The node flags each entry script passes, so the two cannot drift apart unnoticed. */
+function flagsOf(command: string): string[] {
+  return command.split(/\s+/).filter((part) => part.startsWith('--'))
+}
+
 interface BootOutcome {
   ok: boolean
   output: string
@@ -121,5 +126,22 @@ describe('the entry point boots', () => {
       if (!/EADDRINUSE|address already in use/i.test(outcome.output)) break
     }
     throw new Error(`the server did not boot:\n${lastFailure}`)
+  })
+
+  it('starts the same way from the repository root as it does from the package', () => {
+    // pnpm start and pnpm dev:server are two doors into one process. Only the first is spawned
+    // above, so this pins the second: a flag added to one and not the other means the command
+    // the documentation gives people is not the command this test proved.
+    const root = JSON.parse(readFileSync(join(SERVER_ROOT, '../../package.json'), 'utf8')) as {
+      scripts: { start: string }
+    }
+    const server = JSON.parse(readFileSync(join(SERVER_ROOT, 'package.json'), 'utf8')) as {
+      scripts: { dev: string }
+    }
+    expect(flagsOf(root.scripts.start)).toEqual(flagsOf(server.scripts.dev))
+
+    // And it runs node itself rather than delegating, so its working directory is the
+    // repository root and a relative HAELAN_DATA_DIR lands where the README says it does.
+    expect(root.scripts.start.startsWith('node ')).toBe(true)
   })
 })
