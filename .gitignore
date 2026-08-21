@@ -11,3 +11,5 @@ probe/.tokens.json
 probe/findings/token-log.jsonl
 .env.local
 *.tsbuildinfo
+# A local instance's data directory: a real refresh token and real health data.
+.local-data/
