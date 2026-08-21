@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { AccountStore, SCOPES, SettingsStore, openHaelan, seedPerson } from '@haelan/core'
+import { AccountStore, SCOPES, SettingsStore, body, openHaelan, seedPerson } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
 
@@ -37,6 +37,10 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
       }
       return new Response(JSON.stringify({ displayName: 'Bartus' }), { status: 200 })
     }
+    // An empty page in the shape the mappers expect. These tests are about the runner's
+    // scheduling and progress, not its mapping; Task 16's end to end run is where real points
+    // travel through and land as rows.
+    if (url.includes('/dataPoints')) return new Response(body([]), { status: 200 })
     throw new Error(`the stub was asked for ${url}, which it does not serve`)
   }) as unknown as typeof globalThis.fetch
 }
@@ -46,6 +50,7 @@ export interface Harness {
   dir: string
   clock: { nowMs: number }
   completeSetup: () => Promise<void>
+  connectPerson: () => Promise<void>
   cleanup: () => Promise<void>
 }
 
@@ -68,6 +73,13 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
           },
         }
       : {}),
+    // A pass through, because these tests drive hundreds of stubbed windows and the real
+    // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
+    // tests; making every server test wait on it would only make them slow.
+    limiter: { take: async () => {} },
+    // Two windows per type, not fourteen. Enough to prove the walk moved and stayed ordered,
+    // and it keeps a run to tens of archived payloads rather than hundreds.
+    backfillBatchDays: 2,
   })
   await app.ready()
 
@@ -88,11 +100,22 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     settings.markSetupComplete(clock.nowMs)
   }
 
+  // completeSetup leaves the state between the console step and consent: a client, no token.
+  // connectPerson adds the token, which is what a finished wizard actually produces and what
+  // anything about syncing needs.
+  const connectPerson = async () => {
+    await completeSetup()
+    instance.credentials.putRefreshToken({
+      personId: 'p1', refreshToken: 'stub-refresh-token', scopes: [...SCOPES], nowMs: clock.nowMs,
+    })
+  }
+
   return {
     app,
     dir,
     clock,
     completeSetup,
+    connectPerson,
     cleanup: async () => {
       await app.close()
       instance.close()
