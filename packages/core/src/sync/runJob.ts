@@ -12,6 +12,16 @@ import { mapWindowSamples } from '../api/mapSamples.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
 
+/**
+ * Emitted as work completes. Nothing in core subscribes; the server's progress stream does,
+ * and the backfill screen is the only reason a window level event exists at all.
+ */
+export type SyncProgress =
+  | { kind: 'job_started', personId: string, dataType: string }
+  | { kind: 'window_done', personId: string, dataType: string, localDate: string, rowsWritten: number }
+  | { kind: 'job_finished', personId: string, dataType: string, rowsWritten: number, skipped: JobResult['skipped'] }
+  | { kind: 'run_finished', jobs: number, rowsWritten: number, failed: number }
+
 /** What runJob needs of a rate limiter. TokenBucket satisfies it. */
 export interface RateLimiter {
   take(cost?: number): Promise<void>
@@ -32,6 +42,8 @@ export interface JobDeps {
    * filling it then is not a breaking change to a published interface.
    */
   limiter?: RateLimiter
+  /** Called as work completes. Optional: nothing in core needs it, the SSE stream does. */
+  onProgress?: (event: SyncProgress) => void
 }
 
 export interface JobInput {
@@ -52,8 +64,22 @@ export interface JobResult {
 
 export async function runJob(input: JobInput): Promise<JobResult> {
   const { deps, dataType: t } = input
+  const report = (event: SyncProgress) => {
+    // A subscriber that throws is a broken SSE client, not a reason to lose a window of data.
+    try { deps.onProgress?.(event) } catch { /* ignore */ }
+  }
+  const finish = (result: JobResult): JobResult => {
+    report({
+      kind: 'job_finished', personId: input.personId, dataType: t.id,
+      rowsWritten: result.rowsWritten, skipped: result.skipped,
+    })
+    return result
+  }
+
   const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, skipped: null }
   if (!t.listSupported) return { ...empty, skipped: 'unsupported' }
+
+  report({ kind: 'job_started', personId: input.personId, dataType: t.id })
 
   const windows = dayWindows({ fromMs: input.fromMs, toMs: input.toMs, timezone: input.timezone })
   let points = 0
@@ -87,7 +113,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       // after the whole loop, below, so a crash mid-loop commits this window's rows and leaves
       // the cursor behind rather than ahead. That is safe because the trailing re-fetch never
       // consults the cursor to decide what to fetch, so a lagging cursor only costs a re-fetch.
-      rowsWritten += deps.db.transaction((tx) => {
+      const writtenHere = deps.db.transaction((tx) => {
         // Through tx, not the outer handle: the sources row a point resolves has to commit and
         // roll back with the rows whose foreign keys point at it.
         const resolveSource = (dataSource: unknown) =>
@@ -99,6 +125,11 @@ export async function runJob(input: JobInput): Promise<JobResult> {
           ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
           : writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
       })
+      rowsWritten += writtenHere
+      report({
+        kind: 'window_done', personId: input.personId, dataType: t.id,
+        localDate: window.localDate, rowsWritten: writtenHere,
+      })
 
       highWaterMs = Math.max(highWaterMs, window.endMs)
     } catch (error) {
@@ -108,13 +139,13 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
-      if (error instanceof RevokedError) return { windows: windows.length, points, rowsWritten, skipped: 'revoked' }
+      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, skipped: 'revoked' })
       deps.syncState.recordFailure({
         personId: input.personId, dataType: t.id,
         error: classify(error),
         nowMs: deps.now(),
       })
-      return { windows: windows.length, points, rowsWritten, skipped: null }
+      return finish({ windows: windows.length, points, rowsWritten, skipped: null })
     }
   }
 
@@ -123,7 +154,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       personId: input.personId, dataType: t.id, highWaterMs, nowMs: deps.now(),
     })
   }
-  return { windows: windows.length, points, rowsWritten, skipped: null }
+  return finish({ windows: windows.length, points, rowsWritten, skipped: null })
 }
 
 // last_error's first token is documented as the failure's class, so an unclassified throw from

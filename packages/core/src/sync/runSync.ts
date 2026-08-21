@@ -54,5 +54,12 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
     }
   }
 
+  try {
+    // Guarded for the same reason runJob guards its own: a broken SSE client must not turn a
+    // finished run into a thrown one.
+    input.deps.onProgress?.({
+      kind: 'run_finished', jobs: report.jobs, rowsWritten: report.rowsWritten, failed: report.failed,
+    })
+  } catch { /* ignore */ }
   return report
 }

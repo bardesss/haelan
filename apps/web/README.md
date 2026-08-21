@@ -1,9 +1,15 @@
 # @haelan/web
 
-Reference pages for the visual direction. Fixtures only, no data layer, no network.
+The dashboard's reference pages, which are fixtures only until M3, and the setup wizard, which
+is real: it talks to `@haelan/server` and is how an instance is configured.
 
     pnpm install
     pnpm dev
+
+`pnpm dev` proxies `/api` and `/oauth` to Fastify on 4235, so run `pnpm dev:server` from the
+repository root in another terminal. `changeOrigin` is deliberately off in that proxy: the
+server compares `Origin` against `Host`, and rewriting the host would make every mutating
+request from the dev server look cross origin.
 
 `predev` and `prebuild` regenerate `@haelan/tokens/theme.css` first, so a fresh clone builds
 without a manual step. To regenerate it on its own:
@@ -18,6 +24,23 @@ edit `packages/tokens` and regenerate.
 Charts read token *names* from `@haelan/tokens` and resolve their *values* from
 `getComputedStyle` at render time, so a rename in the tokens package is a compile error here and
 a theme switch needs no reload.
+
+## The setup wizard
+
+`src/setup/` renders at any `/setup/*` path and is mounted by `main.tsx` when the server says
+setup is unfinished, whatever the URL says. The server owns which step is due, derived from what
+is actually in the database, so the browser asks rather than remembers and a reload mid wizard
+resumes correctly.
+
+Its one rule, and the reason `CopyField` exists as its own component: **nothing copyable ever
+contains a placeholder.** Every redirect URI shown is complete and concrete, built from the
+running port and the hostname the owner typed. A value Google's rules reject is rendered as
+rejected, with the rule quoted, and is given no copy control at all, because offering it would
+cost the reader a console trip to find that out.
+
+Forms use the shared vocabulary in `app.css` (`.field`, `.input`, `.choice`, `.form-actions`),
+which M1d added because the dashboard had none and M3's override controls and typed events need
+the same one. Add to that layer rather than defining inputs a second time beside a screen.
 
 ## Pages
 

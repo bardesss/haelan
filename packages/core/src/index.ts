@@ -1,5 +1,5 @@
 export { openDatabase, closeDatabase, tableExists, DATABASE_FILENAME } from './db/open.ts'
-export type { Database } from './db/open.ts'
+export type { Database, DbOrTx } from './db/open.ts'
 export { migrateToLatest } from './db/migrate.ts'
 export * as schema from './db/schema/index.ts'
 export { loadOrCreateKey, KEY_FILENAME, KEY_ENV_VAR } from './crypto/key.ts'
@@ -35,4 +35,26 @@ export { runJob } from './sync/runJob.ts'
 export type { JobDeps, JobInput, JobResult, RateLimiter } from './sync/runJob.ts'
 export { runSync } from './sync/runSync.ts'
 export type { SyncInput, SyncReport } from './sync/runSync.ts'
-export type { DbOrTx } from './db/open.ts'
+
+// M1d. The wizard and the accounts behind it: everything the server needs to take an instance
+// from an empty volume to a syncing household, and nothing it does not. `apps/server` reaches
+// core only through this file, which is why the store classes are here rather than deep
+// imported: `exports` in package.json publishes this module and no other.
+export { PeopleStore } from './store/people.ts'
+export type { PersonRow } from './store/people.ts'
+export { AccountStore } from './store/accounts.ts'
+export type { AccountRow, CreateAccountInput, LoginInput, LoginResult } from './store/accounts.ts'
+export { SessionStore, SESSION_TTL_MS } from './store/sessions.ts'
+export { SettingsStore, setupStep } from './store/settings.ts'
+export type { InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps } from './store/settings.ts'
+export { CONSENT_PATHS } from './db/schema/accounts.ts'
+export type { ConsentPath } from './db/schema/accounts.ts'
+export { buildConsentUrl, exchangeAuthorizationCode, probeAccess, SCOPES } from './api/oauth.ts'
+export type { ConsentUrlInput, ExchangeInput, ExchangeResult, ProbeInput } from './api/oauth.ts'
+export { runBackfill } from './sync/runBackfill.ts'
+export type { BackfillInput, BackfillResult } from './sync/runBackfill.ts'
+export type { SyncProgress } from './sync/runJob.ts'
+export { DEFAULT_BACKFILL_HORIZON_DAYS } from './api/catalogue.ts'
+// Synthetic payload builders, exported for the server's Google stub. Test-only in intent, and
+// the file they come from invents every value it emits: nothing here reads real health data.
+export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body } from './testing/payloads.ts'

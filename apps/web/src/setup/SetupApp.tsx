@@ -1,0 +1,104 @@
+import { useEffect, useState } from 'react'
+import { useRoute, navigate } from '../router.js'
+import { AccountStep } from './AccountStep.js'
+import { InstanceUrlStep } from './InstanceUrlStep.js'
+import { GoogleStep } from './GoogleStep.js'
+import { BackfillStep } from './BackfillStep.js'
+import { getLastError, getRedirectUris, getSetupState, getSyncStatus } from './api.js'
+import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
+
+const STEPS = [
+  { step: 'account', path: '/setup/account', title: 'Account' },
+  { step: 'instance-url', path: '/setup/instance-url', title: 'Address' },
+  { step: 'google-client', path: '/setup/google', title: 'Google' },
+  { step: 'consent', path: '/setup/google', title: 'Consent' },
+] as const
+
+const pathForStep = (step: string) =>
+  STEPS.find((entry) => entry.step === step)?.path ?? '/setup/backfill'
+
+function Rail({ current }: { current: string }) {
+  const index = STEPS.findIndex((entry) => entry.step === current)
+  return (
+    <ol className="setup-rail">
+      {STEPS.map((entry, position) => (
+        <li
+          key={entry.title}
+          data-state={position === index ? 'current' : position < index || index === -1 ? 'done' : 'todo'}
+        >
+          {entry.title}
+        </li>
+      ))}
+    </ol>
+  )
+}
+
+export function SetupApp() {
+  const route = useRoute()
+  const [step, setStep] = useState<string | null>(null)
+  const [candidates, setCandidates] = useState<RedirectCandidate[]>([])
+  const [callbackError, setCallbackError] = useState<SetupError | null>(null)
+  const [status, setStatus] = useState<SyncStatus | null>(null)
+
+  // The server owns which step is due, so the browser asks rather than remembers. A reload
+  // mid wizard, or a callback that landed on the wrong path, both resolve here.
+  const refresh = () => {
+    void getSetupState().then(({ step: due }) => {
+      setStep(due)
+      const target = pathForStep(due)
+      if (due !== 'done' && !route.startsWith(target)) navigate(target)
+    })
+  }
+  useEffect(refresh, [])
+
+  const onGoogleRoute = route.startsWith('/setup/google')
+  useEffect(() => {
+    if (!onGoogleRoute) return
+    void getRedirectUris(window.location.hostname).then((r) => setCandidates(r.candidates))
+    // The callback redirects here with an error code in the query, and the message that goes
+    // with it lives on the server. Fetching it is what puts the console fix on screen.
+    if (route.includes('error=')) void getLastError().then(setCallbackError)
+  }, [onGoogleRoute, route])
+
+  const onBackfill = route.startsWith('/setup/backfill')
+  useEffect(() => {
+    if (!onBackfill) return
+    void getSyncStatus().then(setStatus)
+    // EventSource for live progress, with the status route as the fallback: a proxy that
+    // buffers the stream would otherwise leave the page frozen at whatever it first drew.
+    const stream = new EventSource('/api/sync/events')
+    stream.onmessage = (event) => {
+      const parsed: unknown = JSON.parse(event.data as string)
+      if (typeof parsed === 'object' && parsed !== null && 'running' in parsed) {
+        setStatus(parsed as SyncStatus)
+      } else {
+        void getSyncStatus().then(setStatus)
+      }
+    }
+    const poll = setInterval(() => { void getSyncStatus().then(setStatus) }, 5000)
+    return () => { stream.close(); clearInterval(poll) }
+  }, [onBackfill])
+
+  return (
+    <div className="setup-shell">
+      <div className="setup-column">
+        <div className="setup-brand">haelan</div>
+        <Rail current={step ?? 'account'} />
+
+        {route.startsWith('/setup/instance-url')
+          ? <InstanceUrlStep onDone={refresh} />
+          : onGoogleRoute
+            ? (
+              <GoogleStep
+                candidates={candidates}
+                error={callbackError}
+                onDone={() => { window.location.assign('/oauth/start') }}
+              />
+            )
+            : onBackfill
+              ? (status ? <BackfillStep status={status} nowMs={Date.now()} /> : <p className="empty">Loading progress</p>)
+              : <AccountStep onDone={refresh} />}
+      </div>
+    </div>
+  )
+}

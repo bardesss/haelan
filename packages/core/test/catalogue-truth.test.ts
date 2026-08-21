@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DATA_TYPES, dataTypeById } from '../src/api/catalogue.ts'
+import { DATA_TYPES, DEFAULT_BACKFILL_HORIZON_DAYS, dataTypeById } from '../src/api/catalogue.ts'
 import { mapSamples } from '../src/api/mapSamples.ts'
 import { samplePoint, intervalPoint, dailyPoint, body } from '../src/testing/payloads.ts'
 
@@ -44,4 +44,15 @@ describe('the catalogue tells the truth about where a value lives', () => {
       expect(rows[0]?.metric).toBe(t.metric)
     })
   }
+})
+
+describe('the catalogue claims nothing about retention that M0 did not measure', () => {
+  it('never declares a horizon longer than the default', () => {
+    // A longer horizon would be a claim that Google keeps that type further back than five
+    // years, and nothing in probe/findings/ measured retention at all. The default is already
+    // an assumption; a per type value above it would be an unsourced one.
+    for (const type of DATA_TYPES) {
+      expect(type.backfillHorizonDays, type.id).toBeLessThanOrEqual(DEFAULT_BACKFILL_HORIZON_DAYS)
+    }
+  })
 })

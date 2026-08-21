@@ -1,0 +1,99 @@
+import Fastify from 'fastify'
+import cookie from '@fastify/cookie'
+import type { FastifyInstance } from 'fastify'
+import {
+  AccountStore, CredentialStore, PeopleStore, RawArchive, SessionStore, SettingsStore, SourceRegistry,
+  SyncStateStore,
+} from '@haelan/core'
+import type { Instance, RateLimiter } from '@haelan/core'
+import { registerSetupGate } from './routes/setupGate.ts'
+import { registerAuth } from './routes/auth.ts'
+import { registerSetup } from './routes/setup.ts'
+import { registerOauth } from './routes/oauth.ts'
+import { registerSync } from './routes/sync.ts'
+import { registerStatic } from './static.ts'
+import { SyncRunner } from './sync/runner.ts'
+
+/** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
+export interface EndpointOverrides {
+  apiRoot?: string
+  tokenEndpoint?: string
+  authEndpoint?: string
+}
+
+export interface ServerDeps {
+  instance: Instance
+  now: () => number
+  fetch: typeof globalThis.fetch
+  endpoints?: EndpointOverrides
+  /** Absolute path to the built web bundle. Unset in tests, which serve no static files. */
+  webRoot?: string
+  /**
+   * Overrides the runner's token bucket. Production leaves it unset and gets the real one; a
+   * test that drove hundreds of stubbed windows through the real bucket would spend minutes
+   * waiting on a refill that has nothing to do with what it is asserting.
+   */
+  limiter?: RateLimiter
+  /**
+   * Windows each data type walks per run before yielding. Unset in production, which takes
+   * runBackfill's own default. Tests lower it: eighteen types at the real batch is several
+   * hundred archived windows per trigger, which is minutes of gzip in a suite asserting that
+   * a cursor moved at all.
+   */
+  backfillBatchDays?: number
+}
+
+export interface Stores {
+  accounts: AccountStore
+  people: PeopleStore
+  sessions: SessionStore
+  settings: SettingsStore
+  credentials: CredentialStore
+  syncState: SyncStateStore
+  sources: SourceRegistry
+  archive: RawArchive
+}
+
+export interface ServerContext extends ServerDeps {
+  stores: Stores
+  /** Assigned immediately after the context is built; the runner needs the context itself. */
+  runner: SyncRunner
+}
+
+declare module 'fastify' {
+  interface FastifyInstance { haelan: ServerContext }
+}
+
+export function buildServer(deps: ServerDeps): FastifyInstance {
+  const app = Fastify({ logger: false })
+  const stores: Stores = {
+    accounts: new AccountStore(deps.instance.db),
+    people: new PeopleStore(deps.instance.db),
+    sessions: new SessionStore(deps.instance.db),
+    settings: new SettingsStore(deps.instance.db),
+    credentials: deps.instance.credentials,
+    syncState: new SyncStateStore(deps.instance.db),
+    sources: new SourceRegistry(deps.instance.db),
+    archive: deps.instance.archive,
+  }
+  // The runner takes the context and the context holds the runner, so it is assigned rather
+  // than passed. One object, so a route reaching app.haelan.runner reaches the same instance
+  // the scheduler is driving.
+  const context = { ...deps, stores } as ServerContext
+  context.runner = new SyncRunner(context)
+  app.decorate('haelan', context)
+
+  // Not awaited: Fastify queues plugin registration and resolves it during ready(), which the
+  // harness awaits and listen() reaches. Awaiting here would make buildServer async for no gain.
+  void app.register(cookie)
+
+  app.get('/api/health', async () => ({ ok: true }))
+  registerAuth(app)
+  registerSetup(app)
+  registerOauth(app)
+  registerSync(app)
+  registerSetupGate(app)
+  if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
+
+  return app
+}
