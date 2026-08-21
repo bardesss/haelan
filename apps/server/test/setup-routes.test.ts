@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { SCOPES, USER_HORIZON_CHOICES } from '@haelan/core'
+import { SCOPES } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -15,24 +15,6 @@ const createAccount = (h: Harness, overrides: Record<string, unknown> = {}) => h
     displayName: 'Bartus', timezone: 'Europe/Amsterdam', ...overrides,
   },
 })
-
-// Walks the wizard as far as the consent step and returns the session cookie. Stops short of
-// completeSetup/connectPerson on purpose: those mark setup done, and the setup gate refuses
-// every /api/setup/* route once it is, which would make the horizon route untestable by the
-// account that is supposed to set it. Mirrors oauth-routes.test.ts:10-25.
-async function readyForConsent(h: Harness): Promise<string> {
-  const created = await createAccount(h)
-  const cookie = created.cookies.find((c) => c.name === 'haelan_session')!.value
-  await h.app.inject({
-    method: 'POST', url: '/api/setup/instance-url', headers, cookies: { haelan_session: cookie },
-    payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
-  })
-  await h.app.inject({
-    method: 'POST', url: '/api/setup/google-client', headers, cookies: { haelan_session: cookie },
-    payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' },
-  })
-  return cookie
-}
 
 describe('setup routes', () => {
   it('creates the person and the account together and logs the owner in', async () => {
@@ -143,34 +125,5 @@ describe('setup routes', () => {
     const response = await createAccount(harness)
     expect(response.statusCode).toBe(409)
     expect(response.json()).toEqual({ error: 'setup_complete' })
-  })
-
-  it('accepts each offered horizon and rejects anything else', async () => {
-    harness = await withServer()
-    const cookie = await readyForConsent(harness)
-    for (const days of USER_HORIZON_CHOICES) {
-      const ok = await harness.app.inject({
-        method: 'PUT', url: '/api/setup/backfill-horizon', headers, cookies: { haelan_session: cookie },
-        payload: { days },
-      })
-      expect(ok.statusCode).toBe(200)
-      expect(ok.json()).toMatchObject({ backfillHorizonDays: days })
-    }
-    // Not a free-text number: an operator typing 20000 would walk past Google's retention for
-    // years of empty windows, and the wizard only ever offers three values.
-    const rejected = await harness.app.inject({
-      method: 'PUT', url: '/api/setup/backfill-horizon', headers, cookies: { haelan_session: cookie },
-      payload: { days: 20000 },
-    })
-    expect(rejected.statusCode).toBe(400)
-  })
-
-  it('refuses an unauthenticated caller', async () => {
-    harness = await withServer()
-    await readyForConsent(harness)
-    const response = await harness.app.inject({
-      method: 'PUT', url: '/api/setup/backfill-horizon', headers, payload: { days: 365 },
-    })
-    expect(response.statusCode).toBe(401)
   })
 })

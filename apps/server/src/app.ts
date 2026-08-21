@@ -11,6 +11,7 @@ import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
+import { registerSettings } from './routes/settings.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
 
@@ -92,6 +93,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerSetup(app)
   registerOauth(app)
   registerSync(app)
+  registerSettings(app)
   registerSetupGate(app)
   if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
 

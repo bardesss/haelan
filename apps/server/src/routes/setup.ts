@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
-import { setupStep, CONSENT_PATHS, SCOPES, USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS } from '@haelan/core'
+import { setupStep, CONSENT_PATHS, SCOPES } from '@haelan/core'
 import type { ConsentPath } from '@haelan/core'
 import { setSessionCookie } from '../auth/cookie.ts'
 import { candidateFor, loopbackCandidates, redirectUriFor } from '../oauth/redirectUri.ts'
 
 interface AccountBody { username?: unknown, password?: unknown, displayName?: unknown, timezone?: unknown }
 interface InstanceUrlBody { baseUrl?: unknown, consentPath?: unknown }
-interface HorizonBody { days?: unknown }
 
 export function registerSetup(app: FastifyInstance): void {
   const stores = () => app.haelan.stores
@@ -70,25 +69,6 @@ export function registerSetup(app: FastifyInstance): void {
   // list buildConsentUrl requests are the same array. A wizard that told somebody to declare
   // five scopes and then asked for six would fail at consent, having been the reason.
   app.get('/api/setup/scopes', async (_request, reply) => reply.send({ scopes: [...SCOPES] }))
-
-  // Unlike scopes above, both of these carry requireSession: the horizon is an operator choice
-  // made by a logged-in account, not something an unauthenticated visitor needs mid-wizard.
-  app.get('/api/setup/backfill-horizon', { preHandler: [app.requireSession] }, async (_request, reply) =>
-    reply.send({
-      days: stores().settings.get()?.backfillHorizonDays ?? DEFAULT_USER_HORIZON_DAYS,
-      choices: [...USER_HORIZON_CHOICES],
-    }))
-
-  // Constrained to the three offered values rather than any integer: the cost of a horizon is
-  // not linear in it, and the wizard shows a measured disk figure beside each of the three.
-  app.put<{ Body: HorizonBody }>('/api/setup/backfill-horizon', { preHandler: [app.requireSession] }, async (request, reply) => {
-    const { days } = request.body ?? {}
-    if (typeof days !== 'number' || !(USER_HORIZON_CHOICES as readonly number[]).includes(days)) {
-      return reply.code(400).send({ error: `days must be one of ${USER_HORIZON_CHOICES.join(', ')}` })
-    }
-    stores().settings.putBackfillHorizon(days, app.haelan.now())
-    return reply.send({ backfillHorizonDays: days })
-  })
 }
 
 function portOf(hostHeader: string | undefined): number {
