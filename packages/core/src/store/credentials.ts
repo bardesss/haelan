@@ -1,4 +1,4 @@
-import { eq, isNull } from 'drizzle-orm'
+﻿import { eq, isNull } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { oauthClient, credentials } from '../db/schema/index.ts'
 import { seal, unseal } from '../crypto/secretBox.ts'
@@ -10,34 +10,40 @@ export interface ClientCredentials { clientId: string, clientSecret: string }
 export interface StoredRefreshToken { refreshToken: string, scopes: string[], revokedAtMs: number | null }
 
 export class CredentialStore {
-  constructor(private readonly db: DbOrTx, private readonly key: Buffer) {}
+  readonly #db: DbOrTx
+  readonly #key: Buffer
+
+  constructor(db: DbOrTx, key: Buffer) {
+    this.#db = db
+    this.#key = key
+  }
 
   putClient(input: ClientCredentials & { nowMs: number }): void {
-    this.db.insert(oauthClient).values({
+    this.#db.insert(oauthClient).values({
       id: CLIENT_ROW_ID,
       clientId: input.clientId,
-      clientSecretEncrypted: seal(this.key, input.clientSecret),
+      clientSecretEncrypted: seal(this.#key, input.clientSecret),
       updatedAtMs: input.nowMs,
     }).onConflictDoUpdate({
       target: oauthClient.id,
       set: {
         clientId: input.clientId,
-        clientSecretEncrypted: seal(this.key, input.clientSecret),
+        clientSecretEncrypted: seal(this.#key, input.clientSecret),
         updatedAtMs: input.nowMs,
       },
     }).run()
   }
 
   getClient(): ClientCredentials | null {
-    const row = this.db.select().from(oauthClient).where(eq(oauthClient.id, CLIENT_ROW_ID)).get()
+    const row = this.#db.select().from(oauthClient).where(eq(oauthClient.id, CLIENT_ROW_ID)).get()
     if (!row) return null
-    return { clientId: row.clientId, clientSecret: unseal(this.key, row.clientSecretEncrypted) }
+    return { clientId: row.clientId, clientSecret: unseal(this.#key, row.clientSecretEncrypted) }
   }
 
   putRefreshToken(input: { personId: string, refreshToken: string, scopes: string[], nowMs: number }): void {
-    const encrypted = seal(this.key, input.refreshToken)
+    const encrypted = seal(this.#key, input.refreshToken)
     const scopes = input.scopes.join(' ')
-    this.db.insert(credentials).values({
+    this.#db.insert(credentials).values({
       personId: input.personId,
       refreshTokenEncrypted: encrypted,
       grantedScopes: scopes,
@@ -50,19 +56,19 @@ export class CredentialStore {
   }
 
   getRefreshToken(personId: string): StoredRefreshToken | null {
-    const row = this.db.select().from(credentials).where(eq(credentials.personId, personId)).get()
+    const row = this.#db.select().from(credentials).where(eq(credentials.personId, personId)).get()
     if (!row) return null
     return {
-      refreshToken: unseal(this.key, row.refreshTokenEncrypted),
+      refreshToken: unseal(this.#key, row.refreshTokenEncrypted),
       scopes: row.grantedScopes === '' ? [] : row.grantedScopes.split(' '),
       revokedAtMs: row.revokedAtMs ?? null,
     }
   }
 
   putClientOverride(input: { personId: string, clientId: string, clientSecret: string }): void {
-    const result = this.db.update(credentials).set({
+    const result = this.#db.update(credentials).set({
       clientIdOverride: input.clientId,
-      clientSecretOverrideEncrypted: seal(this.key, input.clientSecret),
+      clientSecretOverrideEncrypted: seal(this.#key, input.clientSecret),
     }).where(eq(credentials.personId, input.personId)).run()
     // An UPDATE against a missing row matches nothing and returns void, which would bury the
     // failure. RawArchive.put checks changes for the same reason.
@@ -76,11 +82,11 @@ export class CredentialStore {
   // person who took the trouble to set it up. Spec section 7 calls the override an escape
   // hatch, so it has to be on the path everything takes.
   getClientFor(personId: string): ClientCredentials {
-    const row = this.db.select().from(credentials).where(eq(credentials.personId, personId)).get()
+    const row = this.#db.select().from(credentials).where(eq(credentials.personId, personId)).get()
     if (row?.clientIdOverride && row.clientSecretOverrideEncrypted) {
       return {
         clientId: row.clientIdOverride,
-        clientSecret: unseal(this.key, row.clientSecretOverrideEncrypted),
+        clientSecret: unseal(this.#key, row.clientSecretOverrideEncrypted),
       }
     }
     const household = this.getClient()
@@ -91,17 +97,17 @@ export class CredentialStore {
   // The token is kept rather than deleted: the reconnect banner needs to distinguish "this
   // person revoked access" from "this person was never connected". Spec section 13.
   markRevoked(personId: string, nowMs: number): void {
-    this.db.update(credentials).set({ revokedAtMs: nowMs })
+    this.#db.update(credentials).set({ revokedAtMs: nowMs })
       .where(eq(credentials.personId, personId)).run()
   }
 
   clearRevoked(personId: string): void {
-    this.db.update(credentials).set({ revokedAtMs: null })
+    this.#db.update(credentials).set({ revokedAtMs: null })
       .where(eq(credentials.personId, personId)).run()
   }
 
   listConnectedPeople(): string[] {
-    return this.db.select({ personId: credentials.personId }).from(credentials)
+    return this.#db.select({ personId: credentials.personId }).from(credentials)
       .where(isNull(credentials.revokedAtMs)).all().map((r) => r.personId)
   }
 }

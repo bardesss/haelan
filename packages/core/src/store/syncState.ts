@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+﻿import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { syncState } from '../db/schema/index.ts'
 import { DATA_TYPES } from '../api/catalogue.ts'
@@ -16,10 +16,12 @@ export interface SyncStateRow {
 }
 
 export class SyncStateStore {
-  constructor(private readonly db: DbOrTx) {}
+  readonly #db: DbOrTx
+
+  constructor(db: DbOrTx) { this.#db = db }
 
   get(personId: string, dataType: string): SyncStateRow | null {
-    const row = this.db.select().from(syncState)
+    const row = this.#db.select().from(syncState)
       .where(and(eq(syncState.personId, personId), eq(syncState.dataType, dataType))).get()
     if (!row) return null
     return {
@@ -76,7 +78,7 @@ export class SyncStateStore {
   }
 
   private upsert(personId: string, dataType: string, set: Partial<typeof syncState.$inferInsert>): void {
-    this.db.insert(syncState).values({ personId, dataType, ...set })
+    this.#db.insert(syncState).values({ personId, dataType, ...set })
       .onConflictDoUpdate({ target: [syncState.personId, syncState.dataType], set })
       .run()
   }

@@ -1,4 +1,4 @@
-import { DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync } from '@haelan/core'
+﻿import { DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
 
@@ -42,7 +42,9 @@ export class SyncRunner {
   private timer: NodeJS.Timeout | null = null
   private readonly listeners = new Set<(event: SyncProgress) => void>()
 
-  constructor(private readonly context: ServerContext) {}
+  readonly #context: ServerContext
+
+  constructor(context: ServerContext) { this.#context = context }
 
   subscribe(listener: (event: SyncProgress) => void): () => void {
     this.listeners.add(listener)
@@ -51,10 +53,10 @@ export class SyncRunner {
 
   status(): RunnerStatus {
     const backfill: BackfillSummary[] = []
-    for (const person of this.context.stores.people.list()) {
+    for (const person of this.#context.stores.people.list()) {
       for (const type of DATA_TYPES) {
         if (!type.listSupported) continue
-        const state = this.context.stores.syncState.get(person.id, type.id)
+        const state = this.#context.stores.syncState.get(person.id, type.id)
         backfill.push({
           dataType: type.id,
           complete: state?.backfillCompleteAtMs != null,
@@ -89,21 +91,21 @@ export class SyncRunner {
     if (this.running) return { started: false, reason: 'already_running' }
     this.running = true
     this.reason = reason
-    this.startedAtMs = this.context.now()
+    this.startedAtMs = this.#context.now()
     try {
       await this.run()
     } finally {
       this.running = false
       this.reason = null
       this.startedAtMs = null
-      this.lastFinishedAtMs = this.context.now()
+      this.lastFinishedAtMs = this.#context.now()
     }
     return { started: true }
   }
 
   start(): void {
     if (this.timer) return
-    const minutes = this.context.stores.settings.get()?.syncIntervalMinutes ?? 60
+    const minutes = this.#context.stores.settings.get()?.syncIntervalMinutes ?? 60
     this.timer = setInterval(() => { void this.trigger('scheduled') }, minutes * 60_000)
     // Without unref, an idle timer keeps the process alive through a shutdown that has already
     // closed the server.
@@ -126,33 +128,33 @@ export class SyncRunner {
   }
 
   private buildDeps(): JobDeps {
-    const tokens = new TokenProvider(this.context.stores.credentials, {
-      fetch: this.context.fetch,
-      now: this.context.now,
-      tokenEndpoint: this.context.endpoints?.tokenEndpoint,
+    const tokens = new TokenProvider(this.#context.stores.credentials, {
+      fetch: this.#context.fetch,
+      now: this.#context.now,
+      tokenEndpoint: this.#context.endpoints?.tokenEndpoint,
     })
-    const client = new HealthClient(tokens, this.context.stores.archive, {
-      fetch: this.context.fetch,
-      now: this.context.now,
+    const client = new HealthClient(tokens, this.#context.stores.archive, {
+      fetch: this.#context.fetch,
+      now: this.#context.now,
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       random: Math.random,
-      apiRoot: this.context.endpoints?.apiRoot,
+      apiRoot: this.#context.endpoints?.apiRoot,
     })
     return {
-      db: this.context.instance.db,
-      archive: this.context.stores.archive,
-      sources: this.context.stores.sources,
-      syncState: this.context.stores.syncState,
+      db: this.#context.instance.db,
+      archive: this.#context.stores.archive,
+      sources: this.#context.stores.sources,
+      syncState: this.#context.stores.syncState,
       client,
-      now: this.context.now,
-      limiter: this.context.limiter ?? defaultLimiter(),
+      now: this.#context.now,
+      limiter: this.#context.limiter ?? defaultLimiter(),
       onProgress: (event) => this.emit(event),
     }
   }
 
   private async run(): Promise<void> {
     const deps = this.buildDeps()
-    const personIds = this.context.stores.credentials.listConnectedPeople()
+    const personIds = this.#context.stores.credentials.listConnectedPeople()
     if (personIds.length === 0) return
 
     // The trailing window first: today's data is what a dashboard shows, and a backfill that
@@ -160,16 +162,16 @@ export class SyncRunner {
     await runSync({ personIds, trailingDays: TRAILING_DAYS, deps })
 
     for (const personId of personIds) {
-      const person = this.context.stores.people.get(personId)
+      const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of DATA_TYPES) {
         if (!dataType.listSupported) continue
         try {
           await runBackfill({
-            personId, timezone: person.timezone, dataType, nowMs: this.context.now(),
-            ...(this.context.backfillBatchDays === undefined
+            personId, timezone: person.timezone, dataType, nowMs: this.#context.now(),
+            ...(this.#context.backfillBatchDays === undefined
               ? {}
-              : { batchDays: this.context.backfillBatchDays }),
+              : { batchDays: this.#context.backfillBatchDays }),
             deps,
           })
         } catch (error) {
@@ -178,10 +180,10 @@ export class SyncRunner {
           // here is unexpected. Recording it rather than swallowing it is what stops a whole
           // backfill from silently doing nothing: the first version of this catch was silent,
           // and it hid a missing export behind eighteen types that quietly never walked.
-          this.context.stores.syncState.recordFailure({
+          this.#context.stores.syncState.recordFailure({
             personId, dataType: dataType.id,
             error: error instanceof Error ? error : new Error(String(error)),
-            nowMs: this.context.now(),
+            nowMs: this.#context.now(),
           })
         }
       }

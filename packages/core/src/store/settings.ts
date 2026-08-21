@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+﻿import { eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { instanceSettings } from '../db/schema/index.ts'
 import type { ConsentPath } from '../db/schema/accounts.ts'
@@ -22,10 +22,12 @@ export interface PutSettingsInput {
 }
 
 export class SettingsStore {
-  constructor(private readonly db: DbOrTx) {}
+  readonly #db: DbOrTx
+
+  constructor(db: DbOrTx) { this.#db = db }
 
   get(): InstanceSettingsRow | null {
-    const row = this.db.select().from(instanceSettings).where(eq(instanceSettings.id, ROW_ID)).get()
+    const row = this.#db.select().from(instanceSettings).where(eq(instanceSettings.id, ROW_ID)).get()
     if (!row) return null
     return {
       baseUrl: row.baseUrl,
@@ -44,14 +46,14 @@ export class SettingsStore {
       ...(input.syncIntervalMinutes === undefined ? {} : { syncIntervalMinutes: input.syncIntervalMinutes }),
       updatedAtMs: input.nowMs,
     }
-    this.db.insert(instanceSettings)
+    this.#db.insert(instanceSettings)
       .values({ id: ROW_ID, syncIntervalMinutes: input.syncIntervalMinutes ?? 60, ...set })
       .onConflictDoUpdate({ target: instanceSettings.id, set })
       .run()
   }
 
   markSetupComplete(nowMs: number): void {
-    this.db.update(instanceSettings).set({ setupCompletedAtMs: nowMs, updatedAtMs: nowMs })
+    this.#db.update(instanceSettings).set({ setupCompletedAtMs: nowMs, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 }

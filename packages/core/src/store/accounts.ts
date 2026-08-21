@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+﻿import { eq } from 'drizzle-orm'
 import { hash, verify } from '@node-rs/argon2'
 import type { DbOrTx } from '../db/open.ts'
 import { accounts } from '../db/schema/index.ts'
@@ -41,21 +41,23 @@ async function decoy(): Promise<string> {
 }
 
 export class AccountStore {
-  constructor(private readonly db: DbOrTx) {}
+  readonly #db: DbOrTx
+
+  constructor(db: DbOrTx) { this.#db = db }
 
   count(): number {
-    return this.db.select().from(accounts).all().length
+    return this.#db.select().from(accounts).all().length
   }
 
   async create(input: CreateAccountInput): Promise<AccountRow> {
     const username = input.username.trim().toLowerCase()
     if (username === '') throw new ConfigError('username must not be empty')
-    if (this.db.select().from(accounts).where(eq(accounts.username, username)).get()) {
+    if (this.#db.select().from(accounts).where(eq(accounts.username, username)).get()) {
       throw new ConfigError(`username ${username} is already taken`)
     }
     if (input.password.length < 8) throw new ConfigError('password must be at least 8 characters')
     const passwordHash = await hash(input.password, ARGON2)
-    this.db.insert(accounts).values({
+    this.#db.insert(accounts).values({
       id: input.id,
       personId: input.personId,
       username,
@@ -68,7 +70,7 @@ export class AccountStore {
 
   async login(input: LoginInput): Promise<LoginResult> {
     const username = input.username.trim().toLowerCase()
-    const row = this.db.select().from(accounts).where(eq(accounts.username, username)).get()
+    const row = this.#db.select().from(accounts).where(eq(accounts.username, username)).get()
     if (!row) {
       await verify(await decoy(), input.password).catch(() => false)
       return { ok: false, reason: 'unknown' }
@@ -80,25 +82,25 @@ export class AccountStore {
     const matched = await verify(row.passwordHash, input.password).catch(() => false)
     if (!matched) {
       const failedAttempts = row.failedAttempts + 1
-      this.db.update(accounts).set({
+      this.#db.update(accounts).set({
         failedAttempts,
         lockedUntilMs: failedAttempts >= MAX_ATTEMPTS ? input.nowMs + LOCK_MS : row.lockedUntilMs,
       }).where(eq(accounts.id, row.id)).run()
       return { ok: false, reason: 'bad_password' }
     }
 
-    this.db.update(accounts).set({ failedAttempts: 0, lockedUntilMs: null })
+    this.#db.update(accounts).set({ failedAttempts: 0, lockedUntilMs: null })
       .where(eq(accounts.id, row.id)).run()
     return { ok: true, account: toRow(row) }
   }
 
   getById(id: string): AccountRow | null {
-    const row = this.db.select().from(accounts).where(eq(accounts.id, id)).get()
+    const row = this.#db.select().from(accounts).where(eq(accounts.id, id)).get()
     return row ? toRow(row) : null
   }
 
   getByPersonId(personId: string): AccountRow | null {
-    const row = this.db.select().from(accounts).where(eq(accounts.personId, personId)).get()
+    const row = this.#db.select().from(accounts).where(eq(accounts.personId, personId)).get()
     return row ? toRow(row) : null
   }
 }

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+﻿import { createHash } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { sources } from '../db/schema/index.ts'
@@ -22,25 +22,27 @@ function describe(dataSource: unknown): Described {
 }
 
 export class SourceRegistry {
-  private readonly cache = new Map<string, string>()
+  readonly #cache = new Map<string, string>()
 
-  constructor(private readonly db: DbOrTx) {}
+  readonly #db: DbOrTx
+
+  constructor(db: DbOrTx) { this.#db = db }
 
   /**
    * `into` is the handle the row is written and read through. A caller inside a transaction
    * passes its transaction handle so the sources row commits and rolls back with the samples
    * and sessions rows whose foreign keys point at it.
    */
-  resolve(personId: string, dataSource: unknown, nowMs: number, into: DbOrTx = this.db): string {
+  resolve(personId: string, dataSource: unknown, nowMs: number, into: DbOrTx = this.#db): string {
     const { externalId, displayName, kind } = describe(dataSource)
     const cacheKey = `${personId} ${externalId}`
-    const cached = this.cache.get(cacheKey)
+    const cached = this.#cache.get(cacheKey)
     if (cached) return cached
 
     const existing = into.select({ id: sources.id }).from(sources)
       .where(and(eq(sources.personId, personId), eq(sources.externalId, externalId))).get()
     if (existing) {
-      this.cache.set(cacheKey, existing.id)
+      this.#cache.set(cacheKey, existing.id)
       return existing.id
     }
 
@@ -51,7 +53,7 @@ export class SourceRegistry {
       .values({ id, personId, externalId, displayName, kind, createdAtMs: nowMs })
       .onConflictDoNothing({ target: [sources.personId, sources.externalId] })
       .run()
-    this.cache.set(cacheKey, id)
+    this.#cache.set(cacheKey, id)
     return id
   }
 
@@ -63,8 +65,8 @@ export class SourceRegistry {
    */
   forget(personId: string): void {
     const prefix = `${personId} `
-    for (const key of this.cache.keys()) {
-      if (key.startsWith(prefix)) this.cache.delete(key)
+    for (const key of this.#cache.keys()) {
+      if (key.startsWith(prefix)) this.#cache.delete(key)
     }
   }
 }
