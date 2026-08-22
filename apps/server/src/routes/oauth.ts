@@ -28,7 +28,7 @@ export function registerOauth(app: FastifyInstance): void {
     return reply.send({ step: currentStep() })
   })
 
-  app.get('/api/setup/last-error', async () => lastError ?? { code: 'none', message: '' })
+  app.get('/api/setup/last-error', { preHandler: [app.requireSession] }, async () => lastError ?? { code: 'none', message: '' })
 
   app.get('/oauth/start', { preHandler: [app.requireSession] }, async (request, reply) => {
     const account = request.accountId ? stores().accounts.getById(request.accountId) : null
