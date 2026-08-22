@@ -4,7 +4,7 @@ import { useChart } from './useChart.js'
 import { chartBase } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import type { Stage } from '../fixtures/july.js'
-import { stageColor } from './stage.js'
+import { stageMark } from './stage.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatDuration } from '../format.js'
 
@@ -36,10 +36,11 @@ export function Hypnogram({ segments, startLabel, label }: {
           const laneSize = api.size?.([0, 1]) ?? 20
           const laneHeight = (Array.isArray(laneSize) ? laneSize[1] : laneSize) ?? 20
           const height = laneHeight * 0.45
+          const mark = stageMark(stage as Stage, t)
           return {
             type: 'rect',
             shape: { x: start[0] ?? 0, y: (start[1] ?? 0) - height / 2, width: (end[0] ?? 0) - (start[0] ?? 0), height },
-            style: { fill: stageColor(stage as Stage, t) },
+            style: { fill: mark.fill, stroke: mark.outline, lineWidth: mark.outlineWidth },
           }
         },
         encode: { x: [0, 1], y: 2 },

@@ -4,6 +4,9 @@ export const STROKE = {
   sparkline: 1.6,
   series: 1.9,
   nightSpan: 5,
+  // Hairline, because it is there to give the mark an edge the card cannot
+  // swallow, not to be seen as a line in its own right.
+  stageOutline: 1,
 } as const
 
 export const OPACITY = {
@@ -18,6 +21,21 @@ export const SYMBOL = {
 } as const
 
 export const AXIS_FONT_SIZE = 12
+
+/**
+ * Applies the reader's motion preference to a built option object.
+ *
+ * useChart re-runs setOption with notMerge on every theme change, so every chart on the page
+ * animates again each time - and ECharts animates by default, which nothing here had ever turned
+ * off. A stated system preference overrules whatever a chart asked for: it is a statement about
+ * the reader, not a default for a chart to weigh against its own preferences.
+ *
+ * A plain function rather than something wired into chartBase, so the decision is testable
+ * without a DOM; the one line that reads the media query lives in useChart.
+ */
+export function withMotionPreference<T extends object>(option: T, reducedMotion: boolean): T & { animation: boolean } {
+  return { ...option, animation: !reducedMotion }
+}
 
 type Inset = { left?: number; right?: number; top?: number; bottom?: number }
 
