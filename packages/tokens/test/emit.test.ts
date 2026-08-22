@@ -19,6 +19,25 @@ describe('css emitter', () => {
     expect(light).not.toContain('--space-4:')
   })
 
+  // The light theme was fully built and fully tested and nothing could reach it: dark sat on
+  // bare :root, there was no prefers-color-scheme block, and index.html hardcoded the attribute.
+  // A theme that exists only in the test suite is not a theme that ships.
+  it('follows the system preference when the reader has not chosen a theme', () => {
+    expect(css).toMatch(/@media \(prefers-color-scheme: light\)/)
+    const media = css.slice(css.indexOf('@media (prefers-color-scheme: light)'))
+    expect(media).toContain(`${semanticVar('surface-card')}: ${resolveSemantic('light')['surface-card']};`)
+  })
+
+  // Both directions, which is the part that is easy to get half right: a light-mode system with
+  // dark chosen has to stay dark, and a dark-mode system with light chosen has to go light.
+  it('lets an explicit choice beat the system preference in both directions', () => {
+    const media = css.slice(css.indexOf('@media (prefers-color-scheme: light)'))
+    expect(media, 'the system light rule must exclude an explicit dark choice')
+      .toContain(":root:not([data-theme='dark'])")
+    expect(css, 'an explicit light choice needs a rule of its own, outside the media query')
+      .toContain("[data-theme='light'] {")
+  })
+
   it('emits spacing and type scales once, outside the theme blocks', () => {
     expect(css).toContain('--space-4: 16px;')
     expect(css).toContain('--font-size-xl: 34px;')

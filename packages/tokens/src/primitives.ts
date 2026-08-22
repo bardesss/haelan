@@ -20,7 +20,7 @@ export const primitives = {
   // Reserved for the absence marker; its separation from every other chart colour is measured, not chosen by eye (see chart.ts).
   plum: { 300: '#C1A2BC', 800: '#523145' },
   mint: { 400: '#5EC9A0', 700: '#166F52' },
-  coral: { 400: '#E8846B', 700: '#B4472C' },
+  coral: { 400: '#E8846B', 700: '#AB432A' },
   slate: {
     50: '#FFFFFF',
     100: '#F5F7FB',
