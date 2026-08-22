@@ -62,3 +62,18 @@ export type { SyncProgress } from './sync/runJob.ts'
 // Synthetic payload builders, exported for the server's Google stub. Test-only in intent, and
 // the file they come from invents every value it emits: nothing here reads real health data.
 export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body } from './testing/payloads.ts'
+
+// M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
+// ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
+// tasks in this milestone first needed them across the apps/server boundary.
+export { METRICS, DAILY_AGGS, metricSpec } from './derive/metrics.ts'
+export type { MetricSpec, DailyAgg } from './derive/metrics.ts'
+export { DERIVATION_VERSION } from './derive/version.ts'
+export { localDateOf, localHourOf } from './derive/localDay.ts'
+export { coverageOf } from './derive/coverage.ts'
+export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
+export type { DailyRow, SampleLike } from './derive/rollup.ts'
+export { runDerive } from './derive/runDerive.ts'
+export type { DeriveReport } from './derive/runDerive.ts'
+export { mapRollups } from './api/mapRollups.ts'
+export { runRollupJob, rollupRangeCapDays } from './sync/runRollupJob.ts'
