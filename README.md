@@ -187,7 +187,13 @@ localhost.
   are attribution and are welcome; a session URL is meaningless to everyone but the account that
   created it. Enforced by `.githooks/commit-msg` and by CI.
 - Comments are sparse and record why, not what.
-- Every change reaches `master` through a pull request, and nothing is ever force pushed.
+- Every change reaches `master` through a pull request, and nothing is ever force pushed. That
+  rule has exactly one exception, on 2026-08-22, recorded here rather than quietly: `master` was
+  rewritten once to strip agent session links from 22 commit messages, before the repository was
+  public and while nothing else had cloned it. Content was untouched, verified by the rewritten
+  tree being byte-identical to the original and by the commit count and every `Co-Authored-By`
+  line surviving. The merge references on pull requests #30 through #38 point at commits that
+  rewrite left unreachable. There is no second exception.
 - Real health data never gets committed. Archived payloads stay gitignored, and every test fixture
   is synthetic.
 
