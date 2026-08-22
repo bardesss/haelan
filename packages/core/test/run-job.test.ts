@@ -380,21 +380,24 @@ describe('runJob', () => {
     expect(entries.map((e) => e.localDate).sort()).toEqual([...expectedDates].sort())
   })
 
-  it('leaves the queue empty for a window rolled back, so a derive never reads data that is not there', async () => {
+  it('rolls the rows back with the mark, so a failed mark never leaves rows behind for a day the queue does not know is dirty', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
     const queue = new DeriveQueue(ctx.db)
     const deps = { ...build(fetchMock), deriveQueue: queue }
 
-    // Same busy-database trigger the rollback test above uses: the throw lands inside the
-    // window's transaction after the rows would have been written, taking the mark with it.
-    ctx.db.$client.exec("CREATE TRIGGER haelan_test_busy BEFORE INSERT ON samples BEGIN SELECT RAISE(ABORT, 'database is locked'); END")
+    // The sample rows map and insert cleanly; only the mark that follows them fails. That is
+    // what makes the empty samples table below meaningful: those rows were written before the
+    // trigger fired, so their absence afterwards proves the day's mark and the day's rows commit
+    // or roll back together, not merely that a doomed write leaves nothing queued.
+    ctx.db.$client.exec("CREATE TRIGGER haelan_test_queue_fail BEFORE INSERT ON derive_queue BEGIN SELECT RAISE(ABORT, 'derive_queue insert failed'); END")
     const result = await runJob({
       personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
     })
-    ctx.db.$client.exec('DROP TRIGGER haelan_test_busy')
+    ctx.db.$client.exec('DROP TRIGGER haelan_test_queue_fail')
 
     expect(result.rowsWritten).toBe(0)
     expect(queue.size()).toBe(0)
+    expect(ctx.db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(0)
   })
 })
