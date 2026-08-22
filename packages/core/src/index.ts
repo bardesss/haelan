@@ -11,10 +11,10 @@ export type { PutInput, PutResult } from './store/rawArchive.ts'
 export { createTestDatabase, seedPerson } from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
 export {
-  DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor,
+  ACTIONS, DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor, supports,
   INTRADAY_HORIZON_DAYS, USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS,
 } from './api/catalogue.ts'
-export type { DataType, FilterMember, MappingTarget, TypeTier } from './api/catalogue.ts'
+export type { Action, DataType, FilterMember, MappingTarget, TypeTier } from './api/catalogue.ts'
 export { TokenProvider, RevokedError } from './api/tokens.ts'
 export type { TokenProviderDeps } from './api/tokens.ts'
 export { HealthClient } from './api/client.ts'

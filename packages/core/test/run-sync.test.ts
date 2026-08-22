@@ -6,7 +6,7 @@ import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { runSync, reachBackTo } from '../src/sync/runSync.ts'
-import { DATA_TYPES, DEFAULT_USER_HORIZON_DAYS, INTRADAY_HORIZON_DAYS } from '../src/api/catalogue.ts'
+import { DATA_TYPES, DEFAULT_USER_HORIZON_DAYS, INTRADAY_HORIZON_DAYS, supports } from '../src/api/catalogue.ts'
 import { body } from '../src/testing/payloads.ts'
 import { rawPayloads } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -38,7 +38,7 @@ describe('runSync', () => {
   afterEach(() => { ctx.cleanup(); vi.restoreAllMocks() })
 
   const DAY_MS = 86_400_000
-  const listable = () => DATA_TYPES.filter((t) => t.listSupported)
+  const listable = () => DATA_TYPES.filter((t) => supports(t, 'list'))
   const windowStartsFor = (personId: string) =>
     ctx.db.select({ personId: rawPayloads.personId, windowStartMs: rawPayloads.windowStartMs })
       .from(rawPayloads).all().filter((r) => r.personId === personId).map((r) => r.windowStartMs)
@@ -86,8 +86,8 @@ describe('runSync', () => {
   describe('how far back one run reaches', () => {
     const nowMs = Date.parse('2026-08-19T12:00:00Z')
     const trailingFromMs = nowMs - 7 * DAY_MS
-    const daily = DATA_TYPES.find((t) => t.listSupported && t.tier !== 'intraday')!
-    const intraday = DATA_TYPES.find((t) => t.listSupported && t.tier === 'intraday')!
+    const daily = DATA_TYPES.find((t) => supports(t, 'list') && t.tier !== 'intraday')!
+    const intraday = DATA_TYPES.find((t) => supports(t, 'list') && t.tier === 'intraday')!
 
     it('reaches only the trailing window when there is no mark to reach for', () => {
       expect(reachBackTo(null, trailingFromMs, nowMs, daily, DEFAULT_USER_HORIZON_DAYS)).toBe(trailingFromMs)

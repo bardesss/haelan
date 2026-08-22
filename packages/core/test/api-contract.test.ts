@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { HealthClient } from '../src/api/client.ts'
-import { dataTypeById, DATA_TYPES } from '../src/api/catalogue.ts'
+import { dataTypeById, DATA_TYPES, supports } from '../src/api/catalogue.ts'
 import { mapWindowSamples } from '../src/api/mapSamples.ts'
 import { mapSessions } from '../src/api/mapSessions.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
@@ -74,7 +74,7 @@ describe('client and mapper together', () => {
   })
 
   it('every listable type declares a filterRoot and payloadKey in the casing the API demands', () => {
-    for (const t of DATA_TYPES.filter((t) => t.listSupported)) {
+    for (const t of DATA_TYPES.filter((t) => supports(t, 'list'))) {
       expect(t.filterRoot, t.id).not.toMatch(/[A-Z]/)
       expect(t.payloadKey, t.id).not.toMatch(/[-_]/)
     }

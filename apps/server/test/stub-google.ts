@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
-import { SCOPES, body, dailyPoint, dataTypeById, intervalPoint, samplePoint, sleepPoint } from '@haelan/core'
+import { SCOPES, body, dailyPoint, dataTypeById, intervalPoint, samplePoint, sleepPoint, supports } from '@haelan/core'
 
 export interface StubGoogle {
   origin: string
@@ -22,7 +22,7 @@ const DATE = { year: 2026, month: 2, day: 28 }
 // drift from what the mappers expect.
 function pointFor(id: string): Record<string, unknown> | null {
   const type = dataTypeById(id)
-  if (!type || !type.listSupported || type.mappingDeferred) return null
+  if (!type || !supports(type, 'list') || type.mappingDeferred) return null
   if (type.target === 'sessions') {
     return sleepPoint({
       startTime: '2026-02-27T23:00:00Z', endTime: '2026-02-28T06:30:00Z',

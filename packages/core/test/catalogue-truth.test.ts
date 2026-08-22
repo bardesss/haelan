@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DATA_TYPES, USER_HORIZON_CHOICES, dataTypeById, horizonDaysFor } from '../src/api/catalogue.ts'
+import { DATA_TYPES, USER_HORIZON_CHOICES, dataTypeById, horizonDaysFor, supports } from '../src/api/catalogue.ts'
 import { mapSamples } from '../src/api/mapSamples.ts'
 import { samplePoint, intervalPoint, dailyPoint, body } from '../src/testing/payloads.ts'
 
@@ -26,7 +26,7 @@ const shapeFor = (id: string) => {
 }
 
 describe('the catalogue tells the truth about where a value lives', () => {
-  const mappable = DATA_TYPES.filter((t) => t.listSupported && t.target === 'samples' && !t.mappingDeferred)
+  const mappable = DATA_TYPES.filter((t) => supports(t, 'list') && t.target === 'samples' && !t.mappingDeferred)
 
   it('covers every mappable type, so this test cannot quietly shrink', () => {
     // Pinned exactly: a looser floor would not notice the set losing an entry.

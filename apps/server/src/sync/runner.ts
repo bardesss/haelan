@@ -1,6 +1,6 @@
 ﻿import {
   DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync,
-  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
+  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
 } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -113,7 +113,7 @@ export class SyncRunner {
     const backfill: BackfillSummary[] = []
     for (const person of this.#context.stores.people.list()) {
       for (const type of DATA_TYPES) {
-        if (!type.listSupported) continue
+        if (!supports(type, 'list')) continue
         const state = this.#context.stores.syncState.get(person.id, type.id)
         backfill.push({
           dataType: type.id,
@@ -275,7 +275,7 @@ export class SyncRunner {
     for (const personId of personIds) {
       if (!this.#context.stores.people.get(personId)) continue
       for (const type of DATA_TYPES) {
-        if (!type.listSupported) continue
+        if (!supports(type, 'list')) continue
         const state = this.#context.stores.syncState.get(personId, type.id)
         if (state?.backfillCompleteAtMs != null) continue
         const cursor = state?.backfillCursorMs
@@ -302,7 +302,7 @@ export class SyncRunner {
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of DATA_TYPES) {
-        if (!dataType.listSupported) continue
+        if (!supports(dataType, 'list')) continue
         if (this.#aborted) return cursorAdvanced
         const resolved = horizonDaysFor(dataType, userHorizonDays)
         // A stored completion mark pins a type to whatever horizon was in force on the day it

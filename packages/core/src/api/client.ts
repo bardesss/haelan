@@ -1,5 +1,6 @@
 ﻿import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
+import { supports } from './catalogue.ts'
 import { ConfigError, HaelanError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const API_ROOT = 'https://health.googleapis.com/v4'
@@ -97,8 +98,8 @@ export class HealthClient {
 
   async listDataPoints(input: ListInput): Promise<ListResult> {
     const { dataType: t } = input
-    if (!t.listSupported) {
-      throw new ConfigError(`${t.id} does not support list, only rollup and dailyRollup`)
+    if (!supports(t, 'list')) {
+      throw new ConfigError(`${t.id} does not support list, only ${t.actions.join(', ')}`)
     }
     // A reversed or empty window builds a filter that is always false. The API would answer it
     // with a legitimate looking empty page, and an empty page recorded as "no data" for a range

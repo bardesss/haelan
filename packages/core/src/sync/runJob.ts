@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import type { DataType } from '../api/catalogue.ts'
+import { supports } from '../api/catalogue.ts'
 import type { HealthClient } from '../api/client.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
@@ -83,7 +84,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   }
 
   const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, skipped: null }
-  if (!t.listSupported) return { ...empty, skipped: 'unsupported' }
+  if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
 
