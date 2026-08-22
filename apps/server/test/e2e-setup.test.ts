@@ -133,6 +133,15 @@ describe('empty volume to syncing instance', () => {
     expect(rollupState.length).toBe(2)
     expect(rollupState.every((row) => row.last_error === null), JSON.stringify(rollupState)).toBe(true)
 
+    // Tier 3 from tier 2. Sync marks a dirty day for every window it wrote rows into, and until
+    // something drains that queue the milestone's own goal is unmet in a running instance: the
+    // queue only grows and daily never receives a derived row.
+    const derived = instance.db.$client
+      .prepare("select count(*) as n from daily where source <> 'provider'").get() as { n: number }
+    expect(derived.n).toBeGreaterThan(0)
+    const queued = instance.db.$client.prepare('select count(*) as n from derive_queue').get() as { n: number }
+    expect(queued.n).toBe(0)
+
     expect(google.requests.some((url) => url.includes('/dataPoints'))).toBe(true)
     // Every data plane request carried a bearer token, so nothing went out unauthenticated.
     expect(google.authHeaders.length).toBeGreaterThan(0)
