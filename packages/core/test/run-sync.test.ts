@@ -43,6 +43,28 @@ describe('runSync', () => {
     ctx.db.select({ personId: rawPayloads.personId, windowStartMs: rawPayloads.windowStartMs })
       .from(rawPayloads).all().filter((r) => r.personId === personId).map((r) => r.windowStartMs)
 
+  // Runs one sync and splits the URLs the stub fetch saw into the two endpoint shapes: `list`
+  // ends in plain `/dataPoints`, `dailyRollUp` ends in `/dataPoints:dailyRollUp`. Reuses the
+  // same build(fetchMock) stub every other test in this file uses, rather than a second one.
+  const runOneSyncRecordingEndpoints = async (): Promise<{ listed: string[], rolledUp: string[] }> => {
+    const seenUrls: string[] = []
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      seenUrls.push(String(url))
+      return new Response(body([]), { status: 200 })
+    })
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps: build(fetchMock) })
+    const idFrom = (url: string) => /\/dataTypes\/([^/]+)\/dataPoints/.exec(url)?.[1]
+    const listed = new Set<string>()
+    const rolledUp = new Set<string>()
+    for (const url of seenUrls) {
+      const id = idFrom(url)
+      if (!id) continue
+      if (url.includes(':dailyRollUp')) rolledUp.add(id)
+      else listed.add(id)
+    }
+    return { listed: [...listed], rolledUp: [...rolledUp] }
+  }
+
   // Spec section 16 promises that after an offline stretch sync resumes from sync_state and
   // backfills the gap. The trailing window alone cannot keep that promise: it is a fixed span
   // ending at now, so an outage longer than the span leaves days that no trailing run will ever
@@ -152,8 +174,16 @@ describe('runSync', () => {
     // synced are checkable directly rather than inferred from an incidental filter count. Alice
     // is Europe/Amsterdam and Bob is UTC, a two hour offset in August, so their day boundaries are
     // genuinely different instants and the two sets of starts must be disjoint.
-    const rows = ctx.db.select({ personId: rawPayloads.personId, windowStartMs: rawPayloads.windowStartMs })
-      .from(rawPayloads).all()
+    //
+    // Scoped to listable types: a rollup walk archives a civil date's own UTC midnight rather
+    // than dayWindows' per-timezone local midnight, so at an instant that names the same
+    // calendar date in both zones (noon in August, here) total-calories and floors would
+    // legitimately collide across people. That is a property of the rollup archive, not of
+    // whether list jobs used each person's own timezone, which is what this test checks.
+    const listableIds = new Set(listable().map((t) => t.id))
+    const rows = ctx.db.select({
+      personId: rawPayloads.personId, windowStartMs: rawPayloads.windowStartMs, dataType: rawPayloads.dataType,
+    }).from(rawPayloads).all().filter((r) => listableIds.has(r.dataType))
     const startsFor = (personId: string) =>
       new Set(rows.filter((r) => r.personId === personId).map((r) => r.windowStartMs))
     const aliceStarts = startsFor('alice')
@@ -193,5 +223,14 @@ describe('runSync', () => {
       jobs: expect.any(Number), succeeded: expect.any(Number),
       failed: expect.any(Number), skipped: expect.any(Number),
     })
+  })
+
+  it('reads a rollup only type through its rollup, and a type answering both through list', async () => {
+    // steps answers both. Reading it through its rollup would trade a per source split for a
+    // number nobody can attribute, which is why supports(list) wins.
+    const seen = await runOneSyncRecordingEndpoints()
+    expect(seen.listed).toContain('steps')
+    expect(seen.listed).not.toContain('total-calories')
+    expect(seen.rolledUp.sort()).toEqual(['floors', 'total-calories'])
   })
 })

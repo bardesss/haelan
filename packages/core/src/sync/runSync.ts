@@ -1,8 +1,9 @@
 import { eq } from 'drizzle-orm'
 import { people } from '../db/schema/index.ts'
-import { dataTypeById, horizonDaysFor } from '../api/catalogue.ts'
+import { dataTypeById, horizonDaysFor, supports } from '../api/catalogue.ts'
 import { runJob } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
+import { runRollupJob } from './runRollupJob.ts'
 
 export interface SyncReport {
   jobs: number
@@ -71,6 +72,23 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
     for (const job of input.deps.syncState.dueJobs([personId], toMs)) {
       const dataType = dataTypeById(job.dataType)
       if (!dataType) continue
+
+      if (!supports(dataType, 'list')) {
+        // A type answering only rollups has no windows, no high water mark and no per source
+        // rows. It is a different walk, and treating it as a failed list job is how it stayed
+        // unreadable through the whole of M1.
+        if (!supports(dataType, 'dailyRollUp')) continue
+        report.jobs++
+        const rollup = await runRollupJob({
+          personId, dataType, timezone: person.timezone,
+          fromMs: toMs - horizonDaysFor(dataType, input.userHorizonDays) * DAY_MS,
+          toMs, deps: input.deps,
+        })
+        report.rowsWritten += rollup.rowsWritten
+        report.succeeded++
+        continue
+      }
+
       report.jobs++
       const state = input.deps.syncState.get(personId, job.dataType)
       const before = state?.consecutiveFailures ?? 0

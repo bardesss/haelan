@@ -11,6 +11,22 @@ const BASE_BACKOFF_MS = 500
 // while still catching a nextPageToken that never advances before it archives forever.
 const MAX_PAGES = 200
 
+export interface RollupInput {
+  personId: string
+  dataType: DataType
+  /** Inclusive, `YYYY-MM-DD`. */
+  fromLocalDate: string
+  /** Exclusive, `YYYY-MM-DD`. */
+  toLocalDate: string
+}
+
+export interface RollupResult { payloadId: string }
+
+const civilRange = (localDate: string) => {
+  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number]
+  return { date: { year, month, day } }
+}
+
 export interface ListInput {
   personId: string
   dataType: DataType
@@ -173,7 +189,43 @@ export class HealthClient {
     return { payloadIds, pointCount, pagesFetched, attempts, lastRetriedStatus }
   }
 
-  private async fetchWithRetry(url: URL, personId: string): Promise<{
+  /**
+   * The rollup read. It takes a civil interval rather than a filter, and it does not paginate:
+   * `pageSize` is a floor the request must clear, not a page size, so the per type range cap is
+   * the only lever a walk has. Measured in probe/findings/rollup-methods.md.
+   */
+  async dailyRollUpDataPoints(input: RollupInput): Promise<RollupResult> {
+    const t = input.dataType
+    if (!supports(t, 'dailyRollUp')) {
+      throw new ConfigError(`${t.id} does not support dailyRollUp, only ${t.actions.join(', ')}`)
+    }
+    const url = new URL(`${this.#deps.apiRoot ?? API_ROOT}/users/me/dataTypes/${t.id}/dataPoints:dailyRollUp`)
+    const request = {
+      range: { start: civilRange(input.fromLocalDate), end: civilRange(input.toLocalDate) },
+    }
+    const fetched = await this.fetchWithRetry(url, input.personId, { method: 'POST', body: request })
+    const { id } = this.#archive.put({
+      personId: input.personId,
+      dataType: t.id,
+      requestParams: request,
+      windowStartMs: Date.parse(`${input.fromLocalDate}T00:00:00Z`),
+      windowEndMs: Date.parse(`${input.toLocalDate}T00:00:00Z`),
+      fetchedAtMs: this.#deps.now(),
+      httpStatus: fetched.status,
+      body: fetched.body,
+    })
+    if (fetched.status !== 200) {
+      const message = `${fetched.status} rolling up ${t.id}: ${fetched.body.slice(0, 200)}`
+      throw classifyHttp(fetched.status) === 'transient'
+        ? new TransientError(message)
+        : new SchemaDriftError(message)
+    }
+    return { payloadId: id }
+  }
+
+  private async fetchWithRetry(url: URL, personId: string, init?: {
+    method: string, body: unknown,
+  }): Promise<{
     body: string, status: number, attempts: number, retriedStatus: number | null,
   }> {
     let lastStatus = 0
@@ -200,7 +252,13 @@ export class HealthClient {
         continue
       }
 
-      const res = await this.#deps.fetch(url.toString(), { headers: { authorization: `Bearer ${token}` } })
+      const headers: Record<string, string> = { authorization: `Bearer ${token}` }
+      if (init) headers['content-type'] = 'application/json'
+      const res = await this.#deps.fetch(url.toString(), {
+        method: init?.method,
+        headers,
+        body: init ? JSON.stringify(init.body) : undefined,
+      })
       lastStatus = res.status
       lastBody = await res.text()
 
