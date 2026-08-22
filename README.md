@@ -147,7 +147,13 @@ documents for whoever is building, not part of what ships.
 pnpm install
 pnpm test
 pnpm typecheck
+git config core.hooksPath .githooks
 ```
+
+That last line is once per clone. It enables `.githooks/commit-msg`, which refuses a commit
+message carrying a Claude Code session link. CI checks the same rule on every push and pull
+request, so the hook is fast feedback rather than the guarantee, and forgetting it costs a red
+build instead of a bad commit reaching `master`.
 
 Two processes in development, in separate terminals. Vite serves the app and proxies `/api` and
 `/oauth` to Fastify, so the browser sees one origin and the session cookie behaves exactly as it
@@ -177,6 +183,9 @@ localhost.
 ## Conventions
 
 - No em dashes anywhere: prose, documentation, UI copy, code comments, commit messages.
+- No agent session links in commit messages or pull request bodies. `Co-Authored-By` trailers
+  are attribution and are welcome; a session URL is meaningless to everyone but the account that
+  created it. Enforced by `.githooks/commit-msg` and by CI.
 - Comments are sparse and record why, not what.
 - Every change reaches `master` through a pull request, and nothing is ever force pushed.
 - Real health data never gets committed. Archived payloads stay gitignored, and every test fixture

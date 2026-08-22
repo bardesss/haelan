@@ -1,0 +1,28 @@
+#!/bin/sh
+# Refuses a commit message carrying a Claude Code session link.
+#
+# haelan is going public, and a session URL is meaningless to anyone but the account that
+# created it. Twenty-two commits reached master with one before this hook existed; they were
+# left in place because rewriting them would break every merge reference on the pull requests
+# that introduced them, and a session id is not a credential.
+#
+# Enable it once per clone:
+#
+#     git config core.hooksPath .githooks
+#
+# CI enforces the same rule for anyone who has not, so this hook is the fast feedback rather
+# than the guarantee.
+
+message_file="$1"
+
+if grep -qiE 'claude\.ai/code/session|^[[:space:]]*Claude-Session:' "$message_file"; then
+  echo "commit-msg: this message carries a Claude Code session link." >&2
+  echo >&2
+  grep -inE 'claude\.ai/code/session|^[[:space:]]*Claude-Session:' "$message_file" >&2
+  echo >&2
+  echo "Remove that line and commit again. Co-Authored-By trailers are fine: they are" >&2
+  echo "attribution rather than a link into somebody's session." >&2
+  exit 1
+fi
+
+exit 0
