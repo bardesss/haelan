@@ -258,6 +258,31 @@ describe('runSync', () => {
     expect(rows.some((r) => r.dataType === 'steps')).toBe(true)
   })
 
+  it('walks the whole horizon the first time a rollup type runs, and only the gap after that', async () => {
+    // A rollup type has no backfill: apps/server's pass skips anything that cannot list. So if
+    // the first run only took the trailing window, the mark it then stamps would pin the type
+    // there and the account's history before install would never be fetched at all - the 14 and
+    // 90 day chunk walk would build exactly one chunk, forever.
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const deps = build(fetchMock)
+    const rollupCallCount = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes(':dailyRollUp')).length
+
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+    const firstRun = rollupCallCount()
+
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+    const secondRun = rollupCallCount() - firstRun
+
+    // 730 days at the measured caps: ceil(730 / 14) chunks for total-calories and ceil(730 / 90)
+    // for floors. Exact rather than a lower bound, so a walk that quietly stops short is a
+    // failure here rather than a shortfall nobody notices.
+    expect(firstRun).toBe(Math.ceil(730 / 14) + Math.ceil(730 / 90))
+    // The mark the first run stamped is now, so the second reaches back one trailing day: one
+    // chunk each, because a chunk shorter than the cap is still one request.
+    expect(secondRun).toBe(2)
+  })
+
   it('reaches back only to the trailing window on a second run, not the whole horizon again', async () => {
     // An unconditional full horizon walk on every run would cost 53 requests for total-calories
     // and 9 for floors per person per run, against the 300 per minute per user quota

@@ -80,12 +80,20 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
         // unreadable through the whole of M1.
         if (!supports(dataType, 'dailyRollUp')) continue
         report.jobs++
-        const rollupState = input.deps.syncState.get(personId, job.dataType)
+        const rollupHighWaterMs = input.deps.syncState.get(personId, job.dataType)?.highWaterMs ?? null
+        // Nothing else ever walks these types deeper: the backfill pass skips anything that
+        // cannot list, so this run is their whole read path. With no mark, reachBackTo returns
+        // the trailing window, which means a first run would reach back a week, stamp a mark,
+        // and leave every account's history before install unfetched for good. The first run
+        // therefore walks the type's full horizon; from the second on, the mark exists and
+        // reachBackTo governs the reach exactly as it does for a list job.
+        const rollupFromMs = rollupHighWaterMs === null
+          ? toMs - horizonDaysFor(dataType, input.userHorizonDays) * DAY_MS
+          : reachBackTo(rollupHighWaterMs, trailingFromMs, toMs, dataType, input.userHorizonDays)
         try {
           const rollup = await runRollupJob({
             personId, dataType, timezone: person.timezone,
-            fromMs: reachBackTo(rollupState?.highWaterMs ?? null, trailingFromMs, toMs, dataType, input.userHorizonDays),
-            toMs, deps: input.deps,
+            fromMs: rollupFromMs, toMs, deps: input.deps,
           })
           report.rowsWritten += rollup.rowsWritten
           // Mirrors runJob: only stamp a mark once the walk actually covered something, and the
