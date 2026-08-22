@@ -62,12 +62,14 @@ export const daily = sqliteTable('daily', {
   localDate: text('local_date').notNull(),
   metric: text('metric').notNull(),
   agg: text('agg').notNull(),
-  // The literal 'merged' rather than a source id, when this row is the merge of several.
+  // A source id, or the literal 'merged' when we computed the row by choosing between sources,
+  // or 'provider' when the API only answers a figure it reconciled itself and we cannot inspect.
   source: text('source').notNull(),
   value: real('value'),
-  // Fraction of the day the underlying data actually covers. A number whose basis is unstated
-  // invites a conclusion the data may not support.
-  coverage: real('coverage').notNull(),
+  // Fraction of the day's hours carrying at least one sample. Null where there is no basis to
+  // measure it: a provider reconciled rollup has no samples underneath it, and a fabricated 1.0
+  // would read as a fully observed day.
+  coverage: real('coverage'),
   derivationVersion: integer('derivation_version').notNull(),
 }, (t) => [
   unique('daily_natural').on(t.personId, t.localDate, t.metric, t.agg, t.source),

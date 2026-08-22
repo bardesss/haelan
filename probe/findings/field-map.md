@@ -70,7 +70,7 @@ Points in the archived window: 5000.
 ```
 activeMinutes.activeMinutesByActivityLevel[]         array
 activeMinutes.activeMinutesByActivityLevel[].activeMinutes string
-activeMinutes.activeMinutesByActivityLevel[].activityLevel string
+activeMinutes.activeMinutesByActivityLevel[].activityLevel string  {LIGHT | MODERATE | VIGOROUS}
 activeMinutes.interval.civilEndTime.date.day         number
 activeMinutes.interval.civilEndTime.date.month       number
 activeMinutes.interval.civilEndTime.date.year        number
@@ -96,7 +96,7 @@ Points in the archived window: 1114.
 
 ```
 activeZoneMinutes.activeZoneMinutes                  string
-activeZoneMinutes.heartRateZone                      string
+activeZoneMinutes.heartRateZone                      string  {CARDIO | FAT_BURN | PEAK}
 activeZoneMinutes.interval.civilEndTime.date.day     number
 activeZoneMinutes.interval.civilEndTime.date.month   number
 activeZoneMinutes.interval.civilEndTime.date.year    number
@@ -117,6 +117,16 @@ dataSource.recordingMethod                           string  {PASSIVELY_MEASURED
 ```
 
 Points in the archived window: 334.
+
+Both enum sets were read on 2026-08-22 from 29 archived payloads per type, 4919 and 1128 points,
+after M2a's plan found them missing here and nearly invented them. The generator that produced
+this file only records a value set for a field it recognises as enum-like, and these two sit one
+level inside an array and an interval respectively, so it passed over both.
+
+Also measured, and contrary to the reason `active-zone-minutes` was deferred: no interval in the
+sample carried more than one zone, so the natural key collision that deferral anticipated does
+not appear in this account's data. Encoding the zone into the metric name makes the question
+moot either way.
 
 ### body-fat
 

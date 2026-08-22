@@ -5,9 +5,11 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
+import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { runJob } from '../src/sync/runJob.ts'
+import { dayWindows } from '../src/sync/windows.ts'
 import { RevokedError } from '../src/api/tokens.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
 import { samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
@@ -133,19 +135,33 @@ describe('runJob', () => {
       expect(deps.syncState.get('p1', 'oxygen-saturation')?.lastError ?? null).toBeNull()
     })
 
-    it('stays quiet for a type whose mapping is deferred on purpose', async () => {
-      // active-minutes is fetched and archived for M2 but deliberately not mapped, so writing no
-      // rows is the design rather than a symptom of it.
-      const point = samplePoint({
-        payloadKey: 'activeMinutes', valuePath: 'activeMinutesByActivityLevel', value: 12,
-        physicalTime: '2026-08-18T10:00:00Z',
-      })
+    it('splits active minutes into a row per activity level instead of deferring it', async () => {
+      // active-minutes used to defer mapping entirely, so this test asserted zero rows written.
+      // Task 11 taught mapSamples the sub-dimension, so the type is no longer deferred and this
+      // now asserts the split it produces instead.
+      const point = {
+        dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+        activeMinutes: {
+          interval: {
+            startTime: '2026-08-18T10:00:00Z', startUtcOffset: '7200s',
+            endTime: '2026-08-18T11:00:00Z', endUtcOffset: '7200s',
+          },
+          activeMinutesByActivityLevel: [
+            { activityLevel: 'LIGHT', activeMinutes: '20' },
+            { activityLevel: 'VIGOROUS', activeMinutes: '5' },
+          ],
+        },
+      }
       const fetchMock = vi.fn().mockImplementation(async () => new Response(body([point]), { status: 200 }))
       const deps = build(fetchMock)
+      // A single local day rather than the shared `window`: that one spans two AMS calendar
+      // days, and the mock answers every window with the same point, which would double the
+      // count and obscure that one point becomes two rows.
       const result = await runJob({
-        personId: 'p1', dataType: dataTypeById('active-minutes')!, timezone: AMS, ...window, deps,
+        personId: 'p1', dataType: dataTypeById('active-minutes')!, timezone: AMS,
+        fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-18T22:00:00Z'), deps,
       })
-      expect(result.rowsWritten).toBe(0)
+      expect(result.rowsWritten).toBe(2)
       expect(deps.syncState.get('p1', 'active-minutes')?.lastError ?? null).toBeNull()
     })
   })
@@ -344,13 +360,84 @@ describe('runJob', () => {
   })
 
   it('writes nothing for a deferred type, but still archives what it fetched', async () => {
+    // active-zone-minutes was the deferred type this test used to exercise; task 11 gave it a
+    // mapping, so nutrition-log, the one type still deferred, stands in for it here.
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
     const result = await runJob({
-      personId: 'p1', dataType: dataTypeById('active-zone-minutes')!, timezone: AMS,
+      personId: 'p1', dataType: dataTypeById('nutrition-log')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
       deps: build(fetchMock),
     })
     expect(result.rowsWritten).toBe(0)
     expect(fetchMock).toHaveBeenCalled()
+  })
+
+  it('marks every day it wrote rows into, in the transaction that wrote them', async () => {
+    // Each window is answered with a point an hour into the day it asked for, so every window
+    // writes a row of its own local day and the marked set can be checked against dayWindows
+    // exactly, rather than merely asserting the queue is non-empty.
+    const args = {
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+    }
+    const windows = dayWindows({ fromMs: args.fromMs, toMs: args.toMs, timezone: args.timezone })
+    let next = 0
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      const window = windows[next++]!
+      return new Response(body([spo2Point(new Date(window.startMs + 3_600_000).toISOString(), 97)]), { status: 200 })
+    })
+    const queue = new DeriveQueue(ctx.db)
+    const result = await runJob({ ...args, deps: { ...build(fetchMock), deriveQueue: queue } })
+
+    const expectedDates = windows.map((w) => w.localDate)
+    expect(result.windows).toBe(expectedDates.length)
+    expect(result.rowsWritten).toBeGreaterThan(0)
+
+    const entries = queue.claim(expectedDates.length + 1)
+    expect(entries).toHaveLength(expectedDates.length)
+    expect(entries.every((e) => e.personId === 'p1')).toBe(true)
+    expect(entries.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.localDate))).toBe(true)
+    expect(entries.map((e) => e.localDate).sort()).toEqual([...expectedDates].sort())
+  })
+
+  it('marks the day a row belongs to, not the day the window asked for', async () => {
+    // A person who travelled. The window is built in their home timezone, but this point
+    // carries its own offset, eleven hours behind, which puts it on the previous local day -
+    // and runDerive selects a day's rows by each row's own offset. Marking the window's date
+    // would leave that day unmarked and its rows carrying a value no later run corrects.
+    const abroad = samplePoint({
+      payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 97,
+      physicalTime: '2026-08-18T00:30:00Z', utcOffset: '-39600s',
+    })
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([abroad]), { status: 200 }))
+    const queue = new DeriveQueue(ctx.db)
+    await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: { ...build(fetchMock), deriveQueue: queue },
+    })
+
+    expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-17'])
+  })
+
+  it('rolls the rows back with the mark, so a failed mark never leaves rows behind for a day the queue does not know is dirty', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    const queue = new DeriveQueue(ctx.db)
+    const deps = { ...build(fetchMock), deriveQueue: queue }
+
+    // The sample rows map and insert cleanly; only the mark that follows them fails. That is
+    // what makes the empty samples table below meaningful: those rows were written before the
+    // trigger fired, so their absence afterwards proves the day's mark and the day's rows commit
+    // or roll back together, not merely that a doomed write leaves nothing queued.
+    ctx.db.$client.exec("CREATE TRIGGER haelan_test_queue_fail BEFORE INSERT ON derive_queue BEGIN SELECT RAISE(ABORT, 'derive_queue insert failed'); END")
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
+    })
+    ctx.db.$client.exec('DROP TRIGGER haelan_test_queue_fail')
+
+    expect(result.rowsWritten).toBe(0)
+    expect(queue.size()).toBe(0)
+    expect(ctx.db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(0)
   })
 })

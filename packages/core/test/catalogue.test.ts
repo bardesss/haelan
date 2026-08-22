@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { DATA_TYPES, dataTypeById, horizonDaysFor, INTRADAY_HORIZON_DAYS, USER_HORIZON_CHOICES } from '../src/api/catalogue.ts'
+import {
+  ACTIONS, DATA_TYPES, dataTypeById, horizonDaysFor, supports,
+  INTRADAY_HORIZON_DAYS, USER_HORIZON_CHOICES,
+} from '../src/api/catalogue.ts'
 
 describe('data type catalogue', () => {
   it('declares every type the v1 pages need', () => {
@@ -32,13 +35,37 @@ describe('data type catalogue', () => {
     expect(dataTypeById('exercise')?.filterMember).toBe('interval.civil_start_time')
   })
 
-  it('marks the two types that reject list entirely', () => {
-    expect(dataTypeById('total-calories')?.listSupported).toBe(false)
-    expect(dataTypeById('floors')?.listSupported).toBe(false)
+  it('names no filter member for a type that takes no filter', () => {
+    // The rollup methods take a civil interval and no filter, so the grammar every list call
+    // needs does not apply to these two. A member here would be an assertion nothing measured.
+    expect(dataTypeById('total-calories')?.filterMember).toBeNull()
+    expect(dataTypeById('floors')?.filterMember).toBeNull()
+    for (const t of DATA_TYPES.filter((t) => supports(t, 'list'))) {
+      expect(t.filterMember, t.id).not.toBeNull()
+    }
+  })
+
+  it('records a set of actions, because list and rollUp are neither opposites nor a partition', () => {
+    // Measured in probe/findings/rollup-methods.md: steps answers both, sleep answers neither
+    // rollup, floors answers reconcile as well. A boolean cannot say any of that.
+    expect(supports(dataTypeById('steps')!, 'list')).toBe(true)
+    expect(supports(dataTypeById('steps')!, 'dailyRollUp')).toBe(true)
+    expect(supports(dataTypeById('sleep')!, 'list')).toBe(true)
+    expect(supports(dataTypeById('sleep')!, 'dailyRollUp')).toBe(false)
+    expect(supports(dataTypeById('total-calories')!, 'list')).toBe(false)
+    expect(supports(dataTypeById('total-calories')!, 'dailyRollUp')).toBe(true)
+    expect(supports(dataTypeById('floors')!, 'reconcile')).toBe(true)
+  })
+
+  it('gives every type at least one action it can actually be read with', () => {
+    for (const t of DATA_TYPES) {
+      expect(t.actions.length, t.id).toBeGreaterThan(0)
+      for (const action of t.actions) expect(ACTIONS).toContain(action)
+    }
   })
 
   it('gives every listable type a metric and a target', () => {
-    for (const t of DATA_TYPES.filter((t) => t.listSupported)) {
+    for (const t of DATA_TYPES.filter((t) => supports(t, 'list'))) {
       expect(t.metric, t.id).toBeTruthy()
       expect(['samples', 'sessions'], t.id).toContain(t.target)
     }
@@ -59,7 +86,7 @@ describe('data type catalogue', () => {
 
   it('keeps every mapping-deferred type listable, since it is still fetched and archived', () => {
     for (const t of DATA_TYPES.filter((t) => t.mappingDeferred)) {
-      expect(t.listSupported, t.id).toBe(true)
+      expect(supports(t, 'list'), t.id).toBe(true)
     }
   })
 

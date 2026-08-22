@@ -15,6 +15,25 @@ export type MappingTarget = 'samples' | 'sessions'
 
 export type TypeTier = 'intraday' | 'daily'
 
+/**
+ * A type whose payload carries a dimension a flat sample row cannot hold. Rather than a column,
+ * the dimension goes into the metric name, so each value becomes an ordinary metric with an
+ * ordinary rollup. `arrayPath` is set when the values arrive as an array inside one point, and
+ * left unset when each value is its own point.
+ *
+ * `metricByKey` is exhaustive on purpose. A key it does not name is skipped rather than turned
+ * into a metric no catalogue entry describes; the enum sets are in probe/findings/field-map.md.
+ */
+export interface SubDimension {
+  arrayPath?: string
+  keyPath: string
+  valuePath: string
+  metricByKey: Readonly<Record<string, string>>
+}
+
+export const ACTIONS = ['list', 'rollUp', 'dailyRollUp', 'reconcile'] as const
+export type Action = (typeof ACTIONS)[number]
+
 export interface DataType {
   /** Kebab case, as it appears in the URL path. */
   id: string
@@ -22,22 +41,20 @@ export interface DataType {
   filterRoot: string
   /** Camel case, as it appears in the response body. */
   payloadKey: string
-  filterMember: FilterMember
   /**
-   * False for total-calories and floors, which reject `list` and answer only `rollup` and
-   * `dailyRollup` (probe/findings/field-map.md). They are therefore **not fetched at all**: not
-   * mapped, and unlike the mappingDeferred types below, not archived either, so nothing is
-   * accumulating for a later rebuild to work from. If their server-side retention is finite,
-   * that history is aging out unfetched.
-   *
-   * This is a known, accepted gap rather than an oversight, and it is not M1's to close: M0
-   * measured only that the two endpoints exist. The filter member, payload key and value path
-   * columns for both types are empty in the field map, so the request and response shapes were
-   * never probed, and implementing a fetch now would mean inventing an API contract rather than
-   * reading one. Closing it needs a probe against the live API first, then a rollup path in the
-   * client. Owned by M2, which is where derived and rollup data is built.
+   * Which member a `list` filter is built on. Null for a type that answers no `list` at all:
+   * the rollup methods take a civil interval and no filter, and probe/findings/rollup-methods.md
+   * records that the filter grammar does not apply to them. A member named here for a type that
+   * has none is an assertion nothing measured.
    */
-  listSupported: boolean
+  filterMember: FilterMember | null
+  /**
+   * Read actions observed to work for this type: `probe/findings/rollup-methods.md`, from the
+   * `allowed_actions` metadata the API returns when it refuses one. An action's absence here
+   * means it has not been probed, not that the API refuses it. `list` and `rollUp` are neither
+   * opposites nor a partition, which is why this is a set and not the boolean it replaced.
+   */
+  actions: readonly Action[]
   scope: string
   target: MappingTarget
   /** Our name for the thing, which is not always Google's. */
@@ -54,10 +71,12 @@ export interface DataType {
    */
   tier: TypeTier
   /**
-   * Fetched and archived, but not mapped to tier 2 yet. Set when a type carries a
-   * sub-dimension a flat sample row cannot hold without a derivation decision.
+   * Fetched and archived, but not mapped to tier 2 yet. Set when a type's shape is not yet
+   * confirmed against a real payload, so a valuePath would be a guess.
    */
   mappingDeferred?: true
+  /** Set when a dimension in the payload becomes part of the metric name instead of a column. */
+  subDimension?: SubDimension
 }
 
 // agg records how we computed the row, not how a rollup should combine it. A value the source
@@ -93,7 +112,7 @@ export function horizonDaysFor(type: DataType, userHorizonDays: number): number 
 }
 
 const listable = (
-  id: string, payloadKey: string, filterMember: FilterMember, scope: string,
+  id: string, payloadKey: string, filterMember: FilterMember | null, scope: string,
   metric: string, unit: string, valuePath: string,
   extra: Partial<DataType> = {},
 ): DataType => ({
@@ -101,7 +120,7 @@ const listable = (
   filterRoot: id.replaceAll('-', '_'),
   payloadKey,
   filterMember,
-  listSupported: true,
+  actions: ['list'],
   scope,
   target: 'samples',
   metric,
@@ -114,26 +133,49 @@ const listable = (
 })
 
 export const DATA_TYPES: readonly DataType[] = [
-  listable('steps', 'steps', 'interval.start_time', ACTIVITY, 'steps', 'count', 'count', { tier: 'intraday' }),
+  listable('steps', 'steps', 'interval.start_time', ACTIVITY, 'steps', 'count', 'count', { tier: 'intraday', actions: ['list', 'dailyRollUp'] }),
   listable('distance', 'distance', 'interval.start_time', ACTIVITY, 'distance', 'millimeters', 'millimeters', { tier: 'intraday' }),
   // Sub-dimension: activity level. The payload holds an array,
   // activeMinutes.activeMinutesByActivityLevel[], one point per level per interval, which a
-  // flat sample row cannot resolve. Archived at tier 1; summing across levels or encoding the
-  // level into the metric name is a derivation decision for M2, not this catalogue.
-  listable('active-minutes', 'activeMinutes', 'interval.start_time', ACTIVITY, 'active_minutes', 'minutes', 'activeMinutesByActivityLevel', { mappingDeferred: true, tier: 'intraday' }),
-  // Sub-dimension: heart rate zone. activeZoneMinutes.heartRateZone varies within one interval,
-  // so several points would share the samples natural key and collide on upsert. Same deferral
-  // as active-minutes above.
-  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', 'activeZoneMinutes', { mappingDeferred: true, tier: 'intraday' }),
+  // flat sample row cannot resolve, so the level goes into the metric name instead.
+  listable('active-minutes', 'activeMinutes', 'interval.start_time', ACTIVITY, 'active_minutes', 'minutes', '', {
+    tier: 'intraday',
+    subDimension: {
+      arrayPath: 'activeMinutesByActivityLevel',
+      keyPath: 'activityLevel',
+      valuePath: 'activeMinutes',
+      metricByKey: {
+        LIGHT: 'active_minutes_light',
+        MODERATE: 'active_minutes_moderate',
+        VIGOROUS: 'active_minutes_vigorous',
+      },
+    },
+  }),
+  // Sub-dimension: heart rate zone. One metric per zone is what makes each of them an ordinary
+  // metric with an ordinary rollup, same as the activity level above. The natural key collision
+  // this deferral originally feared was measured on this branch and does not occur: no interval
+  // in the sample carried more than one zone, per probe/findings/field-map.md.
+  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', '', {
+    tier: 'intraday',
+    subDimension: {
+      keyPath: 'heartRateZone',
+      valuePath: 'activeZoneMinutes',
+      metricByKey: {
+        FAT_BURN: 'active_zone_minutes_fat_burn',
+        CARDIO: 'active_zone_minutes_cardio',
+        PEAK: 'active_zone_minutes_peak',
+      },
+    },
+  }),
   listable('active-energy-burned', 'activeEnergyBurned', 'interval.start_time', ACTIVITY, 'active_energy', 'kcal', 'kcal', { tier: 'intraday' }),
 
-  listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true, tier: 'intraday' }),
+  listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true, tier: 'intraday', actions: ['list', 'dailyRollUp'] }),
   listable('heart-rate-variability', 'heartRateVariability', 'sample_time.physical_time', METRICS, 'hrv', 'milliseconds', 'rootMeanSquareOfSuccessiveDifferencesMilliseconds', { tier: 'intraday' }),
   listable('oxygen-saturation', 'oxygenSaturation', 'sample_time.physical_time', METRICS, 'spo2', 'percent', 'percentage', { tier: 'intraday' }),
   listable('weight', 'weight', 'sample_time.physical_time', METRICS, 'weight', 'grams', 'weightGrams'),
   listable('body-fat', 'bodyFat', 'sample_time.physical_time', METRICS, 'body_fat', 'percent', 'percentage'),
 
-  listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute'),
+  listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute', { actions: ['list', 'reconcile'] }),
   // averageHeartRateVariabilityMilliseconds is the day's overall figure. A deep-sleep-only
   // variant also exists, deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds, and was
   // deliberately not chosen: daily_hrv means the whole day, and the deep sleep field would
@@ -142,7 +184,7 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('daily-oxygen-saturation', 'dailyOxygenSaturation', 'date', METRICS, 'daily_spo2', 'percent', 'averagePercentage'),
   listable('daily-respiratory-rate', 'dailyRespiratoryRate', 'date', METRICS, 'respiratory_rate', 'breaths_per_minute', 'breathsPerMinute'),
 
-  listable('sleep', 'sleep', 'interval.end_time', SLEEP, 'sleep', 'session', '', { target: 'sessions' }),
+  listable('sleep', 'sleep', 'interval.end_time', SLEEP, 'sleep', 'session', '', { target: 'sessions', actions: ['list', 'reconcile'] }),
   listable('exercise', 'exercise', 'interval.civil_start_time', ACTIVITY, 'exercise', 'session', '', { target: 'sessions' }),
 
   listable('hydration-log', 'hydrationLog', 'interval.civil_start_time', NUTRITION, 'hydration', 'milliliters', 'amountConsumed.milliliters'),
@@ -151,14 +193,24 @@ export const DATA_TYPES: readonly DataType[] = [
   // archived, with mapping deferred until a real payload confirms or corrects the leaf.
   listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'calories', { mappingDeferred: true }),
 
-  // Rejected list; supported actions are rollup, dailyRollup.
-  { ...listable('total-calories', 'totalCalories', 'interval.start_time', ACTIVITY, 'total_calories', 'kcal', 'kcal'), listSupported: false },
-  // Rejected list too, but one action more than total-calories above: reconcile, rollup, dailyRollup.
-  { ...listable('floors', 'floors', 'interval.start_time', ACTIVITY, 'floors', 'count', 'count'), listSupported: false },
+  // Rejects list, and takes no filter at all: see filterMember above. Measured request and
+  // response shapes: probe/findings/rollup-methods.md.
+  {
+    ...listable('total-calories', 'totalCalories', null, ACTIVITY, 'total_calories', 'kcal', 'kcalSum'),
+    actions: ['rollUp', 'dailyRollUp'],
+  },
+  {
+    ...listable('floors', 'floors', null, ACTIVITY, 'floors', 'count', 'countSum'),
+    actions: ['rollUp', 'dailyRollUp', 'reconcile'],
+  },
 ]
 
 const BY_ID = new Map(DATA_TYPES.map((t) => [t.id, t]))
 
 export function dataTypeById(id: string): DataType | undefined {
   return BY_ID.get(id)
+}
+
+export function supports(t: DataType, action: Action): boolean {
+  return t.actions.includes(action)
 }

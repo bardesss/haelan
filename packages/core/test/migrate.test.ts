@@ -10,6 +10,7 @@ import type { Database } from '../src/db/open.ts'
 const TABLES = [
   'people', 'sources', 'oauth_client', 'credentials', 'notes', 'events', 'overrides',
   'raw_payloads', 'samples', 'sessions', 'session_segments', 'daily', 'sync_state',
+  'derive_queue',
 ]
 
 describe('migrateToLatest', () => {

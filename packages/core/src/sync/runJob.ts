@@ -1,14 +1,17 @@
 import { eq } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import type { DataType } from '../api/catalogue.ts'
+import { supports } from '../api/catalogue.ts'
 import type { HealthClient } from '../api/client.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
+import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { RevokedError } from '../api/tokens.ts'
 import { HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
+import { localDateOf } from '../derive/localDay.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
 
@@ -35,15 +38,22 @@ export interface JobDeps {
   client: HealthClient
   now: () => number
   /**
-   * Optional, and unset by every caller today. dueJobs returns eighteen listable types per
-   * person, so a trailing week for a five person household is roughly 720 requests issued as
-   * fast as the event loop allows, against the 300 per minute per user probe/findings/scopes.md
-   * measured. Choosing the rate is a settings decision and belongs to M1d; the seat is here so
-   * filling it then is not a breaking change to a published interface.
+   * Optional, and unset by every caller today. dueJobs returns all twenty data types per
+   * person, filtered on carrying any action rather than on being listable specifically; the
+   * eighteen that support list still drive the request volume, roughly 720 for a trailing
+   * week across a five person household, issued as fast as the event loop allows, against the
+   * 300 per minute per user probe/findings/scopes.md measured. Choosing the rate is a settings
+   * decision and belongs to M1d; the seat is here so filling it then is not a breaking change
+   * to a published interface.
    */
   limiter?: RateLimiter
   /** Called as work completes. Optional: nothing in core needs it, the SSE stream does. */
   onProgress?: (event: SyncProgress) => void
+  /**
+   * Optional so the sync tests that predate derivation keep working. Set by openHaelan. A day
+   * whose rows commit without being marked is a day the dashboard never sees.
+   */
+  deriveQueue?: DeriveQueue
 }
 
 export interface JobInput {
@@ -77,7 +87,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   }
 
   const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, skipped: null }
-  if (!t.listSupported) return { ...empty, skipped: 'unsupported' }
+  if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
 
@@ -122,9 +132,22 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         const pages = listed.payloadIds.map((id) => ({
           body: deps.archive.getBody(input.personId, id), rawPayloadId: id,
         }))
-        return t.target === 'samples'
+        const written = t.target === 'samples'
           ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
           : writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+        // The days the rows themselves fall on, not the day this window asked for. A window is
+        // computed in the person's current timezone, while runDerive selects a day's rows by
+        // each row's own offset, so a sample from a trip abroad can arrive in window D and
+        // belong to local date D-1. Marking D would leave D-1 unmarked and its stale value
+        // uncorrected by any later run. Through tx, so a mark commits and rolls back with the
+        // rows it describes: a day marked for rows that rolled back would derive from data that
+        // is not there.
+        for (const localDate of written.localDates) {
+          deps.deriveQueue?.markDirty(
+            { personId: input.personId, localDate, nowMs: deps.now() }, tx,
+          )
+        }
+        return written.rows
       })
       rowsWritten += writtenHere
       report({
@@ -177,31 +200,41 @@ export async function runJob(input: JobInput): Promise<JobResult> {
 // SQLite, zlib or a store still has to arrive with one. transient is the honest default: it is
 // what the engine does with such a failure anyway, retrying the window on the next run, whereas
 // schema_drift or data_quality would assert a diagnosis nobody has made.
-function classify(error: unknown): HaelanError {
+// Exported so runRollupJob's caller in runSync classifies a rollup failure the same way rather
+// than growing a second copy of the same judgment call.
+export function classify(error: unknown): HaelanError {
   if (error instanceof HaelanError) return error
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
   return new TransientError(message, { cause: error })
 }
 
+/** What a window wrote, and which local days it landed on, which is what the queue is marked with. */
+interface Written { rows: number, localDates: string[] }
+
 function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
   dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
   pages: Array<{ body: string, rawPayloadId: string }>,
-}): number {
+}): Written {
   const rows = mapWindowSamples(args)
+  const localDates = new Set<string>()
   for (const row of rows) {
     tx.insert(samples).values(row).onConflictDoUpdate({
       target: [samples.personId, samples.sourceId, samples.metric, samples.utcMs, samples.agg],
       set: { value: row.value, n: row.n, tzOffsetMinutes: row.tzOffsetMinutes, rawPayloadId: row.rawPayloadId },
     }).run()
+    localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
-  return rows.length
+  return { rows: rows.length, localDates: [...localDates] }
 }
 
 function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
   dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
   pages: Array<{ body: string, rawPayloadId: string }>,
-}): number {
+}): Written {
   let written = 0
+  // A session's own localDate is already localDateOf its end instant and end offset: a night
+  // spanning midnight belongs to the morning, which is invariant 3 and is decided by mapSessions.
+  const localDates = new Set<string>()
   for (const page of args.pages) {
     const { sessions: rows, segments } = mapSessions({
       dataType: args.dataType, personId: args.personId, resolveSource: args.resolveSource,
@@ -225,6 +258,7 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
         },
       }).run()
       written++
+      localDates.add(row.localDate)
     }
     // Segments are replaced wholesale for the sessions in this page: a re-fetch after Google
     // finishes processing a night legitimately changes the stage timeline, and merging two
@@ -232,5 +266,5 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
     for (const row of rows) tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
     for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
   }
-  return written
+  return { rows: written, localDates: [...localDates] }
 }

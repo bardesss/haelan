@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
-import { samples, daily, sessions, syncState } from '../src/db/schema/index.ts'
+import { samples, daily, sessions, syncState, deriveQueue } from '../src/db/schema/index.ts'
 
 const columnNames = (table: Parameters<typeof getTableConfig>[0]) =>
   getTableConfig(table).columns.map((c) => c.name).sort()
@@ -23,11 +23,18 @@ describe('tier 2 and 3 schema', () => {
     expect(value?.notNull).toBe(false)
   })
 
-  it('carries coverage and a derivation version on every rollup', () => {
+  it('allows a null coverage, because a provider rollup has no samples to measure', () => {
     const coverage = getTableConfig(daily).columns.find((c) => c.name === 'coverage')
     const derivationVersion = getTableConfig(daily).columns.find((c) => c.name === 'derivation_version')
-    expect(coverage?.notNull).toBe(true)
+    // Null means no basis to measure, not zero. A provider reconciled row carries no samples
+    // underneath it, and 1.0 would read to M2d's insight suppression as a fully observed day.
+    expect(coverage?.notNull).toBe(false)
     expect(derivationVersion?.notNull).toBe(true)
+  })
+
+  it('queues a person and a local date, so one dirty day is one row however many metrics it touches', () => {
+    const cols = columnNames(deriveQueue)
+    expect(cols).toEqual(['local_date', 'person_id', 'queued_at_ms'])
   })
 
   it('tracks a high-water mark per person and data type', () => {
