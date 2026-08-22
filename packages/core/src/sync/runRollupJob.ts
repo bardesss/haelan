@@ -1,5 +1,6 @@
 import type { Database } from '../db/open.ts'
 import type { DataType } from '../api/catalogue.ts'
+import type { RateLimiter } from './runJob.ts'
 import { daily } from '../db/schema/index.ts'
 import { mapRollups } from '../api/mapRollups.ts'
 
@@ -27,6 +28,11 @@ export interface RollupJobDeps {
   client: RollupClient
   archive: { getBody: (personId: string, payloadId: string) => string }
   now: () => number
+  /**
+   * Optional, the same interface JobDeps carries. runJob applies it to every list window; a
+   * rollup chunk is a request too and must not get to skip the household's shared quota.
+   */
+  limiter?: RateLimiter
 }
 
 export interface RollupJobInput {
@@ -46,6 +52,18 @@ const localDate = (ms: number, timeZone: string): string =>
   new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
     .format(new Date(ms))
 
+// A local date string carries no zone, so once fromMs/toMs have been converted to dates above,
+// stepping the walk here is pure calendar arithmetic: parsing a date as a UTC midnight and
+// adding whole days is exact, the same technique DeriveQueue.markRange's datesBetween uses. A
+// day-count step in this space cannot land on a 15 civil day span the way stepping by a fixed
+// count of milliseconds can when the range crosses a DST transition: instants near a spring
+// forward or fall back are not evenly 86,400,000 ms of civil time apart, but dates always are.
+const addCivilDays = (dateStr: string, days: number): string =>
+  new Date(Date.parse(`${dateStr}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
+
+const civilDaysBetween = (fromDate: string, toDate: string): number =>
+  (Date.parse(`${toDate}T00:00:00Z`) - Date.parse(`${fromDate}T00:00:00Z`)) / DAY_MS
+
 /**
  * The read path for a type that answers only rollups. It steps by the per type range cap rather
  * than paginating, because these methods do not paginate: `pageSize` is a floor the request must
@@ -55,19 +73,23 @@ const localDate = (ms: number, timeZone: string): string =>
  * `runDerive` leaves `provider` rows alone: nothing local could recompute them.
  */
 export async function runRollupJob(input: RollupJobInput): Promise<{ chunks: number, rowsWritten: number }> {
-  const capMs = rollupRangeCapDays(input.dataType) * DAY_MS
+  const capDays = rollupRangeCapDays(input.dataType)
+  const fromDate = localDate(input.fromMs, input.timezone)
   let chunks = 0
   let rowsWritten = 0
 
   // Backwards from the most recent day, so an interrupted walk has already collected the
   // history anyone is most likely to open first.
-  for (let endMs = input.toMs; endMs > input.fromMs; endMs -= capMs) {
-    const startMs = Math.max(input.fromMs, endMs - capMs)
+  for (let endDate = localDate(input.toMs, input.timezone); civilDaysBetween(fromDate, endDate) > 0;) {
+    const spanDays = Math.min(capDays, civilDaysBetween(fromDate, endDate))
+    const startDate = addCivilDays(endDate, -spanDays)
+
+    await input.deps.limiter?.take()
     const { payloadId } = await input.deps.client.dailyRollUpDataPoints({
       personId: input.personId,
       dataType: input.dataType,
-      fromLocalDate: localDate(startMs, input.timezone),
-      toLocalDate: localDate(endMs, input.timezone),
+      fromLocalDate: startDate,
+      toLocalDate: endDate,
     })
     chunks++
 
@@ -85,6 +107,8 @@ export async function runRollupJob(input: RollupJobInput): Promise<{ chunks: num
       }
     })
     rowsWritten += rows.length
+
+    endDate = startDate
   }
 
   return { chunks, rowsWritten }

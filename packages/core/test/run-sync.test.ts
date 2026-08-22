@@ -233,4 +233,57 @@ describe('runSync', () => {
     expect(seen.listed).not.toContain('total-calories')
     expect(seen.rolledUp.sort()).toEqual(['floors', 'total-calories'])
   })
+
+  it('records a rollup failure in sync_state and keeps the rest of the run going', async () => {
+    // Every dailyRollUp request fails; every list request succeeds. A rollup branch that lets
+    // the failure escape runSync would abort before any listable type below it in DATA_TYPES
+    // ever ran, which is exactly what the "sync never crashes" comment above the branch forbids.
+    const fetchMock = vi.fn().mockImplementation(async (url: string) =>
+      String(url).includes(':dailyRollUp')
+        ? new Response('{"error":{"code":400}}', { status: 400 })
+        : new Response(body([]), { status: 200 }))
+    const deps = build(fetchMock)
+
+    const report = await runSync({
+      personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+    })
+
+    expect(report.failed).toBeGreaterThanOrEqual(2)
+    expect(deps.syncState.get('alice', 'total-calories')?.consecutiveFailures).toBeGreaterThan(0)
+    expect(deps.syncState.get('alice', 'total-calories')?.lastError).toContain('400')
+    expect(deps.syncState.get('alice', 'floors')?.consecutiveFailures).toBeGreaterThan(0)
+    // steps is listable and its job runs after the rollup-only types in the dueJobs order; it
+    // only got here because the earlier rollup failures did not throw out of the loop.
+    const rows = ctx.db.select({ dataType: rawPayloads.dataType }).from(rawPayloads).all()
+    expect(rows.some((r) => r.dataType === 'steps')).toBe(true)
+  })
+
+  it('reaches back only to the trailing window on a second run, not the whole horizon again', async () => {
+    // An unconditional full horizon walk on every run would cost 53 requests for total-calories
+    // and 9 for floors per person per run, against the 300 per minute per user quota
+    // probe/findings/scopes.md measured. Seeding a stale mark, the same way the existing
+    // high-water-mark test above does, is what forces the first run to reach back far; a fresh
+    // sync with no mark at all already only reaches the trailing window, so a stale mark is
+    // needed to exercise reachBackTo's wide branch at all.
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const deps = build(fetchMock)
+    const nowMs = deps.now()
+    const staleMs = nowMs - 400 * DAY_MS
+    deps.syncState.recordSuccess({ personId: 'alice', dataType: 'total-calories', highWaterMs: staleMs, nowMs: staleMs })
+    deps.syncState.recordSuccess({ personId: 'alice', dataType: 'floors', highWaterMs: staleMs, nowMs: staleMs })
+
+    const rollupCallCount = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes(':dailyRollUp')).length
+
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+    const afterFirstRun = rollupCallCount()
+
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+    const secondRunOnly = rollupCallCount() - afterFirstRun
+
+    // The first run reaches back to the 400 day stale mark; the second sees the mark the first
+    // run just recorded, near now, and should reach back only to the one day trailing window.
+    expect(afterFirstRun).toBeGreaterThan(10)
+    expect(secondRunOnly).toBeLessThan(afterFirstRun / 5)
+  })
 })

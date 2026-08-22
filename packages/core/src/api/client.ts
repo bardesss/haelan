@@ -16,7 +16,10 @@ export interface RollupInput {
   dataType: DataType
   /** Inclusive, `YYYY-MM-DD`. */
   fromLocalDate: string
-  /** Exclusive, `YYYY-MM-DD`. */
+  /**
+   * Exclusive, `YYYY-MM-DD`. A walk whose `toLocalDate` is today's date therefore never requests
+   * today itself, so today's provider row does not exist until tomorrow's run asks for it.
+   */
   toLocalDate: string
 }
 

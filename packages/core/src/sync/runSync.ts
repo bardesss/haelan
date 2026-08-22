@@ -1,9 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { people } from '../db/schema/index.ts'
 import { dataTypeById, horizonDaysFor, supports } from '../api/catalogue.ts'
-import { runJob } from './runJob.ts'
+import { runJob, classify } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 import { runRollupJob } from './runRollupJob.ts'
+import { RevokedError } from '../api/tokens.ts'
 
 export interface SyncReport {
   jobs: number
@@ -79,13 +80,30 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
         // unreadable through the whole of M1.
         if (!supports(dataType, 'dailyRollUp')) continue
         report.jobs++
-        const rollup = await runRollupJob({
-          personId, dataType, timezone: person.timezone,
-          fromMs: toMs - horizonDaysFor(dataType, input.userHorizonDays) * DAY_MS,
-          toMs, deps: input.deps,
-        })
-        report.rowsWritten += rollup.rowsWritten
-        report.succeeded++
+        const rollupState = input.deps.syncState.get(personId, job.dataType)
+        try {
+          const rollup = await runRollupJob({
+            personId, dataType, timezone: person.timezone,
+            fromMs: reachBackTo(rollupState?.highWaterMs ?? null, trailingFromMs, toMs, dataType, input.userHorizonDays),
+            toMs, deps: input.deps,
+          })
+          report.rowsWritten += rollup.rowsWritten
+          // Mirrors runJob: only stamp a mark once the walk actually covered something, and the
+          // mark is toMs itself (already now, never later), so it can never claim to have synced
+          // time that has not happened yet.
+          if (rollup.chunks > 0) {
+            input.deps.syncState.recordSuccess({ personId, dataType: job.dataType, highWaterMs: toMs, nowMs: toMs })
+          }
+          report.succeeded++
+        } catch (error) {
+          // A rolled-back window's stale sources cache is runJob's problem, not this one: a
+          // rollup writes only to daily, which carries no source foreign key to go stale.
+          if (error instanceof RevokedError) { report.skipped++; continue }
+          input.deps.syncState.recordFailure({
+            personId, dataType: job.dataType, error: classify(error), nowMs: toMs,
+          })
+          report.failed++
+        }
         continue
       }
 

@@ -84,4 +84,49 @@ describe('runRollupJob', () => {
     await runRollupJob(input)
     expect(test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()).toHaveLength(1)
   })
+
+  it('takes from the limiter before every chunk, the same as runJob does per window', async () => {
+    const stub = stubClient([])
+    const takes: number[] = []
+    const limiter = { take: async () => { takes.push(takes.length) } }
+    const result = await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 6, 14), toMs: Date.UTC(2026, 7, 23),
+      deps: { ...depsWith(stub), limiter },
+    })
+    expect(takes).toHaveLength(result.chunks)
+  })
+
+  it('runs unrated when no limiter is given, since it is optional', async () => {
+    const stub = stubClient([])
+    await expect(runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23), deps: depsWith(stub),
+    })).resolves.toMatchObject({ chunks: 1 })
+  })
+
+  // Reproduces the defect a millisecond-based step had: capMs subtracted from an absolute
+  // instant crosses Amsterdam's spring forward (2026-03-29) unevenly, so converting back to a
+  // civil date could yield a 15 day span for a 14 day cap. Stepping in civil dates instead
+  // cannot do this, because a date carries no zone and every day is exactly one day long.
+  it('keeps every chunk within the cap across a spring forward transition', async () => {
+    const stub = stubClient([])
+    const toMs = Date.parse('2026-04-01T00:30:00+02:00')
+    const asked: Array<{ from: string, to: string }> = []
+    const recordingClient = {
+      async dailyRollUpDataPoints(input: { fromLocalDate: string, toLocalDate: string }) {
+        asked.push({ from: input.fromLocalDate, to: input.toLocalDate })
+        return stub.client.dailyRollUpDataPoints(input)
+      },
+    }
+    await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: toMs - 40 * DAY_MS, toMs, deps: { ...depsWith(stub), client: recordingClient },
+    })
+    expect(asked.length).toBeGreaterThan(0)
+    for (const range of asked) {
+      const days = (Date.parse(`${range.to}T00:00:00Z`) - Date.parse(`${range.from}T00:00:00Z`)) / DAY_MS
+      expect(days, `${range.from} to ${range.to}`).toBeLessThanOrEqual(14)
+    }
+  })
 })

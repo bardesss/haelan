@@ -194,7 +194,9 @@ export async function runJob(input: JobInput): Promise<JobResult> {
 // SQLite, zlib or a store still has to arrive with one. transient is the honest default: it is
 // what the engine does with such a failure anyway, retrying the window on the next run, whereas
 // schema_drift or data_quality would assert a diagnosis nobody has made.
-function classify(error: unknown): HaelanError {
+// Exported so runRollupJob's caller in runSync classifies a rollup failure the same way rather
+// than growing a second copy of the same judgment call.
+export function classify(error: unknown): HaelanError {
   if (error instanceof HaelanError) return error
   const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
   return new TransientError(message, { cause: error })
