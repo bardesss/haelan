@@ -144,7 +144,9 @@ describe('the consent handoff', () => {
       method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`,
     })
     expect(response.headers.location).toBe('/setup/google?error=exchange_failed')
-    const detail = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error' })
+    const detail = await harness.app.inject({
+      method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: cookie },
+    })
     expect(String(detail.json().message)).toContain('redirect_uri_mismatch')
   })
 
@@ -156,7 +158,9 @@ describe('the consent handoff', () => {
     })
     const state = new URL(start.headers.location as string).searchParams.get('state')!
     await harness.app.inject({ method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}` })
-    const detail = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error' })
+    const detail = await harness.app.inject({
+      method: 'GET', url: '/api/setup/last-error', headers, cookies: { haelan_session: cookie },
+    })
     expect(String(detail.json().message)).toContain('not enabled')
     // The probe failed, so nothing was stored: an instance that says it is set up and cannot
     // read a single data point is the failure mode this whole step exists to prevent.

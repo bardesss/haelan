@@ -11,9 +11,9 @@ no edited files; the variables exist for people who disagree.
 
 ## There are no data reading endpoints yet
 
-`/api/sync` is the whole API surface. The metric routes spec section 11 describes read tier 3,
-and tier 3 does not exist until M2's derivation layer, so they arrive with it. Nothing is
-missing here that was meant to be here.
+Setup, auth, sync and one settings control are the whole API surface. The metric routes spec
+section 11 describes read tier 3, and tier 3 does not exist until M2's derivation layer, so they
+arrive with it. Nothing is missing here that was meant to be here.
 
 ## Routes
 
@@ -24,6 +24,7 @@ missing here that was meant to be here.
 | `POST /api/setup/account` | none | Creates the first person and account together, and logs the owner in. |
 | `POST /api/setup/instance-url` | session | Stores the base URL and returns the exact redirect URI to register. |
 | `GET /api/setup/redirect-uris` | session | Concrete, complete candidates. Never a placeholder. |
+| `GET /api/setup/scopes` | session | The six scopes the consent screen declares, for the wizard to list. |
 | `POST /api/setup/google-client` | session | Stores the pasted OAuth client, encrypted. |
 | `GET /api/setup/last-error` | session | The message from the last failed callback, for the wizard to show. |
 | `GET /oauth/start` | session | Redirects to Google with a signed state. |
@@ -34,6 +35,8 @@ missing here that was meant to be here.
 | `GET /api/sync/status` | session | Run state and per data type backfill progress, read from `sync_state`. |
 | `POST /api/sync/run` | session | 202 and the run continues, or 409 if one is already going. |
 | `GET /api/sync/events` | session | Server sent events: the runner's progress, plus a keepalive. |
+| `GET /api/settings/backfill-horizon` | session | The current horizon and the three the wizard offers. |
+| `PUT /api/settings/backfill-horizon` | session | Sets it, and reopens daily types that already finished. |
 
 ## The setup gate points both ways
 
@@ -41,6 +44,12 @@ While setup is unfinished, every API route that is not a setup route answers `40
 setup_incomplete` and names the step that is due. Once setup is finished, the setup routes
 themselves answer `409 setup_complete`: after the wizard there is nothing left to paste and no
 client left to configure.
+
+**Every route after the account step takes a session.** The account step cannot, because it is
+what mints the one the others present. `/api/setup/instance-url`, `/api/setup/redirect-uris`,
+`/api/setup/scopes` and `/api/setup/last-error` were open until 2026-08-22, while this table
+already said they were not; the setup gate bounded that to the setup window, where an
+unauthenticated caller on the network could set the base URL consent is later required to match.
 
 The gate governs `/api/` and `/oauth/` only. A document request for `/setup/google` falls
 through to the static handler and gets the SPA shell, because that is how the wizard is reached

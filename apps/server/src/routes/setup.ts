@@ -14,6 +14,9 @@ export function registerSetup(app: FastifyInstance): void {
     accounts: stores().accounts, settings: stores().settings, credentials: stores().credentials,
   })
 
+  // The account step is the only open one, because it mints the session every step after it
+  // presents. Leaving the rest open let an unauthenticated caller set the base URL that consent
+  // is then required to match.
   app.post<{ Body: AccountBody }>('/api/setup/account', async (request, reply) => {
     if (step() !== 'account') return reply.code(409).send({ error: 'account_exists' })
     const { username, password, displayName, timezone } = request.body ?? {}
@@ -42,7 +45,7 @@ export function registerSetup(app: FastifyInstance): void {
     }
   })
 
-  app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', async (request, reply) => {
+  app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession] }, async (request, reply) => {
     if (step() !== 'instance-url') return reply.code(409).send({ error: 'wrong_step', step: step() })
     const { baseUrl, consentPath } = request.body ?? {}
     if (typeof baseUrl !== 'string' || typeof consentPath !== 'string'
@@ -58,7 +61,7 @@ export function registerSetup(app: FastifyInstance): void {
     return reply.send({ step: step(), redirectUri: redirectUriFor(normalized) })
   })
 
-  app.get<{ Querystring: { host?: string } }>('/api/setup/redirect-uris', async (request, reply) => {
+  app.get<{ Querystring: { host?: string } }>('/api/setup/redirect-uris', { preHandler: [app.requireSession] }, async (request, reply) => {
     const candidates = [...loopbackCandidates(portOf(request.headers.host))]
     const host = request.query.host
     if (typeof host === 'string' && host.trim() !== '') candidates.push(candidateFor(host))
@@ -68,7 +71,7 @@ export function registerSetup(app: FastifyInstance): void {
   // Served rather than restated in the browser bundle, so the list the wizard shows and the
   // list buildConsentUrl requests are the same array. A wizard that told somebody to declare
   // five scopes and then asked for six would fail at consent, having been the reason.
-  app.get('/api/setup/scopes', async (_request, reply) => reply.send({ scopes: [...SCOPES] }))
+  app.get('/api/setup/scopes', { preHandler: [app.requireSession] }, async (_request, reply) => reply.send({ scopes: [...SCOPES] }))
 }
 
 function portOf(hostHeader: string | undefined): number {
