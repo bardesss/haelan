@@ -27,14 +27,10 @@ export interface DataType {
   payloadKey: string
   filterMember: FilterMember
   /**
-   * Which read actions the API accepts for this type, measured rather than assumed:
-   * `probe/findings/rollup-methods.md`, from the `allowed_actions` metadata the API returns
-   * when it refuses one. `list` and `rollUp` are neither opposites nor a partition, which is
-   * why this is a set and not the boolean it replaced.
-   *
-   * Types that answer both are deliberately read with `list`. A rollup arrives reconciled
-   * across sources and cannot be split by source, and sample level data can, so moving a
-   * listable type to its rollup would trade provenance for nothing.
+   * Read actions observed to work for this type: `probe/findings/rollup-methods.md`, from the
+   * `allowed_actions` metadata the API returns when it refuses one. An action's absence here
+   * means it has not been probed, not that the API refuses it. `list` and `rollUp` are neither
+   * opposites nor a partition, which is why this is a set and not the boolean it replaced.
    */
   actions: readonly Action[]
   scope: string
@@ -132,7 +128,7 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('weight', 'weight', 'sample_time.physical_time', METRICS, 'weight', 'grams', 'weightGrams'),
   listable('body-fat', 'bodyFat', 'sample_time.physical_time', METRICS, 'body_fat', 'percent', 'percentage'),
 
-  listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute'),
+  listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute', { actions: ['list', 'reconcile'] }),
   // averageHeartRateVariabilityMilliseconds is the day's overall figure. A deep-sleep-only
   // variant also exists, deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds, and was
   // deliberately not chosen: daily_hrv means the whole day, and the deep sleep field would
@@ -141,7 +137,7 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('daily-oxygen-saturation', 'dailyOxygenSaturation', 'date', METRICS, 'daily_spo2', 'percent', 'averagePercentage'),
   listable('daily-respiratory-rate', 'dailyRespiratoryRate', 'date', METRICS, 'respiratory_rate', 'breaths_per_minute', 'breathsPerMinute'),
 
-  listable('sleep', 'sleep', 'interval.end_time', SLEEP, 'sleep', 'session', '', { target: 'sessions' }),
+  listable('sleep', 'sleep', 'interval.end_time', SLEEP, 'sleep', 'session', '', { target: 'sessions', actions: ['list', 'reconcile'] }),
   listable('exercise', 'exercise', 'interval.civil_start_time', ACTIVITY, 'exercise', 'session', '', { target: 'sessions' }),
 
   listable('hydration-log', 'hydrationLog', 'interval.civil_start_time', NUTRITION, 'hydration', 'milliliters', 'amountConsumed.milliliters'),
