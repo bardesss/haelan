@@ -2,6 +2,7 @@ import { and, asc, desc, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { samples, sourcePriority, sources } from '../db/schema/index.ts'
 import type { DeriveQueue } from './deriveQueue.ts'
+import { ConfigError } from '../errors.ts'
 import { priorityFrom } from '../derive/priority.ts'
 import type { Priority, SourceFacts } from '../derive/priority.ts'
 import { localDateOf } from '../derive/localDay.ts'
@@ -52,6 +53,7 @@ export class SourcePriorityStore {
 
   put(input: { personId: string, metric: string, sourceIds: readonly string[], nowMs: number }): void {
     this.#db.transaction((tx) => {
+      this.#assertOwned(tx, input.personId, input.sourceIds)
       this.#replace(tx, input.personId, input.metric)
       input.sourceIds.forEach((sourceId, rank) => {
         tx.insert(sourcePriority)
@@ -67,6 +69,20 @@ export class SourcePriorityStore {
       this.#replace(tx, input.personId, input.metric)
       this.#markEveryDay(input.personId, input.nowMs, tx)
     })
+  }
+
+  /**
+   * The foreign key is on sources.id alone, so the database will happily file another household
+   * member's source id under this person, where `lists` would read it straight back. Master
+   * design section 15: an account sees only its own data, and a route can authorise the person
+   * without knowing anything about the source ids in the body.
+   */
+  #assertOwned(tx: DbOrTx, personId: string, sourceIds: readonly string[]): void {
+    for (const sourceId of sourceIds) {
+      const owned = tx.select({ id: sources.id }).from(sources)
+        .where(and(eq(sources.id, sourceId), eq(sources.personId, personId))).get()
+      if (!owned) throw new ConfigError(`source ${sourceId} does not belong to this person`)
+    }
   }
 
   #rows(personId: string) {
@@ -86,9 +102,14 @@ export class SourcePriorityStore {
   }
 
   /**
-   * Every day between the person's first and last sample. Two indexed reads rather than a
-   * distinct scan over millions of rows, and each end's offset is read off the boundary row
-   * itself, so somebody who moved timezone still gets both ends of their history right.
+   * Every day between the person's first and last sample, widened by a day at each end. Two
+   * indexed reads rather than a distinct scan over millions of rows, and each end's offset is
+   * read off the boundary row itself. The earliest UTC row is not the earliest local row once
+   * offsets differ, so the two converted dates are ordered here rather than assumed in order:
+   * inverted ends make datesBetween empty and mark nothing at all. The widening covers the same
+   * skew at the outside, where a person's first or last local day can sit outside the raw
+   * min-to-max window. A spare day costs one empty derive; a missed day keeps a merge computed
+   * under the priority list this write just replaced.
    */
   #markEveryDay(personId: string, nowMs: number, tx: DbOrTx): void {
     const columns = { utcMs: samples.utcMs, tzOffsetMinutes: samples.tzOffsetMinutes }
@@ -98,11 +119,21 @@ export class SourcePriorityStore {
       .orderBy(desc(samples.utcMs)).limit(1).get()
     if (!first || !last) return
 
+    const a = localDateOf(first.utcMs, first.tzOffsetMinutes)
+    const b = localDateOf(last.utcMs, last.tzOffsetMinutes)
+
     this.#queue.markRange({
       personId,
-      fromLocalDate: localDateOf(first.utcMs, first.tzOffsetMinutes),
-      toLocalDate: localDateOf(last.utcMs, last.tzOffsetMinutes),
+      fromLocalDate: shiftDate(a <= b ? a : b, -1),
+      toLocalDate: shiftDate(a <= b ? b : a, 1),
       nowMs,
     })
   }
+}
+
+const DAY_MS = 86_400_000
+
+// An ISO local date carries no zone, so stepping it as a UTC midnight is exact.
+function shiftDate(localDate: string, days: number): string {
+  return new Date(Date.parse(`${localDate}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
 }
