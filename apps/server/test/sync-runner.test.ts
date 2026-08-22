@@ -5,6 +5,20 @@ import type { Harness } from './harness.ts'
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
 
+// The four tests below that pass sprintDays and backfillBatchDays are deliberately expensive:
+// they assert against production's own numbers, and at the harness's speed-picked defaults they
+// would pass for the wrong reason (see each one's comment). Measured with one extra vitest
+// process competing for the machine, they cost 13.0s, 13.5s, 9.2s and 6.9s - against a global
+// testTimeout of 20s, which is a margin of well under two on a machine whose load nobody
+// controls. That is the whole flake: not a race, not shared state, just a budget sized for
+// ordinary tests applied to tests that are two orders of magnitude heavier.
+//
+// Raising the global budget would blunt it for the other six hundred tests, where 20s means "this
+// is hung". So the cost is declared where it is incurred. Generous on purpose: it is a
+// hang-detector for these tests, not a performance assertion, and a performance assertion is
+// exactly what it must not become on hardware this suite does not choose.
+const SPRINT_BUDGET_MS = 60_000
+
 describe('the sync runner', () => {
   it('refuses a second run while one is in flight and says so rather than queueing', async () => {
     harness = await withServer({ google: 'ok' })
@@ -87,7 +101,15 @@ describe('the sync runner', () => {
     // immediately once backfillCompleteAtMs is set, and nothing else ever clears it. Simulates
     // that pre-existing state directly, the state a real instance would already be in, rather
     // than running a real 90 day backfill first just to arrive there.
-    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
+    //
+    // Harness defaults, not the production sprint numbers its neighbours below use: nothing here
+    // turns on sprint depth or batch size. What is asserted is that the stale mark gets cleared
+    // and the cursor moves past the old floor at all, and #backfillPass clears it on any pass.
+    // This test carried sprintDays 90 / batch 14 for no reason it needed, which cost it 26.8s
+    // under load against a 20s budget - the flake. Verified by mutation rather than by argument:
+    // with clearBackfillComplete disabled it still fails, on the cursor sitting exactly on the
+    // old floor.
+    harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
     const stores = harness.app.haelan.stores
     const oldFloorMs = harness.clock.nowMs - 90 * 86_400_000
@@ -129,7 +151,7 @@ describe('the sync runner', () => {
     for (const row of status.backfill) {
       expect(row.complete || (row.cursorMs !== null && row.cursorMs <= sprintFloor)).toBe(true)
     }
-  })
+  }, SPRINT_BUDGET_MS)
 
   it('stops at the sprint window and leaves the deep history to later runs', async () => {
     // The real sprintDays and real batch size: at the harness's default batch of 1, forty
@@ -143,7 +165,7 @@ describe('the sync runner', () => {
     // Daily types were asked for five years; the sprint must not have walked them there.
     expect(weight?.complete).toBe(false)
     expect(weight?.cursorMs).toBeGreaterThan(harness.clock.nowMs - 1825 * 86_400_000)
-  })
+  }, SPRINT_BUDGET_MS)
 
   it('reverts to one batch per type once the sprint window is filled', async () => {
     // This test is about the revert, not about the number 90 - it only needs the sprint to
@@ -162,7 +184,7 @@ describe('the sync runner', () => {
     // One batch of fourteen days (backfillBatchDays passed above), not another sprint.
     expect(before - after).toBeLessThanOrEqual(16 * 86_400_000)
     expect(after).toBeLessThan(before)
-  })
+  }, SPRINT_BUDGET_MS)
 
   it('abandons a sprint promptly when asked to stop, so shutdown does not wait for it', async () => {
     // Not about the number 90: stop() lands before runSync's first await resolves (see the
@@ -240,5 +262,5 @@ describe('the sync runner', () => {
     const brokenType = harness.app.haelan.runner.status().backfill
       .find((s) => s.dataType === LIST_FAILS_TYPE)
     expect(brokenType?.complete).toBe(false)
-  })
+  }, SPRINT_BUDGET_MS)
 })
