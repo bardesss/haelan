@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
 import { people } from './people.ts'
 
 // One account, one person, enforced by the unique constraint rather than by convention.
@@ -43,6 +43,10 @@ export const instanceSettings = sqliteTable('instance_settings', {
   // generator can serialise, so it cannot reference DEFAULT_USER_HORIZON_DAYS in catalogue.ts.
   // A test pins the two together so they cannot drift apart.
   backfillHorizonDays: integer('backfill_horizon_days').notNull().default(730),
+  // Two sessions of the same kind are one event when their overlap exceeds this fraction of the
+  // shorter one. Master design section 9 names 50 percent and calls it configurable; the column
+  // exists from the start so the value is never a constant somebody has to go digging for.
+  sessionOverlapRatio: real('session_overlap_ratio').notNull().default(0.5),
   setupCompletedAtMs: integer('setup_completed_at_ms'),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })

@@ -2,6 +2,7 @@
 import type { DbOrTx } from '../db/open.ts'
 import { instanceSettings } from '../db/schema/index.ts'
 import type { ConsentPath } from '../db/schema/accounts.ts'
+import { ConfigError } from '../errors.ts'
 import type { AccountStore } from './accounts.ts'
 import type { CredentialStore } from './credentials.ts'
 
@@ -13,6 +14,7 @@ export interface InstanceSettingsRow {
   syncIntervalMinutes: number
   backfillHorizonDays: number
   setupCompletedAtMs: number | null
+  sessionOverlapRatio: number
 }
 
 export interface PutSettingsInput {
@@ -37,6 +39,7 @@ export class SettingsStore {
       syncIntervalMinutes: row.syncIntervalMinutes,
       backfillHorizonDays: row.backfillHorizonDays,
       setupCompletedAtMs: row.setupCompletedAtMs ?? null,
+      sessionOverlapRatio: row.sessionOverlapRatio,
     }
   }
 
@@ -63,6 +66,16 @@ export class SettingsStore {
 
   putBackfillHorizon(days: number, nowMs: number): void {
     this.#db.update(instanceSettings).set({ backfillHorizonDays: days, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  putSessionOverlapRatio(ratio: number, nowMs: number): void {
+    // At or below zero every pair of sessions overlaps enough; above one no pair ever can.
+    // Either would make grouping meaningless rather than merely aggressive.
+    if (!(ratio > 0 && ratio <= 1)) {
+      throw new ConfigError(`session overlap ratio must be above 0 and at most 1, got ${ratio}`)
+    }
+    this.#db.update(instanceSettings).set({ sessionOverlapRatio: ratio, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 }

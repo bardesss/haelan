@@ -23,6 +23,12 @@ export interface SampleLike {
  */
 export const PROVIDER_SOURCE = 'provider'
 
+/**
+ * The `daily.source` of a row we computed by choosing between sources. Distinct from
+ * PROVIDER_SOURCE, which is a merge Google performed and we cannot inspect.
+ */
+export const MERGED_SOURCE = 'merged'
+
 export interface DailyRow {
   personId: string
   localDate: string
@@ -31,6 +37,8 @@ export interface DailyRow {
   source: string
   value: number | null
   coverage: number | null
+  /** JSON, and only ever on a merged row. See the column comment in schema/derived.ts. */
+  sourceMix: string | null
   derivationVersion: number
 }
 
@@ -143,6 +151,7 @@ export function rollUpDay(input: RollUpDayInput): DailyRow[] {
           source,
           value,
           coverage,
+          sourceMix: null,
           derivationVersion: DERIVATION_VERSION,
         })
       }
