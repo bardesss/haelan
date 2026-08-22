@@ -99,7 +99,7 @@ export class SyncStateStore {
 
   dueJobs(personIds: string[], _nowMs: number): SyncJob[] {
     return personIds.flatMap((personId) =>
-      DATA_TYPES.filter((t) => t.listSupported).map((t) => ({ personId, dataType: t.id })))
+      DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => ({ personId, dataType: t.id })))
   }
 
   private upsert(personId: string, dataType: string, set: Partial<typeof syncState.$inferInsert>): void {

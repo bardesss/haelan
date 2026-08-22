@@ -1,4 +1,5 @@
 import type { DataType } from '../api/catalogue.ts'
+import { supports } from '../api/catalogue.ts'
 import { dayWindows } from './windows.ts'
 import { runJob } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
@@ -42,7 +43,7 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     rowsWritten: number,
   ): BackfillResult => ({ windowsFetched, rowsWritten, complete, stoppedBecause })
 
-  if (!t.listSupported) return done('horizon', true, 0, 0)
+  if (!supports(t, 'list')) return done('horizon', true, 0, 0)
 
   const state = deps.syncState.get(input.personId, t.id)
   if (state?.backfillCompleteAtMs != null) return done('horizon', true, 0, 0)

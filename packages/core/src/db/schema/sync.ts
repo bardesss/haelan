@@ -12,3 +12,13 @@ export const syncState = sqliteTable('sync_state', {
   lastError: text('last_error'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.personId, t.dataType] })])
+
+// One row per dirty person-day, not per metric: a day whose samples changed has to be
+// recomputed for every metric anyway, and a per metric queue would be a hundred rows saying
+// the same thing. Written by sync as it commits a window, by an override as it is added or
+// removed, and by a derivation_version bump, which is what a rebuild is.
+export const deriveQueue = sqliteTable('derive_queue', {
+  personId: text('person_id').notNull().references(() => people.id),
+  localDate: text('local_date').notNull(),
+  queuedAtMs: integer('queued_at_ms').notNull(),
+}, (t) => [primaryKey({ columns: [t.personId, t.localDate] })])

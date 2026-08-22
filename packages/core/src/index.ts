@@ -11,10 +11,10 @@ export type { PutInput, PutResult } from './store/rawArchive.ts'
 export { createTestDatabase, seedPerson } from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
 export {
-  DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor,
+  ACTIONS, DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor, supports,
   INTRADAY_HORIZON_DAYS, USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS,
 } from './api/catalogue.ts'
-export type { DataType, FilterMember, MappingTarget, TypeTier } from './api/catalogue.ts'
+export type { Action, DataType, FilterMember, MappingTarget, TypeTier } from './api/catalogue.ts'
 export { TokenProvider, RevokedError } from './api/tokens.ts'
 export type { TokenProviderDeps } from './api/tokens.ts'
 export { HealthClient } from './api/client.ts'
@@ -38,6 +38,8 @@ export { runJob } from './sync/runJob.ts'
 export type { JobDeps, JobInput, JobResult, RateLimiter } from './sync/runJob.ts'
 export { runSync } from './sync/runSync.ts'
 export type { SyncInput, SyncReport } from './sync/runSync.ts'
+export { DeriveQueue } from './store/deriveQueue.ts'
+export type { QueueEntry } from './store/deriveQueue.ts'
 
 // M1d. The wizard and the accounts behind it: everything the server needs to take an instance
 // from an empty volume to a syncing household, and nothing it does not. `apps/server` reaches
@@ -59,4 +61,21 @@ export type { BackfillInput, BackfillResult } from './sync/runBackfill.ts'
 export type { SyncProgress } from './sync/runJob.ts'
 // Synthetic payload builders, exported for the server's Google stub. Test-only in intent, and
 // the file they come from invents every value it emits: nothing here reads real health data.
-export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body } from './testing/payloads.ts'
+export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body, dailyRollupBody } from './testing/payloads.ts'
+export type { RollupWindow } from './testing/payloads.ts'
+
+// M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
+// ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
+// tasks in this milestone first needed them across the apps/server boundary.
+export { METRICS, DAILY_AGGS, metricSpec } from './derive/metrics.ts'
+export type { MetricSpec, DailyAgg } from './derive/metrics.ts'
+export { DERIVATION_VERSION } from './derive/version.ts'
+export { localDateOf, localHourOf } from './derive/localDay.ts'
+export { coverageOf } from './derive/coverage.ts'
+export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
+export type { DailyRow, SampleLike } from './derive/rollup.ts'
+export { runDerive } from './derive/runDerive.ts'
+export type { DeriveReport } from './derive/runDerive.ts'
+export { mapRollups } from './api/mapRollups.ts'
+export type { RollupMapping } from './api/mapRollups.ts'
+export { runRollupJob, rollupRangeCapDays } from './sync/runRollupJob.ts'

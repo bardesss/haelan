@@ -1,5 +1,6 @@
 ﻿import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
+import { supports } from './catalogue.ts'
 import { ConfigError, HaelanError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const API_ROOT = 'https://health.googleapis.com/v4'
@@ -9,6 +10,25 @@ const BASE_BACKOFF_MS = 500
 // volume.md's densest measured real day needed eight pages. Low hundreds is generous headroom
 // while still catching a nextPageToken that never advances before it archives forever.
 const MAX_PAGES = 200
+
+export interface RollupInput {
+  personId: string
+  dataType: DataType
+  /** Inclusive, `YYYY-MM-DD`. */
+  fromLocalDate: string
+  /**
+   * Exclusive, `YYYY-MM-DD`. A walk whose `toLocalDate` is today's date therefore never requests
+   * today itself, so today's provider row does not exist until tomorrow's run asks for it.
+   */
+  toLocalDate: string
+}
+
+export interface RollupResult { payloadId: string }
+
+const civilRange = (localDate: string) => {
+  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number]
+  return { date: { year, month, day } }
+}
 
 export interface ListInput {
   personId: string
@@ -66,6 +86,12 @@ const civil = (ms: number, timeZone: string) => {
 }
 
 function buildFilter(t: DataType, startMs: number, endMs: number, timezone: string): string {
+  // Unreachable through listDataPoints, which refuses a type that does not support list before
+  // it gets here. Stated rather than assumed, because the alternative to a null member is the
+  // string "null" inside a filter the API would reject with a message about grammar.
+  if (t.filterMember === null) {
+    throw new ConfigError(`${t.id} has no filter member: it answers ${t.actions.join(', ')}, and none of those takes a filter`)
+  }
   const member = `${t.filterRoot}.${t.filterMember}`
   // date and interval.civil_start_time carry no offset, so the same instant names a different
   // day depending on where the person is. iso is an absolute instant and is zone independent.
@@ -97,8 +123,8 @@ export class HealthClient {
 
   async listDataPoints(input: ListInput): Promise<ListResult> {
     const { dataType: t } = input
-    if (!t.listSupported) {
-      throw new ConfigError(`${t.id} does not support list, only rollup and dailyRollup`)
+    if (!supports(t, 'list')) {
+      throw new ConfigError(`${t.id} does not support list, only ${t.actions.join(', ')}`)
     }
     // A reversed or empty window builds a filter that is always false. The API would answer it
     // with a legitimate looking empty page, and an empty page recorded as "no data" for a range
@@ -172,7 +198,43 @@ export class HealthClient {
     return { payloadIds, pointCount, pagesFetched, attempts, lastRetriedStatus }
   }
 
-  private async fetchWithRetry(url: URL, personId: string): Promise<{
+  /**
+   * The rollup read. It takes a civil interval rather than a filter, and it does not paginate:
+   * `pageSize` is a floor the request must clear, not a page size, so the per type range cap is
+   * the only lever a walk has. Measured in probe/findings/rollup-methods.md.
+   */
+  async dailyRollUpDataPoints(input: RollupInput): Promise<RollupResult> {
+    const t = input.dataType
+    if (!supports(t, 'dailyRollUp')) {
+      throw new ConfigError(`${t.id} does not support dailyRollUp, only ${t.actions.join(', ')}`)
+    }
+    const url = new URL(`${this.#deps.apiRoot ?? API_ROOT}/users/me/dataTypes/${t.id}/dataPoints:dailyRollUp`)
+    const request = {
+      range: { start: civilRange(input.fromLocalDate), end: civilRange(input.toLocalDate) },
+    }
+    const fetched = await this.fetchWithRetry(url, input.personId, { method: 'POST', body: request })
+    const { id } = this.#archive.put({
+      personId: input.personId,
+      dataType: t.id,
+      requestParams: request,
+      windowStartMs: Date.parse(`${input.fromLocalDate}T00:00:00Z`),
+      windowEndMs: Date.parse(`${input.toLocalDate}T00:00:00Z`),
+      fetchedAtMs: this.#deps.now(),
+      httpStatus: fetched.status,
+      body: fetched.body,
+    })
+    if (fetched.status !== 200) {
+      const message = `${fetched.status} rolling up ${t.id}: ${fetched.body.slice(0, 200)}`
+      throw classifyHttp(fetched.status) === 'transient'
+        ? new TransientError(message)
+        : new SchemaDriftError(message)
+    }
+    return { payloadId: id }
+  }
+
+  private async fetchWithRetry(url: URL, personId: string, init?: {
+    method: string, body: unknown,
+  }): Promise<{
     body: string, status: number, attempts: number, retriedStatus: number | null,
   }> {
     let lastStatus = 0
@@ -199,7 +261,13 @@ export class HealthClient {
         continue
       }
 
-      const res = await this.#deps.fetch(url.toString(), { headers: { authorization: `Bearer ${token}` } })
+      const headers: Record<string, string> = { authorization: `Bearer ${token}` }
+      if (init) headers['content-type'] = 'application/json'
+      const res = await this.#deps.fetch(url.toString(), {
+        method: init?.method,
+        headers,
+        body: init ? JSON.stringify(init.body) : undefined,
+      })
       lastStatus = res.status
       lastBody = await res.text()
 

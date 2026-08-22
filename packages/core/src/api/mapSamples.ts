@@ -28,9 +28,8 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
   const t = input.dataType
   if (t.target !== 'samples') throw new ConfigError(`${t.id} is not a sample type`)
 
-  // Deferred types are fetched and archived but carry a sub-dimension a flat sample row cannot
-  // hold. M2 derives them from tier 1, so mapping them here would silently drop all but one
-  // point per interval.
+  // Deferred types are fetched and archived, but their shape is not yet confirmed against a
+  // real payload, so a valuePath would be a guess rather than a measurement.
   if (t.mappingDeferred) return []
 
   let parsed: unknown
@@ -54,11 +53,8 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
     const payload = valueAt(point, t.payloadKey)
     if (payload === undefined) continue
 
-    const value = parseNumeric(valueAt(payload, t.valuePath))
-    // A point with no value is a point the device did not record. Writing a zero here is the
-    // single easiest way to turn a gap into a fabricated measurement. Spec invariant 2.
-    if (value === null) continue
-
+    // The interval or sample instant is the row's clock for both an ordinary type and a
+    // sub-dimension type, so it is resolved once here rather than twice.
     const instant = parseInstant(valueAt(payload, 'sampleTime'))
       ?? parseInstant(valueAt(payload, 'interval'))
     const civil = parseCivilDate(valueAt(payload, 'date'))
@@ -78,6 +74,42 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
     } else {
       continue
     }
+
+    const sub = t.subDimension
+    if (sub) {
+      const arrayValue = sub.arrayPath ? valueAt(payload, sub.arrayPath) : undefined
+      const elements = sub.arrayPath ? (Array.isArray(arrayValue) ? arrayValue : []) : [payload]
+      // One source per point, not per element: every element in this loop comes from the same
+      // point, so resolving it once outside the loop is both correct and cheaper.
+      const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+      for (const element of elements) {
+        const key = valueAt(element, sub.keyPath)
+        const metric = typeof key === 'string' ? sub.metricByKey[key] : undefined
+        // A key the field map never recorded is schema drift, not a new metric. Writing it
+        // anyway would put a series on a chart that no catalogue entry describes, silently.
+        if (metric === undefined) continue
+        // Both value fields are int64 and arrive as JSON strings, same as an ordinary type.
+        const minutes = parseNumeric(valueAt(element, sub.valuePath))
+        if (minutes === null) continue
+        rows.push({
+          personId: input.personId,
+          sourceId,
+          metric,
+          utcMs,
+          tzOffsetMinutes,
+          agg: 'raw',
+          value: minutes,
+          n: 1,
+          rawPayloadId: input.rawPayloadId,
+        })
+      }
+      continue
+    }
+
+    const value = parseNumeric(valueAt(payload, t.valuePath))
+    // A point with no value is a point the device did not record. Writing a zero here is the
+    // single easiest way to turn a gap into a fabricated measurement. Spec invariant 2.
+    if (value === null) continue
 
     // Per point, not once per call: a single payload carries more than one platform, and spec
     // invariant 4 requires every row to keep its own source.

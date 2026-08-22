@@ -52,6 +52,27 @@ export const body = (points: unknown[], nextPageToken?: string): string =>
 
 export interface SleepStage { type: string, startTime: string, endTime: string }
 
+export interface RollupWindow {
+  date: { year: number, month: number, day: number }
+  /** The payload key's own object, e.g. { kcalSum: 2500 } or { countSum: '56' }. */
+  value: Record<string, unknown>
+}
+
+const nextDay = (d: { year: number, month: number, day: number }) => {
+  const ms = Date.UTC(d.year, d.month - 1, d.day) + 86_400_000
+  const next = new Date(ms)
+  return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() }
+}
+
+export const dailyRollupBody = (payloadKey: string, windows: RollupWindow[]): string =>
+  JSON.stringify({
+    rollupDataPoints: windows.map((w) => ({
+      civilStartTime: { date: w.date, time: {} },
+      civilEndTime: { date: nextDay(w.date), time: {} },
+      [payloadKey]: w.value,
+    })),
+  })
+
 export function sleepPoint(o: {
   name?: string
   startTime: string

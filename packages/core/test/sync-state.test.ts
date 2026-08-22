@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
+import { DATA_TYPES } from '../src/api/catalogue.ts'
 import { TransientError, SchemaDriftError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
@@ -77,13 +78,17 @@ describe('SyncStateStore', () => {
     expect(store.get('p1', 'steps')?.backfillCursorMs).toBe(1000)
   })
 
-  it('lists a job for every listable data type and every person given', () => {
+  it('lists a job for every data type carrying an action, and every person given', () => {
     seedPerson(ctx.db, 'p2')
     const jobs = store.dueJobs(['p1', 'p2'], 1000)
     const types = new Set(jobs.map((j) => j.dataType))
     expect(jobs.filter((j) => j.personId === 'p1').length).toBe(types.size)
-    expect(types.has('steps')).toBe(true)
-    expect(types.has('floors')).toBe(false)
+    // Pinned to the full catalogue rather than a couple of spot checks: a set this size would
+    // also pass spot checks on 'steps' and 'floors' if the filter were dropped entirely, so
+    // only equality against every id in DATA_TYPES actually detects that regression.
+    // floors rejects list but answers rollUp, dailyRollUp and reconcile, so it is due too;
+    // runJob is what dispatches on which action a type actually gets, not dueJobs.
+    expect(types).toEqual(new Set(DATA_TYPES.map((t) => t.id)))
   })
 
   it('keeps one person state separate from another', () => {

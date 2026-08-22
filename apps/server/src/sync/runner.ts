@@ -1,6 +1,6 @@
 ﻿import {
-  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runSync,
-  horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
+  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runDerive,
+  runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
 } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -34,6 +34,14 @@ const SPRINT_DAYS = 90
  * needs far fewer passes than this.
  */
 const MAX_SPRINT_PASSES = 40
+
+/**
+ * runDerive claims one batch per call, and a sprint marks far more days than one batch holds.
+ * Bounded for the same reason the sprint is: a batch that comes back claimed and is still
+ * queued afterwards would otherwise spin here. What is left stays queued for the next run,
+ * which is safe because the queue is the record of what needs deriving, not this loop.
+ */
+const MAX_DERIVE_BATCHES = 200
 
 export type RunReason = 'manual' | 'scheduled' | 'setup'
 
@@ -113,7 +121,7 @@ export class SyncRunner {
     const backfill: BackfillSummary[] = []
     for (const person of this.#context.stores.people.list()) {
       for (const type of DATA_TYPES) {
-        if (!type.listSupported) continue
+        if (!supports(type, 'list')) continue
         const state = this.#context.stores.syncState.get(person.id, type.id)
         backfill.push({
           dataType: type.id,
@@ -218,6 +226,7 @@ export class SyncRunner {
       now: this.#context.now,
       limiter: this.#context.limiter ?? defaultLimiter(),
       onProgress: (event) => this.emit(event),
+      deriveQueue: this.#context.instance.deriveQueue,
     }
   }
 
@@ -229,6 +238,10 @@ export class SyncRunner {
     // The trailing window first: today's data is what a dashboard shows, and a backfill that
     // takes an hour must not delay it.
     await runSync({ personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps })
+    // Here as well as at the end of the run, for the same reason the trailing window goes
+    // first: a backfill that takes an hour must not be what stands between today's samples and
+    // the dashboard reading them.
+    this.#derive()
 
     // Resolved once per run rather than per type: it is one operator setting, and reading it
     // fresh for every (person, type) pair would let a mid-run settings change produce a run
@@ -266,6 +279,29 @@ export class SyncRunner {
     // above was the only place any of them ever got a chance to walk.
     if (this.#aborted) return
     await this.#backfillPass(deps, personIds, userHorizonDays, null)
+    this.#derive()
+  }
+
+  /**
+   * Drains the days sync just marked. Nothing else in the running system does, so without this
+   * derive_queue only grows and tier 3 never receives a derived row.
+   *
+   * Its failures stay inside it, the way a failed job stays inside runJob: a derivation defect
+   * turning a completed sync into a failed one is the coupling section 13 forbids in the other
+   * direction, and the days it could not derive are still queued for the next run either way.
+   */
+  #derive(): void {
+    try {
+      for (let batch = 0; batch < MAX_DERIVE_BATCHES; batch++) {
+        if (this.#aborted) return
+        if (runDerive({
+          db: this.#context.instance.db, queue: this.#context.instance.deriveQueue,
+        }).daysDerived === 0) return
+      }
+      console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)
+    } catch (error) {
+      console.log(`sync: derivation failed, ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   /** True while any connected person has a type that has not yet reached the sprint depth. */
@@ -274,7 +310,7 @@ export class SyncRunner {
     for (const personId of personIds) {
       if (!this.#context.stores.people.get(personId)) continue
       for (const type of DATA_TYPES) {
-        if (!type.listSupported) continue
+        if (!supports(type, 'list')) continue
         const state = this.#context.stores.syncState.get(personId, type.id)
         if (state?.backfillCompleteAtMs != null) continue
         const cursor = state?.backfillCursorMs
@@ -301,7 +337,7 @@ export class SyncRunner {
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
       for (const dataType of DATA_TYPES) {
-        if (!dataType.listSupported) continue
+        if (!supports(dataType, 'list')) continue
         if (this.#aborted) return cursorAdvanced
         const resolved = horizonDaysFor(dataType, userHorizonDays)
         // A stored completion mark pins a type to whatever horizon was in force on the day it

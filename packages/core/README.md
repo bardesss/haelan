@@ -117,6 +117,53 @@ roughly 720 requests. `JobDeps.limiter` is optional, `runJob` takes one token be
 fetches, and `TokenBucket` satisfies it. Nothing sets it today, because choosing the rate is a
 settings decision and belongs with the scheduler in M1d.
 
+## Derivation
+
+Tier 3, `daily`, is a cache computed from tier 2. `src/derive` is where that computation lives,
+and `src/derive/metrics.ts` is where it starts.
+
+**`METRICS` is a separate catalogue from `DATA_TYPES`, on purpose.** `DATA_TYPES` describes the
+API: what Google calls a data type, how to fetch it, what unit the response carries. `METRICS`
+describes what a metric means once it is ours: which daily aggregates are meaningful for it (a
+sum of heart rate readings is not a number anyone means), how many decimals to show, and whether
+a higher reading is better, worse or neither. The two catalogues change on different clocks. A
+field map correction to `DATA_TYPES` is measured against the live API; a decision about whether
+weight should show its mean or only its last reading belongs to product judgement instead, and
+lives in `METRICS`. Sleep and exercise carry no entry here, deliberately: their daily figures come
+from sessions and segments, not from a sample rollup, and a test asserts that neither of the two
+session types has an entry, so nobody adds one by habit.
+
+**Coverage** is the fraction of the local day's hours, out of 24, that carry at least one sample:
+computed by `coverageOf`, stored on every derived `daily` row. It is hours rather than a sample
+count or a rate, because a rate would need a declared expected frequency per metric, meaningless
+for something episodic like weight. Hours mean the same thing whether the metric is heart rate at
+one reading a minute or weight at one reading a week: how much of the day was actually observed.
+A **null coverage** means the row was not computed by `rollUpDay` at all, which today means it is
+a `provider` row (below); nothing downstream should read a null coverage as zero, or as one. What
+a null coverage means for a suppression rule on the dashboard is a decision M2d makes, which is
+exactly why it is left null here rather than filled with a fabricated 1.0.
+
+**`daily.source`** takes one of three shapes. A source id names the source that reported it, and
+is what `rollUpDay` writes: it derives per source by construction and never merges, so a row it
+produces always names exactly the source it came from. The literal `merged` names a row we
+computed ourselves by choosing between sources, which needs the per metric priority list that is
+M2b's; nothing writes this literal yet. The literal `provider` names a row for a type the API only
+answers as a rollup, so we ingested it rather than derived it: `mapRollups` writes these, and
+`runDerive` leaves them alone because there is no local recomputation for a number we never saw
+the components of. A `provider` row is Google's own reconciliation across sources, which is a
+different thing from `merged`: we cannot inspect it against per source data the way we could
+verify our own merge, so it is filed under its own literal rather than under `merged`, where it
+would make that literal's promise, "this is a merge we can account for", false without saying so.
+
+**A dirty day is queued rather than derived inline.** `DeriveQueue` records which (person, local
+date) pairs need recomputing, and `runDerive` is what drains it, replacing a day's derived rows
+wholesale in one transaction so a metric whose samples all got excluded loses its row rather than
+keeping a stale number. Three things write to the queue: sync, as it commits a window and marks
+the days it touched dirty in the same transaction; an override, as it is added or removed; and a
+`derivation_version` bump, which is what a rebuild is. Of those three, only sync exists today. The
+queue is the mechanism overrides and rebuild will use, not evidence that either is implemented:
+nothing applies an override yet, and nothing compares `DERIVATION_VERSION` to what is on disk.
+
 ## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all

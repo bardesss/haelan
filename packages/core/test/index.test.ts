@@ -124,6 +124,34 @@ describe('package barrel', () => {
     expect(typeof core.body).toBe('function')
   })
 
+  it('exports the metric catalogue and the derivation constants', () => {
+    expect(typeof core.METRICS).toBe('object')
+    expect(Array.isArray(core.DAILY_AGGS)).toBe(true)
+    expect(typeof core.metricSpec).toBe('function')
+    expect(typeof core.DERIVATION_VERSION).toBe('number')
+    expect(typeof core.PROVIDER_SOURCE).toBe('string')
+  })
+
+  it('exports the local day and coverage functions', () => {
+    expect(typeof core.localDateOf).toBe('function')
+    expect(typeof core.localHourOf).toBe('function')
+    expect(typeof core.coverageOf).toBe('function')
+  })
+
+  it('exports the rollup engine, the drain and the two rollup-only read paths', () => {
+    expect(typeof core.rollUpDay).toBe('function')
+    expect(typeof core.runDerive).toBe('function')
+    expect(typeof core.DeriveQueue).toBe('function')
+    expect(typeof core.mapRollups).toBe('function')
+    expect(typeof core.runRollupJob).toBe('function')
+    expect(typeof core.rollupRangeCapDays).toBe('function')
+  })
+
+  it('exports the actions the catalogue supports', () => {
+    expect(Array.isArray(core.ACTIONS)).toBe(true)
+    expect(typeof core.supports).toBe('function')
+  })
+
   it('is callable, not merely present: setupStep answers on a real empty instance', () => {
     // A barrel test that only checks typeof passes on an export wired to the wrong module.
     const fixture = core.createTestDatabase()

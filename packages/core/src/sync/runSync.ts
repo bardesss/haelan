@@ -1,8 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { people } from '../db/schema/index.ts'
-import { dataTypeById, horizonDaysFor } from '../api/catalogue.ts'
-import { runJob } from './runJob.ts'
+import { dataTypeById, horizonDaysFor, supports } from '../api/catalogue.ts'
+import { runJob, classify } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
+import { runRollupJob } from './runRollupJob.ts'
+import { RevokedError } from '../api/tokens.ts'
 
 export interface SyncReport {
   jobs: number
@@ -71,6 +73,48 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
     for (const job of input.deps.syncState.dueJobs([personId], toMs)) {
       const dataType = dataTypeById(job.dataType)
       if (!dataType) continue
+
+      if (!supports(dataType, 'list')) {
+        // A type answering only rollups has no windows, no high water mark and no per source
+        // rows. It is a different walk, and treating it as a failed list job is how it stayed
+        // unreadable through the whole of M1.
+        if (!supports(dataType, 'dailyRollUp')) continue
+        report.jobs++
+        const rollupHighWaterMs = input.deps.syncState.get(personId, job.dataType)?.highWaterMs ?? null
+        // Nothing else ever walks these types deeper: the backfill pass skips anything that
+        // cannot list, so this run is their whole read path. With no mark, reachBackTo returns
+        // the trailing window, which means a first run would reach back a week, stamp a mark,
+        // and leave every account's history before install unfetched for good. The first run
+        // therefore walks the type's full horizon; from the second on, the mark exists and
+        // reachBackTo governs the reach exactly as it does for a list job.
+        const rollupFromMs = rollupHighWaterMs === null
+          ? toMs - horizonDaysFor(dataType, input.userHorizonDays) * DAY_MS
+          : reachBackTo(rollupHighWaterMs, trailingFromMs, toMs, dataType, input.userHorizonDays)
+        try {
+          const rollup = await runRollupJob({
+            personId, dataType, timezone: person.timezone,
+            fromMs: rollupFromMs, toMs, deps: input.deps,
+          })
+          report.rowsWritten += rollup.rowsWritten
+          // Mirrors runJob: only stamp a mark once the walk actually covered something, and the
+          // mark is toMs itself (already now, never later), so it can never claim to have synced
+          // time that has not happened yet.
+          if (rollup.chunks > 0) {
+            input.deps.syncState.recordSuccess({ personId, dataType: job.dataType, highWaterMs: toMs, nowMs: toMs })
+          }
+          report.succeeded++
+        } catch (error) {
+          // A rolled-back window's stale sources cache is runJob's problem, not this one: a
+          // rollup writes only to daily, which carries no source foreign key to go stale.
+          if (error instanceof RevokedError) { report.skipped++; continue }
+          input.deps.syncState.recordFailure({
+            personId, dataType: job.dataType, error: classify(error), nowMs: toMs,
+          })
+          report.failed++
+        }
+        continue
+      }
+
       report.jobs++
       const state = input.deps.syncState.get(personId, job.dataType)
       const before = state?.consecutiveFailures ?? 0

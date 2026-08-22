@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS, DATA_TYPES } from '@haelan/core'
+import { USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS, DATA_TYPES, supports } from '@haelan/core'
 
 interface HorizonBody { days?: unknown }
 
@@ -37,7 +37,7 @@ export function registerSettings(app: FastifyInstance): void {
     if (days > previousDays) {
       for (const person of stores().people.list()) {
         for (const type of DATA_TYPES) {
-          if (!type.listSupported || type.tier !== 'daily') continue
+          if (!supports(type, 'list') || type.tier !== 'daily') continue
           stores().syncState.clearBackfillComplete(person.id, type.id)
         }
       }
