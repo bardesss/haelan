@@ -54,4 +54,23 @@ describe('the derive queue', () => {
     queue.clear([])
     expect(queue.size()).toBe(1)
   })
+
+  // Protects sync's caller, which marks a day inside the transaction that writes the day's rows.
+  it('rolls a mark back with the transaction that made it', () => {
+    expect(() => test.db.transaction((tx) => {
+      queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 }, tx)
+      throw new Error('roll back')
+    })).toThrow(/roll back/)
+    expect(queue.size()).toBe(0)
+  })
+
+  // Protects runDerive, which clears inside the transaction that wrote the derived rows.
+  it('leaves an entry queued when the transaction that cleared it rolls back', () => {
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    expect(() => test.db.transaction((tx) => {
+      queue.clear([{ personId: 'p1', localDate: '2026-08-22' }], tx)
+      throw new Error('roll back')
+    })).toThrow(/roll back/)
+    expect(queue.size()).toBe(1)
+  })
 })
