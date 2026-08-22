@@ -21,7 +21,7 @@ response body. The filterable member differs by type and is not documented.
 | `daily-resting-heart-rate` | yes | `date` | 7 | 3.2 |  |
 | `distance` | yes | `interval.start_time` | 1586 | 1694.7 | yes |
 | `exercise` | yes | `interval.civil_start_time` | 4 | 14.6 |  |
-| `floors` | no | reconcile, rollup, dailyRollup |  |  |  |
+| `floors` | no | none, see `rollup-methods.md` |  |  |  |
 | `heart-rate` | yes | `sample_time.physical_time` | 5000 | 3202 | yes |
 | `heart-rate-variability` | yes | `sample_time.physical_time` | 503 | 322.2 |  |
 | `hydration-log` | yes | `interval.civil_start_time` | 33 | 30.3 |  |
@@ -29,8 +29,14 @@ response body. The filterable member differs by type and is not documented.
 | `oxygen-saturation` | yes | `sample_time.physical_time` | 1449 | 927.4 |  |
 | `sleep` | yes | `interval.end_time` | 7 | 58.1 |  |
 | `steps` | yes | `interval.start_time` | 937 | 864.8 | yes |
-| `total-calories` | no | rollup, dailyRollup |  |  |  |
+| `total-calories` | no | none, see `rollup-methods.md` |  |  |  |
 | `weight` | yes | `sample_time.physical_time` | 32 | 22.8 |  |
+
+`floors` and `total-calories` reject `list` and answer `:rollUp` and `:dailyRollUp` instead,
+which take an interval rather than a filter string, so they have no filter member to record.
+Their request shapes, value paths and range caps were measured on 2026-08-22 and are in
+`rollup-methods.md`. The action names in this file's earlier draft were taken from the API's
+rejection message and are spelled without the capital U that the method names actually use.
 
 ## Fields by type
 
