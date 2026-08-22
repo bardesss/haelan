@@ -79,6 +79,9 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
     if (sub) {
       const arrayValue = sub.arrayPath ? valueAt(payload, sub.arrayPath) : undefined
       const elements = sub.arrayPath ? (Array.isArray(arrayValue) ? arrayValue : []) : [payload]
+      // One source per point, not per element: every element in this loop comes from the same
+      // point, so resolving it once outside the loop is both correct and cheaper.
+      const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
       for (const element of elements) {
         const key = valueAt(element, sub.keyPath)
         const metric = typeof key === 'string' ? sub.metricByKey[key] : undefined
@@ -90,7 +93,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
         if (minutes === null) continue
         rows.push({
           personId: input.personId,
-          sourceId: input.resolveSource(valueAt(point, 'dataSource')),
+          sourceId,
           metric,
           utcMs,
           tzOffsetMinutes,

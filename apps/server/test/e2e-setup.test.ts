@@ -110,6 +110,16 @@ describe('empty volume to syncing instance', () => {
     const samples = instance.db.$client.prepare('select count(*) as n from samples').get() as { n: number }
     expect(samples.n).toBeGreaterThan(0)
 
+    // active-minutes and active-zone-minutes carry a sub-dimension the stub has to shape on
+    // purpose (see stub-google.ts's subDimensionPoint). A stub point the mapper cannot read
+    // would fetch real points and map none of them, which is exactly what recordSchemaDrift
+    // exists to flag, silently, without this.
+    const drift = instance.db.$client
+      .prepare("select data_type, last_error from sync_state where data_type in ('active-minutes', 'active-zone-minutes')")
+      .all() as Array<{ data_type: string, last_error: string | null }>
+    expect(drift.length).toBe(2)
+    expect(drift.every((row) => row.last_error === null), JSON.stringify(drift)).toBe(true)
+
     expect(google.requests.some((url) => url.includes('/dataPoints'))).toBe(true)
     // Every data plane request carried a bearer token, so nothing went out unauthenticated.
     expect(google.authHeaders.length).toBeGreaterThan(0)

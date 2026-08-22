@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
+import type { DataType } from '@haelan/core'
 import { SCOPES, body, dailyPoint, dataTypeById, intervalPoint, samplePoint, sleepPoint, supports } from '@haelan/core'
 
 export interface StubGoogle {
@@ -17,12 +18,33 @@ const PHYSICAL_TIME = '2026-02-28T10:00:00Z'
 const END_TIME = '2026-02-28T10:01:00Z'
 const DATE = { year: 2026, month: 2, day: 28 }
 
+// A sub-dimension type has no single valuePath; its point is shaped from subDimension instead,
+// using whichever key metricByKey names first. Taken from the catalogue rather than hardcoded,
+// so a level or zone this stub sends is always one the mapper actually recognises.
+function subDimensionPoint(type: DataType): Record<string, unknown> {
+  const sub = type.subDimension!
+  const key = Object.keys(sub.metricByKey)[0]!
+  const interval = {
+    startTime: PHYSICAL_TIME, startUtcOffset: '7200s',
+    endTime: END_TIME, endUtcOffset: '7200s',
+  }
+  const element = { [sub.keyPath]: key, [sub.valuePath]: '7' }
+  const inner = sub.arrayPath
+    ? { interval, [sub.arrayPath]: [element] }
+    : { interval, ...element }
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    [type.payloadKey]: inner,
+  }
+}
+
 // One point shaped the way the catalogue says this type's value is shaped. Built from the
-// catalogue's own valuePath, exactly as catalogue-truth.test.ts does, so the stub cannot
-// drift from what the mappers expect.
+// catalogue's own valuePath, or subDimension when it has one, exactly as catalogue-truth.test.ts
+// and map-samples.test.ts do, so the stub cannot drift from what the mappers expect.
 function pointFor(id: string): Record<string, unknown> | null {
   const type = dataTypeById(id)
   if (!type || !supports(type, 'list') || type.mappingDeferred) return null
+  if (type.subDimension) return subDimensionPoint(type)
   if (type.target === 'sessions') {
     return sleepPoint({
       startTime: '2026-02-27T23:00:00Z', endTime: '2026-02-28T06:30:00Z',
