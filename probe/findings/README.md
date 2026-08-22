@@ -1,4 +1,9 @@
-# M0 findings
+# Probe findings
+
+Everything below is M0, run 2026-08-19, except `rollup-methods.md`, which is M2p, run
+2026-08-22, and which corrects two things this file said.
+
+## M0
 
 Probe run 2026-08-19 against project `haelan-genesis`, one real account, Fitbit as the only
 connected source.
@@ -12,9 +17,10 @@ demanded. The only warning concerns branding, which controls whether the app nam
 appear on the consent screen rather than whether the app may run. The 7 day refresh token
 expiry that testing status imposes therefore never applies to this instance.
 
-**Refresh token lifetime:** Refresh succeeds. The ten day daily check is logged in
-`token-log.jsonl` and is confirmation rather than discovery, since production status removes
-the documented expiry. That log is machine local and gitignored: it is one line per run of a
+**Refresh token lifetime:** Refresh succeeds. The daily check is logged in `token-log.jsonl`
+and is confirmation rather than discovery, since production status removes the documented
+expiry. It ran from 2026-08-19 to 2026-08-21 and the scheduled task was deleted on 2026-08-22,
+by which point it was authenticating with a client secret Google had stopped accepting. That log is machine local and gitignored: it is one line per run of a
 scheduled task on whoever registered it, so committing it would mean a working tree that goes
 dirty every morning to record an answer this file already states.
 
@@ -29,8 +35,10 @@ type together is under 0.8M rows per person-year. See `volume.md`.
     GET /v4/users/me/dataTypes/{kebab-type}/dataPoints?filter=&pageSize=&pageToken=
 
 **Types unavailable or erroring:** `total-calories` and `floors` reject `list` entirely and
-support only `rollup` and `dailyRollup` (`floors` also `reconcile`). `nutrition-log` is empty
-for this account in every window probed. `hydration-log` holds 33 points, all from 2017.
+answer `:rollUp` and `:dailyRollUp` instead (`floors` also `reconcile`). M0 measured only that
+those endpoints exist; M2p measured what they take and return on 2026-08-22, in
+`rollup-methods.md`. `nutrition-log` is empty for this account in every window probed.
+`hydration-log` holds 33 points, all from 2017.
 
 ## Consequences for M1
 
