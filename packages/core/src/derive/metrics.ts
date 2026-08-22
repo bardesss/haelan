@@ -38,10 +38,6 @@ export const METRICS: Record<string, MetricSpec> = {
   active_zone_minutes_cardio: TOTAL,
   active_zone_minutes_peak: TOTAL,
 
-  // Renamed to the per level metrics above in task 10, when the mapper learns to split them.
-  active_minutes: TOTAL,
-  active_zone_minutes: TOTAL,
-
   // Intraday series: min, mean and max are three different readings of the same day and a card
   // shows all three. p50 is carried because a mean over a day with one glitching hour is not
   // the middle of anything.

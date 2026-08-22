@@ -135,19 +135,33 @@ describe('runJob', () => {
       expect(deps.syncState.get('p1', 'oxygen-saturation')?.lastError ?? null).toBeNull()
     })
 
-    it('stays quiet for a type whose mapping is deferred on purpose', async () => {
-      // active-minutes is fetched and archived for M2 but deliberately not mapped, so writing no
-      // rows is the design rather than a symptom of it.
-      const point = samplePoint({
-        payloadKey: 'activeMinutes', valuePath: 'activeMinutesByActivityLevel', value: 12,
-        physicalTime: '2026-08-18T10:00:00Z',
-      })
+    it('splits active minutes into a row per activity level instead of deferring it', async () => {
+      // active-minutes used to defer mapping entirely, so this test asserted zero rows written.
+      // Task 11 taught mapSamples the sub-dimension, so the type is no longer deferred and this
+      // now asserts the split it produces instead.
+      const point = {
+        dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+        activeMinutes: {
+          interval: {
+            startTime: '2026-08-18T10:00:00Z', startUtcOffset: '7200s',
+            endTime: '2026-08-18T11:00:00Z', endUtcOffset: '7200s',
+          },
+          activeMinutesByActivityLevel: [
+            { activityLevel: 'LIGHT', activeMinutes: '20' },
+            { activityLevel: 'VIGOROUS', activeMinutes: '5' },
+          ],
+        },
+      }
       const fetchMock = vi.fn().mockImplementation(async () => new Response(body([point]), { status: 200 }))
       const deps = build(fetchMock)
+      // A single local day rather than the shared `window`: that one spans two AMS calendar
+      // days, and the mock answers every window with the same point, which would double the
+      // count and obscure that one point becomes two rows.
       const result = await runJob({
-        personId: 'p1', dataType: dataTypeById('active-minutes')!, timezone: AMS, ...window, deps,
+        personId: 'p1', dataType: dataTypeById('active-minutes')!, timezone: AMS,
+        fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-18T22:00:00Z'), deps,
       })
-      expect(result.rowsWritten).toBe(0)
+      expect(result.rowsWritten).toBe(2)
       expect(deps.syncState.get('p1', 'active-minutes')?.lastError ?? null).toBeNull()
     })
   })
@@ -346,9 +360,11 @@ describe('runJob', () => {
   })
 
   it('writes nothing for a deferred type, but still archives what it fetched', async () => {
+    // active-zone-minutes was the deferred type this test used to exercise; task 11 gave it a
+    // mapping, so nutrition-log, the one type still deferred, stands in for it here.
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
     const result = await runJob({
-      personId: 'p1', dataType: dataTypeById('active-zone-minutes')!, timezone: AMS,
+      personId: 'p1', dataType: dataTypeById('nutrition-log')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
       deps: build(fetchMock),
     })

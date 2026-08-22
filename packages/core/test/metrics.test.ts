@@ -5,10 +5,23 @@ import { METRICS, DAILY_AGGS, metricSpec } from '../src/derive/metrics.ts'
 describe('the metric catalogue', () => {
   // The failure this prevents: a metric added to the data type catalogue and forgotten here
   // rolls up to nothing at all, silently, because rollUpDay has no aggregates to compute.
+  //
+  // A sub-dimension type's own `metric` is the family name, not a metric any row carries, so it
+  // is excluded here and checked separately below against metricByKey instead.
   it('declares every sample metric the data type catalogue names', () => {
-    const sampleMetrics = DATA_TYPES.filter((t) => t.target === 'samples').map((t) => t.metric)
+    const sampleMetrics = DATA_TYPES
+      .filter((t) => t.target === 'samples' && !t.subDimension)
+      .map((t) => t.metric)
     for (const metric of sampleMetrics) {
       expect(METRICS[metric], `no METRICS entry for ${metric}`).toBeDefined()
+    }
+  })
+
+  it('declares every metric a sub-dimension type can produce', () => {
+    for (const t of DATA_TYPES) {
+      for (const metric of Object.values(t.subDimension?.metricByKey ?? {})) {
+        expect(METRICS[metric], `no METRICS entry for ${metric}`).toBeDefined()
+      }
     }
   })
 

@@ -15,6 +15,22 @@ export type MappingTarget = 'samples' | 'sessions'
 
 export type TypeTier = 'intraday' | 'daily'
 
+/**
+ * A type whose payload carries a dimension a flat sample row cannot hold. Rather than a column,
+ * the dimension goes into the metric name, so each value becomes an ordinary metric with an
+ * ordinary rollup. `arrayPath` is set when the values arrive as an array inside one point, and
+ * left unset when each value is its own point.
+ *
+ * `metricByKey` is exhaustive on purpose. A key it does not name is skipped rather than turned
+ * into a metric no catalogue entry describes; the enum sets are in probe/findings/field-map.md.
+ */
+export interface SubDimension {
+  arrayPath?: string
+  keyPath: string
+  valuePath: string
+  metricByKey: Readonly<Record<string, string>>
+}
+
 export const ACTIONS = ['list', 'rollUp', 'dailyRollUp', 'reconcile'] as const
 export type Action = (typeof ACTIONS)[number]
 
@@ -49,10 +65,12 @@ export interface DataType {
    */
   tier: TypeTier
   /**
-   * Fetched and archived, but not mapped to tier 2 yet. Set when a type carries a
-   * sub-dimension a flat sample row cannot hold without a derivation decision.
+   * Fetched and archived, but not mapped to tier 2 yet. Set when a type's shape is not yet
+   * confirmed against a real payload, so a valuePath would be a guess.
    */
   mappingDeferred?: true
+  /** Set when a dimension in the payload becomes part of the metric name instead of a column. */
+  subDimension?: SubDimension
 }
 
 // agg records how we computed the row, not how a rollup should combine it. A value the source
@@ -113,13 +131,35 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('distance', 'distance', 'interval.start_time', ACTIVITY, 'distance', 'millimeters', 'millimeters', { tier: 'intraday' }),
   // Sub-dimension: activity level. The payload holds an array,
   // activeMinutes.activeMinutesByActivityLevel[], one point per level per interval, which a
-  // flat sample row cannot resolve. Archived at tier 1; summing across levels or encoding the
-  // level into the metric name is a derivation decision for M2, not this catalogue.
-  listable('active-minutes', 'activeMinutes', 'interval.start_time', ACTIVITY, 'active_minutes', 'minutes', 'activeMinutesByActivityLevel', { mappingDeferred: true, tier: 'intraday' }),
+  // flat sample row cannot resolve, so the level goes into the metric name instead.
+  listable('active-minutes', 'activeMinutes', 'interval.start_time', ACTIVITY, 'active_minutes', 'minutes', '', {
+    tier: 'intraday',
+    subDimension: {
+      arrayPath: 'activeMinutesByActivityLevel',
+      keyPath: 'activityLevel',
+      valuePath: 'activeMinutes',
+      metricByKey: {
+        LIGHT: 'active_minutes_light',
+        MODERATE: 'active_minutes_moderate',
+        VIGOROUS: 'active_minutes_vigorous',
+      },
+    },
+  }),
   // Sub-dimension: heart rate zone. activeZoneMinutes.heartRateZone varies within one interval,
-  // so several points would share the samples natural key and collide on upsert. Same deferral
-  // as active-minutes above.
-  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', 'activeZoneMinutes', { mappingDeferred: true, tier: 'intraday' }),
+  // so several points would share the samples natural key and collide on upsert; the zone goes
+  // into the metric name, same as the activity level above.
+  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', '', {
+    tier: 'intraday',
+    subDimension: {
+      keyPath: 'heartRateZone',
+      valuePath: 'activeZoneMinutes',
+      metricByKey: {
+        FAT_BURN: 'active_zone_minutes_fat_burn',
+        CARDIO: 'active_zone_minutes_cardio',
+        PEAK: 'active_zone_minutes_peak',
+      },
+    },
+  }),
   listable('active-energy-burned', 'activeEnergyBurned', 'interval.start_time', ACTIVITY, 'active_energy', 'kcal', 'kcal', { tier: 'intraday' }),
 
   listable('heart-rate', 'heartRate', 'sample_time.physical_time', METRICS, 'heart_rate', 'bpm', 'beatsPerMinute', { downsampleToMinute: true, tier: 'intraday', actions: ['list', 'dailyRollUp'] }),

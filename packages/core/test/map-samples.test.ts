@@ -195,6 +195,81 @@ describe('mapSamples', () => {
     expect(rows).toHaveLength(2)
     expect(rows.map((r) => r.sourceId)).toEqual(['FITBIT', 'HEALTH_CONNECT'])
   })
+
+  it('splits active minutes into one metric per activity level', () => {
+    // The sub-dimension goes in the metric name, which is what lets each be an ordinary metric
+    // with an ordinary rollup and no collision on the samples natural key.
+    const body = JSON.stringify({
+      dataPoints: [{
+        dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+        activeMinutes: {
+          interval: {
+            startTime: '2026-08-21T08:00:00Z', startUtcOffset: '7200s',
+            endTime: '2026-08-21T09:00:00Z', endUtcOffset: '7200s',
+          },
+          activeMinutesByActivityLevel: [
+            { activityLevel: 'LIGHT', activeMinutes: '20' },
+            { activityLevel: 'VIGOROUS', activeMinutes: '5' },
+          ],
+        },
+      }],
+    })
+    const rows = mapSamples({
+      dataType: dataTypeById('active-minutes')!, body, personId: 'p1',
+      resolveSource: () => 'watch', rawPayloadId: 'raw1',
+    })
+    expect(rows.map((r) => [r.metric, r.value])).toEqual([
+      ['active_minutes_light', 20],
+      ['active_minutes_vigorous', 5],
+    ])
+    // Same interval, different metric, so the natural key no longer collides.
+    expect(new Set(rows.map((r) => r.utcMs)).size).toBe(1)
+  })
+
+  it('gives each heart rate zone its own metric, which is what the deferral was about', () => {
+    const point = (zone: string, minutes: string) => ({
+      dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
+      activeZoneMinutes: {
+        interval: {
+          startTime: '2026-08-21T08:00:00Z', startUtcOffset: '7200s',
+          endTime: '2026-08-21T09:00:00Z', endUtcOffset: '7200s',
+        },
+        heartRateZone: zone,
+        activeZoneMinutes: minutes,
+      },
+    })
+    const body = JSON.stringify({ dataPoints: [point('FAT_BURN', '12'), point('PEAK', '3')] })
+    const rows = mapSamples({
+      dataType: dataTypeById('active-zone-minutes')!, body, personId: 'p1',
+      resolveSource: () => 'watch', rawPayloadId: 'raw1',
+    })
+    expect(rows.map((r) => [r.metric, r.value])).toEqual([
+      ['active_zone_minutes_fat_burn', 12],
+      ['active_zone_minutes_peak', 3],
+    ])
+  })
+
+  it('skips a level or zone the field map never recorded, rather than inventing a metric', () => {
+    // A seventh value appearing upstream is schema drift. Writing it to a metric nobody declared
+    // would put a series on a chart that no catalogue entry describes, silently.
+    const body = JSON.stringify({
+      dataPoints: [{
+        dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
+        activeZoneMinutes: {
+          interval: {
+            startTime: '2026-08-21T08:00:00Z', startUtcOffset: '7200s',
+            endTime: '2026-08-21T09:00:00Z', endUtcOffset: '7200s',
+          },
+          heartRateZone: 'SOMETHING_NEW',
+          activeZoneMinutes: '9',
+        },
+      }],
+    })
+    expect(mapSamples({
+      dataType: dataTypeById('active-zone-minutes')!, body, personId: 'p1',
+      resolveSource: () => 'watch', rawPayloadId: 'raw1',
+    })).toEqual([])
+  })
 })
 
 describe('mapWindowSamples', () => {
