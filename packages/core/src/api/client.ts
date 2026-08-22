@@ -86,6 +86,12 @@ const civil = (ms: number, timeZone: string) => {
 }
 
 function buildFilter(t: DataType, startMs: number, endMs: number, timezone: string): string {
+  // Unreachable through listDataPoints, which refuses a type that does not support list before
+  // it gets here. Stated rather than assumed, because the alternative to a null member is the
+  // string "null" inside a filter the API would reject with a message about grammar.
+  if (t.filterMember === null) {
+    throw new ConfigError(`${t.id} has no filter member: it answers ${t.actions.join(', ')}, and none of those takes a filter`)
+  }
   const member = `${t.filterRoot}.${t.filterMember}`
   // date and interval.civil_start_time carry no offset, so the same instant names a different
   // day depending on where the person is. iso is an absolute instant and is zone independent.

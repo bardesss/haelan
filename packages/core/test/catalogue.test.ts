@@ -35,6 +35,16 @@ describe('data type catalogue', () => {
     expect(dataTypeById('exercise')?.filterMember).toBe('interval.civil_start_time')
   })
 
+  it('names no filter member for a type that takes no filter', () => {
+    // The rollup methods take a civil interval and no filter, so the grammar every list call
+    // needs does not apply to these two. A member here would be an assertion nothing measured.
+    expect(dataTypeById('total-calories')?.filterMember).toBeNull()
+    expect(dataTypeById('floors')?.filterMember).toBeNull()
+    for (const t of DATA_TYPES.filter((t) => supports(t, 'list'))) {
+      expect(t.filterMember, t.id).not.toBeNull()
+    }
+  })
+
   it('records a set of actions, because list and rollUp are neither opposites nor a partition', () => {
     // Measured in probe/findings/rollup-methods.md: steps answers both, sleep answers neither
     // rollup, floors answers reconcile as well. A boolean cannot say any of that.

@@ -41,7 +41,13 @@ export interface DataType {
   filterRoot: string
   /** Camel case, as it appears in the response body. */
   payloadKey: string
-  filterMember: FilterMember
+  /**
+   * Which member a `list` filter is built on. Null for a type that answers no `list` at all:
+   * the rollup methods take a civil interval and no filter, and probe/findings/rollup-methods.md
+   * records that the filter grammar does not apply to them. A member named here for a type that
+   * has none is an assertion nothing measured.
+   */
+  filterMember: FilterMember | null
   /**
    * Read actions observed to work for this type: `probe/findings/rollup-methods.md`, from the
    * `allowed_actions` metadata the API returns when it refuses one. An action's absence here
@@ -106,7 +112,7 @@ export function horizonDaysFor(type: DataType, userHorizonDays: number): number 
 }
 
 const listable = (
-  id: string, payloadKey: string, filterMember: FilterMember, scope: string,
+  id: string, payloadKey: string, filterMember: FilterMember | null, scope: string,
   metric: string, unit: string, valuePath: string,
   extra: Partial<DataType> = {},
 ): DataType => ({
@@ -186,13 +192,14 @@ export const DATA_TYPES: readonly DataType[] = [
   // archived, with mapping deferred until a real payload confirms or corrects the leaf.
   listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'calories', { mappingDeferred: true }),
 
-  // Rejects list. Measured request and response shapes: probe/findings/rollup-methods.md.
+  // Rejects list, and takes no filter at all: see filterMember above. Measured request and
+  // response shapes: probe/findings/rollup-methods.md.
   {
-    ...listable('total-calories', 'totalCalories', 'interval.start_time', ACTIVITY, 'total_calories', 'kcal', 'kcalSum'),
+    ...listable('total-calories', 'totalCalories', null, ACTIVITY, 'total_calories', 'kcal', 'kcalSum'),
     actions: ['rollUp', 'dailyRollUp'],
   },
   {
-    ...listable('floors', 'floors', 'interval.start_time', ACTIVITY, 'floors', 'count', 'countSum'),
+    ...listable('floors', 'floors', null, ACTIVITY, 'floors', 'count', 'countSum'),
     actions: ['rollUp', 'dailyRollUp', 'reconcile'],
   },
 ]
