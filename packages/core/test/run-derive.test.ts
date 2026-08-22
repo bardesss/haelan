@@ -100,6 +100,21 @@ describe('runDerive', () => {
     expect(queue.size()).toBe(1)
   })
 
+  it('includes a sample at the UTC-12 extreme, at the far end of the same widened window', () => {
+    // The other edge of the widened query, and the one nothing held. runDerive anchors on
+    // 2026-08-22T00:00Z for LOCAL_DATE; at tz -720 (UTC-12) that local day does not end until
+    // 2026-08-23T12:00Z, nearly 36 hours past the anchor. Cutting the +38 hour upper bound to
+    // +24 leaves every other test in this file green and drops this row silently.
+    test.db.insert(samples).values({
+      personId: 'p1', sourceId: 'watch', metric: 'steps',
+      utcMs: Date.UTC(2026, 7, 23, 11, 59), tzOffsetMinutes: -720,
+      agg: 'raw', value: 222, n: 1, rawPayloadId: null,
+    }).run()
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue })
+    expect(dailyRows().map((r) => r.value)).toEqual([222])
+  })
+
   it('includes a sample at the UTC+14 extreme whose local date still falls on the queued day', () => {
     // UTC midnight for LOCAL_DATE is 2026-08-21T22:00Z. At tz +840 (UTC+14), an instant at
     // 2026-08-21T10:05Z is already 2026-08-22 locally, 11h55m before that UTC midnight and
