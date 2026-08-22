@@ -2,6 +2,7 @@
 import type { DbOrTx } from '../db/open.ts'
 import { syncState } from '../db/schema/index.ts'
 import { DATA_TYPES } from '../api/catalogue.ts'
+import { SchemaDriftError } from '../errors.ts'
 
 export interface SyncJob { personId: string, dataType: string }
 
@@ -61,6 +62,21 @@ export class SyncStateStore {
     this.upsert(input.personId, input.dataType, {
       lastErrorAtMs: input.nowMs,
       lastError: `[transient] recovered after ${input.attempts} attempts, last status ${input.lastStatus}`,
+    })
+  }
+
+  // Spec section 13's "log", for the one failure mode that raises no error at all: every page
+  // arrived, every point parsed as a point, and not one of them produced a row. Deliberately not
+  // recordFailure - consecutiveFailures is untouched - because the fetch and the archive both
+  // worked. Backing off would stop the archive filling, which is the part still going right, and
+  // the archived payloads are what make this recoverable by rebuild once the mapping is fixed.
+  recordSchemaDrift(input: { personId: string, dataType: string, points: number, nowMs: number }): void {
+    const error = new SchemaDriftError(
+      `${input.points} points fetched and none mapped to a row; the payload shape may have changed`,
+    )
+    this.upsert(input.personId, input.dataType, {
+      lastErrorAtMs: input.nowMs,
+      lastError: error.message.slice(0, 500),
     })
   }
 

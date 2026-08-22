@@ -39,6 +39,36 @@ describe('the consent handoff', () => {
     expect(location.searchParams.get('state')).toBeTruthy()
   })
 
+  // The end of the round trip, not just the gate: a revoked person walks consent again and comes
+  // back connected. Fable's review found the recorded understanding was that this worked and
+  // merely lacked a link in the UI; it was blocked outright.
+  it('brings a revoked person back through consent, clearing the revocation', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const credentials = harness.app.haelan.stores.credentials
+    credentials.markRevoked('p1', harness.clock.nowMs)
+    expect(credentials.listConnectedPeople()).not.toContain('p1')
+
+    const login = await harness.app.inject({
+      method: 'POST', url: '/api/auth/login', headers,
+      payload: { username: 'bartus', password: 'a good long password' },
+    })
+    const cookie = login.cookies.find((c) => c.name === 'haelan_session')!.value
+
+    const start = await harness.app.inject({
+      method: 'GET', url: '/oauth/start', headers, cookies: { haelan_session: cookie },
+    })
+    expect(start.statusCode, 'consent must be reachable once setup is done').toBe(302)
+    const state = new URL(start.headers.location as string).searchParams.get('state')!
+
+    const back = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?code=fresh-code&state=${encodeURIComponent(state)}`, headers,
+    })
+    expect(back.statusCode).toBe(302)
+    expect(credentials.getRefreshToken('p1')?.revokedAtMs, 'a fresh grant is not a revoked one').toBeNull()
+    expect(credentials.listConnectedPeople()).toContain('p1')
+  })
+
   it('refuses to start consent without a session', async () => {
     harness = await withServer()
     await readyForConsent(harness)

@@ -23,7 +23,20 @@ export interface DataType {
   /** Camel case, as it appears in the response body. */
   payloadKey: string
   filterMember: FilterMember
-  /** Two types answer only rollup and dailyRollup. Reading them is M1c's problem, not ours. */
+  /**
+   * False for total-calories and floors, which reject `list` and answer only `rollup` and
+   * `dailyRollup` (probe/findings/field-map.md). They are therefore **not fetched at all**: not
+   * mapped, and unlike the mappingDeferred types below, not archived either, so nothing is
+   * accumulating for a later rebuild to work from. If their server-side retention is finite,
+   * that history is aging out unfetched.
+   *
+   * This is a known, accepted gap rather than an oversight, and it is not M1's to close: M0
+   * measured only that the two endpoints exist. The filter member, payload key and value path
+   * columns for both types are empty in the field map, so the request and response shapes were
+   * never probed, and implementing a fetch now would mean inventing an API contract rather than
+   * reading one. Closing it needs a probe against the live API first, then a rollup path in the
+   * client. Owned by M2, which is where derived and rollup data is built.
+   */
   listSupported: boolean
   scope: string
   target: MappingTarget
