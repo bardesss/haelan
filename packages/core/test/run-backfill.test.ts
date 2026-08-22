@@ -30,12 +30,13 @@ interface RecordedWindow { startMs: number, endMs: number }
 // tests cover mapping; what a backfill test has to see is which windows were walked, in which
 // order, and where the walk stopped.
 function buildDeps(ctx: TestDatabase): {
-  deps: JobDeps & { client: { failNextWith: Error | null } }
+  deps: JobDeps & { client: { failNextWith: Error | null, unreadablePages: number } }
   windows: RecordedWindow[]
 } {
   const windows: RecordedWindow[] = []
   const client = {
     failNextWith: null as Error | null,
+    unreadablePages: 0,
     async listDataPoints(input: ListInput): Promise<ListResult> {
       windows.push({ startMs: input.windowStartMs, endMs: input.windowEndMs })
       if (client.failNextWith) {
@@ -43,7 +44,7 @@ function buildDeps(ctx: TestDatabase): {
         client.failNextWith = null
         throw error
       }
-      return { payloadIds: [], pointCount: 0, pagesFetched: 1, attempts: 1, lastRetriedStatus: null }
+      return { payloadIds: [], pointCount: 0, unreadablePages: client.unreadablePages ?? 0, pagesFetched: 1, attempts: 1, lastRetriedStatus: null }
     },
   }
   const deps = {
@@ -51,9 +52,9 @@ function buildDeps(ctx: TestDatabase): {
     archive: new RawArchive(ctx.db),
     sources: new SourceRegistry(ctx.db),
     syncState: new SyncStateStore(ctx.db),
-    client: client as unknown as HealthClient,
+    client: client as unknown as HealthClient & { failNextWith: Error | null, unreadablePages: number },
     now: () => NOW_MS,
-  } as JobDeps & { client: { failNextWith: Error | null } }
+  } as JobDeps & { client: { failNextWith: Error | null, unreadablePages: number } }
   return { deps, windows }
 }
 
@@ -178,4 +179,19 @@ describe('runBackfill', () => {
     expect(windows).toHaveLength(2)
     expect(result.stoppedBecause).toBe('batch')
   })
+  it('stops walking back when a window comes back unreadable', async () => {
+    // A backfill is one shot: it marks itself complete and never returns. Marching backwards
+    // through five years of days while every response is a shape we cannot read would advance
+    // the cursor over all of them and then declare the history collected.
+    const { deps, windows } = buildDeps(fixture)
+    deps.client.unreadablePages = 1
+    const result = await runBackfill({
+      personId: 'p1', timezone: AMS, dataType: dataTypeById('weight')!,
+      nowMs: NOW_MS, horizonDays: 1825, batchDays: 20, deps,
+    })
+    expect(windows).toHaveLength(1)
+    expect(result.stoppedBecause).toBe('error')
+    expect(result.complete).toBe(false)
+  })
+
 })

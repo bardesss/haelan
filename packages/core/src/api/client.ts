@@ -1,6 +1,7 @@
 ﻿import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
 import { supports } from './catalogue.ts'
+import { readEnvelope } from './envelope.ts'
 import { ConfigError, HaelanError, SchemaDriftError, TransientError, classifyHttp } from '../errors.ts'
 
 const API_ROOT = 'https://health.googleapis.com/v4'
@@ -42,6 +43,12 @@ export interface ListInput {
 export interface ListResult {
   payloadIds: string[]
   pointCount: number
+  /**
+   * Pages whose body was not a shape this code knows. Distinct from a page carrying no points:
+   * a quiet window and a renamed `dataPoints` both count zero, and only this separates them.
+   * runJob withholds its high-water mark while this is non-zero.
+   */
+  unreadablePages: number
   pagesFetched: number
   /** Fetch attempts across every page, including the ones a backoff retried. */
   attempts: number
@@ -136,6 +143,7 @@ export class HealthClient {
     const filter = buildFilter(t, input.windowStartMs, input.windowEndMs, input.timezone)
     const payloadIds: string[] = []
     let pointCount = 0
+    let unreadablePages = 0
     let pagesFetched = 0
     let attempts = 0
     let lastRetriedStatus: number | null = null
@@ -181,21 +189,24 @@ export class HealthClient {
       payloadIds.push(id)
       pagesFetched++
 
-      let json: { dataPoints?: unknown[], nextPageToken?: string }
+      // A 200 whose body is not JSON, an HTML proxy error page, say, is already archived above,
+      // so the evidence survives. The run continues rather than dying to a SyntaxError, but the
+      // page is counted as unreadable: continuing is not the same as understanding, and the old
+      // code conflated the two by folding it into a zero point count.
+      const envelope = readEnvelope(body, 'dataPoints')
+      if (envelope.readable) pointCount += envelope.points.length
+      else unreadablePages += 1
+
+      let nextPageToken: string | undefined
       try {
-        json = JSON.parse(body) as { dataPoints?: unknown[], nextPageToken?: string }
+        nextPageToken = (JSON.parse(body) as { nextPageToken?: string }).nextPageToken
       } catch {
-        // A 200 whose body is not JSON, an HTML proxy error page, say, is already archived
-        // above, so the evidence survives. Treating it as an empty terminal page lets the sync
-        // run continue instead of dying to a SyntaxError on a payload both mappers were already
-        // hardened against.
-        json = {}
+        nextPageToken = undefined
       }
-      pointCount += json.dataPoints?.length ?? 0
-      pageToken = json.nextPageToken
+      pageToken = nextPageToken
     } while (pageToken)
 
-    return { payloadIds, pointCount, pagesFetched, attempts, lastRetriedStatus }
+    return { payloadIds, pointCount, unreadablePages, pagesFetched, attempts, lastRetriedStatus }
   }
 
   /**
