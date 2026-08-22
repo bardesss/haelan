@@ -1,0 +1,5 @@
+# Hooks and shell scripts must keep LF wherever they are checked out. A commit-msg hook whose
+# shebang line ends in CRLF is not executable on Linux, which would silently disable the guard
+# for exactly the contributors who did not write it.
+.githooks/** text eol=lf
+*.sh text eol=lf
