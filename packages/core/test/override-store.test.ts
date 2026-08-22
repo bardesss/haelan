@@ -11,6 +11,10 @@ const OFFSET = 120
 const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
 const NINE_AM = MIDNIGHT_UTC + 9 * 3_600_000
 const LOCAL_DATE = '2026-08-22'
+// Deliberately after 22:00 UTC so the +120 minute offset rolls it into the next UTC day: an
+// implementation that read the day off raw UTC instead of the row's own offset would land on
+// 2026-08-21 here and fail, where NINE_AM (same UTC and local day) would not have caught it.
+const LATE_UTC = Date.UTC(2026, 7, 21, 23, 0)
 
 let test: TestDatabase
 let store: OverrideStore
@@ -50,15 +54,24 @@ describe('OverrideStore', () => {
   it('marks the day again when the override is removed, so the original value comes back', () => {
     const id = excludeSample()
     queue.clear(queue.claim(10))
-    store.remove({ id, nowMs: 2 })
+    store.remove({ personId: 'p1', id, nowMs: 2 })
     expect(store.listFor('p1')).toEqual([])
     expect(queue.claim(10)).toEqual([{ personId: 'p1', localDate: LOCAL_DATE }])
   })
 
   it('reads the day off the sample own offset, not off a guess', () => {
-    // The sample carries the offset in force at its own instant. Recomputing it from the person
-    // timezone is how a night lands on the wrong side of a daylight saving change.
-    excludeSample()
+    // LATE_UTC falls after 22:00 UTC, so the +120 minute offset rolls it into the next UTC day.
+    // Recomputing the day from the person timezone instead of the row's own offset is how a
+    // night lands on the wrong side of a daylight saving change, and it would also fail here.
+    test.db.insert(samples).values({
+      personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: LATE_UTC,
+      tzOffsetMinutes: OFFSET, agg: 'raw', value: 1, n: 1, rawPayloadId: null,
+    }).run()
+    store.put({
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'steps', utcMs: LATE_UTC }),
+      action: 'exclude', reason: 'test', nowMs: 1,
+    })
     expect(queue.claim(10)[0]?.localDate).toBe(LOCAL_DATE)
   })
 
@@ -121,5 +134,17 @@ describe('OverrideStore', () => {
       personId: 'p1', scope: 'sample', targetKey: '{"session":"s"}',
       action: 'exclude', reason: 'r', nowMs: 1,
     })).toThrow(ConfigError)
+  })
+
+  it('refuses to remove another person override, even when the id is known', () => {
+    // An override id is not a secret, and master design section 15 gives each account only its
+    // own data with no sharing. M3 puts this id on the wire in a delete request, so scoping by
+    // personId here is what stands between a guessed or leaked id and a cross-person deletion.
+    seedPerson(test.db, 'p2')
+    const id = excludeSample()
+    queue.clear(queue.claim(10))
+    store.remove({ personId: 'p2', id, nowMs: 2 })
+    expect(store.listFor('p1')).toHaveLength(1)
+    expect(queue.size()).toBe(0)
   })
 })

@@ -55,11 +55,15 @@ export class OverrideStore {
     return id
   }
 
-  remove(input: { id: string, nowMs: number }): void {
+  remove(input: { personId: string, id: string, nowMs: number }): void {
     this.#db.transaction((tx) => {
-      const row = tx.select().from(overrides).where(eq(overrides.id, input.id)).get()
+      // Scoped by personId as well as id: an id is not a secret, and master design section 15
+      // is that an account sees and touches only its own data. Without this, holding another
+      // person's override id would delete their override and requeue their day.
+      const owned = and(eq(overrides.id, input.id), eq(overrides.personId, input.personId))
+      const row = tx.select().from(overrides).where(owned).get()
       if (!row) return
-      tx.delete(overrides).where(eq(overrides.id, input.id)).run()
+      tx.delete(overrides).where(owned).run()
       // Read before delete, and mark after: the day has to be recomputed without the override,
       // and the row is the only place its target was recorded.
       this.#markAffected(tx, row.personId, row.scope, row.targetKey, input.nowMs)
