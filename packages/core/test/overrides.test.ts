@@ -52,6 +52,20 @@ describe('applyToSamples', () => {
     expect(out).toEqual([{ ...rows[0], value: 80.5 }])
   })
 
+  it('leaves the reading alone when a correction carries no value', () => {
+    // OverrideStore refuses to write this, but the function is exported from the barrel, so the
+    // store is not the only door in. Nulling the value would be an exclusion that forgot to
+    // remove the row, which is worse than the correction saying nothing.
+    const rows = [sample({ metric: 'weight', value: 205, n: 4 })]
+    const out = applyToSamples(rows, [{
+      scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'weight', utcMs: 1000 }),
+      action: 'correct',
+      correctedValue: null,
+    }])
+    expect(out).toEqual(rows)
+  })
+
   it('leaves another source at the same instant untouched', () => {
     const rows = [
       sample({ metric: 'heart_rate', value: 210, sourceId: 'watch' }),

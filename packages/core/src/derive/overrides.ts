@@ -43,6 +43,10 @@ export function applyToSamples(
     )
     if (!override) { out.push(row); continue }
     if (override.action === 'exclude') continue
+    // A correction carrying no value is not an exclusion. Assigning the null would leave the row
+    // present with nothing in it, which reads downstream as a device that observed nothing, so
+    // the reading stands until somebody says what it should be instead.
+    if (override.correctedValue === null) { out.push(row); continue }
     // Every aggregate of the minute takes the corrected reading, for the same reason the key
     // carries no agg: the person corrected a reading, not one of its three summaries.
     out.push({ ...row, value: override.correctedValue })
