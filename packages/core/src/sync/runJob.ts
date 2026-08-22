@@ -111,8 +111,9 @@ export async function runJob(input: JobInput): Promise<JobResult> {
 
       // One transaction per window, but the cursor is not part of it: recordSuccess runs once
       // after the whole loop, below, so a crash mid-loop commits this window's rows and leaves
-      // the cursor behind rather than ahead. That is safe because the trailing re-fetch never
-      // consults the cursor to decide what to fetch, so a lagging cursor only costs a re-fetch.
+      // the cursor behind rather than ahead. That is the safe direction: runSync does consult the
+      // mark to decide how far back to reach, and a lagging mark only ever costs a re-fetch of
+      // days already held, where a leading one would skip days never fetched at all.
       const writtenHere = deps.db.transaction((tx) => {
         // Through tx, not the outer handle: the sources row a point resolves has to commit and
         // roll back with the rows whose foreign keys point at it.
@@ -150,10 +151,25 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   }
 
   if (highWaterMs > 0) {
+    const nowMs = deps.now()
+    // Clamped, because today's window ends at the *next* local midnight and the mark would
+    // otherwise sit up to a day ahead of now. A mark in the future is a claim to have synced
+    // time that has not happened yet, and runSync's gap repair reads it as coverage: left
+    // unclamped it would quietly subtract a day from what every run reaches back for.
     deps.syncState.recordSuccess({
-      personId: input.personId, dataType: t.id, highWaterMs, nowMs: deps.now(),
+      personId: input.personId, dataType: t.id, highWaterMs: Math.min(highWaterMs, nowMs), nowMs,
     })
   }
+  // Nothing threw, so nothing else in this job will ever mention it: the pages were full, the
+  // points parsed, and every one of them was skipped by a mapper that could not find its field.
+  // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
+  // Types whose mapping is deferred are excluded, because writing no rows is their design.
+  if (points > 0 && rowsWritten === 0 && !t.mappingDeferred) {
+    deps.syncState.recordSchemaDrift({
+      personId: input.personId, dataType: t.id, points, nowMs: deps.now(),
+    })
+  }
+
   return finish({ windows: windows.length, points, rowsWritten, skipped: null })
 }
 

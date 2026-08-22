@@ -8,8 +8,26 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 interface Described { externalId: string, displayName: string, kind: 'device' | 'app' | 'manual' }
 
-// The field map records platform taking both FITBIT and HEALTH_CONNECT inside single payloads,
-// so the platform alone cannot identify a source. The device name joins it when there is one.
+/**
+ * What identifies a source, in the order the payload answers it.
+ *
+ * The field map records platform taking both FITBIT and HEALTH_CONNECT inside single payloads,
+ * so the platform alone cannot identify a source. The device name joins it when there is one,
+ * and `application.packageName` when there is not: several apps report through Health Connect
+ * with no device between them, and on the platform alone a scale app and a food diary became one
+ * source that spec section 9's merge policy could never let anyone choose between.
+ *
+ * `MANUAL` is part of the identity for the same reason but a stronger one - a reading somebody
+ * typed in is not a measurement, and the person who wants their manual weights out of a trend
+ * needs them to be a source they can exclude. The other recordingMethod values are not: DERIVED
+ * and PASSIVELY_MEASURED are both the app measuring, and splitting on each would turn one app
+ * into three sources for no question anyone asks. This is also what finally produces the
+ * 'manual' kind the schema has carried since the first migration.
+ *
+ * Widening this re-keys only what was genuinely ambiguous. A payload with a device, or with
+ * neither a package name nor a manual flag, produces exactly the externalId it produced before,
+ * so rows already written against it keep pointing at the same source (pinned in sources.test.ts).
+ */
 function describe(dataSource: unknown): Described {
   if (!isRecord(dataSource)) return { externalId: 'unknown', displayName: 'unknown', kind: 'app' }
   const platform = typeof dataSource['platform'] === 'string' ? dataSource['platform'] : 'unknown'
@@ -17,8 +35,16 @@ function describe(dataSource: unknown): Described {
   const deviceName = isRecord(device) && typeof device['displayName'] === 'string'
     ? device['displayName']
     : null
-  if (deviceName) return { externalId: `${platform}:${deviceName}`, displayName: deviceName, kind: 'device' }
-  return { externalId: platform, displayName: platform, kind: 'app' }
+  const application = dataSource['application']
+  const packageName = isRecord(application) && typeof application['packageName'] === 'string'
+    ? application['packageName']
+    : null
+  const isManual = dataSource['recordingMethod'] === 'MANUAL'
+
+  const who = deviceName ?? packageName
+  const externalId = [platform, who, isManual ? 'MANUAL' : null].filter((p) => p !== null).join(':')
+  const kind = isManual ? 'manual' : deviceName ? 'device' : 'app'
+  return { externalId, displayName: who ?? platform, kind }
 }
 
 export class SourceRegistry {

@@ -18,12 +18,23 @@ export function registerSetupGate(app: FastifyInstance): void {
     if (!path.startsWith('/api/') && !path.startsWith('/oauth/')) return
 
     const step = currentStep(app)
-    const isSetupRoute = path.startsWith('/api/setup/') || path.startsWith('/oauth/')
+    const isConsentRoute = path.startsWith('/oauth/')
+    const isSetupRoute = path.startsWith('/api/setup/') || isConsentRoute
 
     if (step !== 'done' && !isSetupRoute) {
       return reply.code(409).send({ error: 'setup_incomplete', step })
     }
-    if (step === 'done' && isSetupRoute) {
+    // Consent outlives setup; the rest of the wizard does not. A grant can die after setup is
+    // long finished - the owner revokes haelan in their Google account, or Google invalidates it
+    // - and consent is the only thing that revives it, because putRefreshToken clearing
+    // revoked_at_ms is the sole path back. Closing /oauth/* here left hand-editing SQLite as the
+    // only recovery, and would have blocked a second member's first consent too (M5 invites).
+    // The wizard's own API stays closed: those routes build an instance that already exists, and
+    // re-running one silently rewrites what a working install depends on. /oauth/* is safe to
+    // leave open because it does not rely on this gate for its protection - /oauth/start takes a
+    // session, and /oauth/callback only accepts state this instance signed, for the person named
+    // inside it.
+    if (step === 'done' && isSetupRoute && !isConsentRoute) {
       return reply.code(409).send({ error: 'setup_complete' })
     }
   })

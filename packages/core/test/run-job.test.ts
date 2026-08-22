@@ -90,6 +90,66 @@ describe('runJob', () => {
     expect(sourceOf(97)).not.toBe(sourceOf(95))
   })
 
+  // Spec section 13 says store, log, continue. The store and the continue were there; the log
+  // was not, so the one failure mode that produces no error at all produced no signal either.
+  describe('schema drift', () => {
+    const window = {
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+    }
+
+    it('records drift when a window full of points maps to no rows at all', async () => {
+      // Google renames the value field. Every page still arrives full, every point still parses
+      // as a point, and not one of them yields a row. Before this check the job recorded plain
+      // success: consecutiveFailures stayed 0, the backfill marched on to the horizon, and with
+      // doctor deferred to M4 and no dashboard until M3, nothing would have said a word.
+      const renamed = samplePoint({
+        payloadKey: 'oxygenSaturation', valuePath: 'percentageValue', value: 97,
+        physicalTime: '2026-08-18T10:00:00Z',
+      })
+      const fetchMock = vi.fn().mockImplementation(async () => new Response(body([renamed]), { status: 200 }))
+      const deps = build(fetchMock)
+      const result = await runJob({
+        personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS, ...window, deps,
+      })
+
+      expect(result.points, 'the API answered with points').toBeGreaterThan(0)
+      expect(result.rowsWritten, 'and none of them mapped').toBe(0)
+      const state = deps.syncState.get('p1', 'oxygen-saturation')
+      expect(state?.lastError).toMatch(/^\[schema_drift\]/)
+      // Deliberately not a failure. The fetch worked and the archive holds every byte, so a
+      // rebuild recovers this once the mapping is fixed; backing off would stop the archive
+      // filling, which is the one thing still going right.
+      expect(state?.consecutiveFailures, 'drift must not trip the backoff').toBe(0)
+      expect(state?.lastSuccessAtMs).not.toBeNull()
+    })
+
+    it('stays quiet when the person simply has no data for the type', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+      const deps = build(fetchMock)
+      await runJob({
+        personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS, ...window, deps,
+      })
+      // No points is not drift. A type nobody records would otherwise cry wolf every single run.
+      expect(deps.syncState.get('p1', 'oxygen-saturation')?.lastError ?? null).toBeNull()
+    })
+
+    it('stays quiet for a type whose mapping is deferred on purpose', async () => {
+      // active-minutes is fetched and archived for M2 but deliberately not mapped, so writing no
+      // rows is the design rather than a symptom of it.
+      const point = samplePoint({
+        payloadKey: 'activeMinutes', valuePath: 'activeMinutesByActivityLevel', value: 12,
+        physicalTime: '2026-08-18T10:00:00Z',
+      })
+      const fetchMock = vi.fn().mockImplementation(async () => new Response(body([point]), { status: 200 }))
+      const deps = build(fetchMock)
+      const result = await runJob({
+        personId: 'p1', dataType: dataTypeById('active-minutes')!, timezone: AMS, ...window, deps,
+      })
+      expect(result.rowsWritten).toBe(0)
+      expect(deps.syncState.get('p1', 'active-minutes')?.lastError ?? null).toBeNull()
+    })
+  })
+
   it('is idempotent, so a second run over the same window changes nothing', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
     const args = {
