@@ -86,7 +86,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M1b** API client and mapping | v4 client, the data type catalogue, payload parsers, sample and session mappers | Done, [#14](https://github.com/bardesss/haelan/pull/14) |
 | **M1c** Sync engine | Day aligned windows, per person jobs, sync state, token bucket, transactional writes | Done, [#19](https://github.com/bardesss/haelan/pull/19) |
 | **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | Done, [#21](https://github.com/bardesss/haelan/pull/21) |
-| **M2a** Catalogue and rollups | The metric catalogue, per source `daily` rows with coverage, the derive queue and its drain, the rollup read path for `total-calories` and `floors` | In review, [#38](https://github.com/bardesss/haelan/pull/38) |
+| **M2a** Catalogue and rollups | The metric catalogue, per source `daily` rows with coverage, the derive queue and its drain, the rollup read path for `total-calories` and `floors` | Done, [#38](https://github.com/bardesss/haelan/pull/38) |
 | **M2** Derivation and query layer | Source priority and merged rows, sleep and recovery derivation, nap detection, baselines, overrides at derivation, rebuild | Not started |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
