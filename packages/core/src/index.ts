@@ -79,3 +79,23 @@ export type { DeriveReport } from './derive/runDerive.ts'
 export { mapRollups } from './api/mapRollups.ts'
 export type { RollupMapping } from './api/mapRollups.ts'
 export { runRollupJob, rollupRangeCapDays } from './sync/runRollupJob.ts'
+
+// M2b. Choosing between sources, and the corrections that apply while we do.
+export { priorityFrom, fallbackOrder, DEFAULT_LIST, UNRANKED_BASE } from './derive/priority.ts'
+export type { Priority, PriorityInput, SourceFacts } from './derive/priority.ts'
+export { mergeDay, encodeMix } from './derive/merge.ts'
+export type { MixEntry, MergeDayInput } from './derive/merge.ts'
+export { MERGED_SOURCE } from './derive/rollup.ts'
+export { SourcePriorityStore } from './store/sourcePriority.ts'
+export type { StoredList } from './store/sourcePriority.ts'
+export {
+  sampleTarget, sessionTarget, dayMetricTarget,
+  parseSampleTarget, parseSessionTarget, parseDayMetricTarget,
+} from './derive/targetKey.ts'
+export type { OverrideScope, SampleTarget, DayMetricTarget } from './derive/targetKey.ts'
+export { applyToSamples, applyToDay, applyToSessions, excludedMetrics } from './derive/overrides.ts'
+export type { OverrideLike, SessionLike, SessionOverrideResult } from './derive/overrides.ts'
+export { OverrideStore } from './store/overrides.ts'
+export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'
+export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'
+export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'

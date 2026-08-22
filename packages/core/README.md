@@ -146,9 +146,10 @@ exactly why it is left null here rather than filled with a fabricated 1.0.
 **`daily.source`** takes one of three shapes. A source id names the source that reported it, and
 is what `rollUpDay` writes: it derives per source by construction and never merges, so a row it
 produces always names exactly the source it came from. The literal `merged` names a row we
-computed ourselves by choosing between sources, which needs the per metric priority list that is
-M2b's; nothing writes this literal yet. The literal `provider` names a row for a type the API only
-answers as a rollup, so we ingested it rather than derived it: `mapRollups` writes these, and
+computed ourselves by choosing between sources: `mergeDay` writes it, per metric, per local hour,
+picking the winning source from the priority list and recording which sources it drew on in
+`source_mix`. The literal `provider` names a row for a type the API only answers as a rollup, so
+we ingested it rather than derived it: `mapRollups` writes these, and
 `runDerive` leaves them alone because there is no local recomputation for a number we never saw
 the components of. A `provider` row is Google's own reconciliation across sources, which is a
 different thing from `merged`: we cannot inspect it against per source data the way we could
@@ -163,6 +164,33 @@ the days it touched dirty in the same transaction; an override, as it is added o
 `derivation_version` bump, which is what a rebuild is. Of those three, only sync exists today. The
 queue is the mechanism overrides and rebuild will use, not evidence that either is implemented:
 nothing applies an override yet, and nothing compares `DERIVATION_VERSION` to what is on disk.
+
+**Priority** is the per person, per metric ranking that decides which source wins where more than
+one reported the same metric. `SourcePriorityStore` keeps it in `source_priority`, one row per
+person, metric and rank; the metric `*` is the person's default. A metric's own list is a complete
+statement for that metric, not an amendment to the default, because the two lists' indices are not
+comparable. Where nothing is configured, the fallback order is `device`, then `app`, then
+`manual`, ties broken by source id rather than `created_at_ms`, chosen because a source id
+survives M2e's rebuild unchanged and a creation timestamp does not. Changing a list marks every
+day the person has data for, because section 9 says changing priority is a rebuild.
+
+**Overrides** are applied at derivation and never on write, which is what makes removing one
+restore the original exactly rather than repair it. Sample scope excludes or corrects a reading at
+one instant, across every aggregate of that minute, because the person corrected a reading rather
+than one of its three summaries. Session scope excludes a session; a session correction is
+surfaced for M2c rather than applied here, since no derived session scalar exists yet for it to
+replace. Day metric scope excludes only: a corrected day figure has no source and nothing per
+source to be inspected against, and `OverrideStore.put` rejects a correcting day metric override
+rather than storing something no derivation would apply. `OverrideStore.remove` takes
+`{personId, id, nowMs}`, not a bare id: a review found that an id alone let one person delete
+another person's override, since an id is not a secret, and the fix scopes removal to the caller's
+own person as well as the id.
+
+**Session grouping** is `groupSessions`, pure and stores nothing: two sessions of the same kind
+join by single linkage over a configurable overlap ratio that defaults to a half, so one stretch
+of sleep stays one event however many devices cut it into pieces. Priority picks the primary from
+the group, and every alternate is kept rather than discarded, since section 9's merges are
+computed rather than stored and the untouched `sessions` rows are already what "retained" means.
 
 ## Heart rate volume and the downsampling decision
 
