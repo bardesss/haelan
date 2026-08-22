@@ -298,8 +298,8 @@ describe('runSync', () => {
     // and 9 for floors per person per run, against the 300 per minute per user quota
     // probe/findings/scopes.md measured. Seeding a stale mark, the same way the existing
     // high-water-mark test above does, is what forces the first run to reach back far; a fresh
-    // sync with no mark at all already only reaches the trailing window, so a stale mark is
-    // needed to exercise reachBackTo's wide branch at all.
+    // sync with no mark at all already reaches the full horizon for a rollup type, per the test
+    // above, so seeding a stale mark here is what isolates the second run's narrower reach instead.
     const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
     const deps = build(fetchMock)
     const nowMs = deps.now()

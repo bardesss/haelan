@@ -4,6 +4,8 @@ import { loadOrCreateKey } from './crypto/key.ts'
 import { CredentialStore } from './store/credentials.ts'
 import { RawArchive } from './store/rawArchive.ts'
 import { DeriveQueue } from './store/deriveQueue.ts'
+import { SourcePriorityStore } from './store/sourcePriority.ts'
+import { OverrideStore } from './store/overrides.ts'
 import type { Database } from './db/open.ts'
 
 export interface Instance {
@@ -12,6 +14,8 @@ export interface Instance {
   credentials: CredentialStore
   archive: RawArchive
   deriveQueue: DeriveQueue
+  sourcePriority: SourcePriorityStore
+  overrides: OverrideStore
   close: () => void
 }
 
@@ -22,12 +26,15 @@ export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): I
   try {
     migrateToLatest(db)
     const key = loadOrCreateKey(dir, env)
+    const deriveQueue = new DeriveQueue(db)
     return {
       db,
       key,
       credentials: new CredentialStore(db, key),
       archive: new RawArchive(db),
-      deriveQueue: new DeriveQueue(db),
+      deriveQueue,
+      sourcePriority: new SourcePriorityStore(db, deriveQueue),
+      overrides: new OverrideStore(db, deriveQueue),
       close: () => closeDatabase(db),
     }
   } catch (err) {

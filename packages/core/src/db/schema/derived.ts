@@ -70,6 +70,12 @@ export const daily = sqliteTable('daily', {
   // measure it: a provider reconciled rollup has no samples underneath it, and a fabricated 1.0
   // would read as a fully observed day.
   coverage: real('coverage'),
+  // Which sources the merged row drew on, and for how many of the day's hours:
+  // [{"source":"a1b2","hours":18},{"source":"c3d4","hours":4}], hours descending. Written only
+  // when source is 'merged'. Null on a per source row, which has no mix, and on a provider row,
+  // whose mix Google performed and did not show us. Spec section 9 requires a merge decision to
+  // be inspectable against the per source rows, and this is the half the row itself owes.
+  sourceMix: text('source_mix'),
   derivationVersion: integer('derivation_version').notNull(),
 }, (t) => [
   unique('daily_natural').on(t.personId, t.localDate, t.metric, t.agg, t.source),

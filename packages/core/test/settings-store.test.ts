@@ -5,6 +5,7 @@ import { AccountStore } from '../src/store/accounts.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
 import { SettingsStore, setupStep } from '../src/store/settings.ts'
 import { DEFAULT_USER_HORIZON_DAYS } from '../src/api/catalogue.ts'
+import { ConfigError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 let fixture: TestDatabase
@@ -84,5 +85,26 @@ describe('the backfill horizon setting', () => {
       settings.putBackfillHorizon(days, 2)
       expect(settings.get()?.backfillHorizonDays).toBe(days)
     }
+  })
+})
+
+describe('the session overlap ratio setting', () => {
+  it('defaults the session overlap ratio to a half, which is what section 9 names', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(settings.get()?.sessionOverlapRatio).toBe(0.5)
+  })
+
+  it('round trips a changed overlap ratio without touching anything else', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.putSessionOverlapRatio(0.7, 2)
+    expect(settings.get()?.sessionOverlapRatio).toBe(0.7)
+    expect(settings.get()?.baseUrl).toBe('http://localhost:4235')
+  })
+
+  it('refuses a ratio outside the range where it means anything', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    // At or below zero every pair of sessions touches; above one no pair ever can.
+    expect(() => settings.putSessionOverlapRatio(0, 2)).toThrow(ConfigError)
+    expect(() => settings.putSessionOverlapRatio(1.5, 2)).toThrow(ConfigError)
   })
 })

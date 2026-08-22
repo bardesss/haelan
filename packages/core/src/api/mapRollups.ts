@@ -58,6 +58,9 @@ export function mapRollups(input: { dataType: DataType, body: string, personId: 
       // No samples underneath, so no basis to measure coverage. Not 1.0, which would read to
       // M2d's suppression as a fully observed day.
       coverage: null,
+      // A provider row is Google's own reconciliation. We chose between nothing, so there is no
+      // mix of ours to record, and an empty array would claim there was one.
+      sourceMix: null,
       derivationVersion: DERIVATION_VERSION,
     })
   }
