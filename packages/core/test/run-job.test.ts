@@ -373,19 +373,23 @@ describe('runJob', () => {
   })
 
   it('marks every day it wrote rows into, in the transaction that wrote them', async () => {
-    // Every fetch answers with the same point regardless of which window asked, so every window
-    // in this job writes a row and the marked set can be checked against dayWindows exactly,
-    // rather than merely asserting the queue is non-empty.
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    // Each window is answered with a point an hour into the day it asked for, so every window
+    // writes a row of its own local day and the marked set can be checked against dayWindows
+    // exactly, rather than merely asserting the queue is non-empty.
     const args = {
       personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
       fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
     }
+    const windows = dayWindows({ fromMs: args.fromMs, toMs: args.toMs, timezone: args.timezone })
+    let next = 0
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      const window = windows[next++]!
+      return new Response(body([spo2Point(new Date(window.startMs + 3_600_000).toISOString(), 97)]), { status: 200 })
+    })
     const queue = new DeriveQueue(ctx.db)
     const result = await runJob({ ...args, deps: { ...build(fetchMock), deriveQueue: queue } })
 
-    const expectedDates = dayWindows({ fromMs: args.fromMs, toMs: args.toMs, timezone: args.timezone })
-      .map((w) => w.localDate)
+    const expectedDates = windows.map((w) => w.localDate)
     expect(result.windows).toBe(expectedDates.length)
     expect(result.rowsWritten).toBeGreaterThan(0)
 
@@ -394,6 +398,26 @@ describe('runJob', () => {
     expect(entries.every((e) => e.personId === 'p1')).toBe(true)
     expect(entries.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.localDate))).toBe(true)
     expect(entries.map((e) => e.localDate).sort()).toEqual([...expectedDates].sort())
+  })
+
+  it('marks the day a row belongs to, not the day the window asked for', async () => {
+    // A person who travelled. The window is built in their home timezone, but this point
+    // carries its own offset, eleven hours behind, which puts it on the previous local day -
+    // and runDerive selects a day's rows by each row's own offset. Marking the window's date
+    // would leave that day unmarked and its rows carrying a value no later run corrects.
+    const abroad = samplePoint({
+      payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 97,
+      physicalTime: '2026-08-18T00:30:00Z', utcOffset: '-39600s',
+    })
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([abroad]), { status: 200 }))
+    const queue = new DeriveQueue(ctx.db)
+    await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+      deps: { ...build(fetchMock), deriveQueue: queue },
+    })
+
+    expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-17'])
   })
 
   it('rolls the rows back with the mark, so a failed mark never leaves rows behind for a day the queue does not know is dirty', async () => {

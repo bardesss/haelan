@@ -11,6 +11,7 @@ import { RevokedError } from '../api/tokens.ts'
 import { HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
+import { localDateOf } from '../derive/localDay.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
 
@@ -131,17 +132,22 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         const pages = listed.payloadIds.map((id) => ({
           body: deps.archive.getBody(input.personId, id), rawPayloadId: id,
         }))
-        const rows = t.target === 'samples'
+        const written = t.target === 'samples'
           ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
           : writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
-        // Through tx, so the mark commits and rolls back with the rows it describes. A day
-        // marked for rows that were rolled back would derive from data that is not there.
-        if (rows > 0) {
+        // The days the rows themselves fall on, not the day this window asked for. A window is
+        // computed in the person's current timezone, while runDerive selects a day's rows by
+        // each row's own offset, so a sample from a trip abroad can arrive in window D and
+        // belong to local date D-1. Marking D would leave D-1 unmarked and its stale value
+        // uncorrected by any later run. Through tx, so a mark commits and rolls back with the
+        // rows it describes: a day marked for rows that rolled back would derive from data that
+        // is not there.
+        for (const localDate of written.localDates) {
           deps.deriveQueue?.markDirty(
-            { personId: input.personId, localDate: window.localDate, nowMs: deps.now() }, tx,
+            { personId: input.personId, localDate, nowMs: deps.now() }, tx,
           )
         }
-        return rows
+        return written.rows
       })
       rowsWritten += writtenHere
       report({
@@ -202,25 +208,33 @@ export function classify(error: unknown): HaelanError {
   return new TransientError(message, { cause: error })
 }
 
+/** What a window wrote, and which local days it landed on, which is what the queue is marked with. */
+interface Written { rows: number, localDates: string[] }
+
 function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
   dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
   pages: Array<{ body: string, rawPayloadId: string }>,
-}): number {
+}): Written {
   const rows = mapWindowSamples(args)
+  const localDates = new Set<string>()
   for (const row of rows) {
     tx.insert(samples).values(row).onConflictDoUpdate({
       target: [samples.personId, samples.sourceId, samples.metric, samples.utcMs, samples.agg],
       set: { value: row.value, n: row.n, tzOffsetMinutes: row.tzOffsetMinutes, rawPayloadId: row.rawPayloadId },
     }).run()
+    localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
-  return rows.length
+  return { rows: rows.length, localDates: [...localDates] }
 }
 
 function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
   dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
   pages: Array<{ body: string, rawPayloadId: string }>,
-}): number {
+}): Written {
   let written = 0
+  // A session's own localDate is already localDateOf its end instant and end offset: a night
+  // spanning midnight belongs to the morning, which is invariant 3 and is decided by mapSessions.
+  const localDates = new Set<string>()
   for (const page of args.pages) {
     const { sessions: rows, segments } = mapSessions({
       dataType: args.dataType, personId: args.personId, resolveSource: args.resolveSource,
@@ -244,6 +258,7 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
         },
       }).run()
       written++
+      localDates.add(row.localDate)
     }
     // Segments are replaced wholesale for the sessions in this page: a re-fetch after Google
     // finishes processing a night legitimately changes the stage timeline, and merging two
@@ -251,5 +266,5 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
     for (const row of rows) tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
     for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
   }
-  return written
+  return { rows: written, localDates: [...localDates] }
 }
