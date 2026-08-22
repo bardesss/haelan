@@ -169,4 +169,12 @@ describe('rollUpDay', () => {
     })
     expect(rows).toEqual([])
   })
+
+  it('leaves the mix null, because a per source row is not a merge', () => {
+    const rows = rollUpDay({
+      personId: 'p1', localDate: LOCAL_DATE,
+      rows: [sample({ metric: 'steps', value: 400 })],
+    })
+    expect(rows[0]?.sourceMix).toBeNull()
+  })
 })

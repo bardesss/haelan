@@ -16,7 +16,8 @@ describe('mapRollups', () => {
       points: 1,
       rows: [{
         personId: 'p1', localDate: '2026-08-21', metric: 'total_calories', agg: 'sum',
-        source: 'provider', value: 2500.5, coverage: null, derivationVersion: DERIVATION_VERSION,
+        source: 'provider', value: 2500.5, coverage: null, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION,
       }],
     })
   })
