@@ -159,11 +159,12 @@ would make that literal's promise, "this is a merge we can account for", false w
 **A dirty day is queued rather than derived inline.** `DeriveQueue` records which (person, local
 date) pairs need recomputing, and `runDerive` is what drains it, replacing a day's derived rows
 wholesale in one transaction so a metric whose samples all got excluded loses its row rather than
-keeping a stale number. Three things write to the queue: sync, as it commits a window and marks
-the days it touched dirty in the same transaction; an override, as it is added or removed; and a
-`derivation_version` bump, which is what a rebuild is. Of those three, only sync exists today. The
-queue is the mechanism overrides and rebuild will use, not evidence that either is implemented:
-nothing applies an override yet, and nothing compares `DERIVATION_VERSION` to what is on disk.
+keeping a stale number. Four things write to the queue. Sync marks the days a window touched dirty
+in the same transaction that commits it. An override marks its own day as it is added or removed,
+through `OverrideStore.put` and `.remove`. A priority list write marks every day the person has
+data for, through `SourcePriorityStore.put` and `.clear`, because changing priority is a rebuild.
+The fourth is a `derivation_version` bump, which is what a rebuild itself is: that one is M2e's,
+and nothing compares `DERIVATION_VERSION` to what is on disk yet.
 
 **Priority** is the per person, per metric ranking that decides which source wins where more than
 one reported the same metric. `SourcePriorityStore` keeps it in `source_priority`, one row per
