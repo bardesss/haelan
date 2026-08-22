@@ -57,6 +57,21 @@ describe('rollUpDay', () => {
     expect(valueOf(rows, 'max')).toBe(88)
   })
 
+  it('never derives min or max from mean rows, because a day of means has no floor or ceiling to report', () => {
+    // A mean can never fall outside its own minute's min and max, so no fixture mixing mean
+    // with min/max rows can catch mean leaking into FEEDS.min or FEEDS.max. This fixture has no
+    // min or max rows at all, so leaking mean in would be the only way to produce one.
+    const rows = rollUpDay({
+      personId: 'p1', localDate: LOCAL_DATE,
+      rows: [55, 57, 59].map((value, i) => sample({
+        metric: 'heart_rate', value, agg: 'mean', n: 30, utcMs: MIDNIGHT_UTC + i * 3_600_000,
+      })),
+    })
+    expect(rows.map((r) => r.agg).sort()).toEqual(['mean', 'p50'])
+    expect(valueOf(rows, 'min')).toBeUndefined()
+    expect(valueOf(rows, 'max')).toBeUndefined()
+  })
+
   it('weights a mean by how many readings each row collapsed', () => {
     // The failure this prevents: averaging two minute rows equally when one collapsed thirty
     // readings and the other collapsed two.
@@ -79,6 +94,16 @@ describe('rollUpDay', () => {
       ],
     })
     expect(valueOf(rows, 'last')).toBe(80.9)
+  })
+
+  it('breaks a last tie on utcMs toward the raw row, regardless of input order', () => {
+    const tiedUtcMs = MIDNIGHT_UTC + 5 * 3_600_000
+    const raw = sample({ metric: 'weight', value: 81.4, agg: 'raw', utcMs: tiedUtcMs })
+    const mean = sample({ metric: 'weight', value: 79.0, agg: 'mean', utcMs: tiedUtcMs })
+    const forward = rollUpDay({ personId: 'p1', localDate: LOCAL_DATE, rows: [raw, mean] })
+    const reversed = rollUpDay({ personId: 'p1', localDate: LOCAL_DATE, rows: [mean, raw] })
+    expect(valueOf(forward, 'last')).toBe(81.4)
+    expect(valueOf(reversed, 'last')).toBe(81.4)
   })
 
   it('computes a median that one bad hour cannot drag', () => {
@@ -107,6 +132,20 @@ describe('rollUpDay', () => {
       ],
     })
     expect(valueOf(rows, 'sum')).toBe(250)
+  })
+
+  it('excludes a null from the mean rather than averaging it in as zero', () => {
+    // Sum can't tell null-skipped from null-as-zero here (both give 250 above), because adding
+    // zero doesn't change a sum. Mean can: averaging a real 60 with a fabricated zero gives 30,
+    // while excluding the null gives 60. This is the test that actually discriminates.
+    const rows = rollUpDay({
+      personId: 'p1', localDate: LOCAL_DATE,
+      rows: [
+        sample({ metric: 'heart_rate', value: 60, agg: 'mean', n: 1 }),
+        sample({ metric: 'heart_rate', value: null, agg: 'mean', utcMs: MIDNIGHT_UTC + 3_600_000 }),
+      ],
+    })
+    expect(valueOf(rows, 'mean')).toBe(60)
   })
 
   it('writes no row at all for a metric with nothing but nulls', () => {

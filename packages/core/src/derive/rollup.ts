@@ -58,6 +58,11 @@ const FEEDS: Record<DailyAgg, ReadonlySet<SampleAgg>> = {
   last: new Set<SampleAgg>(['raw', 'min', 'mean', 'max', 'sum', 'count']),
 }
 
+// Tie-break order for 'last' when two rows share a utcMs. Ascending priority: the last entry
+// wins the tie. 'raw' is what the source actually reported, so it outranks anything we
+// downsampled ourselves.
+const LAST_TIE_ORDER: readonly SampleAgg[] = ['min', 'mean', 'max', 'sum', 'count', 'raw']
+
 function compute(agg: DailyAgg, rows: readonly Scored[]): number | null {
   const feeding = rows.filter((r) => FEEDS[agg].has(r.agg))
   if (feeding.length === 0) return null
@@ -66,7 +71,17 @@ function compute(agg: DailyAgg, rows: readonly Scored[]): number | null {
     case 'max': return Math.max(...feeding.map((r) => r.value))
     case 'sum': return feeding.reduce((total, r) => total + r.value, 0)
     case 'count': return feeding.reduce((total, r) => total + r.n, 0)
-    case 'last': return [...feeding].sort((a, b) => a.utcMs - b.utcMs).at(-1)!.value
+    case 'last': {
+      // A plain utcMs sort leaves same-instant rows in input order, which Array#sort's
+      // stability would then let the caller's array order decide. Breaking the tie by agg
+      // makes the result the same regardless of how the rows arrived.
+      const sorted = [...feeding].sort((a, b) => (
+        a.utcMs !== b.utcMs
+          ? a.utcMs - b.utcMs
+          : LAST_TIE_ORDER.indexOf(a.agg) - LAST_TIE_ORDER.indexOf(b.agg)
+      ))
+      return sorted.at(-1)!.value
+    }
     case 'mean': {
       // Weighted by n, because a minute row that collapsed thirty readings is not worth the
       // same as one that collapsed two.
