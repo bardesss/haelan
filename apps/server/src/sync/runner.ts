@@ -228,7 +228,7 @@ export class SyncRunner {
 
     // The trailing window first: today's data is what a dashboard shows, and a backfill that
     // takes an hour must not delay it.
-    await runSync({ personIds, trailingDays: TRAILING_DAYS, deps })
+    await runSync({ personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps })
 
     // Resolved once per run rather than per type: it is one operator setting, and reading it
     // fresh for every (person, type) pair would let a mid-run settings change produce a run

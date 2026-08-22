@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { people } from '../db/schema/index.ts'
-import { dataTypeById } from '../api/catalogue.ts'
+import { dataTypeById, horizonDaysFor } from '../api/catalogue.ts'
 import { runJob } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 
@@ -17,17 +17,46 @@ export interface SyncReport {
 export interface SyncInput {
   personIds: string[]
   trailingDays: number
+  /**
+   * The account's chosen depth, which horizonDaysFor turns into a per-type ceiling. Required
+   * rather than defaulted because it bounds how far a gap repair may reach: a default here would
+   * silently let one run walk further back than the account ever asked to keep.
+   */
+  userHorizonDays: number
   deps: JobDeps
 }
 
 const DAY_MS = 86_400_000
 
-// Spec section 8: every run re-fetches a trailing window rather than only the range since the
-// cursor, because devices upload late and a pure cursor would miss that data permanently.
+/**
+ * How far back one run reaches for a type, which is the trailing window *or* the gap since this
+ * mirror actually stops, whichever is further.
+ *
+ * Spec section 8: every run re-fetches a trailing window rather than only the range since the
+ * mark, because devices upload late and a pure cursor would miss that data permanently. But the
+ * trailing window alone is a fixed span ending at now, so an outage longer than the span leaves
+ * days nothing ever asks for again: the trailing run has moved past them and the backfill cursor
+ * only walks backwards. Spec section 16 promises those days come back, and the high-water mark
+ * is the only record of where they start.
+ *
+ * Clamped to the type's horizon so a very old mark cannot pull one run deeper than the account
+ * ever asked to keep. A long gap therefore costs one large run rather than a permanent hole, and
+ * because the mark only advances as far as a run actually got, an interrupted repair resumes
+ * from where it stopped rather than starting over.
+ */
+export function reachBackTo(
+  highWaterMs: number | null, trailingFromMs: number, toMs: number,
+  dataType: Parameters<typeof horizonDaysFor>[0], userHorizonDays: number,
+): number {
+  if (highWaterMs === null) return trailingFromMs
+  const horizonFloorMs = toMs - horizonDaysFor(dataType, userHorizonDays) * DAY_MS
+  return Math.max(horizonFloorMs, Math.min(trailingFromMs, highWaterMs))
+}
+
 export async function runSync(input: SyncInput): Promise<SyncReport> {
   const report: SyncReport = { jobs: 0, succeeded: 0, failed: 0, skipped: 0, rowsWritten: 0, unknownPersonIds: [] }
   const toMs = input.deps.now()
-  const fromMs = toMs - input.trailingDays * DAY_MS
+  const trailingFromMs = toMs - input.trailingDays * DAY_MS
 
   for (const personId of input.personIds) {
     const person = input.deps.db.select().from(people).where(eq(people.id, personId)).get()
@@ -43,9 +72,12 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
       const dataType = dataTypeById(job.dataType)
       if (!dataType) continue
       report.jobs++
-      const before = input.deps.syncState.get(personId, job.dataType)?.consecutiveFailures ?? 0
+      const state = input.deps.syncState.get(personId, job.dataType)
+      const before = state?.consecutiveFailures ?? 0
       const result = await runJob({
-        personId, dataType, timezone: person.timezone, fromMs, toMs, deps: input.deps,
+        personId, dataType, timezone: person.timezone,
+        fromMs: reachBackTo(state?.highWaterMs ?? null, trailingFromMs, toMs, dataType, input.userHorizonDays),
+        toMs, deps: input.deps,
       })
       report.rowsWritten += result.rowsWritten
       if (result.skipped) report.skipped++

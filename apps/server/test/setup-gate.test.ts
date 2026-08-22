@@ -34,6 +34,29 @@ describe('the setup gate', () => {
     expect(response.statusCode).not.toBe(409)
   })
 
+  // Spec section 13 pauses a revoked person and the reconnect banner tells them so, but consent
+  // is the only thing that can un-revoke them: putRefreshToken clears revoked_at_ms and nothing
+  // else does. Closing /oauth/* once setup is done left the sole recovery path as hand-editing
+  // SQLite, and it is the same path a second household member's first consent will take (M5).
+  it('keeps consent reachable after setup, because a revoked grant has no other way back', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    // 401 rather than 302: the gate is open, and the route's own session check is what answers.
+    // A 409 here would mean the gate never let it through at all.
+    expect((await harness.app.inject({ method: 'GET', url: '/oauth/start' })).statusCode).toBe(401)
+  })
+
+  it('still refuses the wizard API after setup, because those routes build an instance that exists', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/setup/instance-url',
+      payload: { baseUrl: 'http://elsewhere.invalid', consentPath: 'elsewhere.invalid' },
+    })
+    expect(response.statusCode).toBe(409)
+    expect(response.json()).toEqual({ error: 'setup_complete' })
+  })
+
   it('still reports the step after setup is finished, because the SPA asks on every load', async () => {
     harness = await withServer()
     await harness.completeSetup()
