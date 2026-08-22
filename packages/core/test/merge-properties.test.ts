@@ -52,17 +52,9 @@ const nullableSpecArb = fc.record({
 
 const nullableDayArb = fc.array(nullableSpecArb, { minLength: 1, maxLength: 40 })
 
-const toRows = (specs: readonly Spec[]): SampleLike[] => specs.map((s) => ({
-  sourceId: s.sourceId,
-  metric: 'steps',
-  utcMs: MIDNIGHT_UTC + s.hour * 3_600_000 + s.minute * 60_000,
-  tzOffsetMinutes: OFFSET,
-  agg: 'raw' as const,
-  value: s.value,
-  n: 1,
-}))
-
-const toRowsNullable = (specs: readonly NullableSpec[]): SampleLike[] => specs.map((s) => ({
+// Widened rather than duplicated: a Spec is assignable to a NullableSpec, so one builder
+// serves both the non-null generators and the null-carrying one.
+const toRows = (specs: readonly NullableSpec[]): SampleLike[] => specs.map((s) => ({
   sourceId: s.sourceId,
   metric: 'steps',
   utcMs: MIDNIGHT_UTC + s.hour * 3_600_000 + s.minute * 60_000,
@@ -177,8 +169,8 @@ describe('merge properties', () => {
 
   it('treats a null reading as absent, not as a zero', () => {
     fc.assert(fc.property(nullableDayArb, listArb, (specs, list) => {
-      const withNulls = mergeRows(toRowsNullable(specs), list)
-      const withoutNulls = mergeRows(toRowsNullable(specs.filter((s) => s.value !== null)), list)
+      const withNulls = mergeRows(toRows(specs), list)
+      const withoutNulls = mergeRows(toRows(specs.filter((s) => s.value !== null)), list)
       expect(withNulls).toEqual(withoutNulls)
     }))
   })

@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { deriveQueue } from '../db/schema/index.ts'
+import { shiftLocalDate } from '../derive/localDay.ts'
 
 export interface QueueEntry { personId: string, localDate: string }
 
@@ -65,14 +66,9 @@ export class DeriveQueue {
   }
 }
 
-const DAY_MS = 86_400_000
-
-// Dates are ISO local dates with no zone, so stepping them as UTC midnights is exact: no
-// offset applies, and a daylight saving change never moves a calendar date.
+// The stepping itself lives in localDay.ts, which is the module that owns day arithmetic.
 function datesBetween(from: string, to: string): string[] {
   const out: string[] = []
-  for (let ms = Date.parse(`${from}T00:00:00Z`); ms <= Date.parse(`${to}T00:00:00Z`); ms += DAY_MS) {
-    out.push(new Date(ms).toISOString().slice(0, 10))
-  }
+  for (let date = from; date <= to; date = shiftLocalDate(date, 1)) out.push(date)
   return out
 }

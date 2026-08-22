@@ -41,4 +41,14 @@ describe('target keys', () => {
     expect(() => parseSessionTarget('{"nope":1}')).toThrow(ConfigError)
     expect(() => parseDayMetricTarget('{"localDate":"2026-08-22"}')).toThrow(ConfigError)
   })
+  it('refuses a JSON array and a bare primitive, which decode guards but nothing exercised', () => {
+    // decode() rules both out, and neither was covered. A key is a database value: whatever
+    // shape arrives has to fail at the parser rather than deeper in a derivation.
+    for (const key of ['[]', '[{"source":"w"}]', 'null', '7', '"a string"', 'true']) {
+      expect(() => parseSampleTarget(key), key).toThrow(ConfigError)
+      expect(() => parseSessionTarget(key), key).toThrow(ConfigError)
+      expect(() => parseDayMetricTarget(key), key).toThrow(ConfigError)
+    }
+  })
+
 })

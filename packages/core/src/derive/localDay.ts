@@ -12,3 +12,15 @@ export function localDateOf(utcMs: number, tzOffsetMinutes: number): string {
 export function localHourOf(utcMs: number, tzOffsetMinutes: number): number {
   return new Date(utcMs + tzOffsetMinutes * 60_000).getUTCHours()
 }
+
+const DAY_MS = 86_400_000
+
+/**
+ * Steps a calendar date by whole days. An ISO local date carries no zone, so stepping it as a
+ * UTC midnight is exact: no offset applies and a daylight saving change never moves a calendar
+ * date. Two callers had grown their own copy of this, which is one copy too many for the module
+ * that exists to be the only place a day boundary is computed.
+ */
+export function shiftLocalDate(localDate: string, days: number): string {
+  return new Date(Date.parse(`${localDate}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
+}
