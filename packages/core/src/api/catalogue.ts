@@ -151,9 +151,10 @@ export const DATA_TYPES: readonly DataType[] = [
       },
     },
   }),
-  // Sub-dimension: heart rate zone. activeZoneMinutes.heartRateZone varies within one interval,
-  // so several points would share the samples natural key and collide on upsert; the zone goes
-  // into the metric name, same as the activity level above.
+  // Sub-dimension: heart rate zone. One metric per zone is what makes each of them an ordinary
+  // metric with an ordinary rollup, same as the activity level above. The natural key collision
+  // this deferral originally feared was measured on this branch and does not occur: no interval
+  // in the sample carried more than one zone, per probe/findings/field-map.md.
   listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', '', {
     tier: 'intraday',
     subDimension: {

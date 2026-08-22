@@ -252,8 +252,10 @@ describe('runSync', () => {
     expect(deps.syncState.get('alice', 'total-calories')?.consecutiveFailures).toBeGreaterThan(0)
     expect(deps.syncState.get('alice', 'total-calories')?.lastError).toContain('400')
     expect(deps.syncState.get('alice', 'floors')?.consecutiveFailures).toBeGreaterThan(0)
-    // steps is listable and its job runs after the rollup-only types in the dueJobs order; it
-    // only got here because the earlier rollup failures did not throw out of the loop.
+    // What proves the loop continued is floors above: dueJobs follows DATA_TYPES order, so its
+    // failure is recorded after total-calories's, which could not happen if the first rollup
+    // failure had escaped runSync. steps runs first of all, so the payload below shows only
+    // that the list path is untouched.
     const rows = ctx.db.select({ dataType: rawPayloads.dataType }).from(rawPayloads).all()
     expect(rows.some((r) => r.dataType === 'steps')).toBe(true)
   })

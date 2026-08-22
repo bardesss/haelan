@@ -62,7 +62,8 @@ export const daily = sqliteTable('daily', {
   localDate: text('local_date').notNull(),
   metric: text('metric').notNull(),
   agg: text('agg').notNull(),
-  // The literal 'merged' rather than a source id, when this row is the merge of several.
+  // A source id, or the literal 'merged' when we computed the row by choosing between sources,
+  // or 'provider' when the API only answers a figure it reconciled itself and we cannot inspect.
   source: text('source').notNull(),
   value: real('value'),
   // Fraction of the day's hours carrying at least one sample. Null where there is no basis to

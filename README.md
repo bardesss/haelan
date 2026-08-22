@@ -86,7 +86,8 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M1b** API client and mapping | v4 client, the data type catalogue, payload parsers, sample and session mappers | Done, [#14](https://github.com/bardesss/haelan/pull/14) |
 | **M1c** Sync engine | Day aligned windows, per person jobs, sync state, token bucket, transactional writes | Done, [#19](https://github.com/bardesss/haelan/pull/19) |
 | **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | Done, [#21](https://github.com/bardesss/haelan/pull/21) |
-| **M2** Derivation and query layer | Rollups, sleep and recovery derivation, nap detection, baselines, merge policy, rebuild | In review |
+| **M2a** Catalogue and rollups | The metric catalogue, per source `daily` rows with coverage, the derive queue and its drain, the rollup read path for `total-calories` and `floors` | In review |
+| **M2** Derivation and query layer | Source priority and merged rows, sleep and recovery derivation, nap detection, baselines, overrides at derivation, rebuild | Not started |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish | Not started |
@@ -97,7 +98,9 @@ done**: the design calls it done when a real account's history is on disk, re-sy
 idempotent, and the whole route from empty database to syncing data ran through the browser. That
 run happened on 2026-08-21 and is recorded, including what it broke, in
 `probe/findings/console-steps.md`. Two things that run did not settle are listed there rather than
-here, because an unanswered question belongs next to its evidence. D1 and M0 through
+here, because an unanswered question belongs next to its evidence. **M2 is cut the same way**,
+into the units `docs/superpowers/specs/2026-08-22-m2-derivation-design.md` names: M2a is the first
+of them and has its own row above, and the **M2** row now holds what the rest still owe. D1 and M0 through
 M5 are the only phases the design defines. M1 comes before the dashboard deliberately: intraday samples have a shelf
 life, since the API only retains them for a recent window, so every week without ingestion is a
 week of minute-level history permanently unavailable at that resolution. Charts can be improved

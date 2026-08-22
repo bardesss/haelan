@@ -129,9 +129,9 @@ sum of heart rate readings is not a number anyone means), how many decimals to s
 a higher reading is better, worse or neither. The two catalogues change on different clocks. A
 field map correction to `DATA_TYPES` is measured against the live API; a decision about whether
 weight should show its mean or only its last reading belongs to product judgement instead, and
-lives in `METRICS`. Sleep and recovery carry no entry here, deliberately: their daily figures come
-from sessions and segments, not from a sample rollup, and a test asserts the omission so nobody
-adds one by habit.
+lives in `METRICS`. Sleep and exercise carry no entry here, deliberately: their daily figures come
+from sessions and segments, not from a sample rollup, and a test asserts that neither of the two
+session types has an entry, so nobody adds one by habit.
 
 **Coverage** is the fraction of the local day's hours, out of 24, that carry at least one sample:
 computed by `coverageOf`, stored on every derived `daily` row. It is hours rather than a sample
