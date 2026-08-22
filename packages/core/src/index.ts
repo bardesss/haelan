@@ -38,6 +38,8 @@ export { runJob } from './sync/runJob.ts'
 export type { JobDeps, JobInput, JobResult, RateLimiter } from './sync/runJob.ts'
 export { runSync } from './sync/runSync.ts'
 export type { SyncInput, SyncReport } from './sync/runSync.ts'
+export { DeriveQueue } from './store/deriveQueue.ts'
+export type { QueueEntry } from './store/deriveQueue.ts'
 
 // M1d. The wizard and the accounts behind it: everything the server needs to take an instance
 // from an empty volume to a syncing household, and nothing it does not. `apps/server` reaches

@@ -5,9 +5,11 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
+import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { dataTypeById } from '../src/api/catalogue.ts'
 import { runJob } from '../src/sync/runJob.ts'
+import { dayWindows } from '../src/sync/windows.ts'
 import { RevokedError } from '../src/api/tokens.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
 import { samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
@@ -352,5 +354,47 @@ describe('runJob', () => {
     })
     expect(result.rowsWritten).toBe(0)
     expect(fetchMock).toHaveBeenCalled()
+  })
+
+  it('marks every day it wrote rows into, in the transaction that wrote them', async () => {
+    // Every fetch answers with the same point regardless of which window asked, so every window
+    // in this job writes a row and the marked set can be checked against dayWindows exactly,
+    // rather than merely asserting the queue is non-empty.
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    const args = {
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-17T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+    }
+    const queue = new DeriveQueue(ctx.db)
+    const result = await runJob({ ...args, deps: { ...build(fetchMock), deriveQueue: queue } })
+
+    const expectedDates = dayWindows({ fromMs: args.fromMs, toMs: args.toMs, timezone: args.timezone })
+      .map((w) => w.localDate)
+    expect(result.windows).toBe(expectedDates.length)
+    expect(result.rowsWritten).toBeGreaterThan(0)
+
+    const entries = queue.claim(expectedDates.length + 1)
+    expect(entries).toHaveLength(expectedDates.length)
+    expect(entries.every((e) => e.personId === 'p1')).toBe(true)
+    expect(entries.every((e) => /^\d{4}-\d{2}-\d{2}$/.test(e.localDate))).toBe(true)
+    expect(entries.map((e) => e.localDate).sort()).toEqual([...expectedDates].sort())
+  })
+
+  it('leaves the queue empty for a window rolled back, so a derive never reads data that is not there', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
+    const queue = new DeriveQueue(ctx.db)
+    const deps = { ...build(fetchMock), deriveQueue: queue }
+
+    // Same busy-database trigger the rollback test above uses: the throw lands inside the
+    // window's transaction after the rows would have been written, taking the mark with it.
+    ctx.db.$client.exec("CREATE TRIGGER haelan_test_busy BEFORE INSERT ON samples BEGIN SELECT RAISE(ABORT, 'database is locked'); END")
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('oxygen-saturation')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'), deps,
+    })
+    ctx.db.$client.exec('DROP TRIGGER haelan_test_busy')
+
+    expect(result.rowsWritten).toBe(0)
+    expect(queue.size()).toBe(0)
   })
 })

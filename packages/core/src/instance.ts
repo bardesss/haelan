@@ -3,6 +3,7 @@ import { migrateToLatest } from './db/migrate.ts'
 import { loadOrCreateKey } from './crypto/key.ts'
 import { CredentialStore } from './store/credentials.ts'
 import { RawArchive } from './store/rawArchive.ts'
+import { DeriveQueue } from './store/deriveQueue.ts'
 import type { Database } from './db/open.ts'
 
 export interface Instance {
@@ -10,6 +11,7 @@ export interface Instance {
   key: Buffer
   credentials: CredentialStore
   archive: RawArchive
+  deriveQueue: DeriveQueue
   close: () => void
 }
 
@@ -25,6 +27,7 @@ export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): I
       key,
       credentials: new CredentialStore(db, key),
       archive: new RawArchive(db),
+      deriveQueue: new DeriveQueue(db),
       close: () => closeDatabase(db),
     }
   } catch (err) {

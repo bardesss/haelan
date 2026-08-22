@@ -5,6 +5,7 @@ import type { HealthClient } from '../api/client.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
+import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { RevokedError } from '../api/tokens.ts'
 import { HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
@@ -44,6 +45,11 @@ export interface JobDeps {
   limiter?: RateLimiter
   /** Called as work completes. Optional: nothing in core needs it, the SSE stream does. */
   onProgress?: (event: SyncProgress) => void
+  /**
+   * Optional so the sync tests that predate derivation keep working. Set by openHaelan. A day
+   * whose rows commit without being marked is a day the dashboard never sees.
+   */
+  deriveQueue?: DeriveQueue
 }
 
 export interface JobInput {
@@ -122,9 +128,17 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         const pages = listed.payloadIds.map((id) => ({
           body: deps.archive.getBody(input.personId, id), rawPayloadId: id,
         }))
-        return t.target === 'samples'
+        const rows = t.target === 'samples'
           ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
           : writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+        // Through tx, so the mark commits and rolls back with the rows it describes. A day
+        // marked for rows that were rolled back would derive from data that is not there.
+        if (rows > 0) {
+          deps.deriveQueue?.markDirty(
+            { personId: input.personId, localDate: window.localDate, nowMs: deps.now() }, tx,
+          )
+        }
+        return rows
       })
       rowsWritten += writtenHere
       report({

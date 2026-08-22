@@ -218,6 +218,7 @@ export class SyncRunner {
       now: this.#context.now,
       limiter: this.#context.limiter ?? defaultLimiter(),
       onProgress: (event) => this.emit(event),
+      deriveQueue: this.#context.instance.deriveQueue,
     }
   }
 
