@@ -4,6 +4,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { runDerive } from '../src/derive/runDerive.ts'
+import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
 import { daily, samples, sources } from '../src/db/schema/index.ts'
 
 const OFFSET = 120
@@ -12,6 +13,7 @@ const LOCAL_DATE = '2026-08-22'
 
 let test: TestDatabase
 let queue: DeriveQueue
+let priority: SourcePriorityStore
 beforeEach(() => {
   test = createTestDatabase()
   seedPerson(test.db, 'p1')
@@ -21,6 +23,7 @@ beforeEach(() => {
     }).run()
   }
   queue = new DeriveQueue(test.db)
+  priority = new SourcePriorityStore(test.db, queue)
 })
 afterEach(() => test.cleanup())
 
@@ -32,24 +35,27 @@ const insertSample = (o: { metric: string, value: number, hour: number, sourceId
   }).run()
 
 const dailyRows = () => test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()
+const perSourceRows = () => dailyRows().filter((r) => r.source !== 'merged' && r.source !== 'provider')
+const mergedRows = () => dailyRows().filter((r) => r.source === 'merged')
 
 describe('runDerive', () => {
   it('derives a queued day and clears it', () => {
     insertSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    const report = runDerive({ db: test.db, queue })
+    const report = runDerive({ db: test.db, queue, priority })
     expect(report.daysDerived).toBe(1)
     expect(queue.size()).toBe(0)
-    expect(dailyRows().map((r) => [r.metric, r.agg, r.value])).toEqual([['steps', 'sum', 400]])
+    expect(perSourceRows().map((r) => [r.metric, r.agg, r.value])).toEqual([['steps', 'sum', 400]])
   })
 
   it('is idempotent: draining twice writes the same rows, not twice the rows', () => {
     insertSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
+    runDerive({ db: test.db, queue, priority })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
-    runDerive({ db: test.db, queue })
-    expect(dailyRows()).toHaveLength(1)
+    runDerive({ db: test.db, queue, priority })
+    // One per source row and one merged row. Draining twice is still one of each.
+    expect(dailyRows()).toHaveLength(2)
   })
 
   it('removes a row whose samples went away, rather than leaving a stale number', () => {
@@ -57,10 +63,10 @@ describe('runDerive', () => {
     // leave yesterday's answer standing.
     insertSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
+    runDerive({ db: test.db, queue, priority })
     test.db.delete(samples).run()
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
-    runDerive({ db: test.db, queue })
+    runDerive({ db: test.db, queue, priority })
     expect(dailyRows()).toEqual([])
   })
 
@@ -71,7 +77,7 @@ describe('runDerive', () => {
     }).run()
     insertSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
+    runDerive({ db: test.db, queue, priority })
     expect(dailyRows().filter((r) => r.source === 'provider')).toHaveLength(1)
   })
 
@@ -79,23 +85,23 @@ describe('runDerive', () => {
     insertSample({ metric: 'steps', value: 400, hour: 9 })
     insertSample({ metric: 'steps', value: 999, hour: 30 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
-    expect(dailyRows().map((r) => r.value)).toEqual([400])
+    runDerive({ db: test.db, queue, priority })
+    expect(perSourceRows().map((r) => r.value)).toEqual([400])
   })
 
   it('keeps a source split rather than adding two devices together', () => {
     insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
     insertSample({ metric: 'steps', value: 900, hour: 9, sourceId: 'phone' })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
-    expect(dailyRows().map((r) => r.value).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([400, 900])
+    runDerive({ db: test.db, queue, priority })
+    expect(perSourceRows().map((r) => r.value).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([400, 900])
   })
 
   it('stops at the batch size and leaves the rest queued', () => {
     for (const localDate of ['2026-08-20', '2026-08-21', '2026-08-22']) {
       queue.markDirty({ personId: 'p1', localDate, nowMs: 1 })
     }
-    const report = runDerive({ db: test.db, queue, batch: 2 })
+    const report = runDerive({ db: test.db, queue, priority, batch: 2 })
     expect(report.daysDerived).toBe(2)
     expect(queue.size()).toBe(1)
   })
@@ -111,8 +117,8 @@ describe('runDerive', () => {
       agg: 'raw', value: 222, n: 1, rawPayloadId: null,
     }).run()
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
-    expect(dailyRows().map((r) => r.value)).toEqual([222])
+    runDerive({ db: test.db, queue, priority })
+    expect(perSourceRows().map((r) => r.value)).toEqual([222])
   })
 
   it('includes a sample at the UTC+14 extreme whose local date still falls on the queued day', () => {
@@ -126,7 +132,42 @@ describe('runDerive', () => {
       agg: 'raw', value: 111, n: 1, rawPayloadId: null,
     }).run()
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
-    runDerive({ db: test.db, queue })
-    expect(dailyRows().map((r) => r.value)).toEqual([111])
+    runDerive({ db: test.db, queue, priority })
+    expect(perSourceRows().map((r) => r.value)).toEqual([111])
+  })
+
+  it('writes a merged row beside the per source rows, never instead of them', () => {
+    // Invariant 4: merging never happens on write. The per source rows are what a merge is
+    // inspected against, so a merged row that replaced them would destroy its own evidence.
+    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    insertSample({ metric: 'steps', value: 900, hour: 15, sourceId: 'phone' })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue, priority })
+
+    expect(perSourceRows().map((r) => r.value).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([400, 900])
+    const merged = mergedRows()
+    expect(merged).toHaveLength(1)
+    expect(merged[0]?.value).toBe(1300)
+    // encodeMix breaks a tie in hours by source id ascending, so 'phone' sorts before 'watch'.
+    expect(merged[0]?.sourceMix).toBe('[{"source":"phone","hours":1},{"source":"watch","hours":1}]')
+  })
+
+  it('follows a stored priority list rather than the fallback', () => {
+    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    insertSample({ metric: 'steps', value: 900, hour: 9, sourceId: 'phone' })
+    priority.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
+    runDerive({ db: test.db, queue, priority })
+    expect(mergedRows()[0]?.value).toBe(900)
+  })
+
+  it('replaces a merged row wholesale, so a stale merge cannot outlive its inputs', () => {
+    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue, priority })
+    test.db.delete(samples).run()
+    insertSample({ metric: 'steps', value: 50, hour: 9, sourceId: 'watch' })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
+    runDerive({ db: test.db, queue, priority })
+    expect(mergedRows().map((r) => r.value)).toEqual([50])
   })
 })

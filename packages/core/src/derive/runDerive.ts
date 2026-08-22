@@ -1,9 +1,12 @@
 import { and, eq, gte, lte, ne } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
+import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import { daily, samples } from '../db/schema/index.ts'
 import { rollUpDay, PROVIDER_SOURCE } from './rollup.ts'
 import type { SampleLike } from './rollup.ts'
+import { mergeDay } from './merge.ts'
+import type { Priority } from './priority.ts'
 import { localDateOf } from './localDay.ts'
 
 const DEFAULT_BATCH = 64
@@ -18,9 +21,26 @@ export interface DeriveReport { daysDerived: number, rowsWritten: number }
  * The queue entry is cleared inside the same transaction as the rows it produced. A crash
  * between the two would otherwise leave a day that looks derived and is not.
  */
-export function runDerive(input: { db: Database, queue: DeriveQueue, batch?: number }): DeriveReport {
+export function runDerive(input: {
+  db: Database
+  queue: DeriveQueue
+  priority: SourcePriorityStore
+  batch?: number
+}): DeriveReport {
   const claimed = input.queue.claim(input.batch ?? DEFAULT_BATCH)
   let rowsWritten = 0
+
+  // One load per person rather than per day: draining a year of backfill is 365 entries for the
+  // same person. A ranking that changes underneath the drain costs a re-derive rather than a
+  // wrong row, because a priority write marks the days dirty again.
+  const priorities = new Map<string, Priority>()
+  const priorityFor = (personId: string): Priority => {
+    const cached = priorities.get(personId)
+    if (cached) return cached
+    const loaded = input.priority.load(personId)
+    priorities.set(personId, loaded)
+    return loaded
+  }
 
   for (const entry of claimed) {
     input.db.transaction((tx) => {
@@ -47,6 +67,13 @@ export function runDerive(input: { db: Database, queue: DeriveQueue, batch?: num
         rows: dayRows as SampleLike[],
       })
 
+      const merged = mergeDay({
+        personId: entry.personId,
+        localDate: entry.localDate,
+        rows: dayRows as SampleLike[],
+        priority: priorityFor(entry.personId),
+      })
+
       // Everything we derive for this day goes, then comes back. Provider rows are excluded
       // because they are ingested rather than derived and nothing here could recompute them.
       tx.delete(daily).where(and(
@@ -56,7 +83,8 @@ export function runDerive(input: { db: Database, queue: DeriveQueue, batch?: num
       )).run()
 
       for (const row of derived) tx.insert(daily).values(row).run()
-      rowsWritten += derived.length
+      for (const row of merged) tx.insert(daily).values(row).run()
+      rowsWritten += derived.length + merged.length
 
       input.queue.clear([entry], tx)
     })
