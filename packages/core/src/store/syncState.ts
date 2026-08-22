@@ -70,9 +70,18 @@ export class SyncStateStore {
   // recordFailure - consecutiveFailures is untouched - because the fetch and the archive both
   // worked. Backing off would stop the archive filling, which is the part still going right, and
   // the archived payloads are what make this recoverable by rebuild once the mapping is fixed.
-  recordSchemaDrift(input: { personId: string, dataType: string, points: number, nowMs: number }): void {
+  /**
+   * `reason` distinguishes the two ways a payload can stop making sense: points that mapped to
+   * no rows, which means a value path moved, and a body we could not read at all, which means
+   * the envelope itself did. They need different fixes, so the record has to say which.
+   */
+  recordSchemaDrift(input: {
+    personId: string, dataType: string, points: number, nowMs: number, reason?: string,
+  }): void {
     const error = new SchemaDriftError(
-      `${input.points} points fetched and none mapped to a row; the payload shape may have changed`,
+      input.reason
+        ? `${input.reason}; the payload shape may have changed`
+        : `${input.points} points fetched and none mapped to a row; the payload shape may have changed`,
     )
     this.upsert(input.personId, input.dataType, {
       lastErrorAtMs: input.nowMs,

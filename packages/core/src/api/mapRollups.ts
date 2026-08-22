@@ -3,6 +3,7 @@ import type { DailyRow } from '../derive/rollup.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { parseNumeric, valueAt } from './parse.ts'
+import { readEnvelope } from './envelope.ts'
 
 export interface RollupMapping {
   rows: DailyRow[]
@@ -13,6 +14,12 @@ export interface RollupMapping {
    * longer read.
    */
   points: number
+  /**
+   * Whether the body was a shape this code knows at all. Distinct from carrying no points: a
+   * quiet window and a renamed envelope both map to nothing, and only this tells them apart.
+   * The walk refuses to advance its cursor over a window it could not read.
+   */
+  readable: boolean
 }
 
 /**
@@ -25,17 +32,9 @@ export interface RollupMapping {
  * promise false for exactly two metrics without saying so.
  */
 export function mapRollups(input: { dataType: DataType, body: string, personId: string }): RollupMapping {
-  const nothing: RollupMapping = { rows: [], points: 0 }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(input.body)
-  } catch {
-    return nothing
-  }
-  if (typeof parsed !== 'object' || parsed === null) return nothing
-
-  const points = (parsed as { rollupDataPoints?: unknown }).rollupDataPoints
-  if (!Array.isArray(points)) return nothing
+  const envelope = readEnvelope(input.body, 'rollupDataPoints')
+  if (!envelope.readable) return { rows: [], points: 0, readable: false }
+  const points = envelope.points
 
   const rows: DailyRow[] = []
   for (const point of points) {
@@ -62,7 +61,7 @@ export function mapRollups(input: { dataType: DataType, body: string, personId: 
       derivationVersion: DERIVATION_VERSION,
     })
   }
-  return { rows, points: points.length }
+  return { rows, points: points.length, readable: true }
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')

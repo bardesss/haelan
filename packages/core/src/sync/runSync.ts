@@ -99,7 +99,10 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
           // Mirrors runJob: only stamp a mark once the walk actually covered something, and the
           // mark is toMs itself (already now, never later), so it can never claim to have synced
           // time that has not happened yet.
-          if (rollup.chunks > 0) {
+          // A chunk we could not read is not a chunk with no data, and only the walk can tell
+          // them apart. Stamping the mark here would scroll the cursor past days nothing ever
+          // read, and a rollup type has no backfill pass to come back for them.
+          if (rollup.chunks > 0 && rollup.unreadable === 0) {
             input.deps.syncState.recordSuccess({ personId, dataType: job.dataType, highWaterMs: toMs, nowMs: toMs })
           }
           report.succeeded++

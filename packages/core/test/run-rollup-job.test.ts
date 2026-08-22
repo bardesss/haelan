@@ -42,6 +42,20 @@ const recordingSyncState = () => {
   }
 }
 
+// Serves a body whose points array has been renamed, which is what a Google field rename looks
+// like from here: valid JSON, an object, and nothing this code can find.
+function renamedEnvelopeClient() {
+  const client = {
+    async dailyRollUpDataPoints(input: { fromLocalDate: string }) {
+      return { payloadId: `raw-${input.fromLocalDate}` }
+    },
+  }
+  const archive = {
+    getBody: () => JSON.stringify({ rollupDataPointList: [{ civilStartTime: { date: {} } }] }),
+  }
+  return { client, archive }
+}
+
 const depsWith = (stub: ReturnType<typeof stubClient>, syncState = recordingSyncState()) =>
   ({ db: test.db, client: stub.client, archive: stub.archive, syncState, now: () => 0 })
 
@@ -189,4 +203,62 @@ describe('runRollupJob', () => {
       expect(days, `${range.from} to ${range.to}`).toBeLessThanOrEqual(14)
     }
   })
+  it('reports an unreadable chunk instead of counting it as a quiet stretch of days', async () => {
+    const syncState = recordingSyncState()
+    const result = await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23),
+      deps: depsWith(renamedEnvelopeClient() as never, syncState),
+    })
+    // The whole carried finding. Before this, a renamed envelope produced zero points and zero
+    // rows, which is exactly what days with no data produce, so the walk called it a success.
+    expect(result.unreadable).toBe(1)
+    expect(syncState.drift).toHaveLength(1)
+  })
+
+  it('does not report drift for a walk that read every chunk', async () => {
+    const syncState = recordingSyncState()
+    const result = await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23),
+      deps: depsWith(stubClient([]), syncState),
+    })
+    expect(result.unreadable).toBe(0)
+    expect(syncState.drift).toEqual([])
+  })
+
+  it('counts every unreadable chunk, so one bad chunk among good ones is not masked', async () => {
+    // Points are summed across a walk, which the M2 design's section 7a names as the second
+    // half of this defect: one unreadable chunk beside readable ones disappeared into the total.
+    const good = stubClient([])
+    let call = 0
+    const mixed = {
+      client: {
+        async dailyRollUpDataPoints(input: { personId: string, dataType: never, fromLocalDate: string, toLocalDate: string }) {
+          call += 1
+          return call === 2
+            ? { payloadId: 'renamed' }
+            : good.client.dailyRollUpDataPoints(input)
+        },
+      },
+      archive: {
+        getBody: (personId: string, id: string) => (
+          id === 'renamed'
+            ? JSON.stringify({ rollupDataPointList: [] })
+            : good.archive.getBody(personId, id)
+        ),
+      },
+    }
+    const syncState = recordingSyncState()
+    const result = await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 6, 14), toMs: Date.UTC(2026, 7, 23),
+      deps: depsWith(mixed as never, syncState),
+    })
+    expect(result.chunks).toBe(3)
+    expect(result.unreadable).toBe(1)
+    expect(result.rowsWritten).toBeGreaterThan(0)
+    expect(syncState.drift).toHaveLength(1)
+  })
+
 })

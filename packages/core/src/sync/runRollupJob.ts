@@ -30,7 +30,7 @@ export interface RollupJobDeps {
   /** Narrowed to the one thing the walk records itself. SyncStateStore satisfies it. */
   syncState: {
     recordSchemaDrift: (
-      input: { personId: string, dataType: string, points: number, nowMs: number },
+      input: { personId: string, dataType: string, points: number, nowMs: number, reason?: string },
     ) => void
   }
   now: () => number
@@ -80,12 +80,14 @@ const civilDaysBetween = (fromDate: string, toDate: string): number =>
  */
 export async function runRollupJob(
   input: RollupJobInput,
-): Promise<{ chunks: number, points: number, rowsWritten: number }> {
+): Promise<{ chunks: number, points: number, rowsWritten: number, unreadable: number }> {
   const capDays = rollupRangeCapDays(input.dataType)
   const fromDate = localDate(input.fromMs, input.timezone)
   let chunks = 0
   let points = 0
   let rowsWritten = 0
+  let unreadable = 0
+  let firstUnreadable: string | null = null
 
   // Backwards from the most recent day, so an interrupted walk has already collected the
   // history anyone is most likely to open first.
@@ -109,6 +111,12 @@ export async function runRollupJob(
     })
     const rows = mapped.rows
     points += mapped.points
+    if (!mapped.readable) {
+      // Counted per chunk rather than folded into the point total, because points are summed
+      // across the walk and one unreadable chunk among readable ones would vanish into it.
+      unreadable += 1
+      firstUnreadable ??= `${startDate} to ${endDate}`
+    }
     input.deps.db.transaction((tx) => {
       for (const row of rows) {
         tx.insert(daily).values(row).onConflictDoUpdate({
@@ -130,8 +138,20 @@ export async function runRollupJob(
   if (points > 0 && rowsWritten === 0) {
     input.deps.syncState.recordSchemaDrift({
       personId: input.personId, dataType: input.dataType.id, points, nowMs: input.deps.now(),
+      reason: 'points mapped to no rows',
     })
   }
 
-  return { chunks, points, rowsWritten }
+  // A body we could not read at all is the other half, and it is the half a point count cannot
+  // see: zero points is what a stretch of days with no data looks like too. The caller leaves
+  // the cursor where it was when this is non-zero, so the same range is asked for again once
+  // somebody fixes the mapper, rather than being scrolled past and lost at this resolution.
+  if (unreadable > 0) {
+    input.deps.syncState.recordSchemaDrift({
+      personId: input.personId, dataType: input.dataType.id, points, nowMs: input.deps.now(),
+      reason: `${unreadable} of ${chunks} chunks unreadable, first ${firstUnreadable}`,
+    })
+  }
+
+  return { chunks, points, rowsWritten, unreadable }
 }

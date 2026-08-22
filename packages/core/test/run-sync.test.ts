@@ -7,9 +7,17 @@ import { SyncStateStore } from '../src/store/syncState.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { runSync, reachBackTo } from '../src/sync/runSync.ts'
 import { DATA_TYPES, DEFAULT_USER_HORIZON_DAYS, INTRADAY_HORIZON_DAYS, supports } from '../src/api/catalogue.ts'
-import { body } from '../src/testing/payloads.ts'
+import { body, dailyRollupBody } from '../src/testing/payloads.ts'
 import { rawPayloads } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
+
+// A rollup endpoint answers `rollupDataPoints`, a list endpoint answers `dataPoints`. Serving
+// one shape to both endpoints made the stub quietly wrong: the old mapper read a list envelope
+// on a rollup response as zero points, which is indistinguishable from a quiet stretch of days,
+// so nothing complained. It is distinguishable now, and the stub has to be honest about it.
+const emptyFor = (url: unknown) => (
+  String(url).includes(':dailyRollUp') ? dailyRollupBody('totalCalories', []) : body([])
+)
 
 describe('runSync', () => {
   let ctx: TestDatabase
@@ -71,7 +79,7 @@ describe('runSync', () => {
   // ask for and no backfill will either, because the backfill cursor only walks backwards. The
   // high-water mark is what says where the mirror actually stops.
   it('reaches back to the high-water mark when an outage outran the trailing window', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
     const deps = build(fetchMock)
     const nowMs = deps.now()
     const staleMs = nowMs - 30 * DAY_MS
@@ -88,7 +96,7 @@ describe('runSync', () => {
   })
 
   it('still fetches the trailing window when the mark is more recent than it', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
     const deps = build(fetchMock)
     const nowMs = deps.now()
     for (const type of listable()) {
@@ -265,7 +273,7 @@ describe('runSync', () => {
     // the first run only took the trailing window, the mark it then stamps would pin the type
     // there and the account's history before install would never be fetched at all - the 14 and
     // 90 day chunk walk would build exactly one chunk, forever.
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
     const deps = build(fetchMock)
     const rollupCallCount = () =>
       fetchMock.mock.calls.filter((c) => String(c[0]).includes(':dailyRollUp')).length
@@ -292,7 +300,7 @@ describe('runSync', () => {
     // high-water-mark test above does, is what forces the first run to reach back far; a fresh
     // sync with no mark at all already only reaches the trailing window, so a stale mark is
     // needed to exercise reachBackTo's wide branch at all.
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([]), { status: 200 }))
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
     const deps = build(fetchMock)
     const nowMs = deps.now()
     const staleMs = nowMs - 400 * DAY_MS
@@ -313,4 +321,30 @@ describe('runSync', () => {
     expect(afterFirstRun).toBeGreaterThan(10)
     expect(secondRunOnly).toBeLessThan(afterFirstRun / 5)
   })
+  it('leaves the mark alone when a rollup walk could not read what came back', async () => {
+    // The cost of getting this wrong is not a missing log line, it is data. The cursor used to
+    // advance over a renamed envelope because zero rows looks like a stretch of days with no
+    // data, and a rollup type has no backfill pass to come back for them. Refusing the mark
+    // means the same range is asked for again next run, so the backlog drains by itself once
+    // the mapper is fixed.
+    const renamed = JSON.stringify({ rollupDataPointList: [] })
+    const fetchMock = vi.fn().mockImplementation(async (url: unknown) => (
+      String(url).includes(':dailyRollUp')
+        ? new Response(renamed, { status: 200 })
+        : new Response(body([]), { status: 200 })
+    ))
+    const deps = build(fetchMock)
+    const rollupCallCount = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes(':dailyRollUp')).length
+
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+    const firstRun = rollupCallCount()
+    await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+
+    // A stamped mark would make the second run two chunks, the way the horizon test above
+    // asserts. An unstamped one makes it walk the whole horizon again, which is the point.
+    expect(rollupCallCount() - firstRun).toBe(firstRun)
+    expect(deps.syncState.get('alice', 'total-calories')?.lastError).toContain('unreadable')
+  })
+
 })
