@@ -297,6 +297,7 @@ export class SyncRunner {
         if (runDerive({
           db: this.#context.instance.db, queue: this.#context.instance.deriveQueue,
           priority: this.#context.instance.sourcePriority,
+          overrides: this.#context.instance.overrides,
         }).daysDerived === 0) return
       }
       console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)
