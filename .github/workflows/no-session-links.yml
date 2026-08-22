@@ -1,0 +1,77 @@
+name: No session links
+
+# The guarantee behind .githooks/commit-msg. A hook only runs for someone who enabled it, and a
+# public repository cannot assume that of a contributor, so the same rule is checked here where
+# nothing can skip it.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: no-session-links-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Full history: the commit messages under review are the point, and the default shallow
+      # checkout has none of them.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check commit messages
+        # Through the environment rather than interpolated into the script. These values come
+        # from the event payload, and a branch name is attacker controlled on a fork.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -eu
+          if [ -n "${BASE_SHA:-}" ]; then
+            # A pull request: everything it proposes to add.
+            set -- "${BASE_SHA}..${HEAD_SHA}"
+          elif [ -n "${BEFORE_SHA:-}" ] && git rev-parse --quiet --verify "${BEFORE_SHA}^{commit}" > /dev/null 2>&1; then
+            # A push to master: the commits it introduced, and nothing older.
+            set -- "${BEFORE_SHA}..${HEAD_SHA}"
+          else
+            # A first push, or a force push whose previous head is gone: judge the tip alone.
+            set -- -1 "${HEAD_SHA}"
+          fi
+          echo "Scanning: $*"
+          offenders=$(git log --format='%H %s%n%b' "$@" | grep -inE 'claude\.ai/code/session|^[[:space:]]*Claude-Session:' || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::A commit message in this range carries an agent session link."
+            printf '%s\n' "$offenders"
+            echo "Remove the line and amend or rebase. Co-Authored-By trailers are fine."
+            exit 1
+          fi
+          echo "No session links in commit messages."
+
+      # The body is where this rule was first broken, and neither the hook nor a commit scan can
+      # see it: a pull request description is not part of any commit.
+      - name: Check the pull request body
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -eu
+          if printf '%s' "${PR_BODY:-}" | grep -inE 'claude\.ai/code/session'; then
+            echo "::error::This pull request's body carries an agent session link. Edit the description."
+            exit 1
+          fi
+          echo "No session links in the pull request body."
+
+      - name: Check tracked files
+        run: |
+          set -eu
+          # Nothing has ever carried one in file contents, and this is what keeps it that way.
+          if git grep -inE 'claude\.ai/code/session' -- . ':!.github/workflows/no-session-links.yml' ':!.githooks/**'; then
+            echo "::error::A tracked file carries an agent session link."
+            exit 1
+          fi
+          echo "No session links in tracked files."
