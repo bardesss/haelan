@@ -27,6 +27,7 @@ describe('package barrel', () => {
     expect(core.schema.sessionSegments).toBeDefined()
     expect(core.schema.daily).toBeDefined()
     expect(core.schema.syncState).toBeDefined()
+    expect(core.schema.sourcePriority).toBeDefined()
   })
 
   it('exports the crypto primitives', () => {
@@ -130,6 +131,7 @@ describe('package barrel', () => {
     expect(typeof core.metricSpec).toBe('function')
     expect(typeof core.DERIVATION_VERSION).toBe('number')
     expect(typeof core.PROVIDER_SOURCE).toBe('string')
+    expect(typeof core.MERGED_SOURCE).toBe('string')
   })
 
   it('exports the local day and coverage functions', () => {
@@ -150,6 +152,52 @@ describe('package barrel', () => {
   it('exports the actions the catalogue supports', () => {
     expect(Array.isArray(core.ACTIONS)).toBe(true)
     expect(typeof core.supports).toBe('function')
+  })
+
+  describe('M2b: choosing between sources, and the corrections applied while we do', () => {
+    it('exports the priority rule and the merge', () => {
+      expect(typeof core.priorityFrom).toBe('function')
+      expect(typeof core.fallbackOrder).toBe('function')
+      expect(typeof core.DEFAULT_LIST).toBe('string')
+      expect(typeof core.UNRANKED_BASE).toBe('number')
+      expect(typeof core.mergeDay).toBe('function')
+      expect(typeof core.encodeMix).toBe('function')
+    })
+
+    it('exports the target key builders and their parsers', () => {
+      expect(typeof core.sampleTarget).toBe('function')
+      expect(typeof core.sessionTarget).toBe('function')
+      expect(typeof core.dayMetricTarget).toBe('function')
+      expect(typeof core.parseSampleTarget).toBe('function')
+      expect(typeof core.parseSessionTarget).toBe('function')
+      expect(typeof core.parseDayMetricTarget).toBe('function')
+    })
+
+    it('exports the override application functions and the session grouping', () => {
+      expect(typeof core.applyToSamples).toBe('function')
+      expect(typeof core.applyToDay).toBe('function')
+      expect(typeof core.applyToSessions).toBe('function')
+      expect(typeof core.excludedMetrics).toBe('function')
+      expect(typeof core.groupSessions).toBe('function')
+      expect(typeof core.DEFAULT_OVERLAP_RATIO).toBe('number')
+    })
+
+    it('exports the two stores M3 writes priority and overrides through', () => {
+      expect(typeof core.SourcePriorityStore).toBe('function')
+      expect(typeof core.OverrideStore).toBe('function')
+    })
+
+    it('is callable, not merely present: a target key round trips and a rank comes back', () => {
+      const key = core.sampleTarget({ source: 'watch', metric: 'steps', utcMs: 1000 })
+      expect(core.parseSampleTarget(key)).toEqual({ source: 'watch', metric: 'steps', utcMs: 1000 })
+
+      const priority = core.priorityFrom({
+        lists: new Map([['steps', ['phone']]]),
+        sources: [{ id: 'watch', kind: 'device' }, { id: 'phone', kind: 'app' }],
+      })
+      expect(priority.rank('steps', 'phone')).toBe(0)
+      expect(priority.rank('steps', 'watch')).toBeGreaterThanOrEqual(core.UNRANKED_BASE)
+    })
   })
 
   it('is callable, not merely present: setupStep answers on a real empty instance', () => {
