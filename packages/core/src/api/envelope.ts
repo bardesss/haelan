@@ -10,7 +10,8 @@
  */
 
 export type Envelope =
-  | { readable: true, points: unknown[] }
+  /** `body` is the parsed object, so a caller reading a sibling such as a page token does not parse twice. */
+  | { readable: true, points: unknown[], body: Record<string, unknown> }
   | { readable: false, reason: string }
 
 /**
@@ -41,17 +42,39 @@ export function readEnvelope(body: string, pointsKey: string): Envelope {
 
   const object = parsed as Record<string, unknown>
   const points = object[pointsKey]
-  if (Array.isArray(points)) return { readable: true, points }
-  if (points !== undefined) return unreadable(`${pointsKey} is present but is not an array`)
+  if (Array.isArray(points)) return { readable: true, points, body: object }
+  // An explicit null says no points without ambiguity. proto3 JSON does not emit it, but a
+  // transcoding proxy can, and stalling a cursor on it would be a false positive nobody would
+  // call a rename.
+  if (points !== undefined && points !== null) {
+    return unreadable(`${pointsKey} is present but is not an array`)
+  }
 
   // The points key is absent, which is ambiguous on its own. proto3 JSON omits a repeated field
   // that is empty, so an empty body is the expected shape of a window with no data, and calling
-  // that drift would cry wolf on every quiet day. What is not ambiguous is a body carrying
-  // content under names we do not know: that is a field that got renamed, which is precisely
-  // the case zero-point counting could never see.
-  const unknown = Object.keys(object).filter((key) => !BENIGN_SIBLINGS.includes(key))
-  if (unknown.length > 0) {
-    return unreadable(`no ${pointsKey}, but the body carried ${unknown.join(', ')}`)
+  // that drift would cry wolf on every quiet day.
+  //
+  // What is not ambiguous is a list of structured points sitting under a name we do not know:
+  // that is the field having moved. The three qualifiers each rule out a false positive, and a
+  // false positive is expensive here because it stalls the cursor silently.
+  //
+  //   a list, because a scalar sibling like minStartTimeNs is a new field, not a moved one
+  //   of objects, because an id echo is a list of strings and a data point never is
+  //   non-empty, because a rename on a day with no data costs nothing and is caught the first
+  //   busy day, which is the first day anything is at stake
+  const moved = Object.keys(object).filter((key) => (
+    !BENIGN_SIBLINGS.includes(key) && looksLikePoints(object[key])
+  ))
+  if (moved.length > 0) {
+    return unreadable(`no ${pointsKey}, but the body carried ${moved.join(', ')}`)
   }
-  return { readable: true, points: [] }
+  return { readable: true, points: [], body: object }
+}
+
+function looksLikePoints(value: unknown): boolean {
+  return Array.isArray(value)
+    && value.length > 0
+    && typeof value[0] === 'object'
+    && value[0] !== null
+    && !Array.isArray(value[0])
 }

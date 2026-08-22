@@ -180,10 +180,18 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   // A window we could not read is not a window with no data. Advancing over it marks days as
   // synced that nothing ever read, and intraday samples only stay fetchable for a recent window,
   // so those days are gone at that resolution rather than merely late.
-  if (unreadableWindows > 0) {
+  //
+  // Both kinds of drift go in one record because last_error holds one string. Written
+  // separately, whichever ran second would erase the other, and the two need different fixes:
+  // a moved value path against an envelope this code can no longer read at all.
+  const drifted = [
+    unreadableWindows > 0 ? `${unreadableWindows} unreadable pages across ${windows.length} windows` : null,
+    points > 0 && rowsWritten === 0 && !t.mappingDeferred ? `${points} points fetched and none mapped to a row` : null,
+  ].filter((reason) => reason !== null)
+  if (drifted.length > 0) {
     deps.syncState.recordSchemaDrift({
       personId: input.personId, dataType: t.id, points, nowMs: deps.now(),
-      reason: `${unreadableWindows} of ${windows.length} windows unreadable`,
+      reason: drifted.join('; '),
     })
   }
 
@@ -201,11 +209,6 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   // points parsed, and every one of them was skipped by a mapper that could not find its field.
   // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
   // Types whose mapping is deferred are excluded, because writing no rows is their design.
-  if (points > 0 && rowsWritten === 0 && !t.mappingDeferred) {
-    deps.syncState.recordSchemaDrift({
-      personId: input.personId, dataType: t.id, points, nowMs: deps.now(),
-    })
-  }
 
   return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
 }

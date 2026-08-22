@@ -244,7 +244,7 @@ describe('runRollupJob', () => {
       archive: {
         getBody: (personId: string, id: string) => (
           id === 'renamed'
-            ? JSON.stringify({ rollupDataPointList: [] })
+            ? JSON.stringify({ rollupDataPointList: [{ civilStartTime: { date: {} } }] })
             : good.archive.getBody(personId, id)
         ),
       },

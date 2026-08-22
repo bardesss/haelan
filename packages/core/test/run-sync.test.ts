@@ -327,7 +327,7 @@ describe('runSync', () => {
     // data, and a rollup type has no backfill pass to come back for them. Refusing the mark
     // means the same range is asked for again next run, so the backlog drains by itself once
     // the mapper is fixed.
-    const renamed = JSON.stringify({ rollupDataPointList: [] })
+    const renamed = JSON.stringify({ rollupDataPointList: [{ civilStartTime: { date: {} } }] })
     const fetchMock = vi.fn().mockImplementation(async (url: unknown) => (
       String(url).includes(':dailyRollUp')
         ? new Response(renamed, { status: 200 })
@@ -341,6 +341,8 @@ describe('runSync', () => {
     const firstRun = rollupCallCount()
     await runSync({ personIds: ['alice'], trailingDays: 1, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
 
+    // Guarding the comparison below, which zero would satisfy trivially.
+    expect(firstRun).toBeGreaterThan(0)
     // A stamped mark would make the second run two chunks, the way the horizon test above
     // asserts. An unstamped one makes it walk the whole horizon again, which is the point.
     expect(rollupCallCount() - firstRun).toBe(firstRun)

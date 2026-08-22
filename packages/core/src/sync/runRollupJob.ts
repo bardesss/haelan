@@ -135,21 +135,21 @@ export async function runRollupJob(
   // could not find its field. A response with no points at all is not this case, because days
   // with no data are omitted rather than zeroed, so an empty walk is what a person with no
   // device looks like. Left unreported, a renamed value path is a permanent silent gap.
-  if (points > 0 && rowsWritten === 0) {
-    input.deps.syncState.recordSchemaDrift({
-      personId: input.personId, dataType: input.dataType.id, points, nowMs: input.deps.now(),
-      reason: 'points mapped to no rows',
-    })
-  }
-
   // A body we could not read at all is the other half, and it is the half a point count cannot
   // see: zero points is what a stretch of days with no data looks like too. The caller leaves
   // the cursor where it was when this is non-zero, so the same range is asked for again once
   // somebody fixes the mapper, rather than being scrolled past and lost at this resolution.
-  if (unreadable > 0) {
+  //
+  // One record for both, in the same order runJob uses: last_error holds one string, and
+  // written separately whichever ran second would erase the other.
+  const drifted = [
+    unreadable > 0 ? `${unreadable} of ${chunks} chunks unreadable, first ${firstUnreadable}` : null,
+    points > 0 && rowsWritten === 0 ? `${points} points fetched and none mapped to a row` : null,
+  ].filter((reason) => reason !== null)
+  if (drifted.length > 0) {
     input.deps.syncState.recordSchemaDrift({
       personId: input.personId, dataType: input.dataType.id, points, nowMs: input.deps.now(),
-      reason: `${unreadable} of ${chunks} chunks unreadable, first ${firstUnreadable}`,
+      reason: drifted.join('; '),
     })
   }
 

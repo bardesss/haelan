@@ -197,13 +197,10 @@ export class HealthClient {
       if (envelope.readable) pointCount += envelope.points.length
       else unreadablePages += 1
 
-      let nextPageToken: string | undefined
-      try {
-        nextPageToken = (JSON.parse(body) as { nextPageToken?: string }).nextPageToken
-      } catch {
-        nextPageToken = undefined
-      }
-      pageToken = nextPageToken
+      // A body we could not read carries no token we would trust, so pagination ends here and
+      // the window is reported unreadable rather than followed into a shape we do not know.
+      const token = envelope.readable ? envelope.body['nextPageToken'] : undefined
+      pageToken = typeof token === 'string' ? token : undefined
     } while (pageToken)
 
     return { payloadIds, pointCount, unreadablePages, pagesFetched, attempts, lastRetriedStatus }

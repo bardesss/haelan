@@ -67,18 +67,54 @@ describe('readEnvelope', () => {
     expect(read({ rollupDataPoints: [{ a: 1 }] }, 'dataPoints').readable).toBe(false)
   })
 
-  it('names every unrecognised key in the reason, because that is what a person needs', () => {
-    const envelope = read({ dataPointList: [], somethingElse: 1 })
+  it('names every moved key in the reason, because that is what a person needs', () => {
+    const envelope = read({ dataPointList: [{ a: 1 }], otherPoints: [{ b: 2 }], count: 3 })
     expect(envelope.readable === false && envelope.reason).toContain('dataPointList')
-    expect(envelope.readable === false && envelope.reason).toContain('somethingElse')
+    expect(envelope.readable === false && envelope.reason).toContain('otherPoints')
+    // `count` is a scalar, so it is a sibling rather than a candidate, and naming it would send
+    // whoever reads this record looking in the wrong place.
+    expect(envelope.readable === false && envelope.reason).not.toContain('count')
   })
 
   it('does not count a benign sibling as evidence of a rename', () => {
     // A page token beside a renamed field must not make the reason misleading, and a page token
     // on its own must not trip the guard at all.
     expect(BENIGN_SIBLINGS).toContain('nextPageToken')
-    const envelope = read({ nextPageToken: 'abc', dataPointList: [] })
+    const envelope = read({ nextPageToken: 'abc', dataPointList: [{ value: 1 }] })
     expect(envelope.readable).toBe(false)
     expect(envelope.readable === false && envelope.reason).not.toContain('nextPageToken')
   })
+
+  it('does not call a scalar sibling a rename', () => {
+    // Google may add fields to a response whenever it likes, and the guard only ever fires on a
+    // quiet day, when the points key is absent. A sibling that is not a list of points must not
+    // stall the cursor: the cost of a false positive here is a sync that freezes silently.
+    expect(read({ minStartTimeNs: '123', maxEndTimeNs: '456' }).readable).toBe(true)
+  })
+
+  it('does not call a list of ids a rename', () => {
+    // Google Fit's Dataset carried dataSourceId beside its points. An echo of that shape is a
+    // list of strings; a renamed points array is a list of structured points. That difference
+    // is what separates a new sibling field from a field that moved.
+    expect(read({ dataSourceIds: ['abc', 'def'] }).readable).toBe(true)
+  })
+
+  it('still calls a list of structured points under an unknown name a rename', () => {
+    const envelope = read({ dataPointList: [{ value: 1 }] })
+    expect(envelope.readable).toBe(false)
+  })
+
+  it('lets an empty list under an unknown name pass, because it carries nothing to lose', () => {
+    // A rename that shows up on a day with no data costs nothing: there was no data to skip.
+    // It is caught the first busy day, which is the first day anything is at stake.
+    expect(read({ dataPointList: [] }).readable).toBe(true)
+  })
+
+  it('reads an explicitly null points key as no points rather than as broken', () => {
+    // proto3 JSON does not emit this, but a transcoding proxy can, and null says no points
+    // without ambiguity. Stalling a cursor on it would be a false positive nobody would call
+    // a rename.
+    expect(read({ dataPoints: null }).readable).toBe(true)
+  })
+
 })

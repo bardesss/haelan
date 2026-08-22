@@ -100,8 +100,11 @@ what the high water mark means when a window in the middle of a job failed.
 a window the person has no data in, which is most windows, and a body whose shape changed under
 us. `readEnvelope` in `src/api/envelope.ts` separates them and both sync paths run through it. An
 empty object stays readable, because proto3 JSON omits a repeated field that is empty, so that is
-what a genuinely quiet window looks like; a body carrying content under names we do not know is a
-rename, and that is the case a point count could never see.
+what a genuinely quiet window looks like. What marks a rename is a **non-empty list of objects
+under a name we do not know**, and each qualifier rules out a false positive: a scalar sibling is
+a new field rather than a moved one, a list of strings is an id echo and a data point never is,
+and an empty list means the day had nothing to lose, so the rename is caught on the first busy
+day instead. A false positive here stalls the cursor silently, which is why the rule is narrow.
 
 An unreadable window records schema drift and, more importantly, withholds the mark: `runJob`
 skips `recordSuccess`, `runSync` skips it for a rollup walk, and `runBackfill` stops its backwards
