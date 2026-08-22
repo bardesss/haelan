@@ -30,7 +30,7 @@ export interface RollupJobDeps {
   /** Narrowed to the one thing the walk records itself. SyncStateStore satisfies it. */
   syncState: {
     recordSchemaDrift: (
-      input: { personId: string, dataType: string, points: number, nowMs: number },
+      input: { personId: string, dataType: string, points: number, nowMs: number, reason?: string },
     ) => void
   }
   now: () => number
@@ -80,12 +80,14 @@ const civilDaysBetween = (fromDate: string, toDate: string): number =>
  */
 export async function runRollupJob(
   input: RollupJobInput,
-): Promise<{ chunks: number, points: number, rowsWritten: number }> {
+): Promise<{ chunks: number, points: number, rowsWritten: number, unreadable: number }> {
   const capDays = rollupRangeCapDays(input.dataType)
   const fromDate = localDate(input.fromMs, input.timezone)
   let chunks = 0
   let points = 0
   let rowsWritten = 0
+  let unreadable = 0
+  let firstUnreadable: string | null = null
 
   // Backwards from the most recent day, so an interrupted walk has already collected the
   // history anyone is most likely to open first.
@@ -109,6 +111,12 @@ export async function runRollupJob(
     })
     const rows = mapped.rows
     points += mapped.points
+    if (!mapped.readable) {
+      // Counted per chunk rather than folded into the point total, because points are summed
+      // across the walk and one unreadable chunk among readable ones would vanish into it.
+      unreadable += 1
+      firstUnreadable ??= `${startDate} to ${endDate}`
+    }
     input.deps.db.transaction((tx) => {
       for (const row of rows) {
         tx.insert(daily).values(row).onConflictDoUpdate({
@@ -127,11 +135,23 @@ export async function runRollupJob(
   // could not find its field. A response with no points at all is not this case, because days
   // with no data are omitted rather than zeroed, so an empty walk is what a person with no
   // device looks like. Left unreported, a renamed value path is a permanent silent gap.
-  if (points > 0 && rowsWritten === 0) {
+  // A body we could not read at all is the other half, and it is the half a point count cannot
+  // see: zero points is what a stretch of days with no data looks like too. The caller leaves
+  // the cursor where it was when this is non-zero, so the same range is asked for again once
+  // somebody fixes the mapper, rather than being scrolled past and lost at this resolution.
+  //
+  // One record for both, in the same order runJob uses: last_error holds one string, and
+  // written separately whichever ran second would erase the other.
+  const drifted = [
+    unreadable > 0 ? `${unreadable} of ${chunks} chunks unreadable, first ${firstUnreadable}` : null,
+    points > 0 && rowsWritten === 0 ? `${points} points fetched and none mapped to a row` : null,
+  ].filter((reason) => reason !== null)
+  if (drifted.length > 0) {
     input.deps.syncState.recordSchemaDrift({
       personId: input.personId, dataType: input.dataType.id, points, nowMs: input.deps.now(),
+      reason: drifted.join('; '),
     })
   }
 
-  return { chunks, points, rowsWritten }
+  return { chunks, points, rowsWritten, unreadable }
 }

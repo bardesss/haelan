@@ -440,4 +440,40 @@ describe('runJob', () => {
     expect(queue.size()).toBe(0)
     expect(ctx.db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(0)
   })
+  it('withholds the high-water mark when a window came back unreadable', async () => {
+    // The list half of the same defect. A renamed dataPoints array counted zero points and
+    // wrote no rows, which is what a quiet day looks like, so the mark advanced over it. Sample
+    // level history is the part that cannot be recovered later: the API only retains intraday
+    // data for a recent window, so a day scrolled past is gone at that resolution.
+    const renamed = JSON.stringify({ dataPointList: [{ a: 1 }] })
+    const fetchMock = vi.fn<typeof globalThis.fetch>().mockImplementation(
+      async () => new Response(renamed, { status: 200 }),
+    )
+    const deps = build(fetchMock)
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('steps')!, timezone: AMS,
+      fromMs: Date.UTC(2026, 7, 18), toMs: Date.UTC(2026, 7, 19), deps,
+    })
+
+    expect(result.unreadableWindows).toBeGreaterThan(0)
+    expect(deps.syncState.get('p1', 'steps')?.highWaterMs ?? null).toBeNull()
+    expect(deps.syncState.get('p1', 'steps')?.lastError).toContain('unreadable')
+  })
+
+  it('still stamps the mark for a window that was simply quiet', async () => {
+    // The other side of it. An empty body is an ordinary answer and must not stall the cursor,
+    // or a person with a quiet day would never sync past it.
+    const fetchMock = vi.fn<typeof globalThis.fetch>().mockImplementation(
+      async () => new Response(JSON.stringify({}), { status: 200 }),
+    )
+    const deps = build(fetchMock)
+    const result = await runJob({
+      personId: 'p1', dataType: dataTypeById('steps')!, timezone: AMS,
+      fromMs: Date.UTC(2026, 7, 18), toMs: Date.UTC(2026, 7, 19), deps,
+    })
+
+    expect(result.unreadableWindows).toBe(0)
+    expect(deps.syncState.get('p1', 'steps')?.highWaterMs).toBeGreaterThan(0)
+  })
+
 })

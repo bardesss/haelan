@@ -68,6 +68,8 @@ export interface JobInput {
 export interface JobResult {
   windows: number
   points: number
+  /** Windows whose body was not a shape this code knows. Non-zero withholds the mark. */
+  unreadableWindows: number
   rowsWritten: number
   skipped: 'revoked' | 'unsupported' | null
 }
@@ -86,13 +88,14 @@ export async function runJob(input: JobInput): Promise<JobResult> {
     return result
   }
 
-  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, skipped: null }
+  const empty: JobResult = { windows: 0, points: 0, rowsWritten: 0, unreadableWindows: 0, skipped: null }
   if (!supports(t, 'list')) return { ...empty, skipped: 'unsupported' }
 
   report({ kind: 'job_started', personId: input.personId, dataType: t.id })
 
   const windows = dayWindows({ fromMs: input.fromMs, toMs: input.toMs, timezone: input.timezone })
   let points = 0
+  let unreadableWindows = 0
   let rowsWritten = 0
   let highWaterMs = 0
 
@@ -104,6 +107,7 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         windowStartMs: window.startMs, windowEndMs: window.endMs,
       })
       points += listed.pointCount
+      unreadableWindows += listed.unreadablePages
 
       // Recorded here, at the point the fetch finished, rather than saved up for the end of the
       // job. last_error holds one string, and a failure recorded later in this same job has to
@@ -163,17 +167,35 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       deps.sources.forget(input.personId)
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
-      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, skipped: 'revoked' })
+      if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'revoked' })
       deps.syncState.recordFailure({
         personId: input.personId, dataType: t.id,
         error: classify(error),
         nowMs: deps.now(),
       })
-      return finish({ windows: windows.length, points, rowsWritten, skipped: null })
+      return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
     }
   }
 
-  if (highWaterMs > 0) {
+  // A window we could not read is not a window with no data. Advancing over it marks days as
+  // synced that nothing ever read, and intraday samples only stay fetchable for a recent window,
+  // so those days are gone at that resolution rather than merely late.
+  //
+  // Both kinds of drift go in one record because last_error holds one string. Written
+  // separately, whichever ran second would erase the other, and the two need different fixes:
+  // a moved value path against an envelope this code can no longer read at all.
+  const drifted = [
+    unreadableWindows > 0 ? `${unreadableWindows} unreadable pages across ${windows.length} windows` : null,
+    points > 0 && rowsWritten === 0 && !t.mappingDeferred ? `${points} points fetched and none mapped to a row` : null,
+  ].filter((reason) => reason !== null)
+  if (drifted.length > 0) {
+    deps.syncState.recordSchemaDrift({
+      personId: input.personId, dataType: t.id, points, nowMs: deps.now(),
+      reason: drifted.join('; '),
+    })
+  }
+
+  if (highWaterMs > 0 && unreadableWindows === 0) {
     const nowMs = deps.now()
     // Clamped, because today's window ends at the *next* local midnight and the mark would
     // otherwise sit up to a day ahead of now. A mark in the future is a claim to have synced
@@ -187,13 +209,8 @@ export async function runJob(input: JobInput): Promise<JobResult> {
   // points parsed, and every one of them was skipped by a mapper that could not find its field.
   // Left unreported, a rename upstream reads exactly like a person who stopped wearing a device.
   // Types whose mapping is deferred are excluded, because writing no rows is their design.
-  if (points > 0 && rowsWritten === 0 && !t.mappingDeferred) {
-    deps.syncState.recordSchemaDrift({
-      personId: input.personId, dataType: t.id, points, nowMs: deps.now(),
-    })
-  }
 
-  return finish({ windows: windows.length, points, rowsWritten, skipped: null })
+  return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: null })
 }
 
 // last_error's first token is documented as the failure's class, so an unclassified throw from

@@ -88,6 +88,12 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     const after = deps.syncState.get(input.personId, t.id)?.consecutiveFailures ?? 0
     if (after > before) return done('error', false, windowsFetched, rowsWritten)
 
+    // Drift is not a failure, so the counter above never moves for it, and a backfill is one
+    // shot: it would walk the whole horizon against bodies it cannot read, advance the cursor
+    // over every one of them, and then declare the history collected. Stopping leaves the
+    // cursor where the last readable window put it.
+    if (result.unreadableWindows > 0) return done('error', false, windowsFetched, rowsWritten)
+
     cursorMs = window.startMs
     deps.syncState.setBackfillCursor({
       personId: input.personId, dataType: t.id, cursorMs, nowMs: deps.now(),

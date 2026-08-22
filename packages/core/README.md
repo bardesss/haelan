@@ -96,6 +96,25 @@ day is retried rather than skipped. Continuing past a window that drifted, which
 names, is deferred to M1d along with the backfill it matters for, because it needs a decision about
 what the high water mark means when a window in the middle of a job failed.
 
+**A body we cannot read holds the cursor back.** Zero points used to mean two opposite things:
+a window the person has no data in, which is most windows, and a body whose shape changed under
+us. `readEnvelope` in `src/api/envelope.ts` separates them and both sync paths run through it. An
+empty object stays readable, because proto3 JSON omits a repeated field that is empty, so that is
+what a genuinely quiet window looks like. What marks a rename is a **non-empty list of objects
+under a name we do not know**, and each qualifier rules out a false positive: a scalar sibling is
+a new field rather than a moved one, a list of strings is an id echo and a data point never is,
+and an empty list means the day had nothing to lose, so the rename is caught on the first busy
+day instead. A false positive here stalls the cursor silently, which is why the rule is narrow.
+
+An unreadable window records schema drift and, more importantly, withholds the mark: `runJob`
+skips `recordSuccess`, `runSync` skips it for a rollup walk, and `runBackfill` stops its backwards
+walk rather than marching to the horizon against bodies it cannot read. The backfill needs its own
+guard because drift is not a failure, so the consecutive failure counter it otherwise stops on
+never moves, and a backfill is one shot. Holding the cursor means the same range is asked for
+again next run, so the backlog drains itself once the mapper is fixed. That matters more here than
+it would elsewhere: the API retains intraday samples only for a recent window, so a day the cursor
+scrolls past is unavailable at that resolution rather than merely late.
+
 **A failure stops one job, not the household.** A revoked person pauses alone and the rest keep
 syncing, and a person id with no row is reported back in the run's `unknownPersonIds` rather than
 thrown out of the loop. `sync_state` has no separate column for a failure's class; `HaelanError`'s

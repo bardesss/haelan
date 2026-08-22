@@ -262,4 +262,28 @@ describe('HealthClient', () => {
     })).rejects.toThrow(/window must be ordered/)
     expect(fetchMock).not.toHaveBeenCalled()
   })
+  it('counts an unreadable page, so a renamed dataPoints array is visible', async () => {
+    const renamed = JSON.stringify({ dataPointList: [{ a: 1 }] })
+    const fetchMock = vi.fn().mockResolvedValue(new Response(renamed, { status: 200 }))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    expect(result.unreadablePages).toBe(1)
+    expect(result.pointCount).toBe(0)
+  })
+
+  it('counts an empty page as readable, because a quiet window is an ordinary answer', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    expect(result.unreadablePages).toBe(0)
+    expect(result.pointCount).toBe(0)
+  })
+
+  it('counts an HTML body arriving with status 200 as unreadable rather than empty', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('<html><body>502 Bad Gateway</body></html>', { status: 200 }))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    const result = await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    expect(result.unreadablePages).toBe(1)
+  })
+
 })
