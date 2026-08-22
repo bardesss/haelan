@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { resolveChart, STAGE_KEYS, SCALE_KEYS } from '../src/chart.js'
-import { resolveSemantic, SURFACE_KEYS, TEXT_KEYS, THEMES } from '../src/semantic.js'
-import { deltaE, toLab } from '../src/color/convert.js'
+import { resolveChart, CHART_KEYS, STAGE_KEYS, SCALE_KEYS, type ChartToken } from '../src/chart.js'
+import { resolveSemantic, SEMANTIC_KEYS, SURFACE_KEYS, TEXT_KEYS, THEMES, type SemanticToken } from '../src/semantic.js'
+import { deltaE, toLab, hexToRgb, rgbToHex } from '../src/color/convert.js'
 import { simulate, minSeparation, CVD_KINDS } from '../src/color/cvd.js'
 import { contrast } from '../src/color/contrast.js'
 
@@ -17,6 +17,30 @@ const TEXT_MIN: Record<(typeof TEXT_KEYS)[number], number> = {
   'text-secondary': 4.5,
   'text-muted': 4.5,
   'text-faint': 4.5,
+}
+
+// app.css paints these on text: the active rail item and current wizard step
+// (--accent-soft), the delta chips and form errors (--positive/--negative). Text
+// answers to 4.5:1, not the 3:1 non-text floor - holding a tone token to the
+// non-text floor while it renders 13.5px type is how a real failure ships green.
+const TEXT_TONE_KEYS = ['accent-soft', 'positive', 'negative'] as const satisfies readonly SemanticToken[]
+const NON_TEXT_KEYS = ['accent', 'focus'] as const satisfies readonly SemanticToken[]
+
+// --accent-soft never sits on a bare surface: every rule that uses it also tints
+// the background with --accent. Asserting against the untinted surface would
+// measure a background that never renders, so the test composites the same mix
+// the stylesheet does (color-mix in srgb over the surface).
+const ACCENT_TINT = 0.13
+
+// Mirrors OPACITY in apps/web/src/charts/base.ts. The band tokens are never
+// painted at full strength, so full strength is not what a floor should measure.
+const BASELINE_BAND_OPACITY = 0.5
+const RANGE_BAND_OPACITY = 0.22
+
+function tint(over: string, withColor: string, ratio: number): string {
+  const [br, bg, bb] = hexToRgb(over)
+  const [fr, fg, fb] = hexToRgb(withColor)
+  return rgbToHex([br + (fr - br) * ratio, bg + (fg - bg) * ratio, bb + (fb - bb) * ratio])
 }
 
 function pairs(values: string[]): [string, string][] {
@@ -54,9 +78,67 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
   // whatever it is drawn on. `focus` is included even though nothing consumes it
   // yet, because a focus ring is exactly this kind of mark and the milestone that
   // builds one should inherit a constrained token rather than an unchecked one.
-  it.each(['accent', 'focus', 'positive', 'negative'] as const)('meets non-text contrast for %s on every surface', (token) => {
+  it.each(NON_TEXT_KEYS)('meets non-text contrast for %s on every surface', (token) => {
     for (const surface of SURFACE_KEYS) {
       expect(contrast(s[token], s[surface]), `${token} on ${surface}`).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  it.each(TEXT_TONE_KEYS)('meets WCAG text contrast for %s on every surface it labels', (token) => {
+    for (const surface of SURFACE_KEYS) {
+      // The accent tint travels with the token; the other tones are painted on
+      // the bare surface (delta chips on the inset, form errors on the card).
+      const background = token === 'accent-soft' ? tint(s[surface], s.accent, ACCENT_TINT) : s[surface]
+      expect(contrast(s[token], background), `${token} on ${surface}`).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  // Good and bad are the one deliberately red/green pair in the system, in a
+  // suite that exists because red and green collapse. The delta chip carries a
+  // direction arrow too, but a redundant channel elsewhere is not a licence for
+  // the colours themselves to be confusable.
+  it('keeps the positive and negative tones separable under every simulation', () => {
+    expect(minSeparation(s.positive, s.negative), 'positive vs negative').toBeGreaterThanOrEqual(MIN_STATE)
+  })
+
+  // Stage separation says the four stages are told apart from each other; it says
+  // nothing about whether any of them can be seen at all. Hypnogram bars are not
+  // a tiled band - each is centred in its own lane at 45% of the lane height
+  // (Hypnogram.tsx), so card shows above and below every bar and each is an
+  // isolated mark answering to the WCAG 1.4.11 floor. Two stages cannot meet it
+  // from their fill: dark stage-deep measures 1.77 against its card and light
+  // stage-rem 1.36, and lifting either means abandoning "deeper sleep, deeper
+  // blue" (spec section 17), which is the thing that makes the ramp readable in
+  // the first place. The marks are outlined instead (stage.ts, stageMark), so
+  // what this layer has to guarantee is the outline colour - and it is asserted
+  // here rather than beside the chart because the guarantee is a property of the
+  // token, and a palette change is what would quietly withdraw it.
+  it('holds the stage outline colour to the non-text floor against the card', () => {
+    expect(contrast(chart.axis, s['surface-card']), 'axis (stage outline) vs surface-card').toBeGreaterThanOrEqual(3)
+  })
+
+  // The two washes. Neither is a mark in its own right - both are quiet fills
+  // behind the data - so they answer to "actually a different colour from the
+  // card", the same floor the border and the tooltip answer to, and they are
+  // measured as composited rather than at full strength because neither is ever
+  // painted at full strength.
+  it('draws the baseline band as a band rather than as bare card', () => {
+    const band = tint(s['surface-card'], chart['band-baseline'], BASELINE_BAND_OPACITY)
+    expect(deltaE(band, s['surface-card']), 'baseline band vs surface-card').toBeGreaterThanOrEqual(5)
+  })
+
+  it('draws the heart-rate range band as a band rather than as bare card', () => {
+    const band = tint(s['surface-card'], chart['stage-light'], RANGE_BAND_OPACITY)
+    expect(deltaE(band, s['surface-card']), 'range band vs surface-card').toBeGreaterThanOrEqual(5)
+  })
+
+  // What a band must never do is swallow the series drawn on top of it. Stages
+  // are absent here on purpose: a hypnogram has no baseline, and the two are
+  // never drawn on the same chart.
+  it('keeps both series legible where they cross the baseline band', () => {
+    const band = tint(s['surface-card'], chart['band-baseline'], BASELINE_BAND_OPACITY)
+    for (const token of ['series', 'series-alt'] as const) {
+      expect(contrast(chart[token], band), `${token} vs baseline band`).toBeGreaterThanOrEqual(3)
     }
   })
 
@@ -128,5 +210,30 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
 
   it('keeps the low end of the sequential scale visible as a cell rather than as bare card', () => {
     expect(deltaE(scale[0]!, s['surface-card']), 'scale-1 vs surface-card').toBeGreaterThanOrEqual(10)
+  })
+})
+
+// The suite's coverage used to end wherever someone stopped typing token names:
+// `accent-soft` coloured the navigation and `band-baseline` backed every chart,
+// and neither appeared in a single assertion. This guard does not prove a token
+// is well tested - it proves nobody added one without deciding. A new token in
+// semantic.ts or chart.ts fails here until it is listed, and listing it without
+// writing an assertion is then a deliberate act rather than an oversight.
+describe('assertion coverage', () => {
+  const ASSERTED_SEMANTIC: readonly SemanticToken[] = [
+    ...SURFACE_KEYS, ...TEXT_KEYS, ...TEXT_TONE_KEYS, ...NON_TEXT_KEYS, 'border-subtle',
+  ]
+  const ASSERTED_CHART: readonly ChartToken[] = [
+    ...STAGE_KEYS, ...SCALE_KEYS,
+    'series', 'series-alt', 'grid', 'axis', 'band-baseline',
+    'state-excluded', 'state-no-data', 'tooltip-bg',
+  ]
+
+  it('holds every semantic token to at least one assertion', () => {
+    expect([...SEMANTIC_KEYS].sort()).toEqual([...ASSERTED_SEMANTIC].sort())
+  })
+
+  it('holds every chart token to at least one assertion', () => {
+    expect([...CHART_KEYS].sort()).toEqual([...ASSERTED_CHART].sort())
   })
 })
