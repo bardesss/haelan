@@ -1,7 +1,10 @@
 import { createServer } from 'node:http'
 import type { Server } from 'node:http'
 import type { DataType } from '@haelan/core'
-import { SCOPES, body, dailyPoint, dataTypeById, intervalPoint, samplePoint, sleepPoint, supports } from '@haelan/core'
+import {
+  SCOPES, body, dailyPoint, dailyRollupBody, dataTypeById, intervalPoint, samplePoint,
+  sleepPoint, supports,
+} from '@haelan/core'
 
 export interface StubGoogle {
   origin: string
@@ -65,6 +68,18 @@ function pointFor(id: string): Record<string, unknown> | null {
   })
 }
 
+// The rollup endpoint answers a different envelope: rollupDataPoints, not dataPoints. Answering
+// it with a list shaped body maps to nothing, which the walk now records as schema drift, and
+// leaves the end to end run with no provider rows to assert against. Built from the catalogue's
+// own payloadKey and valuePath for the same reason pointFor is.
+function rollupBodyFor(id: string): string | null {
+  const type = dataTypeById(id)
+  if (!type || !supports(type, 'dailyRollUp')) return null
+  const value = type.valuePath.split('.')
+    .reduceRight<unknown>((acc, key) => ({ [key]: acc }), 7) as Record<string, unknown>
+  return dailyRollupBody(type.payloadKey, [{ date: DATE, value }])
+}
+
 const typeIdFrom = (url: string): string =>
   url.match(/\/dataTypes\/([^/]+)\/dataPoints/)?.[1] ?? ''
 
@@ -89,6 +104,11 @@ export async function startStubGoogle(): Promise<StubGoogle> {
 
     authHeaders.push(request.headers.authorization)
     if (url.startsWith('/v4/users/me/profile')) return json(200, { displayName: 'Bartus' })
+    if (url.includes('/dataPoints:dailyRollUp')) {
+      const rollup = rollupBodyFor(typeIdFrom(url))
+      return response.writeHead(200, { 'content-type': 'application/json' })
+        && response.end(rollup ?? JSON.stringify({ rollupDataPoints: [] }))
+    }
     if (url.includes('/dataPoints')) {
       const point = pointFor(typeIdFrom(url))
       return response.writeHead(200, { 'content-type': 'application/json' })

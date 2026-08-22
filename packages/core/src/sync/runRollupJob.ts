@@ -27,6 +27,12 @@ export interface RollupJobDeps {
   db: Database
   client: RollupClient
   archive: { getBody: (personId: string, payloadId: string) => string }
+  /** Narrowed to the one thing the walk records itself. SyncStateStore satisfies it. */
+  syncState: {
+    recordSchemaDrift: (
+      input: { personId: string, dataType: string, points: number, nowMs: number },
+    ) => void
+  }
   now: () => number
   /**
    * Optional, the same interface JobDeps carries. runJob applies it to every list window; a
@@ -72,10 +78,13 @@ const civilDaysBetween = (fromDate: string, toDate: string): number =>
  * It marks nothing dirty. These rows are ingested rather than derived, which is the same reason
  * `runDerive` leaves `provider` rows alone: nothing local could recompute them.
  */
-export async function runRollupJob(input: RollupJobInput): Promise<{ chunks: number, rowsWritten: number }> {
+export async function runRollupJob(
+  input: RollupJobInput,
+): Promise<{ chunks: number, points: number, rowsWritten: number }> {
   const capDays = rollupRangeCapDays(input.dataType)
   const fromDate = localDate(input.fromMs, input.timezone)
   let chunks = 0
+  let points = 0
   let rowsWritten = 0
 
   // Backwards from the most recent day, so an interrupted walk has already collected the
@@ -93,11 +102,13 @@ export async function runRollupJob(input: RollupJobInput): Promise<{ chunks: num
     })
     chunks++
 
-    const rows = mapRollups({
+    const mapped = mapRollups({
       dataType: input.dataType,
       body: input.deps.archive.getBody(input.personId, payloadId),
       personId: input.personId,
     })
+    const rows = mapped.rows
+    points += mapped.points
     input.deps.db.transaction((tx) => {
       for (const row of rows) {
         tx.insert(daily).values(row).onConflictDoUpdate({
@@ -111,5 +122,16 @@ export async function runRollupJob(input: RollupJobInput): Promise<{ chunks: num
     endDate = startDate
   }
 
-  return { chunks, rowsWritten }
+  // The same judgment runJob makes for a list window, and for the same reason: nothing threw,
+  // the windows came back carrying points, and every one of them was skipped by a mapper that
+  // could not find its field. A response with no points at all is not this case, because days
+  // with no data are omitted rather than zeroed, so an empty walk is what a person with no
+  // device looks like. Left unreported, a renamed value path is a permanent silent gap.
+  if (points > 0 && rowsWritten === 0) {
+    input.deps.syncState.recordSchemaDrift({
+      personId: input.personId, dataType: input.dataType.id, points, nowMs: input.deps.now(),
+    })
+  }
+
+  return { chunks, points, rowsWritten }
 }

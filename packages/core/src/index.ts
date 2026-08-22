@@ -61,7 +61,8 @@ export type { BackfillInput, BackfillResult } from './sync/runBackfill.ts'
 export type { SyncProgress } from './sync/runJob.ts'
 // Synthetic payload builders, exported for the server's Google stub. Test-only in intent, and
 // the file they come from invents every value it emits: nothing here reads real health data.
-export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body } from './testing/payloads.ts'
+export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body, dailyRollupBody } from './testing/payloads.ts'
+export type { RollupWindow } from './testing/payloads.ts'
 
 // M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
 // ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
@@ -76,4 +77,5 @@ export type { DailyRow, SampleLike } from './derive/rollup.ts'
 export { runDerive } from './derive/runDerive.ts'
 export type { DeriveReport } from './derive/runDerive.ts'
 export { mapRollups } from './api/mapRollups.ts'
+export type { RollupMapping } from './api/mapRollups.ts'
 export { runRollupJob, rollupRangeCapDays } from './sync/runRollupJob.ts'

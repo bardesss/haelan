@@ -30,8 +30,20 @@ function stubClient(asked: Array<{ from: string, to: string }>) {
   return { client, archive }
 }
 
-const depsWith = (stub: ReturnType<typeof stubClient>) =>
-  ({ db: test.db, client: stub.client, archive: stub.archive, now: () => 0 })
+// Records what the walk reported about itself, in place of the real SyncStateStore: these
+// tests are about the walk, and a drift record is the only state it writes.
+const recordingSyncState = () => {
+  const drift: Array<{ dataType: string, points: number }> = []
+  return {
+    drift,
+    recordSchemaDrift: (input: { personId: string, dataType: string, points: number, nowMs: number }) => {
+      drift.push({ dataType: input.dataType, points: input.points })
+    },
+  }
+}
+
+const depsWith = (stub: ReturnType<typeof stubClient>, syncState = recordingSyncState()) =>
+  ({ db: test.db, client: stub.client, archive: stub.archive, syncState, now: () => 0 })
 
 describe('rollup range caps', () => {
   // Measured: INVALID_ROLLUP_QUERY_DURATION carries maxDurationDays in its metadata.
@@ -103,6 +115,54 @@ describe('runRollupJob', () => {
       personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
       fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23), deps: depsWith(stub),
     })).resolves.toMatchObject({ chunks: 1 })
+  })
+
+  it('records schema drift when the windows carried points and none of them mapped', async () => {
+    // A rename upstream answers 200 with a body full of windows this mapper cannot read. Left
+    // unreported it is indistinguishable from a person with no device, and total-calories
+    // becomes a permanent silent gap. runJob makes the same judgment for a list window.
+    const bodies = new Map<string, string>()
+    const client = {
+      async dailyRollUpDataPoints(input: { fromLocalDate: string, toLocalDate: string }) {
+        const [year, month, day] = input.fromLocalDate.split('-').map(Number) as [number, number, number]
+        const id = `raw-${input.fromLocalDate}`
+        bodies.set(id, dailyRollupBody('totalCalories', [
+          { date: { year, month, day }, value: { kcalTotal: 2000 } },
+        ]))
+        return { payloadId: id }
+      },
+    }
+    const syncState = recordingSyncState()
+    const result = await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23),
+      deps: {
+        db: test.db, client, archive: { getBody: (_p: string, id: string) => bodies.get(id)! },
+        syncState, now: () => 0,
+      },
+    })
+    expect(result.rowsWritten).toBe(0)
+    expect(result.points).toBeGreaterThan(0)
+    expect(syncState.drift).toEqual([{ dataType: 'total-calories', points: result.points }])
+  })
+
+  it('says nothing about a walk that carried no points, because a day with no data is omitted', async () => {
+    // The response for a person who owns no device that reports floors: an empty array, not a
+    // run of zeroes. Calling that drift would cry wolf on every such account for good.
+    const empty = { async dailyRollUpDataPoints() { return { payloadId: 'raw-empty' } } }
+    const syncState = recordingSyncState()
+    const result = await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23),
+      deps: {
+        db: test.db, client: empty,
+        archive: { getBody: () => dailyRollupBody('totalCalories', []) },
+        syncState, now: () => 0,
+      },
+    })
+    expect(result.chunks).toBe(1)
+    expect(result.rowsWritten).toBe(0)
+    expect(syncState.drift).toEqual([])
   })
 
   // Reproduces the defect a millisecond-based step had: capMs subtracted from an absolute

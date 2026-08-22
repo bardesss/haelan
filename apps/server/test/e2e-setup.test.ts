@@ -120,6 +120,19 @@ describe('empty volume to syncing instance', () => {
     expect(drift.length).toBe(2)
     expect(drift.every((row) => row.last_error === null), JSON.stringify(drift)).toBe(true)
 
+    // The two types that reject list have no tier 2 at all, so a provider row in tier 3 is the
+    // only evidence the run read them. The rollup walk records the same drift on a body it
+    // cannot map, which is why the absence of one is asserted here alongside the rows.
+    const rolledUp = instance.db.$client
+      .prepare("select distinct metric from daily where source = 'provider' order by metric")
+      .all() as Array<{ metric: string }>
+    expect(rolledUp.map((row) => row.metric)).toEqual(['floors', 'total_calories'])
+    const rollupState = instance.db.$client
+      .prepare("select data_type, last_error from sync_state where data_type in ('total-calories', 'floors')")
+      .all() as Array<{ data_type: string, last_error: string | null }>
+    expect(rollupState.length).toBe(2)
+    expect(rollupState.every((row) => row.last_error === null), JSON.stringify(rollupState)).toBe(true)
+
     expect(google.requests.some((url) => url.includes('/dataPoints'))).toBe(true)
     // Every data plane request carried a bearer token, so nothing went out unauthenticated.
     expect(google.authHeaders.length).toBeGreaterThan(0)

@@ -4,6 +4,17 @@ import { DERIVATION_VERSION } from '../derive/version.ts'
 import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { parseNumeric, valueAt } from './parse.ts'
 
+export interface RollupMapping {
+  rows: DailyRow[]
+  /**
+   * How many `rollupDataPoints` the body carried, which the caller needs and the row count
+   * cannot give it. A day with no data is omitted from the response rather than zeroed, so no
+   * points is an ordinary answer, while points that produce no row is a body this code can no
+   * longer read.
+   */
+  points: number
+}
+
 /**
  * A `dailyRollUp` response to `daily` rows. These two types have no tier 2: there is no per
  * sample data underneath them, only a daily figure the provider already reconciled across
@@ -13,17 +24,18 @@ import { parseNumeric, valueAt } from './parse.ts'
  * inspect it against per source data, and filing them as `merged` would make section 9's
  * promise false for exactly two metrics without saying so.
  */
-export function mapRollups(input: { dataType: DataType, body: string, personId: string }): DailyRow[] {
+export function mapRollups(input: { dataType: DataType, body: string, personId: string }): RollupMapping {
+  const nothing: RollupMapping = { rows: [], points: 0 }
   let parsed: unknown
   try {
     parsed = JSON.parse(input.body)
   } catch {
-    return []
+    return nothing
   }
-  if (typeof parsed !== 'object' || parsed === null) return []
+  if (typeof parsed !== 'object' || parsed === null) return nothing
 
   const points = (parsed as { rollupDataPoints?: unknown }).rollupDataPoints
-  if (!Array.isArray(points)) return []
+  if (!Array.isArray(points)) return nothing
 
   const rows: DailyRow[] = []
   for (const point of points) {
@@ -50,7 +62,7 @@ export function mapRollups(input: { dataType: DataType, body: string, personId: 
       derivationVersion: DERIVATION_VERSION,
     })
   }
-  return rows
+  return { rows, points: points.length }
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
