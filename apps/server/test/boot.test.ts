@@ -61,6 +61,21 @@ function flagsOf(command: string): string[] {
   return command.split(/\s+/).filter((part) => part.startsWith('--'))
 }
 
+/**
+ * How long one attempt waits for the child to answer, as a wall-clock deadline rather than a
+ * count of polls. The count was the bug: a hundred iterations of "sleep 100ms then fetch" is only
+ * a ten second budget while the fetch is free, and on a saturated machine it is not - one attempt
+ * measured 15.4s. A deadline means the budget is the budget whatever else the machine is doing.
+ */
+const READY_DEADLINE_MS = 20_000
+
+/**
+ * Generous on purpose: three attempts of READY_DEADLINE_MS plus the spawns. A hang-detector, not
+ * a performance assertion - this test costs about 1s idle and 3s with two other full suites
+ * running, so approaching this number means something is genuinely stuck.
+ */
+const BOOT_BUDGET_MS = 90_000
+
 interface BootOutcome {
   ok: boolean
   output: string
@@ -83,7 +98,8 @@ async function bootOnce(dataDir: string): Promise<BootOutcome> {
   let exited = false
   child.once('exit', () => { exited = true })
 
-  for (let attempt = 0; attempt < 100 && !exited; attempt++) {
+  const deadline = Date.now() + READY_DEADLINE_MS
+  while (Date.now() < deadline && !exited) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/health`)
       if (response.ok) {
@@ -93,7 +109,7 @@ async function bootOnce(dataDir: string): Promise<BootOutcome> {
       }
     } catch {
       // Not up yet. The exit flag is what turns a crash into a prompt failure rather than
-      // letting this loop spin for ten seconds and report nothing useful.
+      // letting this loop spin out the whole deadline and report nothing useful.
     }
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
@@ -123,10 +139,20 @@ describe('the entry point boots', () => {
         return
       }
       lastFailure = outcome.output
-      if (!/EADDRINUSE|address already in use/i.test(outcome.output)) break
+      // Silence is retryable for the same reason a port clash is: it says the machine was busy,
+      // not that the server is broken. An empty transcript means the child never got far enough
+      // to say anything - a cold start losing a CPU race to twenty other vitest forks - whereas a
+      // real boot failure is loud, which is the entire reason this test exists. So any output at
+      // all is reported immediately rather than retried into a slower, later failure.
+      const busy = /EADDRINUSE|address already in use/i.test(outcome.output) || outcome.output.trim() === ''
+      if (!busy) break
     }
-    throw new Error(`the server did not boot:\n${lastFailure}`)
-  })
+    throw new Error(lastFailure.trim() === ''
+      // The old message ended in a colon and a blank line, which reads like the server
+      // failed and then declined to explain itself.
+      ? `the server never answered within ${READY_DEADLINE_MS}ms on any of 3 attempts, and wrote nothing to stdout or stderr`
+      : `the server did not boot:\n${lastFailure}`)
+  }, BOOT_BUDGET_MS)
 
   it('starts the same way from the repository root as it does from the package', () => {
     // pnpm start and pnpm dev:server are two doors into one process. Only the first is spawned
