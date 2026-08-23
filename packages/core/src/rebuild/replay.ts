@@ -25,7 +25,7 @@ export interface ReplayCounts {
   providerDaily: number
   /** Payloads no current mapper claims. Reported rather than thrown, see below. */
   unmappable: number
-  /** Every local date a sample or a session landed on, which is what needs deriving after. */
+  /** Every local date a replayed row landed on, which is what needs deriving after. */
   localDates: string[]
 }
 
@@ -68,6 +68,15 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
               derivationVersion: row.derivationVersion,
             },
           }).run()
+          // Deriving a rollup-only day writes no derived rows, so this looks like pointless
+          // work, and it is not. deriveDayInto is the only thing in the system that ever applies
+          // a day_metric exclusion to a PROVIDER_SOURCE row, and it only runs for the dates
+          // named here. Leave them out and a day whose sole content is a provider figure is
+          // never derived, so a correction somebody made on that figure is silently undone by
+          // the next rebuild. Reachable in practice, because the rollup endpoints reach further
+          // back than intraday retention: the oldest days a household carries commonly have a
+          // provider row and no samples at all.
+          localDates.add(row.localDate)
         }
       }
       continue

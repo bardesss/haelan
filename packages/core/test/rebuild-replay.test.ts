@@ -216,7 +216,7 @@ describe('replayPerson', () => {
     expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(3)
   })
 
-  test('the local dates the rows landed on come back sorted, deduplicated, and without rollup-only dates', () => {
+  test('the local dates the rows landed on come back sorted, deduplicated, and including rollup-only dates', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
     const archive = new RawArchive(db)
@@ -237,8 +237,11 @@ describe('replayPerson', () => {
       windowStartMs: 172_800_000, windowEndMs: 259_200_000, fetchedAtMs: 1, httpStatus: 200,
       body: sleepBody(),
     })
-    // A rollup on a third date entirely. Provider daily rows have no samples underneath them and
-    // are not what runDerive's queue needs marked, so this date must be absent from the result.
+    // A rollup on a third date entirely, with no sample and no session anywhere near it. This
+    // date has to be present. Deriving it writes no derived rows, since there is nothing
+    // underneath a provider figure to roll up, but deriveDayInto is the only path that applies a
+    // day_metric exclusion to a PROVIDER_SOURCE row, and it only runs for the dates named here.
+    // Leave this date out and a correction on that figure is silently undone by every rebuild.
     archive.put({
       personId: 'p1', dataType: 'total-calories',
       requestParams: { range: { start: {}, end: {} } },
@@ -251,7 +254,6 @@ describe('replayPerson', () => {
       sources: new SourceRegistry(db), nowMs: 1,
     }))
 
-    expect(counts.localDates).toEqual(['2026-08-01', '2026-08-18'])
-    expect(counts.localDates).not.toContain('2026-08-05')
+    expect(counts.localDates).toEqual(['2026-08-01', '2026-08-05', '2026-08-18'])
   })
 })

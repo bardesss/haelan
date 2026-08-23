@@ -6,7 +6,8 @@ import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import {
   daily, overrides, people, samples, sessions, sessionSegments, sources, sourcePriority, syncState,
 } from '../src/db/schema/index.ts'
-import { sessionTarget } from '../src/derive/targetKey.ts'
+import { dayMetricTarget, sessionTarget } from '../src/derive/targetKey.ts'
+import { dailyRollupBody } from '../src/testing/payloads.ts'
 import { PROVIDER_SOURCE } from '../src/derive/rollup.ts'
 
 // Builds a database holding one person, one archived heart rate window and one archived sleep
@@ -184,6 +185,42 @@ describe('runRebuild', () => {
     // dailyRows is the derived rows plus counts.providerDaily, so it can only equal what the
     // table holds if the stale provider row went and the archived one came back.
     expect(report.people[0]!.dailyRows).toBe(h.db.select().from(daily).all().length)
+  })
+
+  test('a day metric exclusion on a rollup-only day survives the rebuild', () => {
+    h = seedRebuildable()
+    // A day whose only content is a provider rollup row, which is an ordinary shape rather than a
+    // contrived one: the rollup endpoints reach further back than intraday retention, so the
+    // oldest days a household has commonly carry a provider figure and no samples at all.
+    const lonelyDate = '2026-07-04'
+    const lonelyWindowStart = Date.parse(`${lonelyDate}T00:00:00Z`)
+    h.deps.archive.put({
+      personId: h.personId, dataType: 'total-calories',
+      requestParams: { range: { start: {}, end: {} } },
+      windowStartMs: lonelyWindowStart, windowEndMs: lonelyWindowStart + 86_400_000,
+      fetchedAtMs: 1, httpStatus: 200,
+      body: dailyRollupBody('totalCalories', [
+        { date: { year: 2026, month: 7, day: 4 }, value: { kcalSum: 1900 } },
+      ]),
+    })
+    // The correction somebody made on that figure. deriveDayInto is the only thing in the system
+    // that ever applies a day metric exclusion to a PROVIDER_SOURCE row, so a rebuild that never
+    // derives this day puts the excluded calorie figure straight back on their dashboard, with
+    // nothing anywhere saying it did.
+    seedOverride(h.db, {
+      personId: h.personId, scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: lonelyDate, metric: 'total_calories' }),
+      action: 'exclude',
+    })
+
+    runRebuild({ ...h.deps, nowMs: 1 })
+
+    const onThatDay = h.db.select().from(daily).where(eq(daily.localDate, lonelyDate)).all()
+    expect(onThatDay).toEqual([])
+    // And the day really did carry a provider row to throw away, so an assertion that passed
+    // because the replay never wrote one would not read as a pass.
+    const stillThere = h.db.select().from(daily).where(eq(daily.localDate, REBUILDABLE_DATE)).all()
+    expect(stillThere.some((r) => r.source === PROVIDER_SOURCE)).toBe(true)
   })
 
   test('every person who needs it is rebuilt, each from their own archive', () => {
