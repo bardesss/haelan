@@ -102,3 +102,9 @@ export { OverrideStore } from './store/overrides.ts'
 export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'
 export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'
 export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'
+
+// M2c. Sleep, from sessions and their stages to a day's figures.
+export { assembleNights, deriveSleepDay, DEFAULT_NIGHT_GAP_MINUTES, ASLEEP_STAGES, AWAKE_STAGE } from './derive/sleep.ts'
+export type { SleepSessionLike, SleepSegmentLike, NightAssembly } from './derive/sleep.ts'
+export { mergeSleepDay } from './derive/sleepMerge.ts'
+export { SLEEP_METRICS } from './derive/metrics.ts'

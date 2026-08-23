@@ -198,11 +198,12 @@ day the person has data for, because section 9 says changing priority is a rebui
 restore the original exactly rather than repair it. Sample scope excludes or corrects a reading at
 one instant, across every aggregate of that minute, because the person corrected a reading rather
 than one of its three summaries. Session scope excludes a session; a session correction is
-surfaced for M2c rather than applied here, since no derived session scalar exists yet for it to
-replace. Day metric scope excludes only: a corrected day figure has no source and nothing per
-source to be inspected against, and `OverrideStore.put` rejects a correcting day metric override
-rather than storing something no derivation would apply. `OverrideStore.remove` takes
-`{personId, id, nowMs}`, not a bare id: a review found that an id alone let one person delete
+refused rather than applied, because a night derives eleven figures and one number cannot say
+which of them it means, and setting `sleep_asleep_minutes` alone would leave the stage totals no
+longer summing to it. Day metric scope excludes only: a corrected day figure has no source and
+nothing per source to be inspected against, and `OverrideStore.put` rejects a correcting day
+metric override rather than storing something no derivation would apply. `OverrideStore.remove`
+takes `{personId, id, nowMs}`, not a bare id: a review found that an id alone let one person delete
 another person's override, since an id is not a secret, and the fix scopes removal to the caller's
 own person as well as the id.
 
@@ -211,6 +212,23 @@ join by single linkage over a configurable overlap ratio that defaults to a half
 of sleep stays one event however many devices cut it into pieces. Priority picks the primary from
 the group, and every alternate is kept rather than discarded, since section 9's merges are
 computed rather than stored and the untouched `sessions` rows are already what "retained" means.
+
+**Sleep** is derived by `deriveSleepDay`, in `src/derive/sleep.ts`, and three different things
+merge it, which is worth keeping apart because confusing them is how a night goes missing:
+`groupSessions` merges one event recorded across sources, `assembleNights` merges one night
+recorded across sessions, and `shortAwakenings`, carried in a session's own `attrs`, is the
+provider's model of brief wakes inside one session that nothing here touches. Pieces separated by
+less than `night_gap_minutes`, default 120, are one night, which is what stops an early wake being
+reported as a night plus a nap rather than the single night it was. `mainSleep` chooses between
+groups and never within one, so a piece that joined the night by gap is part of it whatever its
+own flag says. A nap needs no rule of its own: it is simply a session that did not join, which is
+why there is one threshold rather than two. Every figure is summed from the stage segments rather
+than read from the provider's own summary, so it can be inspected against the segments underneath
+it and so an override on a session moves it. `sleep_bedtime_minutes` and `sleep_waketime_minutes`
+are minutes from the local midnight of the row's own date, negative before it, one signed scale
+rather than a time plus a column saying which day. A night whose segments never arrived writes its
+times and its in-bed span but none of the six stage figures, because a zero there would claim the
+person lay awake all night when the truth is we do not know.
 
 ## Heart rate volume and the downsampling decision
 
