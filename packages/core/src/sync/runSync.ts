@@ -26,6 +26,16 @@ export interface SyncInput {
    */
   userHorizonDays: number
   deps: JobDeps
+  /**
+   * Asked between people and between jobs. A shutdown sets this, and the run then returns what it
+   * has finished instead of walking every remaining person and type while settle() waits on it.
+   *
+   * Between jobs rather than inside one: a job is transactional and withholds its own cursor when
+   * it cannot trust what it read, so abandoning the run at a job boundary leaves sync state
+   * consistent and the next run simply picks the remaining jobs up. Stopping mid job would buy a
+   * few hundred milliseconds and cost that guarantee.
+   */
+  shouldStop?: () => boolean
 }
 
 const DAY_MS = 86_400_000
@@ -61,6 +71,9 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
   const trailingFromMs = toMs - input.trailingDays * DAY_MS
 
   for (const personId of input.personIds) {
+    // Before the person is even looked up, so a stop reaches the household member who has not
+    // started rather than only the one already under way.
+    if (input.shouldStop?.() === true) return report
     const person = input.deps.db.select().from(people).where(eq(people.id, personId)).get()
     // A person id that was valid when the caller assembled the list and is gone by the time the
     // loop reaches it must not take the rest of the household down with it. Sync never crashes,
@@ -71,6 +84,7 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
     }
 
     for (const job of input.deps.syncState.dueJobs([personId], toMs)) {
+      if (input.shouldStop?.() === true) return report
       const dataType = dataTypeById(job.dataType)
       if (!dataType) continue
 

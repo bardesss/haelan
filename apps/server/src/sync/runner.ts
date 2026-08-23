@@ -237,7 +237,16 @@ export class SyncRunner {
 
     // The trailing window first: today's data is what a dashboard shows, and a backfill that
     // takes an hour must not delay it.
-    await runSync({ personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps })
+    //
+    // shouldStop, because this is run()'s first await and everything below it is guarded by an
+    // #aborted check while this was not. stop() sets #aborted and shutdown() then awaits
+    // settle(), so without this a shutdown waited out a whole trailing sync of every connected
+    // person and every listable type before anything noticed it had been asked to stop.
+    await runSync({
+      personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps,
+      shouldStop: () => this.#aborted,
+    })
+    if (this.#aborted) return
     // Here as well as at the end of the run, for the same reason the trailing window goes
     // first: a backfill that takes an hour must not be what stands between today's samples and
     // the dashboard reading them.

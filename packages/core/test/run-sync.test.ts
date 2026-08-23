@@ -349,4 +349,59 @@ describe('runSync', () => {
     expect(deps.syncState.get('alice', 'total-calories')?.lastError).toContain('unreadable')
   })
 
+
+  // stop() has to reach the trailing sync, not only the sprint that follows it. shutdown() calls
+  // stop() then awaits settle(), so anything run() does before its first abort check is time a
+  // shutdown spends waiting. The trailing sync walks every connected person and every listable
+  // type, which on a real instance is not a moment.
+  describe('when a shutdown asks it to stop', () => {
+    it('stops between jobs rather than finishing every type it was going to walk', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
+      const deps = build(fetchMock)
+
+      const full = await runSync({
+        personIds: ['alice'], trailingDays: 7, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+      })
+      expect(full.jobs, 'the unstopped run is the baseline this is measured against').toBeGreaterThan(1)
+
+      const stopped = build(fetchMock)
+      // True from the very first question, which is what stop() landing before run()'s first
+      // await looks like from in here.
+      const report = await runSync({
+        personIds: ['alice'], trailingDays: 7, userHorizonDays: DEFAULT_USER_HORIZON_DAYS,
+        deps: stopped, shouldStop: () => true,
+      })
+
+      expect(report.jobs).toBe(0)
+    })
+
+    it('keeps what it finished before it was asked, rather than discarding the run', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
+      const deps = build(fetchMock)
+      // Gated on work actually finished rather than on how many times the run happens to ask,
+      // so adding a third check point somewhere would not break this test without any behaviour
+      // changing. One job writes, the next question stops the run.
+      const report = await runSync({
+        personIds: ['alice'], trailingDays: 7, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+        shouldStop: () => deps.db.select().from(rawPayloads).all().length > 0,
+      })
+
+      expect(report.jobs).toBe(1)
+    })
+
+    it('stops before starting a second person, so one household member does not wait out another', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: unknown) => new Response(emptyFor(url), { status: 200 }))
+      const deps = build(fetchMock)
+
+      await runSync({
+        personIds: ['alice', 'bob'], trailingDays: 7, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps,
+        // True as soon as any job has actually written something, which is alice's first one.
+        shouldStop: () => deps.db.select().from(rawPayloads).all().length > 0,
+      })
+
+      const seen = new Set<string>()
+      for (const row of deps.db.select().from(rawPayloads).all()) seen.add(row.personId)
+      expect([...seen]).toEqual(['alice'])
+    })
+  })
 })
