@@ -94,6 +94,39 @@ describe('replayPerson', () => {
     expect(counts.samples).toBe(3)
   })
 
+  test('replays two windows for one date in the order they were fetched, not the order their bounds sort in', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // Day windows are aligned to the person's local day, so a timezone that moves westward gives
+    // the same date earlier bounds than it had before. The later fetch then sorts BEFORE the one
+    // it corrects under a window-first ordering, and replay lands the older reading last.
+    //
+    // Fetched first, at the old bounds, saying 60 bpm.
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 86_400_000, windowEndMs: 172_800_000, fetchedAtMs: 100, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 100_000_000, bpm: 60 }]),
+    })
+    // Fetched second, after the move, so the same date now starts two hours earlier. This is the
+    // reading that corrects the one above, and a replay has to land it last.
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 79_200_000, windowEndMs: 165_600_000, fetchedAtMs: 200, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 100_000_000, bpm: 100 }]),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    // The correction wins, because it was fetched second. Ordering on window bounds puts it first
+    // and leaves 60 standing, which is the reading Google had already replaced.
+    const rows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
+    expect(rows.every((row) => row.value === 100), 'the older reading overwrote the correction').toBe(true)
+  })
+
   test('a two page window downsamples once, not once per page', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
