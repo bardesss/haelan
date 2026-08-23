@@ -38,9 +38,28 @@ export interface RebuildPersonReport {
   unmappablePayloads: number
 }
 
+/**
+ * A person whose rebuild threw, and who is therefore still on their old derived rows.
+ *
+ * The error is carried whole rather than as a message. Whoever reports this decides how much of
+ * it to print, and a stack is the only thing that turns "a payload no mapper handles" from a
+ * sentence into something somebody can fix.
+ */
+export interface RebuildFailure {
+  personId: string
+  /** The same reasons the attempt was made for, so a log line can say what was being tried. */
+  reasons: string[]
+  error: Error
+}
+
 export interface RebuildReport {
   /** One entry per person actually rebuilt. Empty when nothing needed it. */
   people: RebuildPersonReport[]
+  /**
+   * One entry per person whose rebuild threw. Their transaction rolled back and their version
+   * stamp went with it, so they keep the rows they had and the next boot retries them.
+   */
+  failures: RebuildFailure[]
 }
 
 export interface RebuildInput {
@@ -90,98 +109,111 @@ export function runRebuild(input: RebuildInput): RebuildReport {
   const gapMinutes = tuning?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
   const overlapRatio = tuning?.sessionOverlapRatio ?? DEFAULT_OVERLAP_RATIO
 
-  const report: RebuildReport = { people: [] }
+  const report: RebuildReport = { people: [], failures: [] }
 
   for (const { personId, reasons } of todo) {
-    // Oldest window first, which is the order the syncs wrote in.
-    const payloads = input.archive.listFor(personId)
     // A registry per person, never shared across the loop. Its cache maps an external id to a
     // row id, and a rebuild deletes rows, so a cache that outlived one person's transaction
     // would hand the next person an id that no longer exists.
     //
-    // Measured honesty about that: no test catches hoisting this line out of the loop, because
-    // the cache key names the person as well as the external id, so one person's entry is never
-    // handed to another, and today nothing runs after a person's transaction rolls back. A throw
-    // leaves runRebuild entirely rather than moving to the next person.
-    //
-    // It stays per person because that second fact is control flow somebody could reasonably
-    // change. The moment a caller wants one person's failure not to cost the rest of the
-    // household, a surviving cache entry becomes reachable, and resolve() returns a cached id
-    // without reinserting the row, so it hands back an id whose row the rollback took away and
-    // the next write against it fails the foreign key. That is what SourceRegistry.forget exists
-    // for. A fresh registry per person costs one allocation and makes the question moot.
+    // That used to be a precaution against a control flow nobody had written yet. It is now the
+    // control flow: the catch below means work does run after a person's transaction rolls back.
+    // resolve() returns a cached id without reinserting the row, so a registry that survived the
+    // rollback would hand back an id whose row is gone and the next write against it would fail
+    // the foreign key, turning one person's failure into everybody's. A fresh registry per
+    // person costs one allocation and makes the question moot.
     const registry = new SourceRegistry(input.db)
 
-    // input.peopleStore, input.priority and input.overrides were built on the outer db handle and
-    // are used inside this transaction anyway. That is correct rather than an oversight:
-    // better-sqlite3 runs on one connection, so every statement issued while the transaction
-    // callback executes is part of the transaction, whichever handle issued it. Two properties
-    // depend on it. The version stamp commits and rolls back with the rows it describes, and
-    // overrides.listFor below sees the keys retargetOverrides just rewrote. Moving the stores
-    // onto tx is not a fix; if this ever does change, both properties have to survive it.
-    const personReport = input.db.transaction((tx) => {
-      // Captured before the delete, because re-targeting a session override needs to know what
-      // the id it names used to mean, and after the delete nothing does.
-      const oldSessions = new Map<string, OldSession>(
-        tx.select({ id: sessions.id, kind: sessions.kind, externalId: sessions.externalId })
-          .from(sessions).where(eq(sessions.personId, personId)).all()
-          .map((row) => [row.id, { kind: row.kind, externalId: row.externalId }]),
-      )
+    // Declared out here so the catch below, not the transaction, decides what a failure means.
+    let personReport: RebuildPersonReport
+    try {
+      // Oldest window first, which is the order the syncs wrote in.
+      const payloads = input.archive.listFor(personId)
+      // input.peopleStore, input.priority and input.overrides were built on the outer db handle
+      // and are used inside this transaction anyway. That is correct rather than an oversight:
+      // better-sqlite3 runs on one connection, so every statement issued while the transaction
+      // callback executes is part of the transaction, whichever handle issued it. Two properties
+      // depend on it. The version stamp commits and rolls back with the rows it describes, and
+      // overrides.listFor below sees the keys retargetOverrides just rewrote. Moving the stores
+      // onto tx is not a fix; if this ever does change, both properties have to survive it.
+      personReport = input.db.transaction((tx) => {
+        // Captured before the delete, because re-targeting a session override needs to know what
+        // the id it names used to mean, and after the delete nothing does.
+        const oldSessions = new Map<string, OldSession>(
+          tx.select({ id: sessions.id, kind: sessions.kind, externalId: sessions.externalId })
+            .from(sessions).where(eq(sessions.personId, personId)).all()
+            .map((row) => [row.id, { kind: row.kind, externalId: row.externalId }]),
+        )
 
-      // Segments go with their sessions by cascade: session_segments.session_id declares
-      // ON DELETE cascade and openDatabase sets PRAGMA foreign_keys = ON on every connection it
-      // makes, which is the only way this package opens one. Deleting them explicitly first
-      // would be a second statement doing what the first already does.
-      tx.delete(sessions).where(eq(sessions.personId, personId)).run()
-      tx.delete(samples).where(eq(samples.personId, personId)).run()
-      // Provider rows included. They are mapped from archived rollup responses like everything
-      // else, so the replay puts them back.
-      tx.delete(daily).where(eq(daily.personId, personId)).run()
+        // Segments go with their sessions by cascade: session_segments.session_id declares
+        // ON DELETE cascade and openDatabase sets PRAGMA foreign_keys = ON on every connection it
+        // makes, which is the only way this package opens one. Deleting them explicitly first
+        // would be a second statement doing what the first already does.
+        tx.delete(sessions).where(eq(sessions.personId, personId)).run()
+        tx.delete(samples).where(eq(samples.personId, personId)).run()
+        // Provider rows included. They are mapped from archived rollup responses like everything
+        // else, so the replay puts them back.
+        tx.delete(daily).where(eq(daily.personId, personId)).run()
 
-      const counts = replayPerson(tx, {
-        personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
-      })
-
-      const dropped = dropUnreferencedSources(tx, personId)
-
-      const retarget = retargetOverrides(tx, { personId, oldSessions })
-
-      const priority = input.priority.load(personId)
-      // Read after re-targeting, so a moved key is the one the derivation applies.
-      const personOverrides = input.overrides.listFor(personId)
-      for (const localDate of counts.localDates) {
-        deriveDayInto(tx, {
-          personId, localDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
+        const counts = replayPerson(tx, {
+          personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
         })
-      }
 
-      // Measured after the derive loop rather than summed from what the replay and the
-      // derivation each returned, for the same reason replayPerson measures its own counters.
-      // deriveDayInto applies day metric exclusions, and those delete provider rows the replay
-      // had already counted, so the two returned figures added together overstate the table by
-      // one per exclusion. This is the number an operator reads to decide whether their upgrade
-      // worked, so it has to be what is actually there.
-      const dailyRows = tx.select({ n: sql<number>`count(*)` })
-        .from(daily).where(eq(daily.personId, personId)).get()?.n ?? 0
+        const dropped = dropUnreferencedSources(tx, personId)
 
-      input.peopleStore.stampBuiltVersions({
-        id: personId, mappingVersion: MAPPING_VERSION, derivationVersion: DERIVATION_VERSION,
+        const retarget = retargetOverrides(tx, { personId, oldSessions })
+
+        const priority = input.priority.load(personId)
+        // Read after re-targeting, so a moved key is the one the derivation applies.
+        const personOverrides = input.overrides.listFor(personId)
+        for (const localDate of counts.localDates) {
+          deriveDayInto(tx, {
+            personId, localDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
+          })
+        }
+
+        // Measured after the derive loop rather than summed from what the replay and the
+        // derivation each returned, for the same reason replayPerson measures its own counters.
+        // deriveDayInto applies day metric exclusions, and those delete provider rows the replay
+        // had already counted, so the two returned figures added together overstate the table by
+        // one per exclusion. This is the number an operator reads to decide whether their upgrade
+        // worked, so it has to be what is actually there.
+        const dailyRows = tx.select({ n: sql<number>`count(*)` })
+          .from(daily).where(eq(daily.personId, personId)).get()?.n ?? 0
+
+        input.peopleStore.stampBuiltVersions({
+          id: personId, mappingVersion: MAPPING_VERSION, derivationVersion: DERIVATION_VERSION,
+        })
+
+        return {
+          personId,
+          reasons,
+          samples: counts.samples,
+          sessions: counts.sessions,
+          daysDerived: counts.localDates.length,
+          dailyRows,
+          sourcesRemoved: dropped.sources,
+          rankingsRemoved: dropped.rankings,
+          overridesRetargeted: retarget.retargeted,
+          overridesOrphaned: retarget.orphaned,
+          unmappablePayloads: counts.unmappable,
+        }
       })
-
-      return {
+    } catch (error) {
+      // Caught per person, so one broken payload shape costs one household member their
+      // rebuild instead of costing everybody their sync. The transaction has already rolled
+      // back by the time this runs, which is what makes continuing safe: this person keeps
+      // the derived rows they had, their version stamp rolled back with them, and so the next
+      // boot picks them up again with nothing for an operator to reset. Their sync is skipped
+      // meanwhile (see the runner), so the stale rows are never mixed with rows derived at a
+      // different version, which is the invariant the stamp exists to protect.
+      report.failures.push({
         personId,
         reasons,
-        samples: counts.samples,
-        sessions: counts.sessions,
-        daysDerived: counts.localDates.length,
-        dailyRows,
-        sourcesRemoved: dropped.sources,
-        rankingsRemoved: dropped.rankings,
-        overridesRetargeted: retarget.retargeted,
-        overridesOrphaned: retarget.orphaned,
-        unmappablePayloads: counts.unmappable,
-      }
-    })
+        error: error instanceof Error ? error : new Error(String(error)),
+      })
+      continue
+    }
 
     report.people.push(personReport)
     input.onPersonDone?.(personReport)

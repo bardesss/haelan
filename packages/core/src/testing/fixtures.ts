@@ -50,6 +50,20 @@ export function seedPerson(db: Database, id: string, overrides: SeedPersonOverri
   return id
 }
 
+/**
+ * Ruins every archived body this person has, so any replay of them throws.
+ *
+ * Archived first and ruined afterwards because `RawArchive.put` gzips whatever it is handed, so
+ * there is no body that survives storage and then fails to decompress. What this stands in for
+ * is the hazard the rebuild has to survive: a payload it cannot get through. Which payload, and
+ * why, is not what the callers assert; that the throw happens inside the person's transaction
+ * is.
+ */
+export function corruptArchivedBodies(db: Database, personId: string): void {
+  db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
+    .where(eq(rawPayloads.personId, personId)).run()
+}
+
 export interface DerivableDay { personId: string, localDate: string }
 
 // One person, one source, one sample on one local date: the minimum a derivation needs to

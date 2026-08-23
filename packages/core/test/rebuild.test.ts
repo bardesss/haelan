@@ -171,8 +171,13 @@ describe('runRebuild', () => {
       .where(eq(people.id, h.personId)).run()
     h.corruptOneArchivedBody()
 
-    expect(() => runRebuild({ ...h.deps, nowMs: 2 })).toThrow()
+    const report = runRebuild({ ...h.deps, nowMs: 2 })
 
+    // Reported rather than thrown, but the rollback it reports is the same one. The throw used
+    // to leave runRebuild entirely; what replaced it changes who hears about the failure, not
+    // what the failure does to the person's rows.
+    expect(report.failures.map((f) => f.personId)).toEqual([h.personId])
+    expect(report.people).toEqual([])
     expect(h.db.select().from(daily).all()).toEqual(before)
     expect(h.db.select().from(samples).all().length).toBeGreaterThan(0)
     // The stamp is written inside the same transaction, so a rollback has to take it too.
@@ -181,6 +186,32 @@ describe('runRebuild', () => {
     const row = h.db.select().from(people).where(eq(people.id, h.personId)).get()!
     expect(row.builtMappingVersion).toBeNull()
     expect(row.builtDerivationVersion).toBeNull()
+  })
+
+  test('one person failing does not cost the rest of the household their rebuild', () => {
+    h = seedRebuildable()
+    h.seedSecondPerson()
+    // p1's archive only. p2 has an archive of their own and is untouched by this.
+    h.corruptOneArchivedBody()
+
+    const report = runRebuild({ ...h.deps, nowMs: 1 })
+
+    // The whole point of the change: p2 is rebuilt even though p1, earlier in the loop, threw.
+    // Aborting there meant one bad payload shape stopped every household member ingesting,
+    // permanently, because the sync runner is started only after the rebuild returns.
+    expect(report.people.map((r) => r.personId)).toEqual(['p2'])
+    expect(report.failures.map((f) => f.personId)).toEqual(['p1'])
+    // Carried whole rather than stringified, so the caller decides how loudly to say it and
+    // still has the stack when it turns out to matter.
+    expect(report.failures[0]!.error).toBeInstanceOf(Error)
+    // And the reasons that put them in the loop, so a log line can say what was being attempted.
+    expect(report.failures[0]!.reasons.length).toBeGreaterThan(0)
+
+    // Unstamped, so the next boot picks p1 up again with no operator action at all. This is the
+    // difference between quarantine and giving up: nothing here writes a mark that would stop
+    // a later, fixed mapper from being tried.
+    expect(h.deps.peopleStore.get('p1')!.builtMappingVersion).toBeNull()
+    expect(h.deps.peopleStore.get('p2')!.builtMappingVersion).toBe(MAPPING_VERSION)
   })
 
   test('reports each person as it commits, so a caller can log progress', () => {

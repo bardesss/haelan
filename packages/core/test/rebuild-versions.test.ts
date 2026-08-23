@@ -1,6 +1,9 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
 import { MAPPING_VERSION, DERIVATION_VERSION, peopleNeedingRebuild } from '../src/index.ts'
+import { PeopleStore } from '../src/store/people.ts'
 import type { PersonRow } from '../src/store/people.ts'
+import { createTestDatabase } from '../src/testing/fixtures.ts'
+import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const person = (over: Partial<PersonRow> = {}): PersonRow => ({
   id: 'p1',
@@ -50,5 +53,30 @@ describe('peopleNeedingRebuild', () => {
 
   test('no people means no rebuild', () => {
     expect(peopleNeedingRebuild([])).toEqual([])
+  })
+})
+
+describe('a person the wizard just created', () => {
+  let t: TestDatabase | null = null
+  afterEach(() => { t?.cleanup(); t = null })
+
+  test('is stamped at the current versions, so nothing thinks they need rebuilding', () => {
+    t = createTestDatabase()
+    const store = new PeopleStore(t.db)
+
+    const created = store.create({
+      id: 'p1', displayName: 'Ada', timezone: 'Europe/Amsterdam', nowMs: 1,
+    })
+
+    // A person with no derived rows at all is trivially consistent with any version, so this is
+    // an honest stamp rather than a convenient lie. It is also what makes the sync gate mean
+    // what it says: the runner skips people who need a rebuild, and a brand new person left
+    // unstamped would be reported as needing one, be skipped, and never receive any data. The
+    // rebuild only runs at boot, so nothing would ever have cleared it either.
+    expect(created.builtMappingVersion).toBe(MAPPING_VERSION)
+    expect(created.builtDerivationVersion).toBe(DERIVATION_VERSION)
+    // Read back, not just returned. What the gate consults is the row, and a create that
+    // returned the stamp without writing it would pass on the object alone.
+    expect(peopleNeedingRebuild(store.list())).toEqual([])
   })
 })
