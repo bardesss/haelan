@@ -89,14 +89,21 @@ export class RawArchive {
   }
 
   /**
-   * Every payload of one person's that a replay can map, oldest window first.
+   * Every payload of one person's that a replay can map, oldest fetch first.
    *
    * Non-200 responses are excluded. The archive keeps them because a 429 body is evidence about
    * a sync, but there are no data points inside one to map.
    *
-   * Ordering is by window and then by fetch time, so when a window was fetched twice the later
-   * body replays last and its answer is the one that lands. That is the same order the original
-   * syncs wrote in, which is what makes a replay reproduce them rather than approximate them.
+   * Ordered on fetch time rather than on window bounds, because fetch time is what the replay
+   * actually needs: a later body must land after the one it corrects, and the only thing that
+   * reliably says which came later is when each was fetched. Window bounds usually agree, which
+   * is why they were the sort key first, but they are derived from the person's local day, so a
+   * timezone that moves westward gives the same date earlier bounds than it had before. A window
+   * first sort then puts the correction ahead of the reading it corrects and the replay lands the
+   * stale one last.
+   *
+   * The id breaks a tie so two rows identical on fetch time still come back in a fixed order,
+   * which is what lets a rebuild be deterministic.
    */
   listFor(personId: string): ArchivedPayload[] {
     return this.#db.select({
@@ -109,10 +116,7 @@ export class RawArchive {
       fetchEpisodeId: rawPayloads.fetchEpisodeId,
     }).from(rawPayloads)
       .where(and(eq(rawPayloads.personId, personId), eq(rawPayloads.httpStatus, 200)))
-      .orderBy(
-        asc(rawPayloads.windowStartMs), asc(rawPayloads.windowEndMs),
-        asc(rawPayloads.fetchedAtMs), asc(rawPayloads.id),
-      )
+      .orderBy(asc(rawPayloads.fetchedAtMs), asc(rawPayloads.id))
       .all()
   }
 

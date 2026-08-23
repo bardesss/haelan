@@ -173,13 +173,16 @@ describe('listFor', () => {
   })
   afterEach(() => { closeDatabase(db); rmSync(dir, { recursive: true, force: true }) })
 
-  it('returns one person\'s payloads oldest window first', () => {
-    // Fetch times run in the reverse of window order on purpose. If the implementation sorted
-    // by fetchedAtMs ahead of windowStartMs, the two would disagree: fetch order would return
-    // [3000, 2000, 1000], and only window order returns [1000, 2000, 3000]. Sharing one
-    // fetchedAtMs across all three rows, as an earlier version of this test did, cannot tell
-    // the two orderings apart because the fetch time ties and windowStartMs decides regardless
+  it('returns one person\'s payloads oldest fetch first, whatever their window bounds sort like', () => {
+    // Window bounds run in the reverse of fetch order on purpose, so the two orderings disagree
+    // and this can say which one won: window order would return [1000, 2000, 3000] and only
+    // fetch order returns [3000, 2000, 1000]. Sharing one fetchedAtMs across all three rows
+    // cannot tell them apart, because the fetch time then ties and the window decides regardless
     // of which column the implementation checks first.
+    //
+    // Fetch time is the one that matters. A replay has to land a later body after the one it
+    // corrects, and window bounds agree with fetch order only while the person's timezone holds
+    // still. See the note on listFor.
     const base = { personId: 'p1', dataType: 'steps', requestParams: {}, httpStatus: 200 }
     archive.put({ ...base, windowStartMs: 3000, windowEndMs: 4000, fetchedAtMs: 1, body: '{"c":1}' })
     archive.put({ ...base, windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 3, body: '{"a":1}' })
@@ -187,8 +190,8 @@ describe('listFor', () => {
 
     const listed = archive.listFor('p1')
 
-    expect(listed.map((p) => p.windowStartMs)).toEqual([1000, 2000, 3000])
-    expect(listed.map((p) => p.fetchedAtMs)).toEqual([3, 2, 1])
+    expect(listed.map((p) => p.fetchedAtMs)).toEqual([1, 2, 3])
+    expect(listed.map((p) => p.windowStartMs)).toEqual([3000, 2000, 1000])
   })
 
   it('two fetches of one window come back in fetch order', () => {
