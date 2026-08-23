@@ -223,6 +223,25 @@ describe('package barrel', () => {
     })
   })
 
+  describe('M2d: the person bound query layer, and the statistics behind it', () => {
+    it('exports the query class and its point type', () => {
+      expect(typeof core.PersonQuery).toBe('function')
+    })
+
+    it('exports the baseline function and its constants', () => {
+      expect(typeof core.baselineOf).toBe('function')
+      expect(typeof core.zScoreOf).toBe('function')
+      expect(typeof core.BASELINE_WINDOW_DAYS).toBe('number')
+      expect(typeof core.BASELINE_MIN_DAYS).toBe('number')
+    })
+
+    it('exports the insight function and its constants', () => {
+      expect(typeof core.comparePeriods).toBe('function')
+      expect(typeof core.INSIGHT_MIN_DAY_FRACTION).toBe('number')
+      expect(typeof core.INSIGHT_MIN_COVERAGE).toBe('number')
+    })
+  })
+
   it('is callable, not merely present: setupStep answers on a real empty instance', () => {
     // A barrel test that only checks typeof passes on an export wired to the wrong module.
     const fixture = core.createTestDatabase()
