@@ -90,7 +90,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M2b** Priority and merge | The per metric source priority list, `merged` rows chosen per local hour with their mix recorded, overrides applied at derivation, session overlap grouping | Done, [#45](https://github.com/bardesss/haelan/pull/45) |
 | **M2c** Sleep derivation | Night assembly across split sessions, nap detection, stage durations and efficiency from our own segments, per source and merged sleep rows | Done, [#50](https://github.com/bardesss/haelan/pull/50) |
 | **M2d** Baselines and query layer | Rolling baselines with a thin flag, insights suppressed on missing days and thin coverage, and the person bound query layer M3 and M4 read through | Done, [#51](https://github.com/bardesss/haelan/pull/51) |
-| **M2e** Rebuild | Per person atomic rebuild of tiers 2 and 3 from the archive, source identity re-resolved through the current mapping, overrides re-targeted or reported, and the version bump that triggers it on boot | In review |
+| **M2e** Rebuild | Per person atomic rebuild of tiers 2 and 3 from the archive, source identity re-resolved through the current mapping, overrides re-targeted or reported, and the version bump that triggers it on boot | In review, [#55](https://github.com/bardesss/haelan/pull/55) |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish | Not started |
