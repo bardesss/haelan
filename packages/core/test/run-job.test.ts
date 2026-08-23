@@ -257,6 +257,34 @@ describe('runJob', () => {
     expect(rows[0]?.rawPayloadId).not.toBe(first?.rawPayloadId)
   })
 
+  it('marks the day a session left as well as the day it moved to', async () => {
+    // A session that moved days leaves derived rows behind on the day it left. localDate is in
+    // the upsert's set clause, so a corrected end offset legitimately moves one across midnight,
+    // and the delete-then-insert that rewrites a day's sleep rows only runs for a dirty day.
+    const night = (utcOffset: string) => body([sleepPoint({
+      startTime: '2026-08-18T21:00:00Z', endTime: '2026-08-18T22:30:00Z', utcOffset,
+      stages: [{ type: 'DEEP', startTime: '2026-08-18T21:00:00Z', endTime: '2026-08-18T22:30:00Z' }],
+    })])
+    const args = {
+      personId: 'p1', dataType: dataTypeById('sleep')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-19T00:00:00Z'),
+    }
+    const queue = new DeriveQueue(ctx.db)
+    const deps = (utcOffset: string) => ({
+      ...build(vi.fn().mockImplementation(async () => new Response(night(utcOffset), { status: 200 }))),
+      deriveQueue: queue,
+    })
+
+    await runJob({ ...args, deps: deps('7200s') })
+    expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-19'])
+    queue.clear(queue.claim(10))
+
+    // The same session, one hour earlier, which puts its end on the previous local date.
+    await runJob({ ...args, deps: deps('3600s') })
+    expect(ctx.db.select().from(sessions).all()[0]?.localDate).toBe('2026-08-18')
+    expect(queue.claim(10).map((e) => e.localDate).sort()).toEqual(['2026-08-18', '2026-08-19'])
+  })
+
   it('skips a type the API cannot list without calling it', async () => {
     const fetchMock = vi.fn()
     const result = await runJob({
