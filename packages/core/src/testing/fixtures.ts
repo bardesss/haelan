@@ -6,7 +6,8 @@ import { asc, eq } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../db/open.ts'
 import { migrateToLatest } from '../db/migrate.ts'
 import {
-  people, sources, samples, sessions, sessionSegments, overrides, rawPayloads, syncState, daily,
+  people, sources, sourcePriority, samples, sessions, sessionSegments, overrides, rawPayloads,
+  syncState, deriveQueue, daily,
 } from '../db/schema/index.ts'
 import type { SessionKind, SampleAgg } from '../db/schema/index.ts'
 import type { Database } from '../db/open.ts'
@@ -260,6 +261,93 @@ function rollupBody(localDate: string, kcal: number): string {
   return dailyRollupBody('totalCalories', [{ date: { year, month, day }, value: { kcalSum: kcal } }])
 }
 
+const REBUILDABLE_LIST_PARAMS = { filter: 'x', pageSize: 1000, pageToken: null }
+
+/**
+ * Archives the heart-rate windows, the sleep night and the rollup, and writes the sync_state row.
+ * Shared between `seedRebuildable`, which does this once against a brand new file, and
+ * `openRebuildLab`'s `reset`, which does it again and again against the same file after clearing
+ * every row it wrote last time. Neither caller does anything to the archived payloads that the
+ * other does not, so a fix made here reaches both without the two drifting apart.
+ */
+function archiveRebuildablePayloads(
+  db: Database, archive: RawArchive, personId: string, options: SeedRebuildableOptions,
+): void {
+  const dataSources = options.dataSources
+    ?? [options.dataSource ?? { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' }]
+  // One heart-rate window per descriptor, each on its own day: a shared window would let two
+  // descriptors' readings collide on nothing (different dataSource, different bodyHash, so the
+  // archive keeps both), but putting them on separate days keeps every descriptor's samples
+  // independently inspectable rather than downsampled together into one window.
+  dataSources.forEach((dataSource, i) => {
+    const windowStartMs = REBUILDABLE_WINDOW_START + i * 86_400_000
+    archive.put({
+      personId, dataType: 'heart-rate', requestParams: REBUILDABLE_LIST_PARAMS,
+      windowStartMs, windowEndMs: windowStartMs + 86_400_000,
+      fetchedAtMs: 1, httpStatus: 200, body: heartRateBody(dataSource, windowStartMs),
+    })
+  })
+  archive.put({
+    personId, dataType: 'sleep', requestParams: REBUILDABLE_LIST_PARAMS,
+    windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
+    fetchedAtMs: 1, httpStatus: 200, body: sleepNightBody(dataSources[0]!),
+  })
+  // A rollup response, which is the only thing that ever produces a provider daily row. The
+  // range in requestParams is what tells the replay this was a rollup call rather than a list
+  // one, so it cannot be omitted.
+  archive.put({
+    personId, dataType: 'total-calories', requestParams: { range: { start: {}, end: {} } },
+    windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
+    fetchedAtMs: 1, httpStatus: 200, body: rollupBody(REBUILDABLE_DATE, 2100),
+  })
+
+  // A high water mark and a backfill cursor, the two things a rebuild must not reset. Without a
+  // row here the test that pins that compares an empty table to an empty table.
+  db.insert(syncState).values({
+    personId, dataType: 'heart-rate',
+    highWaterMs: REBUILDABLE_WINDOW_START + 86_400_000,
+    backfillCursorMs: REBUILDABLE_WINDOW_START,
+    lastSuccessAtMs: 1,
+  }).run()
+}
+
+/**
+ * Every row of the five tables a rebuild writes, each sorted by its own full natural key. Shared
+ * by `seedRebuildable` and `openRebuildLab` so the two fixtures hand a property test the same
+ * definition of "unchanged" to compare against.
+ */
+function snapshotOf(db: Database): RebuildableSnapshot {
+  return {
+    sources: db.select().from(sources)
+      .orderBy(asc(sources.personId), asc(sources.externalId), asc(sources.id)).all(),
+    samples: db.select().from(samples)
+      .orderBy(
+        asc(samples.personId), asc(samples.sourceId), asc(samples.metric),
+        asc(samples.utcMs), asc(samples.agg),
+      ).all(),
+    sessions: db.select().from(sessions)
+      .orderBy(
+        asc(sessions.personId), asc(sessions.sourceId), asc(sessions.kind),
+        asc(sessions.externalId), asc(sessions.id),
+      ).all(),
+    // Ordered by session, stage and start rather than id: two rows sharing all three would be
+    // two segments of the same stage starting at the same instant, which is not a shape the
+    // fixture or the mappers produce, so id only has to break a tie that cannot occur. It is
+    // still included last, because a sort that silently depended on that never happening would
+    // be the kind of thing this fixture exists to not do.
+    sessionSegments: db.select().from(sessionSegments)
+      .orderBy(
+        asc(sessionSegments.sessionId), asc(sessionSegments.stage),
+        asc(sessionSegments.startMs), asc(sessionSegments.id),
+      ).all(),
+    daily: db.select().from(daily)
+      .orderBy(
+        asc(daily.personId), asc(daily.localDate), asc(daily.metric),
+        asc(daily.agg), asc(daily.source),
+      ).all(),
+  }
+}
+
 // The one database the most recent seedRebuildable handed out, so the next call can close it.
 let openRebuildable: { cleanup: () => void } | null = null
 
@@ -287,44 +375,8 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
   const personId = 'p1'
   seedPerson(db, personId)
 
-  const dataSources = options.dataSources
-    ?? [options.dataSource ?? { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' }]
   const archive = new RawArchive(db)
-  const listParams = { filter: 'x', pageSize: 1000, pageToken: null }
-  // One heart-rate window per descriptor, each on its own day: a shared window would let two
-  // descriptors' readings collide on nothing (different dataSource, different bodyHash, so the
-  // archive keeps both), but putting them on separate days keeps every descriptor's samples
-  // independently inspectable rather than downsampled together into one window.
-  dataSources.forEach((dataSource, i) => {
-    const windowStartMs = REBUILDABLE_WINDOW_START + i * 86_400_000
-    archive.put({
-      personId, dataType: 'heart-rate', requestParams: listParams,
-      windowStartMs, windowEndMs: windowStartMs + 86_400_000,
-      fetchedAtMs: 1, httpStatus: 200, body: heartRateBody(dataSource, windowStartMs),
-    })
-  })
-  archive.put({
-    personId, dataType: 'sleep', requestParams: listParams,
-    windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
-    fetchedAtMs: 1, httpStatus: 200, body: sleepNightBody(dataSources[0]!),
-  })
-  // A rollup response, which is the only thing that ever produces a provider daily row. The
-  // range in requestParams is what tells the replay this was a rollup call rather than a list
-  // one, so it cannot be omitted.
-  archive.put({
-    personId, dataType: 'total-calories', requestParams: { range: { start: {}, end: {} } },
-    windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
-    fetchedAtMs: 1, httpStatus: 200, body: rollupBody(REBUILDABLE_DATE, 2100),
-  })
-
-  // A high water mark and a backfill cursor, the two things a rebuild must not reset. Without a
-  // row here the test that pins that compares an empty table to an empty table.
-  db.insert(syncState).values({
-    personId, dataType: 'heart-rate',
-    highWaterMs: REBUILDABLE_WINDOW_START + 86_400_000,
-    backfillCursorMs: REBUILDABLE_WINDOW_START,
-    lastSuccessAtMs: 1,
-  }).run()
+  archiveRebuildablePayloads(db, archive, personId, options)
 
   const queue = new DeriveQueue(db)
   const deps: RebuildDeps = {
@@ -356,7 +408,7 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
       // genuinely different identities. Without this the second person is never replayed at all,
       // and every claim about doing per person work holds vacuously for them.
       archive.put({
-        personId: otherId, dataType: 'heart-rate', requestParams: listParams,
+        personId: otherId, dataType: 'heart-rate', requestParams: REBUILDABLE_LIST_PARAMS,
         windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
         fetchedAtMs: 1, httpStatus: 200,
         body: heartRateBody({
@@ -396,36 +448,90 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
       db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
         .where(eq(rawPayloads.id, row.id)).run()
     },
-    snapshot: () => ({
-      sources: db.select().from(sources)
-        .orderBy(asc(sources.personId), asc(sources.externalId), asc(sources.id)).all(),
-      samples: db.select().from(samples)
-        .orderBy(
-          asc(samples.personId), asc(samples.sourceId), asc(samples.metric),
-          asc(samples.utcMs), asc(samples.agg),
-        ).all(),
-      sessions: db.select().from(sessions)
-        .orderBy(
-          asc(sessions.personId), asc(sessions.sourceId), asc(sessions.kind),
-          asc(sessions.externalId), asc(sessions.id),
-        ).all(),
-      // Ordered by session, stage and start rather than id: two rows sharing all three would be
-      // two segments of the same stage starting at the same instant, which is not a shape the
-      // fixture or the mappers produce, so id only has to break a tie that cannot occur. It is
-      // still included last, because a sort that silently depended on that never happening would
-      // be the kind of thing this fixture exists to not do.
-      sessionSegments: db.select().from(sessionSegments)
-        .orderBy(
-          asc(sessionSegments.sessionId), asc(sessionSegments.stage),
-          asc(sessionSegments.startMs), asc(sessionSegments.id),
-        ).all(),
-      daily: db.select().from(daily)
-        .orderBy(
-          asc(daily.personId), asc(daily.localDate), asc(daily.metric),
-          asc(daily.agg), asc(daily.source),
-        ).all(),
-    }),
+    snapshot: () => snapshotOf(db),
   }
   openRebuildable = handle
   return handle
+}
+
+export interface RebuildLab {
+  db: Database
+  personId: string
+  /** Everything runRebuild needs except nowMs, so a caller spreads this and adds the clock. */
+  deps: RebuildDeps
+  /**
+   * Wipes every row this fixture writes and reseeds fresh archived payloads for `personId`,
+   * without recreating the sqlite file or re-running its migrations. Safe to call any number of
+   * times against the same lab, which is the entire reason this exists: a fast-check property
+   * calls it once per generated case instead of calling `seedRebuildable` and paying for a fresh
+   * file and seven migrations every time.
+   */
+  reset: (options?: SeedRebuildableOptions) => void
+  /** Same definition of "every row that matters" as `Rebuildable.snapshot`. */
+  snapshot: () => RebuildableSnapshot
+  cleanup: () => void
+}
+
+/**
+ * A rebuild fixture that pays sqlite's setup cost once instead of once per fast-check run.
+ *
+ * `seedRebuildable` creates a fresh file and runs every migration on each call, because its other
+ * callers each call it once or twice per test. A property test calling it fifty times inside one
+ * `fc.assert` pays that migration cost fifty times for work the property itself never reads:
+ * `runRebuild` only ever touches the tables `reset` clears below. Measured, opening a fresh
+ * database and migrating it costs around half of what one full `seedRebuildable` call spends, and
+ * it is the syscall-heavy half, which is exactly the part that gets worse under the parallelism a
+ * full `vitest run` runs everything under.
+ *
+ * `reset` clearing rows and reseeding is only as safe as a fresh file if nothing upstream of it
+ * can tell the difference, which is what this instance's own unique constraints
+ * (`sources_person_external`, `samples_natural`, `sessions_natural`, `daily_natural`) guarantee:
+ * every row this fixture or a rebuild ever writes is addressed by its natural key, never by
+ * anything a leftover row from a previous case could collide with once that case's own rows are
+ * gone.
+ */
+export function openRebuildLab(): RebuildLab {
+  const t = createTestDatabase()
+  const db = t.db
+  const personId = 'p1'
+  const archive = new RawArchive(db)
+  const queue = new DeriveQueue(db)
+  const deps: RebuildDeps = {
+    db,
+    archive,
+    peopleStore: new PeopleStore(db),
+    priority: new SourcePriorityStore(db, queue),
+    overrides: new OverrideStore(db, queue),
+    settings: new SettingsStore(db),
+  }
+
+  const reset = (options: SeedRebuildableOptions = {}): void => {
+    // Children before the parents they reference, and sources and people last of all: sources
+    // and people are what samples, sessions, source_priority, raw_payloads, sync_state and
+    // derive_queue all point at, and PRAGMA foreign_keys = ON (set on every connection this
+    // package opens) rejects a delete order that got that backwards.
+    db.delete(sessionSegments).run()
+    db.delete(sessions).run()
+    db.delete(samples).run()
+    db.delete(sourcePriority).run()
+    db.delete(overrides).run()
+    db.delete(daily).run()
+    db.delete(sources).run()
+    db.delete(rawPayloads).run()
+    db.delete(syncState).run()
+    db.delete(deriveQueue).run()
+    db.delete(people).run()
+
+    seedPerson(db, personId)
+    archiveRebuildablePayloads(db, archive, personId, options)
+  }
+
+  return {
+    db,
+    personId,
+    deps,
+    reset,
+    snapshot: () => snapshotOf(db),
+    cleanup: t.cleanup,
+  }
 }
