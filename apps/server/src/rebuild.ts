@@ -52,6 +52,17 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildPer
       for (const orphan of person.overridesOrphaned) {
         deps.log(`override ${orphan.id} no longer applies: ${orphan.reason}`)
       }
+      // Its own line for the same reason, and only when there is something to say. Every other
+      // number above describes rows that came back from tier 1; this one describes the household
+      // member's own choice of which device wins for which metric, which went with the sources it
+      // named and which nothing can regenerate or move onto the identities that replaced them.
+      // Folded into the "stale sources removed" count it would read as housekeeping.
+      if (person.rankingsRemoved > 0) {
+        deps.log(
+          `${person.rankingsRemoved} source rankings for ${person.personId} went with those `
+          + 'sources and cannot be rebuilt, so set them again',
+        )
+      }
       if (person.unmappablePayloads > 0) {
         deps.log(`${person.unmappablePayloads} payloads had no current mapper and were skipped`)
       }

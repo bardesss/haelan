@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { openHaelan, sampleTarget, seedPerson } from '@haelan/core'
+import { openHaelan, sampleTarget, schema, seedPerson } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import { rebuildIfNeeded, runBootSequence } from '../src/rebuild.ts'
 
@@ -181,6 +181,8 @@ interface BootHarness {
   seedUnstampedPerson: (id: string) => void
   /** A correction naming a sample the archive will never reproduce, so the rebuild orphans it. */
   seedOverrideOnAMissingSample: (id: string) => void
+  /** A ranking on a source no payload will reproduce, so the rebuild takes the ranking with it. */
+  seedRankingOnAStaleSource: (id: string) => void
 }
 
 /**
@@ -204,6 +206,19 @@ async function bootHarness(): Promise<BootHarness> {
         reason: 'test fixture: a correction on a reading that will not survive the rebuild',
         nowMs: 1,
       })
+    },
+    seedRankingOnAStaleSource: (id) => {
+      // Straight into the tables rather than through SourcePriorityStore.put, which would also
+      // mark days dirty. What this fixture is about is a ranking that outlived the source it
+      // named, and the store's own queueing has nothing to do with that.
+      instance.db.insert(schema.sources).values({
+        id: 'a-source-no-payload-will-ever-produce', personId: id,
+        externalId: 'HEALTH_CONNECT', displayName: 'HEALTH_CONNECT', kind: 'app', createdAtMs: 1,
+      }).run()
+      instance.db.insert(schema.sourcePriority).values({
+        personId: id, metric: 'heart_rate',
+        sourceId: 'a-source-no-payload-will-ever-produce', rank: 0,
+      }).run()
     },
   }
 }
@@ -265,6 +280,23 @@ describe('rebuildIfNeeded', () => {
     await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
 
     expect(lines.some((l) => l.includes('override'))).toBe(true)
+  })
+
+  test('a ranking lost with its source is called out, not folded into the source count', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    h.seedRankingOnAStaleSource('p1')
+    const lines: string[] = []
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
+
+    // A household member's ranking is the one thing a rebuild destroys that no rebuild can put
+    // back, and it cannot be re-targeted either: the stale identity carries no record of which
+    // new identity replaced it. So the log has to say it plainly enough that whoever reads it
+    // knows there is something for them to do.
+    const said = lines.find((l) => l.includes('ranking'))
+    expect(said).toBeDefined()
+    expect(said).toContain('set them again')
   })
 
   test('yields between people rather than only after all of them', async () => {

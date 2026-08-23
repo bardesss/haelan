@@ -98,6 +98,33 @@ describe('runRebuild', () => {
     expect(report.people[0]!.sourcesRemoved).toBe(1)
   })
 
+  test('the rankings that went with a stale source are counted, not just the sources', () => {
+    h = seedRebuildable()
+    // One source from before describe() widened, ranked for two metrics. Two numbers rather than
+    // one, so a report that handed back sourcesRemoved twice would still read as wrong.
+    h.db.insert(sources).values({
+      id: 'stale', personId: h.personId, externalId: 'HEALTH_CONNECT',
+      displayName: 'HEALTH_CONNECT', kind: 'app', createdAtMs: 1,
+    }).run()
+    for (const metric of ['heart_rate', 'steps']) {
+      h.db.insert(sourcePriority).values({
+        personId: h.personId, metric, sourceId: 'stale', rank: 0,
+      }).run()
+    }
+
+    const report = runRebuild({ ...h.deps, nowMs: 1 })
+
+    // source_priority is tier 1 in every sense that matters: it is the household member's own
+    // choice of which device wins for which metric, and no rebuild can regenerate it. The
+    // rankings cannot be re-targeted the way overrides are either, because a stale source's
+    // identity carries no record of which new identity replaced it. Saying how many went is the
+    // whole of what is possible, so the report has to carry it rather than fold it into the
+    // source count and leave an operator believing nothing was lost.
+    expect(report.people[0]!.sourcesRemoved).toBe(1)
+    expect(report.people[0]!.rankingsRemoved).toBe(2)
+    expect(h.db.select().from(sourcePriority).all()).toEqual([])
+  })
+
   test('leaves sync state alone, because a rebuild is not a re-fetch', () => {
     h = seedRebuildable()
     const before = h.db.select().from(syncState).all()

@@ -26,6 +26,13 @@ export interface RebuildPersonReport {
   daysDerived: number
   dailyRows: number
   sourcesRemoved: number
+  /**
+   * How many `source_priority` rows went with those sources. Beside `sourcesRemoved` rather than
+   * inside it because the two mean different things to whoever reads them: a stale source is a
+   * regenerable cache entry, and a ranking is the household member's own choice of which device
+   * wins for which metric, which nothing here or anywhere else can put back.
+   */
+  rankingsRemoved: number
   overridesRetargeted: number
   overridesOrphaned: OrphanedOverride[]
   unmappablePayloads: number
@@ -135,7 +142,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
       })
 
-      const sourcesRemoved = dropUnreferencedSources(tx, personId)
+      const dropped = dropUnreferencedSources(tx, personId)
 
       const retarget = retargetOverrides(tx, { personId, oldSessions })
 
@@ -161,7 +168,8 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         daysDerived: counts.localDates.length,
         // Provider rows come from the replay, derived rows from the loop above. Both are tier 3.
         dailyRows: dailyRows + counts.providerDaily,
-        sourcesRemoved,
+        sourcesRemoved: dropped.sources,
+        rankingsRemoved: dropped.rankings,
         overridesRetargeted: retarget.retargeted,
         overridesOrphaned: retarget.orphaned,
         unmappablePayloads: counts.unmappable,
@@ -185,8 +193,19 @@ export function runRebuild(input: RebuildInput): RebuildReport {
  *
  * The rankings go with them because `source_priority.source_id` is a foreign key, and a ranking
  * of a source that no longer exists is not a preference anybody can act on.
+ *
+ * They are counted separately, and the caller says so out loud, because they are the one thing a
+ * rebuild destroys that no rebuild can restore. Every other row here comes back from tier 1; a
+ * ranking is the household member's own decision about which device wins for which metric and
+ * exists nowhere else. Re-targeting them the way overrides are re-targeted is not available: an
+ * override's key names an instant we can look up again, while a stale source's identity carries
+ * no record of which new identity replaced it, and the change to the identity rules is exactly
+ * the thing we cannot invert. So reporting is the whole of what is possible, and reporting
+ * nothing would leave a household's merge preferences quietly different after an upgrade.
  */
-function dropUnreferencedSources(tx: DbOrTx, personId: string): number {
+interface Dropped { sources: number, rankings: number }
+
+function dropUnreferencedSources(tx: DbOrTx, personId: string): Dropped {
   const referenced = new Set<string>([
     ...tx.selectDistinct({ id: samples.sourceId }).from(samples)
       .where(eq(samples.personId, personId)).all().map((row) => row.id),
@@ -197,12 +216,18 @@ function dropUnreferencedSources(tx: DbOrTx, personId: string): number {
   const owned = tx.select({ id: sources.id }).from(sources)
     .where(eq(sources.personId, personId)).all().map((row) => row.id)
   const stale = owned.filter((id) => !referenced.has(id))
-  if (stale.length === 0) return 0
+  if (stale.length === 0) return { sources: 0, rankings: 0 }
 
-  tx.delete(sourcePriority).where(and(
+  const doomed = and(
     eq(sourcePriority.personId, personId),
     inArray(sourcePriority.sourceId, stale),
-  )).run()
+  )
+  // Counted by reading the rows before deleting them rather than off the delete's changes count,
+  // for the same reason the replay counts against the table: one source can be ranked for
+  // several metrics, so the number an operator needs is rows, not sources.
+  const rankings = tx.select({ metric: sourcePriority.metric }).from(sourcePriority)
+    .where(doomed).all().length
+  tx.delete(sourcePriority).where(doomed).run()
   tx.delete(sources).where(inArray(sources.id, stale)).run()
-  return stale.length
+  return { sources: stale.length, rankings }
 }
