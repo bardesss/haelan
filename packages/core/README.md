@@ -245,6 +245,53 @@ two separate nights on two separate days. A wake from 23:40 to 00:10 is the case
 happens to re-fetch are recomputed under the new value; a year of backfilled nights keeps its old
 grouping until a full rebuild.
 
+## Querying
+
+`src/query` is the surface `server`, `mcp` and `cli` read the store through. It sits above tier 3
+and computes nothing that is not already a `daily` row, except the statistics baselines and
+insights need on top of one.
+
+**The person binding is structural.** `PersonQuery` takes a person id at construction and every
+method reads through it. There is no unbound variant and no optional person parameter, because
+section 11 requires the binding to live in the query layer rather than in the callers: a tool that
+forgets a `WHERE` clause must not be able to leak another member's data. `person-query-isolation.test.ts`
+is what keeps that true as methods are added.
+
+**Three questions, not ten.** The MCP surface names ten tools, but most are readings of the same
+three answers: a series over a range, a baseline to judge a reading against, and a period against
+the one before it. Today's numbers are a series whose range is one day, and a sleep page is a
+series over the `sleep_*` metrics.
+
+**Merged by default, per source on request.** A series reads the `merged` row unless asked
+otherwise, because that is the answer to what happened rather than to what one device said, and
+naming a source is what keeps a merge inspectable against the rows underneath it. Two metrics
+break that default silently: `total_calories` and `floors` have no `merged` row at all, because
+Google reconciles them itself and there is no sample underneath either for a merge to work from.
+Each is written only as a `provider` row, so a series for one of them must name that source; asking
+without naming it returns nothing.
+
+**Baselines are computed, not stored.** Sixty rows is a cheap query, a stored baseline can
+disagree with the rows it came from, and changing the window takes effect everywhere at once.
+Overridden days need no handling here: an override applies at derivation, so an excluded day has
+no row and a corrected one already carries its new value.
+
+**A baseline never contains the reading it judges.** The window ends the day before the date asked
+about, because a reading included in its own baseline pulls the centre toward itself and biases
+its own z score toward zero, worst when history is shortest.
+
+**A thin baseline is reported, not hidden.** It carries the number of contributing days and a
+`thin` flag against one stated minimum, so a dashboard band and an agent's effect size inherit the
+same judgement instead of each inventing a threshold.
+
+**Suppression has two gates, and a suppressed insight is blank.** Days present first, because a
+missing day has no row and therefore no coverage, so completeness is a failure the coverage gate
+structurally cannot see. Then how well observed the present days were. A null coverage counts as
+present and fine, since null means there was never a basis to measure hours: treating it as zero
+would blank every sleep and provider insight in the product. When either gate fails the numbers
+come back null with a reason, deliberately unlike a thin baseline, because a thin baseline is a
+weaker true statement while a suppressed insight is the fabricated number the design calls worse
+than a blank card.
+
 ## Heart rate volume and the downsampling decision
 
 M0 measured heart rate arriving every 2 seconds: 13.6M rows per person-year, 95 percent of all

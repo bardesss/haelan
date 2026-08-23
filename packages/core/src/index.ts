@@ -108,3 +108,11 @@ export { assembleNights, deriveSleepDay, DEFAULT_NIGHT_GAP_MINUTES, ASLEEP_STAGE
 export type { SleepSessionLike, SleepSegmentLike, NightAssembly } from './derive/sleep.ts'
 export { mergeSleepDay } from './derive/sleepMerge.ts'
 export { SLEEP_METRICS } from './derive/metrics.ts'
+
+// M2d. The query layer M3 and M4 both sit on, and the statistics behind it.
+export { PersonQuery } from './query/personQuery.ts'
+export type { DailyPoint } from './query/personQuery.ts'
+export { baselineOf, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
+export type { Baseline } from './query/baseline.ts'
+export { comparePeriods, INSIGHT_MIN_DAY_FRACTION, INSIGHT_MIN_COVERAGE } from './query/insights.ts'
+export type { Insight, PeriodPoint, SuppressionReason } from './query/insights.ts'
