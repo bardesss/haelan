@@ -7,7 +7,7 @@ export { seal, unseal } from './crypto/secretBox.ts'
 export { CredentialStore } from './store/credentials.ts'
 export type { ClientCredentials, StoredRefreshToken } from './store/credentials.ts'
 export { RawArchive } from './store/rawArchive.ts'
-export type { PutInput, PutResult } from './store/rawArchive.ts'
+export type { PutInput, PutResult, ArchivedPayload } from './store/rawArchive.ts'
 export { createTestDatabase, seedPerson } from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
 export {

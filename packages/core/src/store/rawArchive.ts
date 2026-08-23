@@ -1,6 +1,6 @@
 ﻿import { createHash, randomUUID } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { rawPayloads } from '../db/schema/index.ts'
 import { ConfigError, TransientError } from '../errors.ts'
@@ -17,6 +17,16 @@ export interface PutInput {
 }
 
 export interface PutResult { id: string, deduplicated: boolean }
+
+export interface ArchivedPayload {
+  id: string
+  dataType: string
+  /** JSON, as stored. A rollup response carries `range`, a list response carries `filter`. */
+  requestParams: string
+  windowStartMs: number
+  windowEndMs: number
+  fetchedAtMs: number
+}
 
 export class RawArchive {
   readonly #db: DbOrTx
@@ -62,6 +72,33 @@ export class RawArchive {
     )).get()
     if (!existing) throw new TransientError('insert conflicted but no existing row found')
     return { id: existing.id, deduplicated: true }
+  }
+
+  /**
+   * Every payload of one person's that a replay can map, oldest window first.
+   *
+   * Non-200 responses are excluded. The archive keeps them because a 429 body is evidence about
+   * a sync, but there are no data points inside one to map.
+   *
+   * Ordering is by window and then by fetch time, so when a window was fetched twice the later
+   * body replays last and its answer is the one that lands. That is the same order the original
+   * syncs wrote in, which is what makes a replay reproduce them rather than approximate them.
+   */
+  listFor(personId: string): ArchivedPayload[] {
+    return this.#db.select({
+      id: rawPayloads.id,
+      dataType: rawPayloads.dataType,
+      requestParams: rawPayloads.requestParams,
+      windowStartMs: rawPayloads.windowStartMs,
+      windowEndMs: rawPayloads.windowEndMs,
+      fetchedAtMs: rawPayloads.fetchedAtMs,
+    }).from(rawPayloads)
+      .where(and(eq(rawPayloads.personId, personId), eq(rawPayloads.httpStatus, 200)))
+      .orderBy(
+        asc(rawPayloads.windowStartMs), asc(rawPayloads.windowEndMs),
+        asc(rawPayloads.fetchedAtMs), asc(rawPayloads.id),
+      )
+      .all()
   }
 
   // The person is part of the lookup rather than checked after it, so a caller cannot forget.

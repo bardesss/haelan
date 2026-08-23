@@ -123,3 +123,68 @@ describe('RawArchive', () => {
     expect(archive.getBody('p1', id)).toContain('400')
   })
 })
+
+describe('listFor', () => {
+  let dir: string
+  let db: Database
+  let archive: RawArchive
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'haelan-'))
+    db = openDatabase(dir)
+    migrateToLatest(db)
+    db.insert(people).values({
+      id: 'p1', displayName: 'Test', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+    }).run()
+    archive = new RawArchive(db)
+  })
+  afterEach(() => { closeDatabase(db); rmSync(dir, { recursive: true, force: true }) })
+
+  it('returns one person\'s payloads oldest window first', () => {
+    const base = { personId: 'p1', requestParams: {}, fetchedAtMs: 1, httpStatus: 200 }
+    archive.put({ ...base, dataType: 'steps', windowStartMs: 3000, windowEndMs: 4000, body: '{"c":1}' })
+    archive.put({ ...base, dataType: 'steps', windowStartMs: 1000, windowEndMs: 2000, body: '{"a":1}' })
+    archive.put({ ...base, dataType: 'steps', windowStartMs: 2000, windowEndMs: 3000, body: '{"b":1}' })
+
+    const listed = archive.listFor('p1')
+
+    expect(listed.map((p) => p.windowStartMs)).toEqual([1000, 2000, 3000])
+  })
+
+  it('two fetches of one window come back in fetch order', () => {
+    const base = { personId: 'p1', dataType: 'steps', requestParams: {}, windowStartMs: 1000, windowEndMs: 2000, httpStatus: 200 }
+    archive.put({ ...base, fetchedAtMs: 200, body: '{"corrected":true}' })
+    archive.put({ ...base, fetchedAtMs: 100, body: '{"corrected":false}' })
+
+    const listed = archive.listFor('p1')
+
+    expect(listed.map((p) => p.fetchedAtMs)).toEqual([100, 200])
+  })
+
+  it('a non-200 response is not listed', () => {
+    const base = { personId: 'p1', dataType: 'steps', requestParams: {}, windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1 }
+    archive.put({ ...base, httpStatus: 429, body: '{"error":"slow down"}' })
+
+    expect(archive.listFor('p1')).toEqual([])
+  })
+
+  it('another person\'s payloads are not listed', () => {
+    db.insert(people).values({
+      id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+    }).run()
+    const base = { dataType: 'steps', requestParams: {}, windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1, httpStatus: 200 }
+    archive.put({ ...base, personId: 'p1', body: '{"mine":1}' })
+    archive.put({ ...base, personId: 'p2', body: '{"theirs":1}' })
+
+    expect(archive.listFor('p1')).toHaveLength(1)
+  })
+
+  it('the request params come back so a replay can tell a rollup from a list', () => {
+    archive.put({
+      personId: 'p1', dataType: 'steps', requestParams: { range: { start: 'x', end: 'y' } },
+      windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1, httpStatus: 200, body: '{}',
+    })
+
+    expect(JSON.parse(archive.listFor('p1')[0]!.requestParams)).toEqual({ range: { start: 'x', end: 'y' } })
+  })
+})
