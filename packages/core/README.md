@@ -262,13 +262,15 @@ three answers: a series over a range, a baseline to judge a reading against, and
 the one before it. Today's numbers are a series whose range is one day, and a sleep page is a
 series over the `sleep_*` metrics.
 
-**Merged by default, per source on request.** A series reads the `merged` row unless asked
-otherwise, because that is the answer to what happened rather than to what one device said, and
-naming a source is what keeps a merge inspectable against the rows underneath it. Two metrics
-break that default silently: `total_calories` and `floors` have no `merged` row at all, because
-Google reconciles them itself and there is no sample underneath either for a merge to work from.
-Each is written only as a `provider` row, so a series for one of them must name that source; asking
-without naming it returns nothing.
+**The authoritative row by default, per source on request.** With no source named, a series reads
+the `merged` row for a day and falls back to the `provider` row where no merged one exists, because
+both mean what happened that day and differ only in who reconciled it, which is what `daily.source`'s
+own column comment says. The fallback is per row rather than per series, so a single stray merged
+row cannot hide an entire provider series. `total_calories` and `floors` are why it exists: Google
+reconciles them itself and there is no sample underneath either for a merge to work from, so each is
+written only as a `provider` row. Naming a source reads that device instead, and naming `merged`
+still means only the rows we merged ourselves, which is what keeps a merge inspectable against the
+rows underneath it. `DailyPoint` carries `source`, so a caller can always see which it got.
 
 **Baselines are computed, not stored.** Sixty rows is a cheap query, a stored baseline can
 disagree with the rows it came from, and changing the window takes effect everywhere at once.
@@ -280,8 +282,30 @@ about, because a reading included in its own baseline pulls the centre toward it
 its own z score toward zero, worst when history is shortest.
 
 **A thin baseline is reported, not hidden.** It carries the number of contributing days and a
-`thin` flag against one stated minimum, so a dashboard band and an agent's effect size inherit the
-same judgement instead of each inventing a threshold.
+`thin` flag, so a dashboard band and an agent's effect size inherit the same judgement instead of
+each inventing a threshold. Thin means either of two things: too few days for a spread to stand on,
+capped at the window so a legitimate seven day trend is not thin by construction, or too small a
+fraction of the window asked for. The fraction is the one insights use, imported rather than
+copied, because a person who wore their device 20 of 60 days must not get a confident band directly
+above a blank insight card built from the same rows.
+
+**A baseline drops the days it cannot trust.** Where coverage is a quality signal for the metric, a
+day below the same minimum insights use is left out rather than averaged in. Sixty mornings-only
+days at 0.2 coverage are sixty systematic undercounts, and left in they build a centre against which
+the first properly worn day scores a large positive z: a wear artefact reported as a health signal.
+
+**Coverage is a quality signal only where a metric is continuously sampled.** It is the fraction of
+the day's hours carrying a sample, which is comparable within a metric and meaningless across them:
+a `resting_heart_rate` arrives once a day, so a perfect one reads 1/24. `coverageIsMeaningful` asks
+the catalogue, and only an `intraday` tier says yes. A metric no data type declares, which is every
+`sleep_*` metric, says no. Without this the single cross-metric threshold blanked the whole Recovery
+page, the whole Weight page, and the metric behind the product's own flagship example question.
+
+**A query that cannot be answered throws rather than returning nothing.** Dates must be padded ISO
+and a range must run forwards, the metric must be one the catalogue declares, and the aggregate must
+be one that metric lists. Each of those otherwise returns an empty series indistinguishable from
+"this person has no data", which in M4 becomes an agent stating a false thing about somebody's
+health record with total confidence. The failures are `ConfigError` and name the offending value.
 
 **Suppression has two gates, and a suppressed insight is blank.** Days present first, because a
 missing day has no row and therefore no coverage, so completeness is a failure the coverage gate
@@ -290,7 +314,10 @@ present and fine, since null means there was never a basis to measure hours: tre
 would blank every sleep and provider insight in the product. When either gate fails the numbers
 come back null with a reason, deliberately unlike a thin baseline, because a thin baseline is a
 weaker true statement while a suppressed insight is the fabricated number the design calls worse
-than a blank card.
+than a blank card. A refusal still carries its evidence: both day counts, both mean coverages and
+both resolved date ranges come back either way, because they are what explain it, and because a
+caller that had to re-derive "the period before this one" would grow its own copy of the day
+arithmetic to do it.
 
 ## Heart rate volume and the downsampling decision
 
