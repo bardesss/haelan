@@ -89,8 +89,8 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M2a** Catalogue and rollups | The metric catalogue, per source `daily` rows with coverage, the derive queue and its drain, the rollup read path for `total-calories` and `floors` | Done, [#38](https://github.com/bardesss/haelan/pull/38) |
 | **M2b** Priority and merge | The per metric source priority list, `merged` rows chosen per local hour with their mix recorded, overrides applied at derivation, session overlap grouping | Done, [#45](https://github.com/bardesss/haelan/pull/45) |
 | **M2c** Sleep derivation | Night assembly across split sessions, nap detection, stage durations and efficiency from our own segments, per source and merged sleep rows | Done, [#50](https://github.com/bardesss/haelan/pull/50) |
-| **M2d** Baselines and query layer | Rolling baselines with a thin flag, insights suppressed on missing days and thin coverage, and the person bound query layer M3 and M4 read through | In review, [#51](https://github.com/bardesss/haelan/pull/51) |
-| **M2** Derivation and query layer | Rebuild | Not started |
+| **M2d** Baselines and query layer | Rolling baselines with a thin flag, insights suppressed on missing days and thin coverage, and the person bound query layer M3 and M4 read through | Done, [#51](https://github.com/bardesss/haelan/pull/51) |
+| **M2e** Rebuild | Per person atomic rebuild of tiers 2 and 3 from the archive, source identity re-resolved through the current mapping, overrides re-targeted or reported, and the version bump that triggers it on boot | In review |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish | Not started |
@@ -103,7 +103,7 @@ run happened on 2026-08-21 and is recorded, including what it broke, in
 `probe/findings/console-steps.md`. Two things that run did not settle are listed there rather than
 here, because an unanswered question belongs next to its evidence. **M2 is cut the same way**,
 into the units `docs/superpowers/specs/2026-08-22-m2-derivation-design.md` names: M2a is the first
-of them and has its own row above, and the **M2** row now holds what the rest still owe. D1 and M0 through
+of them and each has its own row above, and **M2e** is the last. D1 and M0 through
 M5 are the only phases the design defines. M1 comes before the dashboard deliberately: intraday samples have a shelf
 life, since the API only retains them for a recent window, so every week without ingestion is a
 week of minute-level history permanently unavailable at that resolution. Charts can be improved

@@ -245,6 +245,51 @@ two separate nights on two separate days. A wake from 23:40 to 00:10 is the case
 happens to re-fetch are recomputed under the new value; a year of backfilled nights keeps its old
 grouping until a full rebuild.
 
+## Rebuild
+
+Tiers 2 and 3 are a cache. `runRebuild`, in `src/rebuild/runRebuild.ts`, regenerates them from the
+archived payloads in tier 1, one person at a time, each inside a single transaction: nobody ever
+reads a person whose samples and daily rows disagree, and the rest of the household keeps reading
+throughout while one member's rebuild runs.
+
+Two constants decide when it happens. `DERIVATION_VERSION` says what the numbers computed from
+tier 2 mean. `MAPPING_VERSION`, in `src/api/version.ts`, says what a payload turns into, including
+how `describe()` decides a source's identity, which `DERIVATION_VERSION` cannot express because a
+mapping change alters tier 2 itself. Either one moving, in either direction, triggers a rebuild on
+the next boot. Both are stamped on each `people` row as the rebuild finishes with them, which is
+what lets an interrupted run resume at the next unstamped person rather than starting over.
+
+Sources are re-resolved rather than reused. A source id is derived from the person and the
+identity `describe()` produces, so an identity the current code still produces comes back under
+the same id, and one it no longer produces is dropped along with the priority rankings that named
+it. That is the point of the milestone: an instance whose `sources` rows predate a change to
+`describe()` comes out of a rebuild carrying the identity the current code would produce.
+
+`replayPerson`, in `src/rebuild/replay.ts`, maps each fetch episode of a window separately rather
+than the window as a whole. That detail is load bearing. The sync re-fetches a trailing window on
+every run by design, so several archived rows commonly share one window's bounds without being
+pages of the same fetch, and mapping them together would run per minute downsampling across a
+stale reading and the reading that later corrected it, blending two things the original sync
+always kept apart.
+
+Re-resolving identity moves things that point at it. Sample override keys name a source, and
+session ids embed one, so `retargetOverrides`, in `src/rebuild/retarget.ts`, moves each key onto
+the regenerated row where exactly one candidate exists and reports the rest. An override that
+could go two places is left where it is and named in the boot log, because a correction silently
+applied to the wrong reading is worse than one an operator is told about.
+
+The boot trigger itself lives outside this package, in `apps/server/src/rebuild.ts`.
+`rebuildIfNeeded` runs after `listen`, so an upgrade never turns into a refused connection, and
+`runBootSequence` starts the sync runner only once the rebuild has succeeded, so nothing writes
+rows the replay would delete without replaying. It yields between people so the server keeps
+answering while better-sqlite3 holds the thread for whichever one it is currently on. A failed
+rebuild does not start the sync runner.
+
+A rebuild never touches sync state. High water marks, backfill cursors, notes and events all
+survive it untouched, and so do the overrides themselves beyond moving their keys. Tier 1 exists
+so that improving derivation costs a rebuild rather than months of API calls, and a rebuild that
+reset a cursor would undo exactly that.
+
 ## Querying
 
 `src/query` is the surface `server`, `mcp` and `cli` read the store through. It sits above tier 3
