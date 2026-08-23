@@ -1,0 +1,138 @@
+import { describe, expect, it } from 'vitest'
+import { mergeSleepDay } from '../src/derive/sleepMerge.ts'
+import { priorityFrom } from '../src/derive/priority.ts'
+import type { SourceFacts } from '../src/derive/priority.ts'
+import type { SleepSessionLike, SleepSegmentLike } from '../src/derive/sleep.ts'
+
+const MIN = 60_000
+const H = 60 * MIN
+const LOCAL_DATE = '2026-08-22'
+const BEDTIME = Date.UTC(2026, 7, 21, 21, 0)
+
+const SOURCES: SourceFacts[] = [
+  { id: 'watch', kind: 'device' },
+  { id: 'phone', kind: 'app' },
+]
+
+const session = (o: Partial<SleepSessionLike> & { id: string, startMs: number, endMs: number }): SleepSessionLike => ({
+  sourceId: 'watch', startOffsetMinutes: 120, endOffsetMinutes: 120, mainSleep: null, ...o,
+})
+
+const merge = (
+  sessions: SleepSessionLike[],
+  segments: SleepSegmentLike[] = [],
+  lists: Map<string, readonly string[]> = new Map(),
+) => mergeSleepDay({
+  personId: 'p1',
+  localDate: LOCAL_DATE,
+  sessions,
+  segments,
+  gapMinutes: 120,
+  overlapRatio: 0.5,
+  priority: priorityFrom({ lists, sources: SOURCES }),
+})
+
+const valueOf = (rows: ReturnType<typeof merge>, metric: string) =>
+  rows.find((r) => r.metric === metric)?.value
+
+// The night metrics share one mix, so reading it off any one of them is enough.
+const mixOf = (rows: ReturnType<typeof merge>): Array<{ source: string, hours: number }> =>
+  JSON.parse(rows.find((r) => r.metric === 'sleep_in_bed_minutes')!.sourceMix!)
+
+// The nap metrics carry a separate mix, computed from a disjoint set of sessions.
+const napMixOf = (rows: ReturnType<typeof merge>): Array<{ source: string, hours: number }> =>
+  JSON.parse(rows.find((r) => r.metric === 'sleep_nap_count')!.sourceMix!)
+
+describe('mergeSleepDay', () => {
+  it('files every row it produces under the merged source', () => {
+    const rows = merge([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H })])
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every((r) => r.source === 'merged')).toBe(true)
+  })
+
+  it('counts one night once when two sources both recorded it', () => {
+    // The corruption this prevents, in its sleep form: sixteen hours in bed on a night somebody
+    // slept eight, because a watch and a phone both saw it.
+    const rows = merge([
+      session({ id: 'w', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME + 10 * MIN, endMs: BEDTIME + 8 * H }),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+    // No nap happened, so there is nothing to name a source for, not an empty list of sources.
+    expect(rows.find((r) => r.metric === 'sleep_nap_count')?.sourceMix).toBeNull()
+  })
+
+  it('lets the priority list decide which recording of the night is used', () => {
+    const sessions = [
+      session({ id: 'w', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME, endMs: BEDTIME + 7 * H }),
+    ]
+    // The fallback ranks the device first, so the watch's eight hours win.
+    expect(valueOf(merge(sessions), 'sleep_in_bed_minutes')).toBe(480)
+    // Configured the other way, the phone's seven do.
+    const lists = new Map<string, readonly string[]>([['sleep', ['phone', 'watch']]])
+    expect(valueOf(merge(sessions, [], lists), 'sleep_in_bed_minutes')).toBe(420)
+  })
+
+  it('records which sources the merged night drew on', () => {
+    const rows = merge([
+      session({ id: 'w', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME + 16 * H, endMs: BEDTIME + 17 * H }),
+    ])
+    // The watch's night and the phone's nap are different events, so both are primaries, but they
+    // are disjoint sessions: the night's mix names only the watch, the nap's only the phone.
+    expect(mixOf(rows)).toEqual([{ source: 'watch', hours: 8 }])
+    expect(napMixOf(rows)).toEqual([{ source: 'phone', hours: 1 }])
+  })
+
+  it('keeps every piece the winning source recorded, not only the first', () => {
+    // The case this milestone exists for. The watch broke the night in two across a ten minute
+    // wake, the phone recorded it unbroken, and the device outranks the app. Keeping only the
+    // group's primary reported the watch's first piece as the whole night: 180 minutes in bed
+    // and a waketime of 02:00, with five hours filed as neither night nor nap.
+    const rows = merge([
+      session({ id: 'w1', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 3 * H }),
+      session({ id: 'w2', sourceId: 'watch', startMs: BEDTIME + 3 * H + 10 * MIN, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_waketime_minutes')).toBe(420)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+    // Still one source winning the event, now naming every hour it actually covered.
+    expect(mixOf(rows)).toEqual([{ source: 'watch', hours: 8 }])
+  })
+
+  it('assembles a merged night from more than two pieces', () => {
+    const rows = merge([
+      session({ id: 'w1', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 3 * H }),
+      session({ id: 'w2', sourceId: 'watch', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 5 * H }),
+      session({ id: 'w3', sourceId: 'watch', startMs: BEDTIME + 6 * H, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+  })
+
+  it('leaves an alternate recording out of the merged figures', () => {
+    // groupSessions retains the alternate; the merged row simply does not count it. The per
+    // source rows deriveSleepDay writes are where the alternate remains visible.
+    const rows = merge([
+      session({ id: 'w', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+    ])
+    expect(mixOf(rows)).toEqual([{ source: 'watch', hours: 8 }])
+  })
+
+  it('writes nothing for a day with no sleep', () => {
+    expect(merge([])).toEqual([])
+  })
+
+  it('does not depend on the order the sessions arrived in', () => {
+    const sessions = [
+      session({ id: 'w', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME + 16 * H, endMs: BEDTIME + 17 * H }),
+    ]
+    expect(merge([...sessions].reverse())).toEqual(merge(sessions))
+  })
+})

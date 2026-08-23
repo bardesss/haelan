@@ -207,6 +207,22 @@ describe('package barrel', () => {
     })
   })
 
+  describe('M2c: sleep, from sessions and their stages to a day\'s figures', () => {
+    it('exports night assembly and the day derivation', () => {
+      expect(typeof core.assembleNights).toBe('function')
+      expect(typeof core.deriveSleepDay).toBe('function')
+      expect(typeof core.DEFAULT_NIGHT_GAP_MINUTES).toBe('number')
+      expect(Array.isArray(core.ASLEEP_STAGES)).toBe(true)
+      expect(typeof core.AWAKE_STAGE).toBe('string')
+    })
+
+    it('exports the merge across sources and the sleep metric family', () => {
+      expect(typeof core.mergeSleepDay).toBe('function')
+      expect(Array.isArray(core.SLEEP_METRICS)).toBe(true)
+      expect(core.SLEEP_METRICS).toHaveLength(11)
+    })
+  })
+
   it('is callable, not merely present: setupStep answers on a real empty instance', () => {
     // A barrel test that only checks typeof passes on an export wired to the wrong module.
     const fixture = core.createTestDatabase()

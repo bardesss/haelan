@@ -258,6 +258,12 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
       body: page.body, rawPayloadId: page.rawPayloadId,
     })
     for (const row of rows) {
+      // A session that moved days leaves derived rows behind on the day it left. localDate is in
+      // the set clause below, so Google revising an end time across midnight legitimately moves
+      // one, and the day it left is only rewritten if the queue is told it is dirty.
+      const previous = tx.select({ localDate: sessions.localDate })
+        .from(sessions).where(eq(sessions.id, row.id)).get()
+      if (previous && previous.localDate !== row.localDate) localDates.add(previous.localDate)
       // Every field the mapper derives, not a subset: localDate is computed from the end offset,
       // so refreshing one without the other leaves a row whose local date and its own offset
       // disagree. rawPayloadId follows the correction for the same reason the sample upsert

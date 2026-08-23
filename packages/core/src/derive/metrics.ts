@@ -54,7 +54,35 @@ export const METRICS: Record<string, MetricSpec> = {
   daily_hrv: { aggs: ['last'], precision: 0, direction: 'up' },
   daily_spo2: { aggs: ['last'], precision: 1, direction: 'up' },
   respiratory_rate: { aggs: ['last'], precision: 1, direction: 'neutral' },
+
+  // Sleep, derived from sessions and their stage segments rather than from samples, which is why
+  // the data type `sleep` has no entry of its own. Minutes are summed over the night's pieces;
+  // the three one-per-night figures take `last` because a night has exactly one of each.
+  sleep_asleep_minutes: { aggs: ['sum'], precision: 0, direction: 'up' },
+  sleep_awake_minutes: { aggs: ['sum'], precision: 0, direction: 'down' },
+  sleep_in_bed_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral' },
+  sleep_deep_minutes: { aggs: ['sum'], precision: 0, direction: 'up' },
+  sleep_light_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral' },
+  sleep_rem_minutes: { aggs: ['sum'], precision: 0, direction: 'up' },
+  sleep_efficiency: { aggs: ['last'], precision: 0, direction: 'up' },
+  // Minutes from the local midnight of the row's date, which is the morning the night ended, so
+  // an 23:30 bedtime is -30. One signed scale rather than a time plus a column saying which day.
+  sleep_bedtime_minutes: { aggs: ['last'], precision: 0, direction: 'neutral' },
+  sleep_waketime_minutes: { aggs: ['last'], precision: 0, direction: 'neutral' },
+  sleep_nap_count: { aggs: ['count'], precision: 0, direction: 'neutral' },
+  sleep_nap_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral' },
 }
+
+/**
+ * The sleep family, in one place so deriveSleepDay and the truth test cannot drift apart on
+ * which metrics exist.
+ */
+export const SLEEP_METRICS = [
+  'sleep_asleep_minutes', 'sleep_awake_minutes', 'sleep_in_bed_minutes',
+  'sleep_deep_minutes', 'sleep_light_minutes', 'sleep_rem_minutes',
+  'sleep_efficiency', 'sleep_bedtime_minutes', 'sleep_waketime_minutes',
+  'sleep_nap_count', 'sleep_nap_minutes',
+] as const
 
 export function metricSpec(metric: string): MetricSpec | undefined {
   return METRICS[metric]

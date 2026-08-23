@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `night_gap_minutes` integer DEFAULT 120 NOT NULL;

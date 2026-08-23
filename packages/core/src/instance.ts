@@ -6,6 +6,7 @@ import { RawArchive } from './store/rawArchive.ts'
 import { DeriveQueue } from './store/deriveQueue.ts'
 import { SourcePriorityStore } from './store/sourcePriority.ts'
 import { OverrideStore } from './store/overrides.ts'
+import { SettingsStore } from './store/settings.ts'
 import type { Database } from './db/open.ts'
 
 export interface Instance {
@@ -16,6 +17,7 @@ export interface Instance {
   deriveQueue: DeriveQueue
   sourcePriority: SourcePriorityStore
   overrides: OverrideStore
+  settings: SettingsStore
   close: () => void
 }
 
@@ -35,6 +37,7 @@ export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): I
       deriveQueue,
       sourcePriority: new SourcePriorityStore(db, deriveQueue),
       overrides: new OverrideStore(db, deriveQueue),
+      settings: new SettingsStore(db),
       close: () => closeDatabase(db),
     }
   } catch (err) {

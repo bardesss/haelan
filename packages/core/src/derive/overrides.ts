@@ -80,23 +80,19 @@ export function applyToDay(
   return rows.filter((row) => !excluded.has(row.metric))
 }
 
-export interface SessionOverrideResult {
-  kept: SessionLike[]
-  /** Session id to corrected value, for M2c. Nothing in M2b has a value to replace. */
-  corrections: Map<string, number>
-}
-
+/**
+ * Excluded sessions removed, nothing else. `correct` is refused at this scope by OverrideStore:
+ * a night derives eleven figures and one number cannot say which of them it means.
+ */
 export function applyToSessions(
   sessions: readonly SessionLike[],
   overrides: readonly OverrideLike[],
-): SessionOverrideResult {
+): SessionLike[] {
   const excluded = new Set<string>()
-  const corrections = new Map<string, number>()
   for (const override of overrides) {
-    if (override.scope !== 'session') continue
-    const id = parseSessionTarget(override.targetKey)
-    if (override.action === 'exclude') excluded.add(id)
-    else if (override.correctedValue !== null) corrections.set(id, override.correctedValue)
+    if (override.scope !== 'session' || override.action !== 'exclude') continue
+    excluded.add(parseSessionTarget(override.targetKey))
   }
-  return { kept: sessions.filter((s) => !excluded.has(s.id)), corrections }
+  if (excluded.size === 0) return [...sessions]
+  return sessions.filter((s) => !excluded.has(s.id))
 }

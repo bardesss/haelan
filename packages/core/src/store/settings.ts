@@ -15,6 +15,7 @@ export interface InstanceSettingsRow {
   backfillHorizonDays: number
   setupCompletedAtMs: number | null
   sessionOverlapRatio: number
+  nightGapMinutes: number
 }
 
 export interface PutSettingsInput {
@@ -40,6 +41,7 @@ export class SettingsStore {
       backfillHorizonDays: row.backfillHorizonDays,
       setupCompletedAtMs: row.setupCompletedAtMs ?? null,
       sessionOverlapRatio: row.sessionOverlapRatio,
+      nightGapMinutes: row.nightGapMinutes,
     }
   }
 
@@ -76,6 +78,17 @@ export class SettingsStore {
       throw new ConfigError(`session overlap ratio must be above 0 and at most 1, got ${ratio}`)
     }
     this.#db.update(instanceSettings).set({ sessionOverlapRatio: ratio, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  putNightGapMinutes(minutes: number, nowMs: number): void {
+    // At or below zero nothing ever joins, so every early wake becomes a nap. Above a day
+    // everything on one date joins, so naps stop existing. Neither is a setting, it is a
+    // grouping switched off in one of its two directions.
+    if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) {
+      throw new ConfigError(`night gap must be a whole number of minutes from 1 to 1440, got ${minutes}`)
+    }
+    this.#db.update(instanceSettings).set({ nightGapMinutes: minutes, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 }

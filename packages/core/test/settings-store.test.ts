@@ -6,6 +6,7 @@ import { CredentialStore } from '../src/store/credentials.ts'
 import { SettingsStore, setupStep } from '../src/store/settings.ts'
 import { DEFAULT_USER_HORIZON_DAYS } from '../src/api/catalogue.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
+import { DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
 import { ConfigError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
@@ -117,4 +118,32 @@ describe('the session overlap ratio setting', () => {
     expect(settings.get()?.sessionOverlapRatio).toBe(1)
   })
 
+})
+
+describe('the night gap setting', () => {
+  it('defaults the night gap to two hours', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(settings.get()?.nightGapMinutes).toBe(DEFAULT_NIGHT_GAP_MINUTES)
+  })
+
+  it('round trips a changed night gap without touching anything else', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.putNightGapMinutes(45, 2)
+    expect(settings.get()?.nightGapMinutes).toBe(45)
+    expect(settings.get()?.baseUrl).toBe('http://localhost:4235')
+  })
+
+  it('refuses a night gap outside the range where it means anything', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    // At or below zero no two pieces ever join, so every early wake becomes a nap. Above a day
+    // every sleep on the same date joins, including an afternoon one, so naps stop existing.
+    expect(() => settings.putNightGapMinutes(0, 2)).toThrow(ConfigError)
+    expect(() => settings.putNightGapMinutes(-1, 2)).toThrow(ConfigError)
+    expect(() => settings.putNightGapMinutes(1441, 2)).toThrow(ConfigError)
+  })
+
+  it('accepts a gap of exactly one day, which the comparison deliberately allows', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(() => settings.putNightGapMinutes(1440, 2)).not.toThrow()
+  })
 })
