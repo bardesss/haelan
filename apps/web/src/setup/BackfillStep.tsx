@@ -31,11 +31,11 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
   // The intraday cap is a server fact, not a constant this bundle can import (apps/web does not
   // depend on @haelan/core). The rows already say it: intraday types are the ones walking to
   // something shorter than the operator's chosen horizon, so the smallest horizonDays present is
-  // the cap. An empty list can't happen through this screen today — a session only exists after
-  // account creation, which creates the person before this screen is reachable — but Math.min()
-  // of nothing is Infinity, and "the last Infinity days" would be a worse failure than falling
-  // back to the number production uses everywhere else, so the fallback stays even though the
-  // branch is currently unreachable.
+  // the cap. An empty list cannot happen through this screen today, because a session only
+  // exists after account creation and that creates the person before this screen is
+  // reachable. The fallback stays anyway: Math.min() of nothing is Infinity, and "the last
+  // Infinity days" would be a worse failure than falling back to the number production uses
+  // everywhere else.
   const intradayDays = status.backfill.length > 0
     ? Math.min(...status.backfill.map((row) => row.horizonDays))
     : 365
