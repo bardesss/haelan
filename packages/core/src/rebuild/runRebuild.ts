@@ -92,13 +92,17 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     // row id, and a rebuild deletes rows, so a cache that outlived one person's transaction
     // would hand the next person an id that no longer exists.
     //
-    // Measured honesty about that: as SourceRegistry stands today the collision is not reachable
-    // from here, because its cache key names the person as well as the external id, and source
-    // ids are a hash of exactly those two, so even a rolled back person's cached id is the id
-    // their next rebuild recreates. Hoisting this line out of the loop passes every test in
-    // rebuild.test.ts. It stays per person anyway: the two facts holding it up live in another
-    // file, one of them is a caching detail nobody would think to preserve, and a fresh registry
-    // per person costs one allocation against a whole transaction of work.
+    // Measured honesty about that: no test catches hoisting this line out of the loop, because
+    // the cache key names the person as well as the external id, so one person's entry is never
+    // handed to another, and today nothing runs after a person's transaction rolls back. A throw
+    // leaves runRebuild entirely rather than moving to the next person.
+    //
+    // It stays per person because that second fact is control flow somebody could reasonably
+    // change. The moment a caller wants one person's failure not to cost the rest of the
+    // household, a surviving cache entry becomes reachable, and resolve() returns a cached id
+    // without reinserting the row, so it hands back an id whose row the rollback took away and
+    // the next write against it fails the foreign key. That is what SourceRegistry.forget exists
+    // for. A fresh registry per person costs one allocation and makes the question moot.
     const registry = new SourceRegistry(input.db)
 
     // input.peopleStore, input.priority and input.overrides were built on the outer db handle and
