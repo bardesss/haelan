@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { openDatabase, closeDatabase } from '../db/open.ts'
 import { migrateToLatest } from '../db/migrate.ts'
 import { people, sources, samples, sessions, overrides } from '../db/schema/index.ts'
-import type { SessionKind } from '../db/schema/index.ts'
+import type { SessionKind, SampleAgg } from '../db/schema/index.ts'
 import type { Database } from '../db/open.ts'
 import type { OverrideScope } from '../derive/targetKey.ts'
 
@@ -64,6 +64,10 @@ export interface SeedSampleInput {
   metric: string
   utcMs: number
   value?: number
+  // Defaults to 'raw'. A caller seeding more than one row at the same person, source, metric and
+  // instant has to vary this, because samples_natural is unique on all five columns together and
+  // that is exactly what per-minute downsampling does: one row per aggregate, same instant.
+  agg?: SampleAgg
 }
 
 // Creates the source row a sample references as well as the sample itself, so a retarget test
@@ -76,7 +80,7 @@ export function seedSample(db: Database, input: SeedSampleInput): string {
   }).onConflictDoNothing().run()
   db.insert(samples).values({
     personId: input.personId, sourceId: input.sourceId, metric: input.metric, utcMs: input.utcMs,
-    tzOffsetMinutes: 0, agg: 'raw', value: input.value ?? 1, n: 1, rawPayloadId: null,
+    tzOffsetMinutes: 0, agg: input.agg ?? 'raw', value: input.value ?? 1, n: 1, rawPayloadId: null,
   }).run()
   return input.sourceId
 }

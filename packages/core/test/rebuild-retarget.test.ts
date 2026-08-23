@@ -62,6 +62,27 @@ describe('retargetOverrides', () => {
     expect(outcome.orphaned[0]!.reason).toBe('two or more sources report that instant')
   })
 
+  test('three rows from one source at one instant is still one answer', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    // What per-minute downsampling actually writes: three rows, one per aggregate, same person,
+    // source, metric and instant. Counting rows instead of distinct sources would see three and
+    // call this ambiguous, when there is exactly one source here.
+    seedSample(db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: 1000, agg: 'min' })
+    seedSample(db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: 1000, agg: 'mean' })
+    seedSample(db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: 1000, agg: 'max' })
+    const id = seedOverride(db, {
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'old-source', metric: 'heart_rate', utcMs: 1000 }),
+    })
+
+    const outcome = retargetOverrides(db, { personId: 'p1', oldSessions: new Map() })
+
+    expect(outcome.retargeted).toBe(1)
+    expect(outcome.orphaned).toEqual([])
+    expect(keyOf(db, id)).toBe(sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: 1000 }))
+  })
+
   test('no sample at that instant is reported', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
