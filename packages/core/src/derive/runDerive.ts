@@ -1,16 +1,21 @@
-import { and, eq, gte, lte, ne } from 'drizzle-orm'
+import { and, eq, gte, inArray, lte, ne } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import type { OverrideStore } from '../store/overrides.ts'
-import { daily, samples } from '../db/schema/index.ts'
+import { daily, samples, sessions, sessionSegments } from '../db/schema/index.ts'
 import { rollUpDay, PROVIDER_SOURCE } from './rollup.ts'
 import type { SampleLike } from './rollup.ts'
 import { mergeDay } from './merge.ts'
 import type { Priority } from './priority.ts'
 import { localDateOf } from './localDay.ts'
-import { applyToDay, applyToSamples, excludedMetrics } from './overrides.ts'
+import { applyToDay, applyToSamples, applyToSessions, excludedMetrics } from './overrides.ts'
 import type { OverrideLike } from './overrides.ts'
+import { deriveSleepDay, DEFAULT_NIGHT_GAP_MINUTES } from './sleep.ts'
+import type { SleepSessionLike } from './sleep.ts'
+import { mergeSleepDay } from './sleepMerge.ts'
+import { DEFAULT_OVERLAP_RATIO } from './sessionOverlap.ts'
+import type { SettingsStore } from '../store/settings.ts'
 
 const DEFAULT_BATCH = 64
 const HOUR_MS = 3_600_000
@@ -29,10 +34,18 @@ export function runDerive(input: {
   queue: DeriveQueue
   priority: SourcePriorityStore
   overrides: OverrideStore
+  settings: SettingsStore
   batch?: number
 }): DeriveReport {
   const claimed = input.queue.claim(input.batch ?? DEFAULT_BATCH)
   let rowsWritten = 0
+
+  // Instance wide rather than per person, and read once for the whole drain. A change to either
+  // marks nothing dirty today, so a drain that straddles an edit costs a stale night that the
+  // next sync of that day corrects.
+  const tuning = input.settings.get()
+  const gapMinutes = tuning?.nightGapMinutes ?? DEFAULT_NIGHT_GAP_MINUTES
+  const overlapRatio = tuning?.sessionOverlapRatio ?? DEFAULT_OVERLAP_RATIO
 
   // One load per person rather than per day: draining a year of backfill is 365 entries for the
   // same person. A ranking that changes underneath the drain costs a re-derive rather than a
@@ -91,8 +104,57 @@ export function runDerive(input: {
         priority: priorityFor(entry.personId),
       })
 
+      // sessions.local_date is computed at ingest and indexed, so unlike samples this needs no
+      // widened window and no per row filter.
+      const sleepRows = tx.select().from(sessions).where(and(
+        eq(sessions.personId, entry.personId),
+        eq(sessions.localDate, entry.localDate),
+        eq(sessions.kind, 'sleep'),
+      )).all()
+
+      const sleepSessions: SleepSessionLike[] = applyToSessions(
+        sleepRows.map((row) => ({
+          id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs,
+        })),
+        personOverrides,
+      ).map((kept) => {
+        const row = sleepRows.find((r) => r.id === kept.id)!
+        return {
+          id: row.id,
+          sourceId: row.sourceId,
+          startMs: row.startMs,
+          startOffsetMinutes: row.startOffsetMinutes,
+          endMs: row.endMs,
+          endOffsetMinutes: row.endOffsetMinutes,
+          mainSleep: mainSleepOf(row.attrs),
+        }
+      })
+
+      const segments = sleepSessions.length === 0 ? [] : tx.select().from(sessionSegments)
+        .where(inArray(sessionSegments.sessionId, sleepSessions.map((s) => s.id))).all()
+
+      const perSourceSleep = [...new Set(sleepSessions.map((s) => s.sourceId))].flatMap((source) =>
+        deriveSleepDay({
+          personId: entry.personId,
+          localDate: entry.localDate,
+          source,
+          sessions: sleepSessions.filter((s) => s.sourceId === source),
+          segments,
+          gapMinutes,
+        }))
+
+      const mergedSleep = mergeSleepDay({
+        personId: entry.personId,
+        localDate: entry.localDate,
+        sessions: sleepSessions,
+        segments,
+        gapMinutes,
+        overlapRatio,
+        priority: priorityFor(entry.personId),
+      })
+
       const excluded = excludedMetrics(personOverrides, entry.localDate)
-      const rows = applyToDay([...derived, ...merged], excluded)
+      const rows = applyToDay([...derived, ...merged, ...perSourceSleep, ...mergedSleep], excluded)
 
       // Everything we derive for this day goes, then comes back. Provider rows are excluded
       // because they are ingested rather than derived and nothing here could recompute them.
@@ -121,4 +183,18 @@ export function runDerive(input: {
   }
 
   return { daysDerived: claimed.length, rowsWritten }
+}
+
+/**
+ * `metadata.mainSleep`, off the attrs blob mapSessions wrote. Null rather than false when the
+ * source did not say: assembleNights treats absent and false differently, since absent means
+ * nobody claimed a night and false means somebody claimed this is not one.
+ */
+function mainSleepOf(attrs: string): boolean | null {
+  try {
+    const parsed = JSON.parse(attrs) as { mainSleep?: unknown }
+    return typeof parsed.mainSleep === 'boolean' ? parsed.mainSleep : null
+  } catch {
+    return null
+  }
 }
