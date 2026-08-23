@@ -401,3 +401,41 @@ describe('PersonQuery.comparePeriods', () => {
     expect(insight.delta).toBeNull()
   })
 })
+
+describe('PersonQuery date validation, out of range components', () => {
+  // The format check alone lets '2026-13-45' through: it is four digits, two, two. The three
+  // methods then diverge, which is the exact failure the padded-month check was added to end.
+  // series compares it as a string and finds nothing, while the other two hand it to Date.parse,
+  // get NaN, and throw a RangeError from three frames down. The consumers here are an HTTP query
+  // string and a language model picking tool arguments, so an off by one month is ordinary.
+  const nonsense = ['2026-13-01', '2026-00-15', '2026-02-30', '2026-01-32', '2026-01-00']
+
+  it('refuses an impossible month or day from series', () => {
+    for (const on of nonsense) {
+      expect(() => query.series({ metric: 'steps', agg: 'sum', from: on, to: '2026-08-28' }), on)
+        .toThrow(ConfigError)
+    }
+  })
+
+  it('refuses an impossible month or day from baseline', () => {
+    for (const on of nonsense) {
+      expect(() => query.baseline({ metric: 'steps', agg: 'sum', on }), on).toThrow(ConfigError)
+    }
+  })
+
+  it('refuses an impossible month or day from comparePeriods', () => {
+    for (const on of nonsense) {
+      expect(() => query.comparePeriods({ metric: 'steps', agg: 'sum', from: on, to: '2026-08-28' }), on)
+        .toThrow(ConfigError)
+    }
+  })
+
+  it('still accepts a real leap day, so the check rejects only what the calendar rejects', () => {
+    // 2028 is a leap year and 2026 is not. A round trip check that simply reformatted the parsed
+    // date would pass both, so this is what proves it compares against the calendar.
+    expect(() => query.series({ metric: 'steps', agg: 'sum', from: '2028-02-29', to: '2028-03-01' }))
+      .not.toThrow()
+    expect(() => query.series({ metric: 'steps', agg: 'sum', from: '2026-02-29', to: '2026-03-01' }))
+      .toThrow(ConfigError)
+  })
+})

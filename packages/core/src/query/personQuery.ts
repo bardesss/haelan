@@ -195,6 +195,15 @@ function requireDate(label: string, value: string): void {
   if (!ISO_DATE.test(value)) {
     throw new ConfigError(`${label} must be a YYYY-MM-DD local date, got '${value}'`)
   }
+  // The shape alone accepts a thirteenth month and a thirtieth of February, and those diverge
+  // rather than fail together: series compares them as strings and finds nothing, while the two
+  // methods that step dates hand them to Date.parse and throw from three frames down. Round
+  // tripping through the calendar is what refuses a date that cannot exist while keeping a real
+  // leap day, and it makes all three methods refuse the same input the same way.
+  const onCalendar = new Date(`${value}T00:00:00Z`)
+  if (Number.isNaN(onCalendar.getTime()) || onCalendar.toISOString().slice(0, 10) !== value) {
+    throw new ConfigError(`${label} is not a date on the calendar, got '${value}'`)
+  }
 }
 
 function requireRange(from: string, to: string): void {
