@@ -96,6 +96,42 @@ describe('PersonQuery.series', () => {
   it('returns an empty series rather than throwing when there is nothing', () => {
     expect(query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })).toEqual([])
   })
+
+  it('falls back to the provider row for a metric that has no merged one', () => {
+    // total_calories and floors are written only as provider rows: Google reconciles them
+    // itself and there is no sample underneath either for a merge to work from. Asking what
+    // happened that day has to answer with the row that says it.
+    insertDaily({ localDate: '2026-08-01', value: 2200, metric: 'total_calories', source: 'provider' })
+    const points = query.series({ metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([2200])
+    expect(points.map((p) => p.source)).toEqual(['provider'])
+  })
+
+  it('falls back per row, so one stray merged row cannot hide a provider series', () => {
+    insertDaily({ localDate: '2026-08-01', value: 2200, metric: 'total_calories', source: 'provider' })
+    insertDaily({ localDate: '2026-08-02', value: 2300, metric: 'total_calories', source: 'provider' })
+    insertDaily({ localDate: '2026-08-02', value: 2350, metric: 'total_calories', source: 'merged' })
+    const points = query.series({ metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
+    expect(points.map((p) => p.value)).toEqual([2200, 2350])
+    expect(points.map((p) => p.source)).toEqual(['provider', 'merged'])
+  })
+
+  it('ignores the provider row on a day that has a merged one', () => {
+    insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
+    insertDaily({ localDate: '2026-08-01', value: 400, source: 'provider' })
+    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([900])
+  })
+
+  it('returns only merged rows when merged is named, so provenance stays askable', () => {
+    // Not the same question as the default. This one asks which days we reconciled ourselves.
+    insertDaily({ localDate: '2026-08-01', value: 2200, metric: 'total_calories', source: 'provider' })
+    insertDaily({ localDate: '2026-08-02', value: 2350, metric: 'total_calories', source: 'merged' })
+    const points = query.series({
+      metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-02', source: 'merged',
+    })
+    expect(points.map((p) => p.value)).toEqual([2350])
+  })
 })
 
 describe('PersonQuery.baseline', () => {

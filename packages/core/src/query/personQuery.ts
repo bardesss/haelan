@@ -1,7 +1,7 @@
-import { and, asc, eq, gte, isNotNull, lte } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily } from '../db/schema/index.ts'
-import { MERGED_SOURCE } from '../derive/rollup.ts'
+import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { coverageIsMeaningful } from './coverageSignal.ts'
@@ -42,9 +42,12 @@ export class PersonQuery {
   /**
    * The daily rows for a metric over an inclusive range, oldest first.
    *
-   * `source` defaults to the merged row, which is the answer to what happened rather than to
-   * what one device said. Passing a source id reads that device instead, which is what keeps
-   * a merge inspectable against the rows underneath it.
+   * With no `source`, this answers what happened that day: the merged row where we reconciled
+   * one, and the provider row where Google already had. Both mean the day rather than one
+   * device, which is what `daily.source`'s own column comment says they differ only in who
+   * reconciled. Passing a source id reads that device instead, which is what keeps a merge
+   * inspectable against the rows underneath it, and passing `merged` still means only the rows
+   * we merged ourselves.
    */
   series(input: {
     metric: string
@@ -53,7 +56,8 @@ export class PersonQuery {
     to: string
     source?: string
   }): DailyPoint[] {
-    return this.#db.select({
+    const source = input.source
+    const rows = this.#db.select({
       localDate: daily.localDate,
       value: daily.value,
       coverage: daily.coverage,
@@ -63,13 +67,17 @@ export class PersonQuery {
       eq(daily.personId, this.#personId),
       eq(daily.metric, input.metric),
       eq(daily.agg, input.agg),
-      eq(daily.source, input.source ?? MERGED_SOURCE),
+      source === undefined
+        ? inArray(daily.source, [MERGED_SOURCE, PROVIDER_SOURCE])
+        : eq(daily.source, source),
       gte(daily.localDate, input.from),
       lte(daily.localDate, input.to),
       // A row with no value is not a measurement, and letting one through would put a hole in
       // every mean computed downstream. Nothing writes one today; this is the guard for later.
       isNotNull(daily.value),
     )).orderBy(asc(daily.localDate)).all() as DailyPoint[]
+
+    return source === undefined ? preferMerged(rows) : rows
   }
 
   /**
@@ -145,6 +153,20 @@ export class PersonQuery {
       previousRange: { from: previousFrom, to: previousTo },
     }
   }
+}
+
+/**
+ * One row per day, preferring the one we reconciled. Per row rather than per series, because a
+ * single stray merged row must not hide an entire provider series, and a metric can gain a
+ * merged row partway through its history the day a second device starts reporting it.
+ */
+function preferMerged(rows: readonly DailyPoint[]): DailyPoint[] {
+  const byDate = new Map<string, DailyPoint>()
+  for (const row of rows) {
+    if (!byDate.has(row.localDate) || row.source === MERGED_SOURCE) byDate.set(row.localDate, row)
+  }
+  // Map iteration follows insertion, and the rows arrived ordered, so this stays oldest first.
+  return [...byDate.values()]
 }
 
 const DAY_MS = 86_400_000
