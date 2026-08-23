@@ -229,9 +229,21 @@ summing the sessions that did not join. Either way nothing here reads the provid
 so a figure can be inspected against the rows underneath it and so an override on a session moves
 it. `sleep_bedtime_minutes` and `sleep_waketime_minutes` are minutes from the local midnight of
 the row's own date, negative before it, one signed scale rather than a time plus a column saying
-which day. A night whose segments never arrived writes its times and its in-bed span but none of
-the six stage figures, because a zero there would claim the person lay awake all night when the
-truth is we do not know.
+which day. A night whose segments never arrived, or whose segments all carry a stage value we do
+not recognise, writes its times and its in-bed span but none of the six stage figures, because a
+zero there would claim the person lay awake all night when the truth is we do not know. Where the
+source says of every session on a day that it is not the main sleep, the day gets no night at all
+and every session is a nap: a session the provider told us was not the night must not become one.
+A null flag is the provider declining to say, which is a different thing, and there the longest
+group is still taken as the night.
+
+Two limitations M2c does not address, written down rather than fixed. Night assembly cannot cross
+the local date boundary: `sessions.local_date` is the date a session ended in, and a day's sleep is
+queried by that column, so two pieces of one night falling either side of midnight are assembled as
+two separate nights on two separate days. A wake from 23:40 to 00:10 is the case. And changing
+`night_gap_minutes` or `session_overlap_ratio` requeues nothing, so only the days a later sync
+happens to re-fetch are recomputed under the new value; a year of backfilled nights keeps its old
+grouping until a full rebuild.
 
 ## Heart rate volume and the downsampling decision
 
