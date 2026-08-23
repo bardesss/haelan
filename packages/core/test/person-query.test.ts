@@ -97,3 +97,110 @@ describe('PersonQuery.series', () => {
     expect(query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })).toEqual([])
   })
 })
+
+describe('PersonQuery.baseline', () => {
+  const seedRun = (fromDay: number, count: number, value: (at: number) => number) => {
+    for (let at = 0; at < count; at += 1) {
+      insertDaily({ localDate: `2026-08-${String(fromDay + at).padStart(2, '0')}`, value: value(at) })
+    }
+  }
+
+  it('averages the window ending the day before the date asked about', () => {
+    // Five days at 10, then a wild reading on the sixth. The baseline for the sixth must not
+    // contain it, or the reading would be judged against a centre it moved itself.
+    seedRun(1, 5, () => 10)
+    insertDaily({ localDate: '2026-08-06', value: 1000 })
+
+    const baseline = query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-06', windowDays: 5 })
+    expect(baseline?.center).toBeCloseTo(10, 10)
+    expect(baseline?.n).toBe(5)
+  })
+
+  it('reaches back exactly the window it was given', () => {
+    seedRun(1, 10, (at) => at)
+    // Window of 3 ending on the day before the 8th: the 5th, 6th and 7th, values 4, 5 and 6.
+    const baseline = query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-08', windowDays: 3 })
+    expect(baseline?.n).toBe(3)
+    expect(baseline?.center).toBeCloseTo(5, 10)
+  })
+
+  it('defaults to the stated window', () => {
+    seedRun(1, 10, () => 100)
+    const baseline = query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-20' })
+    // The default reaches far enough back to include all ten days and finds no more.
+    expect(baseline?.n).toBe(10)
+  })
+
+  it('marks a short history thin rather than pretending', () => {
+    seedRun(1, 3, () => 100)
+    expect(query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-20' })?.thin).toBe(true)
+  })
+
+  it('returns null when there is no history at all', () => {
+    expect(query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-20' })).toBeNull()
+  })
+
+  it('counts only the days that have a row, so a gap is absent rather than zero', () => {
+    insertDaily({ localDate: '2026-08-01', value: 10 })
+    insertDaily({ localDate: '2026-08-05', value: 20 })
+    const baseline = query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-10', windowDays: 60 })
+    expect(baseline?.n).toBe(2)
+    expect(baseline?.center).toBeCloseTo(15, 10)
+  })
+})
+
+describe('PersonQuery.comparePeriods', () => {
+  const seedWeek = (fromDay: number, value: number, coverage: number | null = 0.9) => {
+    for (let at = 0; at < 7; at += 1) {
+      insertDaily({
+        localDate: `2026-08-${String(fromDay + at).padStart(2, '0')}`, value, coverage,
+      })
+    }
+  }
+
+  it('compares a week against the week immediately before it', () => {
+    seedWeek(1, 80)
+    seedWeek(8, 100)
+    const insight = query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.current).toBeCloseTo(100, 10)
+    expect(insight.previous).toBeCloseTo(80, 10)
+    expect(insight.delta).toBeCloseTo(20, 10)
+    expect(insight.periodDays).toBe(7)
+    expect(insight.suppressed).toBe(false)
+  })
+
+  it('suppresses when the current week is full of holes', () => {
+    seedWeek(1, 80)
+    insertDaily({ localDate: '2026-08-08', value: 100 })
+    insertDaily({ localDate: '2026-08-09', value: 100 })
+    const insight = query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.suppressed).toBe(true)
+    expect(insight.reason).toBe('thin-days')
+    expect(insight.delta).toBeNull()
+  })
+
+  it('does not suppress a sleep comparison for having null coverage', () => {
+    // Every sleep row carries a null coverage on purpose. If that counted as zero, the sleep
+    // page would never show an insight at all, which is the opposite of what the rule is for.
+    for (let at = 0; at < 7; at += 1) {
+      insertDaily({ localDate: `2026-08-${String(1 + at).padStart(2, '0')}`, value: 420, metric: 'sleep_asleep_minutes', coverage: null })
+      insertDaily({ localDate: `2026-08-${String(8 + at).padStart(2, '0')}`, value: 480, metric: 'sleep_asleep_minutes', coverage: null })
+    }
+    const insight = query.comparePeriods({ metric: 'sleep_asleep_minutes', agg: 'sum', from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.suppressed).toBe(false)
+    expect(insight.delta).toBeCloseTo(60, 10)
+  })
+
+  it('measures the previous period as the same number of days, immediately before', () => {
+    // A three day window ending the 10th compares against the 5th to the 7th, not against a
+    // week or a calendar month.
+    for (const day of [5, 6, 7]) insertDaily({ localDate: `2026-08-0${day}`, value: 10 })
+    for (const day of [8, 9]) insertDaily({ localDate: `2026-08-0${day}`, value: 20 })
+    insertDaily({ localDate: '2026-08-10', value: 20 })
+    const insight = query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-08', to: '2026-08-10' })
+    expect(insight.periodDays).toBe(3)
+    expect(insight.previousDays).toBe(3)
+    expect(insight.previous).toBeCloseTo(10, 10)
+    expect(insight.current).toBeCloseTo(20, 10)
+  })
+})
