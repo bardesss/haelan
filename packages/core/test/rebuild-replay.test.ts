@@ -68,7 +68,7 @@ describe('replayPerson', () => {
       body: pageWithBeats([{ atMs: 60_000, bpm: 100 }]),
     })
 
-    db.transaction((tx) => replayPerson(tx, {
+    const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
       sources: new SourceRegistry(db), nowMs: 1,
     }))
@@ -80,6 +80,10 @@ describe('replayPerson', () => {
     expect(byAgg.min).toMatchObject({ value: 100, n: 1 })
     expect(byAgg.mean).toMatchObject({ value: 100, n: 1 })
     expect(byAgg.max).toMatchObject({ value: 100, n: 1 })
+    // Two episodes both wrote 3 rows each into mapper output, 6 total, but they upserted onto the
+    // same 3 slots. counts.samples must report what the table now holds, not what the mappers
+    // returned, or a re-fetch (which happens on every sync run) inflates this every single time.
+    expect(counts.samples).toBe(3)
   })
 
   test('a two page window downsamples once, not once per page', () => {
@@ -108,7 +112,10 @@ describe('replayPerson', () => {
     // One minute, one row per aggregate. Replaying page by page would produce two sets.
     const rows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
     expect(new Set(rows.map((r) => r.utcMs)).size).toBe(1)
-    expect(counts.samples).toBe(rows.length)
+    // A concrete number, not rows.length: counts.samples is measured against the table
+    // independently of this query, and comparing it to a number derived from the very same table
+    // would pass no matter what either side actually held.
+    expect(counts.samples).toBe(3)
     // 60 and 80 downsampled together: mean 70 over both readings, not two independent means.
     // Checking only the row count would also pass a page-by-page replay that happened to produce
     // the same number of rows for the wrong reason.
@@ -152,7 +159,10 @@ describe('replayPerson', () => {
     }))
 
     expect(counts.sessions).toBe(1)
-    expect(counts.segments).toBeGreaterThan(0)
+    // sleepBody's two stages, LIGHT and DEEP, as a concrete number rather than toBeGreaterThan(0):
+    // counts.segments is now measured from the table, so a wrong but positive count would pass
+    // an inequality check just as well as the right one.
+    expect(counts.segments).toBe(2)
     expect(db.select().from(sessions).all()).toHaveLength(1)
   })
 
@@ -198,8 +208,12 @@ describe('replayPerson', () => {
     }))
 
     expect(counts.unmappable).toBe(1)
-    expect(counts.samples).toBeGreaterThan(0)
-    expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all().length).toBe(counts.samples)
+    // The live payload's own concrete count (one heart-rate reading downsamples to one minute,
+    // three aggregate rows), not a comparison to a length queried from the same table counts.
+    // samples is now measured against: that comparison would pass regardless of which number,
+    // right or wrong, both sides happened to agree on.
+    expect(counts.samples).toBe(3)
+    expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(3)
   })
 
   test('the local dates the rows landed on come back sorted, deduplicated, and without rollup-only dates', () => {

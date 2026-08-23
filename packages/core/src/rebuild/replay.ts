@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, samples, sessions, sessionSegments } from '../db/schema/index.ts'
 import { dataTypeById } from '../api/catalogue.ts'
@@ -6,6 +6,7 @@ import { mapWindowSamples } from '../api/mapSamples.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { mapRollups } from '../api/mapRollups.ts'
 import { localDateOf } from '../derive/localDay.ts'
+import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { ArchivedPayload, RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
 
@@ -68,7 +69,6 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
             },
           }).run()
         }
-        counts.providerDaily += mapped.rows.length
       }
       continue
     }
@@ -106,8 +106,6 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
           tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
         }
         for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
-        counts.sessions += rows.length
-        counts.segments += segments.length
       }
       continue
     }
@@ -139,9 +137,28 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         }).run()
         localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
       }
-      counts.samples += rows.length
     }
   }
+
+  // Measured against the table rather than accumulated from what each mapper call returned. The
+  // trailing window is re-fetched on every sync run by design, so the same minute is commonly
+  // mapped more than once and upserted onto the one row it always was; summing mapper output
+  // would answer "how much work did the replay do" when the number a caller wants is "what is in
+  // the database now". Every metric in ReplayCounts that a later task will surface to an operator
+  // deciding whether their rebuild worked has to be this, or it is a plausible-looking lie.
+  counts.samples = tx.select({ n: sql<number>`count(*)` })
+    .from(samples).where(eq(samples.personId, input.personId)).get()?.n ?? 0
+  counts.sessions = tx.select({ n: sql<number>`count(*)` })
+    .from(sessions).where(eq(sessions.personId, input.personId)).get()?.n ?? 0
+  counts.segments = tx.select({ n: sql<number>`count(*)` })
+    .from(sessionSegments)
+    .innerJoin(sessions, eq(sessionSegments.sessionId, sessions.id))
+    .where(eq(sessions.personId, input.personId))
+    .get()?.n ?? 0
+  counts.providerDaily = tx.select({ n: sql<number>`count(*)` })
+    .from(daily)
+    .where(and(eq(daily.personId, input.personId), eq(daily.source, PROVIDER_SOURCE)))
+    .get()?.n ?? 0
 
   counts.localDates = [...localDates].sort()
   return counts
