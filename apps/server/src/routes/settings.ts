@@ -6,7 +6,7 @@ interface HorizonBody { days?: unknown }
 // Post-setup routes: reachable once the wizard finishes and answered with setup_incomplete
 // before that, unlike /api/setup/*, which the gate closes the moment setup is done. The
 // backfill horizon belongs here rather than under /api/setup/ because SetupApp shows this
-// control on the /setup/backfill screen, which is itself the step after setup is 'done' —
+// control on the /setup/backfill screen, which is itself the step after setup is 'done',
 // putting the route under the gate that gets closed at exactly that step would make it
 // unreachable in production.
 export function registerSettings(app: FastifyInstance): void {

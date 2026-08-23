@@ -83,7 +83,7 @@ export class SyncRunner {
    * Set by stop() and never cleared, unlike #aborted which trigger() resets at the start of
    * every run. shutdown() calls stop() then awaits settle() while the HTTP server is still up,
    * so a request racing that window (routes/sync.ts, routes/oauth.ts) can reach tryStart after
-   * the aborted run has already finished — at which point #aborted alone would have been reset
+   * the aborted run has already finished, at which point #aborted alone would have been reset
    * to false by trigger() and the new run would start, and settle()'s while loop would pick up
    * its promise and wait out a full sprint instead of returning. This flag latches so neither
    * tryStart nor trigger can start anything once stop() has been called, for good.
@@ -336,7 +336,7 @@ export class SyncRunner {
    * One batch for every type. capDays limits how deep this pass may walk, which is what makes
    * the sprint a bounded phase rather than a run to the full horizon; null means the type's own
    * resolved horizon, which is the trickle. The cap is enforced by skipping a type that has
-   * already reached it, not by shrinking the horizonDays passed to runBackfill — see the comment
+   * already reached it, not by shrinking the horizonDays passed to runBackfill. See the comment
    * at the skip below for why that distinction is load-bearing. Returns whether any type's
    * cursor actually moved, which is what the sprint loop above uses to decide whether another
    * pass is worth taking.
@@ -369,12 +369,12 @@ export class SyncRunner {
         // separate from the horizonDays runBackfill is given below. Passing a *capped*
         // horizonDays would work for one call, but a batch that doesn't divide evenly into
         // capDays (fourteen into ninety, say) can walk straight past the cap and hit
-        // runBackfill's own "reached the floor" check in the same call — and that check (frozen,
+        // runBackfill's own "reached the floor" check in the same call, and that check (frozen,
         // from Task 5) reads it as "done" and marks the type complete for good, permanently
         // stunting a type whose operator asked for years of history at the sprint's 90 days.
         // Checking the cap here instead, before ever calling runBackfill, and always handing it
         // the type's real horizon, means the only way runBackfill marks something complete is by
-        // genuinely reaching it — overshooting the sprint cap by a few days is harmless, a type
+        // genuinely reaching it. Overshooting the sprint cap by a few days is harmless, a type
         // never reaching horizonDays this way is not.
         if (capDays !== null && resolved > capDays) {
           const floorMs = this.#context.now() - capDays * DAY_MS

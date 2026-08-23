@@ -45,7 +45,7 @@ export interface ServerDeps {
   /**
    * How much history the first run sprints through before settling into the trickle. Unset in
    * production, which takes the runner's own SPRINT_DAYS (90). Tests lower it so a run that
-   * merely completes consent — and so starts a sprint of its own — doesn't pay for a 90 day walk
+   * merely completes consent, and so starts a sprint of its own, doesn't pay for a 90 day walk
    * in its cleanup; the tests that are actually about sprint depth pass the real 90 explicitly.
    */
   sprintDays?: number

@@ -3,8 +3,8 @@
 The open question this answers: **how far back does the API actually serve intraday data?**
 
 It mattered because the design's argument for building ingestion before the dashboard rests on
-it — "every week without ingestion is a week of minute-level history permanently unavailable at
-that resolution" — and because the backfill caps intraday types at 90 days for reasons of disk
+it, "every week without ingestion is a week of minute-level history permanently unavailable at
+that resolution", and because the backfill caps intraday types at 90 days for reasons of disk
 cost. Whether that cap forgoes data Google would still have served was unknown, and unlike most
 open questions this one gets worse while it waits.
 
@@ -13,7 +13,7 @@ M0 measured intraday *density* in `volume.md` and never *depth*. This is the dep
 ## Method
 
 One request per probe against the live account, heart rate for a single day window at increasing
-age, reads only — no archiving, no cursor movement. Every empty answer was paired with a
+age, reads only, with no archiving and no cursor movement. Every empty answer was paired with a
 **control**: `daily-resting-heart-rate` for the same day, derived from the same wear. Without the
 control an empty intraday answer is unreadable, because "Google no longer serves it" and "this
 person had no device yet" look identical.

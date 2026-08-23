@@ -13,3 +13,7 @@ probe/findings/token-log.jsonl
 *.tsbuildinfo
 # A local instance's data directory: a real refresh token and real health data.
 .local-data/
+
+# Linked worktrees. Kept out of the tree they live in: a git add -A from the repository root
+# would otherwise record one as an embedded repository and commit a gitlink nobody wanted.
+.worktrees/

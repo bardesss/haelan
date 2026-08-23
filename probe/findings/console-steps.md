@@ -7,7 +7,7 @@ which means recording the friction while it is fresh rather than from memory.
 **Walked on 2026-08-21**, from an empty data directory against a real Google project and a real
 account, in a browser. The console side produced no friction worth a table: the redirect URIs the
 wizard offered were accepted verbatim with no editing, publishing reached In production with a
-branding warning and nothing else, and **no billing account was demanded at any point** — which
+branding warning and nothing else, and **no billing account was demanded at any point**, which
 closes the question M0 left open at `scopes.md`. The numbered copy in
 `apps/web/src/setup/GoogleStep.tsx` needed no correction against what the console actually showed.
 
@@ -26,7 +26,7 @@ defects, none of which any test was positioned to catch, fixed in
 
 A fourth, milder one: the documented acceptance command is
 `HAELAN_DATA_DIR=./.local-data pnpm start`, and running plain `pnpm start` resolves the default
-`/data` to `C:\data` on Windows — real health data at a drive root, outside the repository. The
+`/data` to `C:\data` on Windows, meaning real health data at a drive root, outside the repository. The
 absolute path printed at boot ([#24](https://github.com/bardesss/haelan/pull/24)) is what caught
 it, working exactly as intended.
 
@@ -73,7 +73,7 @@ saying so is the point of keeping this file.
       point.** `scopes.md` is corrected to match.
 
 Re-syncing is idempotent, measured on the same instance rather than inferred: the trailing week is
-re-fetched every run, and 29 window and type pairs have been fetched more than once — 725 archived
+re-fetched every run, and 29 window and type pairs have been fetched more than once, giving 725 archived
 payloads carry only 586 distinct body hashes, so 139 were bytes the instance already held. Against
 that, zero duplicate sample natural keys and zero duplicate session keys.
 
