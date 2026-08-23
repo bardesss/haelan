@@ -1,6 +1,8 @@
 ﻿import { eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { people } from '../db/schema/index.ts'
+import { MAPPING_VERSION } from '../api/version.ts'
+import { DERIVATION_VERSION } from '../derive/version.ts'
 
 export interface PersonRow {
   id: string
@@ -17,19 +19,35 @@ export class PeopleStore {
 
   constructor(db: DbOrTx) { this.#db = db }
 
+  /**
+   * Stamped at the current versions from the moment they exist, unlike the null columns a
+   * person predating M2e carries.
+   *
+   * Not a shortcut: a person with no derived rows at all is consistent with every version there
+   * has ever been, so the stamp is true the instant it is written. What it buys is that the
+   * version columns mean one thing rather than two. Left null, a brand new person would be
+   * indistinguishable from one whose rows were built by an older mapper, and everything that
+   * reads the gate would treat them the same, which is exactly wrong in one specific way: the
+   * sync runner skips a person who needs a rebuild, so a new person would be skipped and never
+   * receive any data, and the rebuild only runs at boot, so somebody who connected afterwards
+   * would never be un-skipped either. Stamping here is what makes "needs a rebuild" mean "has
+   * rows built by something older" rather than "has rows, or does not, we cannot tell".
+   */
   create(input: Omit<PersonRow, 'builtMappingVersion' | 'builtDerivationVersion'> & { nowMs: number }): PersonRow {
     this.#db.insert(people).values({
       id: input.id,
       displayName: input.displayName,
       timezone: input.timezone,
       createdAtMs: input.nowMs,
+      builtMappingVersion: MAPPING_VERSION,
+      builtDerivationVersion: DERIVATION_VERSION,
     }).run()
     return {
       id: input.id,
       displayName: input.displayName,
       timezone: input.timezone,
-      builtMappingVersion: null,
-      builtDerivationVersion: null,
+      builtMappingVersion: MAPPING_VERSION,
+      builtDerivationVersion: DERIVATION_VERSION,
     }
   }
 

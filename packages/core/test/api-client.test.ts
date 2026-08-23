@@ -286,4 +286,44 @@ describe('HealthClient', () => {
     expect(result.unreadablePages).toBe(1)
   })
 
+  it('stamps every page of one call with the same fetch episode id', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(page([{ a: 1 }], 'tok-2'))
+      .mockResolvedValueOnce(page([{ a: 2 }], 'tok-3'))
+      .mockResolvedValueOnce(page([{ a: 3 }]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+
+    const ids = ctx.db.select().from(rawPayloads).all().map((r) => r.fetchEpisodeId)
+    expect(ids).toHaveLength(3)
+    expect(new Set(ids).size).toBe(1)
+    expect(ids[0]).not.toBe(null)
+  })
+
+  it('gives two calls over the same window two different episode ids', async () => {
+    // The trailing window is re-fetched on every run, and this is the pair a replay must never
+    // downsample together: the second call is a correction of the first, not more of it.
+    const fetchMock = vi.fn().mockImplementation(async () => page([{ a: Math.random() }]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+    await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('steps')!, ...WINDOW })
+
+    const ids = ctx.db.select().from(rawPayloads).all().map((r) => r.fetchEpisodeId)
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+  })
+
+  it('gives a rollup call an episode id of its own', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ rollupDataPoints: [] }), { status: 200 }))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    await client.dailyRollUpDataPoints({
+      personId: 'p1', dataType: dataTypeById('steps')!,
+      fromLocalDate: '2026-08-01', toLocalDate: '2026-08-02',
+    })
+
+    const rows = ctx.db.select().from(rawPayloads).all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.fetchEpisodeId).not.toBe(null)
+  })
+
 })

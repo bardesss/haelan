@@ -122,6 +122,39 @@ describe('RawArchive', () => {
     const { id } = archive.put({ ...base, body: '{"error":{"code":400}}', httpStatus: 400, fetchedAtMs: 10 })
     expect(archive.getBody('p1', id)).toContain('400')
   })
+
+  it('stores the fetch episode the caller names', () => {
+    archive.put({ ...base, body, fetchedAtMs: 10, fetchEpisodeId: 'ep-1' })
+    const rows = db.all<{ fetch_episode_id: string | null }>(
+      sql`select fetch_episode_id from raw_payloads`,
+    )
+    expect(rows[0]!.fetch_episode_id).toBe('ep-1')
+  })
+
+  it('leaves the fetch episode null when no caller names one, which is what every row archived before the column existed looks like', () => {
+    archive.put({ ...base, body, fetchedAtMs: 10 })
+    const rows = db.all<{ fetch_episode_id: string | null }>(
+      sql`select fetch_episode_id from raw_payloads`,
+    )
+    expect(rows[0]!.fetch_episode_id).toBe(null)
+  })
+
+  it('does not let a new episode id defeat body dedup', () => {
+    // Every fetch episode has an id of its own, so folding it into the dedup key would end
+    // deduplication outright: the trailing window is re-fetched on every run and its unchanged
+    // pages would be archived again on each one, which is exactly the storage growth the body
+    // hash key exists to prevent. The first episode to archive a body keeps the row, and the
+    // replay reads that body as part of the episode that first saw it.
+    const first = archive.put({ ...base, body, fetchedAtMs: 10, fetchEpisodeId: 'ep-1' })
+    const second = archive.put({ ...base, body, fetchedAtMs: 99, fetchEpisodeId: 'ep-2' })
+    expect(second.deduplicated).toBe(true)
+    expect(second.id).toBe(first.id)
+    expect(db.all(sql`select 1 from raw_payloads`)).toHaveLength(1)
+    const rows = db.all<{ fetch_episode_id: string | null }>(
+      sql`select fetch_episode_id from raw_payloads`,
+    )
+    expect(rows[0]!.fetch_episode_id).toBe('ep-1')
+  })
 })
 
 describe('listFor', () => {
@@ -184,6 +217,23 @@ describe('listFor', () => {
     archive.put({ ...base, personId: 'p2', body: '{"theirs":1}' })
 
     expect(archive.listFor('p1')).toHaveLength(1)
+  })
+
+  it('returns the fetch episode id, which is what a replay groups the pages of one call by', () => {
+    archive.put({
+      personId: 'p1', dataType: 'steps', requestParams: {},
+      windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1, httpStatus: 200,
+      body: '{"a":1}', fetchEpisodeId: 'ep-1',
+    })
+    // A second row with no episode id at all, the shape of everything archived before the
+    // column existed. listFor has to hand both back, so the replay can tell which grouping
+    // rule each row needs rather than assuming the archive is all one kind.
+    archive.put({
+      personId: 'p1', dataType: 'steps', requestParams: {},
+      windowStartMs: 2000, windowEndMs: 3000, fetchedAtMs: 2, httpStatus: 200, body: '{"b":1}',
+    })
+
+    expect(archive.listFor('p1').map((p) => p.fetchEpisodeId)).toEqual(['ep-1', null])
   })
 
   it('the request params come back so a replay can tell a rollup from a list', () => {

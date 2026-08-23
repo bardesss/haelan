@@ -1,0 +1,1 @@
+ALTER TABLE `raw_payloads` ADD `fetch_episode_id` text;

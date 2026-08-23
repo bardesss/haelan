@@ -1,4 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, supports } from '@haelan/core'
 import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -28,6 +29,68 @@ describe('the sync runner', () => {
     const second = await runner.trigger('manual')
     expect(second).toMatchObject({ started: false, reason: 'already_running' })
     await first
+  })
+
+  it('skips a person whose derived data is not at the current versions', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    // A person the boot rebuild could not finish: connected, and carrying derived rows built by
+    // something older. A failed rebuild leaves the columns null rather than at 0, but the gate
+    // reads both the same way and peopleNeedingRebuild's own tests pin that; what this needs is
+    // a state reachable through a public store method rather than a hand written UPDATE.
+    harness.app.haelan.stores.people.stampBuiltVersions({
+      id: 'p1', mappingVersion: 0, derivationVersion: 0,
+    })
+
+    await harness.app.haelan.runner.trigger('scheduled')
+
+    // Nothing was fetched for them at all. This is the invariant the version stamp exists for:
+    // a sync appending rows derived at the current version beside rows derived at an older one
+    // leaves a person whose tiers disagree, which is exactly what a rebuild is meant to prevent.
+    expect(harness.app.haelan.stores.syncState.get('p1', 'heart-rate')).toBeNull()
+  })
+
+  it('says a person is being skipped once rather than on every tick', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    harness.app.haelan.stores.people.stampBuiltVersions({
+      id: 'p1', mappingVersion: 0, derivationVersion: 0,
+    })
+    const lines: string[] = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(' '))
+    })
+
+    try {
+      // Hourly in production. A line per tick is how a real reason to look becomes noise nobody
+      // reads by the second day, so it is said when the state is entered and not again.
+      await harness.app.haelan.runner.trigger('scheduled')
+      await harness.app.haelan.runner.trigger('scheduled')
+      await harness.app.haelan.runner.trigger('scheduled')
+    } finally {
+      spy.mockRestore()
+    }
+
+    expect(lines.filter((l) => l.includes('p1'))).toHaveLength(1)
+  })
+
+  it('syncs a person again once their rebuild has brought them up to date', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const stores = harness.app.haelan.stores
+    stores.people.stampBuiltVersions({ id: 'p1', mappingVersion: 0, derivationVersion: 0 })
+    await harness.app.haelan.runner.trigger('scheduled')
+    expect(stores.syncState.get('p1', 'heart-rate')).toBeNull()
+
+    // What a later boot's rebuild leaves behind. The skip has to be a state the runner reads
+    // every run, not a decision it made once and cached, or a person rescued by a fixed mapper
+    // would stay quarantined until the process was restarted a second time.
+    stores.people.stampBuiltVersions({
+      id: 'p1', mappingVersion: MAPPING_VERSION, derivationVersion: DERIVATION_VERSION,
+    })
+    await harness.app.haelan.runner.trigger('scheduled')
+
+    expect(stores.syncState.get('p1', 'heart-rate')).not.toBeNull()
   })
 
   it('reports itself idle once the run finishes', async () => {
@@ -207,6 +270,17 @@ describe('the sync runner', () => {
     // that weight in particular fell short of some deep horizon it was never asked to reach here.
     const status = runner.status()
     expect(status.backfill.every((row) => row.cursorMs === null)).toBe(true)
+
+    // The cursors above prove the sprint never took a step, but the trailing sync runs before the
+    // sprint and writes no cursor of its own, so on their own they say nothing about it. Its
+    // evidence is the high water marks. run() passes shouldStop into runSync; without that the
+    // trailing sync walks every listable type to completion while settle() waits, leaving a mark
+    // on each of them. At most one is what stopping between jobs looks like.
+    const stores = harness.app.haelan.stores
+    const marked = stores.people.list().flatMap((person) =>
+      DATA_TYPES.filter((type) => supports(type, 'list'))
+        .filter((type) => stores.syncState.get(person.id, type.id)?.highWaterMs != null))
+    expect(marked.length, 'the trailing sync kept walking after stop()').toBeLessThanOrEqual(1)
   })
 
   it('refuses to start once stopped, so a request racing shutdown cannot restart the sprint settle() is waiting out', async () => {

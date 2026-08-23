@@ -1,6 +1,6 @@
 ﻿import {
-  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runDerive,
-  runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
+  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, peopleNeedingRebuild,
+  runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
 } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -83,12 +83,19 @@ export class SyncRunner {
    * Set by stop() and never cleared, unlike #aborted which trigger() resets at the start of
    * every run. shutdown() calls stop() then awaits settle() while the HTTP server is still up,
    * so a request racing that window (routes/sync.ts, routes/oauth.ts) can reach tryStart after
-   * the aborted run has already finished — at which point #aborted alone would have been reset
+   * the aborted run has already finished, at which point #aborted alone would have been reset
    * to false by trigger() and the new run would start, and settle()'s while loop would pick up
    * its promise and wait out a full sprint instead of returning. This flag latches so neither
    * tryStart nor trigger can start anything once stop() has been called, for good.
    */
   #stopped = false
+  /**
+   * Who this runner has already said it is skipping. The scheduler ticks hourly and a person
+   * stays quarantined until a boot rebuilds them, so a line per tick is how a real reason to
+   * look becomes noise nobody reads by the second day. Entries are dropped again once the
+   * person comes back up to date, so a second quarantine is reported as loudly as the first.
+   */
+  readonly #reportedSkips = new Set<string>()
 
   constructor(context: ServerContext) { this.#context = context }
 
@@ -232,12 +239,21 @@ export class SyncRunner {
 
   private async run(): Promise<void> {
     const deps = this.buildDeps()
-    const personIds = this.#context.stores.credentials.listConnectedPeople()
+    const personIds = this.#eligible(this.#context.stores.credentials.listConnectedPeople())
     if (personIds.length === 0) return
 
     // The trailing window first: today's data is what a dashboard shows, and a backfill that
     // takes an hour must not delay it.
-    await runSync({ personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps })
+    //
+    // shouldStop, because this is run()'s first await and everything below it is guarded by an
+    // #aborted check while this was not. stop() sets #aborted and shutdown() then awaits
+    // settle(), so without this a shutdown waited out a whole trailing sync of every connected
+    // person and every listable type before anything noticed it had been asked to stop.
+    await runSync({
+      personIds, trailingDays: TRAILING_DAYS, userHorizonDays: this.#userHorizonDays(), deps,
+      shouldStop: () => this.#aborted,
+    })
+    if (this.#aborted) return
     // Here as well as at the end of the run, for the same reason the trailing window goes
     // first: a backfill that takes an hour must not be what stands between today's samples and
     // the dashboard reading them.
@@ -280,6 +296,57 @@ export class SyncRunner {
     if (this.#aborted) return
     await this.#backfillPass(deps, personIds, userHorizonDays, null)
     this.#derive()
+  }
+
+  /**
+   * The connected people whose derived rows are at the versions this build derives at.
+   *
+   * A person whose boot rebuild failed keeps rows built by an older mapper, and their version
+   * stamp rolled back with them. Syncing them anyway would append rows derived at the current
+   * version alongside the old ones, leaving a person whose tier 2 and tier 3 disagree with no
+   * record of which rows came from which, which is the one thing the version stamp exists to
+   * prevent. So they wait, and the rest of the household goes on ingesting.
+   *
+   * Read fresh on every run rather than resolved once at boot. The person is meant to recover by
+   * a later boot rebuilding them, and a cached decision would keep them quarantined until the
+   * process was restarted a second time.
+   *
+   * A brand new person is not caught by this, and that is not luck: PeopleStore.create stamps the
+   * current versions precisely so that "needs a rebuild" means "has rows built by something
+   * older" rather than "has no rows yet". Without that, somebody who connected after boot would
+   * be skipped here and never rebuilt either, since the rebuild only runs at boot, and so would
+   * never receive any data at all.
+   */
+  #eligible(personIds: string[]): string[] {
+    const connected = new Set(personIds)
+    const rows = this.#context.stores.people.list().filter((person) => connected.has(person.id))
+    const behind = new Map(peopleNeedingRebuild(rows).map((need) => [need.personId, need.reasons]))
+
+    // Forgotten as soon as they are current again, so a person quarantined a second time is
+    // reported a second time rather than silently skipped on the strength of an old line.
+    for (const id of this.#reportedSkips) {
+      if (!behind.has(id)) this.#reportedSkips.delete(id)
+    }
+
+    const eligible: string[] = []
+    for (const personId of personIds) {
+      const reasons = behind.get(personId)
+      // Undefined covers two cases on purpose: a person who is current, and a connected person
+      // with no row at all. The second is already handled downstream, where #backfillPass skips
+      // whoever people.get cannot find, and inventing a second answer to it here would only mean
+      // two places to keep in agreement.
+      if (reasons === undefined) {
+        eligible.push(personId)
+        continue
+      }
+      if (this.#reportedSkips.has(personId)) continue
+      this.#reportedSkips.add(personId)
+      console.log(
+        `sync: skipping ${personId} until a boot rebuilds them, `
+        + `because their derived data is behind (${reasons.join(', ')})`,
+      )
+    }
+    return eligible
   }
 
   /**
@@ -327,7 +394,7 @@ export class SyncRunner {
    * One batch for every type. capDays limits how deep this pass may walk, which is what makes
    * the sprint a bounded phase rather than a run to the full horizon; null means the type's own
    * resolved horizon, which is the trickle. The cap is enforced by skipping a type that has
-   * already reached it, not by shrinking the horizonDays passed to runBackfill — see the comment
+   * already reached it, not by shrinking the horizonDays passed to runBackfill. See the comment
    * at the skip below for why that distinction is load-bearing. Returns whether any type's
    * cursor actually moved, which is what the sprint loop above uses to decide whether another
    * pass is worth taking.
@@ -360,12 +427,12 @@ export class SyncRunner {
         // separate from the horizonDays runBackfill is given below. Passing a *capped*
         // horizonDays would work for one call, but a batch that doesn't divide evenly into
         // capDays (fourteen into ninety, say) can walk straight past the cap and hit
-        // runBackfill's own "reached the floor" check in the same call — and that check (frozen,
+        // runBackfill's own "reached the floor" check in the same call, and that check (frozen,
         // from Task 5) reads it as "done" and marks the type complete for good, permanently
         // stunting a type whose operator asked for years of history at the sprint's 90 days.
         // Checking the cap here instead, before ever calling runBackfill, and always handing it
         // the type's real horizon, means the only way runBackfill marks something complete is by
-        // genuinely reaching it — overshooting the sprint cap by a few days is harmless, a type
+        // genuinely reaching it. Overshooting the sprint cap by a few days is harmless, a type
         // never reaching horizonDays this way is not.
         if (capDays !== null && resolved > capDays) {
           const floorMs = this.#context.now() - capDays * DAY_MS

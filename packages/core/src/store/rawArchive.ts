@@ -14,6 +14,12 @@ export interface PutInput {
   fetchedAtMs: number
   httpStatus: number
   body: string
+  /**
+   * Which fetch call this page came from. One listDataPoints call passes the same value for
+   * every page it paginates through; a caller that has no such notion leaves it out and the row
+   * stores null, which is what every row archived before this existed looks like.
+   */
+  fetchEpisodeId?: string
 }
 
 export interface PutResult { id: string, deduplicated: boolean }
@@ -26,6 +32,8 @@ export interface ArchivedPayload {
   windowStartMs: number
   windowEndMs: number
   fetchedAtMs: number
+  /** Null on any row archived before the column existed. See splitIntoEpisodes in replay.ts. */
+  fetchEpisodeId: string | null
 }
 
 export class RawArchive {
@@ -47,6 +55,7 @@ export class RawArchive {
       personId: input.personId,
       dataType: input.dataType,
       requestParams: JSON.stringify(input.requestParams),
+      fetchEpisodeId: input.fetchEpisodeId ?? null,
       windowStartMs: input.windowStartMs,
       windowEndMs: input.windowEndMs,
       fetchedAtMs: input.fetchedAtMs,
@@ -55,6 +64,11 @@ export class RawArchive {
       bodyHash,
       bodyBytes: Buffer.byteLength(input.body, 'utf8'),
     }).onConflictDoNothing({
+      // fetchEpisodeId is deliberately absent from this target. Every episode has an id of its
+      // own, so keying on it would end deduplication outright and archive the unchanged trailing
+      // window again on every run. A conflicting body therefore keeps the episode that first
+      // archived it, which is the right answer: the second call would have mapped the same
+      // points to the same values, so the stored row already stands in for both.
       target: [
         rawPayloads.personId, rawPayloads.dataType, rawPayloads.bodyHash,
         rawPayloads.windowStartMs, rawPayloads.windowEndMs,
@@ -92,6 +106,7 @@ export class RawArchive {
       windowStartMs: rawPayloads.windowStartMs,
       windowEndMs: rawPayloads.windowEndMs,
       fetchedAtMs: rawPayloads.fetchedAtMs,
+      fetchEpisodeId: rawPayloads.fetchEpisodeId,
     }).from(rawPayloads)
       .where(and(eq(rawPayloads.personId, personId), eq(rawPayloads.httpStatus, 200)))
       .orderBy(

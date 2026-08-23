@@ -8,7 +8,7 @@ export { CredentialStore } from './store/credentials.ts'
 export type { ClientCredentials, StoredRefreshToken } from './store/credentials.ts'
 export { RawArchive } from './store/rawArchive.ts'
 export type { PutInput, PutResult, ArchivedPayload } from './store/rawArchive.ts'
-export { createTestDatabase, seedPerson } from './testing/fixtures.ts'
+export { createTestDatabase, seedPerson, corruptArchivedBodies } from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
 export {
   ACTIONS, DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor, supports,
@@ -74,7 +74,9 @@ export { MAPPING_VERSION } from './api/version.ts'
 export { peopleNeedingRebuild } from './rebuild/versions.ts'
 export type { RebuildNeed } from './rebuild/versions.ts'
 export { runRebuild } from './rebuild/runRebuild.ts'
-export type { RebuildInput, RebuildReport, RebuildPersonReport } from './rebuild/runRebuild.ts'
+export type {
+  RebuildInput, RebuildReport, RebuildPersonReport, RebuildFailure,
+} from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
 export { localDateOf, localHourOf } from './derive/localDay.ts'
 export { coverageOf } from './derive/coverage.ts'
