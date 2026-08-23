@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DATA_TYPES } from '../src/api/catalogue.ts'
-import { METRICS, DAILY_AGGS, metricSpec } from '../src/derive/metrics.ts'
+import { METRICS, DAILY_AGGS, metricSpec, SLEEP_METRICS } from '../src/derive/metrics.ts'
 
 describe('the metric catalogue', () => {
   // The failure this prevents: a metric added to the data type catalogue and forgotten here
@@ -52,5 +52,26 @@ describe('the metric catalogue', () => {
   it('answers by name and says so when it does not know', () => {
     expect(metricSpec('steps')?.aggs).toContain('sum')
     expect(metricSpec('not_a_metric')).toBeUndefined()
+  })
+
+  it('declares the sleep family, which comes from sessions rather than samples', () => {
+    // rollUpDay cannot produce these: sleep has no samples underneath it. deriveSleepDay writes
+    // them, and they live in METRICS anyway so a chart reads precision and direction from one
+    // catalogue rather than two.
+    for (const metric of SLEEP_METRICS) {
+      expect(METRICS[metric], `no METRICS entry for ${metric}`).toBeDefined()
+    }
+  })
+
+  it('names every sleep metric with the family prefix, so a reader can tell where it came from', () => {
+    for (const metric of SLEEP_METRICS) expect(metric.startsWith('sleep_')).toBe(true)
+  })
+
+  it('still declares no entry for the session data types themselves', () => {
+    // The existing rule, restated against the new family: sleep_asleep_minutes is a derived
+    // figure, `sleep` is a data type, and an entry for the latter would claim a sample rollup
+    // that cannot exist.
+    expect(METRICS['sleep']).toBeUndefined()
+    expect(METRICS['exercise']).toBeUndefined()
   })
 })
