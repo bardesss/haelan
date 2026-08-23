@@ -5,7 +5,9 @@ import { join } from 'node:path'
 import { asc, eq } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../db/open.ts'
 import { migrateToLatest } from '../db/migrate.ts'
-import { people, sources, samples, sessions, overrides, rawPayloads, syncState } from '../db/schema/index.ts'
+import {
+  people, sources, samples, sessions, overrides, rawPayloads, syncState, daily,
+} from '../db/schema/index.ts'
 import type { SessionKind, SampleAgg } from '../db/schema/index.ts'
 import type { Database } from '../db/open.ts'
 import type { OverrideScope } from '../derive/targetKey.ts'
@@ -15,7 +17,8 @@ import { DeriveQueue } from '../store/deriveQueue.ts'
 import { SourcePriorityStore } from '../store/sourcePriority.ts'
 import { OverrideStore } from '../store/overrides.ts'
 import { SettingsStore } from '../store/settings.ts'
-import { body, samplePoint, sleepPoint } from './payloads.ts'
+import { body, dailyRollupBody, samplePoint, sleepPoint } from './payloads.ts'
+import { DERIVATION_VERSION } from '../derive/version.ts'
 
 export interface TestDatabase { db: Database, dir: string, cleanup: () => void }
 
@@ -153,14 +156,24 @@ export interface RebuildDeps {
   settings: SettingsStore
 }
 
+export interface SecondPersonRows {
+  samples: (typeof samples.$inferSelect)[]
+  sessions: (typeof sessions.$inferSelect)[]
+  daily: (typeof daily.$inferSelect)[]
+}
+
 export interface Rebuildable {
   db: Database
   personId: string
   /** Everything runRebuild needs except nowMs, so a caller spreads this and adds the clock. */
   deps: RebuildDeps
   cleanup: () => void
-  /** A second household member with rows of their own, returned so a test can compare them. */
-  seedSecondPerson: () => (typeof samples.$inferSelect)[]
+  /**
+   * A second household member with an archive and rows of their own, returned so a test can
+   * compare them. All three tables a person transaction empties, because asserting only over
+   * samples would let a delete that forgot its person filter on sessions or daily pass.
+   */
+  seedSecondPerson: () => SecondPersonRows
   /** Makes one archived body ungzippable, which is the cheapest honest way to fail a replay. */
   corruptOneArchivedBody: () => void
 }
@@ -173,7 +186,8 @@ export interface SeedRebuildableOptions {
   dataSource?: Record<string, unknown>
 }
 
-const REBUILDABLE_DATE = '2026-08-18'
+/** The one local date every archived payload in the fixture lands on. */
+export const REBUILDABLE_DATE = '2026-08-18'
 const REBUILDABLE_WINDOW_START = Date.parse(`${REBUILDABLE_DATE}T00:00:00Z`)
 
 /**
@@ -212,20 +226,33 @@ function sleepNightBody(dataSource: Record<string, unknown>): string {
   })])
 }
 
-// The one database the most recent seedRebuildable handed out. A later task drives this fixture
-// from inside a fast-check property, which runs hundreds of cases inside a single test body and
-// so fires afterEach exactly once, at the end. Closing the previous handle as the next one is
-// made keeps that from leaking a temp directory and an open sqlite file per generated case.
+// Same envelope shape map-rollups.test.ts and rebuild-replay.test.ts use for total calories:
+// rollupDataPoints keyed by civil date, with the payload's own value object nested under its
+// payload key. Archived because a provider daily row can only ever come from one of these, and a
+// rebuild that spared them would leave a retired mapping's figures on the dashboard forever.
+function rollupBody(localDate: string, kcal: number): string {
+  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number]
+  return dailyRollupBody('totalCalories', [{ date: { year, month, day }, value: { kcalSum: kcal } }])
+}
+
+// The one database the most recent seedRebuildable handed out, so the next call can close it.
 let openRebuildable: { cleanup: () => void } | null = null
 
 /**
  * A database that has everything a rebuild needs and nothing it should have to invent: one
- * person, one archived heart rate window, one archived sleep window, and a sync_state row that a
- * rebuild must leave exactly where it found it.
+ * person, one archived heart rate window, one archived sleep window, one archived daily rollup,
+ * and a sync_state row that a rebuild must leave exactly where it found it.
  *
  * Tiers 2 and 3 are deliberately left empty. Every row a rebuild test asserts on comes from the
  * archive by way of the real mappers, which is the property the milestone is about; seeding
  * samples directly would prove only that the fixture can write samples.
+ *
+ * ONE LIVE DATABASE AT A TIME. Each call closes the database the previous call handed out, so a
+ * caller cannot hold two of these open at once. That is deliberate: a later task drives this
+ * from inside a fast-check property, which runs hundreds of cases inside a single test body and
+ * so fires afterEach exactly once, at the end. Without the close here, every generated case
+ * would leak a temp directory and an open sqlite handle. `cleanup` is idempotent, so calling it
+ * from a hook as well costs nothing.
  */
 export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildable {
   openRebuildable?.cleanup()
@@ -247,6 +274,14 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
     personId, dataType: 'sleep', requestParams: listParams,
     windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
     fetchedAtMs: 1, httpStatus: 200, body: sleepNightBody(dataSource),
+  })
+  // A rollup response, which is the only thing that ever produces a provider daily row. The
+  // range in requestParams is what tells the replay this was a rollup call rather than a list
+  // one, so it cannot be omitted.
+  archive.put({
+    personId, dataType: 'total-calories', requestParams: { range: { start: {}, end: {} } },
+    windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
+    fetchedAtMs: 1, httpStatus: 200, body: rollupBody(REBUILDABLE_DATE, 2100),
   })
 
   // A high water mark and a backfill cursor, the two things a rebuild must not reset. Without a
@@ -282,12 +317,41 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
       t.cleanup()
     },
     seedSecondPerson: () => {
-      seedPerson(db, 'p2')
+      const otherId = 'p2'
+      seedPerson(db, otherId)
+      // An archive of their own, under a different platform and package so their sources are
+      // genuinely different identities. Without this the second person is never replayed at all,
+      // and every claim about doing per person work holds vacuously for them.
+      archive.put({
+        personId: otherId, dataType: 'heart-rate', requestParams: listParams,
+        windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
+        fetchedAtMs: 1, httpStatus: 200,
+        body: heartRateBody({
+          platform: 'HEALTH_CONNECT',
+          application: { packageName: 'com.example.other' },
+          recordingMethod: 'PASSIVELY_MEASURED',
+        }),
+      })
+      // A row in each of the three tables a person transaction empties. One table is not enough:
+      // a delete that lost its person filter on sessions or on daily has to fail as loudly as
+      // one that lost it on samples.
       seedSample(db, {
-        personId: 'p2', sourceId: 'p2-watch', metric: 'steps',
+        personId: otherId, sourceId: 'p2-watch', metric: 'steps',
         utcMs: Date.parse(`${REBUILDABLE_DATE}T09:00:00Z`), value: 900,
       })
-      return db.select().from(samples).where(eq(samples.personId, 'p2')).all()
+      seedSession(db, {
+        id: 'p2-night', personId: otherId, kind: 'sleep', externalId: 'p2-night-external',
+      })
+      db.insert(daily).values({
+        personId: otherId, localDate: REBUILDABLE_DATE, metric: 'steps', agg: 'sum',
+        source: 'p2-watch', value: 900, coverage: null, sourceMix: null,
+        derivationVersion: DERIVATION_VERSION,
+      }).run()
+      return {
+        samples: db.select().from(samples).where(eq(samples.personId, otherId)).all(),
+        sessions: db.select().from(sessions).where(eq(sessions.personId, otherId)).all(),
+        daily: db.select().from(daily).where(eq(daily.personId, otherId)).all(),
+      }
     },
     corruptOneArchivedBody: () => {
       // Ordered, so which body is ruined is the same on every run. An unordered get() would

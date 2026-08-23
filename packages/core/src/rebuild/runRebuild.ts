@@ -1,8 +1,6 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
-import {
-  daily, samples, sessions, sessionSegments, sources, sourcePriority,
-} from '../db/schema/index.ts'
+import { daily, samples, sessions, sources, sourcePriority } from '../db/schema/index.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 import { deriveDayInto } from '../derive/deriveDay.ts'
@@ -93,6 +91,14 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     // A registry per person, never shared across the loop. Its cache maps an external id to a
     // row id, and a rebuild deletes rows, so a cache that outlived one person's transaction
     // would hand the next person an id that no longer exists.
+    //
+    // Measured honesty about that: as SourceRegistry stands today the collision is not reachable
+    // from here, because its cache key names the person as well as the external id, and source
+    // ids are a hash of exactly those two, so even a rolled back person's cached id is the id
+    // their next rebuild recreates. Hoisting this line out of the loop passes every test in
+    // rebuild.test.ts. It stays per person anyway: the two facts holding it up live in another
+    // file, one of them is a caching detail nobody would think to preserve, and a fresh registry
+    // per person costs one allocation against a whole transaction of work.
     const registry = new SourceRegistry(input.db)
 
     // input.peopleStore, input.priority and input.overrides were built on the outer db handle and
@@ -111,11 +117,10 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           .map((row) => [row.id, { kind: row.kind, externalId: row.externalId }]),
       )
 
-      // Segments before sessions, sessions before sources, because of the foreign keys.
-      const sessionIds = [...oldSessions.keys()]
-      if (sessionIds.length > 0) {
-        tx.delete(sessionSegments).where(inArray(sessionSegments.sessionId, sessionIds)).run()
-      }
+      // Segments go with their sessions by cascade: session_segments.session_id declares
+      // ON DELETE cascade and openDatabase sets PRAGMA foreign_keys = ON on every connection it
+      // makes, which is the only way this package opens one. Deleting them explicitly first
+      // would be a second statement doing what the first already does.
       tx.delete(sessions).where(eq(sessions.personId, personId)).run()
       tx.delete(samples).where(eq(samples.personId, personId)).run()
       // Provider rows included. They are mapped from archived rollup responses like everything
