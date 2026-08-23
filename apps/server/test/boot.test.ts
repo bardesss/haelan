@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { openHaelan, sampleTarget, schema, seedPerson } from '@haelan/core'
+import { corruptArchivedBodies, openHaelan, sampleTarget, schema, seedPerson } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import { rebuildIfNeeded, runBootSequence } from '../src/rebuild.ts'
 
@@ -183,6 +183,8 @@ interface BootHarness {
   seedOverrideOnAMissingSample: (id: string) => void
   /** A ranking on a source no payload will reproduce, so the rebuild takes the ranking with it. */
   seedRankingOnAStaleSource: (id: string) => void
+  /** An unstamped person whose archive cannot be replayed at all, so their rebuild throws. */
+  seedPersonWhoseRebuildFails: (id: string) => void
 }
 
 /**
@@ -206,6 +208,15 @@ async function bootHarness(): Promise<BootHarness> {
         reason: 'test fixture: a correction on a reading that will not survive the rebuild',
         nowMs: 1,
       })
+    },
+    seedPersonWhoseRebuildFails: (id) => {
+      seedPerson(instance.db, id)
+      instance.archive.put({
+        personId: id, dataType: 'heart-rate', requestParams: {},
+        windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+        body: '{}',
+      })
+      corruptArchivedBodies(instance.db, id)
     },
     seedRankingOnAStaleSource: (id) => {
       // Straight into the tables rather than through SourcePriorityStore.put, which would also
@@ -245,7 +256,7 @@ describe('rebuildIfNeeded', () => {
       instance: h.instance, nowMs: () => 1, log: () => {},
     })
 
-    expect(reports.map((r) => r.personId)).toEqual(['p1'])
+    expect(reports.people.map((r) => r.personId)).toEqual(['p1'])
   })
 
   test('does nothing when every person is already current', async () => {
@@ -257,7 +268,7 @@ describe('rebuildIfNeeded', () => {
       instance: h.instance, nowMs: () => 2, log: () => {},
     })
 
-    expect(second).toEqual([])
+    expect(second).toEqual({ people: [], failures: [] })
   })
 
   test('reports each person and why, so an operator can read the log', async () => {
@@ -299,6 +310,45 @@ describe('rebuildIfNeeded', () => {
     expect(said).toContain('set them again')
   })
 
+  test('a person whose rebuild throws is named, with the error, and the rest still rebuild', async () => {
+    const h = await bootHarness()
+    h.seedPersonWhoseRebuildFails('p1')
+    h.seedUnstampedPerson('p2')
+    const lines: string[] = []
+
+    const report = await rebuildIfNeeded({
+      instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l),
+    })
+
+    // p2 is rebuilt even though p1, ahead of them in the loop, threw. Before this the loop
+    // aborted, so a single bad payload stopped every household member ingesting until somebody
+    // edited code, and intraday samples have a shelf life.
+    expect(report.people.map((r) => r.personId)).toEqual(['p2'])
+    expect(report.failures.map((f) => f.personId)).toEqual(['p1'])
+
+    // Named individually and quoted, the way an orphaned override is, rather than folded into a
+    // count. A count tells an operator that something is wrong; this tells them which person and
+    // what to go and look at.
+    const said = lines.find((l) => l.includes('p1') && l.includes('could not be rebuilt'))
+    expect(said).toBeDefined()
+    expect(said).toContain('incorrect header check')
+    // And what it means for them, since the consequence is not obvious from the failure alone:
+    // this person stops syncing until a later boot rebuilds them.
+    expect(said).toContain('skipped by sync')
+  })
+
+  test('a failed person is left unstamped, so the next call tries them again', async () => {
+    const h = await bootHarness()
+    h.seedPersonWhoseRebuildFails('p1')
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: () => {} })
+    // No operator action in between. Retrying has to be the default, because the fix for a
+    // payload no mapper handles is a new mapper, and that arrives as a restart.
+    const second = await rebuildIfNeeded({ instance: h.instance, nowMs: () => 2, log: () => {} })
+
+    expect(second.failures.map((f) => f.personId)).toEqual(['p1'])
+  })
+
   test('yields between people rather than only after all of them', async () => {
     const h = await bootHarness()
     h.seedUnstampedPerson('p1')
@@ -330,7 +380,7 @@ describe('rebuildIfNeeded', () => {
       // settles rather than leaving a second faked timer stranded.
       await vi.advanceTimersByTimeAsync(0)
       const reports = await reportsPromise
-      expect(reports.map((r) => r.personId).sort()).toEqual(['p1', 'p2'])
+      expect(reports.people.map((r) => r.personId).sort()).toEqual(['p1', 'p2'])
     } finally {
       vi.useRealTimers()
     }
@@ -341,6 +391,7 @@ describe('runBootSequence', () => {
   test('the sync runner does not start while the rebuild is still running', async () => {
     let resolveRebuild: () => void = () => {}
     const rebuildPromise = new Promise<void>((resolve) => { resolveRebuild = resolve })
+      .then(() => ({ people: [], failures: [] }))
     let startSyncCalls = 0
 
     const sequence = runBootSequence({
@@ -359,6 +410,31 @@ describe('runBootSequence', () => {
     await sequence
 
     expect(startSyncCalls).toBe(1)
+  })
+
+  test('starts sync when some people were quarantined, and names each of them', async () => {
+    let startSyncCalls = 0
+    const errors: { message: string, error: unknown }[] = []
+    const boom = new Error('incorrect header check')
+
+    await runBootSequence({
+      rebuild: () => Promise.resolve({
+        people: [],
+        failures: [{ personId: 'p1', reasons: ['mapping version unrecorded, now 3'], error: boom }],
+      }),
+      startSync: () => { startSyncCalls++ },
+      log: () => {},
+      logError: (message, error) => { errors.push({ message, error }) },
+    })
+
+    // The household keeps ingesting. Refusing to start sync for everybody was the safe direction
+    // only while a failure was assumed to be structural; once it is one person's, the cost of
+    // refusing is every other member losing data that the API will not retain to be re-fetched.
+    expect(startSyncCalls).toBe(1)
+    // Loudly, through logError rather than log, and one line per person with the error attached.
+    expect(errors).toHaveLength(1)
+    expect(errors[0]!.message).toContain('p1')
+    expect(errors[0]!.error).toBe(boom)
   })
 
   test('a failed rebuild does not start the sync runner', async () => {

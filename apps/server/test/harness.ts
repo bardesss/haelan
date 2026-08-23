@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { AccountStore, SCOPES, SettingsStore, body, openHaelan, seedPerson } from '@haelan/core'
+import { AccountStore, PeopleStore, SCOPES, SettingsStore, body, openHaelan } from '@haelan/core'
 import type { RateLimiter } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import type { FastifyInstance } from 'fastify'
@@ -126,7 +126,13 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
   // What a finished wizard would have left behind, so a test about anything else does not
   // have to walk it.
   const completeSetup = async () => {
-    seedPerson(instance.db, 'p1', { displayName: 'Bartus', timezone: 'Europe/Amsterdam' })
+    // Through the store the wizard itself uses, not seedPerson, because the two now differ in a
+    // way that matters here: create stamps the current versions and seedPerson leaves them null,
+    // which is a person the sync runner skips. A harness that produced the second while claiming
+    // to produce a finished wizard would make every sync test in this file a test of the skip.
+    new PeopleStore(instance.db).create({
+      id: 'p1', displayName: 'Bartus', timezone: 'Europe/Amsterdam', nowMs: clock.nowMs,
+    })
     const accounts = new AccountStore(instance.db)
     const settings = new SettingsStore(instance.db)
     await accounts.create({

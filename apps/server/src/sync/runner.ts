@@ -1,6 +1,6 @@
 ﻿import {
-  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, runBackfill, runDerive,
-  runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
+  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, peopleNeedingRebuild,
+  runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
 } from '@haelan/core'
 import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -89,6 +89,13 @@ export class SyncRunner {
    * tryStart nor trigger can start anything once stop() has been called, for good.
    */
   #stopped = false
+  /**
+   * Who this runner has already said it is skipping. The scheduler ticks hourly and a person
+   * stays quarantined until a boot rebuilds them, so a line per tick is how a real reason to
+   * look becomes noise nobody reads by the second day. Entries are dropped again once the
+   * person comes back up to date, so a second quarantine is reported as loudly as the first.
+   */
+  readonly #reportedSkips = new Set<string>()
 
   constructor(context: ServerContext) { this.#context = context }
 
@@ -232,7 +239,7 @@ export class SyncRunner {
 
   private async run(): Promise<void> {
     const deps = this.buildDeps()
-    const personIds = this.#context.stores.credentials.listConnectedPeople()
+    const personIds = this.#eligible(this.#context.stores.credentials.listConnectedPeople())
     if (personIds.length === 0) return
 
     // The trailing window first: today's data is what a dashboard shows, and a backfill that
@@ -289,6 +296,57 @@ export class SyncRunner {
     if (this.#aborted) return
     await this.#backfillPass(deps, personIds, userHorizonDays, null)
     this.#derive()
+  }
+
+  /**
+   * The connected people whose derived rows are at the versions this build derives at.
+   *
+   * A person whose boot rebuild failed keeps rows built by an older mapper, and their version
+   * stamp rolled back with them. Syncing them anyway would append rows derived at the current
+   * version alongside the old ones, leaving a person whose tier 2 and tier 3 disagree with no
+   * record of which rows came from which, which is the one thing the version stamp exists to
+   * prevent. So they wait, and the rest of the household goes on ingesting.
+   *
+   * Read fresh on every run rather than resolved once at boot. The person is meant to recover by
+   * a later boot rebuilding them, and a cached decision would keep them quarantined until the
+   * process was restarted a second time.
+   *
+   * A brand new person is not caught by this, and that is not luck: PeopleStore.create stamps the
+   * current versions precisely so that "needs a rebuild" means "has rows built by something
+   * older" rather than "has no rows yet". Without that, somebody who connected after boot would
+   * be skipped here and never rebuilt either, since the rebuild only runs at boot, and so would
+   * never receive any data at all.
+   */
+  #eligible(personIds: string[]): string[] {
+    const connected = new Set(personIds)
+    const rows = this.#context.stores.people.list().filter((person) => connected.has(person.id))
+    const behind = new Map(peopleNeedingRebuild(rows).map((need) => [need.personId, need.reasons]))
+
+    // Forgotten as soon as they are current again, so a person quarantined a second time is
+    // reported a second time rather than silently skipped on the strength of an old line.
+    for (const id of this.#reportedSkips) {
+      if (!behind.has(id)) this.#reportedSkips.delete(id)
+    }
+
+    const eligible: string[] = []
+    for (const personId of personIds) {
+      const reasons = behind.get(personId)
+      // Undefined covers two cases on purpose: a person who is current, and a connected person
+      // with no row at all. The second is already handled downstream, where #backfillPass skips
+      // whoever people.get cannot find, and inventing a second answer to it here would only mean
+      // two places to keep in agreement.
+      if (reasons === undefined) {
+        eligible.push(personId)
+        continue
+      }
+      if (this.#reportedSkips.has(personId)) continue
+      this.#reportedSkips.add(personId)
+      console.log(
+        `sync: skipping ${personId} until a boot rebuilds them, `
+        + `because their derived data is behind (${reasons.join(', ')})`,
+      )
+    }
+    return eligible
   }
 
   /**

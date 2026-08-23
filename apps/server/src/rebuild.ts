@@ -1,6 +1,6 @@
 import { setImmediate } from 'node:timers/promises'
 import { PeopleStore, peopleNeedingRebuild, runRebuild } from '@haelan/core'
-import type { RebuildPersonReport, openHaelan } from '@haelan/core'
+import type { RebuildFailure, RebuildReport, openHaelan } from '@haelan/core'
 
 export interface BootRebuildDeps {
   instance: ReturnType<typeof openHaelan>
@@ -17,10 +17,10 @@ export interface BootRebuildDeps {
  * the thread is still held, and that is the price of the atomicity the design rests on: nobody
  * ever reads a person whose tier 2 and tier 3 disagree.
  */
-export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildPersonReport[]> {
+export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildReport> {
   const peopleStore = new PeopleStore(deps.instance.db)
   const needs = peopleNeedingRebuild(peopleStore.list())
-  if (needs.length === 0) return []
+  if (needs.length === 0) return { people: [], failures: [] }
 
   deps.log(`rebuild needed for ${needs.length} of ${peopleStore.count()} people`)
 
@@ -36,12 +36,24 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildPer
     settings: deps.instance.settings,
   }
 
-  const reports: RebuildPersonReport[] = []
+  const reports: RebuildReport = { people: [], failures: [] }
   for (const need of needs) {
     deps.log(`rebuilding ${need.personId}: ${need.reasons.join(', ')}`)
     const report = runRebuild({ ...shared, personIds: [need.personId], nowMs: deps.nowMs() })
+    // Named individually, for the same reason an orphaned override is, and for a sharper one:
+    // this person stops receiving data until a later boot rebuilds them, so the log has to say
+    // who and why plainly enough that somebody can go and look. A count would say only that
+    // something somewhere is wrong, which is the least useful thing a log can say about a
+    // household member who has quietly stopped ingesting.
+    for (const failure of report.failures) {
+      reports.failures.push(failure)
+      deps.log(
+        `${failure.personId} could not be rebuilt and will be skipped by sync until a later boot `
+        + `rebuilds them: ${failure.error.message}`,
+      )
+    }
     for (const person of report.people) {
-      reports.push(person)
+      reports.people.push(person)
       deps.log(
         `rebuilt ${person.personId}: ${person.samples} samples, ${person.sessions} sessions, `
         + `${person.dailyRows} daily rows over ${person.daysDerived} days, `
@@ -76,9 +88,15 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildPer
 }
 
 export interface BootSequenceDeps {
-  /** Runs the rebuild. A callback rather than a call, so this function has nothing to reach for. */
-  rebuild: () => Promise<unknown>
-  /** Starts the sync runner. Called only once the rebuild has succeeded. */
+  /**
+   * Runs the rebuild. A callback rather than a call, so this function has nothing to reach for.
+   *
+   * It resolves with the people it could not rebuild rather than throwing for them, which is the
+   * distinction this whole sequence now turns on: a resolved report with failures in it is one
+   * or more household members quarantined, and a rejection is something structural.
+   */
+  rebuild: () => Promise<{ failures: readonly RebuildFailure[] }>
+  /** Starts the sync runner. Not called at all when the rebuild throws. */
   startSync: () => void
   log: (line: string) => void
   logError: (message: string, error: unknown) => void
@@ -94,10 +112,17 @@ export interface BootSequenceDeps {
  * The promise this returns is the one `shutdown` awaits, and a rejected promise nothing has
  * attached a handler to is how a shutdown turns into an unhandled rejection rather than a clean
  * exit. So a failed rebuild is caught here, reported loudly through `logError`, and never
- * rethrown: the rebuild is what makes the derived rows trustworthy, so a failed one must not be
- * followed by a sync appending more rows to a tier nobody has verified, and the sequence simply
- * stops before `startSync` rather than resolving to something the caller has to remember to
- * unwrap.
+ * rethrown.
+ *
+ * A throw and a per person failure mean different things, and this is where the difference is
+ * spent. A throw is structural, so the sequence stops before `startSync`: the rebuild is what
+ * makes the derived rows trustworthy, and a sync appending rows to a tier nobody has verified is
+ * worse than no sync. A person the rebuild reported as failed is quarantined instead. Sync
+ * starts, the runner skips that person because their stamp is not at the current versions, and
+ * every other household member goes on ingesting. Refusing to start for everybody used to be the
+ * safe direction, and it is not: intraday samples have a shelf life, because the API only
+ * retains them for a recent window, so a household held out of sync until somebody edits code
+ * loses minute level history permanently, one day at a time, for a fault in one person's data.
  *
  * Pulled out of index.ts, a top level script with side effects that nothing could import and
  * test, into a function that takes its collaborators as parameters. This is what makes the
@@ -105,11 +130,21 @@ export interface BootSequenceDeps {
  * against.
  */
 export async function runBootSequence(deps: BootSequenceDeps): Promise<void> {
+  let outcome: { failures: readonly RebuildFailure[] }
   try {
-    await deps.rebuild()
+    outcome = await deps.rebuild()
   } catch (error) {
     deps.logError('rebuild failed, sync not started', error)
     return
+  }
+  // Through logError rather than log, and one line each. rebuildIfNeeded has already said this
+  // once on the way past, but that line is a progress line among many; this one is the state the
+  // instance is now in, and it is the last thing said before sync starts without these people.
+  for (const failure of outcome.failures) {
+    deps.logError(
+      `${failure.personId} is quarantined: sync will skip them until a boot rebuilds them`,
+      failure.error,
+    )
   }
   deps.startSync()
   deps.log('sync runner started')
