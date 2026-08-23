@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
@@ -47,12 +47,48 @@ function sleepBody(): string {
 }
 
 describe('replayPerson', () => {
+  test('a re-fetch of the same window replays as its own episode, not merged into the first', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // Two separate fetches of the same window, both single page (pageToken: null), the trailing
+    // window re-fetch runSync does on every run. Google revised the minute's reading from 60 bpm
+    // to 100 bpm between the two fetches. A sync would call mapWindowSamples once per fetch and
+    // let the second upsert win outright: min 100, mean 100, max 100, n 1. Grouping both archived
+    // rows into one mapWindowSamples call instead downsamples across both readings at once and
+    // leaves min 60, mean 80, max 100, n 2, which is the bug this test pins.
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 60_000, bpm: 60 }]),
+    })
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 2, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 60_000, bpm: 100 }]),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    const rows = db.select().from(samples)
+      .where(and(eq(samples.personId, 'p1'), eq(samples.utcMs, 60_000))).all()
+    expect(rows).toHaveLength(3)
+    const byAgg = Object.fromEntries(rows.map((r) => [r.agg, r]))
+    expect(byAgg.min).toMatchObject({ value: 100, n: 1 })
+    expect(byAgg.mean).toMatchObject({ value: 100, n: 1 })
+    expect(byAgg.max).toMatchObject({ value: 100, n: 1 })
+  })
+
   test('a two page window downsamples once, not once per page', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
     const archive = new RawArchive(db)
     // Two readings inside the same minute, split across the two pages of one window, from a
-    // data type whose catalogue entry sets downsampleToMinute.
+    // data type whose catalogue entry sets downsampleToMinute. The second page's pageToken is a
+    // continuation token, not null, so this stays one fetch episode rather than two.
     archive.put({
       personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
       windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
@@ -73,6 +109,11 @@ describe('replayPerson', () => {
     const rows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
     expect(new Set(rows.map((r) => r.utcMs)).size).toBe(1)
     expect(counts.samples).toBe(rows.length)
+    // 60 and 80 downsampled together: mean 70 over both readings, not two independent means.
+    // Checking only the row count would also pass a page-by-page replay that happened to produce
+    // the same number of rows for the wrong reason.
+    const meanRow = rows.find((r) => r.agg === 'mean')
+    expect(meanRow).toMatchObject({ value: 70, n: 2 })
   })
 
   test('a rollup payload becomes provider daily rows, not samples', () => {
@@ -133,13 +174,22 @@ describe('replayPerson', () => {
     expect(db.select().from(sources).where(eq(sources.personId, 'p1')).all()).toHaveLength(1)
   })
 
-  test('a payload whose data type left the catalogue is counted, not thrown', () => {
+  test('a payload whose data type left the catalogue is counted, not thrown, and does not cost its siblings', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
     const archive = new RawArchive(db)
     archive.put({
       personId: 'p1', dataType: 'retired-type', requestParams: listParams,
       windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200, body: '{}',
+    })
+    // A live type archived alongside the retired one. The property under test is that one type
+    // leaving the catalogue must not cost the person the rebuild of everything else, which a
+    // single-payload test cannot show: it would pass just as well if the retired payload silently
+    // stopped the whole walk.
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 86_400_000, windowEndMs: 172_800_000, fetchedAtMs: 1, httpStatus: 200,
+      body: pageWithBeats([{ atMs: 90_000_000, bpm: 60 }]),
     })
 
     const counts = db.transaction((tx) => replayPerson(tx, {
@@ -148,17 +198,38 @@ describe('replayPerson', () => {
     }))
 
     expect(counts.unmappable).toBe(1)
-    expect(counts.samples).toBe(0)
+    expect(counts.samples).toBeGreaterThan(0)
+    expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all().length).toBe(counts.samples)
   })
 
-  test('the local dates the rows landed on come back', () => {
+  test('the local dates the rows landed on come back sorted, deduplicated, and without rollup-only dates', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
     const archive = new RawArchive(db)
+    // Two heart rate readings on the same local date, at different times, so a set that failed to
+    // deduplicate would show up as a repeated entry.
     archive.put({
       personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
       windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
-      body: pageWithBeats([{ atMs: Date.parse('2026-08-01T10:00:00Z'), bpm: 60 }]),
+      body: pageWithBeats([
+        { atMs: Date.parse('2026-08-01T10:00:00Z'), bpm: 60 },
+        { atMs: Date.parse('2026-08-01T15:00:00Z'), bpm: 70 },
+      ]),
+    })
+    // A sleep session ending on a different date. Sessions have to contribute their own date, not
+    // just samples.
+    archive.put({
+      personId: 'p1', dataType: 'sleep', requestParams: listParams,
+      windowStartMs: 172_800_000, windowEndMs: 259_200_000, fetchedAtMs: 1, httpStatus: 200,
+      body: sleepBody(),
+    })
+    // A rollup on a third date entirely. Provider daily rows have no samples underneath them and
+    // are not what runDerive's queue needs marked, so this date must be absent from the result.
+    archive.put({
+      personId: 'p1', dataType: 'total-calories',
+      requestParams: { range: { start: {}, end: {} } },
+      windowStartMs: 432_000_000, windowEndMs: 518_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: rollupBody('2026-08-05', 2100),
     })
 
     const counts = db.transaction((tx) => replayPerson(tx, {
@@ -166,6 +237,7 @@ describe('replayPerson', () => {
       sources: new SourceRegistry(db), nowMs: 1,
     }))
 
-    expect(counts.localDates).toEqual(['2026-08-01'])
+    expect(counts.localDates).toEqual(['2026-08-01', '2026-08-18'])
+    expect(counts.localDates).not.toContain('2026-08-05')
   })
 })
