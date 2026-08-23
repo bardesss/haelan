@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, test, expect, afterEach } from 'vitest'
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -6,6 +6,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { openHaelan, sampleTarget, seedPerson } from '@haelan/core'
+import type { Instance } from '@haelan/core'
+import { rebuildIfNeeded } from '../src/rebuild.ts'
 
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -169,5 +172,98 @@ describe('the entry point boots', () => {
     // And it runs node itself rather than delegating, so its working directory is the
     // repository root and a relative HAELAN_DATA_DIR lands where the README says it does.
     expect(root.scripts.start.startsWith('node ')).toBe(true)
+  })
+})
+
+interface BootHarness {
+  instance: Instance
+  /** A person whose rows predate DERIVATION_VERSION and MAPPING_VERSION: never built at all. */
+  seedUnstampedPerson: (id: string) => void
+  /** A correction naming a sample the archive will never reproduce, so the rebuild orphans it. */
+  seedOverrideOnAMissingSample: (id: string) => void
+}
+
+/**
+ * An in-process instance on its own temporary data directory, the same construction index.ts
+ * does, without the fastify app or the child process boot.test's other tests spawn: rebuildIfNeeded
+ * only ever touches `instance`, so a full server is a detail these tests do not need.
+ */
+async function bootHarness(): Promise<BootHarness> {
+  const dir = mkdtempSync(join(tmpdir(), 'haelan-boot-harness-'))
+  const instance = openHaelan(dir, {})
+  bootHarnesses.push({ instance, dir })
+  return {
+    instance,
+    seedUnstampedPerson: (id) => { seedPerson(instance.db, id) },
+    seedOverrideOnAMissingSample: (id) => {
+      instance.overrides.put({
+        personId: id,
+        scope: 'sample',
+        targetKey: sampleTarget({ source: 'a-source-no-payload-will-ever-produce', metric: 'heart_rate', utcMs: 0 }),
+        action: 'exclude',
+        reason: 'test fixture: a correction on a reading that will not survive the rebuild',
+        nowMs: 1,
+      })
+    },
+  }
+}
+
+// Closed and removed after each test rather than by the test itself, so a bootHarness() call
+// reads exactly like the brief that specifies it and every test still leaves its temp directory
+// and its open database behind it.
+const bootHarnesses: { instance: Instance, dir: string }[] = []
+
+describe('rebuildIfNeeded', () => {
+  afterEach(() => {
+    while (bootHarnesses.length > 0) {
+      const h = bootHarnesses.pop()!
+      h.instance.close()
+      rmSync(h.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  test('rebuilds a person whose rows predate the current versions', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+
+    const reports = await rebuildIfNeeded({
+      instance: h.instance, nowMs: () => 1, log: () => {},
+    })
+
+    expect(reports.map((r) => r.personId)).toEqual(['p1'])
+  })
+
+  test('does nothing when every person is already current', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: () => {} })
+
+    const second = await rebuildIfNeeded({
+      instance: h.instance, nowMs: () => 2, log: () => {},
+    })
+
+    expect(second).toEqual([])
+  })
+
+  test('reports each person and why, so an operator can read the log', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    const lines: string[] = []
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
+
+    expect(lines.some((l) => l.includes('p1'))).toBe(true)
+    expect(lines.some((l) => l.includes('mapping version unrecorded'))).toBe(true)
+  })
+
+  test('an orphaned override is named in the log rather than swallowed', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    h.seedOverrideOnAMissingSample('p1')
+    const lines: string[] = []
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
+
+    expect(lines.some((l) => l.includes('override'))).toBe(true)
   })
 })
