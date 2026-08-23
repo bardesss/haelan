@@ -203,4 +203,27 @@ describe('PersonQuery.comparePeriods', () => {
     expect(insight.previous).toBeCloseTo(10, 10)
     expect(insight.current).toBeCloseTo(20, 10)
   })
+
+  it('says which two ranges it compared, so nothing downstream re-derives them', () => {
+    seedWeek(1, 80)
+    seedWeek(8, 100)
+    const insight = query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.currentRange).toEqual({ from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.previousRange).toEqual({ from: '2026-08-01', to: '2026-08-07' })
+    expect(insight.currentCoverage).toBeCloseTo(0.9, 10)
+    expect(insight.previousCoverage).toBeCloseTo(0.9, 10)
+  })
+
+  it('still says what it compared when it refuses, because that is the explanation', () => {
+    seedWeek(1, 80)
+    insertDaily({ localDate: '2026-08-08', value: 100 })
+    const insight = query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.suppressed).toBe(true)
+    expect(insight.currentRange).toEqual({ from: '2026-08-08', to: '2026-08-14' })
+    expect(insight.previousRange).toEqual({ from: '2026-08-01', to: '2026-08-07' })
+    expect(insight.currentDays).toBe(1)
+    expect(insight.previousDays).toBe(7)
+    expect(insight.currentCoverage).toBeCloseTo(0.9, 10)
+    expect(insight.delta).toBeNull()
+  })
 })

@@ -115,11 +115,17 @@ export class PersonQuery {
       localDate: point.localDate, value: point.value, coverage: point.coverage,
     }))
 
-    return comparePeriodPoints({
+    const insight = comparePeriodPoints({
       current: fetch(input.from, input.to),
       previous: fetch(previousFrom, previousTo),
       periodDays,
     })
+
+    return {
+      ...insight,
+      currentRange: { from: input.from, to: input.to },
+      previousRange: { from: previousFrom, to: previousTo },
+    }
   }
 }
 

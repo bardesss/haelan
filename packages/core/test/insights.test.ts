@@ -125,4 +125,50 @@ describe('comparePeriods', () => {
     expect(insight.previousDays).toBe(7)
     expect(insight.periodDays).toBe(7)
   })
+
+  it('reports the mean coverage of each period, which section 11 requires a finding to carry', () => {
+    const insight = comparePeriods({
+      current: full(8, 100, 0.8),
+      previous: full(1, 80, 0.6),
+      periodDays: 7,
+    })
+    expect(insight.currentCoverage).toBeCloseTo(0.8, 10)
+    expect(insight.previousCoverage).toBeCloseTo(0.6, 10)
+  })
+
+  it('reports the coverage it refused on, because that is what explains the refusal', () => {
+    const insight = comparePeriods({
+      current: full(8, 100, 0.1),
+      previous: full(1, 80, 1),
+      periodDays: 7,
+    })
+    expect(insight.suppressed).toBe(true)
+    expect(insight.currentCoverage).toBeCloseTo(0.1, 10)
+    expect(insight.previousCoverage).toBeCloseTo(1, 10)
+    expect(insight.delta).toBeNull()
+  })
+
+  it('reports a null coverage rather than a zero when no day carried one', () => {
+    const insight = comparePeriods({
+      current: full(8, 100, null),
+      previous: full(1, 80, null),
+      periodDays: 7,
+    })
+    expect(insight.currentCoverage).toBeNull()
+    expect(insight.previousCoverage).toBeNull()
+    expect(insight.suppressed).toBe(false)
+  })
+
+  it('averages coverage over the days that carry one, not over the period', () => {
+    const mixed = [day(8, 100, 1), day(9, 100, null), day(10, 100, 0.5), ...full(11, 100, 1).slice(0, 4)]
+    const insight = comparePeriods({ current: mixed, previous: full(1, 80, 1), periodDays: 7 })
+    // Six measured days: 1, 0.5 and four at 1, which is 5.5 over 6.
+    expect(insight.currentCoverage).toBeCloseTo(5.5 / 6, 10)
+  })
+
+  it('leaves the ranges null, because this module is given points rather than dates', () => {
+    const insight = comparePeriods({ current: full(8, 100), previous: full(1, 80), periodDays: 7 })
+    expect(insight.currentRange).toBeNull()
+    expect(insight.previousRange).toBeNull()
+  })
 })
