@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
@@ -44,6 +44,14 @@ function sleepBody(): string {
       { type: 'DEEP', startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T00:30:00Z' },
     ],
   })])
+}
+
+// The mean row for one downsampled minute. Four tests below check a minute's mean and n, and
+// spelling the filter out at each one buried what they were actually claiming.
+function meanAt(db: TestDatabase['db'], utcMs: number): unknown {
+  return db.select().from(samples)
+    .where(and(eq(samples.personId, 'p1'), eq(samples.utcMs, utcMs), eq(samples.agg, 'mean')))
+    .get()
 }
 
 describe('replayPerson', () => {
@@ -121,6 +129,162 @@ describe('replayPerson', () => {
     // the same number of rows for the wrong reason.
     const meanRow = rows.find((r) => r.agg === 'mean')
     expect(meanRow).toMatchObject({ value: 70, n: 2 })
+  })
+
+  test('the pages of one call are mapped together even when the archive hands them back out of order', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // Two pages of one call, archived in the same millisecond. listFor orders by window bounds
+    // then fetch time, and when both tie it falls through to the row id, which put() generates at
+    // random: nothing stops a continuation page sorting ahead of its own start page. The
+    // pageToken inference reads that order as two episodes, the second overwriting the first,
+    // where the sync made one call and downsampled both pages at once.
+    const first = archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      fetchEpisodeId: 'ep-1', body: pageWithBeats([{ atMs: 60_000, bpm: 60 }]),
+    })
+    const second = archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: { ...listParams, pageToken: 'p2' },
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      fetchEpisodeId: 'ep-1', body: pageWithBeats([{ atMs: 90_000, bpm: 80 }]),
+    })
+    // Pinned rather than left to the random ids, which would decide this test by coin flip.
+    db.run(sql`update raw_payloads set id = 'zzz-start' where id = ${first.id}`)
+    db.run(sql`update raw_payloads set id = 'aaa-continuation' where id = ${second.id}`)
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    // 60 and 80 in one minute, downsampled together. Two episodes would leave whichever page
+    // replayed last standing alone at n 1.
+    expect(meanAt(db, 60_000)).toMatchObject({ value: 70, n: 2 })
+  })
+
+  test('a re-fetch whose first page was deduplicated does not blend into the call before it', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // One call of two pages, then a second call over the same window whose first page came back
+    // byte identical and so was deduplicated away. Only the second call's changed second page is
+    // a new row, and it carries a continuation token, so the pageToken inference has no null to
+    // start an episode at and folds the correction into the call it corrects: minute two would
+    // come out mean 80 over n 2 rather than the 100 the sync itself left.
+    const shared = {
+      personId: 'p1', dataType: 'heart-rate', windowStartMs: 0, windowEndMs: 86_400_000,
+      httpStatus: 200,
+    } as const
+    const firstPage = pageWithBeats([{ atMs: 60_000, bpm: 60 }])
+    // Fetch times are all distinct, so listFor orders these four calls to put() the one way and
+    // never falls through to its random id tiebreak. Sharing a millisecond between two pages of
+    // one call would leave their order, and with it whether the inference happens to guess right,
+    // to a coin flip on every run.
+    archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 1, fetchEpisodeId: 'ep-1',
+      body: firstPage,
+    })
+    archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 2,
+      fetchEpisodeId: 'ep-1', body: pageWithBeats([{ atMs: 120_000, bpm: 60 }]),
+    })
+    const deduplicated = archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 3, fetchEpisodeId: 'ep-2',
+      body: firstPage,
+    })
+    expect(deduplicated.deduplicated).toBe(true)
+    archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 4,
+      fetchEpisodeId: 'ep-2', body: pageWithBeats([{ atMs: 120_000, bpm: 100 }]),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    expect(meanAt(db, 120_000)).toMatchObject({ value: 100, n: 1 })
+  })
+
+  test('a payload archived before the episode id existed still replays through the pageToken inference', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // No fetchEpisodeId anywhere: the shape of every row a live instance archived before this
+    // column, which is months of tier 1 truth and the only copy of it. Two pages of one call and
+    // then a separate re-fetch, all inferred from pageToken exactly as they are today.
+    const shared = {
+      personId: 'p1', dataType: 'heart-rate', windowStartMs: 0, windowEndMs: 86_400_000,
+      httpStatus: 200,
+    } as const
+    archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 1,
+      body: pageWithBeats([{ atMs: 60_000, bpm: 50 }, { atMs: 120_000, bpm: 60 }]),
+    })
+    archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 2,
+      body: pageWithBeats([{ atMs: 150_000, bpm: 80 }]),
+    })
+    archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 3,
+      body: pageWithBeats([{ atMs: 60_000, bpm: 100 }]),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    // Minute two: both pages of the first call, downsampled together, 60 and 80 to a mean of 70.
+    expect(meanAt(db, 120_000)).toMatchObject({ value: 70, n: 2 })
+    // Minute one: the re-fetch is its own episode and overwrites the reading it corrects.
+    expect(meanAt(db, 60_000)).toMatchObject({ value: 100, n: 1 })
+  })
+
+  test('an archive holding both kinds of row replays each by its own rule', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // What every upgraded instance looks like for as long as its oldest windows survive: rows
+    // from before the column beside rows from after it, inside one window group. The old pair
+    // has to keep grouping by pageToken and the new page by its recorded id, without either rule
+    // swallowing the pages of the other. The new call is the deduplicated first page case again,
+    // so the inference alone would fold its one surviving page into the call it corrects.
+    const shared = {
+      personId: 'p1', dataType: 'heart-rate', windowStartMs: 0, windowEndMs: 86_400_000,
+      httpStatus: 200,
+    } as const
+    const firstPage = pageWithBeats([{ atMs: 60_000, bpm: 50 }, { atMs: 180_000, bpm: 60 }])
+    archive.put({ ...shared, requestParams: listParams, fetchedAtMs: 1, body: firstPage })
+    archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 2,
+      body: pageWithBeats([{ atMs: 210_000, bpm: 80 }, { atMs: 120_000, bpm: 60 }]),
+    })
+    const deduplicated = archive.put({
+      ...shared, requestParams: listParams, fetchedAtMs: 3, fetchEpisodeId: 'ep-2',
+      body: firstPage,
+    })
+    expect(deduplicated.deduplicated).toBe(true)
+    archive.put({
+      ...shared, requestParams: { ...listParams, pageToken: 'p2' }, fetchedAtMs: 4,
+      fetchEpisodeId: 'ep-2', body: pageWithBeats([{ atMs: 120_000, bpm: 100 }]),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    // Minute three: the two pages with no id at all, still one call by the pageToken inference,
+    // 60 and 80 downsampled together to a mean of 70.
+    expect(meanAt(db, 180_000)).toMatchObject({ value: 70, n: 2 })
+    // Minute two: the recorded page is its own call and corrects the 60 outright. Grouped by the
+    // inference instead it would join the call above and leave a mean of 80 over n 2.
+    expect(meanAt(db, 120_000)).toMatchObject({ value: 100, n: 1 })
+    // Minute one: untouched by the correction, so the old call's reading stands.
+    expect(meanAt(db, 60_000)).toMatchObject({ value: 50, n: 1 })
   })
 
   test('a rollup payload becomes provider daily rows, not samples', () => {

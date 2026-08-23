@@ -1,4 +1,5 @@
-﻿import type { RawArchive } from '../store/rawArchive.ts'
+﻿import { randomUUID } from 'node:crypto'
+import type { RawArchive } from '../store/rawArchive.ts'
 import type { DataType } from './catalogue.ts'
 import { supports } from './catalogue.ts'
 import { readEnvelope } from './envelope.ts'
@@ -141,6 +142,13 @@ export class HealthClient {
     }
 
     const filter = buildFilter(t, input.windowStartMs, input.windowEndMs, input.timezone)
+    // Minted once, outside the loop, because the loop below IS one fetch episode: every page it
+    // walks is part of a single call, and a replay has to map them together or the per minute
+    // downsampling that mapWindowSamples applies across a call would run on a fragment of one.
+    // Recorded rather than left to be inferred from a null pageToken, because dedup of an
+    // identical first page, a fetch time tie and a westward timezone change each break that
+    // inference (issue 54).
+    const fetchEpisodeId = randomUUID()
     const payloadIds: string[] = []
     let pointCount = 0
     let unreadablePages = 0
@@ -174,6 +182,7 @@ export class HealthClient {
         personId: input.personId,
         dataType: t.id,
         requestParams: { filter, pageSize: PAGE_SIZE, pageToken: pageToken ?? null },
+        fetchEpisodeId,
         windowStartMs: input.windowStartMs,
         windowEndMs: input.windowEndMs,
         fetchedAtMs: this.#deps.now(),
@@ -225,6 +234,10 @@ export class HealthClient {
       personId: input.personId,
       dataType: t.id,
       requestParams: request,
+      // A rollup does not paginate, so one call is one page and the id is minted here per call.
+      // Recorded all the same, so that no reader of raw_payloads has to know which kinds of call
+      // carry a grouping and which do not.
+      fetchEpisodeId: randomUUID(),
       windowStartMs: Date.parse(`${input.fromLocalDate}T00:00:00Z`),
       windowEndMs: Date.parse(`${input.toLocalDate}T00:00:00Z`),
       fetchedAtMs: this.#deps.now(),

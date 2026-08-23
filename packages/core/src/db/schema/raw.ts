@@ -9,6 +9,15 @@ export const rawPayloads = sqliteTable('raw_payloads', {
   personId: text('person_id').notNull().references(() => people.id),
   dataType: text('data_type').notNull(),
   requestParams: text('request_params').notNull(),
+  // Which fetch call produced this page. One listDataPoints call shares one value across every
+  // page it paginates through, so a replay can put a call back together by reading the grouping
+  // instead of inferring it from a null pageToken. Nullable, and null is not a gap to backfill:
+  // it is the shape of every row archived before this column existed, and it means "fall back to
+  // the pageToken inference". A live instance carries months of those and they are tier 1 truth,
+  // so they have to keep replaying exactly as they do now. Deliberately not part of the body
+  // hash unique constraint: every episode has a new value, so including it would end dedup and
+  // archive the unchanged trailing window again on every single run.
+  fetchEpisodeId: text('fetch_episode_id'),
   windowStartMs: integer('window_start_ms').notNull(),
   windowEndMs: integer('window_end_ms').notNull(),
   fetchedAtMs: integer('fetched_at_ms').notNull(),

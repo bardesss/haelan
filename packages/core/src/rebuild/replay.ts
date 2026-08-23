@@ -122,9 +122,11 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
     // One mapWindowSamples call per fetch episode, oldest first, not one call over the whole
     // group. Pagination pages of a single fetch must still be mapped together, which is the
     // reason groupIntoWindows exists at all, so this splits WITHIN a group rather than reverting
-    // to one call per page. But runJob calls listDataPoints once per sync run, and the trailing
-    // window is re-fetched on every run by design, so two archived rows sharing a window's bounds
-    // are just as often two separate fetch episodes as two pages of one. Merging them into a
+    // to one call per page. splitIntoEpisodes reads the episode the client recorded where there
+    // is one and infers it from pageToken where there is not. But runJob calls listDataPoints
+    // once per sync run, and the trailing window is re-fetched on every run by design, so two
+    // archived rows sharing a window's bounds are just as often two separate fetch episodes as
+    // two pages of one. Merging them into a
     // single mapWindowSamples call would downsample across readings the original sync never saw
     // together: a minute Google revised from 60 bpm to 100 bpm between two fetches would leave
     // min 60, mean 80, max 100, n 2, where the sync itself left min 100, mean 100, max 100, n 1.
@@ -220,27 +222,63 @@ function isRollupRequest(requestParams: string): boolean {
 /**
  * Splits one window's list pages back into the fetch episodes that produced them.
  *
- * client.ts writes pageToken: pageToken ?? null on every archived list page, so null marks the
- * first page of a fetch and a string marks a continuation of the fetch before it. listFor orders
- * pages by fetch time within a window, and a paginated fetch is sequential, so walking the array
- * in order and starting a new episode at every null boundary recovers the original calls exactly:
- * pagination pages of one fetch stay together, which is the reason groupIntoWindows groups by
- * window at all, and two separate fetches of the same window split apart instead of being
- * downsampled as if they were one call. With this in place a window re-fetched later really does
- * replay after, and correct, the episode before it, because there is now an "after": each episode
- * is its own mapWindowSamples call and its own round of upserts, in the order listFor returned
- * them.
+ * A page archived by a client that records its fetch episode carries the id of the call it came
+ * from, and pages sharing that id are one call no matter what else the row says. Reading the
+ * grouping beats deriving it, and the three ways deriving it goes wrong are all real (issue 54):
+ * a re-fetch whose first page was deduplicated leaves no null token to start its episode at, two
+ * pages archived in the same millisecond are ordered by a random row id that can put a
+ * continuation ahead of its own start, and a person moving west gives the same date earlier
+ * window bounds. Each one silently merges a correction with the reading it corrects, and because
+ * daily means are weighted by n, one blended minute reweights a whole day.
+ *
+ * A page whose id is null is not a gap. It is a row archived before the column existed, and a
+ * live instance holds months of them: tier 1 is the only copy of what the API ever said, so those
+ * rows must keep replaying exactly as they did, through the pageToken inference below. Both kinds
+ * appear in the same window group for as long as the oldest windows survive, so the two rules run
+ * side by side rather than one replacing the other.
+ *
+ * The inference: client.ts writes pageToken: pageToken ?? null on every archived list page, so
+ * null marks the first page of a fetch and a string marks a continuation of the fetch before it.
+ * listFor orders pages by fetch time within a window, and a paginated fetch is sequential, so
+ * walking the array in order and starting a new episode at every null boundary recovers the
+ * original calls: pagination pages of one fetch stay together, which is the reason
+ * groupIntoWindows groups by window at all, and two separate fetches of the same window split
+ * apart instead of being downsampled as if they were one call.
+ *
+ * Either way a window re-fetched later really does replay after, and correct, the episode before
+ * it, because there is an "after": each episode is its own mapWindowSamples call and its own
+ * round of upserts, in the order listFor returned them. Episodes are emitted in the order their
+ * first page appears, which for a recorded id is the order the calls themselves ran in.
  *
  * If a re-fetch's first page came back byte-identical to what was already archived, RawArchive.put
- * deduplicated it and no new row exists at all. That is correct to replay as a single episode: the
- * sync's second call would have produced the same rows and upserted them to the same values, so
- * the one stored row already stands in for both calls.
+ * deduplicated it and no new row exists at all. The stored row stays with the episode that first
+ * archived it, and the re-fetch replays as whatever pages it did add: the deduplicated page would
+ * have mapped to the same values it already did, so nothing is lost by not repeating it.
  */
 function splitIntoEpisodes(pages: readonly ArchivedPayload[]): ArchivedPayload[][] {
   const episodes: ArchivedPayload[][] = []
+  const recorded = new Map<string, ArchivedPayload[]>()
+  // The inferred episode still open, if any. A page carrying an id closes it: the two rules must
+  // not pour pages into each other's episodes, and a continuation token on a recorded page says
+  // nothing about a call whose pages were never given ids.
+  let inferred: ArchivedPayload[] | null = null
+
   for (const page of pages) {
-    if (episodes.length === 0 || isEpisodeStart(page.requestParams)) episodes.push([page])
-    else episodes.at(-1)!.push(page)
+    if (page.fetchEpisodeId !== null) {
+      inferred = null
+      const existing = recorded.get(page.fetchEpisodeId)
+      if (existing) { existing.push(page); continue }
+      const episode = [page]
+      recorded.set(page.fetchEpisodeId, episode)
+      episodes.push(episode)
+      continue
+    }
+    if (inferred === null || isEpisodeStart(page.requestParams)) {
+      inferred = [page]
+      episodes.push(inferred)
+      continue
+    }
+    inferred.push(page)
   }
   return episodes
 }
