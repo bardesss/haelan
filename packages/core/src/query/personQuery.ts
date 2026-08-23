@@ -4,10 +4,11 @@ import { daily } from '../db/schema/index.ts'
 import { MERGED_SOURCE } from '../derive/rollup.ts'
 import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
+import { coverageIsMeaningful } from './coverageSignal.ts'
 // Aliased: the class has a method of the same name, and an unqualified call inside it
 // resolving to the module import rather than the method is technically fine and genuinely
 // confusing to read.
-import { comparePeriods as comparePeriodPoints } from './insights.ts'
+import { comparePeriods as comparePeriodPoints, INSIGHT_MIN_COVERAGE } from './insights.ts'
 import type { Insight, PeriodPoint } from './insights.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 
@@ -91,12 +92,22 @@ export class PersonQuery {
     const points = this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
     })
-    return baselineOf(points.map((point) => point.value), windowDays)
+
+    // A barely observed day is a systematic undercount, not a low reading, and sixty of them
+    // build a centre a properly worn day then scores a large z against. The insight gate refuses
+    // such a period outright; a baseline can do better and drop the days rather than the answer.
+    const judgeCoverage = coverageIsMeaningful(input.metric)
+    const values = points
+      .filter((point) => !(judgeCoverage && point.coverage !== null && point.coverage < INSIGHT_MIN_COVERAGE))
+      .map((point) => point.value)
+
+    return baselineOf(values, windowDays)
   }
 
   /**
    * A range against the range of equal length immediately before it. Suppression is the pure
-   * function's decision; this only fetches the two periods and says how long they are.
+   * function's decision; this only fetches the two periods, says how long they are, and says
+   * whether coverage means anything for this metric.
    */
   comparePeriods(input: {
     metric: string
@@ -109,10 +120,17 @@ export class PersonQuery {
     const previousTo = shiftLocalDate(input.from, -1)
     const previousFrom = shiftLocalDate(previousTo, -(periodDays - 1))
 
+    // Coverage is a fraction of the day's hours, so a once-a-day metric reads 0.0417 when it is
+    // perfect. Handing that number to a gate built for continuously sampled data suppresses the
+    // whole Recovery page forever. Null says the period cannot be judged on coverage, which the
+    // gate already handles correctly.
+    const judgeCoverage = coverageIsMeaningful(input.metric)
     const fetch = (from: string, to: string): PeriodPoint[] => this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
     }).map((point) => ({
-      localDate: point.localDate, value: point.value, coverage: point.coverage,
+      localDate: point.localDate,
+      value: point.value,
+      coverage: judgeCoverage ? point.coverage : null,
     }))
 
     const insight = comparePeriodPoints({

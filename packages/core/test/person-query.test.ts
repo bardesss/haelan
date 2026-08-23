@@ -147,6 +147,50 @@ describe('PersonQuery.baseline', () => {
     expect(baseline?.n).toBe(2)
     expect(baseline?.center).toBeCloseTo(15, 10)
   })
+
+  it('drops barely worn days for a metric whose coverage says something', () => {
+    // A watch worn only in the mornings gives a day at 0.2 coverage whose mean is a systematic
+    // undercount, not a low reading. Left in, the centre sinks and the first properly worn day
+    // scores a large positive z, which is a wear artefact reported as a health signal.
+    for (let at = 0; at < 10; at += 1) {
+      insertDaily({
+        localDate: `2026-08-${String(1 + at).padStart(2, '0')}`,
+        value: 60, metric: 'heart_rate', agg: 'mean', coverage: 0.9,
+      })
+      insertDaily({
+        localDate: `2026-08-${String(11 + at).padStart(2, '0')}`,
+        value: 30, metric: 'heart_rate', agg: 'mean', coverage: 0.2,
+      })
+    }
+    const baseline = query.baseline({ metric: 'heart_rate', agg: 'mean', on: '2026-08-21', windowDays: 20 })
+    expect(baseline?.n).toBe(10)
+    expect(baseline?.center).toBeCloseTo(60, 10)
+  })
+
+  it('keeps every day for a metric whose coverage is not a quality signal', () => {
+    // resting_heart_rate arrives once a day, so a perfect day reads 1/24. Dropping those would
+    // leave the metric behind the product's flagship example question with no baseline at all.
+    for (let at = 0; at < 20; at += 1) {
+      insertDaily({
+        localDate: `2026-08-${String(1 + at).padStart(2, '0')}`,
+        value: 58, metric: 'resting_heart_rate', agg: 'last', coverage: 1 / 24,
+      })
+    }
+    const baseline = query.baseline({ metric: 'resting_heart_rate', agg: 'last', on: '2026-08-21', windowDays: 20 })
+    expect(baseline?.n).toBe(20)
+    expect(baseline?.thin).toBe(false)
+  })
+
+  it('keeps a day whose coverage is null, because null is not a zero', () => {
+    for (let at = 0; at < 20; at += 1) {
+      insertDaily({
+        localDate: `2026-08-${String(1 + at).padStart(2, '0')}`,
+        value: 420, metric: 'sleep_asleep_minutes', coverage: null,
+      })
+    }
+    const baseline = query.baseline({ metric: 'sleep_asleep_minutes', agg: 'sum', on: '2026-08-21', windowDays: 20 })
+    expect(baseline?.n).toBe(20)
+  })
 })
 
 describe('PersonQuery.comparePeriods', () => {
@@ -202,6 +246,50 @@ describe('PersonQuery.comparePeriods', () => {
     expect(insight.previousDays).toBe(3)
     expect(insight.previous).toBeCloseTo(10, 10)
     expect(insight.current).toBeCloseTo(20, 10)
+  })
+
+  it('does not suppress a once-a-day metric for reading one hour in twenty four', () => {
+    // resting_heart_rate arrives once a day, so coverage is 1/24 = 0.0417 on a perfect week.
+    // Judged against a threshold of 0.5 it was suppressed always and forever, which blanked the
+    // whole Recovery page and the metric behind the product's own flagship example question.
+    for (let at = 0; at < 7; at += 1) {
+      insertDaily({
+        localDate: `2026-08-${String(1 + at).padStart(2, '0')}`,
+        value: 58, metric: 'resting_heart_rate', agg: 'last', coverage: 1 / 24,
+      })
+      insertDaily({
+        localDate: `2026-08-${String(8 + at).padStart(2, '0')}`,
+        value: 62, metric: 'resting_heart_rate', agg: 'last', coverage: 1 / 24,
+      })
+    }
+    const insight = query.comparePeriods({
+      metric: 'resting_heart_rate', agg: 'last', from: '2026-08-08', to: '2026-08-14',
+    })
+    expect(insight.suppressed).toBe(false)
+    expect(insight.delta).toBeCloseTo(4, 10)
+    // Null rather than 0.0417: the number exists in the row and means nothing about quality here.
+    expect(insight.currentCoverage).toBeNull()
+  })
+
+  it('still suppresses a continuously sampled metric that was barely worn', () => {
+    // heart_rate is sampled all day, so 0.1 is a watch worn for a couple of hours and its mean
+    // is an artefact. The gate has to keep working exactly where coverage does mean something.
+    for (let at = 0; at < 7; at += 1) {
+      insertDaily({
+        localDate: `2026-08-${String(1 + at).padStart(2, '0')}`,
+        value: 58, metric: 'heart_rate', agg: 'mean', coverage: 0.1,
+      })
+      insertDaily({
+        localDate: `2026-08-${String(8 + at).padStart(2, '0')}`,
+        value: 62, metric: 'heart_rate', agg: 'mean', coverage: 0.1,
+      })
+    }
+    const insight = query.comparePeriods({
+      metric: 'heart_rate', agg: 'mean', from: '2026-08-08', to: '2026-08-14',
+    })
+    expect(insight.suppressed).toBe(true)
+    expect(insight.reason).toBe('thin-coverage')
+    expect(insight.currentCoverage).toBeCloseTo(0.1, 10)
   })
 
   it('says which two ranges it compared, so nothing downstream re-derives them', () => {
