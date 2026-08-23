@@ -87,7 +87,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M1c** Sync engine | Day aligned windows, per person jobs, sync state, token bucket, transactional writes | Done, [#19](https://github.com/bardesss/haelan/pull/19) |
 | **M1d** Wizard and accounts | Fastify server, argon2 accounts, sessions, the guided setup flow and backfill progress | Done, [#21](https://github.com/bardesss/haelan/pull/21) |
 | **M2a** Catalogue and rollups | The metric catalogue, per source `daily` rows with coverage, the derive queue and its drain, the rollup read path for `total-calories` and `floors` | Done, [#38](https://github.com/bardesss/haelan/pull/38) |
-| **M2b** Priority and merge | The per metric source priority list, `merged` rows chosen per local hour with their mix recorded, overrides applied at derivation, session overlap grouping | In review, [#45](https://github.com/bardesss/haelan/pull/45) |
+| **M2b** Priority and merge | The per metric source priority list, `merged` rows chosen per local hour with their mix recorded, overrides applied at derivation, session overlap grouping | Done, [#45](https://github.com/bardesss/haelan/pull/45) |
 | **M2c** Sleep derivation | Night assembly across split sessions, nap detection, stage durations and efficiency from our own segments, per source and merged sleep rows | In review, [#50](https://github.com/bardesss/haelan/pull/50) |
 | **M2** Derivation and query layer | Baselines, insights and rebuild | Not started |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
