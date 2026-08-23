@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { openHaelan } from '@haelan/core'
 import { readConfig } from './config.ts'
 import { buildServer } from './app.ts'
-import { rebuildIfNeeded } from './rebuild.ts'
+import { rebuildIfNeeded, runBootSequence } from './rebuild.ts'
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working
@@ -45,13 +45,12 @@ await app.listen({ port: config.port, host: config.host })
 console.log(`haelan listening on http://${config.host}:${config.port}`)
 console.log(`data directory ${dataDir}`)
 
-// After listen, so an upgrade that triggers a rebuild does not delay the first request. Before
-// the runner, because a sync landing mid rebuild would write rows the replay has already
-// finished listing and would delete without replaying.
-rebuilding = rebuildIfNeeded({ instance, nowMs: Date.now, log: (line) => { console.log(line) } })
-  .then(() => { app.haelan.runner.start() })
-  .catch((error: unknown) => {
-    // The rebuild is what makes the derived rows trustworthy, so a failed one must not be
-    // followed by a sync appending more rows to a tier nobody has verified. Loud and stopped.
-    console.error('rebuild failed, sync not started', error)
-  })
+// After listen, so an upgrade that triggers a rebuild does not delay the first request. The rest
+// of the ordering (before the runner, and never rejecting) lives in runBootSequence itself, in
+// rebuild.ts, where a test can hold a mutation against it; this is wiring only.
+rebuilding = runBootSequence({
+  rebuild: () => rebuildIfNeeded({ instance, nowMs: Date.now, log: (line) => { console.log(line) } }),
+  startSync: () => { app.haelan.runner.start() },
+  log: (line) => { console.log(line) },
+  logError: (message, error) => { console.error(message, error) },
+})

@@ -1,4 +1,4 @@
-import { describe, it, test, expect, afterEach } from 'vitest'
+import { describe, it, test, expect, afterEach, vi } from 'vitest'
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openHaelan, sampleTarget, seedPerson } from '@haelan/core'
 import type { Instance } from '@haelan/core'
-import { rebuildIfNeeded } from '../src/rebuild.ts'
+import { rebuildIfNeeded, runBootSequence } from '../src/rebuild.ts'
 
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -265,5 +265,94 @@ describe('rebuildIfNeeded', () => {
     await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
 
     expect(lines.some((l) => l.includes('override'))).toBe(true)
+  })
+
+  test('yields between people rather than only after all of them', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    h.seedUnstampedPerson('p2')
+    const lines: string[] = []
+
+    // Faking only setImmediate, not the wall clock: this pins the interleaving itself rather
+    // than a timing coincidence. Cheap by construction, since a faked timer never actually
+    // waits, which is how this holds without touching any per test timeout: issue #32's raised
+    // budgets are exactly the thing issue #47 is open about, and a test that cannot be slow
+    // needs no budget at all.
+    vi.useFakeTimers({ toFake: ['setImmediate'] })
+    try {
+      // Not awaited. An async function body runs synchronously up to its first await, so by the
+      // time this call returns control here, p1's whole transaction has already run and logged,
+      // and the function is suspended on its own `await setImmediate()`, having touched p2 not
+      // at all. If that suspension were removed, p2 would already be done too, right here.
+      const reportsPromise = rebuildIfNeeded({
+        instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l),
+      })
+      expect(lines.some((l) => l.startsWith('rebuilt p1'))).toBe(true)
+      expect(lines.some((l) => l.startsWith('rebuilt p2'))).toBe(false)
+
+      // The one faked timer due resolves the awaited setImmediate(), which is what lets p2 run.
+      await vi.advanceTimersByTimeAsync(0)
+      expect(lines.some((l) => l.startsWith('rebuilt p2'))).toBe(true)
+
+      // And the loop's own trailing yield after the last person, so the function actually
+      // settles rather than leaving a second faked timer stranded.
+      await vi.advanceTimersByTimeAsync(0)
+      const reports = await reportsPromise
+      expect(reports.map((r) => r.personId).sort()).toEqual(['p1', 'p2'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('runBootSequence', () => {
+  test('the sync runner does not start while the rebuild is still running', async () => {
+    let resolveRebuild: () => void = () => {}
+    const rebuildPromise = new Promise<void>((resolve) => { resolveRebuild = resolve })
+    let startSyncCalls = 0
+
+    const sequence = runBootSequence({
+      rebuild: () => rebuildPromise,
+      startSync: () => { startSyncCalls++ },
+      log: () => {},
+      logError: () => {},
+    })
+
+    // Still pending: nothing has resolved the rebuild yet, so the runner must not have started.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(startSyncCalls).toBe(0)
+
+    resolveRebuild()
+    await sequence
+
+    expect(startSyncCalls).toBe(1)
+  })
+
+  test('a failed rebuild does not start the sync runner', async () => {
+    let startSyncCalls = 0
+    const errors: { message: string, error: unknown }[] = []
+    const rebuildError = new Error('rebuild boom')
+
+    await runBootSequence({
+      rebuild: () => Promise.reject(rebuildError),
+      startSync: () => { startSyncCalls++ },
+      log: () => {},
+      logError: (message, error) => { errors.push({ message, error }) },
+    })
+
+    expect(startSyncCalls).toBe(0)
+    expect(errors).toEqual([{ message: 'rebuild failed, sync not started', error: rebuildError }])
+  })
+
+  test('the returned promise settles rather than rejecting when the rebuild fails', async () => {
+    // This is what makes awaiting it from shutdown safe: a rejected promise nothing has attached
+    // a handler to is how a shutdown turns into an unhandled rejection instead of a clean exit.
+    await expect(runBootSequence({
+      rebuild: () => Promise.reject(new Error('rebuild boom')),
+      startSync: () => {},
+      log: () => {},
+      logError: () => {},
+    })).resolves.toBeUndefined()
   })
 })

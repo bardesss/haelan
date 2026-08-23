@@ -63,3 +63,43 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildPer
 
   return reports
 }
+
+export interface BootSequenceDeps {
+  /** Runs the rebuild. A callback rather than a call, so this function has nothing to reach for. */
+  rebuild: () => Promise<unknown>
+  /** Starts the sync runner. Called only once the rebuild has succeeded. */
+  startSync: () => void
+  log: (line: string) => void
+  logError: (message: string, error: unknown) => void
+}
+
+/**
+ * Runs the rebuild, then starts the sync runner, and never rejects.
+ *
+ * Before the runner, because a sync landing mid rebuild would write samples that the replay,
+ * having already listed the archive, deletes without replaying. Serialising the two costs one
+ * sync interval and removes the hole entirely.
+ *
+ * The promise this returns is the one `shutdown` awaits, and a rejected promise nothing has
+ * attached a handler to is how a shutdown turns into an unhandled rejection rather than a clean
+ * exit. So a failed rebuild is caught here, reported loudly through `logError`, and never
+ * rethrown: the rebuild is what makes the derived rows trustworthy, so a failed one must not be
+ * followed by a sync appending more rows to a tier nobody has verified, and the sequence simply
+ * stops before `startSync` rather than resolving to something the caller has to remember to
+ * unwrap.
+ *
+ * Pulled out of index.ts, a top level script with side effects that nothing could import and
+ * test, into a function that takes its collaborators as parameters. This is what makes the
+ * ordering itself, not just the comments describing it, something a test can hold a mutation
+ * against.
+ */
+export async function runBootSequence(deps: BootSequenceDeps): Promise<void> {
+  try {
+    await deps.rebuild()
+  } catch (error) {
+    deps.logError('rebuild failed, sync not started', error)
+    return
+  }
+  deps.startSync()
+  deps.log('sync runner started')
+}
