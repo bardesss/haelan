@@ -218,17 +218,20 @@ merge it, which is worth keeping apart because confusing them is how a night goe
 `groupSessions` merges one event recorded across sources, `assembleNights` merges one night
 recorded across sessions, and `shortAwakenings`, carried in a session's own `attrs`, is the
 provider's model of brief wakes inside one session that nothing here touches. Pieces separated by
-less than `night_gap_minutes`, default 120, are one night, which is what stops an early wake being
+at most `night_gap_minutes`, default 120, are one night, which is what stops an early wake being
 reported as a night plus a nap rather than the single night it was. `mainSleep` chooses between
 groups and never within one, so a piece that joined the night by gap is part of it whatever its
 own flag says. A nap needs no rule of its own: it is simply a session that did not join, which is
-why there is one threshold rather than two. Every figure is summed from the stage segments rather
-than read from the provider's own summary, so it can be inspected against the segments underneath
-it and so an override on a session moves it. `sleep_bedtime_minutes` and `sleep_waketime_minutes`
-are minutes from the local midnight of the row's own date, negative before it, one signed scale
-rather than a time plus a column saying which day. A night whose segments never arrived writes its
-times and its in-bed span but none of the six stage figures, because a zero there would claim the
-person lay awake all night when the truth is we do not know.
+why there is one threshold rather than two. The six stage figures, deep, light, REM, asleep, awake
+and efficiency, are summed from the segments we stored; bedtime, waketime and time in bed come
+from the sessions' own start and end times instead, and the nap figures come from counting and
+summing the sessions that did not join. Either way nothing here reads the provider's own summary,
+so a figure can be inspected against the rows underneath it and so an override on a session moves
+it. `sleep_bedtime_minutes` and `sleep_waketime_minutes` are minutes from the local midnight of
+the row's own date, negative before it, one signed scale rather than a time plus a column saying
+which day. A night whose segments never arrived writes its times and its in-bed span but none of
+the six stage figures, because a zero there would claim the person lay awake all night when the
+truth is we do not know.
 
 ## Heart rate volume and the downsampling decision
 
