@@ -35,9 +35,13 @@ const merge = (
 const valueOf = (rows: ReturnType<typeof merge>, metric: string) =>
   rows.find((r) => r.metric === metric)?.value
 
-// Every row of a merged night carries the same mix, so reading it off any one of them is enough.
+// The night metrics share one mix, so reading it off any one of them is enough.
 const mixOf = (rows: ReturnType<typeof merge>): Array<{ source: string, hours: number }> =>
   JSON.parse(rows.find((r) => r.metric === 'sleep_in_bed_minutes')!.sourceMix!)
+
+// The nap metrics carry a separate mix, computed from a disjoint set of sessions.
+const napMixOf = (rows: ReturnType<typeof merge>): Array<{ source: string, hours: number }> =>
+  JSON.parse(rows.find((r) => r.metric === 'sleep_nap_count')!.sourceMix!)
 
 describe('mergeSleepDay', () => {
   it('files every row it produces under the merged source', () => {
@@ -55,6 +59,8 @@ describe('mergeSleepDay', () => {
     ])
     expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
     expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+    // No nap happened, so there is nothing to name a source for, not an empty list of sources.
+    expect(rows.find((r) => r.metric === 'sleep_nap_count')?.sourceMix).toBeNull()
   })
 
   it('lets the priority list decide which recording of the night is used', () => {
@@ -74,12 +80,13 @@ describe('mergeSleepDay', () => {
       session({ id: 'w', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
       session({ id: 'p', sourceId: 'phone', startMs: BEDTIME + 16 * H, endMs: BEDTIME + 17 * H }),
     ])
-    // The watch's night and the phone's nap are different events, so both are primaries and both
-    // appear. Hours rather than minutes, because that is what the column means everywhere else.
-    expect(mixOf(rows)).toEqual([{ source: 'watch', hours: 8 }, { source: 'phone', hours: 1 }])
+    // The watch's night and the phone's nap are different events, so both are primaries, but they
+    // are disjoint sessions: the night's mix names only the watch, the nap's only the phone.
+    expect(mixOf(rows)).toEqual([{ source: 'watch', hours: 8 }])
+    expect(napMixOf(rows)).toEqual([{ source: 'phone', hours: 1 }])
   })
 
-  it('keeps an alternate recording out of the figures without deleting it', () => {
+  it('leaves an alternate recording out of the merged figures', () => {
     // groupSessions retains the alternate; the merged row simply does not count it. The per
     // source rows deriveSleepDay writes are where the alternate remains visible.
     const rows = merge([

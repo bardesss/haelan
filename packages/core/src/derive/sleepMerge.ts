@@ -1,4 +1,4 @@
-import { deriveSleepDay } from './sleep.ts'
+import { assembleNights, deriveSleepDay } from './sleep.ts'
 import type { SleepSegmentLike, SleepSessionLike } from './sleep.ts'
 import { groupSessions } from './sessionOverlap.ts'
 import { encodeMix } from './merge.ts'
@@ -7,6 +7,11 @@ import type { DailyRow } from './rollup.ts'
 import type { Priority } from './priority.ts'
 
 const MINUTE_MS = 60_000
+const HOUR_MS = 3_600_000
+
+// The night and the nap metrics are computed from disjoint sessions, so a source that only ever
+// contributed a nap must not be named on the night's rows, and the reverse.
+const NAP_METRICS = new Set(['sleep_nap_count', 'sleep_nap_minutes'])
 
 /**
  * The merged view of a night, when more than one source recorded it.
@@ -50,17 +55,40 @@ export function mergeSleepDay(input: {
     gapMinutes: input.gapMinutes,
   })
 
-  // Hours, because that is what the column means on every other merged row. A night is measured
-  // in hours anyway, so nothing is lost rounding to one decimal, and the per source rows carry
-  // the exact minutes for anyone who needs them.
-  const hoursBySource = new Map<string, number>()
-  for (const primary of primaries) {
-    const hours = (primary.endMs - primary.startMs) / (60 * MINUTE_MS)
-    hoursBySource.set(primary.sourceId, (hoursBySource.get(primary.sourceId) ?? 0) + hours)
-  }
-  const mix = encodeMix([...hoursBySource].map(([source, hours]) => ({
-    source, hours: Math.round(hours * 10) / 10,
-  })))
+  // Run over the primaries a second time, rather than have deriveSleepDay report its own
+  // grouping back: assembleNights is pure and cheap, and this keeps the return shape every
+  // other caller of deriveSleepDay relies on untouched.
+  const { night, naps } = assembleNights({ sessions: primaries, gapMinutes: input.gapMinutes })
+  const nightMix = mixOf(night)
+  const napMix = mixOf(naps)
 
-  return rows.map((row) => ({ ...row, sourceMix: mix }))
+  return rows.map((row) => ({ ...row, sourceMix: NAP_METRICS.has(row.metric) ? napMix : nightMix }))
+}
+
+/** The absolute hour an instant falls in, shifted by the session's own offset first, so a night
+ * crossing midnight cannot collide with itself the way a day-relative hour label would. */
+function bucketOf(utcMs: number, offsetMinutes: number): number {
+  return Math.floor((utcMs + offsetMinutes * MINUTE_MS) / HOUR_MS)
+}
+
+/**
+ * The `daily.source_mix` column means "how many of the day's hours this source won" everywhere
+ * else it is written, counted by mergeDay as distinct local hour buckets. A merged night's mix
+ * has to count the same thing, not the session's elapsed span, or the field means two different
+ * things depending on which code wrote it.
+ */
+function mixOf(sessions: readonly SleepSessionLike[]): string | null {
+  const bucketsBySource = new Map<string, Set<number>>()
+  for (const session of sessions) {
+    // endMs - 1 keeps a session that ends exactly on the hour out of the bucket after it.
+    const from = bucketOf(session.startMs, session.startOffsetMinutes)
+    const to = bucketOf(session.endMs - 1, session.startOffsetMinutes)
+    let buckets = bucketsBySource.get(session.sourceId)
+    if (!buckets) { buckets = new Set(); bucketsBySource.set(session.sourceId, buckets) }
+    for (let bucket = from; bucket <= to; bucket += 1) buckets.add(bucket)
+  }
+  // Null rather than '[]': an empty mix would claim a merge drew on no sources, when the truth
+  // is there was nothing here to merge (no naps, or no night).
+  if (bucketsBySource.size === 0) return null
+  return encodeMix([...bucketsBySource].map(([source, buckets]) => ({ source, hours: buckets.size })))
 }
