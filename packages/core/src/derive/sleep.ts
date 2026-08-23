@@ -1,3 +1,6 @@
+import type { DailyRow } from './rollup.ts'
+import { DERIVATION_VERSION } from './version.ts'
+
 /**
  * Sleep, from sessions and their stage segments to a day's figures.
  *
@@ -95,4 +98,120 @@ function pickNight(groups: readonly SleepSessionLike[][]): number {
 
 function spanOf(group: readonly SleepSessionLike[]): number {
   return Math.max(...group.map((s) => s.endMs)) - Math.min(...group.map((s) => s.startMs))
+}
+
+export interface SleepSegmentLike {
+  sessionId: string
+  stage: string
+  startMs: number
+  endMs: number
+}
+
+/**
+ * The measured values of `sleep.stages[].type`, in probe/findings/field-map.md. A value outside
+ * this set counts toward neither asleep nor awake: calling it asleep would inflate the night and
+ * calling it awake would deflate it, and inventing either is worse than reporting what we know.
+ */
+export const ASLEEP_STAGES: readonly string[] = ['DEEP', 'LIGHT', 'REM']
+export const AWAKE_STAGE = 'AWAKE'
+
+/**
+ * A day's sleep sessions and their segments to `daily` rows, for one source.
+ *
+ * Every figure is summed from the segments rather than read from the provider's own summary.
+ * A number we computed can be inspected against the rows underneath it, and it moves when an
+ * override excludes a session, which a copied figure never would.
+ */
+export function deriveSleepDay(input: {
+  personId: string
+  localDate: string
+  source: string
+  sessions: readonly SleepSessionLike[]
+  segments: readonly SleepSegmentLike[]
+  gapMinutes: number
+}): DailyRow[] {
+  if (input.sessions.length === 0) return []
+
+  const { night, naps } = assembleNights({ sessions: input.sessions, gapMinutes: input.gapMinutes })
+  const out: DailyRow[] = []
+  const push = (metric: string, agg: DailyRow['agg'], value: number | null) => {
+    if (value === null) return
+    out.push({
+      personId: input.personId,
+      localDate: input.localDate,
+      metric,
+      agg,
+      source: input.source,
+      value,
+      // A night has no samples underneath it, so the fraction of the day's hours carrying one is
+      // not a question this row can answer. M2d decides what a null coverage means.
+      coverage: null,
+      sourceMix: null,
+      derivationVersion: DERIVATION_VERSION,
+    })
+  }
+
+  if (night.length > 0) {
+    const start = Math.min(...night.map((s) => s.startMs))
+    const end = Math.max(...night.map((s) => s.endMs))
+    const first = night.find((s) => s.startMs === start)!
+    const last = night.find((s) => s.endMs === end)!
+    const inBed = minutesBetween(start, end)
+
+    push('sleep_in_bed_minutes', 'sum', inBed)
+    push('sleep_bedtime_minutes', 'last', localMinutesOf(input.localDate, first.startMs, first.startOffsetMinutes))
+    push('sleep_waketime_minutes', 'last', localMinutesOf(input.localDate, last.endMs, last.endOffsetMinutes))
+
+    const ids = new Set(night.map((s) => s.id))
+    const staged = input.segments.filter((seg) => ids.has(seg.sessionId))
+    // No segments is not zero segments: the staging can fail, which attrs.stagesStatus reports,
+    // and a zero here would claim the person lay awake all night.
+    if (staged.length > 0) {
+      const byStage = (stage: string) => staged
+        .filter((seg) => seg.stage === stage)
+        .reduce((total, seg) => total + minutesBetween(seg.startMs, seg.endMs), 0)
+
+      const deep = byStage('DEEP')
+      const light = byStage('LIGHT')
+      const rem = byStage('REM')
+      const asleep = deep + light + rem
+      // The time between two pieces is time out of bed, and it counts against the night exactly
+      // as an AWAKE stage inside one session does.
+      const awake = byStage(AWAKE_STAGE) + gapMinutesWithin(night)
+
+      push('sleep_deep_minutes', 'sum', deep)
+      push('sleep_light_minutes', 'sum', light)
+      push('sleep_rem_minutes', 'sum', rem)
+      push('sleep_asleep_minutes', 'sum', asleep)
+      push('sleep_awake_minutes', 'sum', awake)
+      push('sleep_efficiency', 'last', inBed > 0 ? Math.round((asleep / inBed) * 100) : null)
+    }
+  }
+
+  // Zero naps is a measurement rather than a gap: we looked and there were none. A day with no
+  // sleep at all returned above, before reaching here.
+  push('sleep_nap_count', 'count', naps.length)
+  push('sleep_nap_minutes', 'sum', naps.reduce((total, s) => total + minutesBetween(s.startMs, s.endMs), 0))
+
+  return out
+}
+
+const minutesBetween = (fromMs: number, toMs: number): number => Math.round((toMs - fromMs) / MINUTE_MS)
+
+/** Minutes from the local midnight of `localDate`, negative before it. */
+function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number): number {
+  const wall = utcMs + offsetMinutes * MINUTE_MS
+  return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / MINUTE_MS)
+}
+
+/** The time between consecutive pieces of one night, which nobody was in bed for. */
+function gapMinutesWithin(night: readonly SleepSessionLike[]): number {
+  const ordered = [...night].sort((a, b) => a.startMs - b.startMs)
+  let total = 0
+  for (let i = 1; i < ordered.length; i += 1) {
+    const previousEnd = Math.max(...ordered.slice(0, i).map((s) => s.endMs))
+    // Negative for a piece that overlaps the one before it, which contributes no gap at all.
+    total += Math.max(0, minutesBetween(previousEnd, ordered[i]!.startMs))
+  }
+  return total
 }
