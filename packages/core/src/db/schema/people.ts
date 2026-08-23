@@ -5,6 +5,12 @@ export const people = sqliteTable('people', {
   displayName: text('display_name').notNull(),
   // Day boundaries are computed here, not in UTC. Spec invariant 3.
   timezone: text('timezone').notNull(),
+  // What this person's tiers 2 and 3 were built with. Per person rather than instance wide,
+  // because that is what makes an interrupted rebuild resumable: a person carrying the current
+  // numbers is already done. Null on a database whose data predates M2e, which is the case the
+  // milestone exists to fix, so null and a stale number lead to the same place.
+  builtMappingVersion: integer('built_mapping_version'),
+  builtDerivationVersion: integer('built_derivation_version'),
   createdAtMs: integer('created_at_ms').notNull(),
 })
 

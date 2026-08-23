@@ -7,7 +7,7 @@ export { seal, unseal } from './crypto/secretBox.ts'
 export { CredentialStore } from './store/credentials.ts'
 export type { ClientCredentials, StoredRefreshToken } from './store/credentials.ts'
 export { RawArchive } from './store/rawArchive.ts'
-export type { PutInput, PutResult } from './store/rawArchive.ts'
+export type { PutInput, PutResult, ArchivedPayload } from './store/rawArchive.ts'
 export { createTestDatabase, seedPerson } from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
 export {
@@ -70,12 +70,20 @@ export type { RollupWindow } from './testing/payloads.ts'
 export { METRICS, DAILY_AGGS, metricSpec } from './derive/metrics.ts'
 export type { MetricSpec, DailyAgg } from './derive/metrics.ts'
 export { DERIVATION_VERSION } from './derive/version.ts'
+export { MAPPING_VERSION } from './api/version.ts'
+export { peopleNeedingRebuild } from './rebuild/versions.ts'
+export type { RebuildNeed } from './rebuild/versions.ts'
+export { runRebuild } from './rebuild/runRebuild.ts'
+export type { RebuildInput, RebuildReport, RebuildPersonReport } from './rebuild/runRebuild.ts'
+export type { OrphanedOverride } from './rebuild/retarget.ts'
 export { localDateOf, localHourOf } from './derive/localDay.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
 export { runDerive } from './derive/runDerive.ts'
 export type { DeriveReport } from './derive/runDerive.ts'
+export { deriveDayInto } from './derive/deriveDay.ts'
+export type { DeriveDayInput } from './derive/deriveDay.ts'
 export { mapRollups } from './api/mapRollups.ts'
 export type { RollupMapping } from './api/mapRollups.ts'
 export { runRollupJob, rollupRangeCapDays } from './sync/runRollupJob.ts'
@@ -94,9 +102,9 @@ export {
 } from './derive/targetKey.ts'
 export type { OverrideScope, SampleTarget, DayMetricTarget } from './derive/targetKey.ts'
 // applyToSamples, applyToDay, applyToSessions, excludedMetrics and encodeMix are deliberately
-// absent. Each has exactly one caller, runDerive, inside its own transaction, and this file is
-// the package's only integration point with the server and the other apps. The same line is
-// already drawn for the mappers' internals.
+// absent. Each has exactly one caller, deriveDayInto, inside the transaction it was given, and
+// this file is the package's only integration point with the server and the other apps. The
+// same line is already drawn for the mappers' internals.
 export type { OverrideLike, SessionLike } from './derive/overrides.ts'
 export { OverrideStore } from './store/overrides.ts'
 export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'

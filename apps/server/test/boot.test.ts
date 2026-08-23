@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, test, expect, afterEach, vi } from 'vitest'
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { createServer } from 'node:http'
@@ -6,6 +6,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { openHaelan, sampleTarget, schema, seedPerson } from '@haelan/core'
+import type { Instance } from '@haelan/core'
+import { rebuildIfNeeded, runBootSequence } from '../src/rebuild.ts'
 
 const SERVER_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -169,5 +172,219 @@ describe('the entry point boots', () => {
     // And it runs node itself rather than delegating, so its working directory is the
     // repository root and a relative HAELAN_DATA_DIR lands where the README says it does.
     expect(root.scripts.start.startsWith('node ')).toBe(true)
+  })
+})
+
+interface BootHarness {
+  instance: Instance
+  /** A person whose rows predate DERIVATION_VERSION and MAPPING_VERSION: never built at all. */
+  seedUnstampedPerson: (id: string) => void
+  /** A correction naming a sample the archive will never reproduce, so the rebuild orphans it. */
+  seedOverrideOnAMissingSample: (id: string) => void
+  /** A ranking on a source no payload will reproduce, so the rebuild takes the ranking with it. */
+  seedRankingOnAStaleSource: (id: string) => void
+}
+
+/**
+ * An in-process instance on its own temporary data directory, the same construction index.ts
+ * does, without the fastify app or the child process boot.test's other tests spawn: rebuildIfNeeded
+ * only ever touches `instance`, so a full server is a detail these tests do not need.
+ */
+async function bootHarness(): Promise<BootHarness> {
+  const dir = mkdtempSync(join(tmpdir(), 'haelan-boot-harness-'))
+  const instance = openHaelan(dir, {})
+  bootHarnesses.push({ instance, dir })
+  return {
+    instance,
+    seedUnstampedPerson: (id) => { seedPerson(instance.db, id) },
+    seedOverrideOnAMissingSample: (id) => {
+      instance.overrides.put({
+        personId: id,
+        scope: 'sample',
+        targetKey: sampleTarget({ source: 'a-source-no-payload-will-ever-produce', metric: 'heart_rate', utcMs: 0 }),
+        action: 'exclude',
+        reason: 'test fixture: a correction on a reading that will not survive the rebuild',
+        nowMs: 1,
+      })
+    },
+    seedRankingOnAStaleSource: (id) => {
+      // Straight into the tables rather than through SourcePriorityStore.put, which would also
+      // mark days dirty. What this fixture is about is a ranking that outlived the source it
+      // named, and the store's own queueing has nothing to do with that.
+      instance.db.insert(schema.sources).values({
+        id: 'a-source-no-payload-will-ever-produce', personId: id,
+        externalId: 'HEALTH_CONNECT', displayName: 'HEALTH_CONNECT', kind: 'app', createdAtMs: 1,
+      }).run()
+      instance.db.insert(schema.sourcePriority).values({
+        personId: id, metric: 'heart_rate',
+        sourceId: 'a-source-no-payload-will-ever-produce', rank: 0,
+      }).run()
+    },
+  }
+}
+
+// Closed and removed after each test rather than by the test itself, so a bootHarness() call
+// reads exactly like the brief that specifies it and every test still leaves its temp directory
+// and its open database behind it.
+const bootHarnesses: { instance: Instance, dir: string }[] = []
+
+describe('rebuildIfNeeded', () => {
+  afterEach(() => {
+    while (bootHarnesses.length > 0) {
+      const h = bootHarnesses.pop()!
+      h.instance.close()
+      rmSync(h.dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  test('rebuilds a person whose rows predate the current versions', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+
+    const reports = await rebuildIfNeeded({
+      instance: h.instance, nowMs: () => 1, log: () => {},
+    })
+
+    expect(reports.map((r) => r.personId)).toEqual(['p1'])
+  })
+
+  test('does nothing when every person is already current', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: () => {} })
+
+    const second = await rebuildIfNeeded({
+      instance: h.instance, nowMs: () => 2, log: () => {},
+    })
+
+    expect(second).toEqual([])
+  })
+
+  test('reports each person and why, so an operator can read the log', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    const lines: string[] = []
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
+
+    expect(lines.some((l) => l.includes('p1'))).toBe(true)
+    expect(lines.some((l) => l.includes('mapping version unrecorded'))).toBe(true)
+  })
+
+  test('an orphaned override is named in the log rather than swallowed', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    h.seedOverrideOnAMissingSample('p1')
+    const lines: string[] = []
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
+
+    expect(lines.some((l) => l.includes('override'))).toBe(true)
+  })
+
+  test('a ranking lost with its source is called out, not folded into the source count', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    h.seedRankingOnAStaleSource('p1')
+    const lines: string[] = []
+
+    await rebuildIfNeeded({ instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l) })
+
+    // A household member's ranking is the one thing a rebuild destroys that no rebuild can put
+    // back, and it cannot be re-targeted either: the stale identity carries no record of which
+    // new identity replaced it. So the log has to say it plainly enough that whoever reads it
+    // knows there is something for them to do.
+    const said = lines.find((l) => l.includes('ranking'))
+    expect(said).toBeDefined()
+    expect(said).toContain('set them again')
+  })
+
+  test('yields between people rather than only after all of them', async () => {
+    const h = await bootHarness()
+    h.seedUnstampedPerson('p1')
+    h.seedUnstampedPerson('p2')
+    const lines: string[] = []
+
+    // Faking only setImmediate, not the wall clock: this pins the interleaving itself rather
+    // than a timing coincidence. Cheap by construction, since a faked timer never actually
+    // waits, which is how this holds without touching any per test timeout: issue #32's raised
+    // budgets are exactly the thing issue #47 is open about, and a test that cannot be slow
+    // needs no budget at all.
+    vi.useFakeTimers({ toFake: ['setImmediate'] })
+    try {
+      // Not awaited. An async function body runs synchronously up to its first await, so by the
+      // time this call returns control here, p1's whole transaction has already run and logged,
+      // and the function is suspended on its own `await setImmediate()`, having touched p2 not
+      // at all. If that suspension were removed, p2 would already be done too, right here.
+      const reportsPromise = rebuildIfNeeded({
+        instance: h.instance, nowMs: () => 1, log: (l) => lines.push(l),
+      })
+      expect(lines.some((l) => l.startsWith('rebuilt p1'))).toBe(true)
+      expect(lines.some((l) => l.startsWith('rebuilt p2'))).toBe(false)
+
+      // The one faked timer due resolves the awaited setImmediate(), which is what lets p2 run.
+      await vi.advanceTimersByTimeAsync(0)
+      expect(lines.some((l) => l.startsWith('rebuilt p2'))).toBe(true)
+
+      // And the loop's own trailing yield after the last person, so the function actually
+      // settles rather than leaving a second faked timer stranded.
+      await vi.advanceTimersByTimeAsync(0)
+      const reports = await reportsPromise
+      expect(reports.map((r) => r.personId).sort()).toEqual(['p1', 'p2'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('runBootSequence', () => {
+  test('the sync runner does not start while the rebuild is still running', async () => {
+    let resolveRebuild: () => void = () => {}
+    const rebuildPromise = new Promise<void>((resolve) => { resolveRebuild = resolve })
+    let startSyncCalls = 0
+
+    const sequence = runBootSequence({
+      rebuild: () => rebuildPromise,
+      startSync: () => { startSyncCalls++ },
+      log: () => {},
+      logError: () => {},
+    })
+
+    // Still pending: nothing has resolved the rebuild yet, so the runner must not have started.
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(startSyncCalls).toBe(0)
+
+    resolveRebuild()
+    await sequence
+
+    expect(startSyncCalls).toBe(1)
+  })
+
+  test('a failed rebuild does not start the sync runner', async () => {
+    let startSyncCalls = 0
+    const errors: { message: string, error: unknown }[] = []
+    const rebuildError = new Error('rebuild boom')
+
+    await runBootSequence({
+      rebuild: () => Promise.reject(rebuildError),
+      startSync: () => { startSyncCalls++ },
+      log: () => {},
+      logError: (message, error) => { errors.push({ message, error }) },
+    })
+
+    expect(startSyncCalls).toBe(0)
+    expect(errors).toEqual([{ message: 'rebuild failed, sync not started', error: rebuildError }])
+  })
+
+  test('the returned promise settles rather than rejecting when the rebuild fails', async () => {
+    // This is what makes awaiting it from shutdown safe: a rejected promise nothing has attached
+    // a handler to is how a shutdown turns into an unhandled rejection instead of a clean exit.
+    await expect(runBootSequence({
+      rebuild: () => Promise.reject(new Error('rebuild boom')),
+      startSync: () => {},
+      log: () => {},
+      logError: () => {},
+    })).resolves.toBeUndefined()
   })
 })

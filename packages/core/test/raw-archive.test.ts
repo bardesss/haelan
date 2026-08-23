@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../src/db/open.ts'
 import { migrateToLatest } from '../src/db/migrate.ts'
-import { people } from '../src/db/schema/index.ts'
+import { people, rawPayloads } from '../src/db/schema/index.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import type { Database } from '../src/db/open.ts'
 
@@ -121,5 +121,105 @@ describe('RawArchive', () => {
   it('archives a failed response too, because schema drift must not lose the payload', () => {
     const { id } = archive.put({ ...base, body: '{"error":{"code":400}}', httpStatus: 400, fetchedAtMs: 10 })
     expect(archive.getBody('p1', id)).toContain('400')
+  })
+})
+
+describe('listFor', () => {
+  let dir: string
+  let db: Database
+  let archive: RawArchive
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'haelan-'))
+    db = openDatabase(dir)
+    migrateToLatest(db)
+    db.insert(people).values({
+      id: 'p1', displayName: 'Test', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+    }).run()
+    archive = new RawArchive(db)
+  })
+  afterEach(() => { closeDatabase(db); rmSync(dir, { recursive: true, force: true }) })
+
+  it('returns one person\'s payloads oldest window first', () => {
+    // Fetch times run in the reverse of window order on purpose. If the implementation sorted
+    // by fetchedAtMs ahead of windowStartMs, the two would disagree: fetch order would return
+    // [3000, 2000, 1000], and only window order returns [1000, 2000, 3000]. Sharing one
+    // fetchedAtMs across all three rows, as an earlier version of this test did, cannot tell
+    // the two orderings apart because the fetch time ties and windowStartMs decides regardless
+    // of which column the implementation checks first.
+    const base = { personId: 'p1', dataType: 'steps', requestParams: {}, httpStatus: 200 }
+    archive.put({ ...base, windowStartMs: 3000, windowEndMs: 4000, fetchedAtMs: 1, body: '{"c":1}' })
+    archive.put({ ...base, windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 3, body: '{"a":1}' })
+    archive.put({ ...base, windowStartMs: 2000, windowEndMs: 3000, fetchedAtMs: 2, body: '{"b":1}' })
+
+    const listed = archive.listFor('p1')
+
+    expect(listed.map((p) => p.windowStartMs)).toEqual([1000, 2000, 3000])
+    expect(listed.map((p) => p.fetchedAtMs)).toEqual([3, 2, 1])
+  })
+
+  it('two fetches of one window come back in fetch order', () => {
+    const base = { personId: 'p1', dataType: 'steps', requestParams: {}, windowStartMs: 1000, windowEndMs: 2000, httpStatus: 200 }
+    archive.put({ ...base, fetchedAtMs: 200, body: '{"corrected":true}' })
+    archive.put({ ...base, fetchedAtMs: 100, body: '{"corrected":false}' })
+
+    const listed = archive.listFor('p1')
+
+    expect(listed.map((p) => p.fetchedAtMs)).toEqual([100, 200])
+  })
+
+  it('a non-200 response is not listed', () => {
+    const base = { personId: 'p1', dataType: 'steps', requestParams: {}, windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1 }
+    archive.put({ ...base, httpStatus: 429, body: '{"error":"slow down"}' })
+
+    expect(archive.listFor('p1')).toEqual([])
+  })
+
+  it('another person\'s payloads are not listed', () => {
+    db.insert(people).values({
+      id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+    }).run()
+    const base = { dataType: 'steps', requestParams: {}, windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1, httpStatus: 200 }
+    archive.put({ ...base, personId: 'p1', body: '{"mine":1}' })
+    archive.put({ ...base, personId: 'p2', body: '{"theirs":1}' })
+
+    expect(archive.listFor('p1')).toHaveLength(1)
+  })
+
+  it('the request params come back so a replay can tell a rollup from a list', () => {
+    archive.put({
+      personId: 'p1', dataType: 'steps', requestParams: { range: { start: 'x', end: 'y' } },
+      windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1, httpStatus: 200, body: '{}',
+    })
+
+    expect(JSON.parse(archive.listFor('p1')[0]!.requestParams)).toEqual({ range: { start: 'x', end: 'y' } })
+  })
+
+  it('breaks a tie on data type, both window bounds and fetch time by id, so a rebuild is deterministic', () => {
+    // put() always assigns a random id, so proving the id tiebreak needs two rows that tie on
+    // every other ordering column with ids chosen by the test, not generated. Asserting the
+    // returned ids equal a sorted copy of themselves would be tautological, and letting put()
+    // pick random ids would make the test pass or fail depending on whether insertion order
+    // happened to already match sorted order, roughly half the time either way. Inserting
+    // 'zzz...' before 'aaa...' means the only way this test passes is if listFor sorts by id;
+    // returning rows in insertion order, which is what dropping the trailing asc(id) falls back
+    // to, would return 'zzz...' first and fail.
+    const tied = {
+      personId: 'p1', dataType: 'steps', requestParams: '{}',
+      windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs: 1, httpStatus: 200,
+      bodyBytes: 1,
+    }
+    db.insert(rawPayloads).values({
+      ...tied, id: 'zzzzzzzz-0000-0000-0000-000000000000', bodyHash: 'hash-z', bodyGzip: Buffer.from('z'),
+    }).run()
+    db.insert(rawPayloads).values({
+      ...tied, id: 'aaaaaaaa-0000-0000-0000-000000000000', bodyHash: 'hash-a', bodyGzip: Buffer.from('a'),
+    }).run()
+
+    const listed = archive.listFor('p1')
+
+    expect(listed.map((p) => p.id)).toEqual([
+      'aaaaaaaa-0000-0000-0000-000000000000', 'zzzzzzzz-0000-0000-0000-000000000000',
+    ])
   })
 })

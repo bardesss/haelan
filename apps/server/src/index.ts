@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { openHaelan } from '@haelan/core'
 import { readConfig } from './config.ts'
 import { buildServer } from './app.ts'
+import { rebuildIfNeeded, runBootSequence } from './rebuild.ts'
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working
@@ -23,11 +24,16 @@ const app = buildServer({
   ...(existsSync(join(webRoot, 'index.html')) ? { webRoot } : {}),
 })
 
+// Assigned after listen. Declared here so shutdown can wait on it: a rebuild holds a write
+// transaction, and closing SQLite underneath one is how a shutdown turns into a stack trace.
+let rebuilding: Promise<unknown> = Promise.resolve()
+
 const shutdown = async () => {
   // Stop scheduling first so nothing new begins, then wait for whatever is already running.
   // Closing SQLite under a backfill mid-window is how a shutdown turns into a stack trace.
   app.haelan.runner.stop()
   await app.haelan.runner.settle()
+  await rebuilding.catch(() => {})
   await app.close()
   instance.close()
   process.exit(0)
@@ -36,6 +42,15 @@ process.on('SIGTERM', () => void shutdown())
 process.on('SIGINT', () => void shutdown())
 
 await app.listen({ port: config.port, host: config.host })
-app.haelan.runner.start()
 console.log(`haelan listening on http://${config.host}:${config.port}`)
 console.log(`data directory ${dataDir}`)
+
+// After listen, so an upgrade that triggers a rebuild does not delay the first request. The rest
+// of the ordering (before the runner, and never rejecting) lives in runBootSequence itself, in
+// rebuild.ts, where a test can hold a mutation against it; this is wiring only.
+rebuilding = runBootSequence({
+  rebuild: () => rebuildIfNeeded({ instance, nowMs: Date.now, log: (line) => { console.log(line) } }),
+  startSync: () => { app.haelan.runner.start() },
+  log: (line) => { console.log(line) },
+  logError: (message, error) => { console.error(message, error) },
+})
