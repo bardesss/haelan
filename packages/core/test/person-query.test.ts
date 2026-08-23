@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
+import { ConfigError } from '../src/errors.ts'
 import { daily } from '../src/db/schema/index.ts'
 
 let test: TestDatabase
@@ -131,6 +132,55 @@ describe('PersonQuery.series', () => {
       metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-02', source: 'merged',
     })
     expect(points.map((p) => p.value)).toEqual([2350])
+  })
+})
+
+describe('PersonQuery argument validation', () => {
+  // Every emptiness these would otherwise return is indistinguishable from "this person has no
+  // data", which in M4 becomes an agent stating a false thing about a health record.
+  it('refuses an unpadded date rather than silently comparing it as a string', () => {
+    // '2026-08-05' >= '2026-8-1' is false, so the whole month would come back empty.
+    expect(() => query.series({ metric: 'steps', agg: 'sum', from: '2026-8-1', to: '2026-08-31' }))
+      .toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-8-1' })).toThrow(ConfigError)
+    expect(() => query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-8-1', to: '2026-08-31' }))
+      .toThrow(ConfigError)
+  })
+
+  it('names the offending value, so a caller can say which argument was wrong', () => {
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-8-1' })).toThrow(/2026-8-1/)
+  })
+
+  it('refuses a reversed range rather than returning nothing', () => {
+    expect(() => query.series({ metric: 'steps', agg: 'sum', from: '2026-08-31', to: '2026-08-01' }))
+      .toThrow(ConfigError)
+    expect(() => query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-31', to: '2026-08-01' }))
+      .toThrow(ConfigError)
+  })
+
+  it('refuses a plainly malformed date in every method', () => {
+    expect(() => query.series({ metric: 'steps', agg: 'sum', from: 'last tuesday', to: '2026-08-31' }))
+      .toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: 'last tuesday' })).toThrow(ConfigError)
+    expect(() => query.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: 'last tuesday' }))
+      .toThrow(ConfigError)
+  })
+
+  it('refuses a metric the catalogue does not declare', () => {
+    // 'sleep' is the data type id, not a metric. It has no rows and never will.
+    expect(() => query.series({ metric: 'sleep', agg: 'sum', from: '2026-08-01', to: '2026-08-07' }))
+      .toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'sleep', agg: 'sum', on: '2026-08-07' })).toThrow(ConfigError)
+    expect(() => query.comparePeriods({ metric: 'sleep', agg: 'sum', from: '2026-08-01', to: '2026-08-07' }))
+      .toThrow(ConfigError)
+  })
+
+  it('refuses an aggregate the metric does not declare', () => {
+    // Summing heart rate is not a number anyone means, and 'avg' is not what the column is called.
+    expect(() => query.series({ metric: 'heart_rate', agg: 'sum', from: '2026-08-01', to: '2026-08-07' }))
+      .toThrow(ConfigError)
+    expect(() => query.series({ metric: 'heart_rate', agg: 'avg', from: '2026-08-01', to: '2026-08-07' }))
+      .toThrow(/mean/)
   })
 })
 

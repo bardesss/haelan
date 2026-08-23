@@ -2,6 +2,8 @@ import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
+import { metricSpec } from '../derive/metrics.ts'
+import { ConfigError } from '../errors.ts'
 import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { coverageIsMeaningful } from './coverageSignal.ts'
@@ -28,6 +30,11 @@ export interface DailyPoint {
  * a tool that forgets a WHERE clause must not be able to leak another member's data. There is
  * deliberately no unbound variant and no optional person parameter: the guarantee is that you
  * cannot express the question without saying whose data it is about.
+ *
+ * Every method validates its own arguments and throws rather than returning an emptiness. The
+ * direct consumers are an HTTP query string and a language model's tool arguments, and a query
+ * that quietly returns nothing becomes an agent saying there is no data for that period, which
+ * is a false statement about somebody's health record made with total confidence.
  */
 export class PersonQuery {
   readonly #db: DbOrTx
@@ -56,6 +63,9 @@ export class PersonQuery {
     to: string
     source?: string
   }): DailyPoint[] {
+    requireMetricAndAgg(input.metric, input.agg)
+    requireRange(input.from, input.to)
+
     const source = input.source
     const rows = this.#db.select({
       localDate: daily.localDate,
@@ -94,6 +104,9 @@ export class PersonQuery {
     windowDays?: number
     source?: string
   }): Baseline | null {
+    requireMetricAndAgg(input.metric, input.agg)
+    requireDate('on', input.on)
+
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     const to = shiftLocalDate(input.on, -1)
     const from = shiftLocalDate(to, -(windowDays - 1))
@@ -124,6 +137,9 @@ export class PersonQuery {
     to: string
     source?: string
   }): Insight {
+    requireMetricAndAgg(input.metric, input.agg)
+    requireRange(input.from, input.to)
+
     const periodDays = daysBetween(input.from, input.to)
     const previousTo = shiftLocalDate(input.from, -1)
     const previousFrom = shiftLocalDate(previousTo, -(periodDays - 1))
@@ -167,6 +183,33 @@ function preferMerged(rows: readonly DailyPoint[]): DailyPoint[] {
   }
   // Map iteration follows insertion, and the rows arrived ordered, so this stays oldest first.
   return [...byDate.values()]
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * The column holds ISO dates and every comparison against it is a string comparison, so an
+ * unpadded '2026-8-1' does not just sort oddly, it silently excludes the whole month.
+ */
+function requireDate(label: string, value: string): void {
+  if (!ISO_DATE.test(value)) {
+    throw new ConfigError(`${label} must be a YYYY-MM-DD local date, got '${value}'`)
+  }
+}
+
+function requireRange(from: string, to: string): void {
+  requireDate('from', from)
+  requireDate('to', to)
+  if (from > to) throw new ConfigError(`from '${from}' is after to '${to}'`)
+}
+
+/** The catalogue decides which aggregates a metric has. Summing heart rate is not an answer. */
+function requireMetricAndAgg(metric: string, agg: string): void {
+  const spec = metricSpec(metric)
+  if (spec === undefined) throw new ConfigError(`no metric named '${metric}'`)
+  if (!(spec.aggs as readonly string[]).includes(agg)) {
+    throw new ConfigError(`metric '${metric}' has no '${agg}' aggregate, only ${spec.aggs.join(', ')}`)
+  }
 }
 
 const DAY_MS = 86_400_000
