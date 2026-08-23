@@ -129,6 +129,16 @@ describe('OverrideStore', () => {
     expect(() => store.put({ ...base, action: 'exclude', correctedValue: 5 })).toThrow(ConfigError)
   })
 
+  it('refuses to correct a session, because one number cannot say which figure it means', () => {
+    // A night derives asleep, awake, in bed, three stage totals, efficiency and two times. A
+    // single corrected value names none of them, and setting asleep alone would leave the stage
+    // totals no longer summing to it. Excluding the session still covers the real case.
+    expect(() => store.put({
+      personId: 'p1', scope: 'session', targetKey: sessionTarget('sess-1'),
+      action: 'correct', correctedValue: 420, reason: 'felt shorter', nowMs: 1,
+    })).toThrow(ConfigError)
+  })
+
   it('refuses a target key that is not the shape its scope promises', () => {
     expect(() => store.put({
       personId: 'p1', scope: 'sample', targetKey: '{"session":"s"}',

@@ -121,10 +121,10 @@ function validate(input: PutOverrideInput): void {
   else if (input.scope === 'session') parseSessionTarget(input.targetKey)
   else parseDayMetricTarget(input.targetKey)
 
-  if (input.scope === 'day_metric' && input.action === 'correct') {
+  if (input.action === 'correct' && input.scope !== 'sample') {
     throw new ConfigError(
-      'a day_metric override can only exclude: a corrected day figure has no source, no aggregate '
-      + 'to attach to, and nothing per source to be inspected against',
+      `a ${input.scope} override can only exclude: a corrected figure at that scope names none of `
+      + 'the values derived from it, and nothing per source to be inspected against',
     )
   }
   if (input.action === 'correct' && input.correctedValue === undefined) {

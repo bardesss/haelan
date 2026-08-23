@@ -97,7 +97,7 @@ export type { OverrideScope, SampleTarget, DayMetricTarget } from './derive/targ
 // absent. Each has exactly one caller, runDerive, inside its own transaction, and this file is
 // the package's only integration point with the server and the other apps. The same line is
 // already drawn for the mappers' internals.
-export type { OverrideLike, SessionLike, SessionOverrideResult } from './derive/overrides.ts'
+export type { OverrideLike, SessionLike } from './derive/overrides.ts'
 export { OverrideStore } from './store/overrides.ts'
 export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'
 export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'

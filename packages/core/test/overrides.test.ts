@@ -126,14 +126,18 @@ describe('applyToSessions', () => {
 
   it('drops an excluded session', () => {
     const out = applyToSessions([session('a'), session('b')], [exclude('session', sessionTarget('a'))])
-    expect(out.kept.map((s) => s.id)).toEqual(['b'])
+    expect(out.map((s) => s.id)).toEqual(['b'])
   })
 
-  it('surfaces a correction rather than applying it, because M2c is what has a value to replace', () => {
-    const out = applyToSessions([session('a')], [{
-      scope: 'session', targetKey: sessionTarget('a'), action: 'correct', correctedValue: 420,
-    }])
-    expect(out.kept.map((s) => s.id)).toEqual(['a'])
-    expect(out.corrections.get('a')).toBe(420)
+  it('returns the sessions untouched when nothing is excluded', () => {
+    const sessions = [session('a')]
+    expect(applyToSessions(sessions, [])).toEqual(sessions)
+  })
+
+  it('ignores an override of another scope', () => {
+    const sessions = [session('a')]
+    expect(applyToSessions(sessions, [
+      exclude('day_metric', dayMetricTarget({ localDate: LOCAL_DATE, metric: 'steps' })),
+    ])).toEqual(sessions)
   })
 })
