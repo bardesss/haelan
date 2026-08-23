@@ -240,10 +240,15 @@ describe('runRebuild', () => {
       action: 'exclude',
     })
 
-    runRebuild({ ...h.deps, nowMs: 1 })
+    const report = runRebuild({ ...h.deps, nowMs: 1 })
 
     const onThatDay = h.db.select().from(daily).where(eq(daily.localDate, lonelyDate)).all()
     expect(onThatDay).toEqual([])
+    // And the figure an operator reads matches the table. This is the case that catches a
+    // dailyRows summed from what the replay counted plus what the derivation returned: the
+    // exclusion above deleted a provider row the replay had already counted, so the sum
+    // overstates the table by exactly one.
+    expect(report.people[0]!.dailyRows).toBe(h.db.select().from(daily).all().length)
     // And the day really did carry a provider row to throw away, so an assertion that passed
     // because the replay never wrote one would not read as a pass.
     const stillThere = h.db.select().from(daily).where(eq(daily.localDate, REBUILDABLE_DATE)).all()

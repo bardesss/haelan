@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
 import { daily, samples, sessions, sources, sourcePriority } from '../db/schema/index.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
@@ -149,12 +149,20 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       const priority = input.priority.load(personId)
       // Read after re-targeting, so a moved key is the one the derivation applies.
       const personOverrides = input.overrides.listFor(personId)
-      let dailyRows = 0
       for (const localDate of counts.localDates) {
-        dailyRows += deriveDayInto(tx, {
+        deriveDayInto(tx, {
           personId, localDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
         })
       }
+
+      // Measured after the derive loop rather than summed from what the replay and the
+      // derivation each returned, for the same reason replayPerson measures its own counters.
+      // deriveDayInto applies day metric exclusions, and those delete provider rows the replay
+      // had already counted, so the two returned figures added together overstate the table by
+      // one per exclusion. This is the number an operator reads to decide whether their upgrade
+      // worked, so it has to be what is actually there.
+      const dailyRows = tx.select({ n: sql<number>`count(*)` })
+        .from(daily).where(eq(daily.personId, personId)).get()?.n ?? 0
 
       input.peopleStore.stampBuiltVersions({
         id: personId, mappingVersion: MAPPING_VERSION, derivationVersion: DERIVATION_VERSION,
@@ -166,8 +174,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         samples: counts.samples,
         sessions: counts.sessions,
         daysDerived: counts.localDates.length,
-        // Provider rows come from the replay, derived rows from the loop above. Both are tier 3.
-        dailyRows: dailyRows + counts.providerDaily,
+        dailyRows,
         sourcesRemoved: dropped.sources,
         rankingsRemoved: dropped.rankings,
         overridesRetargeted: retarget.retargeted,
