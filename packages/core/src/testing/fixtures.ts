@@ -6,7 +6,7 @@ import { asc, eq } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../db/open.ts'
 import { migrateToLatest } from '../db/migrate.ts'
 import {
-  people, sources, samples, sessions, overrides, rawPayloads, syncState, daily,
+  people, sources, samples, sessions, sessionSegments, overrides, rawPayloads, syncState, daily,
 } from '../db/schema/index.ts'
 import type { SessionKind, SampleAgg } from '../db/schema/index.ts'
 import type { Database } from '../db/open.ts'
@@ -176,14 +176,37 @@ export interface Rebuildable {
   seedSecondPerson: () => SecondPersonRows
   /** Makes one archived body ungzippable, which is the cheapest honest way to fail a replay. */
   corruptOneArchivedBody: () => void
+  /**
+   * Every row of the five tables a rebuild writes, each sorted by its own full natural key
+   * rather than however sqlite happens to have stored it. A property asserting that a second
+   * rebuild changes nothing needs two of these to compare equal, which insertion order alone
+   * could not promise even when the rows themselves are identical.
+   */
+  snapshot: () => RebuildableSnapshot
+}
+
+export interface RebuildableSnapshot {
+  sources: (typeof sources.$inferSelect)[]
+  samples: (typeof samples.$inferSelect)[]
+  sessions: (typeof sessions.$inferSelect)[]
+  sessionSegments: (typeof sessionSegments.$inferSelect)[]
+  daily: (typeof daily.$inferSelect)[]
 }
 
 export interface SeedRebuildableOptions {
   /**
    * What the archived payloads claim recorded them. The source registry derives a source's
    * identity from this, so a caller exploring which identities survive a rebuild chooses it.
+   * Sugar for `dataSources: [dataSource]`; ignored when `dataSources` is also given.
    */
   dataSource?: Record<string, unknown>
+  /**
+   * Several descriptors, one archived heart-rate window per descriptor, so a caller can seed more
+   * than one source at once. The first descriptor also carries the sleep night and the rollup, so
+   * the singular `dataSource` above (or the default) still produces exactly what this fixture has
+   * always produced.
+   */
+  dataSources?: Record<string, unknown>[]
 }
 
 /** The one local date every archived payload in the fixture lands on. */
@@ -199,11 +222,13 @@ export const REBUILDABLE_SLEEP_EXTERNAL_ID = 'users/me/dataTypes/sleep/dataPoint
 
 // Same envelope shape map-samples.test.ts and rebuild-replay.test.ts use for heart rate: a list
 // response whose points carry sampleTime and beatsPerMinute, and an explicit dataSource because
-// the source registry derives a source's identity from it.
-function heartRateBody(dataSource: Record<string, unknown>): string {
+// the source registry derives a source's identity from it. windowStartMs is a parameter rather
+// than always REBUILDABLE_WINDOW_START so several descriptors can each get a window of their own
+// and stay independently inspectable instead of merging into one window's samples.
+function heartRateBody(dataSource: Record<string, unknown>, windowStartMs: number): string {
   return body([
-    { atMs: Date.parse(`${REBUILDABLE_DATE}T10:00:00Z`), bpm: 62 },
-    { atMs: Date.parse(`${REBUILDABLE_DATE}T11:00:00Z`), bpm: 71 },
+    { atMs: windowStartMs + 10 * 3_600_000, bpm: 62 },
+    { atMs: windowStartMs + 11 * 3_600_000, bpm: 71 },
   ].map((b) => samplePoint({
     payloadKey: 'heartRate', valuePath: 'beatsPerMinute', value: String(b.bpm),
     physicalTime: new Date(b.atMs).toISOString(), dataSource,
@@ -262,18 +287,26 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
   const personId = 'p1'
   seedPerson(db, personId)
 
-  const dataSource = options.dataSource ?? { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' }
+  const dataSources = options.dataSources
+    ?? [options.dataSource ?? { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' }]
   const archive = new RawArchive(db)
   const listParams = { filter: 'x', pageSize: 1000, pageToken: null }
-  archive.put({
-    personId, dataType: 'heart-rate', requestParams: listParams,
-    windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
-    fetchedAtMs: 1, httpStatus: 200, body: heartRateBody(dataSource),
+  // One heart-rate window per descriptor, each on its own day: a shared window would let two
+  // descriptors' readings collide on nothing (different dataSource, different bodyHash, so the
+  // archive keeps both), but putting them on separate days keeps every descriptor's samples
+  // independently inspectable rather than downsampled together into one window.
+  dataSources.forEach((dataSource, i) => {
+    const windowStartMs = REBUILDABLE_WINDOW_START + i * 86_400_000
+    archive.put({
+      personId, dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs, windowEndMs: windowStartMs + 86_400_000,
+      fetchedAtMs: 1, httpStatus: 200, body: heartRateBody(dataSource, windowStartMs),
+    })
   })
   archive.put({
     personId, dataType: 'sleep', requestParams: listParams,
     windowStartMs: REBUILDABLE_WINDOW_START, windowEndMs: REBUILDABLE_WINDOW_START + 86_400_000,
-    fetchedAtMs: 1, httpStatus: 200, body: sleepNightBody(dataSource),
+    fetchedAtMs: 1, httpStatus: 200, body: sleepNightBody(dataSources[0]!),
   })
   // A rollup response, which is the only thing that ever produces a provider daily row. The
   // range in requestParams is what tells the replay this was a rollup call rather than a list
@@ -330,7 +363,7 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
           platform: 'HEALTH_CONNECT',
           application: { packageName: 'com.example.other' },
           recordingMethod: 'PASSIVELY_MEASURED',
-        }),
+        }, REBUILDABLE_WINDOW_START),
       })
       // A row in each of the three tables a person transaction empties. One table is not enough:
       // a delete that lost its person filter on sessions or on daily has to fail as loudly as
@@ -363,6 +396,35 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
       db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
         .where(eq(rawPayloads.id, row.id)).run()
     },
+    snapshot: () => ({
+      sources: db.select().from(sources)
+        .orderBy(asc(sources.personId), asc(sources.externalId), asc(sources.id)).all(),
+      samples: db.select().from(samples)
+        .orderBy(
+          asc(samples.personId), asc(samples.sourceId), asc(samples.metric),
+          asc(samples.utcMs), asc(samples.agg),
+        ).all(),
+      sessions: db.select().from(sessions)
+        .orderBy(
+          asc(sessions.personId), asc(sessions.sourceId), asc(sessions.kind),
+          asc(sessions.externalId), asc(sessions.id),
+        ).all(),
+      // Ordered by session, stage and start rather than id: two rows sharing all three would be
+      // two segments of the same stage starting at the same instant, which is not a shape the
+      // fixture or the mappers produce, so id only has to break a tie that cannot occur. It is
+      // still included last, because a sort that silently depended on that never happening would
+      // be the kind of thing this fixture exists to not do.
+      sessionSegments: db.select().from(sessionSegments)
+        .orderBy(
+          asc(sessionSegments.sessionId), asc(sessionSegments.stage),
+          asc(sessionSegments.startMs), asc(sessionSegments.id),
+        ).all(),
+      daily: db.select().from(daily)
+        .orderBy(
+          asc(daily.personId), asc(daily.localDate), asc(daily.metric),
+          asc(daily.agg), asc(daily.source),
+        ).all(),
+    }),
   }
   openRebuildable = handle
   return handle
