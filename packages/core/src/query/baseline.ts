@@ -7,12 +7,15 @@
  * value. Reading `daily` excludes overridden values by construction.
  */
 
+import { INSIGHT_MIN_DAY_FRACTION } from './insights.ts'
+
 /** The default window. Long enough to survive a bad week, short enough to follow a real change. */
 export const BASELINE_WINDOW_DAYS = 60
 
 /**
- * Below this many contributing days a baseline is reported thin. The threshold lives here so a
- * dashboard band and an agent's effect size cannot disagree about what thin means.
+ * The statistical floor: below this many contributing days a spread is not worth standing on.
+ * The threshold lives here so a dashboard band and an agent's effect size cannot disagree about
+ * what thin means.
  */
 export const BASELINE_MIN_DAYS = 14
 
@@ -22,6 +25,7 @@ export interface Baseline {
   spread: number
   /** Days that contributed. Days with no row are absent rather than zero. */
   n: number
+  /** Too few days to stand on, or too little of the window asked for. */
   thin: boolean
 }
 
@@ -31,7 +35,7 @@ export interface Baseline {
  */
 export function baselineOf(
   values: readonly number[],
-  minDays: number = BASELINE_MIN_DAYS,
+  windowDays: number = BASELINE_WINDOW_DAYS,
 ): Baseline | null {
   if (values.length === 0) return null
 
@@ -44,7 +48,12 @@ export function baselineOf(
     ? 0
     : Math.sqrt(values.reduce((total, value) => total + (value - center) ** 2, 0) / (n - 1))
 
-  return { center, spread, n, thin: n < minDays }
+  // Two failures, one flag. An absolute floor because a spread over three days is noise, and a
+  // fraction of the window because a person who wore their device 20 of 60 days must not get a
+  // confident band above a blank insight card computed from the same rows. The floor is capped
+  // at the window, or a legitimate seven day trend would be thin by construction.
+  const floor = Math.min(BASELINE_MIN_DAYS, windowDays)
+  return { center, spread, n, thin: n < floor || n / windowDays < INSIGHT_MIN_DAY_FRACTION }
 }
 
 /**

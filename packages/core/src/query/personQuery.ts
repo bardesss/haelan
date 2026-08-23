@@ -91,7 +91,7 @@ export class PersonQuery {
     const points = this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
     })
-    return baselineOf(points.map((point) => point.value))
+    return baselineOf(points.map((point) => point.value), windowDays)
   }
 
   /**
