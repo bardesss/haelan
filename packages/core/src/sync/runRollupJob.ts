@@ -121,7 +121,14 @@ export async function runRollupJob(
       for (const row of rows) {
         tx.insert(daily).values(row).onConflictDoUpdate({
           target: [daily.personId, daily.localDate, daily.metric, daily.agg, daily.source],
-          set: { value: row.value, coverage: row.coverage, derivationVersion: row.derivationVersion },
+          // Every column mapRollups writes, so a re-walk corrects the row rather than
+          // leaving whichever ones the set forgot holding an older answer.
+          set: {
+            value: row.value,
+            coverage: row.coverage,
+            sourceMix: row.sourceMix,
+            derivationVersion: row.derivationVersion,
+          },
         }).run()
       }
     })

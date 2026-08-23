@@ -5,6 +5,7 @@ import { AccountStore } from '../src/store/accounts.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
 import { SettingsStore, setupStep } from '../src/store/settings.ts'
 import { DEFAULT_USER_HORIZON_DAYS } from '../src/api/catalogue.ts'
+import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { ConfigError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
@@ -91,7 +92,7 @@ describe('the backfill horizon setting', () => {
 describe('the session overlap ratio setting', () => {
   it('defaults the session overlap ratio to a half, which is what section 9 names', () => {
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
-    expect(settings.get()?.sessionOverlapRatio).toBe(0.5)
+    expect(settings.get()?.sessionOverlapRatio).toBe(DEFAULT_OVERLAP_RATIO)
   })
 
   it('round trips a changed overlap ratio without touching anything else', () => {
@@ -107,4 +108,13 @@ describe('the session overlap ratio setting', () => {
     expect(() => settings.putSessionOverlapRatio(0, 2)).toThrow(ConfigError)
     expect(() => settings.putSessionOverlapRatio(1.5, 2)).toThrow(ConfigError)
   })
+  it('accepts a ratio of exactly one, which the comparison deliberately allows', () => {
+    // The bound is `ratio <= 1`, so one means "only sessions that overlap completely are one
+    // event". That is a coherent setting, and the boundary is worth pinning because a stricter
+    // comparison would silently reject it.
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(() => settings.putSessionOverlapRatio(1, 2)).not.toThrow()
+    expect(settings.get()?.sessionOverlapRatio).toBe(1)
+  })
+
 })

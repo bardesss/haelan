@@ -57,8 +57,9 @@ export function mergeDay(input: MergeDayInput): DailyRow[] {
       for (const source of bySource.keys()) {
         const rank = input.priority.rank(metric, source)
         // The id breaks a tie, so the winner never depends on Map insertion order, which is
-        // whatever order the rows happened to arrive in.
-        if (rank < best || (rank === best && winner !== null && source < winner)) {
+        // whatever order the rows happened to arrive in. rank is always finite, so the first
+        // candidate always takes the left branch and the tie branch never sees a null winner.
+        if (rank < best || (rank === best && source < winner!)) {
           best = rank
           winner = source
         }

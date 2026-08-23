@@ -5,7 +5,7 @@ import type { DeriveQueue } from './deriveQueue.ts'
 import { ConfigError } from '../errors.ts'
 import { priorityFrom } from '../derive/priority.ts'
 import type { Priority, SourceFacts } from '../derive/priority.ts'
-import { localDateOf } from '../derive/localDay.ts'
+import { localDateOf, shiftLocalDate } from '../derive/localDay.ts'
 
 export interface StoredList {
   metric: string
@@ -119,21 +119,19 @@ export class SourcePriorityStore {
       .orderBy(desc(samples.utcMs)).limit(1).get()
     if (!first || !last) return
 
-    const a = localDateOf(first.utcMs, first.tzOffsetMinutes)
-    const b = localDateOf(last.utcMs, last.tzOffsetMinutes)
+    // Sorted, because the earliest UTC row is not the earliest LOCAL row once offsets differ:
+    // an eastward flight can give the later instant the earlier calendar date, and an inverted
+    // range marks nothing at all.
+    const [earlier, later] = [
+      localDateOf(first.utcMs, first.tzOffsetMinutes),
+      localDateOf(last.utcMs, last.tzOffsetMinutes),
+    ].sort()
 
     this.#queue.markRange({
       personId,
-      fromLocalDate: shiftDate(a <= b ? a : b, -1),
-      toLocalDate: shiftDate(a <= b ? b : a, 1),
+      fromLocalDate: shiftLocalDate(earlier!, -1),
+      toLocalDate: shiftLocalDate(later!, 1),
       nowMs,
     })
   }
-}
-
-const DAY_MS = 86_400_000
-
-// An ISO local date carries no zone, so stepping it as a UTC midnight is exact.
-function shiftDate(localDate: string, days: number): string {
-  return new Date(Date.parse(`${localDate}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
 }

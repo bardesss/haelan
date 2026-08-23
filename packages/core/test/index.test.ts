@@ -161,7 +161,6 @@ describe('package barrel', () => {
       expect(typeof core.DEFAULT_LIST).toBe('string')
       expect(typeof core.UNRANKED_BASE).toBe('number')
       expect(typeof core.mergeDay).toBe('function')
-      expect(typeof core.encodeMix).toBe('function')
     })
 
     it('exports the target key builders and their parsers', () => {
@@ -173,13 +172,21 @@ describe('package barrel', () => {
       expect(typeof core.parseDayMetricTarget).toBe('function')
     })
 
-    it('exports the override application functions and the session grouping', () => {
-      expect(typeof core.applyToSamples).toBe('function')
-      expect(typeof core.applyToDay).toBe('function')
-      expect(typeof core.applyToSessions).toBe('function')
-      expect(typeof core.excludedMetrics).toBe('function')
+    it('exports the session grouping M2c derives sleep from', () => {
       expect(typeof core.groupSessions).toBe('function')
       expect(typeof core.DEFAULT_OVERLAP_RATIO).toBe('number')
+    })
+
+    it('does not export the derivation internals, which are not a consumer concern', async () => {
+      // Each of these has exactly one caller, runDerive, inside its own transaction. The same
+      // line is drawn above for the mappers' internals, and an export nothing outside the
+      // package uses is a promise about a signature nobody meant to make.
+      const api = await import('../src/index.ts') as Record<string, unknown>
+      expect(api['applyToSamples']).toBeUndefined()
+      expect(api['applyToDay']).toBeUndefined()
+      expect(api['applyToSessions']).toBeUndefined()
+      expect(api['excludedMetrics']).toBeUndefined()
+      expect(api['encodeMix']).toBeUndefined()
     })
 
     it('exports the two stores M3 writes priority and overrides through', () => {

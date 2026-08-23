@@ -261,4 +261,25 @@ describe('runRollupJob', () => {
     expect(syncState.drift).toHaveLength(1)
   })
 
+  it('refreshes every column it writes, not just the ones that usually change', async () => {
+    // The upsert exists so a re-walk corrects a row rather than duplicating it. A column left
+    // out of the set is a column that keeps whatever it held, which makes "corrects" a promise
+    // the code does not keep. sourceMix is null on a provider row today, so a stale value can
+    // only arrive from elsewhere, but the set should not depend on that staying true.
+    test.db.insert(daily).values({
+      personId: 'p1', localDate: '2026-08-20', metric: 'total_calories', agg: 'sum',
+      source: 'provider', value: 1, coverage: 0.5,
+      sourceMix: '[{"source":"stale","hours":24}]', derivationVersion: 1,
+    }).run()
+
+    await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 21), deps: depsWith(stubClient([])),
+    })
+
+    const row = test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()[0]
+    expect(row?.sourceMix).toBeNull()
+    expect(row?.coverage).toBeNull()
+  })
+
 })

@@ -83,7 +83,7 @@ export { runRollupJob, rollupRangeCapDays } from './sync/runRollupJob.ts'
 // M2b. Choosing between sources, and the corrections that apply while we do.
 export { priorityFrom, fallbackOrder, DEFAULT_LIST, UNRANKED_BASE } from './derive/priority.ts'
 export type { Priority, PriorityInput, SourceFacts } from './derive/priority.ts'
-export { mergeDay, encodeMix } from './derive/merge.ts'
+export { mergeDay } from './derive/merge.ts'
 export type { MixEntry, MergeDayInput } from './derive/merge.ts'
 export { MERGED_SOURCE } from './derive/rollup.ts'
 export { SourcePriorityStore } from './store/sourcePriority.ts'
@@ -93,7 +93,10 @@ export {
   parseSampleTarget, parseSessionTarget, parseDayMetricTarget,
 } from './derive/targetKey.ts'
 export type { OverrideScope, SampleTarget, DayMetricTarget } from './derive/targetKey.ts'
-export { applyToSamples, applyToDay, applyToSessions, excludedMetrics } from './derive/overrides.ts'
+// applyToSamples, applyToDay, applyToSessions, excludedMetrics and encodeMix are deliberately
+// absent. Each has exactly one caller, runDerive, inside its own transaction, and this file is
+// the package's only integration point with the server and the other apps. The same line is
+// already drawn for the mappers' internals.
 export type { OverrideLike, SessionLike, SessionOverrideResult } from './derive/overrides.ts'
 export { OverrideStore } from './store/overrides.ts'
 export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'
