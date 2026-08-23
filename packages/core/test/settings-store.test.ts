@@ -118,3 +118,31 @@ describe('the session overlap ratio setting', () => {
   })
 
 })
+
+describe('the night gap setting', () => {
+  it('defaults the night gap to two hours', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(settings.get()?.nightGapMinutes).toBe(120)
+  })
+
+  it('round trips a changed night gap without touching anything else', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.putNightGapMinutes(45, 2)
+    expect(settings.get()?.nightGapMinutes).toBe(45)
+    expect(settings.get()?.baseUrl).toBe('http://localhost:4235')
+  })
+
+  it('refuses a night gap outside the range where it means anything', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    // At or below zero no two pieces ever join, so every early wake becomes a nap. Above a day
+    // every sleep on the same date joins, including an afternoon one, so naps stop existing.
+    expect(() => settings.putNightGapMinutes(0, 2)).toThrow(ConfigError)
+    expect(() => settings.putNightGapMinutes(-1, 2)).toThrow(ConfigError)
+    expect(() => settings.putNightGapMinutes(1441, 2)).toThrow(ConfigError)
+  })
+
+  it('accepts a gap of exactly one day, which the comparison deliberately allows', () => {
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(() => settings.putNightGapMinutes(1440, 2)).not.toThrow()
+  })
+})

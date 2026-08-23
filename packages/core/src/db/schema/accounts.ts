@@ -47,6 +47,10 @@ export const instanceSettings = sqliteTable('instance_settings', {
   // shorter one. Master design section 9 names 50 percent and calls it configurable; the column
   // exists from the start so the value is never a constant somebody has to go digging for.
   sessionOverlapRatio: real('session_overlap_ratio').notNull().default(0.5),
+  // Sleep sessions on one local date join into one night when the gap between them is under
+  // this. A wake long enough for the watch to end a session and start another is ordinary, and
+  // reporting only the longer piece would lose the rest of the night every time it happens.
+  nightGapMinutes: integer('night_gap_minutes').notNull().default(120),
   setupCompletedAtMs: integer('setup_completed_at_ms'),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })
