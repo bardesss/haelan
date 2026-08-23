@@ -74,16 +74,24 @@ export function assembleNights(input: {
 }
 
 /**
- * Which group is the night. The provider's flag when exactly one group carries it, because it
- * knows things we do not, and the longest group otherwise. Note the flag chooses between groups
- * and never within one: a piece that joined by gap is part of the night whatever its own flag
- * says, which is the early wake case.
+ * Which group is the night, or -1 when the day had none. The provider's flag when exactly one
+ * group carries it, because it knows things we do not, and the longest group otherwise. Note the
+ * flag chooses between groups and never within one: a piece that joined by gap is part of the
+ * night whatever its own flag says, which is the early wake case.
  */
 function pickNight(groups: readonly SleepSessionLike[][]): number {
   const flagged = groups
     .map((group, at) => ({ at, flagged: group.some((s) => s.mainSleep === true) }))
     .filter((g) => g.flagged)
   if (flagged.length === 1) return flagged[0]!.at
+
+  // Every session the source explicitly said was not the main sleep, and none it said was: the
+  // day has naps and no night. Promoting the longest anyway would report an afternoon nap as a
+  // bedtime, and a baseline built over such days is a band around nothing. A null flag is the
+  // source declining to say, which is undecidable rather than negative, so the fallback below
+  // still runs for it.
+  const decided = groups.flat().every((s) => s.mainSleep === false)
+  if (flagged.length === 0 && decided) return -1
 
   let best = 0
   let bestSpan = -1
@@ -164,9 +172,13 @@ export function deriveSleepDay(input: {
 
     const ids = new Set(night.map((s) => s.id))
     const staged = input.segments.filter((seg) => ids.has(seg.sessionId))
-    // No segments is not zero segments: the staging can fail, which attrs.stagesStatus reports,
-    // and a zero here would claim the person lay awake all night.
-    if (staged.length > 0) {
+    // Recognised, not merely present: a stage outside the vocabulary counts toward neither
+    // asleep nor awake, so a night made only of such segments has six zeros to write and no
+    // measurement behind any of them. No segments is not zero segments either, since the staging
+    // can fail, which attrs.stagesStatus reports, and a zero would claim the person lay awake
+    // all night.
+    const recognised = staged.filter((s) => ASLEEP_STAGES.includes(s.stage) || s.stage === AWAKE_STAGE)
+    if (recognised.length > 0) {
       const byStage = (stage: string) => staged
         .filter((seg) => seg.stage === stage)
         .reduce((total, seg) => total + minutesBetween(seg.startMs, seg.endMs), 0)
@@ -174,7 +186,9 @@ export function deriveSleepDay(input: {
       const deep = byStage('DEEP')
       const light = byStage('LIGHT')
       const rem = byStage('REM')
-      const asleep = deep + light + rem
+      // Summed from the constant rather than from the three figures beside it, so the vocabulary
+      // is one list and a stage added to it cannot go missing from the total.
+      const asleep = ASLEEP_STAGES.reduce((total, stage) => total + byStage(stage), 0)
       // The time between two pieces is time out of bed, and it counts against the night exactly
       // as an AWAKE stage inside one session does.
       const awake = byStage(AWAKE_STAGE) + gapMinutesWithin(night)

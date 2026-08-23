@@ -107,6 +107,36 @@ describe('assembleNights', () => {
     expect(out.night.map((s) => s.id)).toEqual(['longFlagged'])
   })
 
+  it('leaves the day without a night when the source flagged every session as not the main sleep', () => {
+    // The source did not decline to say, it said no. Calling the longest group the night anyway
+    // would report an afternoon nap as a bedtime.
+    const out = assemble([
+      session({ id: 'afternoon', startMs: T0 + 14 * H, endMs: T0 + 14 * H + 40 * MIN, mainSleep: false }),
+      session({ id: 'evening', startMs: T0 + 19 * H, endMs: T0 + 20 * H, mainSleep: false }),
+    ])
+    expect(out.night).toEqual([])
+    expect(out.naps.map((s) => s.id)).toEqual(['afternoon', 'evening'])
+  })
+
+  it('still falls back to the longest group when the source said nothing either way', () => {
+    // null is undecidable, not negative, so the guess stays.
+    const out = assemble([
+      session({ id: 'afternoon', startMs: T0 + 14 * H, endMs: T0 + 14 * H + 40 * MIN }),
+    ])
+    expect(out.night.map((s) => s.id)).toEqual(['afternoon'])
+    expect(out.naps).toEqual([])
+  })
+
+  it('keeps a night whose other pieces are flagged false when one piece is flagged true', () => {
+    const out = assemble([
+      session({ id: 'first', startMs: T0, endMs: T0 + 5 * H, mainSleep: true }),
+      session({ id: 'second', startMs: T0 + 6 * H, endMs: T0 + 8 * H, mainSleep: false }),
+      session({ id: 'nap', startMs: T0 + 15 * H, endMs: T0 + 16 * H, mainSleep: false }),
+    ])
+    expect(out.night.map((s) => s.id)).toEqual(['first', 'second'])
+    expect(out.naps.map((s) => s.id)).toEqual(['nap'])
+  })
+
   it('returns an empty night rather than inventing one', () => {
     const out = assemble([])
     expect(out.night).toEqual([])

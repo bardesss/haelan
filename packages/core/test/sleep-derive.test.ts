@@ -81,6 +81,57 @@ describe('deriveSleepDay', () => {
     expect(valueOf(rows, 'sleep_efficiency')).toBe(88)
   })
 
+  it('assembles a night that arrived in three pieces', () => {
+    // Two pieces is the case the concept was invented for; three is what a restless night looks
+    // like, and nothing exercised the chain past the first join.
+    const rows = derive(
+      [
+        session({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 3 * H }),
+        session({ id: 'b', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 5 * H }),
+        session({ id: 'c', startMs: BEDTIME + 6 * H, endMs: BEDTIME + 8 * H }),
+      ],
+      [
+        seg('a', 'LIGHT', BEDTIME, BEDTIME + 3 * H),
+        seg('b', 'DEEP', BEDTIME + 4 * H, BEDTIME + 5 * H),
+        seg('c', 'REM', BEDTIME + 6 * H, BEDTIME + 8 * H),
+      ],
+    )
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(360)
+    // Both hours between the three pieces are time out of bed.
+    expect(valueOf(rows, 'sleep_awake_minutes')).toBe(120)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+  })
+
+  it('counts no gap for a piece that overlaps the one before it', () => {
+    // A re-reported session can start before the previous one ended. A negative gap subtracted
+    // from the awake total would credit the night with time nobody spent asleep.
+    const rows = derive(
+      [
+        session({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 5 * H }),
+        session({ id: 'b', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 8 * H }),
+      ],
+      [
+        seg('a', 'LIGHT', BEDTIME, BEDTIME + 5 * H),
+        seg('b', 'LIGHT', BEDTIME + 5 * H, BEDTIME + 8 * H),
+      ],
+    )
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_awake_minutes')).toBe(0)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(480)
+  })
+
+  it('counts every nap on a day that had several', () => {
+    const rows = derive([
+      session({ id: 'night', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'earlyNap', startMs: BEDTIME + 13 * H, endMs: BEDTIME + 13 * H + 30 * MIN }),
+      session({ id: 'lateNap', startMs: BEDTIME + 17 * H, endMs: BEDTIME + 18 * H }),
+    ])
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(2)
+    expect(valueOf(rows, 'sleep_nap_minutes')).toBe(90)
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+  })
+
   it('reports bed and wake times against the local midnight of the row date', () => {
     const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H })])
     // Asleep at 23:00 the evening before, up at 07:00 that morning.
@@ -145,6 +196,50 @@ describe('deriveSleepDay', () => {
     // deflate it. It is neither, and the four measured values are in field-map.md.
     expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(360)
     expect(valueOf(rows, 'sleep_awake_minutes')).toBe(0)
+  })
+
+  it('writes no stage figures when every segment carries a stage it does not recognise', () => {
+    // Six zeros is not the same as no measurement. sleep_asleep_minutes 0 and sleep_efficiency 0
+    // are the claim that the person lay awake all night, which is exactly what we do not know
+    // when the vocabulary has moved under us.
+    const rows = derive(
+      [session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H })],
+      [seg('n', 'SOMETHING_NEW', BEDTIME, BEDTIME + 8 * H)],
+    )
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_bedtime_minutes')).toBe(-60)
+    expect(valueOf(rows, 'sleep_waketime_minutes')).toBe(420)
+    const stageMetrics = [
+      'sleep_deep_minutes', 'sleep_light_minutes', 'sleep_rem_minutes',
+      'sleep_asleep_minutes', 'sleep_awake_minutes', 'sleep_efficiency',
+    ]
+    for (const metric of stageMetrics) {
+      expect(rows.find((r) => r.metric === metric)).toBeUndefined()
+    }
+  })
+
+  it('writes no night for a day whose only sleep the source says was not the main sleep', () => {
+    // 14:00 to 14:40, flagged false. Promoting it would report a bedtime of 14:00, and a later
+    // baseline over a series mixing that with a real bedtime is a band around nothing.
+    const rows = derive([
+      session({ id: 'afternoon', startMs: BEDTIME + 15 * H, endMs: BEDTIME + 15 * H + 40 * MIN, mainSleep: false }),
+    ])
+    expect(rows.find((r) => r.metric === 'sleep_in_bed_minutes')).toBeUndefined()
+    expect(rows.find((r) => r.metric === 'sleep_bedtime_minutes')).toBeUndefined()
+    expect(rows.find((r) => r.metric === 'sleep_waketime_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(1)
+    expect(valueOf(rows, 'sleep_nap_minutes')).toBe(40)
+  })
+
+  it('still calls a lone unflagged session the night, because that case is undecidable', () => {
+    // The same session with no flag at all. The source declined to say rather than said no, and
+    // the longest group is the reasonable guess.
+    const rows = derive([
+      session({ id: 'afternoon', startMs: BEDTIME + 15 * H, endMs: BEDTIME + 15 * H + 40 * MIN }),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(40)
+    expect(valueOf(rows, 'sleep_bedtime_minutes')).toBe(840)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
   })
 
   it('files every row under the source it was told, with no mix', () => {
