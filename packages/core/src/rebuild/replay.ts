@@ -126,8 +126,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
     // is one and infers it from pageToken where there is not. But runJob calls listDataPoints
     // once per sync run, and the trailing window is re-fetched on every run by design, so two
     // archived rows sharing a window's bounds are just as often two separate fetch episodes as
-    // two pages of one. Merging them into a
-    // single mapWindowSamples call would downsample across readings the original sync never saw
+    // two pages of one. Merging them into a single mapWindowSamples call would downsample
+    // across readings the original sync never saw
     // together: a minute Google revised from 60 bpm to 100 bpm between two fetches would leave
     // min 60, mean 80, max 100, n 2, where the sync itself left min 100, mean 100, max 100, n 1.
     for (const episode of splitIntoEpisodes(group.pages)) {

@@ -73,8 +73,8 @@ saying so is the point of keeping this file.
       point.** `scopes.md` is corrected to match.
 
 Re-syncing is idempotent, measured on the same instance rather than inferred: the trailing week is
-re-fetched every run, and 29 window and type pairs have been fetched more than once, giving 725 archived
-payloads carry only 586 distinct body hashes, so 139 were bytes the instance already held. Against
+re-fetched every run, and 29 window and type pairs have been fetched more than once, so the 725 archived
+payloads carry only 586 distinct body hashes and 139 were bytes the instance already held. Against
 that, zero duplicate sample natural keys and zero duplicate session keys.
 
 **What this run did not establish** was how far back the API actually serves intraday data. That

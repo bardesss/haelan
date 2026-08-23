@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { DERIVATION_VERSION, MAPPING_VERSION } from '@haelan/core'
+import { DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, supports } from '@haelan/core'
 import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -270,6 +270,17 @@ describe('the sync runner', () => {
     // that weight in particular fell short of some deep horizon it was never asked to reach here.
     const status = runner.status()
     expect(status.backfill.every((row) => row.cursorMs === null)).toBe(true)
+
+    // The cursors above prove the sprint never took a step, but the trailing sync runs before the
+    // sprint and writes no cursor of its own, so on their own they say nothing about it. Its
+    // evidence is the high water marks. run() passes shouldStop into runSync; without that the
+    // trailing sync walks every listable type to completion while settle() waits, leaving a mark
+    // on each of them. At most one is what stopping between jobs looks like.
+    const stores = harness.app.haelan.stores
+    const marked = stores.people.list().flatMap((person) =>
+      DATA_TYPES.filter((type) => supports(type, 'list'))
+        .filter((type) => stores.syncState.get(person.id, type.id)?.highWaterMs != null))
+    expect(marked.length, 'the trailing sync kept walking after stop()').toBeLessThanOrEqual(1)
   })
 
   it('refuses to start once stopped, so a request racing shutdown cannot restart the sprint settle() is waiting out', async () => {
