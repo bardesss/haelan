@@ -45,9 +45,32 @@ describe('retargetOverrides', () => {
     expect(outcome).toEqual({ retargeted: 0, orphaned: [] })
   })
 
-  test('two sources at one instant is ambiguous, so the override is reported', () => {
+  test('a phone reporting the same minute does not orphan an override whose watch survived', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
+    // A phone and a watch on the same platform reporting the same minute, which is what the two
+    // of them do all day, not a corner case. The override already names the watch, and the watch
+    // is still here, so the correction applies exactly as it did before the rebuild.
+    seedSample(db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: 1000 })
+    seedSample(db, { personId: 'p1', sourceId: 'phone', metric: 'heart_rate', utcMs: 1000 })
+    const key = sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: 1000 })
+    const id = seedOverride(db, { personId: 'p1', scope: 'sample', targetKey: key })
+
+    const outcome = retargetOverrides(db, { personId: 'p1', oldSessions: new Map() })
+
+    // Nothing moved and nothing needs saying. Reporting this as orphaned is a false alarm that
+    // costs a real correction: the boot log tells an operator their exclusion no longer applies,
+    // they go and delete or re-create it, and it was working the whole time.
+    expect(outcome).toEqual({ retargeted: 0, orphaned: [] })
+    expect(keyOf(db, id)).toBe(key)
+  })
+
+  test('two sources at one instant is ambiguous once the source named in the key is gone', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    // Neither of these is the source the override names, so there really is no way to say which
+    // reading the person meant. This is the case the reason below is about, and it is the only
+    // one: an override whose own source survived is answered by the test above.
     seedSample(db, { personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: 1000 })
     seedSample(db, { personId: 'p1', sourceId: 'phone', metric: 'heart_rate', utcMs: 1000 })
     seedOverride(db, {

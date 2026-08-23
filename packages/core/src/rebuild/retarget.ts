@@ -39,9 +39,9 @@ export interface RetargetOutcome {
  * applying, and a spike somebody threw out would quietly come back.
  *
  * Only unambiguous moves are made. A sample override names an instant, and an instant with
- * exactly one source has exactly one answer. Anything else is left where it is and reported, on
- * the grounds that a correction silently applied to the wrong reading is worse than one an
- * operator gets told about.
+ * exactly one source has exactly one answer, as does one whose own source is still reporting it.
+ * Anything else is left where it is and reported, on the grounds that a correction silently
+ * applied to the wrong reading is worse than one an operator gets told about.
  */
 export function retargetOverrides(tx: DbOrTx, input: RetargetInput): RetargetOutcome {
   const rows = tx.select().from(overrides).where(eq(overrides.personId, input.personId)).all()
@@ -98,6 +98,18 @@ function resolveSample(tx: DbOrTx, personId: string, targetKey: string): string 
   // at the same instant, and three rows from one watch is still one unambiguous answer.
   const sourceIds = [...new Set(rows.map((row) => row.sourceId))]
   if (sourceIds.length === 0) return { reason: 'no sample at that instant' }
+
+  // Asked before ambiguity, not after. A phone and a watch on the same platform report the same
+  // minute all day, so deciding ambiguity first reported every override on a shared minute as
+  // orphaned even though its own source never moved and its correction still applied perfectly.
+  // The override was untouched and only the boot log was wrong, which is worse than it sounds:
+  // an operator reading that their exclusion no longer applies goes and deletes or re-creates a
+  // correction that was working the whole time. Ambiguity is a question about which reading the
+  // person meant, and a key whose source is still here has already answered it.
+  if (sourceIds.includes(target.source)) {
+    return sampleTarget({ source: target.source, metric: target.metric, utcMs: target.utcMs })
+  }
+
   if (sourceIds.length > 1) return { reason: 'two or more sources report that instant' }
   return sampleTarget({ source: sourceIds[0]!, metric: target.metric, utcMs: target.utcMs })
 }
