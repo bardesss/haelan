@@ -86,6 +86,34 @@ describe('mergeSleepDay', () => {
     expect(napMixOf(rows)).toEqual([{ source: 'phone', hours: 1 }])
   })
 
+  it('keeps every piece the winning source recorded, not only the first', () => {
+    // The case this milestone exists for. The watch broke the night in two across a ten minute
+    // wake, the phone recorded it unbroken, and the device outranks the app. Keeping only the
+    // group's primary reported the watch's first piece as the whole night: 180 minutes in bed
+    // and a waketime of 02:00, with five hours filed as neither night nor nap.
+    const rows = merge([
+      session({ id: 'w1', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 3 * H }),
+      session({ id: 'w2', sourceId: 'watch', startMs: BEDTIME + 3 * H + 10 * MIN, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_waketime_minutes')).toBe(420)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+    // Still one source winning the event, now naming every hour it actually covered.
+    expect(mixOf(rows)).toEqual([{ source: 'watch', hours: 8 }])
+  })
+
+  it('assembles a merged night from more than two pieces', () => {
+    const rows = merge([
+      session({ id: 'w1', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 3 * H }),
+      session({ id: 'w2', sourceId: 'watch', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 5 * H }),
+      session({ id: 'w3', sourceId: 'watch', startMs: BEDTIME + 6 * H, endMs: BEDTIME + 8 * H }),
+      session({ id: 'p', sourceId: 'phone', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(0)
+  })
+
   it('leaves an alternate recording out of the merged figures', () => {
     // groupSessions retains the alternate; the merged row simply does not count it. The per
     // source rows deriveSleepDay writes are where the alternate remains visible.

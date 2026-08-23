@@ -4,5 +4,6 @@
  * optional. M2e reads it at boot and queues every day when it has moved.
  *
  * 2: M2b writes merged rows and a source mix, so a day derived under 1 has neither.
+ * 3: M2c writes the sleep_* family, so a day derived under 2 has no sleep rows at all.
  */
-export const DERIVATION_VERSION = 2
+export const DERIVATION_VERSION = 3

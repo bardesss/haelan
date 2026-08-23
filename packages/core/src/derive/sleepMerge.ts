@@ -20,9 +20,10 @@ const NAP_METRICS = new Set(['sleep_nap_count', 'sleep_nap_minutes'])
  * source. The arithmetic stays in one place, exactly as mergeDay delegates to rollUpDay: a
  * merged efficiency and a per source efficiency cannot come to disagree about what efficiency is.
  *
- * groupSessions is what says two recordings are the same event and which source wins it. The
- * alternate is not deleted, it simply does not count toward the merged figures, and the per
- * source rows beside this one are where it stays visible.
+ * groupSessions is what says two recordings are the same event and which source wins it. Every
+ * session the winning source contributed to the event survives, since a night arrives in pieces.
+ * A losing source's recording is not deleted, it simply does not count toward the merged
+ * figures, and the per source rows beside this one are where it stays visible.
  */
 export function mergeSleepDay(input: {
   personId: string
@@ -44,21 +45,26 @@ export function mergeSleepDay(input: {
   })
 
   const byId = new Map(input.sessions.map((s) => [s.id, s]))
-  const primaries = groups.map((group) => byId.get(group.primary.id)!)
+  // The primary is one session, a night is not. This milestone exists because one source records
+  // a night as several pieces, so keeping only the primary would delete every piece after the
+  // first. The group still resolves to one winning source; that source keeps everything it saw.
+  const winning = groups
+    .flatMap((g) => [g.primary, ...g.alternates].filter((s) => s.sourceId === g.primary.sourceId))
+    .map((s) => byId.get(s.id)!)
 
   const rows = deriveSleepDay({
     personId: input.personId,
     localDate: input.localDate,
     source: MERGED_SOURCE,
-    sessions: primaries,
+    sessions: winning,
     segments: input.segments,
     gapMinutes: input.gapMinutes,
   })
 
-  // Run over the primaries a second time, rather than have deriveSleepDay report its own
+  // Run over the winning sessions a second time, rather than have deriveSleepDay report its own
   // grouping back: assembleNights is pure and cheap, and this keeps the return shape every
   // other caller of deriveSleepDay relies on untouched.
-  const { night, naps } = assembleNights({ sessions: primaries, gapMinutes: input.gapMinutes })
+  const { night, naps } = assembleNights({ sessions: winning, gapMinutes: input.gapMinutes })
   const nightMix = mixOf(night)
   const napMix = mixOf(naps)
 
