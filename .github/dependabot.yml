@@ -22,13 +22,28 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    # Majors get their own pull request rather than riding along with patches. Grouping by
+    # dependency type alone put a TypeScript 7 migration and an @types/node jump in the same
+    # pull request as a vite patch, so the safe three quarters of it could not be merged
+    # without taking the risky quarter. A major deserves to be judged on its own, and a patch
+    # deserves to land without waiting for one.
     groups:
       production:
         dependency-type: production
         patterns: ['*']
+        update-types: ['minor', 'patch']
+      production-major:
+        dependency-type: production
+        patterns: ['*']
+        update-types: ['major']
       development:
         dependency-type: development
         patterns: ['*']
+        update-types: ['minor', 'patch']
+      development-major:
+        dependency-type: development
+        patterns: ['*']
+        update-types: ['major']
     commit-message:
       prefix: 'deps'
       prefix-development: 'deps(dev)'
