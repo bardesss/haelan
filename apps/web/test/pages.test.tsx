@@ -3,11 +3,17 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { july } from '../src/fixtures/july.js'
+import { I18nProvider } from '../src/i18n/index.js'
 
 // The chart hosts render on the server; ECharts only touches them in an effect,
 // so this exercises every prop, every basis string and every table alternative
-// without a browser.
-const pages = { Dashboard: renderToStaticMarkup(<Dashboard />), Sleep: renderToStaticMarkup(<Sleep />) }
+// without a browser. Pinned to English: both pages now read their copy from the
+// catalogue, and an unpinned instance falls back to navigator.language, which on a
+// Dutch machine would render Dutch and break every literal-text assertion below.
+const pages = {
+  Dashboard: renderToStaticMarkup(<I18nProvider lng="en"><Dashboard /></I18nProvider>),
+  Sleep: renderToStaticMarkup(<I18nProvider lng="en"><Sleep /></I18nProvider>),
+}
 
 describe.each(Object.entries(pages))('%s', (_name, html) => {
   it('names every chart and points it at a description', () => {
@@ -39,6 +45,34 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   it('never renders absence as a zero', () => {
     // Unworn days appear in the table alternatives as words, never as 0.
     expect(html).toMatch(/not worn|no reading/)
+  })
+
+  // These two pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
+  // them look for the shape a missing translation actually takes.
+  it('renders no raw message key', () => {
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts)\.[a-zA-Z][a-zA-Z.]*\b/)
+  })
+})
+
+describe('chart tables follow the active language', () => {
+  // Every chart's accessible table used to be built from English literals regardless of the
+  // active language, which meant a Dutch screen reader user got an English table on both pages.
+  const dashboardNl = renderToStaticMarkup(<I18nProvider lng="nl"><Dashboard /></I18nProvider>)
+  const sleepNl = renderToStaticMarkup(<I18nProvider lng="nl"><Sleep /></I18nProvider>)
+
+  it('translates column headers, weekday labels and absence words', () => {
+    expect(dashboardNl).toContain('Datum')
+    expect(dashboardNl).toContain('Weekdag')
+    expect(dashboardNl).toContain('niet gedragen')
+    expect(dashboardNl).not.toContain('>Date<')
+    expect(dashboardNl).not.toContain('>Weekday<')
+    expect(dashboardNl).not.toContain('not worn')
+  })
+
+  it('translates sleep stage names through the shared sleep.stage keys, not a second set', () => {
+    expect(sleepNl).toContain('Diep')
+    expect(sleepNl).not.toContain('>Deep<')
   })
 })
 

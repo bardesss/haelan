@@ -15,15 +15,19 @@ body {
 .rail { width: 186px; flex: none; display: flex; flex-direction: column; background: var(--surface-rail); padding: var(--space-4) var(--space-3); }
 .rail-group { font-size: var(--font-size-micro); letter-spacing: .15em; text-transform: uppercase; color: var(--text-faint); padding: var(--space-3) var(--space-3) var(--space-1); }
 .rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px var(--space-3); border-radius: 7px; font-size: var(--font-size-sm); color: var(--text-secondary); text-decoration: none; }
-.rail-item[aria-current='page'] { background: color-mix(in srgb, var(--accent) 13%, transparent); color: var(--accent-soft); font-weight: 600; }
+.rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: 600; }
 .brand { font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; padding: 4px 12px 16px; }
 .rail-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
 .rail-item[aria-current='page'] svg { opacity: 1; color: var(--accent); }
-.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: var(--space-2); }
+.rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 0 var(--space-3); }
+.rail-foot .button { justify-content: center; }
 .avatar {
   width: 19px; height: 19px; flex: none; border-radius: 50%;
   display: grid; place-items: center; text-transform: uppercase;
   font-size: var(--font-size-micro); font-weight: 600;
+  /* A decorative tint, not an interaction state: nothing about this element hovers, selects or
+     disables. Left as color-mix on purpose (M3a review finding 1). */
   background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-primary);
 }
 
@@ -43,8 +47,11 @@ body {
 .button:hover { color: var(--text-primary); border-color: var(--text-faint); }
 .button svg, .icon-button svg { width: 15px; height: 15px; }
 .button-count { color: var(--text-faint); }
-.button-primary { color: var(--accent-soft); background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: color-mix(in srgb, var(--accent) 34%, transparent); }
-.button-primary:hover { color: var(--text-primary); background: color-mix(in srgb, var(--accent) 24%, transparent); }
+.button-primary { color: var(--accent-soft); background: var(--surface-accent); border-color: var(--border-accent); }
+.button-primary:hover { color: var(--text-primary); background: var(--surface-accent-hover); }
+.button-primary:disabled, .button-primary[aria-disabled='true'] {
+  background: var(--surface-disabled); color: var(--text-disabled); border-color: var(--border-subtle); cursor: not-allowed;
+}
 .button-primary svg { color: var(--accent); }
 .icon-button { display: inline-flex; padding: 5px; background: none; border: 0; color: var(--text-muted); }
 .icon-button:hover { color: var(--text-primary); }
@@ -94,7 +101,7 @@ body {
    each and a bare 13px dot is not a fair thing to ask someone to hit. */
 .choice { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); cursor: pointer; margin-bottom: var(--space-2); }
 .choice:hover { border-color: var(--text-faint); }
-.choice:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 44%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.choice:has(input:checked) { border-color: var(--border-chosen); background: var(--surface-chosen); }
 .choice input { margin-top: 3px; flex: none; accent-color: var(--accent); }
 .choice-title { font-size: var(--font-size-sm); color: var(--text-primary); display: block; }
 .choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; display: block; margin-top: var(--space-1); }
@@ -110,6 +117,8 @@ body {
 .setup-rail { display: flex; gap: var(--space-1); margin-bottom: var(--space-5); list-style: none; padding: 0; }
 .setup-rail li { flex: 1; font-size: var(--font-size-micro); color: var(--text-faint); padding-top: var(--space-2); border-top: 2px solid var(--border-subtle); }
 .setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: 600; }
+/* A progress marker, not an interaction state: it records a step already completed and nobody
+   hovers, selects or disables it. Left as color-mix on purpose (M3a review finding 1). */
 .setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 .setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
@@ -152,8 +161,8 @@ body {
 }
 .setup-horizon li button:hover { border-color: var(--text-faint); }
 .setup-horizon li[data-chosen='true'] button {
-  color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 44%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-soft); border-color: var(--border-chosen);
+  background: var(--surface-chosen);
 }
 
 @media (max-width: 620px) {
@@ -169,3 +178,9 @@ body {
 }
 
 @media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
+
+/* The sign-in screen is the one place with no rail and no wizard rail either: it is the
+   entire viewport before there is anything else to show. form-error is not redefined here,
+   the boxed alert already declared above under "Forms" fits this screen too. */
+.signin { display: grid; place-items: center; min-height: 100vh; padding: var(--space-6); }
+.signin .card { display: grid; gap: var(--space-3); width: min(360px, 100%); }

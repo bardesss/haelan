@@ -1,3 +1,4 @@
+import { useTranslation } from '../i18n/index.js'
 import type { SyncStatus } from './api.js'
 
 const DAY_MS = 86_400_000
@@ -6,9 +7,9 @@ const DAY_MS = 86_400_000
 // are capped at 365 days, which is why five years costs barely more than one. The numbers are
 // shown because nobody can derive them from the page.
 const HORIZON_CHOICES = [
-  { days: 365, label: '1 year', disk: '1.05 GB' },
-  { days: 730, label: '2 years', disk: '1.05 GB' },
-  { days: 1825, label: '5 years', disk: '1.06 GB' },
+  { days: 365, labelKey: 'setup.backfill.horizon.oneYear', disk: '1.05 GB' },
+  { days: 730, labelKey: 'setup.backfill.horizon.twoYears', disk: '1.05 GB' },
+  { days: 1825, labelKey: 'setup.backfill.horizon.fiveYears', disk: '1.06 GB' },
 ]
 
 // How far back this type has walked, as a fraction of the horizon it is walking to. A cursor
@@ -26,6 +27,7 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
   onHorizonChange: (days: number) => void
   failure?: string | null
 }) {
+  const { t } = useTranslation()
   const now = nowMs ?? status.startedAtMs ?? status.lastFinishedAtMs ?? 0
   const finished = status.backfill.filter((row) => row.complete).length
   // The intraday cap is a server fact, not a constant this bundle can import (apps/web does not
@@ -42,17 +44,13 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
 
   return (
     <section className="setup-step">
-      <h1>Filling in your history</h1>
-      <p>
-        haelan is walking backwards from today, most recent first, so the days you are most
-        likely to look at arrive first. You can leave this page. It resumes where it stopped if
-        the instance restarts, and the trailing week is fetched every run regardless.
-      </p>
+      <h1>{t('setup.backfill.title')}</h1>
+      <p>{t('setup.backfill.intro')}</p>
 
       <p className="setup-note">
         {status.running
-          ? `Running. ${finished} of ${status.backfill.length} data types have reached their horizon.`
-          : `Idle. ${finished} of ${status.backfill.length} data types have reached their horizon.`}
+          ? t('setup.backfill.runningNote', { finished, total: status.backfill.length })
+          : t('setup.backfill.idleNote', { finished, total: status.backfill.length })}
       </p>
 
       <ul className="setup-progress">
@@ -61,12 +59,12 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
           return (
             <li key={row.dataType} data-complete={String(row.complete)}>
               <span className="progress-type">{row.dataType}</span>
-              <span className="field-hint">{row.horizonDays} days back</span>
+              <span className="field-hint">{t('setup.backfill.daysBack', { days: row.horizonDays })}</span>
               <span className="progress-state">
                 {row.complete
-                  ? 'complete'
+                  ? t('setup.backfill.complete')
                   : fraction === null
-                    ? 'not started'
+                    ? t('setup.backfill.notStarted')
                     : `${Math.round(fraction * 100)}%`}
               </span>
             </li>
@@ -75,13 +73,9 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
       </ul>
 
       <div className="setup-horizon">
-        <h2>How far back should haelan go?</h2>
+        <h2>{t('setup.backfill.horizonQuestion')}</h2>
         {failure && <p className="form-error" role="alert">{failure}</p>}
-        <p className="setup-note">
-          Minute level detail is kept for the last {intradayDays} days whichever you pick, because
-          it is most of the size. This chooses how far back the daily history goes. Changing it
-          later re-aims the walk and never deletes anything already fetched.
-        </p>
+        <p className="setup-note">{t('setup.backfill.horizonNote', { intradayDays })}</p>
         <ul>
           {HORIZON_CHOICES.map((choice) => (
             <li key={choice.days} data-chosen={String(choice.days === status.userHorizonDays)}>
@@ -90,7 +84,7 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
                 aria-pressed={choice.days === status.userHorizonDays}
                 onClick={() => onHorizonChange(choice.days)}
               >
-                {choice.label}
+                {t(choice.labelKey)}
               </button>
               <span className="field-hint">{choice.disk}</span>
             </li>

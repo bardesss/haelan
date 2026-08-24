@@ -92,8 +92,9 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M2d** Baselines and query layer | Rolling baselines with a thin flag, insights suppressed on missing days and thin coverage, and the person bound query layer M3 and M4 read through | Done, [#51](https://github.com/bardesss/haelan/pull/51) |
 | **M2e** Rebuild | Per person atomic rebuild of tiers 2 and 3 from the archive, source identity re-resolved through the current mapping, overrides re-targeted or reported, and the version bump that triggers it on boot | Done, [#55](https://github.com/bardesss/haelan/pull/55) |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
+| **M3a** Web foundations | Routing with parameters, sign-in and sign-out, session expiry handled without a stale dashboard behind it, person binding, i18next with English and Dutch across every page and chart, interaction and motion tokens, TanStack Query | In review |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
-| **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish | Not started |
+| **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish, the person switcher and member management | Not started |
 
 M1a through M1d are a decomposition of the spec's single M1, not phases the spec names: store,
 client, sync and wizard each produce working, testable software on their own. **M1 itself is

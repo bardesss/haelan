@@ -4,20 +4,22 @@ import { useChart } from './useChart.js'
 import { chartBase } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import type { Stage } from '../fixtures/july.js'
-import { stageMark } from './stage.js'
+import { stageMark, STAGE_LABEL_KEY } from './stage.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatDuration } from '../format.js'
+import { useTranslation } from '../i18n/index.js'
 
 const LANES: Stage[] = ['awake', 'rem', 'light', 'deep']
-const STAGE_LABEL: Record<Stage, string> = { deep: 'Deep', light: 'Light', rem: 'REM', awake: 'Awake' }
 
 export function Hypnogram({ segments, startLabel, label }: {
   segments: { stage: Stage; from: number; to: number }[]
   startLabel: string
   label: string
 }) {
-  const build = useCallback((t: ChartTokens): EChartsOption => {
-    const base = chartBase(t)
+  const { t } = useTranslation()
+
+  const build = useCallback((tokens: ChartTokens): EChartsOption => {
+    const base = chartBase(tokens)
     return {
       grid: base.grid({ left: 46, top: 10 }),
       xAxis: { type: 'value' as const, min: 0, max: segments.at(-1)?.to ?? 480,
@@ -36,7 +38,7 @@ export function Hypnogram({ segments, startLabel, label }: {
           const laneSize = api.size?.([0, 1]) ?? 20
           const laneHeight = (Array.isArray(laneSize) ? laneSize[1] : laneSize) ?? 20
           const height = laneHeight * 0.45
-          const mark = stageMark(stage as Stage, t)
+          const mark = stageMark(stage as Stage, tokens)
           return {
             type: 'rect',
             shape: { x: start[0] ?? 0, y: (start[1] ?? 0) - height / 2, width: (end[0] ?? 0) - (start[0] ?? 0), height },
@@ -47,7 +49,7 @@ export function Hypnogram({ segments, startLabel, label }: {
         data: segments.map((s) => [s.from, s.to, LANES.length - 1 - LANES.indexOf(s.stage)]),
       }],
       graphic: [{ type: 'text' as const, left: 46, top: 0,
-        style: { text: startLabel, fill: t.muted, fontSize: base.axisLabel.fontSize } }],
+        style: { text: startLabel, fill: tokens.muted, fontSize: base.axisLabel.fontSize } }],
     }
   }, [segments, startLabel])
 
@@ -55,9 +57,9 @@ export function Hypnogram({ segments, startLabel, label }: {
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
-        columns: ['From', 'To', 'Stage', 'Duration'],
+        columns: [t('charts.columns.from'), t('charts.columns.to'), t('charts.columns.stage'), t('charts.columns.duration')],
         rows: segments.map((s) => [
-          formatDuration(s.from), formatDuration(s.to), STAGE_LABEL[s.stage], formatDuration(s.to - s.from),
+          formatDuration(s.from), formatDuration(s.to), t(STAGE_LABEL_KEY[s.stage]), formatDuration(s.to - s.from),
         ]),
       }} />
   )

@@ -47,6 +47,15 @@ function pairs(values: string[]): [string, string][] {
   return values.flatMap((a, i) => values.slice(i + 1).map((b) => [a, b] as [string, string]))
 }
 
+// The interaction set, added in M3a. Each one replaces a color-mix percentage that app.css had
+// tuned by eye, which chart-styling.md section 12 says tokens exist to remove. Declared above its
+// first use rather than relying on vitest deferring the describe.each factory: this is a plain
+// module-level const, and the scoping should hold regardless of collection order.
+const INTERACTION_SURFACE_KEYS = [
+  'surface-hover', 'surface-selected', 'surface-accent', 'surface-accent-hover', 'surface-disabled',
+  'surface-chosen',
+] as const satisfies readonly SemanticToken[]
+
 describe.each(THEMES)('%s palette accessibility', (theme) => {
   const chart = resolveChart(theme)
   const stages = STAGE_KEYS.map((k) => chart[k])
@@ -211,6 +220,32 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
   it('keeps the low end of the sequential scale visible as a cell rather than as bare card', () => {
     expect(deltaE(scale[0]!, s['surface-card']), 'scale-1 vs surface-card').toBeGreaterThanOrEqual(10)
   })
+
+  it.each(INTERACTION_SURFACE_KEYS)('draws %s as a surface distinct from the page', (token) => {
+    expect(deltaE(s[token], s['surface-page']), `${token} vs surface-page`).toBeGreaterThanOrEqual(3)
+  })
+
+  // Exempt from WCAG, held to the floor anyway: a control nobody can read is a worse outcome
+  // than a standard that permits it.
+  it('keeps disabled text readable against the surface it sits on', () => {
+    expect(contrast(s['text-disabled'], s['surface-disabled']), 'text-disabled vs surface-disabled')
+      .toBeGreaterThanOrEqual(3)
+  })
+
+  it('draws the accent border as a border rather than as bare surface', () => {
+    expect(deltaE(s['border-accent'], s['surface-card']), 'border-accent vs surface-card').toBeGreaterThanOrEqual(5)
+  })
+
+  // Hover has to be visible without being a second selected state.
+  it('separates hover from selected', () => {
+    expect(deltaE(s['surface-hover'], s['surface-selected']), 'surface-hover vs surface-selected').toBeGreaterThanOrEqual(3)
+  })
+
+  // border-chosen paints on surface-page: .choice and .setup-horizon's chosen button sit
+  // directly in the setup wizard column, with no card or inset between them and the page.
+  it('draws the chosen border as a border rather than as bare surface', () => {
+    expect(deltaE(s['border-chosen'], s['surface-page']), 'border-chosen vs surface-page').toBeGreaterThanOrEqual(5)
+  })
 })
 
 // The suite's coverage used to end wherever someone stopped typing token names:
@@ -222,6 +257,7 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
 describe('assertion coverage', () => {
   const ASSERTED_SEMANTIC: readonly SemanticToken[] = [
     ...SURFACE_KEYS, ...TEXT_KEYS, ...TEXT_TONE_KEYS, ...NON_TEXT_KEYS, 'border-subtle',
+    ...INTERACTION_SURFACE_KEYS, 'border-accent', 'text-disabled', 'border-chosen',
   ]
   const ASSERTED_CHART: readonly ChartToken[] = [
     ...STAGE_KEYS, ...SCALE_KEYS,

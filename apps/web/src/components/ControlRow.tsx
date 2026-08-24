@@ -1,34 +1,39 @@
+import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 
-const RANGES = ['Day', 'Week', 'Month', '3 months', 'Year'] as const
+const RANGE_KEYS = ['day', 'week', 'month', '3months', 'year'] as const
+export type RangeKey = (typeof RANGE_KEYS)[number]
 
-export function ControlRow({ range, label, sources, syncedAgo }: {
-  range: string
+export function ControlRow({ range, label, sources, syncedMinutesAgo }: {
+  range: RangeKey
   label: string
   sources: string
-  syncedAgo: string
+  syncedMinutesAgo: number
 }) {
+  const { t } = useTranslation()
   return (
     <div className="controls">
-      <div className="segmented" role="group" aria-label="Time range">
-        {RANGES.map((r) => (
-          <button key={r} type="button" className="segment" aria-pressed={r === range}>{r}</button>
+      <div className="segmented" role="group" aria-label={t('controlRow.timeRangeLabel')}>
+        {RANGE_KEYS.map((key) => (
+          <button key={key} type="button" className="segment" aria-pressed={key === range}>
+            {t(`controlRow.ranges.${key}`)}
+          </button>
         ))}
       </div>
 
       <div className="stepper">
-        <button type="button" className="icon-button" aria-label="Previous period"><Icon name="chevronLeft" /></button>
+        <button type="button" className="icon-button" aria-label={t('controlRow.previousPeriod')}><Icon name="chevronLeft" /></button>
         <span className="stepper-label">{label}</span>
-        <button type="button" className="icon-button" aria-label="Next period"><Icon name="chevronRight" /></button>
+        <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}><Icon name="chevronRight" /></button>
       </div>
 
       <div className="controls-end">
         <button type="button" className="button">
-          <Icon name="sources" />Sources<span className="button-count">{sources}</span>
+          <Icon name="sources" />{t('controlRow.sources')}<span className="button-count">{sources}</span>
         </button>
-        <button type="button" className="button"><Icon name="download" />Download raw</button>
-        <button type="button" className="button button-primary"><Icon name="sync" />Sync</button>
-        <span className="synced">Synced {syncedAgo}</span>
+        <button type="button" className="button"><Icon name="download" />{t('controlRow.downloadRaw')}</button>
+        <button type="button" className="button button-primary"><Icon name="sync" />{t('controlRow.sync')}</button>
+        <span className="synced">{t('controlRow.syncedAgo', { count: syncedMinutesAgo })}</span>
       </div>
     </div>
   )

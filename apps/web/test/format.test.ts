@@ -1,5 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import { formatDuration, formatClock, toneFor, toneOf, trend } from '../src/format.js'
+import type { Translate } from '../src/format.js'
+
+// A stub, not a real i18n instance: trend() only needs something call-shaped like `t`, and a
+// test that pins one language's prose here is the exact problem this fix exists to remove. The
+// stub is deliberately traceable rather than transparent: it names both the key and every
+// interpolation value it was called with, so a test can assert on what trend() asked for
+// without also asserting what a translator wrote back.
+function stubT(): { t: Translate, calls: [string, Record<string, unknown> | undefined][] } {
+  const calls: [string, Record<string, unknown> | undefined][] = []
+  const t: Translate = (key, options) => {
+    calls.push([key, options])
+    return `t(${key})`
+  }
+  return { t, calls }
+}
 
 describe('formatDuration', () => {
   it('rounds to whole minutes before splitting, not after', () => {
@@ -47,18 +62,24 @@ describe('tone', () => {
 })
 
 describe('trend', () => {
-  it('states the window it compared', () => {
-    const d = trend([1, 1, 1, 2, 2, 2], 'higher-is-better')
-    expect(d.basis).toBe('change is the mean of the last 3 readings against the first 3')
+  it('asks the catalogue for the window it compared, rather than baking English prose', () => {
+    // The window sizes are the fact worth stating; the sentence around them belongs to
+    // whichever catalogue `t` was resolved from, not to this function.
+    const { t, calls } = stubT()
+    const d = trend(t, [1, 1, 1, 2, 2, 2], 'higher-is-better')
+    expect(calls).toEqual([['common.trendBasis', { recent: 3, earlier: 3 }]])
+    expect(d.basis).toBe('t(common.trendBasis)')
   })
 
   it('reports direction and tone as separate facts', () => {
-    expect(trend([2, 2, 1, 1], 'lower-is-better')).toMatchObject({ dir: 'down', tone: 'good' })
-    expect(trend([2, 2, 1, 1], 'higher-is-better')).toMatchObject({ dir: 'down', tone: 'bad' })
-    expect(trend([2, 2, 1, 1])).toMatchObject({ dir: 'down', tone: 'neutral' })
+    const { t } = stubT()
+    expect(trend(t, [2, 2, 1, 1], 'lower-is-better')).toMatchObject({ dir: 'down', tone: 'good' })
+    expect(trend(t, [2, 2, 1, 1], 'higher-is-better')).toMatchObject({ dir: 'down', tone: 'bad' })
+    expect(trend(t, [2, 2, 1, 1])).toMatchObject({ dir: 'down', tone: 'neutral' })
   })
 
   it('calls a swing under one per cent flat', () => {
-    expect(trend([100, 100, 100, 100.5]).dir).toBe('flat')
+    const { t } = stubT()
+    expect(trend(t, [100, 100, 100, 100.5]).dir).toBe('flat')
   })
 })

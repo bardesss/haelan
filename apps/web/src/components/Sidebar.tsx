@@ -1,41 +1,60 @@
+import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
+import { Link } from '../router.js'
 
 const GROUPS = [
-  { label: 'Overview', items: [['dashboard', 'Dashboard']] },
-  { label: 'Tracking', items: [['activity', 'Activity'], ['sleep', 'Sleep'], ['recovery', 'Recovery'], ['health', 'Health'], ['weight', 'Weight'], ['nutrition', 'Nutrition'], ['notes', 'Notes']] },
-  { label: 'Resources', items: [['docs', 'Docs'], ['changelog', 'Changelog']] },
+  { labelKey: 'sidebar.groups.overview', items: [{ path: '/', nameKey: 'sidebar.items.dashboard' }] },
+  {
+    labelKey: 'sidebar.groups.tracking',
+    items: [
+      { path: '/activity', nameKey: 'sidebar.items.activity' },
+      { path: '/sleep', nameKey: 'sidebar.items.sleep' },
+      { path: '/recovery', nameKey: 'sidebar.items.recovery' },
+      { path: '/health', nameKey: 'sidebar.items.health' },
+      { path: '/weight', nameKey: 'sidebar.items.weight' },
+      { path: '/nutrition', nameKey: 'sidebar.items.nutrition' },
+      { path: '/notes', nameKey: 'sidebar.items.notes' },
+    ],
+  },
 ] as const
 
-export function Sidebar({ active, person, onNavigate }: {
+// A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and
+// nothing but the shell test comparing this against ROUTES keeps them that way. Exported so that
+// test can see what the rail actually links to.
+export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
+
+export function Sidebar({ active, person, onSignOut, signOutError }: {
   active: string
   person: string
-  onNavigate: (id: string) => void
+  onSignOut: () => void
+  signOutError?: string | null
 }) {
+  const { t } = useTranslation()
   return (
-    <nav className="rail" aria-label="Sections">
+    <nav className="rail" aria-label={t('sidebar.sectionsLabel')}>
+      {/* Brand name, not copy: it stays "haelan" in every language. */}
       <div className="brand">haelan</div>
-
       {GROUPS.map((g) => (
-        <div key={g.label}>
-          <div className="rail-group">{g.label}</div>
-          {g.items.map(([id, name]) => (
-            <a key={id} className="rail-item" href={`#${id}`} aria-current={active === id ? 'page' : undefined}
-               onClick={() => onNavigate(id)}>
-              <Icon name={id} />{name}
-            </a>
+        <div key={g.labelKey}>
+          <div className="rail-group">{t(g.labelKey)}</div>
+          {g.items.map((item) => (
+            <Link key={item.path} to={item.path} className="rail-item"
+                  aria-current={active === item.path ? 'page' : undefined}>
+              <Icon name={item.path === '/' ? 'dashboard' : item.path.slice(1)} />{t(item.nameKey)}
+            </Link>
           ))}
         </div>
       ))}
-
       <div className="rail-foot">
-        <a className="rail-item" href="#account" aria-current={active === 'account' ? 'page' : undefined}
-           onClick={() => onNavigate('account')}>
+        {/* Not a Link: the account page it would point to returns in M3e. A dead link here would
+            be a ninth way to reach a blank screen. */}
+        <div className="rail-person">
           <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
-        </a>
-        <a className="rail-item" href="#settings" aria-current={active === 'settings' ? 'page' : undefined}
-           onClick={() => onNavigate('settings')}>
-          <Icon name="settings" />Settings
-        </a>
+        </div>
+        {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
+        <button type="button" className="button" onClick={onSignOut}>
+          <Icon name="signOut" />{t('shell.signOut')}
+        </button>
       </div>
     </nav>
   )

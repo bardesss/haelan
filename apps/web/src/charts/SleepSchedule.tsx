@@ -6,6 +6,7 @@ import type { ChartTokens } from './tokens.js'
 import { nightMark, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
+import { useTranslation } from '../i18n/index.js'
 
 // Noon to noon: shifted rather than widened, so naps at 13:00 fit without compressing the sleep band.
 export const AXIS_MIN = 12 * 60
@@ -15,8 +16,10 @@ export const AXIS_MAX = 36 * 60
 export const NO_DATA_Y = 35 * 60
 
 export function SleepSchedule({ nights, label }: { nights: Night[]; label: string }) {
-  const build = useCallback((t: ChartTokens): EChartsOption => {
-    const base = chartBase(t)
+  const { t } = useTranslation()
+
+  const build = useCallback((tokens: ChartTokens): EChartsOption => {
+    const base = chartBase(tokens)
     return {
       grid: base.grid({ left: 40 }),
       xAxis: { type: 'category' as const, data: nights.map((n) => n.date.slice(8)),
@@ -29,7 +32,7 @@ export function SleepSchedule({ nights, label }: { nights: Night[]; label: strin
           renderItem: (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) => {
             const night = nights[params.dataIndex]
             if (!night) return { type: 'group' as const, children: [] }
-            const mark = nightMark(night, t)
+            const mark = nightMark(night, tokens)
             // Missing bed/wake is absence, not a zero-length span: draw a no-data mark so the gap stays visible.
             if (mark.kind === 'no-data') {
               const point = api.coord([Number(api.value(0)), NO_DATA_Y])
@@ -49,7 +52,7 @@ export function SleepSchedule({ nights, label }: { nights: Night[]; label: strin
           },
           encode: { x: 0 },
           data: nights.map((n, i) => [i, n.bed]) },
-        { type: 'scatter' as const, symbolSize: SYMBOL.nap, itemStyle: { color: t.stageAwake },
+        { type: 'scatter' as const, symbolSize: SYMBOL.nap, itemStyle: { color: tokens.stageAwake },
           data: nights.flatMap((n, i) => n.naps.map((nap) => [i, nap])) },
       ],
     }
@@ -59,12 +62,12 @@ export function SleepSchedule({ nights, label }: { nights: Night[]; label: strin
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
-        columns: ['Night', 'To bed', 'Woke', 'Naps'],
+        columns: [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke'), t('charts.columns.naps')],
         rows: nights.map((n) => [
           n.date,
-          n.bed === null ? 'no reading' : formatClock(n.bed),
-          n.wake === null ? 'no reading' : formatClock(n.wake),
-          n.naps.length === 0 ? 'none' : n.naps.map((nap) => formatClock(nap)).join(', '),
+          n.bed === null ? t('charts.absence.noReading') : formatClock(n.bed),
+          n.wake === null ? t('charts.absence.noReading') : formatClock(n.wake),
+          n.naps.length === 0 ? t('charts.absence.none') : n.naps.map((nap) => formatClock(nap)).join(', '),
         ]),
       }} />
   )
