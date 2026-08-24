@@ -6,6 +6,12 @@ export function stageColor(stage: Stage, t: ChartTokens): string {
   return { deep: t.stageDeep, light: t.stageLight, rem: t.stageRem, awake: t.stageAwake }[stage]
 }
 
+// The one place a stage maps to its catalogue key, shared by Sleep.tsx and Hypnogram.tsx so a
+// second, English-only set of stage names never gets invented next to this one.
+export const STAGE_LABEL_KEY: Record<Stage, string> = {
+  deep: 'sleep.stage.deep', light: 'sleep.stage.light', rem: 'sleep.stage.rem', awake: 'sleep.stage.awake',
+}
+
 export type StageMark = { fill: string; outline: string; outlineWidth: number }
 
 // Stage marks are isolated: a hypnogram bar is centred in its lane at 45% of the

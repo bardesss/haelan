@@ -123,6 +123,40 @@
       "summary": "{{count}} van {{worn}} gedragen nachten registreerden nul minuten slaap: {{dates}}."
     }
   },
+  "charts": {
+    "columns": {
+      "date": "Datum",
+      "weekday": "Weekdag",
+      "steps": "Stappen",
+      "minimum": "Minimum",
+      "mean": "Gemiddelde",
+      "maximum": "Maximum",
+      "note": "Notitie",
+      "from": "Van",
+      "to": "Tot",
+      "stage": "Fase",
+      "duration": "Duur",
+      "night": "Nacht",
+      "toBed": "Naar bed",
+      "woke": "Ontwaakt",
+      "naps": "Dutjes"
+    },
+    "weekday": {
+      "mon": "Ma",
+      "tue": "Di",
+      "wed": "Wo",
+      "thu": "Do",
+      "fri": "Vr",
+      "sat": "Za",
+      "sun": "Zo"
+    },
+    "absence": {
+      "notWorn": "niet gedragen",
+      "noReading": "geen meting",
+      "excluded": "uitgesloten",
+      "none": "geen"
+    }
+  },
   "sleep": {
     "title": "Slaap",
     "noDate": "geen datum",

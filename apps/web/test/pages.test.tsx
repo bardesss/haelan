@@ -46,6 +46,34 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     // Unworn days appear in the table alternatives as words, never as 0.
     expect(html).toMatch(/not worn|no reading/)
   })
+
+  // These two pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
+  // them look for the shape a missing translation actually takes.
+  it('renders no raw message key', () => {
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts)\.[a-zA-Z][a-zA-Z.]*\b/)
+  })
+})
+
+describe('chart tables follow the active language', () => {
+  // Every chart's accessible table used to be built from English literals regardless of the
+  // active language, which meant a Dutch screen reader user got an English table on both pages.
+  const dashboardNl = renderToStaticMarkup(<I18nProvider lng="nl"><Dashboard /></I18nProvider>)
+  const sleepNl = renderToStaticMarkup(<I18nProvider lng="nl"><Sleep /></I18nProvider>)
+
+  it('translates column headers, weekday labels and absence words', () => {
+    expect(dashboardNl).toContain('Datum')
+    expect(dashboardNl).toContain('Weekdag')
+    expect(dashboardNl).toContain('niet gedragen')
+    expect(dashboardNl).not.toContain('>Date<')
+    expect(dashboardNl).not.toContain('>Weekday<')
+    expect(dashboardNl).not.toContain('not worn')
+  })
+
+  it('translates sleep stage names through the shared sleep.stage keys, not a second set', () => {
+    expect(sleepNl).toContain('Diep')
+    expect(sleepNl).not.toContain('>Deep<')
+  })
 })
 
 describe('Dashboard specifics', () => {

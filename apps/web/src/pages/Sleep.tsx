@@ -10,11 +10,9 @@ import { july } from '../fixtures/july.js'
 import type { Stage } from '../fixtures/july.js'
 import { formatClock, formatDuration, toneFor } from '../format.js'
 import type { Delta, Translate } from '../format.js'
+import { STAGE_LABEL_KEY } from '../charts/stage.js'
 
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
-const STAGE_LABEL_KEY: Record<Stage, string> = {
-  deep: 'sleep.stage.deep', light: 'sleep.stage.light', rem: 'sleep.stage.rem', awake: 'sleep.stage.awake',
-}
 // Token names, not literal strings: a rename in chart.ts becomes a compile error, and the swatch follows theme switches via CSS inheritance.
 const STAGE_TOKEN: Record<Stage, ChartToken> = {
   deep: 'stage-deep', light: 'stage-light', rem: 'stage-rem', awake: 'stage-awake',

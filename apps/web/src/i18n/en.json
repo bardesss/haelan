@@ -123,6 +123,40 @@
       "summary": "{{count}} of {{worn}} worn nights recorded zero minutes of sleep: {{dates}}."
     }
   },
+  "charts": {
+    "columns": {
+      "date": "Date",
+      "weekday": "Weekday",
+      "steps": "Steps",
+      "minimum": "Minimum",
+      "mean": "Mean",
+      "maximum": "Maximum",
+      "note": "Note",
+      "from": "From",
+      "to": "To",
+      "stage": "Stage",
+      "duration": "Duration",
+      "night": "Night",
+      "toBed": "To bed",
+      "woke": "Woke",
+      "naps": "Naps"
+    },
+    "weekday": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "absence": {
+      "notWorn": "not worn",
+      "noReading": "no reading",
+      "excluded": "excluded",
+      "none": "none"
+    }
+  },
   "sleep": {
     "title": "Sleep",
     "noDate": "no date",

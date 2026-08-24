@@ -4,6 +4,7 @@ import { useChart } from './useChart.js'
 import { STROKE } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
+import { useTranslation } from '../i18n/index.js'
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({ values, labels, label, unit, height = 34 }: {
@@ -13,20 +14,22 @@ export function Sparkline({ values, labels, label, unit, height = 34 }: {
   unit: string
   height?: number
 }) {
-  const build = useCallback((t: ChartTokens): EChartsOption => ({
+  const { t } = useTranslation()
+
+  const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
     yAxis: { type: 'value' as const, show: false, scale: true },
     series: [{ type: 'line' as const, data: values, showSymbol: false, connectNulls: false,
-      lineStyle: { width: STROKE.sparkline, color: t.series } }],
+      lineStyle: { width: STROKE.sparkline, color: tokens.series } }],
   }), [values])
 
   const { host, style } = useChart(build, height)
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
-        columns: ['Date', unit],
-        rows: values.map((v, i) => [labels[i] ?? String(i), v ?? 'no reading']),
+        columns: [t('charts.columns.date'), unit],
+        rows: values.map((v, i) => [labels[i] ?? String(i), v ?? t('charts.absence.noReading')]),
       }} />
   )
 }

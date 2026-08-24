@@ -3,16 +3,24 @@ import type { EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { chartBase, SYMBOL } from './base.js'
 import { scaleStops, type ChartTokens } from './tokens.js'
-import { calendarLayout, WEEKDAY_LABELS } from './calendar.js'
+import { calendarLayout } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
+import { useTranslation } from '../i18n/index.js'
 import type { DayRow } from '../fixtures/july.js'
 
+// Order matches calendar.ts's weekdayIndex (Monday first); the catalogue keys underneath are
+// what actually reach the page, calendar.ts's own WEEKDAY_LABELS stays English on purpose for
+// the index-correctness test that pins it against real dates.
+const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
+
 export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: number; label: string }) {
+  const { t } = useTranslation()
   // Memoised: an unstable build identity makes useChart dispose and recreate the chart.
   const { weeks, cells } = useMemo(() => calendarLayout(days.map((d) => d.date)), [days])
+  const weekdayLabels = WEEKDAY_KEYS.map((key) => t(`charts.weekday.${key}`))
 
-  const build = useCallback((t: ChartTokens): EChartsOption => {
-    const base = chartBase(t)
+  const build = useCallback((tokens: ChartTokens): EChartsOption => {
+    const base = chartBase(tokens)
     const worn = cells.flatMap((c, i) => {
       const steps = days[i]?.steps
       return steps === null || steps === undefined ? [] : [[c.week, c.weekday, steps]]
@@ -28,34 +36,34 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
         axisLabel: { show: false }, splitArea: { show: false }, ...base.hiddenAxis,
       },
       yAxis: {
-        type: 'category' as const, data: [...WEEKDAY_LABELS],
+        type: 'category' as const, data: weekdayLabels,
         axisLabel: base.axisLabel, ...base.hiddenAxis,
       },
       // seriesIndex: visualMap applies to every series by default and would repaint the absence dots too.
-      visualMap: { min: 0, max, show: false, seriesIndex: 0, inRange: { color: scaleStops(t) } },
+      visualMap: { min: 0, max, show: false, seriesIndex: 0, inRange: { color: scaleStops(tokens) } },
       series: [
         {
           type: 'heatmap' as const,
           data: worn,
-          itemStyle: { borderRadius: 2, borderWidth: 1, borderColor: t.surface },
-          emphasis: { itemStyle: { borderColor: t.axis } },
+          itemStyle: { borderRadius: 2, borderWidth: 1, borderColor: tokens.surface },
+          emphasis: { itemStyle: { borderColor: tokens.axis } },
         },
         {
           type: 'scatter' as const,
           symbolSize: SYMBOL.noData * 2,
-          itemStyle: { color: t.noData },
+          itemStyle: { color: tokens.noData },
           data: absent,
         },
       ],
     }
-  }, [cells, days, weeks, max])
+  }, [cells, days, weeks, max, weekdayLabels])
 
   const { host, style } = useChart(build, 110)
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
-        columns: ['Date', 'Weekday', 'Steps'],
-        rows: cells.map((c, i) => [c.date, WEEKDAY_LABELS[c.weekday] ?? '', days[i]?.steps ?? 'not worn']),
+        columns: [t('charts.columns.date'), t('charts.columns.weekday'), t('charts.columns.steps')],
+        rows: cells.map((c, i) => [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.notWorn')]),
       }} />
   )
 }
