@@ -1,0 +1,15 @@
+{
+  "signIn": {
+    "title": "Inloggen",
+    "username": "Gebruikersnaam",
+    "password": "Wachtwoord",
+    "submit": "Inloggen",
+    "working": "Bezig met inloggen",
+    "failed": "Deze gebruikersnaam en dit wachtwoord horen niet bij een account op deze instantie.",
+    "unreachable": "De instantie gaf geen antwoord. Controleer of hij draait en probeer het opnieuw."
+  },
+  "shell": {
+    "signOut": "Uitloggen",
+    "sessionExpired": "Je sessie is beëindigd. Log opnieuw in om verder te gaan."
+  }
+}

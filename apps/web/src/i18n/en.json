@@ -1,0 +1,15 @@
+{
+  "signIn": {
+    "title": "Sign in",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign in",
+    "working": "Signing in",
+    "failed": "That username and password do not match an account on this instance.",
+    "unreachable": "The instance did not answer. Check that it is running and try again."
+  },
+  "shell": {
+    "signOut": "Sign out",
+    "sessionExpired": "Your session ended. Sign in again to continue."
+  }
+}
