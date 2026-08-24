@@ -6,6 +6,11 @@ const GROUPS = [
   { label: 'Tracking', items: [['/activity', 'Activity'], ['/sleep', 'Sleep'], ['/recovery', 'Recovery'], ['/health', 'Health'], ['/weight', 'Weight'], ['/nutrition', 'Nutrition'], ['/notes', 'Notes']] },
 ] as const
 
+// A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and
+// nothing but the shell test comparing this against ROUTES keeps them that way. Exported so that
+// test can see what the rail actually links to.
+export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map(([path]) => path))
+
 export function Sidebar({ active, person }: { active: string, person: string }) {
   return (
     <nav className="rail" aria-label="Sections">
