@@ -20,6 +20,13 @@ export const semantic = {
     focus: 'blue.100',
     positive: 'mint.400',
     negative: 'coral.400',
+    'surface-hover': 'slate.850',
+    'surface-selected': 'blue.950',
+    'surface-accent': 'blue.950',
+    'surface-accent-hover': 'blue.900',
+    'surface-disabled': 'slate.900',
+    'border-accent': 'blue.800',
+    'text-disabled': 'slate.600',
   },
   light: {
     'surface-page': 'slate.100',
@@ -36,6 +43,16 @@ export const semantic = {
     focus: 'blue.600',
     positive: 'mint.700',
     negative: 'coral.700',
+    'surface-hover': 'slate.200',
+    'surface-selected': 'blue.50',
+    'surface-accent': 'blue.50',
+    'surface-accent-hover': 'blue.100',
+    'surface-disabled': 'slate.200',
+    'border-accent': 'blue.200',
+    // slate.500 (the brief's value) measures 2.95:1 against surface-disabled (slate.200),
+    // under the 3:1 floor this project holds disabled text to even though WCAG exempts it.
+    // slate.600 clears it at 3.90:1 without changing surface-disabled.
+    'text-disabled': 'slate.600',
   },
 } satisfies Record<Theme, Record<string, ColorPath>>
 

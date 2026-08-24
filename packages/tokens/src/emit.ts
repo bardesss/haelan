@@ -26,6 +26,8 @@ function scales(): string[] {
     ...Object.entries(primitives.text).map(([k, v]) => `--font-size-${k}: ${v};`),
     `--font-sans: ${primitives.font.sans};`,
     `--font-mono: ${primitives.font.mono};`,
+    ...Object.entries(primitives.duration).map(([k, v]) => `--duration-${k}: ${v};`),
+    ...Object.entries(primitives.ease).map(([k, v]) => `--ease-${k}: ${v};`),
   ]
 }
 
@@ -53,6 +55,11 @@ export function emitCss(): string {
     '}\n' +
     // The explicit choice, which has to sit outside the media query or it could never win on a
     // dark-mode machine.
-    block("[data-theme='light']", light)
+    block("[data-theme='light']", light) +
+    // Zero rather than absent, so a rule reading the variable still resolves. ECharts is handled
+    // separately in charts/base.ts; this covers CSS transitions.
+    '@media (prefers-reduced-motion: reduce) {\n' +
+    block(':root', ['--duration-fast: 0ms;', '--duration-slow: 0ms;'], '  ') +
+    '}\n'
   )
 }

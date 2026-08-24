@@ -1,12 +1,14 @@
 // Layer one: raw scales with no meaning attached (meaning lives in semantic.ts, chart.ts). Numbers rise as measured Lab lightness falls (layering.test.ts asserts this).
 export const primitives = {
   blue: {
+    50: '#E8F0FE',
     100: '#B3E4FA',
     200: '#BFD5F9',
     500: '#4F8FF7',
     600: '#2376E9',
     800: '#3730A3',
     900: '#1E2A78',
+    950: '#152138',
   },
   // Shared sequential ramp, even in perceived lightness; each theme reads it in the direction that suits its own page (see chart.ts).
   azure: {
@@ -41,6 +43,8 @@ export const primitives = {
   },
   space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px', 6: '24px' },
   radius: { sm: '3px', md: '8px', lg: '11px', xl: '14px' },
+  duration: { fast: '120ms', slow: '240ms' },
+  ease: { standard: 'cubic-bezier(0.2, 0, 0, 1)' },
   text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px' },
   font: {
     sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
