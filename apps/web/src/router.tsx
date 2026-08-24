@@ -13,7 +13,11 @@ export function routeParams(pattern: string, path: string): Record<string, strin
     if (segment.startsWith(':')) {
       const value = got[at]!
       if (value === '') return null
-      params[segment.slice(1)] = decodeURIComponent(value)
+      try {
+        params[segment.slice(1)] = decodeURIComponent(value)
+      } catch {
+        return null
+      }
       continue
     }
     if (segment !== got[at]) return null

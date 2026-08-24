@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchRoute, routeParams, withQuery } from '../src/router.js'
+import { matchRoute, routeParams, withQuery, readQuery } from '../src/router.js'
 
 describe('matchRoute', () => {
   it('matches an exact path', () => {
@@ -39,6 +39,29 @@ describe('route parameters', () => {
 
   it('ignores the query string, as the exact matcher already does', () => {
     expect(routeParams('/p/:personId/sleep', '/p/abc/sleep?range=week')).toEqual({ personId: 'abc' })
+  })
+
+  it('returns null when a parameter segment is empty', () => {
+    expect(routeParams('/p/:id', '/p/')).toBeNull()
+  })
+
+  it('does not crash on malformed percent-encoding, treating it as a non-match', () => {
+    expect(routeParams('/p/:id', '/p/%ZZ')).toBeNull()
+    expect(matchRoute('/p/:id', '/p/%ZZ')).toBe(false)
+  })
+})
+
+describe('readQuery', () => {
+  it('parses a query string with a leading question mark', () => {
+    const params = readQuery('?range=week&date=2026-08-22')
+    expect(params.get('range')).toBe('week')
+    expect(params.get('date')).toBe('2026-08-22')
+  })
+
+  it('parses a query string without a leading question mark', () => {
+    const params = readQuery('range=week&date=2026-08-22')
+    expect(params.get('range')).toBe('week')
+    expect(params.get('date')).toBe('2026-08-22')
   })
 })
 
