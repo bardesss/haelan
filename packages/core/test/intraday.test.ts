@@ -12,16 +12,19 @@ let test: TestDatabase
 beforeEach(() => {
   test = createTestDatabase()
   seedPerson(test.db, 'p1')
-  test.db.insert(sources).values({
-    id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch',
-    kind: 'device', createdAtMs: 0,
-  }).run()
+  for (const id of ['watch', 'phone']) {
+    test.db.insert(sources).values({
+      id, personId: 'p1', externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
+    }).run()
+  }
 })
 afterEach(() => test.cleanup())
 
-const insert = (o: { utcMs: number, agg: SampleAgg, value: number, tzOffsetMinutes?: number }) =>
+const insert = (o: {
+  utcMs: number, agg: SampleAgg, value: number, tzOffsetMinutes?: number, sourceId?: string,
+}) =>
   test.db.insert(samples).values({
-    personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: o.utcMs,
+    personId: 'p1', sourceId: o.sourceId ?? 'watch', metric: 'heart_rate', utcMs: o.utcMs,
     tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET, agg: o.agg, value: o.value, n: 1,
     rawPayloadId: null,
   }).run()
@@ -77,5 +80,30 @@ describe('readIntraday', () => {
     const out = readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE })
     expect(out.points).toEqual([])
     expect(out.reduction).toBeNull()
+  })
+
+  // Two devices can report the same metric at the same minute. Pivoting on utcMs alone would let
+  // whichever row the query happened to return last win each of min, mean and max independently,
+  // which is not a reading of anything. Source selection belongs to the derive layer's priority
+  // list, not to a second heuristic living in a reader.
+  it('keeps two sources at the same minute as two points, not one blended point', () => {
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 62, sourceId: 'watch' })
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 90, sourceId: 'phone' })
+
+    const out = readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE })
+    expect(out.points).toHaveLength(2)
+    expect(out.points.map((p) => ({ sourceId: p.sourceId, mean: p.mean }))
+      .sort((a, b) => a.sourceId.localeCompare(b.sourceId)))
+      .toEqual([{ sourceId: 'phone', mean: 90 }, { sourceId: 'watch', mean: 62 }])
+  })
+
+  it('filters to the requested source rather than every device reporting that minute', () => {
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 62, sourceId: 'watch' })
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 90, sourceId: 'phone' })
+
+    const out = readIntraday(test.db, {
+      personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE, sourceId: 'watch',
+    })
+    expect(out.points).toEqual([expect.objectContaining({ sourceId: 'watch', mean: 62 })])
   })
 })
