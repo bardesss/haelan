@@ -28,7 +28,7 @@ const insertDaily = (o: {
     value: o.value,
     coverage: o.coverage === undefined ? 0.9 : o.coverage,
     sourceMix: null,
-    derivationVersion: 3,
+    derivationVersion: 4,
   }).run()
 }
 

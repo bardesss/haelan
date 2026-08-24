@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from 'vitest'
 import { and, eq } from 'drizzle-orm'
 import { deriveDayInto } from '../src/derive/deriveDay.ts'
-import { daily } from '../src/db/schema/index.ts'
+import { daily, samples } from '../src/db/schema/index.ts'
 import { priorityFrom } from '../src/derive/priority.ts'
 import { DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
+import { downsampleToMinute } from '../src/api/downsample.ts'
+import type { SampleRow } from '../src/api/mapSamples.ts'
 
 import { createTestDatabase, seedDerivableDay } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -41,6 +43,38 @@ describe('deriveDayInto', () => {
     const rows = db.select().from(daily)
       .where(and(eq(daily.personId, personId), eq(daily.localDate, localDate))).all()
     expect(rows).toHaveLength(written)
+  })
+
+  // The composition this pins: mapWindowSamples' downsampler is what emits the count row, and
+  // rollUpDay's count aggregate is what a day rolls it up into. Neither layer's own tests cross
+  // into the other, so nothing before this failed if the two stopped fitting together, whether
+  // the daily count aggregate stopped reading the downsampled agg or the downsampler stopped
+  // emitting it.
+  test('a day of downsampled heart rate samples rolls up to a daily count row', () => {
+    const { db, personId, localDate } = seedDay()
+
+    const readingAt = (utcMs: number, bpm: number): SampleRow => ({
+      personId, sourceId: 'watch', metric: 'heart_rate',
+      utcMs, tzOffsetMinutes: 0, agg: 'raw', value: bpm, n: 1, rawPayloadId: 'r1',
+    })
+    const minuteStart = Date.parse(`${localDate}T10:00:00Z`)
+    const readings = [
+      readingAt(minuteStart, 60), readingAt(minuteStart + 2_000, 61), readingAt(minuteStart + 4_000, 62),
+      readingAt(minuteStart + 60_000, 70), readingAt(minuteStart + 62_000, 71),
+    ]
+    const downsampled = downsampleToMinute(readings)
+
+    // rawPayloadId is nulled rather than kept: nothing in this test archives a payload for it to
+    // reference, and the foreign key exists precisely to catch a row claiming one that is not there.
+    for (const row of downsampled) db.insert(samples).values({ ...row, rawPayloadId: null }).run()
+
+    db.transaction((tx) => deriveDayInto(tx, { personId, localDate, ...tuning }))
+
+    const countRow = db.select().from(daily).where(and(
+      eq(daily.personId, personId), eq(daily.localDate, localDate),
+      eq(daily.metric, 'heart_rate'), eq(daily.agg, 'count'),
+    )).get()
+    expect(countRow?.value).toBe(readings.length)
   })
 
   test('a caller rolling back takes the derived rows with it', () => {

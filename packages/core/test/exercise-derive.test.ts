@@ -60,6 +60,20 @@ describe('deriveExerciseDay', () => {
     expect(rows.find((r) => r.metric === 'workout_count')?.value).toBe(1)
   })
 
+  // Grouped sessions count once, and the group's own primary supplies the duration. Priority
+  // decides the primary, not length: a device outranks an app regardless of which one ran longer,
+  // so a shorter watch session beating a longer phone one here is the point, not an accident.
+  // Summing both or taking the longer one would each pass every other test in this file while
+  // answering this one wrong.
+  it('gives the group\'s duration to the primary chosen by priority, not the longer session', () => {
+    const rows = derive([
+      session({ id: 'watch-run', sourceId: 'watch', startHour: 7, endHour: 7.5 }),
+      session({ id: 'phone-run', sourceId: 'phone', startHour: 7, endHour: 8.5 }),
+    ])
+    expect(rows.find((r) => r.metric === 'workout_count')?.value).toBe(1)
+    expect(rows.find((r) => r.metric === 'workout_minutes')?.value).toBe(30)
+  })
+
   it('files every row under the source it was told, with no coverage or mix', () => {
     const rows = derive([session({ id: 'a', startHour: 7, endHour: 8 })])
     expect(rows.every((r) => r.source === 'watch')).toBe(true)

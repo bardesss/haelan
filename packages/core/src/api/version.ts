@@ -10,5 +10,7 @@
  * 1: M2e, the first version recorded. describe() widened during M1 to take an application
  *    package name and the manual recording flag into a source's identity, and the sources rows
  *    written before that widening are the reason this milestone exists.
+ * 2: M3b's downsampler emits a fourth row per minute carrying that minute's reading tally, so a
+ *    person's tier 2 built under 1 has no count rows for heart rate and cannot roll one up.
  */
-export const MAPPING_VERSION = 1
+export const MAPPING_VERSION = 2

@@ -22,7 +22,7 @@ beforeEach(() => {
     for (const [personId, value] of [['alice', 1000], ['bart', 9000]] as const) {
       test.db.insert(daily).values({
         personId, localDate, metric: 'steps', agg: 'sum', source: 'merged',
-        value, coverage: 0.9, sourceMix: null, derivationVersion: 3,
+        value, coverage: 0.9, sourceMix: null, derivationVersion: 4,
       }).run()
     }
   }
