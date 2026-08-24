@@ -124,7 +124,16 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
       id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs,
     })),
     personOverrides,
-  )
+  ).map((kept) => {
+    const row = exerciseRows.find((r) => r.id === kept.id)!
+    return {
+      id: row.id,
+      sourceId: row.sourceId,
+      startMs: row.startMs,
+      endMs: row.endMs,
+      startOffsetMinutes: row.startOffsetMinutes,
+    }
+  })
 
   const perSourceExercise = [...new Set(exerciseSessions.map((s) => s.sourceId))].flatMap((source) =>
     deriveExerciseDay({

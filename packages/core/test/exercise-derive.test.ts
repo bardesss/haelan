@@ -5,6 +5,7 @@ import { priorityFrom } from '../src/derive/priority.ts'
 import type { SourceFacts } from '../src/derive/priority.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
+import { MERGED_SOURCE } from '../src/derive/rollup.ts'
 
 const H = 3_600_000
 const LOCAL_DATE = '2026-08-22'
@@ -16,17 +17,29 @@ const SOURCES: SourceFacts[] = [
 ]
 const PRIORITY = priorityFrom({ lists: new Map(), sources: SOURCES })
 
-const session = (o: { id: string, startHour: number, endHour: number, sourceId?: string }): ExerciseSessionLike => ({
+const session = (o: {
+  id: string, startHour: number, endHour: number, sourceId?: string, startOffsetMinutes?: number,
+}): ExerciseSessionLike => ({
   id: o.id,
   sourceId: o.sourceId ?? 'watch',
   startMs: MIDNIGHT + o.startHour * H,
   endMs: MIDNIGHT + o.endHour * H,
+  startOffsetMinutes: o.startOffsetMinutes ?? 0,
 })
 
 const derive = (sessions: ExerciseSessionLike[]) => deriveExerciseDay({
   personId: 'p1',
   localDate: LOCAL_DATE,
   source: 'watch',
+  sessions,
+  priority: PRIORITY,
+  overlapRatio: DEFAULT_OVERLAP_RATIO,
+})
+
+const deriveMerged = (sessions: ExerciseSessionLike[]) => deriveExerciseDay({
+  personId: 'p1',
+  localDate: LOCAL_DATE,
+  source: MERGED_SOURCE,
   sessions,
   priority: PRIORITY,
   overlapRatio: DEFAULT_OVERLAP_RATIO,
@@ -81,5 +94,37 @@ describe('deriveExerciseDay', () => {
     expect(rows.every((r) => r.sourceMix === null)).toBe(true)
     expect(rows.every((r) => r.derivationVersion === DERIVATION_VERSION)).toBe(true)
     expect(rows.every((r) => r.localDate === LOCAL_DATE)).toBe(true)
+  })
+
+  // The schema documents source_mix as written whenever source is merged, and sleepMerge.ts
+  // honours that. deriveExerciseDay hardcoded null for both calls, so a merged workout_minutes
+  // of 90 that was 60 from the watch plus 30 from the phone carried nothing recording that split.
+  describe('the merged row\'s sourceMix', () => {
+    it('names the one source a merged row drew on when nothing else recorded that day', () => {
+      const rows = deriveMerged([session({ id: 'a', sourceId: 'watch', startHour: 7, endHour: 8 })])
+      const mix = JSON.parse(rows.find((r) => r.metric === 'workout_count')!.sourceMix!)
+      expect(mix).toEqual([{ source: 'watch', hours: 1 }])
+    })
+
+    it('names every source across more than one workout, following sleepMerge\'s own encoding', () => {
+      const rows = deriveMerged([
+        // Same event, watch and phone both recorded it: priority picks the device, so only
+        // watch's hour counts here.
+        session({ id: 'watch-run', sourceId: 'watch', startHour: 7, endHour: 8 }),
+        session({ id: 'phone-run', sourceId: 'phone', startHour: 7, endHour: 8 }),
+        // A separate event only the phone recorded.
+        session({ id: 'phone-solo', sourceId: 'phone', startHour: 18, endHour: 18.5 }),
+      ])
+      const mix = JSON.parse(rows.find((r) => r.metric === 'workout_count')!.sourceMix!)
+      // encodeMix orders by hours descending then source ascending; both sources won one hour
+      // here, so the tie falls to 'phone' before 'watch', exactly as encodeMix's own doc comment
+      // says it will.
+      expect(mix).toEqual([{ source: 'phone', hours: 1 }, { source: 'watch', hours: 1 }])
+    })
+
+    it('stays null on a per source row, which has no mix of its own', () => {
+      const rows = derive([session({ id: 'a', startHour: 7, endHour: 8 })])
+      expect(rows.every((r) => r.sourceMix === null)).toBe(true)
+    })
   })
 })

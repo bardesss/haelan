@@ -5,9 +5,7 @@ import { encodeMix } from './merge.ts'
 import { MERGED_SOURCE } from './rollup.ts'
 import type { DailyRow } from './rollup.ts'
 import type { Priority } from './priority.ts'
-
-const MINUTE_MS = 60_000
-const HOUR_MS = 3_600_000
+import { absoluteHourOf } from './localDay.ts'
 
 // The night and the nap metrics are computed from disjoint sessions, so a source that only ever
 // contributed a nap must not be named on the night's rows, and the reverse.
@@ -71,12 +69,6 @@ export function mergeSleepDay(input: {
   return rows.map((row) => ({ ...row, sourceMix: NAP_METRICS.has(row.metric) ? napMix : nightMix }))
 }
 
-/** The absolute hour an instant falls in, shifted by the session's own offset first, so a night
- * crossing midnight cannot collide with itself the way a day-relative hour label would. */
-function bucketOf(utcMs: number, offsetMinutes: number): number {
-  return Math.floor((utcMs + offsetMinutes * MINUTE_MS) / HOUR_MS)
-}
-
 /**
  * The `daily.source_mix` column means "how many of the day's hours this source won" everywhere
  * else it is written, counted by mergeDay as distinct local hour buckets. A merged night's mix
@@ -87,8 +79,8 @@ function mixOf(sessions: readonly SleepSessionLike[]): string | null {
   const bucketsBySource = new Map<string, Set<number>>()
   for (const session of sessions) {
     // endMs - 1 keeps a session that ends exactly on the hour out of the bucket after it.
-    const from = bucketOf(session.startMs, session.startOffsetMinutes)
-    const to = bucketOf(session.endMs - 1, session.startOffsetMinutes)
+    const from = absoluteHourOf(session.startMs, session.startOffsetMinutes)
+    const to = absoluteHourOf(session.endMs - 1, session.startOffsetMinutes)
     let buckets = bucketsBySource.get(session.sourceId)
     if (!buckets) { buckets = new Set(); bucketsBySource.set(session.sourceId, buckets) }
     for (let bucket = from; bucket <= to; bucket += 1) buckets.add(bucket)

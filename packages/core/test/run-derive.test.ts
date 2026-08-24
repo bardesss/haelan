@@ -58,7 +58,7 @@ const insertSleep = (o: {
   }).run()
 }
 
-const sleepValue = (metric: string, source = 'merged') =>
+const dailyValue = (metric: string, source = 'merged') =>
   dailyRows().find((r) => r.metric === metric && r.source === source)?.value
 
 const insertExercise = (o: { id: string, sourceId?: string, startHour: number, endHour: number }) => {
@@ -302,8 +302,8 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(sleepValue('sleep_in_bed_minutes', 'watch')).toBe(480)
-    expect(sleepValue('sleep_in_bed_minutes', 'merged')).toBe(480)
+    expect(dailyValue('sleep_in_bed_minutes', 'watch')).toBe(480)
+    expect(dailyValue('sleep_in_bed_minutes', 'merged')).toBe(480)
   })
 
   it('assembles a night the watch split in two', () => {
@@ -314,8 +314,8 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(sleepValue('sleep_in_bed_minutes', 'merged')).toBe(480)
-    expect(sleepValue('sleep_nap_count', 'merged')).toBe(0)
+    expect(dailyValue('sleep_in_bed_minutes', 'merged')).toBe(480)
+    expect(dailyValue('sleep_nap_count', 'merged')).toBe(0)
   })
 
   it('excludes a session an override threw out, and the night shrinks', () => {
@@ -327,8 +327,8 @@ describe('runDerive', () => {
     })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(sleepValue('sleep_nap_count', 'merged')).toBe(0)
-    expect(sleepValue('sleep_in_bed_minutes', 'merged')).toBe(480)
+    expect(dailyValue('sleep_nap_count', 'merged')).toBe(0)
+    expect(dailyValue('sleep_in_bed_minutes', 'merged')).toBe(480)
   })
 
   it('replaces sleep rows wholesale, so a stale night cannot outlive its sessions', () => {
@@ -347,10 +347,16 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(sleepValue('workout_count', 'watch')).toBe(1)
-    expect(sleepValue('workout_minutes', 'watch')).toBe(60)
-    expect(sleepValue('workout_count', 'merged')).toBe(1)
-    expect(sleepValue('workout_minutes', 'merged')).toBe(60)
+    expect(dailyValue('workout_count', 'watch')).toBe(1)
+    expect(dailyValue('workout_minutes', 'watch')).toBe(60)
+    expect(dailyValue('workout_count', 'merged')).toBe(1)
+    expect(dailyValue('workout_minutes', 'merged')).toBe(60)
+    // The per source row has nothing to be inspected against; the merged row is the one the
+    // schema promises a mix on.
+    expect(dailyRows().find((r) => r.metric === 'workout_count' && r.source === 'watch')?.sourceMix)
+      .toBeNull()
+    expect(dailyRows().find((r) => r.metric === 'workout_count' && r.source === 'merged')?.sourceMix)
+      .toBe('[{"source":"watch","hours":1}]')
   })
 
   it('writes no workout rows at all for a day with no exercise sessions', () => {
@@ -369,9 +375,9 @@ describe('runDerive', () => {
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(sleepValue('workout_count', 'watch')).toBe(1)
-    expect(sleepValue('workout_count', 'phone')).toBe(1)
-    expect(sleepValue('workout_count', 'merged')).toBe(1)
+    expect(dailyValue('workout_count', 'watch')).toBe(1)
+    expect(dailyValue('workout_count', 'phone')).toBe(1)
+    expect(dailyValue('workout_count', 'merged')).toBe(1)
   })
 
   it('excludes a session an override threw out, and the workout count shrinks', () => {
@@ -383,7 +389,7 @@ describe('runDerive', () => {
     })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
-    expect(sleepValue('workout_count', 'merged')).toBe(1)
+    expect(dailyValue('workout_count', 'merged')).toBe(1)
   })
 
   it('replaces workout rows wholesale, so a stale count cannot outlive its sessions', () => {
