@@ -64,6 +64,13 @@
       "when": 1787589551656,
       "tag": "0008_careful_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1787600444450,
+      "tag": "0009_silky_black_widow",
+      "breakpoints": true
     }
   ]
 }

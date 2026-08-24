@@ -85,4 +85,7 @@ export const daily = sqliteTable('daily', {
 }, (t) => [
   unique('daily_natural').on(t.personId, t.localDate, t.metric, t.agg, t.source),
   index('daily_person_metric_date').on(t.personId, t.metric, t.localDate),
+  // A future change feed reads "what changed for this person since a moment", exactly the shape
+  // WHERE person_id = ? AND updated_at_ms > ? scans, which no existing index covers.
+  index('daily_person_updated').on(t.personId, t.updatedAtMs),
 ])

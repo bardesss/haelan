@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
-import { samples, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
 import { samplePoint, sleepPoint, dailyRollupBody, body } from '../src/testing/payloads.ts'
 
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
@@ -454,5 +454,30 @@ describe('replayPerson', () => {
     }))
 
     expect(counts.localDates).toEqual(['2026-08-01', '2026-08-05', '2026-08-18'])
+  })
+
+  // The rebuild's own daily row insert site. Every other insert site stamps updated_at_ms; this
+  // one and runRollupJob's write path did not, and the oldest days a household carries are
+  // commonly a provider row with no samples underneath at all, so those rows sat permanently
+  // outside the change feed the column exists for.
+  test('stamps a replayed provider row with the clock it was given', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'total-calories',
+      requestParams: { range: { start: {}, end: {} } },
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: rollupBody('2026-08-01', 2100),
+    })
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1_700_000_000_000,
+    }))
+
+    const rows = db.select().from(daily).where(eq(daily.personId, 'p1')).all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.updatedAtMs).toBe(1_700_000_000_000)
   })
 })
