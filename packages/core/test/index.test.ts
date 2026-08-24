@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import * as core from '../src/index.ts'
+import type {
+  IntradayPoint, Night, NightSegment, WorkoutSession, TrendPoint, Thinned,
+} from '../src/index.ts'
 
 // Every other test imports by relative path, so this barrel is the package's only integration
 // point with server, mcp, cli and web. Nothing else fails if a line is deleted from it.
@@ -239,6 +242,52 @@ describe('package barrel', () => {
       expect(typeof core.comparePeriods).toBe('function')
       expect(typeof core.INSIGHT_MIN_DAY_FRACTION).toBe('number')
       expect(typeof core.INSIGHT_MIN_COVERAGE).toBe('number')
+    })
+  })
+
+  describe('M3b1: the trend, and the four bound readers on PersonQuery', () => {
+    // Each of these is a type with nothing to call at runtime, so the assertion behind the export
+    // is that a value PersonQuery actually returns is assignable to it: if the barrel dropped one
+    // or the shape drifted from what the reader produces, this fails to typecheck rather than
+    // silently passing with no assertion behind it at all.
+    it('is callable, not merely present: every new reader returns the shape its export promises', () => {
+      const test = core.createTestDatabase()
+      try {
+        core.seedPerson(test.db, 'p1')
+        test.db.insert(core.schema.sources).values({
+          id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch',
+          kind: 'device', createdAtMs: 0,
+        }).run()
+        test.db.insert(core.schema.samples).values({
+          personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
+          utcMs: Date.UTC(2026, 7, 1, 9, 0), tzOffsetMinutes: 0, agg: 'mean', value: 60,
+          n: 1, rawPayloadId: null,
+        }).run()
+        test.db.insert(core.schema.sessions).values({
+          id: 'night', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'night',
+          startMs: 0, startOffsetMinutes: 0, endMs: 1000, endOffsetMinutes: 0,
+          localDate: '2026-08-01', attrs: '{}', rawPayloadId: null,
+        }).run()
+
+        const query = new core.PersonQuery(test.db, 'p1')
+
+        const intraday: { points: IntradayPoint[], reduction: Thinned<IntradayPoint>['reduction'] } =
+          query.intraday({ metric: 'heart_rate', localDate: '2026-08-01' })
+        expect(intraday.points).toHaveLength(1)
+
+        const nights: Night[] = query.sleepNights({ from: '2026-08-01', to: '2026-08-01' })
+        expect(nights).toHaveLength(1)
+        const segments: NightSegment[] = nights[0]!.segments
+        expect(segments).toEqual([])
+
+        const sessions: WorkoutSession[] = query.sessions({ kind: 'sleep', from: '2026-08-01', to: '2026-08-01' })
+        expect(sessions.map((s) => s.id)).toEqual(['night'])
+
+        const trend: TrendPoint[] = query.trend({
+          metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01',
+        })
+        expect(trend).toEqual([])
+      } finally { test.cleanup() }
     })
   })
 

@@ -13,6 +13,14 @@ import { coverageIsMeaningful } from './coverageSignal.ts'
 import { comparePeriods as comparePeriodPoints, INSIGHT_MIN_COVERAGE } from './insights.ts'
 import type { Insight, PeriodPoint } from './insights.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
+import { thin } from './downsample.ts'
+import { readIntraday } from './intraday.ts'
+import { readSleepNights } from './sleepNights.ts'
+import type { Night } from './sleepNights.ts'
+import { readSessions } from './sessions.ts'
+import type { WorkoutSession } from './sessions.ts'
+import { trendOf } from './trend.ts'
+import type { TrendPoint } from './trend.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -62,6 +70,7 @@ export class PersonQuery {
     from: string
     to: string
     source?: string
+    points?: number
   }): DailyPoint[] {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
@@ -87,7 +96,18 @@ export class PersonQuery {
       isNotNull(daily.value),
     )).orderBy(asc(daily.localDate)).all() as DailyPoint[]
 
-    return source === undefined ? preferMerged(rows) : rows
+    const result = source === undefined ? preferMerged(rows) : rows
+    if (input.points === undefined) return result
+
+    // Daily rows are evenly spaced by construction, one per local date, so the index is the
+    // correct x to thin on. Parsing each localDate back into an instant would buy nothing and
+    // add a timezone question this series does not have.
+    const indexed = result.map((point, index) => ({ index, point }))
+    return thin(indexed, input.points, {
+      method: 'lttb',
+      x: (entry) => entry.index,
+      y: (entry) => entry.point.value,
+    }).points.map((entry) => entry.point)
   }
 
   /**
@@ -108,6 +128,7 @@ export class PersonQuery {
     requireDate('on', input.on)
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
+    requirePositiveInteger('windowDays', windowDays)
     const to = shiftLocalDate(input.on, -1)
     const from = shiftLocalDate(to, -(windowDays - 1))
     const points = this.series({
@@ -169,6 +190,84 @@ export class PersonQuery {
       previousRange: { from: previousFrom, to: previousTo },
     }
   }
+
+  /**
+   * One day of per-minute samples for a metric, pivoted onto one row per minute per source and
+   * thinned for a chart. See `readIntraday` for why source is never chosen for the caller.
+   */
+  intraday(input: {
+    metric: string
+    localDate: string
+    points?: number
+    sourceId?: string
+  }): ReturnType<typeof readIntraday> {
+    requireDate('localDate', input.localDate)
+    return readIntraday(this.#db, {
+      personId: this.#personId,
+      metric: input.metric,
+      localDate: input.localDate,
+      points: input.points,
+      sourceId: input.sourceId,
+    })
+  }
+
+  /** The person's sleep nights in a local date range. See `readSleepNights` for the grouping. */
+  sleepNights(input: {
+    from: string
+    to: string
+    sourceId?: string
+  }): Night[] {
+    requireRange(input.from, input.to)
+    return readSleepNights(this.#db, {
+      personId: this.#personId,
+      from: input.from,
+      to: input.to,
+      sourceId: input.sourceId,
+    })
+  }
+
+  /** Sessions of one kind in a local date range. See `readSessions` for why kind is load bearing. */
+  sessions(input: {
+    kind: 'sleep' | 'exercise'
+    from: string
+    to: string
+  }): WorkoutSession[] {
+    requireRange(input.from, input.to)
+    return readSessions(this.#db, {
+      personId: this.#personId,
+      kind: input.kind,
+      from: input.from,
+      to: input.to,
+    })
+  }
+
+  /**
+   * A smoothed line over the daily series. Days with no row are absent from the input to
+   * `trendOf` rather than zero, the same treatment `series` already gives a day with no data.
+   */
+  trend(input: {
+    metric: string
+    agg: string
+    from: string
+    to: string
+    source?: string
+  }): TrendPoint[] {
+    requireMetricAndAgg(input.metric, input.agg)
+    requireRange(input.from, input.to)
+
+    const points = this.series({
+      metric: input.metric, agg: input.agg, from: input.from, to: input.to, source: input.source,
+    })
+    const byDate = new Map(points.map((point) => [point.localDate, point.value]))
+
+    const days = daysBetween(input.from, input.to)
+    const withGaps = Array.from({ length: days }, (_, i) => {
+      const localDate = shiftLocalDate(input.from, i)
+      return { localDate, value: byDate.get(localDate) ?? null }
+    })
+
+    return trendOf(withGaps)
+  }
 }
 
 /**
@@ -210,6 +309,17 @@ function requireRange(from: string, to: string): void {
   requireDate('from', from)
   requireDate('to', to)
   if (from > to) throw new ConfigError(`from '${from}' is after to '${to}'`)
+}
+
+/**
+ * windowDays: 0 used to compute a `from` after `to` and throw a ConfigError naming the two dates
+ * instead of the argument that was actually wrong. Reaching zero or negative days back is not a
+ * range problem, it is this argument, so this is what the message has to name.
+ */
+function requirePositiveInteger(label: string, value: number): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new ConfigError(`${label} must be a positive integer, got ${value}`)
+  }
 }
 
 /** The catalogue decides which aggregates a metric has. Summing heart rate is not an answer. */

@@ -127,3 +127,13 @@ export type { Baseline } from './query/baseline.ts'
 export { comparePeriods, INSIGHT_MIN_DAY_FRACTION, INSIGHT_MIN_COVERAGE } from './query/insights.ts'
 export type { Insight, PeriodPoint, SuppressionReason, DateRange } from './query/insights.ts'
 export { coverageIsMeaningful } from './query/coverageSignal.ts'
+
+// M3b1. The rest of PersonQuery's readers: intraday samples, sleep nights, workout sessions and
+// the computed trend. Only the shapes they hand back are exported here, never the module level
+// readers themselves: those take a person id as a plain argument, and PersonQuery is the only
+// place that binding is allowed to live.
+export type { Thinned } from './query/downsample.ts'
+export type { IntradayPoint } from './query/intraday.ts'
+export type { Night, NightSegment } from './query/sleepNights.ts'
+export type { WorkoutSession } from './query/sessions.ts'
+export type { TrendPoint } from './query/trend.ts'
