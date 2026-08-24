@@ -1,27 +1,41 @@
+import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
 
 const GROUPS = [
-  { label: 'Overview', items: [['/', 'Dashboard']] },
-  { label: 'Tracking', items: [['/activity', 'Activity'], ['/sleep', 'Sleep'], ['/recovery', 'Recovery'], ['/health', 'Health'], ['/weight', 'Weight'], ['/nutrition', 'Nutrition'], ['/notes', 'Notes']] },
+  { labelKey: 'sidebar.groups.overview', items: [{ path: '/', nameKey: 'sidebar.items.dashboard' }] },
+  {
+    labelKey: 'sidebar.groups.tracking',
+    items: [
+      { path: '/activity', nameKey: 'sidebar.items.activity' },
+      { path: '/sleep', nameKey: 'sidebar.items.sleep' },
+      { path: '/recovery', nameKey: 'sidebar.items.recovery' },
+      { path: '/health', nameKey: 'sidebar.items.health' },
+      { path: '/weight', nameKey: 'sidebar.items.weight' },
+      { path: '/nutrition', nameKey: 'sidebar.items.nutrition' },
+      { path: '/notes', nameKey: 'sidebar.items.notes' },
+    ],
+  },
 ] as const
 
 // A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and
 // nothing but the shell test comparing this against ROUTES keeps them that way. Exported so that
 // test can see what the rail actually links to.
-export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map(([path]) => path))
+export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
 
 export function Sidebar({ active, person }: { active: string, person: string }) {
+  const { t } = useTranslation()
   return (
-    <nav className="rail" aria-label="Sections">
+    <nav className="rail" aria-label={t('sidebar.sectionsLabel')}>
+      {/* Brand name, not copy: it stays "haelan" in every language. */}
       <div className="brand">haelan</div>
       {GROUPS.map((g) => (
-        <div key={g.label}>
-          <div className="rail-group">{g.label}</div>
-          {g.items.map(([path, name]) => (
-            <Link key={path} to={path} className="rail-item"
-                  aria-current={active === path ? 'page' : undefined}>
-              <Icon name={path === '/' ? 'dashboard' : path.slice(1)} />{name}
+        <div key={g.labelKey}>
+          <div className="rail-group">{t(g.labelKey)}</div>
+          {g.items.map((item) => (
+            <Link key={item.path} to={item.path} className="rail-item"
+                  aria-current={active === item.path ? 'page' : undefined}>
+              <Icon name={item.path === '/' ? 'dashboard' : item.path.slice(1)} />{t(item.nameKey)}
             </Link>
           ))}
         </div>

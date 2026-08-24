@@ -1,3 +1,4 @@
+import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
@@ -26,64 +27,70 @@ const avg = (xs: number[]) => xs.reduce((sum, v) => sum + v, 0) / xs.length
 const maxSteps = Math.max(0, ...numbers((d) => d.steps))
 
 const lastNight = july.schedule.at(-1)
-const startLabel = lastNight?.bed != null ? `Bed ${formatClock(lastNight.bed)}` : 'Bed time not recorded'
 const lastDate = july.days.at(-1)?.date ?? ''
 
 // Verified, not assumed: this is the only metric that naturally hits zero in the fixture, so this branch is real.
 const zeroSleepNights = worn.filter((d) => d.sleepMinutes === 0)
 
 export function Dashboard() {
+  const { t } = useTranslation()
+  const period = t('common.periodLabel')
+  const startLabel = lastNight?.bed != null
+    ? t('common.bedLabel', { time: formatClock(lastNight.bed) })
+    : t('common.bedTimeNotRecorded')
+
   return (
     <>
-      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>Dashboard</h1>
-      <ControlRow range="Month" label="July 2026" sources="2/2" syncedAgo="4 min ago" />
+      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
+      <ControlRow range="month" label={period} sources="2/2" syncedMinutesAgo={4} />
       <div className="grid">
         <Card span={3}>
-          <StatTile label="Steps" value={totalSteps.toLocaleString('en-GB')}
-            basis={`sum, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
+          <StatTile label={t('dashboard.steps.label')} value={totalSteps.toLocaleString('en-GB')}
+            basis={t('dashboard.steps.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(numbers((d) => d.steps), 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.steps)} labels={dates}
-              label="Daily steps through July 2026" unit="Steps" />
+              label={t('dashboard.steps.chartLabel', { period })} unit={t('dashboard.units.steps')} />
           </StatTile>
         </Card>
         <Card span={3}>
-          <StatTile label="Resting heart rate" value={String(Math.round(avg(meanHrMin)))} unit="bpm"
-            basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
+          <StatTile label={t('dashboard.restingHr.label')} value={String(Math.round(avg(meanHrMin)))} unit="bpm"
+            basis={t('dashboard.restingHr.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(meanHrMin, 'lower-is-better')}>
             <Sparkline values={july.days.map((d) => d.hrMin)} labels={dates}
-              label="Daily resting heart rate through July 2026" unit="Beats per minute" />
+              label={t('dashboard.restingHr.chartLabel', { period })} unit={t('dashboard.units.beatsPerMinute')} />
           </StatTile>
         </Card>
         <Card span={3}>
-          <StatTile label="Sleep" value={formatDuration(avg(meanSleep))}
-            basis={`mean, ${worn.length} of ${july.days.length} nights, ${unworn} nights not worn`}
+          <StatTile label={t('dashboard.sleep.label')} value={formatDuration(avg(meanSleep))}
+            basis={t('dashboard.sleep.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(meanSleep, 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.sleepMinutes)} labels={dates}
-              label="Nightly sleep duration through July 2026" unit="Minutes asleep" />
+              label={t('dashboard.sleep.chartLabel', { period })} unit={t('dashboard.units.minutesAsleep')} />
           </StatTile>
         </Card>
         <Card span={3}>
-          <StatTile label="Mean heart rate" value={String(Math.round(avg(meanHrMean)))} unit="bpm"
-            basis={`mean, ${worn.length} of ${july.days.length} days, ${unworn} days not worn`}
+          <StatTile label={t('dashboard.meanHr.label')} value={String(Math.round(avg(meanHrMean)))} unit="bpm"
+            basis={t('dashboard.meanHr.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(meanHrMean, 'neutral')}>
             <Sparkline values={july.days.map((d) => d.hrMean)} labels={dates}
-              label="Daily mean heart rate through July 2026" unit="Beats per minute" />
+              label={t('dashboard.meanHr.chartLabel', { period })} unit={t('dashboard.units.beatsPerMinute')} />
           </StatTile>
         </Card>
 
-        <Card span={8} label="Heart rate range"
-          basis="daily minimum, mean and maximum, shaded band is the 60 day baseline">
+        <Card span={8} label={t('dashboard.heartRateRange.label')}
+          basis={t('dashboard.heartRateRange.basis')}>
           <HeartRateRange days={july.days} baseline={july.baselines.hrMean}
             annotations={july.events.map((e) => ({ date: e.date, text: e.text }))} excluded={july.excluded}
-            label="Daily heart rate minimum, mean and maximum through July 2026" />
+            label={t('dashboard.heartRateRange.chartLabel', { period })} />
         </Card>
-        <Card span={4} label="Flagged days"
-          basis={`${july.events.length} of ${july.days.length} days flagged, annotated on the heart rate chart`}>
+        <Card span={4} label={t('dashboard.flaggedDays.label')}
+          basis={t('dashboard.flaggedDays.basis', { count: july.events.length, total: july.days.length })}>
           <ul style={{ margin: 'var(--space-2) 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
             {july.events.map((e) => (
               <li key={e.date} style={{ fontSize: 'var(--font-size-sm)' }}>
                 <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
-                  {e.date.slice(8)} Jul{e.endDate ? ` to ${e.endDate.slice(8)} Jul` : ''}
+                  {e.date.slice(8)} {t('common.julyAbbrev')}
+                  {e.endDate ? ` ${t('common.to')} ${e.endDate.slice(8)} ${t('common.julyAbbrev')}` : ''}
                 </div>
                 <div style={{ color: 'var(--text-muted)' }}>{e.text}</div>
               </li>
@@ -91,31 +98,36 @@ export function Dashboard() {
           </ul>
         </Card>
 
-        <Card span={7} label="Sleep stages" basis={`last night, ${lastDate}`}>
+        <Card span={7} label={t('dashboard.sleepStages.label')} basis={t('dashboard.sleepStages.basis', { date: lastDate })}>
           <Hypnogram segments={july.hypnogram} startLabel={startLabel}
-            label={`Sleep stages through the night of ${lastDate}`} />
+            label={t('dashboard.sleepStages.chartLabel', { date: lastDate })} />
         </Card>
-        <Card span={5} label="Sleep schedule"
-          basis={`bed and wake time, ${july.schedule.length} nights, dot marks a nap`}>
-          <SleepSchedule nights={july.schedule} label="Bed and wake times for each night of July 2026" />
-        </Card>
-
-        <Card span={8} label="Daily steps"
-          basis={`calendar heatmap, ${worn.length} of ${july.days.length} days worn, 0 to ${maxSteps.toLocaleString('en-GB')} steps, stronger colour is more steps, days with no reading carry an absence dot`}>
-          <ActivityHeatmap days={july.days} max={maxSteps} label="Steps per day through July 2026" />
-        </Card>
-        <Card span={4} label="Recovery">
-          <EmptyState title="No source is providing this data."
-            detail="Connect a device that reports heart rate variability to see recovery scores here." />
+        <Card span={5} label={t('dashboard.sleepSchedule.label')}
+          basis={t('common.bedWakeBasis', { nights: july.schedule.length })}>
+          <SleepSchedule nights={july.schedule} label={t('common.bedWakeChartLabel', { period })} />
         </Card>
 
-        <Card span={12} label="Sleep anomalies">
+        <Card span={8} label={t('dashboard.dailySteps.label')}
+          basis={t('dashboard.dailySteps.basis', {
+            worn: worn.length, total: july.days.length, maxSteps: maxSteps.toLocaleString('en-GB'),
+          })}>
+          <ActivityHeatmap days={july.days} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
+        </Card>
+        <Card span={4} label={t('dashboard.recovery.label')}>
+          <EmptyState title={t('dashboard.recovery.emptyTitle')}
+            detail={t('dashboard.recovery.emptyDetail')} />
+        </Card>
+
+        <Card span={12} label={t('dashboard.anomalies.label')}>
           {zeroSleepNights.length === 0 ? (
-            <EmptyState title="No nights with zero recorded sleep in July."
-              detail={`Checked ${worn.length} of ${july.days.length} nights the device was worn. The remaining ${unworn} nights have no reading at all, which is a different kind of gap.`} />
+            <EmptyState title={t('dashboard.anomalies.emptyTitle')}
+              detail={t('dashboard.anomalies.emptyDetail', { worn: worn.length, total: july.days.length, unworn })} />
           ) : (
             <p className="basis">
-              {zeroSleepNights.length} of {worn.length} worn nights recorded zero minutes of sleep: {zeroSleepNights.map((d) => d.date).join(', ')}.
+              {t('dashboard.anomalies.summary', {
+                count: zeroSleepNights.length, worn: worn.length,
+                dates: zeroSleepNights.map((d) => d.date).join(', '),
+              })}
             </p>
           )}
         </Card>

@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from 'react'
+import { useTranslation } from '../i18n/index.js'
 import { useRoute, navigate } from '../router.js'
 import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
@@ -10,25 +11,26 @@ import {
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 
 const STEPS = [
-  { step: 'account', path: '/setup/account', title: 'Account' },
-  { step: 'instance-url', path: '/setup/instance-url', title: 'Address' },
-  { step: 'google-client', path: '/setup/google', title: 'Google' },
-  { step: 'consent', path: '/setup/google', title: 'Consent' },
+  { step: 'account', path: '/setup/account', titleKey: 'setup.app.steps.account' },
+  { step: 'instance-url', path: '/setup/instance-url', titleKey: 'setup.app.steps.address' },
+  { step: 'google-client', path: '/setup/google', titleKey: 'setup.app.steps.google' },
+  { step: 'consent', path: '/setup/google', titleKey: 'setup.app.steps.consent' },
 ] as const
 
 const pathForStep = (step: string) =>
   STEPS.find((entry) => entry.step === step)?.path ?? '/setup/backfill'
 
 function Rail({ current }: { current: string }) {
+  const { t } = useTranslation()
   const index = STEPS.findIndex((entry) => entry.step === current)
   return (
     <ol className="setup-rail">
       {STEPS.map((entry, position) => (
         <li
-          key={entry.title}
+          key={entry.titleKey}
           data-state={position === index ? 'current' : position < index || index === -1 ? 'done' : 'todo'}
         >
-          {entry.title}
+          {t(entry.titleKey)}
         </li>
       ))}
     </ol>
@@ -36,6 +38,7 @@ function Rail({ current }: { current: string }) {
 }
 
 export function SetupApp() {
+  const { t } = useTranslation()
   const route = useRoute()
   const [step, setStep] = useState<string | null>(null)
   const [candidates, setCandidates] = useState<RedirectCandidate[]>([])
@@ -120,7 +123,7 @@ export function SetupApp() {
                         })
                     }}
                   />
-                : <p className="empty">Loading progress</p>)
+                : <p className="empty">{t('setup.app.loadingProgress')}</p>)
               : <AccountStep onDone={refresh} />}
       </div>
     </div>

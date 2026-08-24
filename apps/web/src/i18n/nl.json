@@ -6,10 +6,238 @@
     "submit": "Inloggen",
     "working": "Bezig met inloggen",
     "failed": "Deze gebruikersnaam en dit wachtwoord horen niet bij een account op deze instantie.",
-    "unreachable": "De instantie gaf geen antwoord. Controleer of hij draait en probeer het opnieuw."
+    "unreachable": "De instantie gaf geen antwoord. Controleer of deze draait en probeer het opnieuw."
   },
   "shell": {
     "signOut": "Uitloggen",
-    "sessionExpired": "Je sessie is beëindigd. Log opnieuw in om verder te gaan."
+    "sessionExpired": "De sessie is beëindigd. Log opnieuw in om verder te gaan."
+  },
+  "controlRow": {
+    "timeRangeLabel": "Tijdsbereik",
+    "ranges": {
+      "day": "Dag",
+      "week": "Week",
+      "month": "Maand",
+      "3months": "3 maanden",
+      "year": "Jaar"
+    },
+    "previousPeriod": "Vorige periode",
+    "nextPeriod": "Volgende periode",
+    "sources": "Bronnen",
+    "downloadRaw": "Ruwe data downloaden",
+    "sync": "Synchroniseren",
+    "syncedAgo": "Gesynchroniseerd {{count}} min geleden"
+  },
+  "sidebar": {
+    "sectionsLabel": "Secties",
+    "groups": {
+      "overview": "Overzicht",
+      "tracking": "Registratie"
+    },
+    "items": {
+      "dashboard": "Dashboard",
+      "activity": "Activiteit",
+      "sleep": "Slaap",
+      "recovery": "Herstel",
+      "health": "Gezondheid",
+      "weight": "Gewicht",
+      "nutrition": "Voeding",
+      "notes": "Notities"
+    }
+  },
+  "common": {
+    "periodLabel": "juli 2026",
+    "bedLabel": "Naar bed {{time}}",
+    "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
+    "julyAbbrev": "jul",
+    "to": "tot",
+    "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
+    "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
+    "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
+    "deviceNotWorn": "Het apparaat werd niet gedragen."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "units": {
+      "steps": "Stappen",
+      "beatsPerMinute": "Slagen per minuut",
+      "minutesAsleep": "Minuten slaap"
+    },
+    "steps": {
+      "label": "Stappen",
+      "basis": "som, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse stappen in {{period}}"
+    },
+    "restingHr": {
+      "label": "Rusthartslag",
+      "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse rusthartslag in {{period}}"
+    },
+    "sleep": {
+      "label": "Slaap",
+      "basis": "gemiddelde, {{worn}} van {{total}} nachten, {{unworn}} nachten niet gedragen",
+      "chartLabel": "Nachtelijke slaapduur in {{period}}"
+    },
+    "meanHr": {
+      "label": "Gemiddelde hartslag",
+      "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}"
+    },
+    "heartRateRange": {
+      "label": "Hartslagbereik",
+      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline van 60 dagen",
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
+    },
+    "flaggedDays": {
+      "label": "Gemarkeerde dagen",
+      "basis": "{{count}} van {{total}} dagen gemarkeerd, geannoteerd op de hartslaggrafiek"
+    },
+    "sleepStages": {
+      "label": "Slaapfasen",
+      "basis": "afgelopen nacht, {{date}}",
+      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
+    },
+    "sleepSchedule": {
+      "label": "Slaapschema"
+    },
+    "dailySteps": {
+      "label": "Dagelijkse stappen",
+      "basis": "kalenderwarmtekaart, {{worn}} van {{total}} dagen gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "chartLabel": "Stappen per dag in {{period}}"
+    },
+    "recovery": {
+      "label": "Herstel",
+      "emptyTitle": "Geen bron levert deze data.",
+      "emptyDetail": "Verbind een apparaat dat hartslagvariabiliteit meet om hier herstelscores te zien."
+    },
+    "anomalies": {
+      "label": "Slaapafwijkingen",
+      "emptyTitle": "Geen nachten met nul geregistreerde slaap in juli.",
+      "emptyDetail": "Gecontroleerd: {{worn}} van {{total}} nachten werd het apparaat gedragen. De overige {{unworn}} nachten hebben helemaal geen meting, wat een ander soort gat is.",
+      "summary": "{{count}} van {{worn}} gedragen nachten registreerden nul minuten slaap: {{dates}}."
+    }
+  },
+  "sleep": {
+    "title": "Slaap",
+    "noDate": "geen datum",
+    "lastRecordedNightFallback": "de laatst geregistreerde nacht",
+    "lastNight": {
+      "label": "Afgelopen nacht",
+      "basis": "geregistreerd, {{date}}",
+      "emptyTitle": "Geen slaap geregistreerd voor deze nacht."
+    },
+    "stages": {
+      "label": "Slaapfasen",
+      "basis": "afgelopen nacht, {{date}}, per minuut",
+      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
+    },
+    "stage": {
+      "deep": "Diep",
+      "light": "Licht",
+      "rem": "REM",
+      "awake": "Wakker"
+    },
+    "nap": {
+      "label": "Dutje",
+      "summary_one": "een dutje geregistreerd, begonnen om {{times}}, {{date}}",
+      "summary_other": "{{count}} dutjes geregistreerd, begonnen om {{times}}, {{date}}",
+      "emptyTitle": "Geen dutje geregistreerd afgelopen nacht.",
+      "wornAbsence": "Het apparaat werd gedragen op {{date}}, dus dit is een echte afwezigheid en geen ontbrekende data.",
+      "notWornEither": "Het apparaat werd niet gedragen, dus is er sowieso geen meting."
+    },
+    "schedule": {
+      "label": "Slaapschema, maand"
+    },
+    "baselineRange": "de baseline van {{low}} tot {{high}}",
+    "baselineBasis": "baseline is het eigen bereik van {{low}} tot {{high}} van deze slaper",
+    "belowBaseline": "↓ onder {{range}}",
+    "aboveBaseline": "↑ boven {{range}}",
+    "withinBaseline": "→ binnen {{range}}"
+  },
+  "setup": {
+    "genericError": "dat lukte niet",
+    "copyField": {
+      "copy": "Kopiëren",
+      "copied": "Gekopieerd"
+    },
+    "account": {
+      "title": "Account aanmaken",
+      "intro": "Dit is het eerste account op deze instantie, en het account waaraan de Google-verbinding gekoppeld is. Niets hiervan verlaat de machine waarop haelan draait.",
+      "nameLabel": "Naam",
+      "nameHint": "Verschijnt op de eigen pagina's. Verder ziet niemand dit.",
+      "usernameLabel": "Gebruikersnaam",
+      "passwordLabel": "Wachtwoord",
+      "passwordHint": "Minimaal 8 tekens. Er is geen resetlink: deze instantie verstuurt geen e-mail.",
+      "timezoneLabel": "Tijdzone",
+      "timezoneHint": "Elke daggrens wordt berekend in deze zone, zodat een nacht die om 07:00 eindigt bij de juiste dag hoort. Een latere wijziging herberekent de dagen.",
+      "submitting": "Bezig met aanmaken",
+      "submit": "Account aanmaken"
+    },
+    "instanceUrl": {
+      "title": "Hoe deze instantie wordt bereikt",
+      "intro": "Google moet het exacte adres weten waar het na het geven van toestemming naar terugstuurt, en dat moet overeenkomen met wat de browser daadwerkelijk gebruikte. Kies hieronder hoe haelan wordt bereikt.",
+      "paths": {
+        "localhost": {
+          "title": "Deze machine",
+          "detail": "haelan wordt geopend in een browser op de machine waarop het draait. Google stelt loopback vrij van de HTTPS-regel, dus dit werkt zonder certificaat."
+        },
+        "tailscale": {
+          "title": "Tailscale",
+          "detail": "De tailnet-naam: een echte hostnaam met een echt certificaat. Bereikbaar vanaf de telefoon zonder iets aan het internet bloot te stellen."
+        },
+        "proxy": {
+          "title": "Reverse proxy",
+          "detail": "Een zelf beheerde hostnaam die HTTPS afhandelt vóór haelan. Het certificaat is al aanwezig."
+        }
+      },
+      "addressLabel": "Adres",
+      "addressHint": "Google weigert een kaal IP-adres als redirect-doel, dus een LAN-adres zoals de router uitdeelt is hier geen optie, wat de adresbalk ook toont. Loopback en echte hostnamen zijn dat wel.",
+      "saving": "Bezig met opslaan",
+      "submit": "Doorgaan"
+    },
+    "google": {
+      "title": "Google verbinden",
+      "intro": "Dit is de ene stap die niet te automatiseren is. Google biedt geen API om een OAuth-client aan te maken; die wordt eenmalig aangemaakt in de console en hier weer geplakt.",
+      "step1": "Open console.cloud.google.com en maak een project aan, of kies een bestaand project.",
+      "step2": "Schakel onder APIs en services de Google Health API in.",
+      "step3": "Configureer het OAuth-toestemmingsscherm en declareer de {{count}} scopes hieronder, ook de datatypen die nu niet gewenst zijn: declareren gebeurt eenmalig, toestemming geven per persoon, en een overgeslagen scope betekent later een tweede bezoek. De console verdeelt ze zelf in gevoelige en beperkte groepen; dat is normaal.",
+      "allScopesLabel": "Alles",
+      "publishingIntro": "Zet de publicatiestatus op",
+      "inProduction": "In productie",
+      "publishingWarning": "Bij de status Testing krijgt elk refresh-token een levensduur van zeven dagen, en stopt de synchronisatie van het huishouden een week na installatie zonder duidelijke oorzaak.",
+      "step5": "Maak een OAuth-client van het type Webtoepassing aan en registreer alle onderstaande redirect-URI's in één keer. Een ongebruikte URI kost niets. Een ontbrekende URI kost een nieuw bezoek.",
+      "step6": "Kopieer de client-ID en het geheim naar de velden hieronder.",
+      "cannotBeRegistered": "kan niet worden geregistreerd.",
+      "unverifiedNote": "De client is niet geverifieerd en blijft dat ook. Iedereen die toestemming geeft, ziet een waarschuwing voor een niet-geverifieerde app; dat is hier verwacht en geen teken dat iets mis is: verificatie bestaat om een limiet van honderd gebruikers op te heffen die een huishoudinstantie nooit bereikt.",
+      "clientIdLabel": "Client-ID",
+      "clientSecretLabel": "Clientgeheim",
+      "saving": "Bezig met opslaan",
+      "submit": "Opslaan en toestemming geven"
+    },
+    "backfill": {
+      "title": "De geschiedenis wordt aangevuld",
+      "intro": "haelan loopt vanaf vandaag terug in de tijd, meest recent eerst, zodat de dagen die het vaakst bekeken worden het eerst binnenkomen. Deze pagina kan gesloten worden. Het werk gaat verder waar het stopte als de instantie opnieuw start, en de afgelopen week wordt bij elke run sowieso opnieuw opgehaald.",
+      "runningNote": "Actief. {{finished}} van {{total}} datatypen hebben hun horizon bereikt.",
+      "idleNote": "Inactief. {{finished}} van {{total}} datatypen hebben hun horizon bereikt.",
+      "daysBack": "{{days}} dagen terug",
+      "complete": "voltooid",
+      "notStarted": "nog niet gestart",
+      "horizonQuestion": "Hoe ver moet haelan teruggaan?",
+      "horizonNote": "Detail op minuutniveau blijft bewaard voor de laatste {{intradayDays}} dagen, ongeacht de keuze, omdat dit het grootste deel van de omvang uitmaakt. Deze keuze bepaalt hoe ver de dagelijkse geschiedenis teruggaat. Een latere wijziging richt de terugloop opnieuw en verwijdert nooit iets dat al is opgehaald.",
+      "horizon": {
+        "oneYear": "1 jaar",
+        "twoYears": "2 jaar",
+        "fiveYears": "5 jaar"
+      }
+    },
+    "app": {
+      "steps": {
+        "account": "Account",
+        "address": "Adres",
+        "google": "Google",
+        "consent": "Toestemming"
+      },
+      "loadingProgress": "Voortgang wordt geladen"
+    }
   }
 }

@@ -1,31 +1,21 @@
 import { useState } from 'react'
+import { useTranslation } from '../i18n/index.js'
 import { putInstanceUrl } from './api.js'
 
 // The three ways a browser reaches this instance, from probe/findings/console-steps.md. A LAN
 // IP is deliberately not among them, and the note below says so rather than letting somebody
 // discover it from a console error.
 const PATHS = [
-  {
-    id: 'localhost',
-    title: 'This machine',
-    detail: 'You open haelan in a browser on the machine it runs on. Google exempts loopback from its HTTPS rule, so this works with no certificate.',
-  },
-  {
-    id: 'tailscale',
-    title: 'Tailscale',
-    detail: 'Your tailnet name, which is a real hostname with a real certificate. Reachable from your phone without exposing anything to the internet.',
-  },
-  {
-    id: 'proxy',
-    title: 'Reverse proxy',
-    detail: 'A hostname you own, terminating HTTPS in front of haelan. You already have the certificate.',
-  },
+  { id: 'localhost', titleKey: 'setup.instanceUrl.paths.localhost.title', detailKey: 'setup.instanceUrl.paths.localhost.detail' },
+  { id: 'tailscale', titleKey: 'setup.instanceUrl.paths.tailscale.title', detailKey: 'setup.instanceUrl.paths.tailscale.detail' },
+  { id: 'proxy', titleKey: 'setup.instanceUrl.paths.proxy.title', detailKey: 'setup.instanceUrl.paths.proxy.detail' },
 ] as const
 
 const originOr = (fallback: string) =>
   typeof window === 'undefined' ? fallback : window.location.origin
 
 export function InstanceUrlStep({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation()
   const [baseUrl, setBaseUrl] = useState(originOr('http://localhost:4235'))
   const [consentPath, setConsentPath] = useState<string>('localhost')
   const [failure, setFailure] = useState<string | null>(null)
@@ -33,11 +23,8 @@ export function InstanceUrlStep({ onDone }: { onDone: () => void }) {
 
   return (
     <section className="setup-step">
-      <h1>How you reach this instance</h1>
-      <p>
-        Google has to be told the exact address it sends you back to after you grant consent,
-        and it has to match what your browser actually used. Pick how you reach haelan.
-      </p>
+      <h1>{t('setup.instanceUrl.title')}</h1>
+      <p>{t('setup.instanceUrl.intro')}</p>
 
       {failure && <p className="form-error" role="alert">{failure}</p>}
 
@@ -49,7 +36,7 @@ export function InstanceUrlStep({ onDone }: { onDone: () => void }) {
           putInstanceUrl({ baseUrl, consentPath })
             .then(onDone)
             .catch((cause: unknown) => {
-              setFailure(cause instanceof Error ? cause.message : 'that did not work')
+              setFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
               setBusy(false)
             })
         }}
@@ -62,25 +49,21 @@ export function InstanceUrlStep({ onDone }: { onDone: () => void }) {
               onChange={() => setConsentPath(path.id)}
             />
             <span>
-              <span className="choice-title">{path.title}</span>
-              <span className="choice-detail">{path.detail}</span>
+              <span className="choice-title">{t(path.titleKey)}</span>
+              <span className="choice-detail">{t(path.detailKey)}</span>
             </span>
           </label>
         ))}
 
         <label className="field">
-          <span className="label">Address</span>
+          <span className="label">{t('setup.instanceUrl.addressLabel')}</span>
           <input className="input" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-          <span className="field-hint">
-            Google refuses a raw IP address as a redirect target, so a LAN address like the one
-            your router hands out is not an option here, whatever it says in your browser bar.
-            Loopback and real hostnames are.
-          </span>
+          <span className="field-hint">{t('setup.instanceUrl.addressHint')}</span>
         </label>
 
         <div className="form-actions">
           <button type="submit" className="button button-primary" disabled={busy}>
-            {busy ? 'Saving' : 'Continue'}
+            {busy ? t('setup.instanceUrl.saving') : t('setup.instanceUrl.submit')}
           </button>
         </div>
       </form>

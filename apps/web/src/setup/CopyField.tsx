@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from '../i18n/index.js'
 
 /**
  * `value` is always a complete URI. There is no template, no interpolation at render time and
@@ -6,6 +7,7 @@ import { useState } from 'react'
  * console would reject is never offered here, it is shown as rejected somewhere else.
  */
 export function CopyField({ value, label }: { value: string, label: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   return (
     <div className="copy-field">
@@ -19,7 +21,7 @@ export function CopyField({ value, label }: { value: string, label: string }) {
           void navigator.clipboard.writeText(value).then(() => setCopied(true))
         }}
       >
-        {copied ? 'Copied' : 'Copy'}
+        {copied ? t('setup.copyField.copied') : t('setup.copyField.copy')}
       </button>
     </div>
   )

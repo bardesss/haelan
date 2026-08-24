@@ -3,11 +3,17 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { july } from '../src/fixtures/july.js'
+import { I18nProvider } from '../src/i18n/index.js'
 
 // The chart hosts render on the server; ECharts only touches them in an effect,
 // so this exercises every prop, every basis string and every table alternative
-// without a browser.
-const pages = { Dashboard: renderToStaticMarkup(<Dashboard />), Sleep: renderToStaticMarkup(<Sleep />) }
+// without a browser. Pinned to English: both pages now read their copy from the
+// catalogue, and an unpinned instance falls back to navigator.language, which on a
+// Dutch machine would render Dutch and break every literal-text assertion below.
+const pages = {
+  Dashboard: renderToStaticMarkup(<I18nProvider lng="en"><Dashboard /></I18nProvider>),
+  Sleep: renderToStaticMarkup(<I18nProvider lng="en"><Sleep /></I18nProvider>),
+}
 
 describe.each(Object.entries(pages))('%s', (_name, html) => {
   it('names every chart and points it at a description', () => {

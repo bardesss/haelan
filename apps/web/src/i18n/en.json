@@ -10,6 +10,234 @@
   },
   "shell": {
     "signOut": "Sign out",
-    "sessionExpired": "Your session ended. Sign in again to continue."
+    "sessionExpired": "The session ended. Sign in again to continue."
+  },
+  "controlRow": {
+    "timeRangeLabel": "Time range",
+    "ranges": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "3months": "3 months",
+      "year": "Year"
+    },
+    "previousPeriod": "Previous period",
+    "nextPeriod": "Next period",
+    "sources": "Sources",
+    "downloadRaw": "Download raw",
+    "sync": "Sync",
+    "syncedAgo": "Synced {{count}} min ago"
+  },
+  "sidebar": {
+    "sectionsLabel": "Sections",
+    "groups": {
+      "overview": "Overview",
+      "tracking": "Tracking"
+    },
+    "items": {
+      "dashboard": "Dashboard",
+      "activity": "Activity",
+      "sleep": "Sleep",
+      "recovery": "Recovery",
+      "health": "Health",
+      "weight": "Weight",
+      "nutrition": "Nutrition",
+      "notes": "Notes"
+    }
+  },
+  "common": {
+    "periodLabel": "July 2026",
+    "bedLabel": "Bed {{time}}",
+    "bedTimeNotRecorded": "Bed time not recorded",
+    "julyAbbrev": "Jul",
+    "to": "to",
+    "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
+    "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
+    "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
+    "deviceNotWorn": "Device was not worn."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "units": {
+      "steps": "Steps",
+      "beatsPerMinute": "Beats per minute",
+      "minutesAsleep": "Minutes asleep"
+    },
+    "steps": {
+      "label": "Steps",
+      "basis": "sum, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "chartLabel": "Daily steps through {{period}}"
+    },
+    "restingHr": {
+      "label": "Resting heart rate",
+      "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "chartLabel": "Daily resting heart rate through {{period}}"
+    },
+    "sleep": {
+      "label": "Sleep",
+      "basis": "mean, {{worn}} of {{total}} nights, {{unworn}} nights not worn",
+      "chartLabel": "Nightly sleep duration through {{period}}"
+    },
+    "meanHr": {
+      "label": "Mean heart rate",
+      "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "chartLabel": "Daily mean heart rate through {{period}}"
+    },
+    "heartRateRange": {
+      "label": "Heart rate range",
+      "basis": "daily minimum, mean and maximum, shaded band is the 60 day baseline",
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
+    },
+    "flaggedDays": {
+      "label": "Flagged days",
+      "basis": "{{count}} of {{total}} days flagged, annotated on the heart rate chart"
+    },
+    "sleepStages": {
+      "label": "Sleep stages",
+      "basis": "last night, {{date}}",
+      "chartLabel": "Sleep stages through the night of {{date}}"
+    },
+    "sleepSchedule": {
+      "label": "Sleep schedule"
+    },
+    "dailySteps": {
+      "label": "Daily steps",
+      "basis": "calendar heatmap, {{worn}} of {{total}} days worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
+      "chartLabel": "Steps per day through {{period}}"
+    },
+    "recovery": {
+      "label": "Recovery",
+      "emptyTitle": "No source is providing this data.",
+      "emptyDetail": "Connect a device that reports heart rate variability to see recovery scores here."
+    },
+    "anomalies": {
+      "label": "Sleep anomalies",
+      "emptyTitle": "No nights with zero recorded sleep in July.",
+      "emptyDetail": "Checked {{worn}} of {{total}} nights the device was worn. The remaining {{unworn}} nights have no reading at all, which is a different kind of gap.",
+      "summary": "{{count}} of {{worn}} worn nights recorded zero minutes of sleep: {{dates}}."
+    }
+  },
+  "sleep": {
+    "title": "Sleep",
+    "noDate": "no date",
+    "lastRecordedNightFallback": "the last recorded night",
+    "lastNight": {
+      "label": "Last night",
+      "basis": "recorded, {{date}}",
+      "emptyTitle": "No sleep recorded for this night."
+    },
+    "stages": {
+      "label": "Sleep stages",
+      "basis": "last night, {{date}}, per minute",
+      "chartLabel": "Sleep stages through the night of {{date}}"
+    },
+    "stage": {
+      "deep": "Deep",
+      "light": "Light",
+      "rem": "REM",
+      "awake": "Awake"
+    },
+    "nap": {
+      "label": "Nap",
+      "summary_one": "recorded a nap starting at {{times}}, {{date}}",
+      "summary_other": "recorded {{count}} naps starting at {{times}}, {{date}}",
+      "emptyTitle": "No nap recorded last night.",
+      "wornAbsence": "Device was worn on {{date}}, so this is a real absence rather than missing data.",
+      "notWornEither": "Device was not worn, so no reading exists either way."
+    },
+    "schedule": {
+      "label": "Sleep schedule, month"
+    },
+    "baselineRange": "the {{low}} to {{high}} baseline",
+    "baselineBasis": "baseline is this sleeper's own {{low}} to {{high}} range",
+    "belowBaseline": "↓ below {{range}}",
+    "aboveBaseline": "↑ above {{range}}",
+    "withinBaseline": "→ within {{range}}"
+  },
+  "setup": {
+    "genericError": "that did not work",
+    "copyField": {
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "account": {
+      "title": "Create your account",
+      "intro": "This is the first account on this instance, and it is the one that owns the Google connection. Nothing here leaves the machine haelan is running on.",
+      "nameLabel": "Your name",
+      "nameHint": "Shown on your own pages. Nobody else sees it.",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "passwordHint": "At least 8 characters. There is no reset link: this instance sends no email.",
+      "timezoneLabel": "Time zone",
+      "timezoneHint": "Every day boundary is computed in this zone, so a night that ends at 07:00 belongs to the right day. Change it later and the days are recomputed.",
+      "submitting": "Creating",
+      "submit": "Create account"
+    },
+    "instanceUrl": {
+      "title": "How you reach this instance",
+      "intro": "Google has to be told the exact address it sends you back to after you grant consent, and it has to match what your browser actually used. Pick how you reach haelan.",
+      "paths": {
+        "localhost": {
+          "title": "This machine",
+          "detail": "You open haelan in a browser on the machine it runs on. Google exempts loopback from its HTTPS rule, so this works with no certificate."
+        },
+        "tailscale": {
+          "title": "Tailscale",
+          "detail": "Your tailnet name, which is a real hostname with a real certificate. Reachable from your phone without exposing anything to the internet."
+        },
+        "proxy": {
+          "title": "Reverse proxy",
+          "detail": "A hostname you own, terminating HTTPS in front of haelan. You already have the certificate."
+        }
+      },
+      "addressLabel": "Address",
+      "addressHint": "Google refuses a raw IP address as a redirect target, so a LAN address like the one your router hands out is not an option here, whatever it says in your browser bar. Loopback and real hostnames are.",
+      "saving": "Saving",
+      "submit": "Continue"
+    },
+    "google": {
+      "title": "Connect Google",
+      "intro": "This is the one step nobody can automate. Google exposes no API for creating an OAuth client, so you create one once, in the console, and paste it back here.",
+      "step1": "Open console.cloud.google.com and create a project, or pick an existing one.",
+      "step2": "Under APIs and services, enable the Google Health API.",
+      "step3": "Configure the OAuth consent screen and declare the {{count}} scopes listed below, even the data types you do not want today: declaring is once, granting is per person, and a scope you skip now means a second visit later. The console sorts them into sensitive and restricted groups by itself, which is expected.",
+      "allScopesLabel": "All of them",
+      "publishingIntro": "Set publishing status to",
+      "inProduction": "In production",
+      "publishingWarning": "Leaving it in Testing gives every refresh token a seven day life, and the household's sync stops a week after setup with no obvious cause.",
+      "step5": "Create an OAuth client of type Web application, and register every redirect URI below in one pass. An unused URI costs nothing. A missing one costs a return trip.",
+      "step6": "Copy the client ID and secret into the fields underneath.",
+      "cannotBeRegistered": "cannot be registered.",
+      "unverifiedNote": "Your client is unverified, and it will stay that way. Every person granting consent sees an unverified app warning, which is expected here and is not a sign anything is wrong: verification exists to lift a hundred user cap that a household instance never reaches.",
+      "clientIdLabel": "Client ID",
+      "clientSecretLabel": "Client secret",
+      "saving": "Saving",
+      "submit": "Save and grant consent"
+    },
+    "backfill": {
+      "title": "Filling in your history",
+      "intro": "haelan is walking backwards from today, most recent first, so the days you are most likely to look at arrive first. You can leave this page. It resumes where it stopped if the instance restarts, and the trailing week is fetched every run regardless.",
+      "runningNote": "Running. {{finished}} of {{total}} data types have reached their horizon.",
+      "idleNote": "Idle. {{finished}} of {{total}} data types have reached their horizon.",
+      "daysBack": "{{days}} days back",
+      "complete": "complete",
+      "notStarted": "not started",
+      "horizonQuestion": "How far back should haelan go?",
+      "horizonNote": "Minute level detail is kept for the last {{intradayDays}} days whichever you pick, because it is most of the size. This chooses how far back the daily history goes. Changing it later re-aims the walk and never deletes anything already fetched.",
+      "horizon": {
+        "oneYear": "1 year",
+        "twoYears": "2 years",
+        "fiveYears": "5 years"
+      }
+    },
+    "app": {
+      "steps": {
+        "account": "Account",
+        "address": "Address",
+        "google": "Google",
+        "consent": "Consent"
+      },
+      "loadingProgress": "Loading progress"
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from '../i18n/index.js'
 import { CopyField } from './CopyField.js'
 import { putGoogleClient } from './api.js'
 import type { RedirectCandidate, SetupError } from './api.js'
@@ -9,6 +10,7 @@ export function GoogleStep({ candidates, scopes = [], error, onDone }: {
   error: SetupError | null
   onDone: () => void
 }) {
+  const { t } = useTranslation()
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
@@ -16,37 +18,26 @@ export function GoogleStep({ candidates, scopes = [], error, onDone }: {
 
   return (
     <section className="setup-step">
-      <h1>Connect Google</h1>
-      <p>
-        This is the one step nobody can automate. Google exposes no API for creating an OAuth
-        client, so you create one once, in the console, and paste it back here.
-      </p>
+      <h1>{t('setup.google.title')}</h1>
+      <p>{t('setup.google.intro')}</p>
 
       <ol className="setup-instructions">
-        <li>Open console.cloud.google.com and create a project, or pick an existing one.</li>
-        <li>Under APIs and services, enable the Google Health API.</li>
+        <li>{t('setup.google.step1')}</li>
+        <li>{t('setup.google.step2')}</li>
         <li>
-          Configure the OAuth consent screen and declare the {scopes.length} scopes listed
-          below, even the data types you do not want today: declaring is once, granting is per
-          person, and a scope you skip now means a second visit later. The console sorts them
-          into sensitive and restricted groups by itself, which is expected.
+          {t('setup.google.step3', { count: scopes.length })}
           <ul className="setup-scopes">
             {scopes.map((scope) => (
               <li key={scope}><code className="copy-value">{scope}</code></li>
             ))}
           </ul>
-          {scopes.length > 0 && <CopyField label="All of them" value={scopes.join('\n')} />}
+          {scopes.length > 0 && <CopyField label={t('setup.google.allScopesLabel')} value={scopes.join('\n')} />}
         </li>
         <li>
-          Set publishing status to <strong>In production</strong>. Leaving it in Testing gives
-          every refresh token a seven day life, and the household&apos;s sync stops a week after
-          setup with no obvious cause.
+          {t('setup.google.publishingIntro')} <strong>{t('setup.google.inProduction')}</strong>. {t('setup.google.publishingWarning')}
         </li>
-        <li>
-          Create an OAuth client of type Web application, and register every redirect URI below
-          in one pass. An unused URI costs nothing. A missing one costs a return trip.
-        </li>
-        <li>Copy the client ID and secret into the fields underneath.</li>
+        <li>{t('setup.google.step5')}</li>
+        <li>{t('setup.google.step6')}</li>
       </ol>
 
       <div className="setup-uris">
@@ -57,18 +48,14 @@ export function GoogleStep({ candidates, scopes = [], error, onDone }: {
               : (
                 <p className="setup-rejected">
                   <code>{candidate.uri === '' ? candidate.label : candidate.uri}</code>
-                  {' '}cannot be registered. {candidate.reason}
+                  {' '}{t('setup.google.cannotBeRegistered')} {candidate.reason}
                 </p>
               )}
           </div>
         ))}
       </div>
 
-      <p className="setup-note">
-        Your client is unverified, and it will stay that way. Every person granting consent sees
-        an unverified app warning, which is expected here and is not a sign anything is wrong:
-        verification exists to lift a hundred user cap that a household instance never reaches.
-      </p>
+      <p className="setup-note">{t('setup.google.unverifiedNote')}</p>
 
       {error && <p className="form-error" role="alert">{error.message}</p>}
       {failure && <p className="form-error" role="alert">{failure}</p>}
@@ -81,25 +68,25 @@ export function GoogleStep({ candidates, scopes = [], error, onDone }: {
           putGoogleClient({ clientId, clientSecret })
             .then(onDone)
             .catch((cause: unknown) => {
-              setFailure(cause instanceof Error ? cause.message : 'that did not work')
+              setFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
               setBusy(false)
             })
         }}
       >
         <label className="field">
-          <span className="label">Client ID</span>
+          <span className="label">{t('setup.google.clientIdLabel')}</span>
           <input className="input" value={clientId} autoComplete="off"
             onChange={(e) => setClientId(e.target.value)} />
         </label>
         <label className="field">
-          <span className="label">Client secret</span>
+          <span className="label">{t('setup.google.clientSecretLabel')}</span>
           <input className="input" type="password" value={clientSecret} autoComplete="off"
             onChange={(e) => setClientSecret(e.target.value)} />
         </label>
 
         <div className="form-actions">
           <button type="submit" className="button button-primary" disabled={busy}>
-            {busy ? 'Saving' : 'Save and grant consent'}
+            {busy ? t('setup.google.saving') : t('setup.google.submit')}
           </button>
         </div>
       </form>
