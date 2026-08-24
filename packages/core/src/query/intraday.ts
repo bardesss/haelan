@@ -31,6 +31,13 @@ export interface IntradayPoint {
  * sources is the derive layer's job, applied once through its priority list when it writes the
  * merged daily rows; this reader has no second policy of its own, so it keeps every source's point
  * separate and lets a caller ask for one with `sourceId` if that is what it wants.
+ *
+ * Thinning is per source too, not shared. Handing one interleaved array covering every source to
+ * a single `thin` call moves the same blending defect into the downsampler: `minmax` buckets by
+ * index and picks extremes by value with no notion of source, so a bucket spanning two devices can
+ * surface one device's minimum next to another device's maximum, a band whose edges belong to
+ * different readings. Each source is thinned on its own share of the requested budget, and the
+ * results are concatenated afterwards, so no bucket ever spans more than one source.
  */
 export function readIntraday(db: DbOrTx, input: {
   personId: string
@@ -67,17 +74,40 @@ export function readIntraday(db: DbOrTx, input: {
     byMinute.set(row.utcMs, point)
   }
 
-  const points = [...bySource.values()]
-    .flatMap((byMinute) => [...byMinute.values()])
-    .sort((a, b) => a.utcMs - b.utcMs || a.sourceId.localeCompare(b.sourceId))
+  const sourceIds = [...bySource.keys()]
+  if (sourceIds.length === 0) return { points: [], reduction: null }
 
-  // minmax, not lttb: an intraday trace is drawn as a min/max band, and lttb would discard
-  // exactly the extremes a band exists to show.
-  const { points: thinned, reduction } = thin(points, input.points ?? DEFAULT_POINTS, {
-    method: 'minmax',
-    x: (p) => p.utcMs,
-    y: (p) => p.mean ?? p.max ?? p.min ?? 0,
+  const requested = input.points ?? DEFAULT_POINTS
+  // Divided across the sources present, so a caller asking for 500 points still gets at most 500
+  // rather than 500 per source. Never below 2: thin always keeps at least the first and last point
+  // of whatever series it is given, and a smaller target would ask it to break that guarantee.
+  const perSource = Math.max(2, Math.floor(requested / sourceIds.length))
+
+  let totalFrom = 0
+  let totalTo = 0
+  let anyThinned = false
+  const perSourcePoints = sourceIds.map((sourceId) => {
+    const series = [...bySource.get(sourceId)!.values()].sort((a, b) => a.utcMs - b.utcMs)
+    // minmax, not lttb: an intraday trace is drawn as a min/max band, and lttb would discard
+    // exactly the extremes a band exists to show.
+    const { points: thinnedSeries, reduction } = thin(series, perSource, {
+      method: 'minmax',
+      x: (p) => p.utcMs,
+      y: (p) => p.mean ?? p.max ?? p.min ?? 0,
+    })
+    totalFrom += series.length
+    totalTo += thinnedSeries.length
+    if (reduction !== null) anyThinned = true
+    return thinnedSeries
   })
 
-  return { points: thinned, reduction }
+  const points = perSourcePoints.flat()
+    .sort((a, b) => a.utcMs - b.utcMs || a.sourceId.localeCompare(b.sourceId))
+
+  return {
+    points,
+    // Aggregate across sources rather than per source: a client asking "was this thinned" wants
+    // one answer for the day, and null still means none of the sources needed it.
+    reduction: anyThinned ? { method: 'minmax', from: totalFrom, to: totalTo } : null,
+  }
 }

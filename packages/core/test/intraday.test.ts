@@ -91,9 +91,8 @@ describe('readIntraday', () => {
     insert({ utcMs: NINE_AM, agg: 'mean', value: 90, sourceId: 'phone' })
 
     const out = readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE })
-    expect(out.points).toHaveLength(2)
-    expect(out.points.map((p) => ({ sourceId: p.sourceId, mean: p.mean }))
-      .sort((a, b) => a.sourceId.localeCompare(b.sourceId)))
+    // Direct order, not sorted before comparing: 'phone' sorts before 'watch' at the same utcMs.
+    expect(out.points.map((p) => ({ sourceId: p.sourceId, mean: p.mean })))
       .toEqual([{ sourceId: 'phone', mean: 90 }, { sourceId: 'watch', mean: 62 }])
   })
 
@@ -105,5 +104,40 @@ describe('readIntraday', () => {
       personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE, sourceId: 'watch',
     })
     expect(out.points).toEqual([expect.objectContaining({ sourceId: 'watch', mean: 62 })])
+  })
+
+  // A subtler version of the same defect: pivoting per source is not enough if thinning still
+  // hands one interleaved array covering every source to a single thin() call. minmax buckets by
+  // index and picks extremes by value with no notion of source, so once the combined series is
+  // large enough to trigger thinning, a bucket spanning both devices can take one device's low
+  // point and another device's high point into what was one span of time. Watch is flat so it
+  // never wins an extreme on its own; phone swings far below and far above watch's whole range so
+  // it wins every combined bucket's min and max, and would starve watch's output down to whatever
+  // survives by accident of where a sort happens to place a series boundary.
+  it('thins each source on its own share of the budget, never mixing a bucket across sources', () => {
+    for (let minute = 0; minute < 300; minute += 1) {
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: 60, sourceId: 'watch' })
+      insert({
+        utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: minute % 2 === 0 ? 0 : 1000,
+        sourceId: 'phone',
+      })
+    }
+
+    const out = readIntraday(test.db, {
+      personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE, points: 100,
+    })
+
+    const watchPoints = out.points.filter((p) => p.sourceId === 'watch')
+    const phonePoints = out.points.filter((p) => p.sourceId === 'phone')
+
+    expect(out.points.length).toBeLessThanOrEqual(100)
+    // No point's own fields are ever corrupted by the bug, so this alone would pass either way;
+    // it is here to rule out mislabeling before the count check below rules out starvation.
+    expect(watchPoints.every((p) => p.mean === 60)).toBe(true)
+    expect(phonePoints.every((p) => p.mean === 0 || p.mean === 1000)).toBe(true)
+    // Thinned on its own budget, watch keeps a real share rather than being reduced to whichever
+    // one or two points a shared, value-driven bucketing happened to leave it.
+    expect(watchPoints.length).toBeGreaterThanOrEqual(20)
+    expect(phonePoints.length).toBeGreaterThanOrEqual(20)
   })
 })
