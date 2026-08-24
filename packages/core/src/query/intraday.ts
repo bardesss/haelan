@@ -79,8 +79,14 @@ export function readIntraday(db: DbOrTx, input: {
 
   const requested = input.points ?? DEFAULT_POINTS
   // Divided across the sources present, so a caller asking for 500 points still gets at most 500
-  // rather than 500 per source. Never below 2: thin always keeps at least the first and last point
-  // of whatever series it is given, and a smaller target would ask it to break that guarantee.
+  // rather than 500 per source, in the ordinary case. The floor of 2 is a deliberate exception to
+  // that budget, not a bug in it: thin always keeps at least the first and last point of whatever
+  // series it is given, so with S sources present and a requested total below 2S, honouring the
+  // budget exactly would mean asking some source's floor to go below 2, and thin cannot do that
+  // without dropping a source to nothing. A device with zero points is silently missing from the
+  // chart; a chart that came back with a few more points than asked for is still every device's
+  // real shape. reduction below reports what was actually returned, so a caller can see the
+  // budget was exceeded rather than being told it was met.
   const perSource = Math.max(2, Math.floor(requested / sourceIds.length))
 
   let totalFrom = 0

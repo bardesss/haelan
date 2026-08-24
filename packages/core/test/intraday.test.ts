@@ -140,4 +140,26 @@ describe('readIntraday', () => {
     expect(watchPoints.length).toBeGreaterThanOrEqual(20)
     expect(phonePoints.length).toBeGreaterThanOrEqual(20)
   })
+
+  // thin always keeps at least the first and last point of a series it thins at all, so a budget
+  // below 2 per source cannot be honoured exactly without dropping a source to nothing. The floor
+  // wins deliberately: the total comes back over the requested count rather than under-reporting
+  // a device into invisibility. reduction is what makes that honest rather than a lie of omission.
+  it('lets the per-source floor exceed a budget too small to split evenly, and says so in reduction', () => {
+    for (let minute = 0; minute < 5; minute += 1) {
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: 60 + minute, sourceId: 'watch' })
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: 80 + minute, sourceId: 'phone' })
+    }
+
+    const out = readIntraday(test.db, {
+      personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE, points: 2,
+    })
+
+    // 2 sources sharing a budget of 2 floors to 2 points each, not 1: 4 total, over the request.
+    expect(out.points).toHaveLength(4)
+    expect(out.points.filter((p) => p.sourceId === 'watch')).toHaveLength(2)
+    expect(out.points.filter((p) => p.sourceId === 'phone')).toHaveLength(2)
+    // 10 in, 4 out: reduction reports what actually came back, not the budget that was asked for.
+    expect(out.reduction).toEqual({ method: 'minmax', from: 10, to: 4 })
+  })
 })
