@@ -121,7 +121,7 @@ export { SLEEP_METRICS } from './derive/metrics.ts'
 
 // M2d. The query layer M3 and M4 both sit on, and the statistics behind it.
 export { PersonQuery } from './query/personQuery.ts'
-export type { DailyPoint } from './query/personQuery.ts'
+export type { DailyPoint, SeriesResult } from './query/personQuery.ts'
 export { baselineOf, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
 export { comparePeriods, INSIGHT_MIN_DAY_FRACTION, INSIGHT_MIN_COVERAGE } from './query/insights.ts'
@@ -133,7 +133,7 @@ export { coverageIsMeaningful } from './query/coverageSignal.ts'
 // readers themselves: those take a person id as a plain argument, and PersonQuery is the only
 // place that binding is allowed to live.
 export type { Thinned } from './query/downsample.ts'
-export type { IntradayPoint } from './query/intraday.ts'
+export type { IntradayPoint, IntradayResult } from './query/intraday.ts'
 export type { Night, NightSegment } from './query/sleepNights.ts'
 export type { WorkoutSession } from './query/sessions.ts'
 export type { TrendPoint } from './query/trend.ts'

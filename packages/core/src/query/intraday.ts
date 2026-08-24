@@ -16,6 +16,11 @@ export interface IntradayPoint {
   max: number | null
 }
 
+export interface IntradayResult {
+  points: IntradayPoint[]
+  reduction: Thinned<IntradayPoint>['reduction']
+}
+
 /**
  * One day of per-minute samples for a metric, pivoted onto one row per minute per source and
  * thinned for a chart.
@@ -53,7 +58,7 @@ export function readIntraday(db: DbOrTx, input: {
   localDate: string
   sourceId?: string
   points?: number
-}): { points: IntradayPoint[], reduction: Thinned<IntradayPoint>['reduction'] } {
+}): IntradayResult {
   const { start: windowStart, end: windowEnd } = widenedUtcWindow(input.localDate)
 
   const rows = db.select().from(samples).where(and(

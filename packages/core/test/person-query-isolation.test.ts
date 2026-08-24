@@ -32,7 +32,7 @@ afterEach(() => test.cleanup())
 
 describe('PersonQuery isolation', () => {
   it('reads only its own person series', () => {
-    const points = alice.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-28' })
+    const { points } = alice.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-28' })
     expect(points).toHaveLength(28)
     expect(points.every((p) => p.value === 1000)).toBe(true)
   })
@@ -53,13 +53,14 @@ describe('PersonQuery isolation', () => {
 
   it('gives two people different answers to the identical question', () => {
     const question = { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-07' } as const
-    expect(alice.series(question).map((p) => p.value)).not.toEqual(bart.series(question).map((p) => p.value))
+    expect(alice.series(question).points.map((p) => p.value))
+      .not.toEqual(bart.series(question).points.map((p) => p.value))
   })
 
   it("returns nothing for a person with no rows rather than somebody else's", () => {
     seedPerson(test.db, 'carol')
     const carol = new PersonQuery(test.db, 'carol')
-    expect(carol.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-28' })).toEqual([])
+    expect(carol.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-28' }).points).toEqual([])
     expect(carol.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-29' })).toBeNull()
     expect(carol.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-15', to: '2026-08-21' }).suppressed).toBe(true)
   })

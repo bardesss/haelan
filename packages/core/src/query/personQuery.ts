@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily } from '../db/schema/index.ts'
+import { daily, SESSION_KINDS } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { ConfigError } from '../errors.ts'
@@ -14,7 +14,9 @@ import { comparePeriods as comparePeriodPoints, INSIGHT_MIN_COVERAGE } from './i
 import type { Insight, PeriodPoint } from './insights.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
+import type { Thinned } from './downsample.ts'
 import { readIntraday } from './intraday.ts'
+import type { IntradayResult } from './intraday.ts'
 import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
 import { readSessions } from './sessions.ts'
@@ -29,6 +31,11 @@ export interface DailyPoint {
   coverage: number | null
   source: string
   sourceMix: string | null
+}
+
+export interface SeriesResult {
+  points: DailyPoint[]
+  reduction: Thinned<DailyPoint>['reduction']
 }
 
 /**
@@ -71,7 +78,7 @@ export class PersonQuery {
     to: string
     source?: string
     points?: number
-  }): DailyPoint[] {
+  }): SeriesResult {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
 
@@ -97,17 +104,18 @@ export class PersonQuery {
     )).orderBy(asc(daily.localDate)).all() as DailyPoint[]
 
     const result = source === undefined ? preferMerged(rows) : rows
-    if (input.points === undefined) return result
+    if (input.points === undefined) return { points: result, reduction: null }
 
     // Daily rows are evenly spaced by construction, one per local date, so the index is the
     // correct x to thin on. Parsing each localDate back into an instant would buy nothing and
     // add a timezone question this series does not have.
     const indexed = result.map((point, index) => ({ index, point }))
-    return thin(indexed, input.points, {
+    const thinned = thin(indexed, input.points, {
       method: 'lttb',
       x: (entry) => entry.index,
       y: (entry) => entry.point.value,
-    }).points.map((entry) => entry.point)
+    })
+    return { points: thinned.points.map((entry) => entry.point), reduction: thinned.reduction }
   }
 
   /**
@@ -131,7 +139,7 @@ export class PersonQuery {
     requirePositiveInteger('windowDays', windowDays)
     const to = shiftLocalDate(input.on, -1)
     const from = shiftLocalDate(to, -(windowDays - 1))
-    const points = this.series({
+    const { points } = this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
     })
 
@@ -172,7 +180,7 @@ export class PersonQuery {
     const judgeCoverage = coverageIsMeaningful(input.metric)
     const fetch = (from: string, to: string): PeriodPoint[] => this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
-    }).map((point) => ({
+    }).points.map((point) => ({
       localDate: point.localDate,
       value: point.value,
       coverage: judgeCoverage ? point.coverage : null,
@@ -200,7 +208,8 @@ export class PersonQuery {
     localDate: string
     points?: number
     sourceId?: string
-  }): ReturnType<typeof readIntraday> {
+  }): IntradayResult {
+    requireMetric(input.metric)
     requireDate('localDate', input.localDate)
     return readIntraday(this.#db, {
       personId: this.#personId,
@@ -232,6 +241,7 @@ export class PersonQuery {
     from: string
     to: string
   }): WorkoutSession[] {
+    requireSessionKind(input.kind)
     requireRange(input.from, input.to)
     return readSessions(this.#db, {
       personId: this.#personId,
@@ -255,7 +265,7 @@ export class PersonQuery {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
 
-    const points = this.series({
+    const { points } = this.series({
       metric: input.metric, agg: input.agg, from: input.from, to: input.to, source: input.source,
     })
     const byDate = new Map(points.map((point) => [point.localDate, point.value]))
@@ -328,6 +338,28 @@ function requireMetricAndAgg(metric: string, agg: string): void {
   if (spec === undefined) throw new ConfigError(`no metric named '${metric}'`)
   if (!(spec.aggs as readonly string[]).includes(agg)) {
     throw new ConfigError(`metric '${metric}' has no '${agg}' aggregate, only ${spec.aggs.join(', ')}`)
+  }
+}
+
+/**
+ * `intraday` has no aggregate to validate against, since it reads samples directly rather than a
+ * `daily` row, but the metric itself still needs the same refusal `requireMetricAndAgg` gives
+ * every other reader: a typo left unvalidated answers with an empty result, indistinguishable
+ * from "this person has no data".
+ */
+function requireMetric(metric: string): void {
+  if (metricSpec(metric) === undefined) throw new ConfigError(`no metric named '${metric}'`)
+}
+
+/**
+ * `sessions({ kind })` is typed as `'sleep' | 'exercise'`, but the type system only protects a
+ * caller written in TypeScript. The two real consumers, an HTTP query string and a language
+ * model's tool arguments, sit outside it, so a value the type forbids still has to be refused at
+ * runtime rather than read as a kind that matches no row and called an empty answer.
+ */
+function requireSessionKind(kind: string): void {
+  if (!(SESSION_KINDS as readonly string[]).includes(kind)) {
+    throw new ConfigError(`kind must be one of ${SESSION_KINDS.join(', ')}, got '${kind}'`)
   }
 }
 
