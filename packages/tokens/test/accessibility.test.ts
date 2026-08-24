@@ -47,6 +47,15 @@ function pairs(values: string[]): [string, string][] {
   return values.flatMap((a, i) => values.slice(i + 1).map((b) => [a, b] as [string, string]))
 }
 
+// The interaction set, added in M3a. Each one replaces a color-mix percentage that app.css had
+// tuned by eye, which chart-styling.md section 12 says tokens exist to remove. Declared above its
+// first use rather than relying on vitest deferring the describe.each factory: this is a plain
+// module-level const, and the scoping should hold regardless of collection order.
+const INTERACTION_SURFACE_KEYS = [
+  'surface-hover', 'surface-selected', 'surface-accent', 'surface-accent-hover', 'surface-disabled',
+  'surface-chosen',
+] as const satisfies readonly SemanticToken[]
+
 describe.each(THEMES)('%s palette accessibility', (theme) => {
   const chart = resolveChart(theme)
   const stages = STAGE_KEYS.map((k) => chart[k])
@@ -231,13 +240,13 @@ describe.each(THEMES)('%s palette accessibility', (theme) => {
   it('separates hover from selected', () => {
     expect(deltaE(s['surface-hover'], s['surface-selected']), 'surface-hover vs surface-selected').toBeGreaterThanOrEqual(3)
   })
-})
 
-// The interaction set, added in M3a. Each one replaces a color-mix percentage that app.css had
-// tuned by eye, which chart-styling.md section 12 says tokens exist to remove.
-const INTERACTION_SURFACE_KEYS = [
-  'surface-hover', 'surface-selected', 'surface-accent', 'surface-accent-hover', 'surface-disabled',
-] as const satisfies readonly SemanticToken[]
+  // border-chosen paints on surface-page: .choice and .setup-horizon's chosen button sit
+  // directly in the setup wizard column, with no card or inset between them and the page.
+  it('draws the chosen border as a border rather than as bare surface', () => {
+    expect(deltaE(s['border-chosen'], s['surface-page']), 'border-chosen vs surface-page').toBeGreaterThanOrEqual(5)
+  })
+})
 
 // The suite's coverage used to end wherever someone stopped typing token names:
 // `accent-soft` coloured the navigation and `band-baseline` backed every chart,
@@ -248,7 +257,7 @@ const INTERACTION_SURFACE_KEYS = [
 describe('assertion coverage', () => {
   const ASSERTED_SEMANTIC: readonly SemanticToken[] = [
     ...SURFACE_KEYS, ...TEXT_KEYS, ...TEXT_TONE_KEYS, ...NON_TEXT_KEYS, 'border-subtle',
-    ...INTERACTION_SURFACE_KEYS, 'border-accent', 'text-disabled',
+    ...INTERACTION_SURFACE_KEYS, 'border-accent', 'text-disabled', 'border-chosen',
   ]
   const ASSERTED_CHART: readonly ChartToken[] = [
     ...STAGE_KEYS, ...SCALE_KEYS,

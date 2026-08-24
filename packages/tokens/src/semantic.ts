@@ -27,6 +27,17 @@ export const semantic = {
     'surface-disabled': 'slate.900',
     'border-accent': 'blue.800',
     'text-disabled': 'slate.600',
+    // .choice:has(input:checked) and .setup-horizon's chosen button share these two (review
+    // finding 1): the state is "this option is picked", not a component. Both paint directly on
+    // surface-page (setup-shell/-column/-step set no background of their own), not surface-card.
+    // 8% accent over surface-page (0.08 x blue.500 + 0.92 x slate.975) computes to #101829, which
+    // sits deltaE 5.92 from the existing blue.950 - under the ramp's 6-point distinctness floor,
+    // so a fresh adjacent step would fail layering.test.ts. Reusing blue.950 is the honest answer:
+    // the two composites are indistinguishable at this ramp's resolution.
+    'surface-chosen': 'blue.950',
+    // 44% accent over surface-page (0.44 x blue.500 + 0.56 x slate.975) computes to #28477A, far
+    // enough from every existing step (deltaE 40+ on both sides) to need a genuine new one: blue.750.
+    'border-chosen': 'blue.750',
   },
   light: {
     'surface-page': 'slate.100',
@@ -53,6 +64,13 @@ export const semantic = {
     // under the 3:1 floor this project holds disabled text to even though WCAG exempts it.
     // slate.600 clears it at 3.90:1 without changing surface-disabled.
     'text-disabled': 'slate.600',
+    // Same reasoning as the dark entries above: 8% accent over surface-page (0.08 x blue.500 +
+    // 0.92 x slate.100) computes to #E8EFFB, deltaE 1.12 from the existing blue.50 - reused rather
+    // than minting an indistinguishable neighbour that would fail the distinctness floor.
+    'surface-chosen': 'blue.50',
+    // 44% accent over surface-page (0.44 x blue.500 + 0.56 x slate.100) computes to #ACC9F9, a
+    // genuine new step: blue.350.
+    'border-chosen': 'blue.350',
   },
 } satisfies Record<Theme, Record<string, ColorPath>>
 

@@ -24,6 +24,8 @@ body {
   width: 19px; height: 19px; flex: none; border-radius: 50%;
   display: grid; place-items: center; text-transform: uppercase;
   font-size: var(--font-size-micro); font-weight: 600;
+  /* A decorative tint, not an interaction state: nothing about this element hovers, selects or
+     disables. Left as color-mix on purpose (M3a review finding 1). */
   background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-primary);
 }
 
@@ -97,7 +99,7 @@ body {
    each and a bare 13px dot is not a fair thing to ask someone to hit. */
 .choice { display: flex; gap: var(--space-3); align-items: flex-start; padding: var(--space-3); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); cursor: pointer; margin-bottom: var(--space-2); }
 .choice:hover { border-color: var(--text-faint); }
-.choice:has(input:checked) { border-color: color-mix(in srgb, var(--accent) 44%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.choice:has(input:checked) { border-color: var(--border-chosen); background: var(--surface-chosen); }
 .choice input { margin-top: 3px; flex: none; accent-color: var(--accent); }
 .choice-title { font-size: var(--font-size-sm); color: var(--text-primary); display: block; }
 .choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; display: block; margin-top: var(--space-1); }
@@ -113,6 +115,8 @@ body {
 .setup-rail { display: flex; gap: var(--space-1); margin-bottom: var(--space-5); list-style: none; padding: 0; }
 .setup-rail li { flex: 1; font-size: var(--font-size-micro); color: var(--text-faint); padding-top: var(--space-2); border-top: 2px solid var(--border-subtle); }
 .setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: 600; }
+/* A progress marker, not an interaction state: it records a step already completed and nobody
+   hovers, selects or disables it. Left as color-mix on purpose (M3a review finding 1). */
 .setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 .setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
@@ -155,8 +159,8 @@ body {
 }
 .setup-horizon li button:hover { border-color: var(--text-faint); }
 .setup-horizon li[data-chosen='true'] button {
-  color: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 44%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent-soft); border-color: var(--border-chosen);
+  background: var(--surface-chosen);
 }
 
 @media (max-width: 620px) {

@@ -4,8 +4,14 @@ export const primitives = {
     50: '#E8F0FE',
     100: '#B3E4FA',
     200: '#BFD5F9',
+    // 44% accent over surface-page, the .choice/.setup-horizon chosen border. Composited exactly
+    // like the 350 and 500 dark neighbours below: color-mix(in srgb, blue.500 <pct>%, transparent)
+    // over the surface the rule actually paints on (see semantic.ts border-chosen).
+    350: '#ACC9F9',
     500: '#4F8FF7',
     600: '#2376E9',
+    // 44% accent over surface-page, dark side of the same border-chosen composite.
+    750: '#28477A',
     800: '#3730A3',
     900: '#1E2A78',
     950: '#152138',
