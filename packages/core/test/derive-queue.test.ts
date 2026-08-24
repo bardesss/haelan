@@ -36,6 +36,24 @@ describe('the derive queue', () => {
     ])
   })
 
+  // The quarantine the sync runner applies is worthless if the drain ignores it: a person whose
+  // rebuild failed carries tier 2 built by an older mapper, and deriving their queued days would
+  // write tier 3 at the current version on top of it.
+  it('claims only the people it was given, and leaves the rest queued', () => {
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    queue.markDirty({ personId: 'p2', localDate: '2026-08-22', nowMs: 2 })
+    expect(queue.claim(10, ['p1'])).toEqual([{ personId: 'p1', localDate: '2026-08-22' }])
+    expect(queue.size()).toBe(2)
+  })
+
+  // Not the same as "no filter". run() returns before draining when nobody is eligible, but a
+  // claim that read an empty list as "everyone" would be a quarantine that inverts under the one
+  // condition it exists for.
+  it('claims nothing when given an empty list of people', () => {
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    expect(queue.claim(10, [])).toEqual([])
+  })
+
   it('leaves a claimed day queued until it is cleared, so a crash mid-derive redoes it', () => {
     queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
     queue.claim(10)

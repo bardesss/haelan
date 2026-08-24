@@ -4,8 +4,11 @@ The only package that issues SQL or talks to Google. `server`, `mcp`, `cli` and 
 adapters over it, which is what makes a dashboard card, a CLI table and an MCP tool answer the
 same question identically.
 
-This package currently covers the store (schema, migrations, encryption and the raw archive)
-and the API client, which landed in M1b. The sync engine and wizard land in M1c and M1d.
+This package covers the store (schema, migrations, encryption and the raw archive), the API
+client and mapping, the sync engine, the derivation layer that turns tier 2 into tier 3, the
+person bound query layer, and the rebuild that regenerates both derived tiers from the archive.
+Each has its own section below. The wizard is not here: it is a server and browser concern, and
+lives in `apps/server` and `apps/web`.
 
 ## Opening a database
 
@@ -25,8 +28,10 @@ Tier 1 is durable truth and is never regenerated: `people`, `sources`, `oauth_cl
 
 Three rules the schema exists to enforce:
 
-- **Missing is not zero.** `samples.value` and `daily.value` are nullable, and every `daily` row
-  carries `coverage`.
+- **Missing is not zero.** `samples.value` and `daily.value` are nullable, and a `daily` row
+  carries `coverage` wherever there is a basis to measure it. Null coverage is itself that rule
+  applied to the column: a provider reconciled rollup has no samples underneath it to count, and
+  a fabricated 1.0 would read as a fully observed day. See the derivation section below.
 - **Days are local.** A sample is an instant, so it carries one offset beside its millisecond
   timestamp, and day boundaries are computed in the person's timezone. A session is a range, so
   it carries two, `start_offset_minutes` and `end_offset_minutes`, because a sleep session spans
@@ -182,8 +187,9 @@ keeping a stale number. Four things write to the queue. Sync marks the days a wi
 in the same transaction that commits it. An override marks its own day as it is added or removed,
 through `OverrideStore.put` and `.remove`. A priority list write marks every day the person has
 data for, through `SourcePriorityStore.put` and `.clear`, because changing priority is a rebuild.
-The fourth is a `derivation_version` bump, which is what a rebuild itself is: that one is M2e's,
-and nothing compares `DERIVATION_VERSION` to what is on disk yet.
+The fourth is a `derivation_version` bump, which is what a rebuild itself is: `rebuild/versions.ts`
+compares both version constants against each person's stamp at boot, and the rebuild section below
+describes what happens when either has moved.
 
 **Priority** is the per person, per metric ranking that decides which source wins where more than
 one reported the same metric. `SourcePriorityStore` keeps it in `source_priority`, one row per
@@ -282,8 +288,14 @@ The boot trigger itself lives outside this package, in `apps/server/src/rebuild.
 `rebuildIfNeeded` runs after `listen`, so an upgrade never turns into a refused connection, and
 `runBootSequence` starts the sync runner only once the rebuild has succeeded, so nothing writes
 rows the replay would delete without replaying. It yields between people so the server keeps
-answering while better-sqlite3 holds the thread for whichever one it is currently on. A failed
-rebuild does not start the sync runner.
+answering while better-sqlite3 holds the thread for whichever one it is currently on.
+
+A failure that stops the boot sequence structurally does not start the sync runner at all. One
+person's rebuild failing does, because a household should not stop ingesting over one broken
+archive: the runner starts and quarantines that person until a later boot rebuilds them. The
+quarantine covers both halves of what a run does, fetching and draining the derive queue, since
+deriving their queued days would write tier 3 at the current version over tier 2 an older mapper
+built, which is the mixing the version stamp exists to prevent.
 
 A rebuild never touches sync state. High water marks, backfill cursors, notes and events all
 survive it untouched, and so do the overrides themselves beyond moving their keys. Tier 1 exists

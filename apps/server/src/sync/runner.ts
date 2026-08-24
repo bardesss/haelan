@@ -257,7 +257,7 @@ export class SyncRunner {
     // Here as well as at the end of the run, for the same reason the trailing window goes
     // first: a backfill that takes an hour must not be what stands between today's samples and
     // the dashboard reading them.
-    this.#derive()
+    this.#derive(personIds)
 
     // Resolved once per run rather than per type: it is one operator setting, and reading it
     // fresh for every (person, type) pair would let a mid-run settings change produce a run
@@ -295,7 +295,7 @@ export class SyncRunner {
     // above was the only place any of them ever got a chance to walk.
     if (this.#aborted) return
     await this.#backfillPass(deps, personIds, userHorizonDays, null)
-    this.#derive()
+    this.#derive(personIds)
   }
 
   /**
@@ -356,8 +356,13 @@ export class SyncRunner {
    * Its failures stay inside it, the way a failed job stays inside runJob: a derivation defect
    * turning a completed sync into a failed one is the coupling section 13 forbids in the other
    * direction, and the days it could not derive are still queued for the next run either way.
+   *
+   * Restricted to the same people #eligible allowed through, and for the same reason. Gating the
+   * fetch alone left the quarantine leaking: a day queued before the rebuild failed is still in
+   * the queue, and draining it writes tier 3 at the current derivation version over tier 2 built
+   * by an older mapper. Their days stay queued until a boot rebuilds them.
    */
-  #derive(): void {
+  #derive(personIds: string[]): void {
     try {
       for (let batch = 0; batch < MAX_DERIVE_BATCHES; batch++) {
         if (this.#aborted) return
@@ -366,6 +371,7 @@ export class SyncRunner {
           priority: this.#context.instance.sourcePriority,
           overrides: this.#context.instance.overrides,
           settings: this.#context.instance.settings,
+          personIds,
         }).daysDerived === 0) return
       }
       console.log(`sync: derivation stopped after ${MAX_DERIVE_BATCHES} batches with days still queued`)

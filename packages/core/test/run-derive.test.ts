@@ -71,6 +71,23 @@ describe('runDerive', () => {
     expect(perSourceRows().map((r) => [r.metric, r.agg, r.value])).toEqual([['steps', 'sum', 400]])
   })
 
+  // The sync runner quarantines a person whose rebuild failed, because their tier 2 was built by
+  // an older mapper. Deriving their queued days anyway would write tier 3 at the current version
+  // on top of it, which is the one mixing the version stamp exists to prevent.
+  it('derives only for the people it was given, leaving the rest queued', () => {
+    seedPerson(test.db, 'p2')
+    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    queue.markDirty({ personId: 'p2', localDate: LOCAL_DATE, nowMs: 2 })
+
+    const report = runDerive({
+      db: test.db, queue, priority, overrides: overrideStore, settings, personIds: ['p1'],
+    })
+
+    expect(report.daysDerived).toBe(1)
+    expect(queue.claim(10)).toEqual([{ personId: 'p2', localDate: LOCAL_DATE }])
+  })
+
   it('is idempotent: draining twice writes the same rows, not twice the rows', () => {
     insertSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
