@@ -54,7 +54,8 @@
     "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
     "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
-    "deviceNotWorn": "Device was not worn."
+    "deviceNotWorn": "Device was not worn.",
+    "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}"
   },
   "dashboard": {
     "title": "Dashboard",

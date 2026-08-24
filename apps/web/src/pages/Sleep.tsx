@@ -9,7 +9,7 @@ import { SleepSchedule } from '../charts/SleepSchedule.js'
 import { july } from '../fixtures/july.js'
 import type { Stage } from '../fixtures/july.js'
 import { formatClock, formatDuration, toneFor } from '../format.js'
-import type { Delta } from '../format.js'
+import type { Delta, Translate } from '../format.js'
 
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
 const STAGE_LABEL_KEY: Record<Stage, string> = {
@@ -29,10 +29,8 @@ const lastDay = july.days.at(-1)
 const lastNight = july.schedule.at(-1)
 const baseline = july.baselines.sleepMinutes
 
-type T = (key: string, options?: Record<string, unknown>) => string
-
 // Sleep duration's polarity is unambiguous: more, up to the baseline band, is always the good direction.
-function baselineDelta(t: T, minutes: number, low: number, high: number): Delta {
+function baselineDelta(t: Translate, minutes: number, low: number, high: number): Delta {
   const range = t('sleep.baselineRange', { low: formatDuration(low), high: formatDuration(high) })
   const basis = t('sleep.baselineBasis', { low: formatDuration(low), high: formatDuration(high) })
   if (minutes < low) return { text: t('sleep.belowBaseline', { range }), dir: 'down', tone: toneFor('down', 'higher-is-better'), basis }

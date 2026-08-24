@@ -26,8 +26,13 @@ export function toneOf(delta: Delta | undefined): Tone {
   return delta?.tone ?? 'neutral'
 }
 
+// The shape react-i18next's `t` actually has, kept local rather than importing i18next's own
+// type surface for one parameter: format.ts has no JSX and no hook access, so the caller (a
+// component) resolves `t` and hands it down.
+export type Translate = (key: string, options?: Record<string, unknown>) => string
+
 // Flat below 1% swing: smaller reads as noise, not a real trend.
-export function trend(values: number[], polarity: Polarity = 'neutral'): Delta {
+export function trend(t: Translate, values: number[], polarity: Polarity = 'neutral'): Delta {
   const half = Math.floor(values.length / 2)
   const first = values.slice(0, half)
   const second = values.slice(half)
@@ -40,6 +45,6 @@ export function trend(values: number[], polarity: Polarity = 'neutral'): Delta {
     text: `${arrow} ${Math.abs(pct).toFixed(0)}%`,
     dir,
     tone: toneFor(dir, polarity),
-    basis: `change is the mean of the last ${second.length} readings against the first ${first.length}`,
+    basis: t('common.trendBasis', { recent: second.length, earlier: first.length }),
   }
 }

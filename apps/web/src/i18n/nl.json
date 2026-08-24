@@ -54,7 +54,8 @@
     "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
     "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
     "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
-    "deviceNotWorn": "Het apparaat werd niet gedragen."
+    "deviceNotWorn": "Het apparaat werd niet gedragen.",
+    "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
   },
   "dashboard": {
     "title": "Dashboard",

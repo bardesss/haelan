@@ -47,7 +47,7 @@ export function Dashboard() {
         <Card span={3}>
           <StatTile label={t('dashboard.steps.label')} value={totalSteps.toLocaleString('en-GB')}
             basis={t('dashboard.steps.basis', { worn: worn.length, total: july.days.length, unworn })}
-            delta={trend(numbers((d) => d.steps), 'higher-is-better')}>
+            delta={trend(t, numbers((d) => d.steps), 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.steps)} labels={dates}
               label={t('dashboard.steps.chartLabel', { period })} unit={t('dashboard.units.steps')} />
           </StatTile>
@@ -55,7 +55,7 @@ export function Dashboard() {
         <Card span={3}>
           <StatTile label={t('dashboard.restingHr.label')} value={String(Math.round(avg(meanHrMin)))} unit="bpm"
             basis={t('dashboard.restingHr.basis', { worn: worn.length, total: july.days.length, unworn })}
-            delta={trend(meanHrMin, 'lower-is-better')}>
+            delta={trend(t, meanHrMin, 'lower-is-better')}>
             <Sparkline values={july.days.map((d) => d.hrMin)} labels={dates}
               label={t('dashboard.restingHr.chartLabel', { period })} unit={t('dashboard.units.beatsPerMinute')} />
           </StatTile>
@@ -63,7 +63,7 @@ export function Dashboard() {
         <Card span={3}>
           <StatTile label={t('dashboard.sleep.label')} value={formatDuration(avg(meanSleep))}
             basis={t('dashboard.sleep.basis', { worn: worn.length, total: july.days.length, unworn })}
-            delta={trend(meanSleep, 'higher-is-better')}>
+            delta={trend(t, meanSleep, 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.sleepMinutes)} labels={dates}
               label={t('dashboard.sleep.chartLabel', { period })} unit={t('dashboard.units.minutesAsleep')} />
           </StatTile>
@@ -71,7 +71,7 @@ export function Dashboard() {
         <Card span={3}>
           <StatTile label={t('dashboard.meanHr.label')} value={String(Math.round(avg(meanHrMean)))} unit="bpm"
             basis={t('dashboard.meanHr.basis', { worn: worn.length, total: july.days.length, unworn })}
-            delta={trend(meanHrMean, 'neutral')}>
+            delta={trend(t, meanHrMean, 'neutral')}>
             <Sparkline values={july.days.map((d) => d.hrMean)} labels={dates}
               label={t('dashboard.meanHr.chartLabel', { period })} unit={t('dashboard.units.beatsPerMinute')} />
           </StatTile>
