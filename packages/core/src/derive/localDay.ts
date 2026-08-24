@@ -13,6 +13,21 @@ export function localHourOf(utcMs: number, tzOffsetMinutes: number): number {
   return new Date(utcMs + tzOffsetMinutes * 60_000).getUTCHours()
 }
 
+const HOUR_MS = 3_600_000
+
+/**
+ * Widens a UTC scan enough to catch every instant that could fall on `localDate`, under any
+ * offset the provider can report, UTC-12 to UTC+14. The exact per-row filter narrows this back
+ * down by each row's own stored offset; widening first and filtering after reads the same rows
+ * an unbounded scan would, only fewer of them. `deriveDayInto` and `readIntraday` both need
+ * exactly this arithmetic, so it lives once here rather than twice: two copies are two chances
+ * for the widened window to quietly stop agreeing with the filter that narrows it.
+ */
+export function widenedUtcWindow(localDate: string): { start: number, end: number } {
+  const utcMidnight = Date.parse(`${localDate}T00:00:00Z`)
+  return { start: utcMidnight - 14 * HOUR_MS, end: utcMidnight + 38 * HOUR_MS }
+}
+
 const DAY_MS = 86_400_000
 
 /**

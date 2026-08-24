@@ -1,11 +1,11 @@
 import { and, eq, gte, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { samples } from '../db/schema/index.ts'
-import { localDateOf } from '../derive/localDay.ts'
-import { thin } from './downsample.ts'
+import { localDateOf, widenedUtcWindow } from '../derive/localDay.ts'
+import { thinBand } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 
-const HOUR_MS = 3_600_000
+const MINUTE_MS = 60_000
 const DEFAULT_POINTS = 500
 
 export interface IntradayPoint {
@@ -32,6 +32,14 @@ export interface IntradayPoint {
  * merged daily rows; this reader has no second policy of its own, so it keeps every source's point
  * separate and lets a caller ask for one with `sourceId` if that is what it wants.
  *
+ * Only heart rate is downsampled to the minute in the catalogue (`downsampleToMinute`); every
+ * other intraday metric, spo2 and hrv included, is stored one row per reading at `agg: 'raw'`.
+ * A raw reading is its own min, mean and max for the instant it was taken, and where more than
+ * one raw reading shares a minute they are combined exactly the way `downsampleToMinute` combines
+ * them for heart rate: the minute's minimum, arithmetic mean and maximum. Without this every
+ * metric but heart rate answered three nulls per point, which reads as worse than empty because
+ * the caller sees points and finds no value in any of them.
+ *
  * Thinning is per source too, not shared. Handing one interleaved array covering every source to
  * a single `thin` call moves the same blending defect into the downsampler: `minmax` buckets by
  * index and picks extremes by value with no notion of source, so a bucket spanning two devices can
@@ -46,9 +54,7 @@ export function readIntraday(db: DbOrTx, input: {
   sourceId?: string
   points?: number
 }): { points: IntradayPoint[], reduction: Thinned<IntradayPoint>['reduction'] } {
-  const utcMidnight = Date.parse(`${input.localDate}T00:00:00Z`)
-  const windowStart = utcMidnight - 14 * HOUR_MS
-  const windowEnd = utcMidnight + 38 * HOUR_MS
+  const { start: windowStart, end: windowEnd } = widenedUtcWindow(input.localDate)
 
   const rows = db.select().from(samples).where(and(
     eq(samples.personId, input.personId),
@@ -62,16 +68,27 @@ export function readIntraday(db: DbOrTx, input: {
   // Keyed by source first, then minute, rather than one map keyed by a string built from both: a
   // source id is arbitrary text and this avoids ever having to reason about whether two different
   // (source, minute) pairs could print to the same key.
-  const bySource = new Map<string, Map<number, IntradayPoint>>()
+  //
+  // rawValues accumulates a raw metric's readings for the minute so they can be combined once
+  // every row for that minute has been seen, rather than folded in one at a time: a running
+  // min/mean/max would need its own running sum and count anyway, which is exactly what an array
+  // and a single pass at the end already gives for free.
+  const bySource = new Map<string, Map<number, IntradayPoint & { rawValues: number[] }>>()
   for (const row of rows) {
-    const byMinute = bySource.get(row.sourceId) ?? new Map<number, IntradayPoint>()
+    if (row.value === null) continue
+    // A raw reading keeps its own instant, not the minute; grouping it under the minute it
+    // belongs to is what lets several readings in one minute combine, the same partition
+    // downsampleToMinute uses at ingest for the one metric that already gets this treatment.
+    const bucketMs = row.agg === 'raw' ? Math.floor(row.utcMs / MINUTE_MS) * MINUTE_MS : row.utcMs
+    const byMinute = bySource.get(row.sourceId) ?? new Map<number, IntradayPoint & { rawValues: number[] }>()
     bySource.set(row.sourceId, byMinute)
-    const point = byMinute.get(row.utcMs)
-      ?? { sourceId: row.sourceId, utcMs: row.utcMs, min: null, mean: null, max: null }
+    const point = byMinute.get(bucketMs)
+      ?? { sourceId: row.sourceId, utcMs: bucketMs, min: null, mean: null, max: null, rawValues: [] }
     if (row.agg === 'min') point.min = row.value
     else if (row.agg === 'mean') point.mean = row.value
     else if (row.agg === 'max') point.max = row.value
-    byMinute.set(row.utcMs, point)
+    else if (row.agg === 'raw') point.rawValues.push(row.value)
+    byMinute.set(bucketMs, point)
   }
 
   const sourceIds = [...bySource.keys()]
@@ -93,13 +110,27 @@ export function readIntraday(db: DbOrTx, input: {
   let totalTo = 0
   let anyThinned = false
   const perSourcePoints = sourceIds.map((sourceId) => {
-    const series = [...bySource.get(sourceId)!.values()].sort((a, b) => a.utcMs - b.utcMs)
-    // minmax, not lttb: an intraday trace is drawn as a min/max band, and lttb would discard
-    // exactly the extremes a band exists to show.
-    const { points: thinnedSeries, reduction } = thin(series, perSource, {
-      method: 'minmax',
+    const series: IntradayPoint[] = [...bySource.get(sourceId)!.values()]
+      .map(({ rawValues, ...point }) => (
+        rawValues.length === 0
+          ? point
+          : {
+              ...point,
+              min: Math.min(...rawValues),
+              mean: rawValues.reduce((total, v) => total + v, 0) / rawValues.length,
+              max: Math.max(...rawValues),
+            }
+      ))
+      .sort((a, b) => a.utcMs - b.utcMs)
+    // Banded, not a single scalar: bucketing on one derived y, even the point's own mean, is what
+    // let a spike in max or a trough in min vanish while the mean stayed unremarkable. thinBand
+    // buckets the low edge on min and the high edge on max independently, so both survive
+    // regardless of what either point's mean happened to be; lttb is not an option here at all,
+    // since it would discard exactly the extremes a band exists to show.
+    const { points: thinnedSeries, reduction } = thinBand(series, perSource, {
       x: (p) => p.utcMs,
-      y: (p) => p.mean ?? p.max ?? p.min ?? 0,
+      low: (p) => p.min ?? p.mean ?? p.max ?? 0,
+      high: (p) => p.max ?? p.mean ?? p.min ?? 0,
     })
     totalFrom += series.length
     totalTo += thinnedSeries.length

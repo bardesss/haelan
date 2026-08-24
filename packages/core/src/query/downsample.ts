@@ -94,6 +94,41 @@ function lttb<T>(points: readonly T[], target: number, opts: ThinOpts<T>): T[] {
 // min and its max), so the bucket count is half the interior budget. Without the halving the
 // output lands near 2 * target, which turns a budget into an estimate.
 function minmax<T>(points: readonly T[], target: number, opts: ThinOpts<T>): T[] {
+  return bucketExtremes(points, target, { x: opts.x, low: opts.y, high: opts.y })
+}
+
+export interface ThinBandOpts<T> {
+  x: (p: T) => number
+  /** The value that draws the band's lower edge. */
+  low: (p: T) => number
+  /** The value that draws the band's upper edge. */
+  high: (p: T) => number
+}
+
+/**
+ * Thins a series drawn as a band whose two edges are different fields on the same point, an
+ * intraday min/mean/max row for instance, rather than one scalar `thin`'s `y` accessor can name.
+ *
+ * Bucketing on a single derived value, even the point's own mean, is what let a spike in `max` or
+ * a trough in `min` disappear while the mean it was bucketed on stayed unremarkable: the value
+ * the band exists to show was never the one deciding which point survived. Each bucket instead
+ * keeps whichever point has the lowest `low` and whichever has the highest `high`, independently,
+ * so a real extreme in either edge survives regardless of what the other edge or the mean of
+ * either chosen point happened to be.
+ */
+export function thinBand<T>(points: readonly T[], target: number, opts: ThinBandOpts<T>): Thinned<T> {
+  if (points.length <= target || points.length <= 2) {
+    return { points: [...points], reduction: null }
+  }
+  const out = bucketExtremes(points, target, opts)
+  return { points: out, reduction: { method: 'minmax', from: points.length, to: out.length } }
+}
+
+function bucketExtremes<T>(
+  points: readonly T[],
+  target: number,
+  opts: { x: (p: T) => number, low: (p: T) => number, high: (p: T) => number },
+): T[] {
   if (target <= 2) return [points[0]!, points.at(-1)!]
 
   const middleStart = 1
@@ -112,8 +147,8 @@ function minmax<T>(points: readonly T[], target: number, opts: ThinOpts<T>): T[]
     let maxPoint = points[start]!
     for (let j = start; j < Math.min(end, middleEnd); j++) {
       const p = points[j]!
-      if (opts.y(p) < opts.y(minPoint)) minPoint = p
-      if (opts.y(p) > opts.y(maxPoint)) maxPoint = p
+      if (opts.low(p) < opts.low(minPoint)) minPoint = p
+      if (opts.high(p) > opts.high(maxPoint)) maxPoint = p
     }
 
     if (opts.x(minPoint) <= opts.x(maxPoint)) {

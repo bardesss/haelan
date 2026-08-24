@@ -21,10 +21,10 @@ beforeEach(() => {
 afterEach(() => test.cleanup())
 
 const insert = (o: {
-  utcMs: number, agg: SampleAgg, value: number, tzOffsetMinutes?: number, sourceId?: string,
+  utcMs: number, agg: SampleAgg, value: number, tzOffsetMinutes?: number, sourceId?: string, metric?: string,
 }) =>
   test.db.insert(samples).values({
-    personId: 'p1', sourceId: o.sourceId ?? 'watch', metric: 'heart_rate', utcMs: o.utcMs,
+    personId: 'p1', sourceId: o.sourceId ?? 'watch', metric: o.metric ?? 'heart_rate', utcMs: o.utcMs,
     tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET, agg: o.agg, value: o.value, n: 1,
     rawPayloadId: null,
   }).run()
@@ -65,6 +65,22 @@ describe('readIntraday', () => {
     expect(out.points.map((p) => p.mean)).toEqual([55])
   })
 
+  // The window this reader queries is widened by the same -14h/+38h that deriveDayInto uses, now
+  // shared through widenedUtcWindow. run-derive.test.ts names this exact extreme and the comment
+  // there explains why: cutting the +38 hour upper bound to +24 leaves every whole-hour-offset
+  // test in the package green and drops this row silently. A reader with its own copy of the
+  // arithmetic could drift from the derive side's without either suite catching it.
+  it('includes a reading at the UTC-12 extreme, at the far end of the widened window', () => {
+    // UTC midnight for LOCAL_DATE is 2026-08-22T00:00Z, so the window ends at 2026-08-23T14:00Z.
+    // At tz -720 (UTC-12), 2026-08-23T11:59Z is still 2026-08-22 locally, inside both bounds.
+    insert({
+      utcMs: Date.UTC(2026, 7, 23, 11, 59), agg: 'mean', value: 111, tzOffsetMinutes: -720,
+    })
+
+    const out = readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE })
+    expect(out.points.map((p) => p.mean)).toEqual([111])
+  })
+
   it('thins to the requested point count and says what it did', () => {
     for (let minute = 0; minute < 600; minute += 1) {
       insert({ utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: 60 + (minute % 7) })
@@ -74,6 +90,33 @@ describe('readIntraday', () => {
     })
     expect(out.points.length).toBeLessThanOrEqual(100)
     expect(out.reduction).toMatchObject({ method: 'minmax', from: 600 })
+  })
+
+  // Only heart-rate sets downsampleToMinute in the catalogue; every other intraday metric,
+  // spo2 and hrv included, is stored one row per reading at agg 'raw'. A reader that only knows
+  // min/mean/max rows creates a point for every raw row and sets no value on any of them, which
+  // is worse than an empty result: the caller sees points and reads null out of every one.
+  it("combines a minute's raw readings the way the ingest downsampler would have", () => {
+    insert({ utcMs: NINE_AM, agg: 'raw', value: 97, sourceId: 'watch', metric: 'spo2' })
+    insert({ utcMs: NINE_AM + 10_000, agg: 'raw', value: 95, sourceId: 'watch', metric: 'spo2' })
+    insert({ utcMs: NINE_AM + 20_000, agg: 'raw', value: 96, sourceId: 'watch', metric: 'spo2' })
+
+    const out = readIntraday(test.db, { personId: 'p1', metric: 'spo2', localDate: LOCAL_DATE })
+    expect(out.points).toHaveLength(1)
+    expect(out.points[0]).toMatchObject({ min: 95, mean: 96, max: 97 })
+  })
+
+  it('answers with real values for both a raw metric and a downsampled one', () => {
+    insert({ utcMs: NINE_AM, agg: 'min', value: 58, sourceId: 'watch' })
+    insert({ utcMs: NINE_AM, agg: 'mean', value: 62, sourceId: 'watch' })
+    insert({ utcMs: NINE_AM, agg: 'max', value: 71, sourceId: 'watch' })
+    insert({ utcMs: NINE_AM, agg: 'raw', value: 96, sourceId: 'watch', metric: 'spo2' })
+
+    const heartRate = readIntraday(test.db, { personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE })
+    expect(heartRate.points[0]).toMatchObject({ min: 58, mean: 62, max: 71 })
+
+    const spo2 = readIntraday(test.db, { personId: 'p1', metric: 'spo2', localDate: LOCAL_DATE })
+    expect(spo2.points[0]).toMatchObject({ min: 96, mean: 96, max: 96 })
   })
 
   it('returns nothing rather than throwing for a day with no samples', () => {
@@ -139,6 +182,43 @@ describe('readIntraday', () => {
     // one or two points a shared, value-driven bucketing happened to leave it.
     expect(watchPoints.length).toBeGreaterThanOrEqual(20)
     expect(phonePoints.length).toBeGreaterThanOrEqual(20)
+  })
+
+  // Bucketing on the mean, as a single scalar thin() call would have to, discards exactly the
+  // extremes a min/max band exists to show whenever the mean stays unremarkable while an edge
+  // does not: a real tachycardia spike whose minute mean looked ordinary must survive thinning
+  // the same as it would if the mean itself had spiked.
+  it('keeps a spike present only in max, invisible to a bucketing that looks only at mean', () => {
+    for (let minute = 0; minute < 300; minute += 1) {
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'min', value: 58 })
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: 60 + (minute % 3) })
+      insert({
+        utcMs: NINE_AM + minute * 60_000, agg: 'max', value: minute === 137 ? 185 : 65,
+      })
+    }
+
+    const out = readIntraday(test.db, {
+      personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE, points: 100,
+    })
+    expect(out.points.length).toBeLessThanOrEqual(100)
+    expect(out.points.some((p) => p.max === 185)).toBe(true)
+  })
+
+  // The mirror image: a trough present only in min must survive the same way.
+  it('keeps a trough present only in min, invisible to a bucketing that looks only at mean', () => {
+    for (let minute = 0; minute < 300; minute += 1) {
+      insert({
+        utcMs: NINE_AM + minute * 60_000, agg: 'min', value: minute === 200 ? 28 : 55,
+      })
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'mean', value: 60 + (minute % 3) })
+      insert({ utcMs: NINE_AM + minute * 60_000, agg: 'max', value: 65 })
+    }
+
+    const out = readIntraday(test.db, {
+      personId: 'p1', metric: 'heart_rate', localDate: LOCAL_DATE, points: 100,
+    })
+    expect(out.points.length).toBeLessThanOrEqual(100)
+    expect(out.points.some((p) => p.min === 28)).toBe(true)
   })
 
   // thin always keeps at least the first and last point of a series it thins at all, so a budget

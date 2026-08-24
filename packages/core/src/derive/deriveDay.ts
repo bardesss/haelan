@@ -5,7 +5,7 @@ import { rollUpDay, PROVIDER_SOURCE, MERGED_SOURCE } from './rollup.ts'
 import type { SampleLike } from './rollup.ts'
 import { mergeDay } from './merge.ts'
 import type { Priority } from './priority.ts'
-import { localDateOf } from './localDay.ts'
+import { localDateOf, widenedUtcWindow } from './localDay.ts'
 import { applyToDay, applyToSamples, applyToSessions, excludedMetrics } from './overrides.ts'
 import type { OverrideLike } from './overrides.ts'
 import { deriveSleepDay } from './sleep.ts'
@@ -13,8 +13,6 @@ import type { SleepSessionLike } from './sleep.ts'
 import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
-
-const HOUR_MS = 3_600_000
 
 export interface DeriveDayInput {
   personId: string
@@ -40,9 +38,7 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   // land up to 14 hours either side of its UTC midnight. Widen the query by that much, then
   // apply the exact per-row filter below: the result is identical to an unbounded scan, only
   // the number of rows read to get there changes.
-  const utcMidnight = Date.parse(`${input.localDate}T00:00:00Z`)
-  const windowStart = utcMidnight - 14 * HOUR_MS
-  const windowEnd = utcMidnight + 38 * HOUR_MS
+  const { start: windowStart, end: windowEnd } = widenedUtcWindow(input.localDate)
 
   const dayRows = tx.select().from(samples).where(and(
     eq(samples.personId, input.personId),

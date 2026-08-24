@@ -42,4 +42,25 @@ describe('thinning properties', () => {
       expect(out.points.at(-1)).toEqual(points.at(-1))
     }))
   })
+
+  // Spec section 9's third named property for the downsampler, alongside the two above: a
+  // min/max-bucketed range always contains every input point. minmax exists so a range band never
+  // loses the true extreme it was drawn to show, so the point holding the series' overall minimum
+  // and the point holding its overall maximum must both come back, wherever in the series they
+  // fell. lttb makes no such promise, since it optimises for a line's shape rather than a band's
+  // edges, so this property is checked against minmax alone.
+  //
+  // target starts at 4 rather than 2: a target of 2 or 3 falls into the edge case documented in
+  // `query-downsample.test.ts`, where thin keeps only the first and last point regardless of
+  // value and is not making the min/max promise at all. Once target reaches 4 there is at least
+  // one interior bucket, which is the smallest case where the promise applies.
+  it('keeps the series minimum and maximum in a min/max-bucketed range', () => {
+    fc.assert(fc.property(seriesArb, fc.integer({ min: 4, max: 50 }), (points, target) => {
+      const out = thin(points, target, { method: 'minmax', x: (p) => p.x, y: (p) => p.y })
+      const ys = points.map((p) => p.y)
+      const outYs = out.points.map((p) => p.y)
+      expect(Math.min(...outYs)).toBe(Math.min(...ys))
+      expect(Math.max(...outYs)).toBe(Math.max(...ys))
+    }))
+  })
 })
