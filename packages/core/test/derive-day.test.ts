@@ -27,6 +27,7 @@ const tuning = {
   overrides: [],
   gapMinutes: DEFAULT_NIGHT_GAP_MINUTES,
   overlapRatio: DEFAULT_OVERLAP_RATIO,
+  nowMs: 1,
 }
 
 describe('deriveDayInto', () => {

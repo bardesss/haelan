@@ -137,11 +137,16 @@ describe('runRebuild', () => {
   test('running it twice leaves the same rows', () => {
     h = seedRebuildable()
     runRebuild({ ...h.deps, nowMs: 1 })
-    const first = h.db.select().from(daily).all()
+    // updatedAtMs stripped: the property here is that a rebuild recomputes the same values from
+    // tier 1, and when a row was written is not one of its values. The two runs below
+    // deliberately pass different clocks, so the stamp itself is expected to differ.
+    const strip = (rows: (typeof daily.$inferSelect)[]) =>
+      rows.map(({ updatedAtMs: _updatedAtMs, ...rest }) => rest)
+    const first = strip(h.db.select().from(daily).all())
 
     runRebuild({ ...h.deps, nowMs: 2, force: true })
 
-    expect(h.db.select().from(daily).all()).toEqual(first)
+    expect(strip(h.db.select().from(daily).all())).toEqual(first)
   })
 
   test('one person\'s rebuild does not touch another\'s rows', () => {

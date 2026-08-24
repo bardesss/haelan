@@ -371,6 +371,7 @@ export class SyncRunner {
           priority: this.#context.instance.sourcePriority,
           overrides: this.#context.instance.overrides,
           settings: this.#context.instance.settings,
+          nowMs: this.#context.now(),
           personIds,
         }).daysDerived === 0) return
       }

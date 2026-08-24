@@ -61,6 +61,7 @@ describe('recovery metrics', () => {
       priority: new SourcePriorityStore(test.db, queue),
       overrides: new OverrideStore(test.db, queue),
       settings,
+      nowMs: 1,
     })
 
     const written = test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()

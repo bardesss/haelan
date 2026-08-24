@@ -171,6 +171,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         for (const localDate of counts.localDates) {
           deriveDayInto(tx, {
             personId, localDate, priority, overrides: personOverrides, gapMinutes, overlapRatio,
+            nowMs: input.nowMs,
           })
         }
 

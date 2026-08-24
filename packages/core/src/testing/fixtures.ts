@@ -205,7 +205,8 @@ export interface RebuildableSnapshot {
   samples: (typeof samples.$inferSelect)[]
   sessions: (typeof sessions.$inferSelect)[]
   sessionSegments: (typeof sessionSegments.$inferSelect)[]
-  daily: (typeof daily.$inferSelect)[]
+  // Excludes updatedAtMs; see the comment beside the select in snapshotOf.
+  daily: Omit<typeof daily.$inferSelect, 'updatedAtMs'>[]
 }
 
 export interface SeedRebuildableOptions {
@@ -354,7 +355,15 @@ function snapshotOf(db: Database): RebuildableSnapshot {
         asc(sessionSegments.sessionId), asc(sessionSegments.stage),
         asc(sessionSegments.startMs), asc(sessionSegments.id),
       ).all(),
-    daily: db.select().from(daily)
+    // Every column except updatedAtMs. The property this feeds asserts that a rebuild recomputes
+    // the same values from tier 1, and when a row was written is not one of its values: the two
+    // runs deliberately pass different clocks. Making the stamp deterministic so this could keep
+    // selecting everything would leave a column that cannot answer "what changed since".
+    daily: db.select({
+      personId: daily.personId, localDate: daily.localDate, metric: daily.metric,
+      agg: daily.agg, source: daily.source, value: daily.value, coverage: daily.coverage,
+      sourceMix: daily.sourceMix, derivationVersion: daily.derivationVersion,
+    }).from(daily)
       .orderBy(
         asc(daily.personId), asc(daily.localDate), asc(daily.metric),
         asc(daily.agg), asc(daily.source),

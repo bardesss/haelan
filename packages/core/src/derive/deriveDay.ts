@@ -21,6 +21,7 @@ export interface DeriveDayInput {
   overrides: OverrideLike[]
   gapMinutes: number
   overlapRatio: number
+  nowMs: number
 }
 
 /**
@@ -136,7 +137,7 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     )).run()
   }
 
-  for (const row of rows) tx.insert(daily).values(row).run()
+  for (const row of rows) tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).run()
 
   return rows.length
 }

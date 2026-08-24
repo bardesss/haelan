@@ -57,6 +57,13 @@
       "when": 1787510250637,
       "tag": "0007_clean_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787589551656,
+      "tag": "0008_careful_firebird",
+      "breakpoints": true
     }
   ]
 }

@@ -73,7 +73,7 @@ const seedDays = () => {
   }
 }
 
-const drain = () => runDerive({ db: test.db, queue, priority, overrides, settings })
+const drain = () => runDerive({ db: test.db, queue, priority, overrides, settings, nowMs: 1 })
 
 // The day after the last seeded one, so the window covers all seven and excludes nothing by date.
 const baseline = () => query.baseline({
