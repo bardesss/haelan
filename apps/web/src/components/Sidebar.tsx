@@ -23,7 +23,12 @@ const GROUPS = [
 // test can see what the rail actually links to.
 export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
 
-export function Sidebar({ active, person, onSignOut }: { active: string, person: string, onSignOut: () => void }) {
+export function Sidebar({ active, person, onSignOut, signOutError }: {
+  active: string
+  person: string
+  onSignOut: () => void
+  signOutError?: string | null
+}) {
   const { t } = useTranslation()
   return (
     <nav className="rail" aria-label={t('sidebar.sectionsLabel')}>
@@ -46,6 +51,7 @@ export function Sidebar({ active, person, onSignOut }: { active: string, person:
         <div className="rail-person">
           <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
         </div>
+        {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
         <button type="button" className="button" onClick={onSignOut}>
           <Icon name="signOut" />{t('shell.signOut')}
         </button>

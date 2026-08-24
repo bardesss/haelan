@@ -10,10 +10,11 @@
   },
   "shell": {
     "signOut": "Uitloggen",
+    "signOutFailed": "Uitloggen bereikte de instantie niet. Probeer het opnieuw.",
     "sessionExpired": "De sessie is beëindigd. Log opnieuw in om verder te gaan.",
     "error": {
       "title": "Deze instantie gaf geen antwoord.",
-      "detail": "Mogelijk wordt opnieuw opgestart of is er tijdelijk geen verbinding. Probeer het straks opnieuw.",
+      "detail": "Mogelijk wordt er opnieuw opgestart of is er tijdelijk geen verbinding. Probeer het straks opnieuw.",
       "retry": "Opnieuw proberen"
     }
   },

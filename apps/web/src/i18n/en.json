@@ -10,6 +10,7 @@
   },
   "shell": {
     "signOut": "Sign out",
+    "signOutFailed": "Sign-out did not reach the instance. Try again.",
     "sessionExpired": "The session ended. Sign in again to continue.",
     "error": {
       "title": "This instance did not answer.",

@@ -17,7 +17,10 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
   const { t } = useTranslation()
   // Memoised: an unstable build identity makes useChart dispose and recreate the chart.
   const { weeks, cells } = useMemo(() => calendarLayout(days.map((d) => d.date)), [days])
-  const weekdayLabels = WEEKDAY_KEYS.map((key) => t(`charts.weekday.${key}`))
+  // Also memoised, on the same grounds: a fresh array every render gave `build` a new identity
+  // on every render regardless of the `cells` memoisation two lines up, and useChart disposes
+  // and recreates the whole chart whenever `build` changes identity.
+  const weekdayLabels = useMemo(() => WEEKDAY_KEYS.map((key) => t(`charts.weekday.${key}`)), [t])
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)

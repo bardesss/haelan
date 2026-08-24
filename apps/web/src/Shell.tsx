@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar } from './components/Sidebar.js'
 import { SetupApp } from './setup/SetupApp.js'
@@ -7,7 +7,7 @@ import { useSession } from './auth/session.js'
 import { useRoute, matchRoute, navigate } from './router.js'
 import { useTranslation } from './i18n/index.js'
 import { ApiError } from './api/client.js'
-import { submitSignOut } from './auth/signOutRequest.js'
+import { signOutAndResetSession } from './auth/signOutRequest.js'
 import { ROUTES } from './routes.js'
 
 export function Shell() {
@@ -27,6 +27,7 @@ export function Shell() {
   // instance that cannot check a password right now.
   const errorKind = session.error instanceof ApiError ? session.error.kind : null
   const setupIncomplete = errorKind === 'setup_incomplete'
+  const [signOutError, setSignOutError] = useState<string | null>(null)
 
   // Not called from the render body: pushState is a side effect, and StrictMode's double-invoked
   // initial render would push the same entry to the history stack twice back to back.
@@ -54,7 +55,11 @@ export function Shell() {
 
   if (setupIncomplete) return null
 
-  if (errorKind !== null) {
+  // Keyed on session.error rather than errorKind: an error that is not an ApiError (a bug
+  // somewhere upstream, not a mapped HTTP failure) still needs a screen. errorKind is null for
+  // that shape, and a branch keyed on it would fall through to session.data === undefined below
+  // and render nothing, forever, rather than a retry screen the reader can at least act on.
+  if (session.error !== null) {
     return (
       <main className="signin">
         <div className="card">
@@ -77,11 +82,17 @@ export function Shell() {
       <Sidebar
         active={active.path}
         person={session.data.displayName}
+        signOutError={signOutError}
         onSignOut={() => {
-          // Clearing only on success: a request that never reached the server (an unreachable
-          // instance, a dropped connection) should leave the signed-in state exactly as it was
-          // rather than blanking the page for a sign-out that did not happen.
-          void submitSignOut().then(() => { queryClient.clear() })
+          setSignOutError(null)
+          // See signOutRequest.ts for why this resets rather than clears the cache: clearing
+          // silently leaves the mounted useSession observer reporting the old session forever.
+          void signOutAndResetSession(queryClient).then((result) => {
+            // A request that never reached the server (an unreachable instance, a dropped
+            // connection) should leave the signed-in state exactly as it was rather than
+            // silently doing nothing: the reader needs to know the click did not work.
+            if (!result.ok) setSignOutError(t('shell.signOutFailed'))
+          })
         }}
       />
       <main className="main">{active.element}</main>
