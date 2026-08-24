@@ -76,10 +76,13 @@ describe('readSleepNights', () => {
     insertSession({ id: 'n2', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22', sourceId: 'phone' })
 
     const nights = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
-    expect(nights).toHaveLength(2)
-    expect(nights.map((n) => n.sourceId).sort()).toEqual(['phone', 'watch'])
+    // Direct order, not sorted before comparing: 'phone' sorts before 'watch' on the same date.
+    expect(nights.map((n) => n.sourceId)).toEqual(['phone', 'watch'])
   })
 
+  // A blended night (the bug this whole file guards against) also has length 1, so the count
+  // alone does not discriminate: what distinguishes a correctly filtered result from a blended
+  // one that happens to report a single sourceId is which sessions actually ended up in it.
   it('filters to the requested source rather than every device reporting that night', () => {
     insertSession({ id: 'n1', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22', sourceId: 'watch' })
     insertSession({ id: 'n2', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22', sourceId: 'phone' })
@@ -89,5 +92,6 @@ describe('readSleepNights', () => {
     })
     expect(nights).toHaveLength(1)
     expect(nights[0]?.sourceId).toBe('watch')
+    expect(nights[0]?.sessionIds).toEqual(['n1'])
   })
 })
