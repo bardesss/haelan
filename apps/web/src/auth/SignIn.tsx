@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useTranslation } from '../i18n/index.js'
-import { submitSignIn } from './signIn.js'
+import { submitSignIn } from './signInRequest.js'
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const { t } = useTranslation()

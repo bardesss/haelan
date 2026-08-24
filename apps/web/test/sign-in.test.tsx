@@ -1,11 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { submitSignIn } from '../src/auth/signIn.js'
-// The .tsx extension is explicit rather than the project's usual .js: signIn.ts and SignIn.tsx
-// share a directory and a case-insensitive filesystem (Windows, default macOS) cannot tell an
-// import of "SignIn.js" apart from "signIn.js", so the bundler's extension guessing picks
-// whichever file it tries first regardless of which one the specifier names.
-import { SignIn } from '../src/auth/SignIn.tsx'
+import { submitSignIn } from '../src/auth/signInRequest.js'
+import { SignIn } from '../src/auth/SignIn.js'
 import { I18nProvider } from '../src/i18n/index.js'
 
 afterEach(() => { vi.unstubAllGlobals() })
