@@ -266,14 +266,16 @@ moving, in either direction, triggers a rebuild on the next boot. Both are stamp
 row as the rebuild finishes with them, which is what lets an interrupted run resume at the next
 unstamped person rather than starting over.
 
-M3b is why both moved at once rather than one at a time. It gathered four changes to what a day's
-figures contain: spo2 and hrv gained a count aggregate, heart rate gained one too, fed by a fourth
-per-minute row the downsampler now emits, and workout counts and durations started being derived
-from exercise sessions nothing had consumed before. The count aggregates and the workout rollups
-both change what a `daily` row set holds, so `DERIVATION_VERSION` moved from 3 to 4; the new
-per-minute row changes what the mapping layer writes into tier 2, so `MAPPING_VERSION` moved from
-1 to 2. Bumping both together, deliberately, in one task, is what lets a single rebuild on the next
-boot carry all four changes at once instead of a person rebuilding once per bump.
+M3b is why both moved at once rather than one at a time. It gathered three changes to what a day's
+figures contain: every `daily` row now carries an `updated_at_ms` stamp, spo2, hrv and heart rate
+each gained a count aggregate, heart rate's fed by a fourth per-minute row the downsampler now
+emits, and workout counts and durations started being derived from exercise sessions nothing had
+consumed before. All three change what a `daily` row set holds, so `DERIVATION_VERSION` moved from
+3 to 4; the new per-minute row also changes what the mapping layer writes into tier 2, so
+`MAPPING_VERSION` moved from 1 to 2. Bumping both together, deliberately, in one task, is what lets
+a single rebuild on the next boot carry all three at once instead of a person rebuilding once per
+bump. M3b's fourth change, every metric declaring its own unit, needed no bump at all: it alters no
+derived value, only how one is labelled, so a day derived before it is already correct under it.
 
 Sources are re-resolved rather than reused. A source id is derived from the person and the
 identity `describe()` produces, so an identity the current code still produces comes back under

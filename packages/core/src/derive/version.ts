@@ -8,7 +8,7 @@
  *
  * 2: M2b writes merged rows and a source mix, so a day derived under 1 has neither.
  * 3: M2c writes the sleep_* family, so a day derived under 2 has no sleep rows at all.
- * 4: M3b adds spo2 and hrv counts, the workout rollups, and a written-at stamp, so a day derived
- *    under 3 has no count rows, no workout rows, and a null stamp.
+ * 4: M3b adds spo2, hrv and heart rate counts, the workout rollups, and a written-at stamp, so a
+ *    day derived under 3 has no count rows, no workout rows, and a null stamp.
  */
 export const DERIVATION_VERSION = 4
