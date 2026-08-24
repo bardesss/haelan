@@ -19,7 +19,9 @@ body {
 .brand { font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; padding: 4px 12px 16px; }
 .rail-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
 .rail-item[aria-current='page'] svg { opacity: 1; color: var(--accent); }
-.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: var(--space-2); }
+.rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 0 var(--space-3); }
+.rail-foot .button { justify-content: center; }
 .avatar {
   width: 19px; height: 19px; flex: none; border-radius: 50%;
   display: grid; place-items: center; text-transform: uppercase;

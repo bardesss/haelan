@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { submitSignIn } from './signInRequest.js'
 
-export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignIn({ onSignedIn, expired = false }: { onSignedIn: () => void, expired?: boolean }) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -25,19 +25,27 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
       <form className="card" onSubmit={(e) => void submit(e)}>
         <h1>{t('signIn.title')}</h1>
 
-        <label htmlFor="username">{t('signIn.username')}</label>
-        <input id="username" name="username" autoComplete="username" value={username}
-               onChange={(e) => setUsername(e.target.value)} />
+        {expired && <p className="form-error" role="alert">{t('shell.sessionExpired')}</p>}
 
-        <label htmlFor="password">{t('signIn.password')}</label>
-        <input id="password" name="password" type="password" autoComplete="current-password"
-               value={password} onChange={(e) => setPassword(e.target.value)} />
+        <label className="field">
+          <span className="label">{t('signIn.username')}</span>
+          <input className="input" autoComplete="username" value={username}
+            onChange={(e) => setUsername(e.target.value)} />
+        </label>
+
+        <label className="field">
+          <span className="label">{t('signIn.password')}</span>
+          <input className="input" type="password" autoComplete="current-password"
+            value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
 
         {errorKey === null ? null : <p className="form-error" role="alert">{t(errorKey)}</p>}
 
-        <button className="button-primary" type="submit" disabled={busy}>
-          {busy ? t('signIn.working') : t('signIn.submit')}
-        </button>
+        <div className="form-actions">
+          <button type="submit" className="button button-primary" disabled={busy}>
+            {busy ? t('signIn.working') : t('signIn.submit')}
+          </button>
+        </div>
       </form>
     </main>
   )

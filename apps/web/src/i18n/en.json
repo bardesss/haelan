@@ -10,7 +10,12 @@
   },
   "shell": {
     "signOut": "Sign out",
-    "sessionExpired": "The session ended. Sign in again to continue."
+    "sessionExpired": "The session ended. Sign in again to continue.",
+    "error": {
+      "title": "This instance did not answer.",
+      "detail": "It may be restarting or temporarily unreachable. Try again in a moment.",
+      "retry": "Try again"
+    }
   },
   "controlRow": {
     "timeRangeLabel": "Time range",

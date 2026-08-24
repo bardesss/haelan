@@ -50,4 +50,13 @@ describe('the sign-in screen', () => {
   it('renders no raw message key, which is what a missing catalogue entry looks like', () => {
     expect(markup()).not.toContain('signIn.')
   })
+
+  // The wizard's AccountStep already carries this vocabulary; a sign-in screen with its own
+  // unstyled inputs and a button missing the layout base class looked like a different app.
+  it('uses the app\'s form vocabulary rather than unstyled inputs', () => {
+    const html = markup()
+    expect(html).toContain('class="input"')
+    expect(html).toContain('class="label"')
+    expect(html).toMatch(/class="button button-primary"/)
+  })
 })

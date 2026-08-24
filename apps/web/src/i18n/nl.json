@@ -10,7 +10,12 @@
   },
   "shell": {
     "signOut": "Uitloggen",
-    "sessionExpired": "De sessie is beëindigd. Log opnieuw in om verder te gaan."
+    "sessionExpired": "De sessie is beëindigd. Log opnieuw in om verder te gaan.",
+    "error": {
+      "title": "Deze instantie gaf geen antwoord.",
+      "detail": "Mogelijk wordt opnieuw opgestart of is er tijdelijk geen verbinding. Probeer het straks opnieuw.",
+      "retry": "Opnieuw proberen"
+    }
   },
   "controlRow": {
     "timeRangeLabel": "Tijdsbereik",

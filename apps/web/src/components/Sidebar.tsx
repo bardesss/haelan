@@ -23,7 +23,7 @@ const GROUPS = [
 // test can see what the rail actually links to.
 export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
 
-export function Sidebar({ active, person }: { active: string, person: string }) {
+export function Sidebar({ active, person, onSignOut }: { active: string, person: string, onSignOut: () => void }) {
   const { t } = useTranslation()
   return (
     <nav className="rail" aria-label={t('sidebar.sectionsLabel')}>
@@ -40,10 +40,15 @@ export function Sidebar({ active, person }: { active: string, person: string }) 
           ))}
         </div>
       ))}
-      {/* Not a Link: the account page it would point to returns in M3e. A dead link here would be
-          a ninth way to reach a blank screen. */}
       <div className="rail-foot">
-        <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
+        {/* Not a Link: the account page it would point to returns in M3e. A dead link here would
+            be a ninth way to reach a blank screen. */}
+        <div className="rail-person">
+          <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
+        </div>
+        <button type="button" className="button" onClick={onSignOut}>
+          <Icon name="signOut" />{t('shell.signOut')}
+        </button>
       </div>
     </nav>
   )
