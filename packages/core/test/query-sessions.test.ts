@@ -67,4 +67,18 @@ describe('readSessions', () => {
     expect(readSessions(test.db, { personId: 'p1', kind: 'exercise', from: '2026-08-21', to: '2026-08-21' })[0]?.attrs)
       .toEqual({ activityType: 'RUNNING' })
   })
+
+  // The mapper is what would normally write attrs, so malformed JSON should never reach this
+  // table, but a reader that trusted that and threw on the day it turned out false would take the
+  // whole page down with it. Inserted directly because insertExercise always JSON.stringifies.
+  it('returns null attrs rather than throwing when the stored JSON is malformed', () => {
+    test.db.insert(sessions).values({
+      id: 'bad', personId: 'p1', sourceId: 'watch', kind: 'exercise', externalId: 'bad',
+      startMs: BEDTIME - 4 * H, startOffsetMinutes: 120, endMs: BEDTIME - 3 * H, endOffsetMinutes: 120,
+      localDate: '2026-08-21', attrs: 'not json', rawPayloadId: null,
+    }).run()
+
+    const out = readSessions(test.db, { personId: 'p1', kind: 'exercise', from: '2026-08-21', to: '2026-08-21' })
+    expect(out[0]?.attrs).toBeNull()
+  })
 })
