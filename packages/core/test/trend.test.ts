@@ -29,6 +29,24 @@ describe('trendOf', () => {
     expect(TREND_MIN_POINTS).toBeGreaterThan(2)
   })
 
+  // The noisy-series test above and PersonQuery.trend's own tests all use series that pass at
+  // ALPHA = 1 (output equals input, no smoothing at all) and at ALPHA = 0 (a flat line at the
+  // first reading, no reaction to the data at all): a flat series is unchanged by any amount of
+  // smoothing, and a bounded-range check on real data cannot tell a smoothed line from an
+  // unsmoothed one. A step change is the one series shape that gives smoothing something to do:
+  // the day right after the jump has to sit strictly between the old level and the new one,
+  // which only a line that lags the data can produce.
+  it('lags a step change, landing strictly between the old level and the new one', () => {
+    const step = [
+      point('2026-08-01', 80), point('2026-08-02', 80), point('2026-08-03', 80),
+      point('2026-08-04', 90), point('2026-08-05', 90), point('2026-08-06', 90),
+    ]
+    const out = trendOf(step)
+    const dayAfterJump = out.find((p) => p.localDate === '2026-08-04')
+    expect(dayAfterJump?.value).toBeGreaterThan(80)
+    expect(dayAfterJump?.value).toBeLessThan(90)
+  })
+
   it('ignores a day with no reading rather than treating it as zero', () => {
     const withGap = [
       point('2026-08-01', 80), point('2026-08-02', null), point('2026-08-03', 80),
