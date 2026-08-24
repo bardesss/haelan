@@ -29,4 +29,19 @@ describe('query keys', () => {
   it('keeps the session outside the person namespace', () => {
     expect(queryKeys.session()[0]).not.toBe('person')
   })
+
+  // Every array parameter this API takes is a set (a repeated metric, a sources filter), where
+  // order carries no meaning. Object.entries and TanStack's hashKey both normalise key order and
+  // nested plain objects, but neither touches array contents, so two orderings of one set would
+  // otherwise be two cache entries for one question.
+  it('sorts array-valued params, so order carries no meaning for a set filter', () => {
+    expect(queryKeys.resource('p1', 'series', { sources: ['a', 'b'] }))
+      .toEqual(queryKeys.resource('p1', 'series', { sources: ['b', 'a'] }))
+  })
+
+  it('sorts a copy of the array, so the caller is not left holding a reordered array', () => {
+    const sources = ['b', 'a']
+    queryKeys.resource('p1', 'series', { sources })
+    expect(sources).toEqual(['b', 'a'])
+  })
 })
