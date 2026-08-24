@@ -32,10 +32,9 @@ export function widenedUtcWindow(localDate: string): { start: number, end: numbe
  * The absolute hour an instant falls in, once shifted by an offset: not the local hour within a
  * day (`localHourOf`, 0-23), which resets at every midnight, but an index that keeps climbing
  * across a boundary. That is what lets a span crossing midnight, or two spans on different
- * calendar days, count as distinct hours instead of colliding on the same 0-23 label. mergeDay,
- * mergeSleepDay's merged night and deriveExerciseDay's merged workouts all count how many of
- * these hours a source's rows or sessions occupy, so it lives once here rather than as three
- * copies of the same shift-then-divide that could quietly stop agreeing with each other.
+ * calendar days, count as distinct hours instead of colliding on the same 0-23 label. mergeSleepDay
+ * and deriveExerciseDay count how many of these hours a source's sessions occupy, so it lives once
+ * here rather than twice.
  */
 export function absoluteHourOf(utcMs: number, offsetMinutes: number): number {
   return Math.floor((utcMs + offsetMinutes * 60_000) / HOUR_MS)
