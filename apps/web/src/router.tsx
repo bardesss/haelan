@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { ReactNode } from 'react'
+import type { AnchorHTMLAttributes, ReactNode } from 'react'
 
 const normalize = (value: string) => (value.split('?')[0] ?? '').replace(/\/+$/, '') || '/'
 
@@ -72,11 +72,11 @@ export function useRoute(): string {
   )
 }
 
-export function Link({ to, className, children }: {
+export function Link({ to, className, children, ...rest }: {
   to: string
   className?: string
   children: ReactNode
-}) {
+} & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href' | 'onClick'>) {
   return (
     <a
       href={to}
@@ -87,6 +87,7 @@ export function Link({ to, className, children }: {
         event.preventDefault()
         navigate(to)
       }}
+      {...rest}
     >
       {children}
     </a>
