@@ -40,4 +40,34 @@ describe('the api client', () => {
     vi.stubGlobal('fetch', vi.fn(async () => respond(500, { error: { kind: 'transient', code: 'oops' } })))
     await expect(apiGet('/api/v1/x')).rejects.toBeInstanceOf(ApiError)
   })
+
+  it('reports a 502 with an HTML body as transient, not unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      '<html><body>Bad Gateway</body></html>',
+      { status: 502, headers: { 'content-type': 'text/html' } },
+    )))
+    await expect(apiGet('/api/v1/x')).rejects.toMatchObject({ kind: 'transient', status: 502 })
+  })
+
+  it('wraps a SyntaxError from malformed error body as an ApiError', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      'not json at all',
+      { status: 502, headers: { 'content-type': 'text/plain' } },
+    )))
+    const error = await apiGet('/api/v1/x').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).kind).toBe('transient')
+    expect((error as ApiError).status).toBe(502)
+  })
+
+  it('wraps a SyntaxError from malformed success body as an ApiError', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      'not json at all',
+      { status: 200, headers: { 'content-type': 'text/plain' } },
+    )))
+    const error = await apiGet('/api/v1/x').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).kind).toBe('transient')
+    expect((error as ApiError).status).toBe(200)
+  })
 })

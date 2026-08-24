@@ -40,8 +40,21 @@ export async function apiSend<T>(method: string, path: string, body?: unknown): 
     throw new ApiError('unreachable', null, 'the instance did not answer')
   }
 
-  const text = await response.text()
-  const parsed: unknown = text === '' ? {} : JSON.parse(text)
+  let parsed: unknown
+  try {
+    const text = await response.text()
+    // Empty body becomes empty object for both success and error paths, since 204 has no body to read.
+    parsed = text === '' ? {} : JSON.parse(text)
+  } catch {
+    // The instance answered (response received) but could not parse the body. This happens when
+    // a reverse proxy returns HTML for a 502 or other error. Use the status mapping to determine
+    // the kind, since we have the status but not the parsed error body.
+    const kind = KIND_BY_STATUS[response.status] ?? (response.status >= 500 ? 'transient' : 'config')
+    if (response.ok) {
+      throw new ApiError('transient', response.status, 'failed to read response body')
+    }
+    throw new ApiError(kind, response.status, `request failed with ${response.status}`)
+  }
 
   if (response.ok) return parsed as T
 
