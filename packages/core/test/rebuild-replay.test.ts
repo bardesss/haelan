@@ -168,8 +168,8 @@ describe('replayPerson', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
     const archive = new RawArchive(db)
-    // Two pages of one call, archived in the same millisecond. listFor orders by window bounds
-    // then fetch time, and when both tie it falls through to the row id, which put() generates at
+    // Two pages of one call, archived in the same millisecond. listFor orders by fetch time, and
+    // when that ties it falls through to the row id, which put() generates at
     // random: nothing stops a continuation page sorting ahead of its own start page. The
     // pageToken inference reads that order as two episodes, the second overwriting the first,
     // where the sync made one call and downsampled both pages at once.

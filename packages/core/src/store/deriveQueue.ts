@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { deriveQueue } from '../db/schema/index.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
@@ -38,10 +38,17 @@ export class DeriveQueue {
    * Oldest first, and it does not remove what it hands back. A day stays queued until `clear`
    * says its rows are committed, so a crash mid-derive costs a repeat rather than a day that
    * silently never derived.
+   *
+   * `personIds` narrows the claim, which is how the sync runner's quarantine reaches the drain.
+   * Filtering here rather than after the fact matters: a batch discarded in the caller would
+   * report nothing derived and stall the drain loop while other people still had work queued.
+   * Omitted means every person, which is what the rebuild and the tests want.
    */
-  claim(limit: number): QueueEntry[] {
+  claim(limit: number, personIds?: readonly string[]): QueueEntry[] {
+    if (personIds !== undefined && personIds.length === 0) return []
     return this.#db.select({ personId: deriveQueue.personId, localDate: deriveQueue.localDate })
       .from(deriveQueue)
+      .where(personIds === undefined ? undefined : inArray(deriveQueue.personId, [...personIds]))
       .orderBy(asc(deriveQueue.queuedAtMs), asc(deriveQueue.personId), asc(deriveQueue.localDate))
       .limit(limit)
       .all()

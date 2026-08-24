@@ -27,8 +27,15 @@ export function runDerive(input: {
   overrides: OverrideStore
   settings: SettingsStore
   batch?: number
+  /**
+   * Restricts the drain to these people. The sync runner passes the people it is willing to sync,
+   * so a person quarantined until a boot rebuilds them is not derived either: their tier 2 was
+   * built by an older mapper, and deriving it at the current version is the mixing the version
+   * stamp exists to prevent. Omitted means every person, which is what a rebuild wants.
+   */
+  personIds?: readonly string[]
 }): DeriveReport {
-  const claimed = input.queue.claim(input.batch ?? DEFAULT_BATCH)
+  const claimed = input.queue.claim(input.batch ?? DEFAULT_BATCH, input.personIds)
   let rowsWritten = 0
 
   // Instance wide rather than per person, and read once for the whole drain. A change to either

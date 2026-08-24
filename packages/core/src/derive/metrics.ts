@@ -76,6 +76,11 @@ export const METRICS: Record<string, MetricSpec> = {
 /**
  * The sleep family, in one place so deriveSleepDay and the truth test cannot drift apart on
  * which metrics exist.
+ *
+ * That is a claim about a guarantee, so it names the thing that provides it: sleep-derive.test.ts
+ * asserts equality between this list and what deriveSleepDay emits for a night reaching every
+ * branch. Until M2f the claim stood on nothing, because deriveSleepDay pushes literal strings and
+ * never reads this list, so either side could gain a metric alone and leave the suite green.
  */
 export const SLEEP_METRICS = [
   'sleep_asleep_minutes', 'sleep_awake_minutes', 'sleep_in_bed_minutes',

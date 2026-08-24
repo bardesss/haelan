@@ -127,7 +127,9 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     // Declared out here so the catch below, not the transaction, decides what a failure means.
     let personReport: RebuildPersonReport
     try {
-      // Oldest window first, which is the order the syncs wrote in.
+      // Oldest fetch first, which is the order the syncs wrote in. Not oldest window: a backfill
+      // walks history backwards, so window order and write order disagree, and replaying by
+      // window would let a stale reading overwrite the correction a later fetch brought.
       const payloads = input.archive.listFor(personId)
       // input.peopleStore, input.priority and input.overrides were built on the outer db handle
       // and are used inside this transaction anyway. That is correct rather than an oversight:

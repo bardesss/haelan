@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { deriveSleepDay } from '../src/derive/sleep.ts'
 import type { SleepSessionLike, SleepSegmentLike } from '../src/derive/sleep.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
+import { SLEEP_METRICS } from '../src/derive/metrics.ts'
 
 const MIN = 60_000
 const H = 60 * MIN
@@ -26,6 +27,26 @@ const valueOf = (rows: ReturnType<typeof derive>, metric: string) =>
   rows.find((r) => r.metric === metric)?.value
 
 describe('deriveSleepDay', () => {
+  // SLEEP_METRICS says it exists so that this function and the catalogue cannot drift apart on
+  // which metrics exist. Nothing enforced that until now: the function pushes literal strings and
+  // never reads the list, so a metric added to either side alone left the suite green and the
+  // comment false. Equality on a night that reaches every branch is what makes the claim true.
+  it('emits exactly the metrics SLEEP_METRICS names, no more and no fewer', () => {
+    const rows = derive(
+      [
+        session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+        session({ id: 'nap', startMs: BEDTIME + 20 * H, endMs: BEDTIME + 21 * H }),
+      ],
+      [
+        seg('n', 'LIGHT', BEDTIME, BEDTIME + 4 * H),
+        seg('n', 'DEEP', BEDTIME + 4 * H, BEDTIME + 6 * H),
+        seg('n', 'REM', BEDTIME + 6 * H, BEDTIME + 7 * H),
+        seg('n', 'AWAKE', BEDTIME + 7 * H, BEDTIME + 8 * H),
+      ],
+    )
+    expect([...new Set(rows.map((r) => r.metric))].sort()).toEqual([...SLEEP_METRICS].sort())
+  })
+
   it('writes nothing at all for a day with no sleep', () => {
     expect(derive([])).toEqual([])
   })

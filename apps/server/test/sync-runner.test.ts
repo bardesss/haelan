@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, supports } from '@haelan/core'
+import { DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, SCOPES, supports } from '@haelan/core'
 import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -18,6 +18,12 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // is hung". So the cost is declared where it is incurred. Generous on purpose: it is a
 // hang-detector for these tests, not a performance assertion, and a performance assertion is
 // exactly what it must not become on hardware this suite does not choose.
+//
+// Two tests carry it for a second reason, which the original wording missed and a full-suite run
+// then proved: a test that awaits a whole run to completion is in the same weight class even at
+// the harness's small defaults, because a run syncs every listable type for every connected
+// person. The first test below awaits one, the quarantine drain test awaits one for two people,
+// and the first was the flake this comment described without covering.
 const SPRINT_BUDGET_MS = 60_000
 
 describe('the sync runner', () => {
@@ -29,7 +35,7 @@ describe('the sync runner', () => {
     const second = await runner.trigger('manual')
     expect(second).toMatchObject({ started: false, reason: 'already_running' })
     await first
-  })
+  }, SPRINT_BUDGET_MS)
 
   it('skips a person whose derived data is not at the current versions', async () => {
     harness = await withServer({ google: 'ok' })
@@ -49,6 +55,32 @@ describe('the sync runner', () => {
     // leaves a person whose tiers disagree, which is exactly what a rebuild is meant to prevent.
     expect(harness.app.haelan.stores.syncState.get('p1', 'heart-rate')).toBeNull()
   })
+
+  // The skip above stops the fetching. It has to stop the draining too, or the quarantine leaks:
+  // a day already queued before the rebuild failed would be derived at the current derivation
+  // version on top of tier 2 built by an older mapper, which is the one state the version stamp
+  // exists to make impossible. Two people, because with only a quarantined one the run returns
+  // before it drains anything and this would pass without draining being gated at all.
+  it('does not derive a quarantined person, while still draining everybody else', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const { stores, instance } = harness.app.haelan
+    stores.people.create({
+      id: 'p2', displayName: 'Other', timezone: 'Europe/Amsterdam', nowMs: harness.clock.nowMs,
+    })
+    instance.credentials.putRefreshToken({
+      personId: 'p2', refreshToken: 'stub-refresh-token', scopes: [...SCOPES], nowMs: harness.clock.nowMs,
+    })
+    stores.people.stampBuiltVersions({ id: 'p1', mappingVersion: 0, derivationVersion: 0 })
+    instance.deriveQueue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    instance.deriveQueue.markDirty({ personId: 'p2', localDate: '2026-08-22', nowMs: 2 })
+
+    await harness.app.haelan.runner.trigger('scheduled')
+
+    expect(instance.deriveQueue.claim(10)).toEqual([
+      { personId: 'p1', localDate: '2026-08-22' },
+    ])
+  }, SPRINT_BUDGET_MS)
 
   it('says a person is being skipped once rather than on every tick', async () => {
     harness = await withServer({ google: 'ok' })
