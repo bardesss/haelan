@@ -81,6 +81,11 @@ export const METRICS: Record<string, MetricSpec> = {
   sleep_waketime_minutes: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'minutes' },
   sleep_nap_count: { aggs: ['count'], precision: 0, direction: 'neutral', unit: 'count' },
   sleep_nap_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'minutes' },
+
+  // Workouts, derived from sessions the way the sleep family is, and named for what they measure
+  // rather than for the data type: `exercise` stays undefined below, same as `sleep` does.
+  workout_count: { aggs: ['count'], precision: 0, direction: 'neutral', unit: 'count' },
+  workout_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'minutes' },
 }
 
 /**

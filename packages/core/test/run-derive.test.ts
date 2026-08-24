@@ -61,6 +61,16 @@ const insertSleep = (o: {
 const sleepValue = (metric: string, source = 'merged') =>
   dailyRows().find((r) => r.metric === metric && r.source === source)?.value
 
+const insertExercise = (o: { id: string, sourceId?: string, startHour: number, endHour: number }) => {
+  test.db.insert(sessions).values({
+    id: o.id, personId: 'p1', sourceId: o.sourceId ?? 'watch', kind: 'exercise', externalId: o.id,
+    startMs: MIDNIGHT_UTC + o.startHour * 3_600_000, startOffsetMinutes: OFFSET,
+    endMs: MIDNIGHT_UTC + o.endHour * 3_600_000, endOffsetMinutes: OFFSET,
+    localDate: LOCAL_DATE, attrs: '{}',
+    rawPayloadId: null,
+  }).run()
+}
+
 describe('runDerive', () => {
   it('derives a queued day and clears it', () => {
     insertSample({ metric: 'steps', value: 400, hour: 9 })
@@ -330,6 +340,61 @@ describe('runDerive', () => {
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
     expect(dailyRows().filter((r) => r.metric.startsWith('sleep_'))).toEqual([])
+  })
+
+  it('derives a workout into daily rows, per source and merged', () => {
+    insertExercise({ id: 'run', startHour: 7, endHour: 8 })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+
+    expect(sleepValue('workout_count', 'watch')).toBe(1)
+    expect(sleepValue('workout_minutes', 'watch')).toBe(60)
+    expect(sleepValue('workout_count', 'merged')).toBe(1)
+    expect(sleepValue('workout_minutes', 'merged')).toBe(60)
+  })
+
+  it('writes no workout rows at all for a day with no exercise sessions', () => {
+    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+
+    expect(dailyRows().filter((r) => r.metric.startsWith('workout_'))).toEqual([])
+  })
+
+  it('counts one workout once in the merged row when two sources both recorded it', () => {
+    // The double count grouping exists to prevent, at the full pipeline: a watch and a phone
+    // recording the same run must not report two workouts merged.
+    insertExercise({ id: 'watch-run', sourceId: 'watch', startHour: 7, endHour: 8 })
+    insertExercise({ id: 'phone-run', sourceId: 'phone', startHour: 7, endHour: 8 })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+
+    expect(sleepValue('workout_count', 'watch')).toBe(1)
+    expect(sleepValue('workout_count', 'phone')).toBe(1)
+    expect(sleepValue('workout_count', 'merged')).toBe(1)
+  })
+
+  it('excludes a session an override threw out, and the workout count shrinks', () => {
+    insertExercise({ id: 'run', startHour: 7, endHour: 8 })
+    insertExercise({ id: 'ride', startHour: 14, endHour: 15 })
+    overrideStore.put({
+      personId: 'p1', scope: 'session', targetKey: sessionTarget('ride'),
+      action: 'exclude', reason: 'forgot to end it', nowMs: 1,
+    })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+
+    expect(sleepValue('workout_count', 'merged')).toBe(1)
+  })
+
+  it('replaces workout rows wholesale, so a stale count cannot outlive its sessions', () => {
+    insertExercise({ id: 'run', startHour: 7, endHour: 8 })
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+    test.db.delete(sessions).run()
+    queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
+    runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
+
+    expect(dailyRows().filter((r) => r.metric.startsWith('workout_'))).toEqual([])
   })
 
   it('stamps every derived row with the clock it was derived at', () => {

@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, lte, ne } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, samples, sessions, sessionSegments } from '../db/schema/index.ts'
-import { rollUpDay, PROVIDER_SOURCE } from './rollup.ts'
+import { rollUpDay, PROVIDER_SOURCE, MERGED_SOURCE } from './rollup.ts'
 import type { SampleLike } from './rollup.ts'
 import { mergeDay } from './merge.ts'
 import type { Priority } from './priority.ts'
@@ -11,6 +11,8 @@ import type { OverrideLike } from './overrides.ts'
 import { deriveSleepDay } from './sleep.ts'
 import type { SleepSessionLike } from './sleep.ts'
 import { mergeSleepDay } from './sleepMerge.ts'
+import { deriveExerciseDay } from './exercise.ts'
+import type { ExerciseSessionLike } from './exercise.ts'
 
 const HOUR_MS = 3_600_000
 
@@ -115,8 +117,43 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     priority: input.priority,
   })
 
+  const exerciseRows = tx.select().from(sessions).where(and(
+    eq(sessions.personId, input.personId),
+    eq(sessions.localDate, input.localDate),
+    eq(sessions.kind, 'exercise'),
+  )).all()
+
+  const exerciseSessions: ExerciseSessionLike[] = applyToSessions(
+    exerciseRows.map((row) => ({
+      id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs,
+    })),
+    personOverrides,
+  )
+
+  const perSourceExercise = [...new Set(exerciseSessions.map((s) => s.sourceId))].flatMap((source) =>
+    deriveExerciseDay({
+      personId: input.personId,
+      localDate: input.localDate,
+      source,
+      sessions: exerciseSessions.filter((s) => s.sourceId === source),
+      priority: input.priority,
+      overlapRatio: input.overlapRatio,
+    }))
+
+  const mergedExercise = deriveExerciseDay({
+    personId: input.personId,
+    localDate: input.localDate,
+    source: MERGED_SOURCE,
+    sessions: exerciseSessions,
+    priority: input.priority,
+    overlapRatio: input.overlapRatio,
+  })
+
   const excluded = excludedMetrics(personOverrides, input.localDate)
-  const rows = applyToDay([...derived, ...merged, ...perSourceSleep, ...mergedSleep], excluded)
+  const rows = applyToDay(
+    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceExercise, ...mergedExercise],
+    excluded,
+  )
 
   // Everything we derive for this day goes, then comes back. Provider rows are excluded
   // because they are ingested rather than derived and nothing here could recompute them.
