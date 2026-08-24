@@ -92,7 +92,8 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M2d** Baselines and query layer | Rolling baselines with a thin flag, insights suppressed on missing days and thin coverage, and the person bound query layer M3 and M4 read through | Done, [#51](https://github.com/bardesss/haelan/pull/51) |
 | **M2e** Rebuild | Per person atomic rebuild of tiers 2 and 3 from the archive, source identity re-resolved through the current mapping, overrides re-targeted or reported, and the version bump that triggers it on boot | Done, [#55](https://github.com/bardesss/haelan/pull/55) |
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
-| **M3a** Web foundations | Routing with parameters, sign-in and sign-out, session expiry handled without a stale dashboard behind it, person binding, i18next with English and Dutch across every page and chart, interaction and motion tokens, TanStack Query | In review |
+| **M3a** Web foundations | Routing with parameters, sign-in and sign-out, session expiry handled without a stale dashboard behind it, person binding, i18next with English and Dutch across every page and chart, interaction and motion tokens, TanStack Query | Done, [#64](https://github.com/bardesss/haelan/pull/64) |
+| **M3b-1** Core read stack | Units on every metric, written-at timestamp on derived rows, sample counts for SpO2, HRV and heart rate, workout counts and durations from exercise sessions, one derivation and mapping version bump, query layer with shared downsampler, intraday, nights, sessions and weight trend bound to one person | In review |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish, the person switcher and member management | Not started |
 
@@ -104,7 +105,8 @@ run happened on 2026-08-21 and is recorded, including what it broke, in
 `probe/findings/console-steps.md`. Two things that run did not settle are listed there rather than
 here, because an unanswered question belongs next to its evidence. **M2 is cut the same way**,
 into the units `docs/superpowers/specs/2026-08-22-m2-derivation-design.md` names: M2a is the first
-of them and each has its own row above, and **M2e** is the last. D1 and M0 through
+of them and each has its own row above, and **M2e** is the last. **M3 is cut the same way**,
+with M3b-1 and a second plan covering the HTTP surface. D1 and M0 through
 M5 are the only phases the design defines. M1 comes before the dashboard deliberately: intraday samples have a shelf
 life, since the API only retains them for a recent window, so every week without ingestion is a
 week of minute-level history permanently unavailable at that resolution. Charts can be improved
