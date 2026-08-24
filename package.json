@@ -16,9 +16,9 @@
     "start": "node --experimental-strip-types apps/server/src/index.ts"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.2.0",
     "fast-check": "^4.9.0",
-    "typescript": "^5.6.0",
+    "typescript": "^7.0.2",
     "vite-node": "^6.0.0",
     "vitest": "^4.1.11"
   }
