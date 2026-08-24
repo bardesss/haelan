@@ -176,3 +176,9 @@ body {
 }
 
 @media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
+
+/* The sign-in screen is the one place with no rail and no wizard rail either: it is the
+   entire viewport before there is anything else to show. form-error is not redefined here,
+   the boxed alert already declared above under "Forms" fits this screen too. */
+.signin { display: grid; place-items: center; min-height: 100vh; padding: var(--space-6); }
+.signin .card { display: grid; gap: var(--space-3); width: min(360px, 100%); }
