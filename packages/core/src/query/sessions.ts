@@ -32,7 +32,10 @@ export function readSessions(db: DbOrTx, input: {
     eq(sessions.kind, input.kind),
     gte(sessions.localDate, input.from),
     lte(sessions.localDate, input.to),
-  )).orderBy(asc(sessions.startMs)).all()
+  // id breaks a tie between two devices reporting a session at the same startMs, which startMs
+  // alone leaves to sqlite's own unspecified order and flaps a snapshot or an ETag over rows that
+  // did not actually change.
+  )).orderBy(asc(sessions.startMs), asc(sessions.id)).all()
 
   return rows.map((row) => ({
     id: row.id,

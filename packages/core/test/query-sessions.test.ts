@@ -68,6 +68,18 @@ describe('readSessions', () => {
       .toEqual({ activityType: 'RUNNING' })
   })
 
+  // Two devices can report an exercise session starting at the exact same instant. Ordering by
+  // startMs alone leaves that tie to whatever order sqlite happened to return the rows in, which
+  // flaps a snapshot or an ETag built from this list without anything in the data actually
+  // changing.
+  it('breaks a startMs tie with a total order, not an arbitrary one', () => {
+    insertExercise({ id: 'b-run', startMs: BEDTIME, endMs: BEDTIME + H, localDate: '2026-08-22' })
+    insertExercise({ id: 'a-run', startMs: BEDTIME, endMs: BEDTIME + H, localDate: '2026-08-22' })
+
+    const out = readSessions(test.db, { personId: 'p1', kind: 'exercise', from: '2026-08-22', to: '2026-08-22' })
+    expect(out.map((s) => s.id)).toEqual(['a-run', 'b-run'])
+  })
+
   // The mapper is what would normally write attrs, so malformed JSON should never reach this
   // table, but a reader that trusted that and threw on the day it turned out false would take the
   // whole page down with it. Inserted directly because insertExercise always JSON.stringifies.

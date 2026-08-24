@@ -46,7 +46,11 @@ export function readSleepNights(db: DbOrTx, input: {
     gte(sessions.localDate, input.from),
     lte(sessions.localDate, input.to),
     input.sourceId === undefined ? undefined : eq(sessions.sourceId, input.sourceId),
-  )).all()
+  // id breaks a tie between two sessions sharing a startMs, which startMs alone leaves to
+  // sqlite's own unspecified order. sessionIds below is built straight from this fetch order, so
+  // an unordered query here is an unordered sessionIds, which flaps a snapshot or an ETag over a
+  // night that did not actually change.
+  )).orderBy(asc(sessions.startMs), asc(sessions.id)).all()
 
   if (sessionRows.length === 0) return []
 

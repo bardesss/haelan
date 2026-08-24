@@ -80,6 +80,18 @@ describe('readSleepNights', () => {
     expect(nights.map((n) => n.sourceId)).toEqual(['phone', 'watch'])
   })
 
+  // Nothing ordered the sessions feeding one night's sessionIds beyond whatever order sqlite
+  // happened to return them in, which is exactly the kind of gap that flaps a snapshot or an
+  // ETag over a night that did not actually change. b then a, deliberately out of both id and
+  // insertion order, so a fix that merely preserved insertion order would still fail this.
+  it('gives sessionIds a total order rather than an arbitrary one', () => {
+    insertSession({ id: 'b', startMs: BEDTIME + 3 * H, endMs: BEDTIME + 6 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 3 * H, localDate: '2026-08-22' })
+
+    const nights = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
+    expect(nights[0]?.sessionIds).toEqual(['a', 'b'])
+  })
+
   // A blended night (the bug this whole file guards against) also has length 1, so the count
   // alone does not discriminate: what distinguishes a correctly filtered result from a blended
   // one that happens to report a single sourceId is which sessions actually ended up in it.

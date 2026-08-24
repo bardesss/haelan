@@ -77,8 +77,14 @@ export const METRICS: Record<string, MetricSpec> = {
   sleep_efficiency: { aggs: ['last'], precision: 0, direction: 'up', unit: 'percent' },
   // Minutes from the local midnight of the row's date, which is the morning the night ended, so
   // an 23:30 bedtime is -30. One signed scale rather than a time plus a column saying which day.
-  sleep_bedtime_minutes: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'minutes' },
-  sleep_waketime_minutes: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'minutes' },
+  // The unit is a clock offset, not a duration, which 'minutes' alone does not say: -30 is not
+  // thirty minutes of anything, it is thirty minutes before midnight.
+  sleep_bedtime_minutes: {
+    aggs: ['last'], precision: 0, direction: 'neutral', unit: 'minutes_from_local_midnight',
+  },
+  sleep_waketime_minutes: {
+    aggs: ['last'], precision: 0, direction: 'neutral', unit: 'minutes_from_local_midnight',
+  },
   sleep_nap_count: { aggs: ['count'], precision: 0, direction: 'neutral', unit: 'count' },
   sleep_nap_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'minutes' },
 
