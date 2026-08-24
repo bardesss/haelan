@@ -90,14 +90,16 @@ function lttb<T>(points: readonly T[], target: number, opts: ThinOpts<T>): T[] {
   return out
 }
 
-// Buckets the series into (target - 2) even slices and keeps each slice's min and max, plus the
-// series' own first and last point. A bucket collapses to one point when its extremes coincide.
+// target counts points, not buckets, and each interior bucket can contribute two of them (its
+// min and its max), so the bucket count is half the interior budget. Without the halving the
+// output lands near 2 * target, which turns a budget into an estimate.
 function minmax<T>(points: readonly T[], target: number, opts: ThinOpts<T>): T[] {
   if (target <= 2) return [points[0]!, points.at(-1)!]
 
   const middleStart = 1
   const middleEnd = points.length - 1
-  const bucketCount = target - 2
+  const bucketCount = Math.floor((target - 2) / 2)
+  if (bucketCount === 0) return [points[0]!, points.at(-1)!]
   const bucketSize = (middleEnd - middleStart) / bucketCount
 
   const out: T[] = [points[0]!]
