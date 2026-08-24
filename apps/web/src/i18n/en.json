@@ -67,6 +67,7 @@
     "units": {
       "steps": "Steps",
       "beatsPerMinute": "Beats per minute",
+      "bpm": "bpm",
       "minutesAsleep": "Minutes asleep"
     },
     "steps": {

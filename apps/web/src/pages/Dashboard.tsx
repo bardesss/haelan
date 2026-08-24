@@ -33,8 +33,11 @@ const lastDate = july.days.at(-1)?.date ?? ''
 const zeroSleepNights = worn.filter((d) => d.sleepMinutes === 0)
 
 export function Dashboard() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const period = t('common.periodLabel')
+  // The active language, not a pinned locale: a bilingual app whose numbers only ever group like
+  // English is not actually speaking Dutch when it renders Dutch.
+  const groupNumber = (value: number) => value.toLocaleString(i18n.language)
   const startLabel = lastNight?.bed != null
     ? t('common.bedLabel', { time: formatClock(lastNight.bed) })
     : t('common.bedTimeNotRecorded')
@@ -45,7 +48,7 @@ export function Dashboard() {
       <ControlRow range="month" label={period} sources="2/2" syncedMinutesAgo={4} />
       <div className="grid">
         <Card span={3}>
-          <StatTile label={t('dashboard.steps.label')} value={totalSteps.toLocaleString('en-GB')}
+          <StatTile label={t('dashboard.steps.label')} value={groupNumber(totalSteps)}
             basis={t('dashboard.steps.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(t, numbers((d) => d.steps), 'higher-is-better')}>
             <Sparkline values={july.days.map((d) => d.steps)} labels={dates}
@@ -53,7 +56,7 @@ export function Dashboard() {
           </StatTile>
         </Card>
         <Card span={3}>
-          <StatTile label={t('dashboard.restingHr.label')} value={String(Math.round(avg(meanHrMin)))} unit="bpm"
+          <StatTile label={t('dashboard.restingHr.label')} value={String(Math.round(avg(meanHrMin)))} unit={t('dashboard.units.bpm')}
             basis={t('dashboard.restingHr.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(t, meanHrMin, 'lower-is-better')}>
             <Sparkline values={july.days.map((d) => d.hrMin)} labels={dates}
@@ -69,7 +72,7 @@ export function Dashboard() {
           </StatTile>
         </Card>
         <Card span={3}>
-          <StatTile label={t('dashboard.meanHr.label')} value={String(Math.round(avg(meanHrMean)))} unit="bpm"
+          <StatTile label={t('dashboard.meanHr.label')} value={String(Math.round(avg(meanHrMean)))} unit={t('dashboard.units.bpm')}
             basis={t('dashboard.meanHr.basis', { worn: worn.length, total: july.days.length, unworn })}
             delta={trend(t, meanHrMean, 'neutral')}>
             <Sparkline values={july.days.map((d) => d.hrMean)} labels={dates}
@@ -109,7 +112,7 @@ export function Dashboard() {
 
         <Card span={8} label={t('dashboard.dailySteps.label')}
           basis={t('dashboard.dailySteps.basis', {
-            worn: worn.length, total: july.days.length, maxSteps: maxSteps.toLocaleString('en-GB'),
+            worn: worn.length, total: july.days.length, maxSteps: groupNumber(maxSteps),
           })}>
           <ActivityHeatmap days={july.days} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
         </Card>

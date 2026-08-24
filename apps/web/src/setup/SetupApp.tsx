@@ -119,7 +119,7 @@ export function SetupApp() {
                       putBackfillHorizon(days)
                         .then(() => getSyncStatus().then(setStatus))
                         .catch((cause: unknown) => {
-                          setHorizonFailure(cause instanceof Error ? cause.message : 'that did not work')
+                          setHorizonFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
                         })
                     }}
                   />

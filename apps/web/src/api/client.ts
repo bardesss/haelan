@@ -47,12 +47,11 @@ export async function apiSend<T>(method: string, path: string, body?: unknown): 
     parsed = text === '' ? {} : JSON.parse(text)
   } catch {
     // The instance answered (response received) but could not parse the body. This happens when
-    // a reverse proxy returns HTML for a 502 or other error. Use the status mapping to determine
-    // the kind, since we have the status but not the parsed error body.
-    const kind = KIND_BY_STATUS[response.status] ?? (response.status >= 500 ? 'transient' : 'config')
+    // a reverse proxy returns HTML for a 502 or other error.
     if (response.ok) {
       throw new ApiError('transient', response.status, 'failed to read response body')
     }
+    const kind = KIND_BY_STATUS[response.status] ?? (response.status >= 500 ? 'transient' : 'config')
     throw new ApiError(kind, response.status, `request failed with ${response.status}`)
   }
 
