@@ -283,8 +283,8 @@ describe('mapWindowSamples', () => {
       dataType: hr, personId: ctx.personId, resolveSource: ctx.resolveSource,
       pages: [{ body: body(points), rawPayloadId: ctx.rawPayloadId }],
     })
-    expect(rows).toHaveLength(3)
-    expect(new Set(rows.map((r) => r.agg))).toEqual(new Set(['min', 'mean', 'max']))
+    expect(rows).toHaveLength(4)
+    expect(new Set(rows.map((r) => r.agg))).toEqual(new Set(['min', 'mean', 'max', 'count']))
     expect(rows[0]?.n).toBe(30)
   })
 
@@ -306,7 +306,7 @@ describe('mapWindowSamples', () => {
         { body: body(secondPage), rawPayloadId: 'r2' },
       ],
     })
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(4)
     expect(rows.every((r) => r.n === 6)).toBe(true)
     const mean = values.reduce((a, b) => a + b, 0) / values.length
     expect(rows.find((r) => r.agg === 'mean')?.value).toBeCloseTo(mean, 10)

@@ -41,7 +41,7 @@ describe('client and mapper together', () => {
       dataType: hr, personId: 'p1', resolveSource: () => 's1',
       pages: result.payloadIds.map((id) => ({ body: archive.getBody('p1', id), rawPayloadId: id })),
     })
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(4)
     expect(rows[0]?.n).toBe(30)
   })
 

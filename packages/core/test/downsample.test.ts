@@ -11,7 +11,7 @@ const at = (seconds: number, value: number): SampleRow => ({
 describe('downsampleToMinute', () => {
   it('turns a minute of readings into min, mean and max', () => {
     const out = downsampleToMinute([at(0, 60), at(2, 70), at(4, 65)])
-    expect(out).toHaveLength(3)
+    expect(out).toHaveLength(4)
     const byAgg = Object.fromEntries(out.map((r) => [r.agg, r.value]))
     expect(byAgg['min']).toBe(60)
     expect(byAgg['max']).toBe(70)
@@ -31,14 +31,14 @@ describe('downsampleToMinute', () => {
   it('keeps separate minutes separate', () => {
     const out = downsampleToMinute([at(0, 60), at(60, 80)])
     expect(new Set(out.map((r) => r.utcMs)).size).toBe(2)
-    expect(out).toHaveLength(6)
+    expect(out).toHaveLength(8)
   })
 
   it('keeps separate sources separate, because merging never happens on write', () => {
     const other = { ...at(0, 200), sourceId: 's2' }
     const out = downsampleToMinute([at(0, 60), other])
-    expect(out.filter((r) => r.sourceId === 's1')).toHaveLength(3)
-    expect(out.filter((r) => r.sourceId === 's2')).toHaveLength(3)
+    expect(out.filter((r) => r.sourceId === 's1')).toHaveLength(4)
+    expect(out.filter((r) => r.sourceId === 's2')).toHaveLength(4)
   })
 
   it('carries the offset of the first reading in the minute', () => {
@@ -50,10 +50,21 @@ describe('downsampleToMinute', () => {
 
   it('is a thirty fold reduction on a real minute of 2 second sampling', () => {
     const minute = Array.from({ length: 30 }, (_, i) => at(i * 2, 60 + i))
-    expect(downsampleToMinute(minute)).toHaveLength(3)
+    expect(downsampleToMinute(minute)).toHaveLength(4)
   })
 
   it('returns nothing for nothing', () => {
     expect(downsampleToMinute([])).toEqual([])
+  })
+
+  // The daily count aggregate feeds from raw and count only, and a downsampled minute has no raw
+  // row left, so without this heart rate is the one metric that cannot say how many readings a
+  // day held.
+  it('emits a count row per minute, so heart rate can answer how many readings a day held', () => {
+    const out = downsampleToMinute([at(0, 60), at(2, 70), at(4, 80)])
+    const count = out.find((r) => r.agg === 'count')
+    expect(count?.value).toBe(3)
+    expect(count?.utcMs).toBe(Date.UTC(2026, 7, 18, 10, 0, 0))
+    expect(out).toHaveLength(4)
   })
 })

@@ -50,7 +50,7 @@ export const METRICS: Record<string, MetricSpec> = {
   // shows all three. p50 is carried because a mean over a day with one glitching hour is not
   // the middle of anything. count is the basis a reading is shown against, not a metric in its
   // own right: the number of samples behind the day's figure.
-  heart_rate: { aggs: ['min', 'mean', 'max', 'p50'], precision: 0, direction: 'down', unit: 'bpm' },
+  heart_rate: { aggs: ['min', 'mean', 'max', 'p50', 'count'], precision: 0, direction: 'down', unit: 'bpm' },
   hrv: { aggs: ['min', 'mean', 'max', 'count'], precision: 0, direction: 'up', unit: 'milliseconds' },
   spo2: { aggs: ['min', 'mean', 'max', 'count'], precision: 1, direction: 'up', unit: 'percent' },
 

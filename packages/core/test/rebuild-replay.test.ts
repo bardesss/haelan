@@ -83,15 +83,15 @@ describe('replayPerson', () => {
 
     const rows = db.select().from(samples)
       .where(and(eq(samples.personId, 'p1'), eq(samples.utcMs, 60_000))).all()
-    expect(rows).toHaveLength(3)
+    expect(rows).toHaveLength(4)
     const byAgg = Object.fromEntries(rows.map((r) => [r.agg, r]))
     expect(byAgg.min).toMatchObject({ value: 100, n: 1 })
     expect(byAgg.mean).toMatchObject({ value: 100, n: 1 })
     expect(byAgg.max).toMatchObject({ value: 100, n: 1 })
-    // Two episodes both wrote 3 rows each into mapper output, 6 total, but they upserted onto the
-    // same 3 slots. counts.samples must report what the table now holds, not what the mappers
+    // Two episodes both wrote 4 rows each into mapper output, 8 total, but they upserted onto the
+    // same 4 slots. counts.samples must report what the table now holds, not what the mappers
     // returned, or a re-fetch (which happens on every sync run) inflates this every single time.
-    expect(counts.samples).toBe(3)
+    expect(counts.samples).toBe(4)
   })
 
   test('replays two windows for one date in the order they were fetched, not the order their bounds sort in', () => {
@@ -122,9 +122,11 @@ describe('replayPerson', () => {
     }))
 
     // The correction wins, because it was fetched second. Ordering on window bounds puts it first
-    // and leaves 60 standing, which is the reading Google had already replaced.
+    // and leaves 60 standing, which is the reading Google had already replaced. The count row is
+    // excluded here: its value is a tally of readings, one in this fixture, not a bpm figure.
     const rows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
-    expect(rows.every((row) => row.value === 100), 'the older reading overwrote the correction').toBe(true)
+    const bpmRows = rows.filter((row) => row.agg !== 'count')
+    expect(bpmRows.every((row) => row.value === 100), 'the older reading overwrote the correction').toBe(true)
   })
 
   test('a two page window downsamples once, not once per page', () => {
@@ -156,7 +158,7 @@ describe('replayPerson', () => {
     // A concrete number, not rows.length: counts.samples is measured against the table
     // independently of this query, and comparing it to a number derived from the very same table
     // would pass no matter what either side actually held.
-    expect(counts.samples).toBe(3)
+    expect(counts.samples).toBe(4)
     // 60 and 80 downsampled together: mean 70 over both readings, not two independent means.
     // Checking only the row count would also pass a page-by-page replay that happened to produce
     // the same number of rows for the wrong reason.
@@ -406,11 +408,11 @@ describe('replayPerson', () => {
 
     expect(counts.unmappable).toBe(1)
     // The live payload's own concrete count (one heart-rate reading downsamples to one minute,
-    // three aggregate rows), not a comparison to a length queried from the same table counts.
+    // four aggregate rows), not a comparison to a length queried from the same table counts.
     // samples is now measured against: that comparison would pass regardless of which number,
     // right or wrong, both sides happened to agree on.
-    expect(counts.samples).toBe(3)
-    expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(3)
+    expect(counts.samples).toBe(4)
+    expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(4)
   })
 
   test('the local dates the rows landed on come back sorted, deduplicated, and including rollup-only dates', () => {
