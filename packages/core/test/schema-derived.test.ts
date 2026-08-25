@@ -39,6 +39,11 @@ describe('tier 2 and 3 schema', () => {
     expect(mix?.notNull).toBe(false)
   })
 
+  it('carries a nullable updated_at_ms, because a row derived before M3b has no honest stamp', () => {
+    const updatedAtMs = getTableConfig(daily).columns.find((c) => c.name === 'updated_at_ms')
+    expect(updatedAtMs?.notNull).toBe(false)
+  })
+
   it('queues a person and a local date, so one dirty day is one row however many metrics it touches', () => {
     const cols = columnNames(deriveQueue)
     expect(cols).toEqual(['local_date', 'person_id', 'queued_at_ms'])

@@ -3,7 +3,8 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { ConfigError } from '../src/errors.ts'
-import { daily } from '../src/db/schema/index.ts'
+import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
+import type { SessionKind } from '../src/db/schema/index.ts'
 
 let test: TestDatabase
 let query: PersonQuery
@@ -28,9 +29,32 @@ const insertDaily = (o: {
     value: o.value,
     coverage: o.coverage === undefined ? 0.9 : o.coverage,
     sourceMix: null,
-    derivationVersion: 3,
+    derivationVersion: 4,
   }).run()
 }
+
+const insertSource = (id: string, personId = 'p1') =>
+  test.db.insert(sources).values({
+    id, personId, externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
+  }).run()
+
+const insertSample = (o: {
+  utcMs: number, value: number, personId?: string, sourceId?: string,
+}) =>
+  test.db.insert(samples).values({
+    personId: o.personId ?? 'p1', sourceId: o.sourceId ?? 'p1-watch', metric: 'heart_rate',
+    utcMs: o.utcMs, tzOffsetMinutes: 0, agg: 'mean', value: o.value, n: 1, rawPayloadId: null,
+  }).run()
+
+const insertSession = (o: {
+  id: string, kind: SessionKind, personId?: string, sourceId?: string,
+  startMs: number, endMs: number, localDate: string,
+}) =>
+  test.db.insert(sessions).values({
+    id: o.id, personId: o.personId ?? 'p1', sourceId: o.sourceId ?? 'p1-watch', kind: o.kind,
+    externalId: o.id, startMs: o.startMs, startOffsetMinutes: 0, endMs: o.endMs,
+    endOffsetMinutes: 0, localDate: o.localDate, attrs: '{}', rawPayloadId: null,
+  }).run()
 
 describe('PersonQuery.series', () => {
   it('returns the days in the range, oldest first', () => {
@@ -38,7 +62,7 @@ describe('PersonQuery.series', () => {
     insertDaily({ localDate: '2026-08-01', value: 100 })
     insertDaily({ localDate: '2026-08-02', value: 200 })
 
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-03' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-03' })
     expect(points.map((p) => p.localDate)).toEqual(['2026-08-01', '2026-08-02', '2026-08-03'])
     expect(points.map((p) => p.value)).toEqual([100, 200, 300])
   })
@@ -46,7 +70,7 @@ describe('PersonQuery.series', () => {
   it('includes both ends of the range', () => {
     insertDaily({ localDate: '2026-08-01', value: 100 })
     insertDaily({ localDate: '2026-08-05', value: 500 })
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
     expect(points).toHaveLength(2)
   })
 
@@ -54,34 +78,34 @@ describe('PersonQuery.series', () => {
     insertDaily({ localDate: '2026-07-31', value: 1 })
     insertDaily({ localDate: '2026-08-01', value: 100 })
     insertDaily({ localDate: '2026-08-06', value: 1 })
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
     expect(points.map((p) => p.value)).toEqual([100])
   })
 
   it('reads the merged row by default, because that is the answer to what happened', () => {
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'watch' })
     insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([900])
   })
 
   it('reads one source when asked, so provenance stays reachable', () => {
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'watch' })
     insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01', source: 'watch' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01', source: 'watch' })
     expect(points.map((p) => p.value)).toEqual([400])
   })
 
   it('separates aggregates of the same metric', () => {
     insertDaily({ localDate: '2026-08-01', value: 52, metric: 'heart_rate', agg: 'min' })
     insertDaily({ localDate: '2026-08-01', value: 88, metric: 'heart_rate', agg: 'max' })
-    const points = query.series({ metric: 'heart_rate', agg: 'max', from: '2026-08-01', to: '2026-08-01' })
+    const { points } = query.series({ metric: 'heart_rate', agg: 'max', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([88])
   })
 
   it('carries coverage through, including a null one', () => {
     insertDaily({ localDate: '2026-08-01', value: 480, metric: 'sleep_asleep_minutes', coverage: null })
-    const points = query.series({ metric: 'sleep_asleep_minutes', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
+    const { points } = query.series({ metric: 'sleep_asleep_minutes', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
     expect(points[0]?.coverage).toBeNull()
   })
 
@@ -90,12 +114,12 @@ describe('PersonQuery.series', () => {
     // is here so a future producer that does cannot silently put a hole in a mean.
     insertDaily({ localDate: '2026-08-01', value: null })
     insertDaily({ localDate: '2026-08-02', value: 200 })
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
     expect(points.map((p) => p.value)).toEqual([200])
   })
 
   it('returns an empty series rather than throwing when there is nothing', () => {
-    expect(query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })).toEqual([])
+    expect(query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' }).points).toEqual([])
   })
 
   it('falls back to the provider row for a metric that has no merged one', () => {
@@ -103,7 +127,7 @@ describe('PersonQuery.series', () => {
     // itself and there is no sample underneath either for a merge to work from. Asking what
     // happened that day has to answer with the row that says it.
     insertDaily({ localDate: '2026-08-01', value: 2200, metric: 'total_calories', source: 'provider' })
-    const points = query.series({ metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
+    const { points } = query.series({ metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([2200])
     expect(points.map((p) => p.source)).toEqual(['provider'])
   })
@@ -112,7 +136,7 @@ describe('PersonQuery.series', () => {
     insertDaily({ localDate: '2026-08-01', value: 2200, metric: 'total_calories', source: 'provider' })
     insertDaily({ localDate: '2026-08-02', value: 2300, metric: 'total_calories', source: 'provider' })
     insertDaily({ localDate: '2026-08-02', value: 2350, metric: 'total_calories', source: 'merged' })
-    const points = query.series({ metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
+    const { points } = query.series({ metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
     expect(points.map((p) => p.value)).toEqual([2200, 2350])
     expect(points.map((p) => p.source)).toEqual(['provider', 'merged'])
   })
@@ -120,7 +144,7 @@ describe('PersonQuery.series', () => {
   it('ignores the provider row on a day that has a merged one', () => {
     insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'provider' })
-    const points = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([900])
   })
 
@@ -128,10 +152,199 @@ describe('PersonQuery.series', () => {
     // Not the same question as the default. This one asks which days we reconciled ourselves.
     insertDaily({ localDate: '2026-08-01', value: 2200, metric: 'total_calories', source: 'provider' })
     insertDaily({ localDate: '2026-08-02', value: 2350, metric: 'total_calories', source: 'merged' })
-    const points = query.series({
+    const { points } = query.series({
       metric: 'total_calories', agg: 'sum', from: '2026-08-01', to: '2026-08-02', source: 'merged',
     })
     expect(points.map((p) => p.value)).toEqual([2350])
+  })
+})
+
+describe('PersonQuery.series with a point budget', () => {
+  it('thins on the index, keeping the first and last local date', () => {
+    for (let day = 1; day <= 20; day += 1) {
+      insertDaily({ localDate: `2026-08-${String(day).padStart(2, '0')}`, value: day })
+    }
+    const { points } = query.series({
+      metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-20', points: 5,
+    })
+    expect(points.length).toBeLessThanOrEqual(5)
+    expect(points[0]?.localDate).toBe('2026-08-01')
+    expect(points.at(-1)?.localDate).toBe('2026-08-20')
+  })
+
+  it('returns every point when no budget is given', () => {
+    for (let day = 1; day <= 5; day += 1) {
+      insertDaily({ localDate: `2026-08-0${day}`, value: day })
+    }
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
+    expect(points).toHaveLength(5)
+  })
+
+  // The spec is explicit that reduction is not optional politeness: a client handed 200 points
+  // where 365 existed, with no way to know, cannot state the basis of what it drew. series used
+  // to discard thin's reduction outright; it now answers the same shape intraday already does.
+  it('reports the reduction when it thins, matching intraday\'s shape', () => {
+    for (let day = 1; day <= 20; day += 1) {
+      insertDaily({ localDate: `2026-08-${String(day).padStart(2, '0')}`, value: day })
+    }
+    const { reduction } = query.series({
+      metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-20', points: 5,
+    })
+    expect(reduction).toMatchObject({ method: 'lttb', from: 20 })
+  })
+
+  it('reports no reduction when nothing was thinned', () => {
+    for (let day = 1; day <= 5; day += 1) {
+      insertDaily({ localDate: `2026-08-0${day}`, value: day })
+    }
+    const { reduction } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
+    expect(reduction).toBeNull()
+  })
+})
+
+describe('PersonQuery.intraday', () => {
+  const NINE_AM = Date.UTC(2026, 7, 22, 9, 0)
+
+  it("reads the person's own samples for the local day", () => {
+    insertSource('p1-watch')
+    insertSample({ utcMs: NINE_AM, value: 62 })
+    const out = query.intraday({ metric: 'heart_rate', localDate: '2026-08-22' })
+    expect(out.points).toHaveLength(1)
+    expect(out.points[0]?.mean).toBe(62)
+  })
+
+  it('is bound to its own person rather than one sharing the same instant', () => {
+    seedPerson(test.db, 'other')
+    insertSource('p1-watch', 'p1')
+    insertSource('other-watch', 'other')
+    insertSample({ utcMs: NINE_AM, value: 62, personId: 'p1', sourceId: 'p1-watch' })
+    insertSample({ utcMs: NINE_AM, value: 999, personId: 'other', sourceId: 'other-watch' })
+
+    const out = query.intraday({ metric: 'heart_rate', localDate: '2026-08-22' })
+    expect(out.points.map((p) => p.mean)).toEqual([62])
+  })
+
+  it('refuses a malformed local date', () => {
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: 'not-a-date' })).toThrow(ConfigError)
+  })
+
+  // Every other reader validates its metric through requireMetricAndAgg. intraday called only
+  // requireDate, so a typo answered with an empty result rather than an error: an emptiness
+  // indistinguishable from "this person has no data", which in M4 becomes an agent stating a
+  // false thing about a health record.
+  it('refuses a metric the catalogue does not declare', () => {
+    expect(() => query.intraday({ metric: 'not_a_metric', localDate: '2026-08-22' })).toThrow(ConfigError)
+  })
+})
+
+describe('PersonQuery.sleepNights', () => {
+  const BEDTIME = Date.UTC(2026, 7, 21, 21, 0)
+  const H = 3_600_000
+
+  it("reads the person's own nights in range", () => {
+    insertSource('p1-watch')
+    insertSession({
+      id: 'n1', kind: 'sleep', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22',
+    })
+    const nights = query.sleepNights({ from: '2026-08-22', to: '2026-08-22' })
+    expect(nights).toHaveLength(1)
+    expect(nights[0]?.sessionIds).toEqual(['n1'])
+  })
+
+  it('is bound to its own person rather than one sleeping the same night', () => {
+    seedPerson(test.db, 'other')
+    insertSource('p1-watch', 'p1')
+    insertSource('other-watch', 'other')
+    insertSession({
+      id: 'n1', kind: 'sleep', personId: 'p1', sourceId: 'p1-watch',
+      startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22',
+    })
+    insertSession({
+      id: 'n2', kind: 'sleep', personId: 'other', sourceId: 'other-watch',
+      startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22',
+    })
+
+    const nights = query.sleepNights({ from: '2026-08-22', to: '2026-08-22' })
+    expect(nights).toHaveLength(1)
+    expect(nights[0]?.sessionIds).toEqual(['n1'])
+  })
+
+  it('refuses a reversed range', () => {
+    expect(() => query.sleepNights({ from: '2026-08-31', to: '2026-08-01' })).toThrow(ConfigError)
+  })
+})
+
+describe('PersonQuery.sessions', () => {
+  const START = Date.UTC(2026, 7, 21, 17, 0)
+  const H = 3_600_000
+
+  it("reads the person's own sessions of the requested kind", () => {
+    insertSource('p1-watch')
+    insertSession({
+      id: 'run', kind: 'exercise', startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+    const out = query.sessions({ kind: 'exercise', from: '2026-08-21', to: '2026-08-21' })
+    expect(out.map((s) => s.id)).toEqual(['run'])
+  })
+
+  it('is bound to its own person rather than one exercising the same day', () => {
+    seedPerson(test.db, 'other')
+    insertSource('p1-watch', 'p1')
+    insertSource('other-watch', 'other')
+    insertSession({
+      id: 'run', kind: 'exercise', personId: 'p1', sourceId: 'p1-watch',
+      startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+    insertSession({
+      id: 'other-run', kind: 'exercise', personId: 'other', sourceId: 'other-watch',
+      startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+
+    const out = query.sessions({ kind: 'exercise', from: '2026-08-21', to: '2026-08-21' })
+    expect(out.map((s) => s.id)).toEqual(['run'])
+  })
+
+  it('refuses a reversed range', () => {
+    expect(() => query.sessions({ kind: 'exercise', from: '2026-08-31', to: '2026-08-01' }))
+      .toThrow(ConfigError)
+  })
+
+  // kind is typed as 'sleep' | 'exercise', but the two direct consumers, an HTTP query string
+  // and a language model's tool arguments, both sit outside the type system: a caller passing
+  // anything else has the same shape at runtime as the metric typo requireMetricAndAgg exists to
+  // catch, so it gets the same treatment rather than reading the sessions table for a kind that
+  // can never match a row and calling the empty result an answer.
+  it('refuses a kind other than sleep or exercise', () => {
+    expect(() => query.sessions({
+      kind: 'workout' as unknown as 'exercise', from: '2026-08-01', to: '2026-08-01',
+    })).toThrow(ConfigError)
+  })
+})
+
+describe('PersonQuery.trend', () => {
+  const seedFlat = (personId: string, value: number) => {
+    for (let day = 1; day <= 10; day += 1) {
+      insertDaily({ localDate: `2026-08-${String(day).padStart(2, '0')}`, value, personId })
+    }
+  }
+
+  it("smooths the person's own series", () => {
+    seedFlat('p1', 80)
+    const out = query.trend({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-10' })
+    expect(out.every((p) => p.value === 80)).toBe(true)
+  })
+
+  it('is bound to its own person rather than one with wildly different readings', () => {
+    seedPerson(test.db, 'other')
+    seedFlat('p1', 80)
+    seedFlat('other', 999)
+    const out = query.trend({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-10' })
+    expect(out.every((p) => p.value === 80)).toBe(true)
+  })
+
+  it('refuses an unknown metric', () => {
+    expect(() => query.trend({ metric: 'sleep', agg: 'sum', from: '2026-08-01', to: '2026-08-10' }))
+      .toThrow(ConfigError)
   })
 })
 
@@ -224,6 +437,19 @@ describe('PersonQuery.baseline', () => {
 
   it('returns null when there is no history at all', () => {
     expect(query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-20' })).toBeNull()
+  })
+
+  it('refuses a windowDays that is not a positive integer, rather than computing a reversed range', () => {
+    // windowDays: 0 used to compute a `from` after `to` and throw a ConfigError naming dates the
+    // caller never passed. The caller passed windowDays; that is what the message should name.
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-10', windowDays: 0 }))
+      .toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-10', windowDays: 0 }))
+      .toThrow(/windowDays/)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-10', windowDays: -5 }))
+      .toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-10', windowDays: 1.5 }))
+      .toThrow(ConfigError)
   })
 
   it('counts only the days that have a row, so a gap is absent rather than zero', () => {

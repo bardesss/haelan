@@ -177,4 +177,19 @@ describe('rollUpDay', () => {
     })
     expect(rows[0]?.sourceMix).toBeNull()
   })
+
+  // The count is the number of readings behind the day's figure, which is what lets a card say
+  // "96 percent over 412 readings" rather than asking the reader to trust a bare number.
+  it('counts the readings behind a spo2 day', () => {
+    const rows = rollUpDay({
+      personId: 'p1',
+      localDate: LOCAL_DATE,
+      rows: [
+        sample({ metric: 'spo2', agg: 'raw', value: 97, utcMs: MIDNIGHT_UTC + 1 * 3_600_000, n: 1 }),
+        sample({ metric: 'spo2', agg: 'raw', value: 95, utcMs: MIDNIGHT_UTC + 2 * 3_600_000, n: 1 }),
+        sample({ metric: 'spo2', agg: 'raw', value: 96, utcMs: MIDNIGHT_UTC + 3 * 3_600_000, n: 1 }),
+      ],
+    })
+    expect(rows.find((r) => r.metric === 'spo2' && r.agg === 'count')?.value).toBe(3)
+  })
 })

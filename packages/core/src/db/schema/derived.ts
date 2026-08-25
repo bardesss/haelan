@@ -77,7 +77,15 @@ export const daily = sqliteTable('daily', {
   // be inspectable against the per source rows, and this is the half the row itself owes.
   sourceMix: text('source_mix'),
   derivationVersion: integer('derivation_version').notNull(),
+  /**
+   * When this row was last written. Nullable because rows derived before M3b have no honest
+   * answer, and a fabricated one would make a client's "what changed since" skip real changes.
+   */
+  updatedAtMs: integer('updated_at_ms'),
 }, (t) => [
   unique('daily_natural').on(t.personId, t.localDate, t.metric, t.agg, t.source),
   index('daily_person_metric_date').on(t.personId, t.metric, t.localDate),
+  // A future change feed reads "what changed for this person since a moment", exactly the shape
+  // WHERE person_id = ? AND updated_at_ms > ? scans, which no existing index covers.
+  index('daily_person_updated').on(t.personId, t.updatedAtMs),
 ])

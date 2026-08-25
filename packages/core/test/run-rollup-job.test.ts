@@ -282,4 +282,18 @@ describe('runRollupJob', () => {
     expect(row?.coverage).toBeNull()
   })
 
+  // The oldest days a household carries are commonly a provider row with no samples underneath at
+  // all, so a walk that never stamps updated_at_ms leaves exactly those days permanently outside
+  // the change feed the column exists for.
+  it('stamps every row it writes with the clock it was given', async () => {
+    const stub = stubClient([])
+    await runRollupJob({
+      personId: 'p1', dataType: dataTypeById('total-calories')!, timezone: 'Europe/Amsterdam',
+      fromMs: Date.UTC(2026, 7, 20), toMs: Date.UTC(2026, 7, 23),
+      deps: { ...depsWith(stub), now: () => 1_700_000_000_000 },
+    })
+    const rows = test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.updatedAtMs).toBe(1_700_000_000_000)
+  })
 })

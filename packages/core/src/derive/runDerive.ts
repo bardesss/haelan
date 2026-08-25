@@ -26,6 +26,7 @@ export function runDerive(input: {
   priority: SourcePriorityStore
   overrides: OverrideStore
   settings: SettingsStore
+  nowMs: number
   batch?: number
   /**
    * Restricts the drain to these people. The sync runner passes the people it is willing to sync,
@@ -75,6 +76,7 @@ export function runDerive(input: {
         overrides: overridesFor(entry.personId),
         gapMinutes,
         overlapRatio,
+        nowMs: input.nowMs,
       })
       input.queue.clear([entry], tx)
     })

@@ -74,4 +74,33 @@ describe('the metric catalogue', () => {
     expect(METRICS['sleep']).toBeUndefined()
     expect(METRICS['exercise']).toBeUndefined()
   })
+
+  // A unit that disagrees with the data type it came from is worse than no unit: a chart would
+  // label the axis with one and scale it by the other.
+  it('agrees with the DATA_TYPES unit wherever a data type declares one', () => {
+    for (const type of DATA_TYPES) {
+      if (type.target !== 'samples') continue
+      if (type.subDimension) {
+        for (const metric of Object.values(type.subDimension.metricByKey)) {
+          expect(METRICS[metric]?.unit, metric).toBe(type.unit)
+        }
+        continue
+      }
+      expect(METRICS[type.metric]?.unit, type.metric).toBe(type.unit)
+    }
+  })
+
+  it('gives every metric a unit, including the ones no data type describes', () => {
+    for (const [metric, spec] of Object.entries(METRICS)) {
+      expect(typeof spec.unit === 'string' && spec.unit !== '', metric).toBe(true)
+    }
+  })
+
+  // The eight metrics that shared one MetricSpec object by reference are the whole reason this
+  // test exists: giving the shared object a unit would have labelled steps as kcal.
+  it('does not give two metrics the same unit merely because they share a spec shape', () => {
+    expect(METRICS['steps']?.unit).not.toBe(METRICS['active_energy']?.unit)
+    expect(METRICS['active_energy']?.unit).toBe(METRICS['total_calories']?.unit)
+    expect(METRICS['active_minutes_light']?.unit).toBe('minutes')
+  })
 })

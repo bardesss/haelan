@@ -59,13 +59,14 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
           body: input.archive.getBody(input.personId, page.id),
         })
         for (const row of mapped.rows) {
-          tx.insert(daily).values(row).onConflictDoUpdate({
+          tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).onConflictDoUpdate({
             target: [daily.personId, daily.localDate, daily.metric, daily.agg, daily.source],
             set: {
               value: row.value,
               coverage: row.coverage,
               sourceMix: row.sourceMix,
               derivationVersion: row.derivationVersion,
+              updatedAtMs: input.nowMs,
             },
           }).run()
           // Deriving a rollup-only day writes no derived rows, so this looks like pointless

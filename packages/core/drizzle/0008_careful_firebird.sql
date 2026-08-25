@@ -1,0 +1,1 @@
+ALTER TABLE `daily` ADD `updated_at_ms` integer;

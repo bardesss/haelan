@@ -38,6 +38,10 @@ export function downsampleToMinute(rows: SampleRow[]): SampleRow[] {
       { ...base, agg: 'min', value: Math.min(...values) },
       { ...base, agg: 'mean', value: values.reduce((a, b) => a + b, 0) / values.length },
       { ...base, agg: 'max', value: Math.max(...values) },
+      // The daily count aggregate feeds from raw and count only, and a downsampled minute has no
+      // raw row left, so without this heart rate is the one metric that cannot say how many
+      // readings a day held.
+      { ...base, agg: 'count', value: values.length },
     )
   }
 

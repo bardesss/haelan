@@ -1,0 +1,1 @@
+CREATE INDEX `daily_person_updated` ON `daily` (`person_id`,`updated_at_ms`);

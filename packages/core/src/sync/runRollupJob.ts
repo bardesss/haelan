@@ -83,6 +83,10 @@ export async function runRollupJob(
 ): Promise<{ chunks: number, points: number, rowsWritten: number, unreadable: number }> {
   const capDays = rollupRangeCapDays(input.dataType)
   const fromDate = localDate(input.fromMs, input.timezone)
+  // One stamp for the whole walk, the same as deriveDayInto takes one nowMs for a whole day
+  // rather than re-reading the clock per row: every row this call writes was written by this
+  // walk, at this moment, whichever chunk it came from.
+  const nowMs = input.deps.now()
   let chunks = 0
   let points = 0
   let rowsWritten = 0
@@ -119,7 +123,7 @@ export async function runRollupJob(
     }
     input.deps.db.transaction((tx) => {
       for (const row of rows) {
-        tx.insert(daily).values(row).onConflictDoUpdate({
+        tx.insert(daily).values({ ...row, updatedAtMs: nowMs }).onConflictDoUpdate({
           target: [daily.personId, daily.localDate, daily.metric, daily.agg, daily.source],
           // Every column mapRollups writes, so a re-walk corrects the row rather than
           // leaving whichever ones the set forgot holding an older answer.
@@ -128,6 +132,7 @@ export async function runRollupJob(
             coverage: row.coverage,
             sourceMix: row.sourceMix,
             derivationVersion: row.derivationVersion,
+            updatedAtMs: nowMs,
           },
         }).run()
       }
