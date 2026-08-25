@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { setupStep } from '@haelan/core'
 import type { SetupStep } from '@haelan/core'
+import { errorBody } from '../api/envelope.ts'
 
 // Open in both directions: during setup there is nobody to authenticate, and afterwards a
 // container health probe still has no cookie.
@@ -22,6 +23,16 @@ export function registerSetupGate(app: FastifyInstance): void {
     const isSetupRoute = path.startsWith('/api/setup/') || isConsentRoute
 
     if (step !== 'done' && !isSetupRoute) {
+      // The versioned surface answers this gate in the envelope like every other status it can
+      // return. It is reached before any session check, so on a fresh instance it is the very
+      // first thing a client sees, and a client narrowing on body.error.kind cannot read a flat
+      // string. The older families keep the flat shape the wizard's own client reads.
+      if (path.startsWith('/api/v1/')) {
+        return reply.code(409).send({
+          ...errorBody('setup_incomplete', 'setup_incomplete', `setup is at the ${step} step`),
+          step,
+        })
+      }
       return reply.code(409).send({ error: 'setup_incomplete', step })
     }
     // Consent outlives setup; the rest of the wizard does not. A grant can die after setup is

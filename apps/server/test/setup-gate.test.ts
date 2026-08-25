@@ -20,6 +20,23 @@ describe('the setup gate', () => {
     expect(response.json()).toEqual({ error: 'setup_incomplete', step: 'account' })
   })
 
+  // The same refusal, in the versioned surface's own shape. On a fresh instance this gate is
+  // reached before any session check, so it is the first thing a v1 client ever sees, and a
+  // client narrowing on body.error.kind cannot read the flat string the older families use.
+  // Found by curling a real server rather than by app.inject, which is why it survived the
+  // round that fixed the 401 on the same surface.
+  it('refuses a v1 route in the envelope shape, not the flat one', async () => {
+    harness = await withServer()
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02',
+    })
+    expect(response.statusCode).toBe(409)
+    expect(response.json()).toMatchObject({
+      error: { kind: 'setup_incomplete', code: 'setup_incomplete' },
+      step: 'account',
+    })
+  })
+
   it('leaves the health check open, so a container probe works during setup', async () => {
     harness = await withServer()
     expect((await harness.app.inject({ method: 'GET', url: '/api/health' })).statusCode).toBe(200)
