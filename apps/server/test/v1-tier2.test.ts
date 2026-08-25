@@ -1,0 +1,185 @@
+import { describe, it, expect, afterEach } from 'vitest'
+import { schema } from '@haelan/core'
+import { withServer } from './harness.ts'
+import type { Harness } from './harness.ts'
+
+let harness: Harness | null = null
+afterEach(async () => { await harness?.cleanup(); harness = null })
+
+async function get(h: Harness, token: string, path: string) {
+  return h.app.inject({
+    method: 'GET',
+    url: `/api/v1/p/p1${path}`,
+    headers: { authorization: `Bearer ${token}` },
+  })
+}
+
+// Every test in this file reads back 2026-08-22 at Europe/Amsterdam's August offset, +120, which
+// is what harness.completeSetup's person carries.
+const OFFSET_MINUTES = 120
+
+function seedSource(h: Harness, sourceId: string): void {
+  h.app.haelan.instance.db.insert(schema.sources).values({
+    id: sourceId, personId: 'p1', externalId: sourceId, displayName: sourceId,
+    kind: 'device', createdAtMs: 0,
+  }).onConflictDoNothing().run()
+}
+
+// One minute of heart rate for one source. Only `mean` is set, since none of these tests read
+// min or max; a point is still well formed with the other two null.
+function seedIntraday(h: Harness, input: {
+  sourceId: string
+  localHour: number
+  minute?: number
+  value: number
+  metric?: string
+}): void {
+  seedSource(h, input.sourceId)
+  const utcMs = Date.UTC(2026, 7, 22, input.localHour, input.minute ?? 0) - OFFSET_MINUTES * 60_000
+  h.app.haelan.instance.db.insert(schema.samples).values({
+    personId: 'p1', sourceId: input.sourceId, metric: input.metric ?? 'heart_rate',
+    utcMs, tzOffsetMinutes: OFFSET_MINUTES, agg: 'mean', value: input.value, n: 1, rawPayloadId: null,
+  }).run()
+}
+
+let workoutCounter = 0
+function seedWorkout(h: Harness, input: { localDate: string, sourceId?: string }): void {
+  const sourceId = input.sourceId ?? 'watch'
+  seedSource(h, sourceId)
+  workoutCounter += 1
+  const id = `workout-${workoutCounter}`
+  const startMs = Date.parse(`${input.localDate}T09:00:00Z`) - OFFSET_MINUTES * 60_000
+  h.app.haelan.instance.db.insert(schema.sessions).values({
+    id, personId: 'p1', sourceId, kind: 'exercise', externalId: id,
+    startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 3_600_000, endOffsetMinutes: OFFSET_MINUTES,
+    localDate: input.localDate, attrs: JSON.stringify({}), rawPayloadId: null,
+  }).run()
+}
+
+describe('GET /intraday', () => {
+  // Two devices in one minute are two points, not one blended reading. M3b-1 made that structural
+  // and the route must not undo it by merging on the way out.
+  it('returns a point per source, each carrying its sourceId', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedIntraday(harness, { sourceId: 'watch', localHour: 9, value: 60 })
+    seedIntraday(harness, { sourceId: 'phone', localHour: 9, value: 61 })
+
+    const points = (await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22')).json().points
+    expect(points).toHaveLength(2)
+    expect(points.map((p: { sourceId: string }) => p.sourceId).sort()).toEqual(['phone', 'watch'])
+  })
+
+  it('filters to one source when asked', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedIntraday(harness, { sourceId: 'watch', localHour: 9, value: 60 })
+    seedIntraday(harness, { sourceId: 'phone', localHour: 9, value: 61 })
+
+    const points = (await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22&source=watch')).json().points
+    expect(points).toHaveLength(1)
+    expect(points[0].sourceId).toBe('watch')
+  })
+
+  it('reports the reduction for a day that thinned', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let minute = 0; minute < 600; minute += 1) {
+      seedIntraday(harness, { sourceId: 'watch', localHour: 6, minute, value: 60 + (minute % 5) })
+    }
+    const body = (await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22&points=100')).json()
+    expect(body.points.length).toBeLessThanOrEqual(100)
+    expect(body.reduction).toMatchObject({ method: 'minmax', from: 600 })
+  })
+})
+
+describe('GET /sessions', () => {
+  // A phone asking for a year of nights should not be handed a year of nights.
+  it('caps a list at limit and hands back a cursor', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 5; day += 1) seedWorkout(harness, { localDate: `2026-08-0${day}` })
+
+    const body = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31&limit=2')).json()
+    expect(body.items).toHaveLength(2)
+    expect(typeof body.cursor).toBe('string')
+  })
+
+  it('resumes from a cursor without repeating or skipping a row', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 5; day += 1) seedWorkout(harness, { localDate: `2026-08-0${day}` })
+    const range = '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31'
+
+    const whole = (await get(harness, token, range)).json().items
+    const first = (await get(harness, token, `${range}&limit=2`)).json()
+    const second = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(first.cursor)}`)).json()
+    const third = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(second.cursor)}`)).json()
+
+    // The union of the pages is the unpaged answer exactly. Asserting page lengths instead would
+    // pass against a cursor that skipped a row and against one that repeated it.
+    expect([...first.items, ...second.items, ...third.items]).toEqual(whole)
+  })
+
+  it('answers 400 for a kind that is not sleep or exercise', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sessions?kind=Sleep&from=2026-08-01&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('filters to one source when asked', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, { localDate: '2026-08-01', sourceId: 'watch' })
+    seedWorkout(harness, { localDate: '2026-08-02', sourceId: 'phone' })
+
+    const body = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31&source=watch')).json()
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0].sourceId).toBe('watch')
+  })
+})
+
+describe('GET /sleep/nights', () => {
+  it('returns a night per source, each carrying its sourceId', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    seedSource(harness, 'phone')
+    const bedtime = Date.UTC(2026, 7, 21, 21, 0)
+    for (const sourceId of ['watch', 'phone']) {
+      harness.app.haelan.instance.db.insert(schema.sessions).values({
+        id: `night-${sourceId}`, personId: 'p1', sourceId, kind: 'sleep', externalId: `night-${sourceId}`,
+        startMs: bedtime, startOffsetMinutes: OFFSET_MINUTES, endMs: bedtime + 8 * 3_600_000,
+        endOffsetMinutes: OFFSET_MINUTES, localDate: '2026-08-22', attrs: JSON.stringify({ mainSleep: true }),
+        rawPayloadId: null,
+      }).run()
+    }
+
+    const nights = (await get(harness, token, '/sleep/nights?from=2026-08-22&to=2026-08-22')).json().items
+    expect(nights).toHaveLength(2)
+    expect(nights.map((n: { sourceId: string }) => n.sourceId).sort()).toEqual(['phone', 'watch'])
+  })
+
+  it('resumes from a cursor without repeating or skipping a row', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedSource(harness, 'watch')
+    for (let day = 1; day <= 5; day += 1) {
+      const localDate = `2026-08-0${day}`
+      const bedtime = Date.parse(`${localDate}T21:00:00Z`) - OFFSET_MINUTES * 60_000
+      harness.app.haelan.instance.db.insert(schema.sessions).values({
+        id: `night-${day}`, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: `night-${day}`,
+        startMs: bedtime, startOffsetMinutes: OFFSET_MINUTES, endMs: bedtime + 8 * 3_600_000,
+        endOffsetMinutes: OFFSET_MINUTES, localDate, attrs: JSON.stringify({ mainSleep: true }), rawPayloadId: null,
+      }).run()
+    }
+    const range = '/sleep/nights?from=2026-08-01&to=2026-08-31'
+
+    const whole = (await get(harness, token, range)).json().items
+    const first = (await get(harness, token, `${range}&limit=2`)).json()
+    const second = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(first.cursor)}`)).json()
+    const third = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(second.cursor)}`)).json()
+
+    expect([...first.items, ...second.items, ...third.items]).toEqual(whole)
+  })
+
+  it('answers 400 for a range whose end precedes its start', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sleep/nights?from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+})
