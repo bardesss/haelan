@@ -61,6 +61,9 @@ describe('GET /series', () => {
     const response = await get(harness, token, '/series?metric=hart_rate&agg=mean&from=2026-08-01&to=2026-08-02')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain('hart_rate')
+    // The kind is a field of its own. HaelanError tags its message with the same word for a log
+    // line, and echoing the tagged message read back as "[config] ..." next to kind: "config".
+    expect(response.json().error.message).not.toContain('[config]')
   })
 
   it('answers 400 for a range whose end precedes its start', async () => {

@@ -8,9 +8,20 @@ export class HaelanError extends Error {
   // would compile here and fail to boot the server. See apps/server/test/boot.test.ts.
   readonly kind: ErrorKind
 
+  /**
+   * The message without the `[kind]` tag `message` carries.
+   *
+   * The tag exists for a log line, where nothing else states the class. A response body states it
+   * in a field of its own, so echoing `message` there put the class in twice and a caller read
+   * `"[config] metric is required"` next to `kind: "config"`. Kept as a field rather than stripped
+   * back off with a regex at the boundary, so there is one place the two forms are decided.
+   */
+  readonly detail: string
+
   constructor(kind: ErrorKind, message: string, options?: { cause?: unknown }) {
     super(`[${kind}] ${message}`, options)
     this.kind = kind
+    this.detail = message
     this.name = new.target.name
   }
 }

@@ -40,4 +40,12 @@ describe('the error taxonomy', () => {
   it('names its kind in the message, so a log line carries the class', () => {
     expect(String(new TransientError('upstream said no'))).toContain('transient')
   })
+
+  // The tag above is for a log line. A response body states the kind in a field of its own, so
+  // anything rendering an error for a person to read needs the message without it: a 400 read
+  // back as "[config] metric is required" next to kind: "config".
+  it('carries the message without the kind tag too, for a surface that states the kind itself', () => {
+    expect(new ConfigError('metric is required').detail).toBe('metric is required')
+    expect(new ConfigError('metric is required').message).toBe('[config] metric is required')
+  })
 })
