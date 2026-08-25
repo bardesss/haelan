@@ -12,7 +12,8 @@ interface ExportQuery {
   from?: string
   to?: string
   source?: string
-  // Accepted for parity with the read this covers (Ruling R15), never read.
+  // Declared so the handler can refuse it by name rather than let it fall through as an unknown
+  // parameter. See the refusal below for why this route has no thinning to offer.
   points?: string
 }
 
@@ -60,10 +61,15 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
  * Downloads a `daily` backed read (Ruling R16: this covers that read only, not intraday,
  * sessions or sleep) as csv or json, under the same query parameters `/series` takes.
  *
- * Ruling R15: an export exists to be kept, so `points` is accepted here but never honoured.
- * Every metric answers its whole range and carries `reduction: null`, the same value a caller
- * of `/series` sees when it asks for no thinning; silently thinning what somebody downloads to
- * keep would defeat the reason to export at all.
+ * Ruling R15: an export exists to be kept, so this route never thins. Every metric answers its
+ * whole range and carries `reduction: null`, the same value a caller of `/series` sees when it
+ * asks for no thinning; silently thinning what somebody downloads to keep would defeat the reason
+ * to export at all.
+ *
+ * `points` is therefore refused rather than ignored. Accepting it and quietly dropping it left a
+ * caller who asked for five points and received twenty eight with no signal that their request
+ * had been reinterpreted, and every other parameter on this surface refuses what it cannot
+ * honour, `points=0` on `/series` included.
  *
  * A parameter check, one core call per metric and a serialiser: no try/catch, because
  * registerV1's setErrorHandler turns whatever PersonQuery throws, and the ConfigError below for
@@ -80,6 +86,12 @@ export function registerExportRoutes(app: FastifyInstance): void {
     const format = requireString(request.query.format, 'format')
     if (format !== 'csv' && format !== 'json') {
       throw new ConfigError(`format must be 'csv' or 'json', got '${format}'`)
+    }
+    if (request.query.points !== undefined) {
+      throw new ConfigError(
+        'points is not accepted here: an export answers its whole range, since thinning what '
+        + 'somebody downloads to keep would defeat the reason to export. Ask /series for a thinned read',
+      )
     }
     const metrics = metricsFrom(request.query.metric)
     const agg = requireString(request.query.agg, 'agg')

@@ -210,17 +210,28 @@ describe('GET /export', () => {
     expect(rows.some((row) => row.startsWith('2026-08-01,floors,'))).toBe(true)
   })
 
-  // R15: export never thins. `points` is accepted, for parity with the read this covers, but
-  // silently thinning what a reader downloads to keep would be worse than refusing the parameter,
-  // so it is honoured by being ignored rather than rejected.
-  it('ignores points and always answers the whole range with reduction null', async () => {
+  // R15: export never thins, which stands. Accepting `points` and dropping it silently did not:
+  // a caller who asked for five points and received twenty eight had no signal their request was
+  // reinterpreted, and every other parameter on this surface refuses what it cannot honour.
+  it('refuses points rather than silently ignoring it', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(
+      harness, token,
+      '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-28&points=5',
+    )
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+    expect(response.json().error.message).toContain('points')
+  })
+
+  it('answers the whole range with reduction null when no thinning was asked for', async () => {
     harness = await withServer(); const token = await harness.signIn()
     for (let day = 1; day <= 28; day += 1) {
       seedDaily(harness, { localDate: `2026-08-${String(day).padStart(2, '0')}`, value: day * 100 })
     }
     const response = await get(
       harness, token,
-      '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-28&points=5',
+      '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-28',
     )
     expect(response.json().steps.points).toHaveLength(28)
     expect(response.json().steps.reduction).toBeNull()
