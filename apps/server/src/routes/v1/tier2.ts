@@ -141,14 +141,9 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
 
-    // PersonQuery.sessions has no source filter of its own, unlike series, intraday and sleep
-    // nights: core does not expose one for this reader (see the task report). Filtering the
-    // range already fetched is a plain array filter on a field the row already carries, not a
-    // second query or a new selection policy, so it stays inside "one core call, a serialiser".
     const kindChecked = kind as 'sleep' | 'exercise' // requireSessionKind validates this at runtime, inside the core call below
-    const all: WorkoutSession[] = personQuery.sessions({ kind: kindChecked, from, to })
-    const filtered = source === undefined ? all : all.filter((session) => session.sourceId === source)
-    const page = paginate(filtered, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
+    const all: WorkoutSession[] = personQuery.sessions({ kind: kindChecked, from, to, sourceId: source })
+    const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
     return reply.send(page)
   })
 }

@@ -20,18 +20,25 @@ export interface WorkoutSession {
  *
  * Sleep and exercise share one table and one natural key, so the kind filter is load bearing:
  * without it a sleep read and an exercise read would answer with the same rows.
+ *
+ * With no sourceId this answers with every device's sessions in range, the same "never choose
+ * between sources" contract readSleepNights and readIntraday already give. Choosing between
+ * sources stays the derive layer's job, applied once through its priority list; a caller that
+ * wants one device's sessions asks for it explicitly instead.
  */
 export function readSessions(db: DbOrTx, input: {
   personId: string
   kind: 'sleep' | 'exercise'
   from: string
   to: string
+  sourceId?: string
 }): WorkoutSession[] {
   const rows = db.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
     eq(sessions.kind, input.kind),
     gte(sessions.localDate, input.from),
     lte(sessions.localDate, input.to),
+    input.sourceId === undefined ? undefined : eq(sessions.sourceId, input.sourceId),
   // id breaks a tie between two devices reporting a session at the same startMs, which startMs
   // alone leaves to sqlite's own unspecified order and flaps a snapshot or an ETag over rows that
   // did not actually change.

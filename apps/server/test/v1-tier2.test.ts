@@ -132,6 +132,31 @@ describe('GET /sessions', () => {
     expect(body.items).toHaveLength(1)
     expect(body.items[0].sourceId).toBe('watch')
   })
+
+  // source has to narrow before limit and cursor slice the page, not after: a filter applied to
+  // an already paginated page would hand back fewer than `limit` rows even though more of that
+  // source exist, and a cursor built against the unfiltered list would resume at the wrong row.
+  // Interleaving the two sources by date is what would catch either mistake.
+  it('pages a source scoped list to the same rows the unpaged source scoped read gives', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 9; day += 1) {
+      seedWorkout(harness, {
+        localDate: `2026-08-0${day}`, sourceId: day % 2 === 1 ? 'watch' : 'phone',
+      })
+    }
+    const range = '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31&source=watch'
+
+    const whole = (await get(harness, token, range)).json().items
+    expect(whole).toHaveLength(5)
+    expect(whole.every((s: { sourceId: string }) => s.sourceId === 'watch')).toBe(true)
+
+    const first = (await get(harness, token, `${range}&limit=2`)).json()
+    expect(first.items).toHaveLength(2)
+    const second = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(first.cursor)}`)).json()
+    const third = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(second.cursor)}`)).json()
+
+    expect([...first.items, ...second.items, ...third.items]).toEqual(whole)
+  })
 })
 
 describe('GET /sleep/nights', () => {

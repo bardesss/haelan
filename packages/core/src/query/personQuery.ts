@@ -240,6 +240,7 @@ export class PersonQuery {
     kind: 'sleep' | 'exercise'
     from: string
     to: string
+    sourceId?: string
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
@@ -248,6 +249,7 @@ export class PersonQuery {
       kind: input.kind,
       from: input.from,
       to: input.to,
+      sourceId: input.sourceId,
     })
   }
 
