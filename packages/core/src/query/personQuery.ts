@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily, SESSION_KINDS } from '../db/schema/index.ts'
+import { daily, SESSION_KINDS, sources } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { ConfigError } from '../errors.ts'
@@ -90,6 +90,7 @@ export class PersonQuery {
   }): SeriesResult {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const source = input.source
     const rows = this.#db.select({
@@ -144,6 +145,7 @@ export class PersonQuery {
   }): Baseline | null {
     requireMetricAndAgg(input.metric, input.agg)
     requireDate('on', input.on)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     requirePositiveInteger('windowDays', windowDays)
@@ -177,6 +179,7 @@ export class PersonQuery {
   }): Insight {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const periodDays = daysBetween(input.from, input.to)
     const previousTo = shiftLocalDate(input.from, -1)
@@ -220,6 +223,7 @@ export class PersonQuery {
   }): IntradayResult {
     requireMetric(input.metric)
     requireDate('localDate', input.localDate)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntraday(this.#db, {
       personId: this.#personId,
       metric: input.metric,
@@ -236,6 +240,7 @@ export class PersonQuery {
     sourceId?: string
   }): Night[] {
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
     return readSleepNights(this.#db, {
       personId: this.#personId,
       from: input.from,
@@ -253,6 +258,7 @@ export class PersonQuery {
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
@@ -275,6 +281,7 @@ export class PersonQuery {
   }): TrendPoint[] {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const { points } = this.series({
       metric: input.metric, agg: input.agg, from: input.from, to: input.to, source: input.source,
@@ -391,6 +398,41 @@ function requireMetricAndAgg(metric: string, agg: string): void {
  */
 function requireMetric(metric: string): void {
   if (metricSpec(metric) === undefined) throw new ConfigError(`no metric named '${metric}'`)
+}
+
+/**
+ * The two `daily.source` values that are not a source id at all. See rollup.ts for what each
+ * means and why they are kept apart from one another.
+ */
+const DERIVED_SOURCES: readonly string[] = [MERGED_SOURCE, PROVIDER_SOURCE]
+
+/**
+ * The same refusal `requireMetric` gives a metric, for the one parameter that was still answering
+ * a typo with an empty result: every read that takes a source narrowed to it with an equality
+ * test, so an id nobody has matched no row and came back as 200 with nothing, indistinguishable
+ * from "this person has no data" for the range asked for.
+ *
+ * Validated against `sources`, the registry of what this person actually has, rather than against
+ * the distinct values present in the table being read: a device that reported nothing on the days
+ * asked for is a real source with an empty answer, and refusing it would turn a true empty result
+ * into an error. `alsoAllowed` carries the `daily` backed reads' two extra values, which name a
+ * merge rather than a device and so appear in no registry.
+ *
+ * The listing is the person's own source ids, which a caller holding a PersonQuery is already
+ * bound to by construction, so it discloses nothing the same caller cannot read from `/sources`.
+ */
+function requireSource(
+  db: DbOrTx, personId: string, source: string | undefined, alsoAllowed: readonly string[],
+): void {
+  if (source === undefined) return
+  // Ordered, so two identical requests cannot produce two different messages.
+  const registered = db.select({ id: sources.id }).from(sources)
+    .where(eq(sources.personId, personId)).orderBy(asc(sources.id)).all().map((row) => row.id)
+  const known = [...registered, ...alsoAllowed]
+  if (known.includes(source)) return
+  throw new ConfigError(known.length === 0
+    ? `no source named '${source}', and this person has no sources at all`
+    : `no source named '${source}', only ${known.join(', ')}`)
 }
 
 /**

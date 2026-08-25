@@ -91,6 +91,10 @@ describe('PersonQuery.series', () => {
   })
 
   it('reads one source when asked, so provenance stays reachable', () => {
+    // Registered as well as written to `daily`, because series() now refuses a source this
+    // person does not have. A row whose source is in no registry cannot arise from a real
+    // derivation either: mapping registers the device before it writes a thing under its id.
+    insertSource('watch')
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'watch' })
     insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
     const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01', source: 'watch' })
@@ -405,6 +409,76 @@ describe('PersonQuery argument validation', () => {
       .toThrow(ConfigError)
     expect(() => query.series({ metric: 'heart_rate', agg: 'avg', from: '2026-08-01', to: '2026-08-07' }))
       .toThrow(/mean/)
+  })
+})
+
+// `source` was the last parameter on this surface still answering a value it could not honour
+// with 200 and an empty result. Every read that takes one narrows with an equality test, so a
+// typo matched no row and came back indistinguishable from "this person has no data" for the
+// range asked for, which in M4 becomes an agent stating a false thing about a health record.
+describe('PersonQuery source validation', () => {
+  const RANGE = { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-07' }
+
+  it('refuses an unknown source on every daily backed read', () => {
+    insertSource('watch')
+    expect(() => query.series({ ...RANGE, source: 'wtach' })).toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-07', source: 'wtach' }))
+      .toThrow(ConfigError)
+    expect(() => query.comparePeriods({ ...RANGE, source: 'wtach' })).toThrow(ConfigError)
+    expect(() => query.trend({ ...RANGE, source: 'wtach' })).toThrow(ConfigError)
+  })
+
+  it('refuses an unknown source on every tier 2 read', () => {
+    insertSource('p1-watch')
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: '2026-08-22', sourceId: 'p1-wtach' }))
+      .toThrow(ConfigError)
+    expect(() => query.sleepNights({ from: '2026-08-01', to: '2026-08-07', sourceId: 'p1-wtach' }))
+      .toThrow(ConfigError)
+    expect(() => query.sessions({ kind: 'exercise', from: '2026-08-01', to: '2026-08-07', sourceId: 'p1-wtach' }))
+      .toThrow(ConfigError)
+  })
+
+  it('names the value it refused and what this person actually has', () => {
+    insertSource('watch')
+    expect(() => query.series({ ...RANGE, source: 'wtach' })).toThrow(/'wtach'/)
+    expect(() => query.series({ ...RANGE, source: 'wtach' })).toThrow(/watch/)
+  })
+
+  it('says plainly when the person has no sources at all, rather than listing nothing', () => {
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: '2026-08-22', sourceId: 'watch' }))
+      .toThrow(/no sources at all/)
+  })
+
+  // The registry, not the rows in range: a device that reported nothing on the days asked for is
+  // a real source whose answer is genuinely empty, and refusing it would turn a true empty result
+  // into an error.
+  it('accepts a registered source with no rows in the range asked for', () => {
+    insertSource('watch')
+    expect(query.series({ ...RANGE, source: 'watch' }).points).toEqual([])
+  })
+
+  it('keeps accepting merged and provider on a daily backed read, since neither is a device', () => {
+    insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
+    insertDaily({ localDate: '2026-08-02', value: 800, source: 'provider' })
+    expect(query.series({ ...RANGE, source: 'merged' }).points.map((p) => p.value)).toEqual([900])
+    expect(query.series({ ...RANGE, source: 'provider' }).points.map((p) => p.value)).toEqual([800])
+  })
+
+  // `samples`, `sessions` and `session_segments` are the normalized tier, written per device.
+  // Nothing there ever carries a merge's name, so asking for one is the same empty answer a typo
+  // gave, and gets the same refusal.
+  it('refuses merged on a tier 2 read, where no row can ever carry it', () => {
+    insertSource('p1-watch')
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: '2026-08-22', sourceId: 'merged' }))
+      .toThrow(ConfigError)
+  })
+
+  // The registry is read per person, so this is the isolation rule showing up in a refusal: the
+  // id exists, and it still is not one of this person's to ask about.
+  it("refuses another person's source id", () => {
+    seedPerson(test.db, 'other')
+    insertSource('other-watch', 'other')
+    expect(() => query.series({ ...RANGE, source: 'other-watch' })).toThrow(ConfigError)
   })
 })
 
