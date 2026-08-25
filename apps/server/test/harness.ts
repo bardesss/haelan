@@ -36,6 +36,8 @@ export interface WithServerOptions {
   backfillBatchDays?: number
   /** See ServerDeps.v1TestExtra. Unset by every test but the one that exercises it. */
   v1TestExtra?: (app: FastifyInstance) => void
+  /** See ServerDeps.onRouteForTest. Unset by every test but the isolation suite's route-coverage guard. */
+  onRouteForTest?: (route: { method: string, url: string }) => void
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -130,6 +132,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // WithServerOptions.sprintDays above for why this defaults small.
     sprintDays: options.sprintDays ?? 2,
     v1TestExtra: options.v1TestExtra,
+    onRouteForTest: options.onRouteForTest,
   })
   await app.ready()
 

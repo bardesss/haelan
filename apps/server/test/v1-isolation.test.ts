@@ -38,12 +38,10 @@ function seedDaily(h: Harness, input: {
   }).run()
 }
 
-// sources.id is a global primary key, not scoped per person, but the table below only ever seeds
-// one owner and one leak target per case, so a plain id is enough to keep them apart.
 function seedSource(h: Harness, personId: string, sourceId: string): void {
   h.app.haelan.instance.db.insert(schema.sources).values({
     id: sourceId, personId, externalId: sourceId, displayName: sourceId, kind: 'device', createdAtMs: 0,
-  }).onConflictDoNothing().run()
+  }).run()
 }
 
 // The `samples` seed /intraday reads. One minute on one day is enough; the marker this suite
@@ -58,12 +56,12 @@ function seedSample(h: Harness, input: { personId: string, sourceId: string, val
 }
 
 // The `sessions` seed /sleep/nights and /sessions read, one kind at a time. Both readers carry
-// sourceId straight through to the response, which is what the table's markers ride on.
-let sessionCounter = 0
+// sourceId straight through to the response, which is what the table's markers ride on. The id is
+// derived from personId and kind rather than a module level counter, since personId already makes
+// an owner's row and a leak target's row distinct within one test.
 function seedSession(h: Harness, input: { personId: string, sourceId: string, kind: 'sleep' | 'exercise' }): void {
   seedSource(h, input.personId, input.sourceId)
-  sessionCounter += 1
-  const id = `session-${sessionCounter}`
+  const id = `${input.personId}-${input.kind}-session`
   const startMs = Date.parse('2026-08-01T09:00:00Z') - OFFSET_MINUTES * 60_000
   h.app.haelan.instance.db.insert(schema.sessions).values({
     id, personId: input.personId, sourceId: input.sourceId, kind: input.kind, externalId: id,
@@ -74,6 +72,10 @@ function seedSession(h: Harness, input: { personId: string, sourceId: string, ki
 
 interface RouteCase {
   name: string
+  // The literal path pattern fastify registers, prefix included: what the route-coverage guard
+  // below compares against what onRouteForTest actually observes. Not derived from `path`, which
+  // carries a concrete personId and a query string, neither of which fastify's router sees.
+  template: string
   path: (personId: string) => string
   // Seeds the session's own person (always 'p1') with an ordinary value.
   seedOwn: (h: Harness) => void
@@ -82,15 +84,22 @@ interface RouteCase {
   seedOther: (h: Harness, personId: string) => void
   ownNeedle: string
   otherNeedle: string
+  // Extra assertions for a route whose answer is a computed statistic rather than a copy of the
+  // seeded rows: a leaked row can move a mean so far from either seed that the response contains
+  // neither needle literally, and the shape of the leak (an extra row contributing) is what a
+  // count catches directly instead of leaving the failure to whichever needle assertion happens
+  // to also fail. Unset for a route whose answer already carries the seeded values verbatim.
+  extraOwnAssertions?: (body: unknown) => void
 }
 
 // Driven from a list rather than written per route, because the failure this guards against is a
 // route added without a test, and a hand written suite cannot notice that. One entry per route
 // registerV1 wires up (apps/server/src/routes/v1/index.ts): the four daily backed reads, the
-// three tier 2 reads, /changes and /export.
+// three tier 2 reads, /changes and /export (json and csv, since csv has its own serialiser).
 const ROUTES: readonly RouteCase[] = [
   {
     name: 'series',
+    template: '/api/v1/p/:personId/series',
     path: (p) => `/api/v1/p/${p}/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`,
     seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', value: 4242 }),
     seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-01', value: 999_999 }),
@@ -99,15 +108,20 @@ const ROUTES: readonly RouteCase[] = [
   },
   {
     name: 'baselines',
+    template: '/api/v1/p/:personId/baselines',
     // windowDays=5 reads back exactly 2026-08-01..2026-08-05 (the window ends the day before `on`).
     path: (p) => `/api/v1/p/${p}/baselines?metric=steps&agg=sum&on=2026-08-06&windowDays=5`,
     seedOwn: (h) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId: 'p1', localDate: dateOf(day), value: 4200 }) },
     seedOther: (h, personId) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId, localDate: dateOf(day), value: 999_999 }) },
     ownNeedle: '4200',
     otherNeedle: '999999',
+    // A mean blending five 4200s with a leaked five 999999s reads 502099.5, containing neither
+    // needle: the count of contributing days is what names an extra row directly.
+    extraOwnAssertions: (body) => expect((body as { n: number }).n).toBe(5),
   },
   {
     name: 'insights',
+    template: '/api/v1/p/:personId/insights',
     // The current range is 08-08..08-14; comparePeriods derives the previous range (08-01..08-07)
     // itself, so both fourteen days need a row for neither period to be refused as too thin.
     path: (p) => `/api/v1/p/${p}/insights?metric=steps&agg=sum&from=2026-08-08&to=2026-08-14`,
@@ -115,18 +129,22 @@ const ROUTES: readonly RouteCase[] = [
     seedOther: (h, personId) => { for (let day = 1; day <= 14; day += 1) seedDaily(h, { personId, localDate: dateOf(day), value: 999_999 }) },
     ownNeedle: '6500',
     otherNeedle: '999999',
+    extraOwnAssertions: (body) => expect((body as { currentDays: number }).currentDays).toBe(7),
   },
   {
     name: 'trend',
+    template: '/api/v1/p/:personId/trend',
     // A constant series smooths to the same constant, so the marker survives the EWMA untouched.
     path: (p) => `/api/v1/p/${p}/trend?metric=steps&agg=sum&from=2026-08-01&to=2026-08-05`,
     seedOwn: (h) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId: 'p1', localDate: dateOf(day), value: 7100 }) },
     seedOther: (h, personId) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId, localDate: dateOf(day), value: 999_999 }) },
     ownNeedle: '7100',
     otherNeedle: '999999',
+    extraOwnAssertions: (body) => expect(body).toHaveLength(5),
   },
   {
     name: 'intraday',
+    template: '/api/v1/p/:personId/intraday',
     path: (p) => `/api/v1/p/${p}/intraday?metric=heart_rate&date=2026-08-22`,
     seedOwn: (h) => seedSample(h, { personId: 'p1', sourceId: 'own-source-ok', value: 61 }),
     seedOther: (h, personId) => seedSample(h, { personId, sourceId: 'leaked-source-999999', value: 62 }),
@@ -135,6 +153,7 @@ const ROUTES: readonly RouteCase[] = [
   },
   {
     name: 'sleep/nights',
+    template: '/api/v1/p/:personId/sleep/nights',
     path: (p) => `/api/v1/p/${p}/sleep/nights?from=2026-08-01&to=2026-08-01`,
     seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'sleep' }),
     seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'sleep' }),
@@ -143,6 +162,7 @@ const ROUTES: readonly RouteCase[] = [
   },
   {
     name: 'sessions',
+    template: '/api/v1/p/:personId/sessions',
     path: (p) => `/api/v1/p/${p}/sessions?kind=exercise&from=2026-08-01&to=2026-08-01`,
     seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise' }),
     seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise' }),
@@ -151,6 +171,7 @@ const ROUTES: readonly RouteCase[] = [
   },
   {
     name: 'changes',
+    template: '/api/v1/p/:personId/changes',
     // changes has no metric parameter; the metric name written to the row is the marker instead.
     path: (p) => `/api/v1/p/${p}/changes?since=0`,
     seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', metric: 'floors', value: 1, updatedAtMs: 1_000 }),
@@ -159,16 +180,28 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-metric-999999',
   },
   {
-    name: 'export',
+    name: 'export (json)',
+    template: '/api/v1/p/:personId/export',
     path: (p) => `/api/v1/p/${p}/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`,
     seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', value: 8080 }),
     seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-01', value: 999_999 }),
     ownNeedle: '8080',
     otherNeedle: '999999',
   },
+  {
+    name: 'export (csv)',
+    // Same route as the json case above; the csv branch has its own serialiser in export.ts and
+    // the gate never reaches it if only format=json is ever exercised.
+    template: '/api/v1/p/:personId/export',
+    path: (p) => `/api/v1/p/${p}/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`,
+    seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', value: 8090 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-01', value: 888_888 }),
+    ownNeedle: '8090',
+    otherNeedle: '888888',
+  },
 ]
 
-describe.each(ROUTES)('$name', (route) => {
+describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
   it('answers 401 with no session at all', async () => {
     harness = await withServer()
     await harness.signIn()
@@ -176,6 +209,9 @@ describe.each(ROUTES)('$name', (route) => {
     expect(response.statusCode).toBe(401)
   })
 
+  // The tautology guard: an account owns exactly one person today, so this proves the path
+  // segment is actually checked rather than decorative. The envelope's code, not just the status,
+  // is what tells this apart from any other reason a route might answer 403.
   it('answers 403 for a person the session does not own', async () => {
     harness = await withServer()
     const token = await harness.signIn()
@@ -185,6 +221,7 @@ describe.each(ROUTES)('$name', (route) => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(403)
+    expect(response.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
   })
 
   // Ruling R20: the positive control. A suite built only from 403s passes in full even if the
@@ -208,6 +245,7 @@ describe.each(ROUTES)('$name', (route) => {
     expect(response.statusCode).toBe(200)
     expect(response.body).toContain(route.ownNeedle)
     expect(response.body).not.toContain(route.otherNeedle)
+    route.extraOwnAssertions?.(response.json())
   })
 })
 
@@ -225,6 +263,21 @@ describe('the versioned surface, beyond the per-route table', () => {
     expect(response.statusCode).toBe(404)
   })
 
+  // Every per-route 401 case above uses 'p1', a real person, so none of them can tell a correct
+  // guard apart from one that checks the person before the session: both orderings answer 401 for
+  // a real id. If requirePerson were ever reordered that way, an unauthenticated request would
+  // become a person id enumeration oracle, 404 for a real id and 401 for an unknown one, and every
+  // per-route 401 case above would stay green regardless. Only an unknown id, with no session,
+  // actually exercises that ordering.
+  it('answers 401 for an unknown person with no session, not 404', async () => {
+    harness = await withServer()
+    await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/nobody/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02',
+    })
+    expect(response.statusCode).toBe(401)
+  })
+
   // The guard has to be a property of the plugin, not of a list every route remembers to carry.
   // This route is registered with no preHandler of its own; if it answers 200 without a session,
   // the hook is not doing the guarding and the per-route array is back to being load bearing.
@@ -239,20 +292,41 @@ describe('the versioned surface, beyond the per-route table', () => {
     expect(response.statusCode).toBe(401)
   })
 
-  // R19: its own harness, not the outer describe's shared variable, since this test has to run
-  // on its own regardless of which per-route case ran last.
+  // Routes under /api/v1 that are deliberately not person scoped, and so carry no isolation case
+  // in the table above. Adding one here is a conscious edit to this list; filtering the guard
+  // below to only '/api/v1/p/' would instead let such a route slip past it with nobody noticing.
+  // Empty today: every route registerV1 wires up is under /p/.
+  const NOT_PERSON_SCOPED: readonly string[] = []
+
+  // R19: its own harness, not the outer describe's shared variable, since this test has to run on
+  // its own regardless of which per-route case ran last.
   //
-  // printRoutes({ commonPrefix: false }) was checked before relying on it: it does not collapse
-  // routes into a radix tree the way the default call does, it prints one line per distinct
-  // registered path with that path's methods grouped in parens (e.g. "/hello (GET, HEAD, PUT)").
-  // Every route in ROUTES is GET only and no two share a path, so the line count and ROUTES.length
-  // line up exactly; there was no need to fall back to the onRoute hook.
+  // Not printRoutes: it merges several methods on one path onto a single line, so a second method
+  // added to an existing path is invisible to a line count, and it nests a route whose path
+  // extends another registered route's path under that route's line instead of printing it in
+  // full, so a route added under an existing one is invisible too. Both were confirmed against
+  // this exact route set before ruling printRoutes out. onRouteForTest instead observes fastify's
+  // own onRoute hook, wired in by app.ts before any route is registered, which fires once per
+  // (method, url) pair exactly as fastify's router sees it: no merging, no nesting. HEAD is
+  // dropped because fastify re-enters route registration to add it for every GET as its own call,
+  // so it would otherwise show up as an entry nobody in this table declared.
+  //
+  // Compared as a set in both directions, not a count, so a mismatch names the offending route
+  // rather than failing with an opaque "expected 10 to be 9" that means nothing to whoever trips
+  // it next.
   it('covers every route the versioned surface registers', async () => {
-    const isolatedHarness = await withServer()
+    const registered = new Set<string>()
+    const isolatedHarness = await withServer({
+      onRouteForTest: (route) => {
+        if (route.method === 'HEAD') return
+        if (route.url.startsWith('/api/v1')) registered.add(`${route.method} ${route.url}`)
+      },
+    })
     try {
-      const registered = isolatedHarness.app.printRoutes({ commonPrefix: false })
-        .split('\n').filter((line) => line.includes('/api/v1/p/'))
-      expect(registered.length).toBe(ROUTES.length)
+      const covered = new Set([...ROUTES.map((route) => `GET ${route.template}`), ...NOT_PERSON_SCOPED])
+      const missing = [...registered].filter((entry) => !covered.has(entry))
+      const stale = [...covered].filter((entry) => !registered.has(entry))
+      expect({ missing, stale }).toEqual({ missing: [], stale: [] })
     } finally {
       await isolatedHarness.cleanup()
     }
