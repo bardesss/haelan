@@ -126,7 +126,14 @@ const ROUTES: readonly RouteCase[] = [
     seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(6), value: 999_999 }),
     ownNeedle: '4200',
     otherNeedle: '999999',
-    extraOwnAssertions: (body) => expect((body as { n: number }).n).toBe(5),
+    // thin is true here on purpose: baselineOf's floor is min(BASELINE_MIN_DAYS, windowDays), and
+    // widening the window to six days while the owner still has five drops n below that floor.
+    // The gap date the leak needs (see the comment above) costs this control a non-thin baseline;
+    // asserted rather than left silent, so a reader sees that trade rather than rediscovering it.
+    extraOwnAssertions: (body) => {
+      expect((body as { n: number }).n).toBe(5)
+      expect((body as { thin: boolean }).thin).toBe(true)
+    },
   },
   {
     name: 'insights',
@@ -264,9 +271,13 @@ describe.each(ROUTES)('the versioned surface is isolated per person: $name', (ro
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(200)
+    // Ahead of the two needle checks: on an aggregate route a leak can fail this without ever
+    // touching either needle (see the baselines, insights and trend entries above), and a failure
+    // here should name the count that actually moved rather than be masked by a needle expect
+    // that happens to run first and reports a less specific reason.
+    route.extraOwnAssertions?.(response.json())
     expect(response.body).toContain(route.ownNeedle)
     expect(response.body).not.toContain(route.otherNeedle)
-    route.extraOwnAssertions?.(response.json())
   })
 })
 
