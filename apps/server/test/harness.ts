@@ -86,6 +86,8 @@ export interface Harness {
   clock: { nowMs: number }
   completeSetup: () => Promise<void>
   connectPerson: () => Promise<void>
+  addPerson: (input: { id: string, displayName: string, username: string }) =>
+    Promise<{ personId: string, accountId: string }>
   cleanup: () => Promise<void>
 }
 
@@ -124,8 +126,12 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
   await app.ready()
 
   // What a finished wizard would have left behind, so a test about anything else does not
-  // have to walk it.
+  // have to walk it. Idempotent, because addPerson below bootstraps it too: a test that connects
+  // the first person and then adds a second would otherwise hit the p1 insert twice.
+  let setupDone = false
   const completeSetup = async () => {
+    if (setupDone) return
+    setupDone = true
     // Through the store the wizard itself uses, not seedPerson, because the two now differ in a
     // way that matters here: create stamps the current versions and seedPerson leaves them null,
     // which is a person the sync runner skips. A harness that produced the second while claiming
@@ -162,6 +168,23 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     clock,
     completeSetup,
     connectPerson,
+
+    // A second household member: a person and an account of their own, no refresh token. Nothing
+    // here grants them any data, which is the point - the isolation tests need an account that
+    // can sign in and must still see nothing of anybody else's.
+    addPerson: async (input: { id: string, displayName: string, username: string }) => {
+      await completeSetup()
+      new PeopleStore(instance.db).create({
+        id: input.id, displayName: input.displayName,
+        timezone: 'Europe/Amsterdam', nowMs: clock.nowMs,
+      })
+      await new AccountStore(instance.db).create({
+        id: `a-${input.id}`, personId: input.id, username: input.username,
+        password: 'a good long password', isAdmin: false, nowMs: clock.nowMs,
+      })
+      return { personId: input.id, accountId: `a-${input.id}` }
+    },
+
     cleanup: async () => {
       // A route or a callback may have left a run going. Closing the database under it turns
       // teardown into an unhandled error attributed to whichever test happened to be next.

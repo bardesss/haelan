@@ -129,8 +129,8 @@ describe('the sync runner', () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('manual')
-    expect(harness.app.haelan.runner.status().running).toBe(false)
-    expect(harness.app.haelan.runner.status().lastFinishedAtMs).toBe(harness.clock.nowMs)
+    expect(harness.app.haelan.runner.runState().running).toBe(false)
+    expect(harness.app.haelan.runner.runState().lastFinishedAtMs).toBe(harness.clock.nowMs)
   })
 
   it('runs nothing for a person with no credential rather than throwing', async () => {
@@ -140,7 +140,7 @@ describe('the sync runner', () => {
     // in between the console step and consent. A scheduler tick here must not crash the server.
     const outcome = await harness.app.haelan.runner.trigger('scheduled')
     expect(outcome.started).toBe(true)
-    expect(harness.app.haelan.runner.status().running).toBe(false)
+    expect(harness.app.haelan.runner.runState().running).toBe(false)
   })
 
   it('delivers progress events to a subscriber and stops after unsubscribe', async () => {
@@ -168,7 +168,7 @@ describe('the sync runner', () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('manual')
-    const summary = harness.app.haelan.runner.status().backfill
+    const summary = harness.app.haelan.runner.status('p1').backfill
     expect(summary.length).toBeGreaterThan(0)
     const heartRate = summary.find((s) => s.dataType === 'heart-rate')
     expect(heartRate?.horizonDays).toBe(365)
@@ -182,7 +182,7 @@ describe('the sync runner', () => {
     await harness.connectPerson()
     harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
     await harness.app.haelan.runner.trigger('manual')
-    const status = harness.app.haelan.runner.status()
+    const status = harness.app.haelan.runner.status('p1')
     expect(status.userHorizonDays).toBe(1825)
     // Intraday stays capped however deep the operator asked to go; daily follows them.
     expect(status.backfill.find((s) => s.dataType === 'heart-rate')?.horizonDays).toBe(365)
@@ -215,7 +215,7 @@ describe('the sync runner', () => {
 
     // Walked strictly past the old floor rather than sitting there silently complete at 90 days
     // forever, which is what a raised cap would otherwise do nothing for.
-    const heartRate = harness.app.haelan.runner.status().backfill.find((s) => s.dataType === 'heart-rate')
+    const heartRate = harness.app.haelan.runner.status('p1').backfill.find((s) => s.dataType === 'heart-rate')
     expect(heartRate?.cursorMs).toBeLessThan(oldFloorMs)
   })
 
@@ -229,7 +229,7 @@ describe('the sync runner', () => {
     expect(second).toMatchObject({ started: false, reason: 'already_running' })
     // tryStart leaves the run going, so let it finish before the harness closes the database
     // out from under it.
-    while (runner.status().running) await new Promise((resolve) => setImmediate(resolve))
+    while (runner.runState().running) await new Promise((resolve) => setImmediate(resolve))
   })
 
   it('fills the sprint window in one run rather than one batch an hour', async () => {
@@ -241,7 +241,7 @@ describe('the sync runner', () => {
     harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
-    const status = harness.app.haelan.runner.status()
+    const status = harness.app.haelan.runner.status('p1')
     const sprintFloor = harness.clock.nowMs - 90 * 86_400_000
     for (const row of status.backfill) {
       expect(row.complete || (row.cursorMs !== null && row.cursorMs <= sprintFloor)).toBe(true)
@@ -256,7 +256,7 @@ describe('the sync runner', () => {
     await harness.connectPerson()
     harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
     await harness.app.haelan.runner.trigger('setup')
-    const weight = harness.app.haelan.runner.status().backfill.find((s) => s.dataType === 'weight')
+    const weight = harness.app.haelan.runner.status('p1').backfill.find((s) => s.dataType === 'weight')
     // Daily types were asked for five years; the sprint must not have walked them there.
     expect(weight?.complete).toBe(false)
     expect(weight?.cursorMs).toBeGreaterThan(harness.clock.nowMs - 1825 * 86_400_000)
@@ -271,10 +271,10 @@ describe('the sync runner', () => {
     harness = await withServer({ google: 'ok', sprintDays: 28, backfillBatchDays: 14 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
-    const before = harness.app.haelan.runner.status().backfill
+    const before = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === 'weight')!.cursorMs!
     await harness.app.haelan.runner.trigger('scheduled')
-    const after = harness.app.haelan.runner.status().backfill
+    const after = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === 'weight')!.cursorMs!
     // One batch of fourteen days (backfillBatchDays passed above), not another sprint.
     expect(before - after).toBeLessThanOrEqual(16 * 86_400_000)
@@ -293,14 +293,14 @@ describe('the sync runner', () => {
     runner.tryStart('setup')
     runner.stop()
     await runner.settle()
-    expect(runner.status().running).toBe(false)
+    expect(runner.runState().running).toBe(false)
     // The regression this exists for: a sprint that ran to completion under a closing database
     // surfaced as "the database connection is not open" from somewhere unrelated. stop() lands
     // before the first await inside runSync resolves, and runSync writes no backfill cursors of
     // its own, so #aborted is already true by the time run() would otherwise enter the sprint
     // loop - no cursor at all is what proves the sprint never took a single step, not merely
     // that weight in particular fell short of some deep horizon it was never asked to reach here.
-    const status = runner.status()
+    const status = runner.status('p1')
     expect(status.backfill.every((row) => row.cursorMs === null)).toBe(true)
 
     // The cursors above prove the sprint never took a step, but the trailing sync runs before the
@@ -330,7 +330,7 @@ describe('the sync runner', () => {
     runner.stop()
     expect(runner.tryStart('manual')).toMatchObject({ started: false, reason: 'shutting_down' })
     expect(await runner.trigger('manual')).toMatchObject({ started: false, reason: 'shutting_down' })
-    expect(runner.status().running).toBe(false)
+    expect(runner.runState().running).toBe(false)
   })
 
   it('does not spin forever on a type that fails every window', async () => {
@@ -340,7 +340,7 @@ describe('the sync runner', () => {
     harness = await withServer({ google: 'list_fails' })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
-    expect(harness.app.haelan.runner.status().running).toBe(false)
+    expect(harness.app.haelan.runner.runState().running).toBe(false)
   })
 
   it('does not let one broken type block a healthy type from advancing past the sprint floor', async () => {
@@ -354,18 +354,18 @@ describe('the sync runner', () => {
     const sprintFloor = harness.clock.nowMs - 28 * 86_400_000
 
     await harness.app.haelan.runner.trigger('setup')
-    const afterFirst = harness.app.haelan.runner.status().backfill
+    const afterFirst = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === 'weight')!.cursorMs!
     expect(afterFirst).toBeLessThanOrEqual(sprintFloor)
 
     await harness.app.haelan.runner.trigger('scheduled')
-    const afterSecond = harness.app.haelan.runner.status().backfill
+    const afterSecond = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === 'weight')!.cursorMs!
     // Strictly deeper, not just "still at the floor": the second run's trickle pass had to do
     // real work, which only happens if run() reached it despite #sprintPending staying true.
     expect(afterSecond).toBeLessThan(afterFirst)
 
-    const brokenType = harness.app.haelan.runner.status().backfill
+    const brokenType = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === LIST_FAILS_TYPE)
     expect(brokenType?.complete).toBe(false)
   }, SPRINT_BUDGET_MS)

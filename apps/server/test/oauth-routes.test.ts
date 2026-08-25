@@ -120,8 +120,8 @@ describe('the consent handoff', () => {
     // The scheduler's first tick is a whole interval away, so without a kick here the screen
     // the callback redirects to would say nothing had started, and be right.
     const runner = harness.app.haelan.runner
-    expect(runner.status().running || runner.status().lastFinishedAtMs !== null).toBe(true)
-    while (runner.status().running) await new Promise((resolve) => setImmediate(resolve))
+    expect(runner.runState().running || runner.runState().lastFinishedAtMs !== null).toBe(true)
+    while (runner.runState().running) await new Promise((resolve) => setImmediate(resolve))
   })
 
   it('sends a rejected state back to the connect step rather than exchanging it', async () => {

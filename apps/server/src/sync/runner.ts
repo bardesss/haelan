@@ -50,6 +50,15 @@ export interface RunOutcome {
   reason?: 'already_running' | 'shutting_down'
 }
 
+/**
+ * Deliberately carries no person id. status() below takes one and returns only that person's
+ * rows, so every entry belongs to the person the caller named and a field repeating it on each
+ * row would be redundant on every response. It would also preserve the flat shape this type
+ * used to have, where the array held one entry per person per type and duplicate dataType
+ * values were the only sign that two households were mixed together. Spec section 15 settles
+ * the question a household-wide variant would raise: each account sees only its own data, with
+ * no sharing mechanism and no admin override, so there is nothing for a per-row owner to serve.
+ */
 export interface BackfillSummary {
   dataType: string
   complete: boolean
@@ -57,11 +66,26 @@ export interface BackfillSummary {
   horizonDays: number
 }
 
-export interface RunnerStatus {
+/**
+ * What is true of the runner itself rather than of anybody's data. The runner is one singleton
+ * per instance, so these four are instance-wide facts and safe to hand to any signed-in caller.
+ * Split out from RunnerStatus so that asking "is a run going" does not require naming a person
+ * and, more to the point, so that there is no argument-free call that returns a backfill array.
+ */
+export interface RunState {
   running: boolean
   reason: RunReason | null
   startedAtMs: number | null
   lastFinishedAtMs: number | null
+}
+
+export interface RunnerStatus extends RunState {
+  /**
+   * Whose snapshot this is. Named once on the envelope rather than once per row: the event
+   * stream sends a snapshot unsolicited on connect, and a client that has since switched person
+   * needs to know whether the one it is holding is the one it is drawing.
+   */
+  personId: string
   userHorizonDays: number
   backfill: BackfillSummary[]
 }
@@ -123,29 +147,37 @@ export class SyncRunner {
     return this.#context.stores.settings.get()?.backfillHorizonDays ?? DEFAULT_USER_HORIZON_DAYS
   }
 
-  status(): RunnerStatus {
-    const userHorizonDays = this.#userHorizonDays()
-    const backfill: BackfillSummary[] = []
-    for (const person of this.#context.stores.people.list()) {
-      for (const type of DATA_TYPES) {
-        if (!supports(type, 'list')) continue
-        const state = this.#context.stores.syncState.get(person.id, type.id)
-        backfill.push({
-          dataType: type.id,
-          complete: state?.backfillCompleteAtMs != null,
-          cursorMs: state?.backfillCursorMs ?? null,
-          horizonDays: horizonDaysFor(type, userHorizonDays),
-        })
-      }
-    }
+  /** The instance-wide facts, with nothing of anybody's data in them. */
+  runState(): RunState {
     return {
       running: this.running,
       reason: this.reason,
       startedAtMs: this.startedAtMs,
       lastFinishedAtMs: this.lastFinishedAtMs,
-      userHorizonDays,
-      backfill,
     }
+  }
+
+  /**
+   * One person's view of the runner. personId is required rather than optional: this used to
+   * walk people.list() and return every household member's backfill in one flat array, which
+   * meant any caller that forgot to filter served one member's cursors to another. An optional
+   * parameter would leave that call spelled the same way it is today and reintroduce the leak
+   * the first time somebody wrote status() out of habit, so the type is what refuses it now.
+   */
+  status(personId: string): RunnerStatus {
+    const userHorizonDays = this.#userHorizonDays()
+    const backfill: BackfillSummary[] = []
+    for (const type of DATA_TYPES) {
+      if (!supports(type, 'list')) continue
+      const state = this.#context.stores.syncState.get(personId, type.id)
+      backfill.push({
+        dataType: type.id,
+        complete: state?.backfillCompleteAtMs != null,
+        cursorMs: state?.backfillCursorMs ?? null,
+        horizonDays: horizonDaysFor(type, userHorizonDays),
+      })
+    }
+    return { ...this.runState(), personId, userHorizonDays, backfill }
   }
 
   /**
