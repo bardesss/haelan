@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ConfigError, PersonQuery } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
+import { hashEtag, notModified } from '../../api/etag.ts'
 
 interface PersonParams { personId: string }
 
@@ -96,6 +97,19 @@ function paginate<T>(items: readonly T[], input: {
 }
 
 /**
+ * Sets the ETag, then either a 304 with no body or the answer itself. `samples`, `sessions` and
+ * `session_segments` carry no `updated_at_ms`, so the ETag hashes the body exactly as it is sent,
+ * after thinning and pagination: hashing the rows ahead of that point would let two different
+ * responses share an ETag, since it would hash something the caller never actually receives.
+ */
+function sendHashed(reply: FastifyReply, request: FastifyRequest, body: unknown) {
+  const etag = hashEtag(body)
+  reply.header('etag', etag)
+  if (notModified(request, etag)) return reply.code(304).send()
+  return reply.send(body)
+}
+
+/**
  * The three tier 2 reads: intraday samples, sleep nights and workout sessions, each backed by the
  * normalized tier rather than the merged `daily` rollup. Each takes `source`: M3b-1's readers
  * never choose between sources themselves, since this project already has exactly one source
@@ -116,7 +130,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const source = request.query.source
 
     const result: IntradayResult = personQuery.intraday({ metric, localDate: date, points, sourceId: source })
-    return reply.send(result)
+    return sendHashed(reply, request, result)
   })
 
   app.get<{ Params: PersonParams, Querystring: NightsQuery }>('/p/:personId/sleep/nights', async (request, reply) => {
@@ -130,7 +144,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const page = paginate(nights, {
       limit, cursor: request.query.cursor, keyOf: (n) => [n.localDate, n.sourceId],
     })
-    return reply.send(page)
+    return sendHashed(reply, request, page)
   })
 
   app.get<{ Params: PersonParams, Querystring: SessionsQuery }>('/p/:personId/sessions', async (request, reply) => {
@@ -144,6 +158,6 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const kindChecked = kind as 'sleep' | 'exercise' // requireSessionKind validates this at runtime, inside the core call below
     const all: WorkoutSession[] = personQuery.sessions({ kind: kindChecked, from, to, sourceId: source })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
-    return reply.send(page)
+    return sendHashed(reply, request, page)
   })
 }

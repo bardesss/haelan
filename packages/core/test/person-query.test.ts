@@ -18,7 +18,7 @@ afterEach(() => test.cleanup())
 
 const insertDaily = (o: {
   localDate: string, value: number | null, metric?: string, agg?: string,
-  source?: string, coverage?: number | null, personId?: string,
+  source?: string, coverage?: number | null, personId?: string, updatedAtMs?: number | null,
 }) => {
   test.db.insert(daily).values({
     personId: o.personId ?? 'p1',
@@ -30,6 +30,7 @@ const insertDaily = (o: {
     coverage: o.coverage === undefined ? 0.9 : o.coverage,
     sourceMix: null,
     derivationVersion: 4,
+    updatedAtMs: o.updatedAtMs === undefined ? null : o.updatedAtMs,
   }).run()
 }
 
@@ -146,6 +147,16 @@ describe('PersonQuery.series', () => {
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'provider' })
     const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([900])
+  })
+
+  // The HTTP surface's ETag needs the newest updated_at_ms among the rows an answer drew on,
+  // and daily is the only reader over that column anywhere in core.
+  it('carries updatedAtMs through, including a null one', () => {
+    insertDaily({ localDate: '2026-08-01', value: 900, updatedAtMs: 1_770_000_000_000 })
+    insertDaily({ localDate: '2026-08-02', value: 800 })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
+    expect(points[0]?.updatedAtMs).toBe(1_770_000_000_000)
+    expect(points[1]?.updatedAtMs).toBeNull()
   })
 
   it('returns only merged rows when merged is named, so provenance stays askable', () => {

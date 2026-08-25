@@ -31,6 +31,13 @@ export interface DailyPoint {
   coverage: number | null
   source: string
   sourceMix: string | null
+  /**
+   * When this row was last written. Null for a row derived before M3b added the column, and for
+   * any row a rebuild has not touched since. The HTTP surface's conditional requests are the
+   * reason this is here: an ETag over `daily` needs the newest stamp among the rows an answer
+   * drew on, and there was no reader over the column anywhere in core until now.
+   */
+  updatedAtMs: number | null
 }
 
 export interface SeriesResult {
@@ -89,6 +96,7 @@ export class PersonQuery {
       coverage: daily.coverage,
       source: daily.source,
       sourceMix: daily.sourceMix,
+      updatedAtMs: daily.updatedAtMs,
     }).from(daily).where(and(
       eq(daily.personId, this.#personId),
       eq(daily.metric, input.metric),
