@@ -92,4 +92,20 @@ describe('requireSession with a bearer token', () => {
     })
     expect(response.cookies.some((c) => c.name === 'haelan_session' && c.value === '')).toBe(false)
   })
+
+  // The obvious "helpful" future change is to fall back to the cookie once the header fails to
+  // resolve. That would authenticate the caller as whoever the cookie names, which is exactly the
+  // identity the header just said they were not. A failed header must lose outright, not degrade
+  // into the cookie, and it must not clear a cookie that was never at fault.
+  it('rejects an invalid bearer token even alongside a valid cookie, and leaves the cookie alone', async () => {
+    harness = await withServer()
+    const mine = await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/auth/me',
+      headers: { authorization: 'Bearer not-a-session' },
+      cookies: { haelan_session: mine },
+    })
+    expect(response.statusCode).toBe(401)
+    expect(response.cookies.some((c) => c.name === 'haelan_session' && c.value === '')).toBe(false)
+  })
 })

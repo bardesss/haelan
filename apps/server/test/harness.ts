@@ -135,11 +135,13 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
   //
   // Guarded against a second call: PeopleStore.create and AccountStore.create both throw on a
   // repeat id/username, and signIn below calls this itself so that a test can sign in without
-  // having called it first. That only works if calling it twice is free.
+  // having called it first. That only works if calling it twice is free, which needs the flag
+  // set after the work succeeds, not before: setting it early would make a failed first call
+  // look like a finished one to every caller after it, turning one loud failure into a silent
+  // no-op somewhere else.
   let setupComplete = false
   const completeSetup = async () => {
     if (setupComplete) return
-    setupComplete = true
     // Through the store the wizard itself uses, not seedPerson, because the two now differ in a
     // way that matters here: create stamps the current versions and seedPerson leaves them null,
     // which is a person the sync runner skips. A harness that produced the second while claiming
@@ -158,6 +160,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
       clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: clock.nowMs,
     })
     settings.markSetupComplete(clock.nowMs)
+    setupComplete = true
   }
 
   // completeSetup leaves the state between the console step and consent: a client, no token.
