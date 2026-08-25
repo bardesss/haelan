@@ -142,4 +142,23 @@ describe('readChanges', () => {
     expect(() => readChanges(test.db, { personId: 'p1', since: 0, cursor: 'not-a-cursor!!' }))
       .toThrow(ConfigError)
   })
+
+  // Well formed JSON of the wrong shape, which the parse itself cannot catch. `null` is the one
+  // that used to get through: it parses, it is not an object the checks below would reject, and
+  // the first field read off it threw a TypeError that reached the caller as a 500. Each of these
+  // has to be a ConfigError, on a route built to be polled by a client that does not control what
+  // its own stored cursor looks like after a version change.
+  it.each([
+    ['null', 'null'],
+    ['an array', '[1,2]'],
+    ['a bare number', '7'],
+    ['a string', '"cursor"'],
+    ['an object missing a field', '{"stamp":9,"localDate":"2026-08-01"}'],
+    ['an object whose stamp is not a number', '{"stamp":"9","localDate":"2026-08-01","metric":"steps"}'],
+    ['an object whose stamp is not finite', '{"stamp":null,"localDate":"2026-08-01","metric":"steps"}'],
+  ])('refuses a cursor that decodes to %s', (_name, json) => {
+    expect(() => readChanges(test.db, {
+      personId: 'p1', since: 0, cursor: Buffer.from(json, 'utf8').toString('base64url'),
+    })).toThrow(ConfigError)
+  })
 })

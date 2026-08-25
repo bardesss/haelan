@@ -103,4 +103,16 @@ describe('GET /changes', () => {
     expect(second.items).toEqual([{ localDate: '2026-08-03', metric: 'steps' }])
     expect(second.cursor).toBeNull()
   })
+
+  // The cursor is opaque to the caller, which means it is also caller controlled: a client whose
+  // stored cursor survived a version change, or anyone hand editing a query string, must get a
+  // refusal rather than a stack trace. base64url of the literal `null` is the one that used to
+  // parse cleanly and then be dereferenced, on the route this surface exists to have polled.
+  it('answers 400 for a cursor that decodes to something that is not a cursor', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const cursor = Buffer.from('null', 'utf8').toString('base64url')
+    const response = await get(harness, token, `/changes?since=0&cursor=${cursor}`)
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
 })

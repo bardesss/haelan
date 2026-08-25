@@ -125,10 +125,31 @@ function encodeCursor(key: CursorKey): string {
   return Buffer.from(JSON.stringify(key), 'utf8').toString('base64url')
 }
 
+/**
+ * The cursor arrives from a query string, so it is caller controlled and its parsed shape has to
+ * be checked rather than asserted. A bare `as CursorKey` accepted the literal `null`, which parses
+ * fine and then dereferenced one frame later as a 500 with a stack trace on the one route the
+ * surface exists to have polled. Every field is checked, not only the wrapper, since a well
+ * shaped object carrying a string stamp would reach the keyset predicate and compare wrongly
+ * rather than fail.
+ */
 function decodeCursor(raw: string): CursorKey {
+  let parsed: unknown
   try {
-    return JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as CursorKey
+    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
   } catch {
     throw new ConfigError(`cursor is not valid, got '${raw}'`)
   }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new ConfigError(`cursor is not valid, got '${raw}'`)
+  }
+  const key = parsed as Partial<Record<keyof CursorKey, unknown>>
+  if (
+    typeof key.stamp !== 'number' || !Number.isFinite(key.stamp)
+    || typeof key.localDate !== 'string'
+    || typeof key.metric !== 'string'
+  ) {
+    throw new ConfigError(`cursor is not valid, got '${raw}'`)
+  }
+  return { stamp: key.stamp, localDate: key.localDate, metric: key.metric }
 }
