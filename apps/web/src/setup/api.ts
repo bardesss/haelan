@@ -15,6 +15,8 @@ export interface BackfillSummary {
 }
 
 export interface SyncStatus {
+  /** Whose snapshot this is. See RunnerStatus.personId on the server for why it is here. */
+  personId: string
   running: boolean
   reason: string | null
   startedAtMs: number | null

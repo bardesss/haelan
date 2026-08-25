@@ -18,6 +18,7 @@ const CANDIDATES = [
 ]
 
 const HORIZON_STATUS = {
+  personId: 'p1',
   running: true, reason: 'setup', startedAtMs: 1_770_000_000_000, lastFinishedAtMs: null,
   userHorizonDays: 730,
   backfill: [
@@ -129,6 +130,7 @@ describe('the wizard screens', () => {
 
   it('names every data type it is backfilling and how far back it is going', () => {
     const html = render(<BackfillStep status={{
+      personId: 'p1',
       running: true, reason: 'setup', startedAtMs: 1, lastFinishedAtMs: null,
       userHorizonDays: 1825,
       backfill: [
@@ -143,6 +145,7 @@ describe('the wizard screens', () => {
 
   it('says a finished type is finished rather than showing it as stalled at nothing', () => {
     const html = render(<BackfillStep status={{
+      personId: 'p1',
       running: false, reason: null, startedAtMs: null, lastFinishedAtMs: 2,
       userHorizonDays: 1825,
       backfill: [{ dataType: 'weight', complete: true, cursorMs: null, horizonDays: 1825 }],
@@ -198,6 +201,7 @@ describe('the wizard screens', () => {
     // at least one row), but Math.min() of an empty list is Infinity, and a future reordering
     // should not be able to put that literal word on screen.
     const html = render(<BackfillStep status={{
+      personId: 'p1',
       running: false, reason: null, startedAtMs: null, lastFinishedAtMs: null,
       userHorizonDays: 730, backfill: [],
     }} nowMs={1_770_000_000_000} onHorizonChange={() => {}} />)
