@@ -111,6 +111,26 @@ describe('readChanges', () => {
     expect(next.cursor).toBeNull()
   })
 
+  // A rebuild leaves many pairs sharing one stamp, so a real client polling after one pages
+  // through a long run of ties. The cursor has to break the tie itself, by local date then
+  // metric, not just skip past a distinct stamp.
+  it('pages correctly across a same-stamp tie, keyed by local date then metric', () => {
+    insertDaily({ localDate: '2026-08-01', metric: 'floors', value: 1, updatedAtMs: 7_000 })
+    insertDaily({ localDate: '2026-08-01', metric: 'steps', value: 1, updatedAtMs: 7_000 })
+    insertDaily({ localDate: '2026-08-02', metric: 'steps', value: 1, updatedAtMs: 7_000 })
+
+    const first = readChanges(test.db, { personId: 'p1', since: 0, limit: 2 })
+    expect(first.items).toEqual([
+      { localDate: '2026-08-01', metric: 'floors' },
+      { localDate: '2026-08-01', metric: 'steps' },
+    ])
+    expect(first.cursor).not.toBeNull()
+
+    const second = readChanges(test.db, { personId: 'p1', since: 0, limit: 2, cursor: first.cursor! })
+    expect(second.items).toEqual([{ localDate: '2026-08-02', metric: 'steps' }])
+    expect(second.cursor).toBeNull()
+  })
+
   it('refuses a cursor that does not match any row in range', () => {
     insertDaily({ localDate: '2026-08-01', metric: 'steps', value: 1, updatedAtMs: 1_000 })
     expect(() => readChanges(test.db, {
