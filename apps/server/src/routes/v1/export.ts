@@ -22,10 +22,11 @@ interface ExportQuery {
 // of the other columns can ever hold a comma, a quote or a newline.
 const CSV_HEADER = 'localDate,metric,agg,source,value,coverage,sourceMix'
 
-/** RFC 4180: a field needing no quoting is written bare; one with a comma, a quote or a
- *  newline is wrapped in double quotes, with an inner quote doubled. */
+/** RFC 4180: a field needing no quoting is written bare; one with a comma, a quote, a line feed
+ *  or a carriage return is wrapped in double quotes, with an inner quote doubled. daily.source_mix
+ *  is an unconstrained text column, so a lone \r is not merely theoretical. */
 function csvField(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 }
 
 function csvRow(fields: readonly string[]): string {
