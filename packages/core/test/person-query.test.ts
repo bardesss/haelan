@@ -711,6 +711,20 @@ describe('PersonQuery.comparePeriods', () => {
     expect(insight.currentCoverage).toBeCloseTo(0.9, 10)
     expect(insight.delta).toBeNull()
   })
+
+  // The comparison period is derived, never supplied. Stepping a wide range back by its own
+  // length lands outside the calendar, and the refusal used to name that derived date: a caller
+  // who sent 1000-01-01 read `got '-008000-01'` and had a range to find in their own code that
+  // was not in it.
+  it('names the range the caller passed when the period before it falls off the calendar', () => {
+    const wide = { metric: 'steps', agg: 'sum', from: '1000-01-01', to: '9999-12-31' }
+    expect(() => query.comparePeriods(wide)).toThrow(ConfigError)
+    expect(() => query.comparePeriods(wide)).toThrow(/1000-01-01/)
+    expect(() => query.comparePeriods(wide)).toThrow(/9999-12-31/)
+    // And says where the range it is refusing came from, since the caller never wrote that one.
+    expect(() => query.comparePeriods(wide)).toThrow(/period of equal length immediately before/)
+    expect(() => query.comparePeriods(wide)).not.toThrow(/-008000/)
+  })
 })
 
 describe('PersonQuery date validation, out of range components', () => {

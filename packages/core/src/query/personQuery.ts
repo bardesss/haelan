@@ -185,6 +185,19 @@ export class PersonQuery {
     const previousTo = shiftLocalDate(input.from, -1)
     const previousFrom = shiftLocalDate(previousTo, -(periodDays - 1))
 
+    // The comparison period is derived here, never supplied. Stepping a wide range back by its
+    // own length lands outside the calendar, and the ConfigError series() then threw named a date
+    // the caller had never written: `from must be a YYYY-MM-DD local date, got '-008000-01'` in
+    // answer to a request that said 1000-01-01. Whoever read that had a range to go and find in
+    // their own code that was not in it. Refused here instead, in terms of what was passed, and
+    // saying where the range the message does not name came from.
+    if (!ISO_DATE.test(previousFrom) || !ISO_DATE.test(previousTo)) {
+      throw new ConfigError(
+        `from '${input.from}' to '${input.to}' spans ${periodDays} days, and the period of equal `
+        + 'length immediately before it, which is what this compares against, starts before year 0001',
+      )
+    }
+
     // Coverage is a fraction of the day's hours, so a once-a-day metric reads 0.0417 when it is
     // perfect. Handing that number to a gate built for continuously sampled data suppresses the
     // whole Recovery page forever. Null says the period cannot be judged on coverage, which the
