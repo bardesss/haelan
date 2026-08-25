@@ -100,33 +100,45 @@ const ROUTES: readonly RouteCase[] = [
   {
     name: 'series',
     template: '/api/v1/p/:personId/series',
-    path: (p) => `/api/v1/p/${p}/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`,
+    // The range runs one day past what the owner seeds. series() runs its rows through
+    // preferMerged (personQuery.ts), a Map keyed on localDate alone: a leak target seeded on the
+    // same date as the owner would not add a row, it would overwrite one, and whether the
+    // needles fire would then depend on SQLite's row order rather than on isolation actually
+    // holding. Seeding the leak target on a date the owner has no row for makes a leak add a row
+    // instead, so the assertions below hold regardless of row order.
+    path: (p) => `/api/v1/p/${p}/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`,
     seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', value: 4242 }),
-    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-01', value: 999_999 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-02', value: 999_999 }),
     ownNeedle: '4242',
     otherNeedle: '999999',
   },
   {
     name: 'baselines',
     template: '/api/v1/p/:personId/baselines',
-    // windowDays=5 reads back exactly 2026-08-01..2026-08-05 (the window ends the day before `on`).
-    path: (p) => `/api/v1/p/${p}/baselines?metric=steps&agg=sum&on=2026-08-06&windowDays=5`,
+    // windowDays=6 reads back 2026-08-01..2026-08-06 (the window ends the day before `on`). The
+    // owner seeds only the first five of those six days; the leak target seeds only the sixth, a
+    // date the owner has no row for. baseline() calls series(), which dedupes by localDate alone
+    // (preferMerged, personQuery.ts): a leak seeded on a date the owner already has would
+    // overwrite rather than add, leaving n at 5 whichever row SQLite happened to keep. Seeded on
+    // its own date, a leak adds a sixth contributing day and n moves to 6.
+    path: (p) => `/api/v1/p/${p}/baselines?metric=steps&agg=sum&on=2026-08-07&windowDays=6`,
     seedOwn: (h) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId: 'p1', localDate: dateOf(day), value: 4200 }) },
-    seedOther: (h, personId) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId, localDate: dateOf(day), value: 999_999 }) },
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(6), value: 999_999 }),
     ownNeedle: '4200',
     otherNeedle: '999999',
-    // A mean blending five 4200s with a leaked five 999999s reads 502099.5, containing neither
-    // needle: the count of contributing days is what names an extra row directly.
     extraOwnAssertions: (body) => expect((body as { n: number }).n).toBe(5),
   },
   {
     name: 'insights',
     template: '/api/v1/p/:personId/insights',
-    // The current range is 08-08..08-14; comparePeriods derives the previous range (08-01..08-07)
-    // itself, so both fourteen days need a row for neither period to be refused as too thin.
-    path: (p) => `/api/v1/p/${p}/insights?metric=steps&agg=sum&from=2026-08-08&to=2026-08-14`,
+    // The current range is 08-08..08-15, one day past the fourteen the owner seeds; the leak
+    // target seeds only that fifteenth day. comparePeriods calls series() for the current range,
+    // which dedupes by localDate alone (preferMerged, personQuery.ts): a leak on a date the owner
+    // already has would overwrite rather than add, leaving currentDays at 7 either way. Seeded on
+    // its own date, a leak adds an eighth contributing day and currentDays moves to 8.
+    path: (p) => `/api/v1/p/${p}/insights?metric=steps&agg=sum&from=2026-08-08&to=2026-08-15`,
     seedOwn: (h) => { for (let day = 1; day <= 14; day += 1) seedDaily(h, { personId: 'p1', localDate: dateOf(day), value: 6500 }) },
-    seedOther: (h, personId) => { for (let day = 1; day <= 14; day += 1) seedDaily(h, { personId, localDate: dateOf(day), value: 999_999 }) },
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(15), value: 999_999 }),
     ownNeedle: '6500',
     otherNeedle: '999999',
     extraOwnAssertions: (body) => expect((body as { currentDays: number }).currentDays).toBe(7),
@@ -134,10 +146,15 @@ const ROUTES: readonly RouteCase[] = [
   {
     name: 'trend',
     template: '/api/v1/p/:personId/trend',
-    // A constant series smooths to the same constant, so the marker survives the EWMA untouched.
-    path: (p) => `/api/v1/p/${p}/trend?metric=steps&agg=sum&from=2026-08-01&to=2026-08-05`,
+    // The range runs to 08-06, one day past the five the owner seeds; the leak target seeds only
+    // that sixth day. trend() calls series(), which dedupes by localDate alone (preferMerged,
+    // personQuery.ts): a leak on a date the owner already has would overwrite rather than add,
+    // leaving the trend at five points either way. Seeded on its own date, a leak adds a sixth
+    // point. A constant series smooths to the same constant, so the owner's marker survives the
+    // EWMA untouched.
+    path: (p) => `/api/v1/p/${p}/trend?metric=steps&agg=sum&from=2026-08-01&to=2026-08-06`,
     seedOwn: (h) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId: 'p1', localDate: dateOf(day), value: 7100 }) },
-    seedOther: (h, personId) => { for (let day = 1; day <= 5; day += 1) seedDaily(h, { personId, localDate: dateOf(day), value: 999_999 }) },
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(6), value: 999_999 }),
     ownNeedle: '7100',
     otherNeedle: '999999',
     extraOwnAssertions: (body) => expect(body).toHaveLength(5),
@@ -182,20 +199,24 @@ const ROUTES: readonly RouteCase[] = [
   {
     name: 'export (json)',
     template: '/api/v1/p/:personId/export',
-    path: (p) => `/api/v1/p/${p}/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`,
+    // export calls series() too, so the same dedupe-by-localDate risk applies (see the series
+    // entry above): the leak target seeds a date the owner does not have, one day past the
+    // owner's, rather than the owner's own date.
+    path: (p) => `/api/v1/p/${p}/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`,
     seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', value: 8080 }),
-    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-01', value: 999_999 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-02', value: 999_999 }),
     ownNeedle: '8080',
     otherNeedle: '999999',
   },
   {
     name: 'export (csv)',
     // Same route as the json case above; the csv branch has its own serialiser in export.ts and
-    // the gate never reaches it if only format=json is ever exercised.
+    // the gate never reaches it if only format=json is ever exercised. Same dedupe-by-localDate
+    // risk too, so the same gap-date seeding.
     template: '/api/v1/p/:personId/export',
-    path: (p) => `/api/v1/p/${p}/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`,
+    path: (p) => `/api/v1/p/${p}/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`,
     seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: '2026-08-01', value: 8090 }),
-    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-01', value: 888_888 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: '2026-08-02', value: 888_888 }),
     ownNeedle: '8090',
     otherNeedle: '888888',
   },
@@ -307,9 +328,11 @@ describe('the versioned surface, beyond the per-route table', () => {
   // full, so a route added under an existing one is invisible too. Both were confirmed against
   // this exact route set before ruling printRoutes out. onRouteForTest instead observes fastify's
   // own onRoute hook, wired in by app.ts before any route is registered, which fires once per
-  // (method, url) pair exactly as fastify's router sees it: no merging, no nesting. HEAD is
-  // dropped because fastify re-enters route registration to add it for every GET as its own call,
-  // so it would otherwise show up as an entry nobody in this table declared.
+  // (method, url) pair exactly as fastify's router sees it: no merging, no nesting. Every HEAD
+  // event is dropped, not only fastify's own auto-added ones (it re-enters route registration to
+  // add one for every GET, which is what would otherwise show up as an entry nobody in this table
+  // declared): no route under /api/v1 is HEAD only today, but a deliberately HEAD only route
+  // would be invisible to this guard the same way, and this filter does not tell the two apart.
   //
   // Compared as a set in both directions, not a count, so a mismatch names the offending route
   // rather than failing with an opaque "expected 10 to be 9" that means nothing to whoever trips
