@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { sendCoreError } from '../../api/envelope.ts'
 import { registerRequirePerson } from '../../api/requirePerson.ts'
+import { registerSeriesRoutes } from './series.ts'
 
 /**
  * Registers the versioned surface. Called through app.register with the /api/v1 prefix (see
@@ -31,9 +32,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
 
   app.setErrorHandler((error, _request, reply) => sendCoreError(reply, error))
 
-  // A stand-in so the guard above has a real route to run in front of. Task 4 replaces this
-  // with the real /series handler, backed by PersonQuery.series and keyed by metric.
-  app.get<{ Params: { personId: string } }>('/p/:personId/series', async () => ({ ok: true }))
+  registerSeriesRoutes(app)
 
   testOnlyExtra?.(app)
 }
