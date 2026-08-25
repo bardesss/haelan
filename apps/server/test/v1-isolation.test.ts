@@ -252,9 +252,14 @@ describe.each(ROUTES)('the versioned surface is isolated per person: $name', (ro
     await routeHarness.cleanup()
   })
 
-  it('answers 401 with no session at all', async () => {
+  // The body, not only the status: an expired session is the most common error any client of this
+  // surface will ever see, and the one shape a client narrowing on body.error.kind has to be able
+  // to read. A status-only assertion here is what let ten route entries agree on 401 while
+  // answering the older families' flat { error: 'no_session' } instead of the envelope.
+  it('answers 401 with no session at all, in the envelope shape', async () => {
     const response = await routeHarness.app.inject({ method: 'GET', url: route.path('p1') })
     expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
   })
 
   // The tautology guard: an account owns exactly one person today, so this proves the path

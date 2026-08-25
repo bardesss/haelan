@@ -109,3 +109,29 @@ describe('requireSession with a bearer token', () => {
     expect(response.cookies.some((c) => c.name === 'haelan_session' && c.value === '')).toBe(false)
   })
 })
+
+describe('the shape a failed session check answers with', () => {
+  // The versioned surface narrows on error.kind. A 401 in the older flat shape is the one status
+  // that would break that narrowing, and it is the status a dashboard client sees most often.
+  it('answers the envelope on /api/v1, so a client can narrow on error.kind', async () => {
+    harness = await withServer()
+    await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02',
+    })
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toEqual({
+      error: { kind: 'unauthorized', code: 'no_session', message: 'sign in required' },
+    })
+  })
+
+  // The other half of the same decision, pinned so nobody later "finishes the migration": the
+  // setup wizard's own client reads this flat shape, and moving it is a later milestone's job.
+  it('keeps the flat shape on the older route families, which their clients read', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    const response = await harness.app.inject({ method: 'GET', url: '/api/auth/me' })
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toEqual({ error: 'no_session' })
+  })
+})
