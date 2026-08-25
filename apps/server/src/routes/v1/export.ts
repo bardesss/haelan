@@ -75,6 +75,9 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
  * registerV1's setErrorHandler turns whatever PersonQuery throws, and the ConfigError below for
  * an unrecognised format, into the right response.
  *
+ * Both formats download rather than render: same naming, same attachment disposition, only the
+ * extension and the content type differ.
+ *
  * Both formats answer a content hashed ETag and honour If-None-Match, the same as every other
  * read here. The hash base rather than the stamp plus count one, because the csv body is a
  * serialisation the row stamps do not determine: two ranges can share a stamp pair and produce
@@ -104,13 +107,18 @@ export function registerExportRoutes(app: FastifyInstance): void {
       body[metric] = personQuery.series({ metric, agg, from, to, source })
     }
 
-    if (format === 'json') return sendHashed(reply, request, body)
-
     // Ruling R17: several metrics join in request order with a hyphen, one file, distinguished
-    // by the metric column rather than one file per metric.
-    const filename = `haelan-${metrics.join('-')}-${from}-${to}.csv`
-    reply.header('content-type', 'text/csv; charset=utf-8')
+    // by the metric column rather than one file per metric. Both formats, not only csv: json set
+    // neither header, so a browser rendered it in a tab while its sibling downloaded, and the
+    // reader had to name the file themselves. An export exists to be kept.
+    const filename = `haelan-${metrics.join('-')}-${from}-${to}.${format}`
     reply.header('content-disposition', `attachment; filename="${filename}"`)
+
+    if (format === 'json') {
+      reply.header('content-type', 'application/json; charset=utf-8')
+      return sendHashed(reply, request, body)
+    }
+    reply.header('content-type', 'text/csv; charset=utf-8')
     return sendHashed(reply, request, toCsv(body, metrics, agg))
   })
 }

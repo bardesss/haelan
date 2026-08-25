@@ -194,6 +194,33 @@ describe('GET /export', () => {
     expect(response.headers['content-disposition']).toContain('haelan-steps-2026-08-01-2026-08-03.csv')
   })
 
+  // json set neither header, so it rendered in a browser tab while its sibling downloaded. Both
+  // are the same route with the same reason to exist, and the extension is the only part of the
+  // name that differs.
+  it('names and downloads the json file too, not only the csv one', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+    const response = await get(harness, token, '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-03')
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-type']).toContain('application/json')
+    expect(response.headers['content-disposition']).toContain('attachment')
+    expect(response.headers['content-disposition']).toContain('haelan-steps-2026-08-01-2026-08-03.json')
+    // The body is still the read route's shape, parsed the same way: naming the file must not
+    // have turned the answer into something a client has to handle differently.
+    expect(response.json().steps.points[0].value).toBe(900)
+  })
+
+  it('joins several metrics with a hyphen in the json filename, the same as the csv one', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', value: 900 })
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'floors', value: 12 })
+    const response = await get(
+      harness, token,
+      '/export?format=json&metric=steps&metric=floors&agg=sum&from=2026-08-01&to=2026-08-01',
+    )
+    expect(response.headers['content-disposition']).toContain('haelan-steps-floors-2026-08-01-2026-08-01.json')
+  })
+
   // R17: several metrics join in request order with a hyphen in the filename, and the CSV carries
   // all of them in one file, distinguished by the metric column.
   it('joins several metrics with a hyphen in the filename and carries them all in one file', async () => {
