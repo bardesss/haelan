@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
 import { DERIVATION_VERSION, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -230,10 +230,30 @@ const ROUTES: readonly RouteCase[] = [
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
+  // One harness for all three cases below: none of them writes, they only read the same seeded
+  // rows back through a different session (none, someone else's, the owner's), so a fresh
+  // database per case buys nothing but boot time. beforeAll/afterAll rather than the per test
+  // withServer + afterEach every other describe.each block used, since the seeding below has to
+  // run once, before any of the three requests, not once per request.
+  let routeHarness: Harness
+  let token: string
+  let otherPersonId: string
+
+  beforeAll(async () => {
+    routeHarness = await withServer()
+    token = await routeHarness.signIn()
+    const other = await routeHarness.addPerson({ id: 'p2', displayName: 'Wilma', username: 'wilma' })
+    otherPersonId = other.personId
+    route.seedOwn(routeHarness)
+    route.seedOther(routeHarness, otherPersonId)
+  })
+
+  afterAll(async () => {
+    await routeHarness.cleanup()
+  })
+
   it('answers 401 with no session at all', async () => {
-    harness = await withServer()
-    await harness.signIn()
-    const response = await harness.app.inject({ method: 'GET', url: route.path('p1') })
+    const response = await routeHarness.app.inject({ method: 'GET', url: route.path('p1') })
     expect(response.statusCode).toBe(401)
   })
 
@@ -241,11 +261,8 @@ describe.each(ROUTES)('the versioned surface is isolated per person: $name', (ro
   // segment is actually checked rather than decorative. The envelope's code, not just the status,
   // is what tells this apart from any other reason a route might answer 403.
   it('answers 403 for a person the session does not own', async () => {
-    harness = await withServer()
-    const token = await harness.signIn()
-    const other = await harness.addPerson({ id: 'p2', displayName: 'Wilma', username: 'wilma' })
-    const response = await harness.app.inject({
-      method: 'GET', url: route.path(other.personId),
+    const response = await routeHarness.app.inject({
+      method: 'GET', url: route.path(otherPersonId),
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(403)
@@ -260,13 +277,7 @@ describe.each(ROUTES)('the versioned surface is isolated per person: $name', (ro
   // person_id filter in the query underneath. Asserting the sentinel's absence on a 403 response
   // would prove nothing, since a forbidden answer was never going to carry a body worth reading.
   it("answers 200 for the session's own person, carrying only their own data", async () => {
-    harness = await withServer()
-    const token = await harness.signIn()
-    const other = await harness.addPerson({ id: 'p2', displayName: 'Wilma', username: 'wilma' })
-    route.seedOwn(harness)
-    route.seedOther(harness, other.personId)
-
-    const response = await harness.app.inject({
+    const response = await routeHarness.app.inject({
       method: 'GET', url: route.path('p1'),
       headers: { authorization: `Bearer ${token}` },
     })
