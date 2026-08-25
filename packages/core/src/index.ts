@@ -137,3 +137,9 @@ export type { IntradayPoint, IntradayResult } from './query/intraday.ts'
 export type { Night, NightSegment } from './query/sleepNights.ts'
 export type { WorkoutSession } from './query/sessions.ts'
 export type { TrendPoint } from './query/trend.ts'
+
+// M3b2 task 7. /changes reads "which days moved since a moment", which none of the above answer.
+// Same discipline as the readers above: readChanges takes a plain person id and stays unexported,
+// reachable only through PersonQuery.changes, so a later SQL surface never gets a way to name a
+// person id straight from the outside.
+export type { ChangedPair, ChangesResult } from './query/changes.ts'

@@ -23,6 +23,8 @@ import { readSessions } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
+import { readChanges } from './changes.ts'
+import type { ChangesResult } from './changes.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -287,6 +289,26 @@ export class PersonQuery {
 
     return trendOf(withGaps)
   }
+
+  /**
+   * The (localDate, metric) pairs whose derived rows moved after `since`. See readChanges for
+   * why the pairs are distinct rather than one per row, why a rebuild's whole-history answer is
+   * correct rather than a bug, and why provider rows are in scope.
+   */
+  changes(input: {
+    since: number
+    limit?: number
+    cursor?: string
+  }): ChangesResult {
+    requireFiniteNumber('since', input.since)
+    if (input.limit !== undefined) requirePositiveInteger('limit', input.limit)
+    return readChanges(this.#db, {
+      personId: this.#personId,
+      since: input.since,
+      limit: input.limit,
+      cursor: input.cursor,
+    })
+  }
 }
 
 /**
@@ -338,6 +360,17 @@ function requireRange(from: string, to: string): void {
 function requirePositiveInteger(label: string, value: number): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new ConfigError(`${label} must be a positive integer, got ${value}`)
+  }
+}
+
+/**
+ * `since` reaches PersonQuery from an HTTP query string and a language model's tool arguments,
+ * neither of which the type system protects: a value that failed to parse to a number arrives
+ * here as NaN rather than being caught on the way in.
+ */
+function requireFiniteNumber(label: string, value: number): void {
+  if (!Number.isFinite(value)) {
+    throw new ConfigError(`${label} must be a number, got ${value}`)
   }
 }
 

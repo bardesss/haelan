@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import * as core from '../src/index.ts'
 import type {
-  IntradayPoint, Night, NightSegment, WorkoutSession, TrendPoint, Thinned,
+  IntradayPoint, Night, NightSegment, WorkoutSession, TrendPoint, Thinned, ChangedPair,
 } from '../src/index.ts'
 
 // Every other test imports by relative path, so this barrel is the package's only integration
@@ -304,6 +304,31 @@ describe('package barrel', () => {
       expect(api['readIntraday']).toBeUndefined()
       expect(api['readSleepNights']).toBeUndefined()
       expect(api['readSessions']).toBeUndefined()
+    })
+  })
+
+  describe('M3b2 task 7: changes, the fifth bound reader on PersonQuery', () => {
+    it('is callable, not merely present: changes answers a pair whose row moved', () => {
+      const test = core.createTestDatabase()
+      try {
+        core.seedPerson(test.db, 'p1')
+        test.db.insert(core.schema.daily).values({
+          personId: 'p1', localDate: '2026-08-01', metric: 'steps', agg: 'sum', source: 'merged',
+          value: 900, coverage: null, sourceMix: null, derivationVersion: 4, updatedAtMs: 5_000,
+        }).run()
+
+        const query = new core.PersonQuery(test.db, 'p1')
+        const result: { items: ChangedPair[], cursor: string | null } = query.changes({ since: 1_000 })
+        expect(result.items).toEqual([{ localDate: '2026-08-01', metric: 'steps' }])
+        expect(result.cursor).toBeNull()
+      } finally { test.cleanup() }
+    })
+
+    // readChanges takes a plain person id, same as readIntraday, readSleepNights and readSessions.
+    // Reachable only through PersonQuery.changes, for the same reason those three are not exported.
+    it('does not export the bound reader itself, only the shape it returns', async () => {
+      const api = await import('../src/index.ts') as Record<string, unknown>
+      expect(api['readChanges']).toBeUndefined()
     })
   })
 

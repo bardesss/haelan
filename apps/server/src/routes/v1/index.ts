@@ -3,6 +3,7 @@ import { sendCoreError } from '../../api/envelope.ts'
 import { registerRequirePerson } from '../../api/requirePerson.ts'
 import { registerSeriesRoutes } from './series.ts'
 import { registerTier2Routes } from './tier2.ts'
+import { registerChangesRoutes } from './changes.ts'
 
 /**
  * Registers the versioned surface. Called through app.register with the /api/v1 prefix (see
@@ -35,6 +36,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
 
   registerSeriesRoutes(app)
   registerTier2Routes(app)
+  registerChangesRoutes(app)
 
   testOnlyExtra?.(app)
 }
