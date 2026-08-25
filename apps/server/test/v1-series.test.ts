@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { DERIVATION_VERSION, schema } from '@haelan/core'
+import { MAX_RANGE_DAYS } from '../src/routes/v1/shared.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -167,5 +168,27 @@ describe('GET /trend', () => {
     const response = await get(harness, token, '/trend?metric=hart_rate&agg=mean&from=2026-08-01&to=2026-08-10')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain('hart_rate')
+  })
+
+  // trend builds one entry per day in the range whether or not any data exists, so the range
+  // itself is the cost. Unbounded, this was one authenticated GET with no body that held the
+  // event loop for about twelve seconds against an empty database. The message has to name the
+  // limit, so a caller learns what to ask for instead of guessing.
+  it('answers 400 rather than materialising a range wider than the maximum', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/trend?metric=steps&agg=sum&from=1900-01-01&to=2100-01-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
+  })
+
+  // The ceiling is meant to be generous, not to get in the way: a decade wide "all time" view is
+  // still an ordinary request and has to answer normally.
+  it('still answers a range exactly at the maximum', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const from = '2020-01-01'
+    const to = new Date(Date.parse(`${from}T00:00:00Z`) + (MAX_RANGE_DAYS - 1) * 86_400_000)
+      .toISOString().slice(0, 10)
+    const response = await get(harness, token, `/trend?metric=steps&agg=sum&from=${from}&to=${to}`)
+    expect(response.statusCode).toBe(200)
   })
 })

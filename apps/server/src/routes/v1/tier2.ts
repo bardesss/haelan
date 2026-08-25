@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { ConfigError, PersonQuery } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
+import { requireBoundedRange } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -137,6 +138,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const personQuery = personQueryOf(request)
     const from = requireString(request.query.from, 'from')
     const to = requireString(request.query.to, 'to')
+    requireBoundedRange(from, to)
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
 

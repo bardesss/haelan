@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { schema } from '@haelan/core'
+import { MAX_RANGE_DAYS } from '../src/routes/v1/shared.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -206,5 +207,15 @@ describe('GET /sleep/nights', () => {
     const response = await get(harness, token, '/sleep/nights?from=2026-08-31&to=2026-08-01')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.kind).toBe('config')
+  })
+
+  // The same ceiling /trend carries, for the same reason: this route reads every session row in
+  // range into JS before paginate slices a page out of it, so limit does not bound what the
+  // request costs, only what it returns. The message has to name the limit.
+  it('answers 400 rather than reading a range wider than the maximum into memory', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sleep/nights?from=1900-01-01&to=2100-01-01&limit=1')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
   })
 })

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { BASELINE_WINDOW_DAYS, baselineWindow, ConfigError } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
-import { metricsFrom, personQueryOf, requireString } from './shared.ts'
+import { metricsFrom, personQueryOf, requireBoundedRange, requireString } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -156,6 +156,7 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const agg = requireString(request.query.agg, 'agg')
     const from = requireString(request.query.from, 'from')
     const to = requireString(request.query.to, 'to')
+    requireBoundedRange(from, to)
     const source = request.query.source
     const body = personQuery.trend({ metric, agg, from, to, source })
 
