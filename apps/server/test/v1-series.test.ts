@@ -109,15 +109,18 @@ describe('GET /baselines', () => {
     }
     const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06&windowDays=5')
     expect(response.statusCode).toBe(200)
-    expect(response.json().center).toBeCloseTo(10, 10)
-    expect(response.json().n).toBe(5)
+    expect(response.json().baseline.center).toBeCloseTo(10, 10)
+    expect(response.json().baseline.n).toBe(5)
   })
 
-  it('answers null when there is no history at all, rather than a fabricated baseline', async () => {
+  // Answering null with no history is right; answering it as a bare top level null was a second
+  // top level shape for one route, which every client would have to branch on. The key is always
+  // present, and only its value moves.
+  it('answers a null baseline when there is no history at all, still under the same key', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toBeNull()
+    expect(response.json()).toEqual({ baseline: null })
   })
 
   it('answers 400 for a metric the catalogue does not declare', async () => {
@@ -159,7 +162,10 @@ describe('GET /trend', () => {
     }
     const response = await get(harness, token, '/trend?metric=steps&agg=sum&from=2026-08-01&to=2026-08-10')
     expect(response.statusCode).toBe(200)
-    const points = response.json()
+    // Under a key, not a bare top level array: a client reads body.points here the same way it
+    // reads body[metric].points on /series, rather than branching on the body being an array.
+    const { points } = response.json()
+    expect(Array.isArray(points)).toBe(true)
     expect(points.every((p: { value: number }) => p.value === 80)).toBe(true)
   })
 

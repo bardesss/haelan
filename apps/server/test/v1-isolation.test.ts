@@ -131,8 +131,9 @@ const ROUTES: readonly RouteCase[] = [
     // The gap date the leak needs (see the comment above) costs this control a non-thin baseline;
     // asserted rather than left silent, so a reader sees that trade rather than rediscovering it.
     extraOwnAssertions: (body) => {
-      expect((body as { n: number }).n).toBe(5)
-      expect((body as { thin: boolean }).thin).toBe(true)
+      const { baseline } = body as { baseline: { n: number, thin: boolean } }
+      expect(baseline.n).toBe(5)
+      expect(baseline.thin).toBe(true)
     },
   },
   {
@@ -164,7 +165,7 @@ const ROUTES: readonly RouteCase[] = [
     seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(6), value: 999_999 }),
     ownNeedle: '7100',
     otherNeedle: '999999',
-    extraOwnAssertions: (body) => expect(body).toHaveLength(5),
+    extraOwnAssertions: (body) => expect((body as { points: unknown[] }).points).toHaveLength(5),
   },
   {
     name: 'intraday',

@@ -116,6 +116,10 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     return sendStamped(reply, request, body, combineStamps(stamps))
   })
 
+  // Wrapped, for the reason R2 keys /series by metric even for one: a response whose top level
+  // shape changes is one every client has to branch on. Answering null when there is no history
+  // is right, but a bare null with status 200 is a second shape, so it becomes
+  // { baseline: null } and the key is always there.
   app.get<{ Params: PersonParams, Querystring: BaselinesQuery }>('/p/:personId/baselines', async (request, reply) => {
     const personQuery = personQueryOf(request)
     const metric = requireString(request.query.metric, 'metric')
@@ -123,14 +127,14 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const on = requireString(request.query.on, 'on')
     const windowDays = optionalPositiveInt(request.query.windowDays, 'windowDays') ?? BASELINE_WINDOW_DAYS
     const source = request.query.source
-    const body = personQuery.baseline({ metric, agg, on, windowDays, source })
+    const baseline = personQuery.baseline({ metric, agg, on, windowDays, source })
 
     // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own
     // window (the same rule baselineWindow names, which baseline() now calls too) is reopened
     // here through a fresh series() call, to read the one thing baseline()'s return value drops.
     const { from, to } = baselineWindow(on, windowDays)
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, body, stampOf(points))
+    return sendStamped(reply, request, { baseline }, stampOf(points))
   })
 
   app.get<{ Params: PersonParams, Querystring: InsightsQuery }>('/p/:personId/insights', async (request, reply) => {
@@ -158,11 +162,14 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const to = requireString(request.query.to, 'to')
     requireBoundedRange(from, to)
     const source = request.query.source
-    const body = personQuery.trend({ metric, agg, from, to, source })
+    // Wrapped in an object rather than answered as a bare top level array, so this route's shape
+    // matches the rest of the surface: a client reads body.points here the same way it reads
+    // body[metric].points on /series, instead of branching on whether the body is an array.
+    const smoothed = personQuery.trend({ metric, agg, from, to, source })
 
     // trend smooths the same series() this reads again, over the same from/to: no window math to
     // redo here, only the read of updatedAtMs the smoothed points themselves do not carry.
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, body, stampOf(points))
+    return sendStamped(reply, request, { points: smoothed }, stampOf(points))
   })
 }

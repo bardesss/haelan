@@ -176,7 +176,7 @@ describe('conditional requests on the daily backed routes', () => {
   it('answers a stable ETag for a null /baselines, so a client with no history is not always miss', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const first = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')
-    expect(first.json()).toBeNull()
+    expect(first.json()).toEqual({ baseline: null })
     const second = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')
     expect(second.headers.etag).toBe(first.headers.etag)
 
