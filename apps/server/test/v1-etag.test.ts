@@ -4,18 +4,37 @@ import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { stampEtag, hashEtag, notModified } from '../src/api/etag.ts'
 
+// stampEtag takes one pair per window an answer drew on. Most of the assertions below are about
+// a single window, so they say so once here rather than building the array eight times.
+const oneWindow = (newestMs: number | null, rows: number) => stampEtag([{ newestMs, rows }])
+
 // A deletion moves the count without moving any timestamp. An ETag on the timestamp alone would
 // let a client keep a row the derivation has dropped.
 it('changes when a row goes away even though no timestamp moved', () => {
-  expect(stampEtag(1000, 10)).not.toBe(stampEtag(1000, 9))
+  expect(oneWindow(1000, 10)).not.toBe(oneWindow(1000, 9))
 })
 
 it('is stable for the same stamp and count', () => {
-  expect(stampEtag(1000, 10)).toBe(stampEtag(1000, 10))
+  expect(oneWindow(1000, 10)).toBe(oneWindow(1000, 10))
 })
 
 it('handles a response with no stamped rows at all', () => {
-  expect(typeof stampEtag(null, 0)).toBe('string')
+  expect(typeof oneWindow(null, 0)).toBe('string')
+})
+
+// The windows used to be folded into one pair, by taking the newest stamp and adding the counts.
+// A row lost by one window and gained by another on an equal or older stamp then cancelled: same
+// maximum, same total, same validator, over a body that had changed.
+it('does not let one window\'s lost row cancel another window\'s gained one', () => {
+  expect(stampEtag([{ newestMs: 1000, rows: 2 }, { newestMs: 1000, rows: 1 }]))
+    .not.toBe(stampEtag([{ newestMs: 1000, rows: 1 }, { newestMs: 1000, rows: 2 }]))
+})
+
+// Every route that reads one window still emits exactly what it emitted before, so the change
+// above is not a cache invalidation for /baselines and /trend clients as well.
+it('renders a single window the way it always did', () => {
+  expect(oneWindow(1000, 10)).toBe('W/"1000-10"')
+  expect(oneWindow(null, 0)).toBe('W/"none-0"')
 })
 
 it('hashes a body to something stable and order sensitive', () => {
@@ -24,13 +43,13 @@ it('hashes a body to something stable and order sensitive', () => {
 })
 
 it('matches a weak validator, since both bases emit weak ones', () => {
-  const etag = stampEtag(1000, 10)
+  const etag = oneWindow(1000, 10)
   expect(notModified({ headers: { 'if-none-match': etag } } as never, etag)).toBe(true)
-  expect(notModified({ headers: { 'if-none-match': stampEtag(1000, 9) } } as never, etag)).toBe(false)
+  expect(notModified({ headers: { 'if-none-match': oneWindow(1000, 9) } } as never, etag)).toBe(false)
 })
 
 it('handles a list of validators and a star', () => {
-  const etag = stampEtag(1000, 10)
+  const etag = oneWindow(1000, 10)
   expect(notModified({ headers: { 'if-none-match': `W/"other", ${etag}` } } as never, etag)).toBe(true)
   expect(notModified({ headers: { 'if-none-match': '*' } } as never, etag)).toBe(true)
   expect(notModified({ headers: {} } as never, etag)).toBe(false)
@@ -67,6 +86,15 @@ function seedDaily(h: Harness, input: {
     target: [schema.daily.personId, schema.daily.localDate, schema.daily.metric, schema.daily.agg, schema.daily.source],
     set: row,
   }).run()
+}
+
+// What a rebuild does when a day's rows no longer derive: it removes them. Raw SQL rather than a
+// drizzle delete, because drizzle-orm is core's dependency and this package does not declare it;
+// the same $client the rest of this suite's sibling tests reach through.
+function deleteDaily(h: Harness, input: { localDate: string, metric: string }): void {
+  h.app.haelan.instance.db.$client
+    .prepare('delete from daily where person_id = ? and local_date = ? and metric = ?')
+    .run('p1', input.localDate, input.metric)
 }
 
 function seedSource(h: Harness, sourceId: string): void {
@@ -161,6 +189,33 @@ describe('conditional requests on the daily backed routes', () => {
     seedDaily(harness, { localDate: '2026-08-01', metric: 'floors', value: 12, updatedAtMs: 9000 })
     const after = await get(harness, token, '/series?metric=steps&metric=floors&agg=sum&from=2026-08-01&to=2026-08-01')
 
+    expect(after.headers.etag).not.toBe(before.headers.etag)
+  })
+
+  // The counts used to be summed across metrics into one figure. Within a single URL that let a
+  // row lost by one metric and gained by another on an equal stamp cancel: the maximum stamp did
+  // not move, the total did not move, and a client comparing validators kept a body that had
+  // changed. Contrived, and it costs nothing to make impossible.
+  it('moves the /series ETag when one metric loses a row and another gains one on the same stamp', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', value: 900, updatedAtMs: 1000 })
+    seedDaily(harness, { localDate: '2026-08-02', metric: 'steps', value: 950, updatedAtMs: 1000 })
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'floors', value: 12, updatedAtMs: 1000 })
+
+    const url = '/series?metric=steps&metric=floors&agg=sum&from=2026-08-01&to=2026-08-02'
+    const before = await get(harness, token, url)
+    expect(before.json().steps.points).toHaveLength(2)
+    expect(before.json().floors.points).toHaveLength(1)
+
+    // Two rows into one metric and one into the other, then one into each: the same three rows
+    // under the same newest stamp, and a different answer.
+    deleteDaily(harness, { localDate: '2026-08-02', metric: 'steps' })
+    seedDaily(harness, { localDate: '2026-08-02', metric: 'floors', value: 14, updatedAtMs: 1000 })
+
+    const after = await get(harness, token, url)
+    expect(after.json().steps.points).toHaveLength(1)
+    expect(after.json().floors.points).toHaveLength(2)
+    expect(after.body).not.toBe(before.body)
     expect(after.headers.etag).not.toBe(before.headers.etag)
   })
 
