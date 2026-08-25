@@ -237,6 +237,20 @@ describe('GET /export', () => {
     expect(response.json().steps.reduction).toBeNull()
   })
 
+  // Asking for the same metric twice is a client bug, not a request worth refusing. Carrying the
+  // duplicate through wrote every data row into the file twice and named it haelan-steps-steps.
+  it('writes each row once when the same metric is asked for twice', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+    const response = await get(
+      harness, token,
+      '/export?format=csv&metric=steps&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01',
+    )
+    expect(response.headers['content-disposition']).toContain('haelan-steps-2026-08-01-2026-08-01.csv')
+    const rows = response.body.trim().split('\n').slice(1)
+    expect(rows).toHaveLength(1)
+  })
+
   it('answers 400 with the real reason for a metric that does not exist, the same as the read', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const response = await get(harness, token, '/export?format=csv&metric=hart_rate&agg=mean&from=2026-08-01&to=2026-08-02')

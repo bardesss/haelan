@@ -135,6 +135,19 @@ describe('conditional requests on the daily backed routes', () => {
     expect(repeat.headers.etag).toBe(both.headers.etag)
   })
 
+  // A repeated metric produces a body byte identical to the single metric one, so it has to
+  // produce the same validator: counting the same rows twice stamped it W/"1000-2" against the
+  // other's W/"1000-1", and a client comparing the two would refetch a body it already had.
+  it('gives a repeated metric the same /series ETag as asking for it once', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', value: 900, updatedAtMs: 1000 })
+
+    const once = await get(harness, token, '/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
+    const twice = await get(harness, token, '/series?metric=steps&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
+    expect(twice.body).toBe(once.body)
+    expect(twice.headers.etag).toBe(once.headers.etag)
+  })
+
   // combineStamps has to fold in every metric's stamp, not just carry the first one through: a
   // bug that only looked at metrics[0] would still pass the test above, since steps changes
   // there too. Holding the metric set fixed and moving only the second metric's data is what
