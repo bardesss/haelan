@@ -3,16 +3,16 @@ import { PersonQuery } from '@haelan/core'
 import { errorBody, statusFor } from './envelope.ts'
 
 declare module 'fastify' {
-  interface FastifyRequest { personQuery: PersonQuery }
+  interface FastifyRequest { personQuery: PersonQuery | null }
   interface FastifyInstance {
     requirePerson: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
 }
 
 /**
- * Two checks, and both stay. This is the guard a reader can see in the route definition;
- * PersonQuery's constructor binding, below, is the guard a forgotten WHERE clause cannot get
- * around.
+ * Two checks, and both stay. This is the guard registerV1 runs in front of every route in its
+ * plugin scope; PersonQuery's constructor binding, below, is the guard a forgotten WHERE clause
+ * cannot get around.
  *
  * accounts.person_id is unique and not null, so :personId is always the session's own today.
  * The segment stays anyway: a later milestone's bearer tokens bind to a person rather than an
@@ -20,11 +20,16 @@ declare module 'fastify' {
  * something rather than assert a tautology.
  */
 export function registerRequirePerson(app: FastifyInstance): void {
+  // Matches how accountId is decorated in auth.ts: nullable, because the guarantee the type
+  // makes is only as strong as this decoration, not as strong as the comment above it. A plain
+  // assignment with no decorateRequest would let the type claim non-null while nothing enforced it.
+  app.decorateRequest('personQuery', null)
+
   app.decorate('requirePerson', async (request: FastifyRequest, reply: FastifyReply) => {
-    // requireSession runs first in every route's preHandler list and already answers 401 for a
-    // missing or invalid session, stopping the chain before this runs. The check stays here too
-    // rather than trusting the ordering, since a route that lists requirePerson alone would
-    // otherwise read request.accountId as null and crash on the store lookup below.
+    // registerV1's plugin-wide hook always runs requireSession first and stops on its own 401
+    // before this runs. The check stays here too rather than trusting the caller's wiring, since
+    // a hook built differently, or a route reached some other way, would otherwise read
+    // request.accountId as null and crash on the store lookup below.
     const accountId = request.accountId
     if (!accountId) {
       return reply.code(statusFor('unauthorized')).send(errorBody('unauthorized', 'no_session', 'sign in required'))

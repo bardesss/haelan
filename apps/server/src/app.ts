@@ -50,6 +50,12 @@ export interface ServerDeps {
    * in its cleanup; the tests that are actually about sprint depth pass the real 90 explicitly.
    */
   sprintDays?: number
+  /**
+   * Lets a test register an extra route inside the /api/v1 plugin scope, with no preHandler of
+   * its own, to prove the versioned surface's guard hook covers a route nobody remembered to
+   * guard rather than relying on a per-route list. Unset in production.
+   */
+  v1TestExtra?: (app: FastifyInstance) => void
 }
 
 export interface Stores {
@@ -106,7 +112,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   // Registered through app.register, not called directly like the routes above: the /api/v1
   // prefix and Fastify's plugin encapsulation are what keep this surface's error handler and
   // its isolation rule from touching anything outside it.
-  void app.register(registerV1, { prefix: '/api/v1' })
+  void app.register((instance) => registerV1(instance, deps.v1TestExtra), { prefix: '/api/v1' })
   if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
 
   return app

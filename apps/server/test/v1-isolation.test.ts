@@ -40,4 +40,18 @@ describe('the versioned surface is isolated per person', () => {
     })
     expect(response.statusCode).toBe(404)
   })
+
+  // The guard has to be a property of the plugin, not of a list every route remembers to carry.
+  // This route is registered with no preHandler of its own; if it answers 200 without a session,
+  // the hook is not doing the guarding and the per-route array is back to being load bearing.
+  it('guards a route that carries no preHandler of its own, because the hook covers the plugin', async () => {
+    harness = await withServer({
+      v1TestExtra: (app) => {
+        app.get('/canary', async () => ({ ok: true }))
+      },
+    })
+    await harness.signIn()
+    const response = await harness.app.inject({ method: 'GET', url: '/api/v1/canary' })
+    expect(response.statusCode).toBe(401)
+  })
 })

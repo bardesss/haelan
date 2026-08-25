@@ -34,6 +34,8 @@ export interface WithServerOptions {
    * this suite's speed-picked default.
    */
   backfillBatchDays?: number
+  /** See ServerDeps.v1TestExtra. Unset by every test but the one that exercises it. */
+  v1TestExtra?: (app: FastifyInstance) => void
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -127,6 +129,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // How deep a sprint walks before this instance settles into the trickle. See
     // WithServerOptions.sprintDays above for why this defaults small.
     sprintDays: options.sprintDays ?? 2,
+    v1TestExtra: options.v1TestExtra,
   })
   await app.ready()
 

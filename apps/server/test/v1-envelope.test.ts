@@ -45,6 +45,9 @@ describe('the error envelope', () => {
     const reply = fakeReply()
     sendCoreError(reply as never, new Error('SQLITE_CORRUPT: /home/bartus/.local-data/haelan.sqlite'))
     expect(reply.sent.status).toBe(500)
+    // 'internal', not 'transient': a caller that retries on kind must not hammer a deterministic
+    // bug in us forever.
+    expect(reply.sent.body).toMatchObject({ error: { kind: 'internal' } })
     expect(JSON.stringify(reply.sent.body)).not.toContain('haelan.sqlite')
   })
 
