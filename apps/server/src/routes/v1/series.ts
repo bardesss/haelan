@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, baselineWindow, ConfigError, PersonQuery } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, ConfigError } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
+import { metricsFrom, personQueryOf, requireString } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -36,28 +37,6 @@ interface TrendQuery {
   from?: string
   to?: string
   source?: string
-}
-
-/**
- * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
- * route in this file runs behind. Narrowing here rather than asserting with ! keeps the reason
- * the type system carries: the guard, not the route, is what makes this safe.
- */
-function personQueryOf(request: FastifyRequest): PersonQuery {
-  const personQuery = request.personQuery
-  if (personQuery === null) throw new Error('personQuery was not set; the plugin guard did not run')
-  return personQuery
-}
-
-/** repeated ?metric= comes back as an array; one occurrence comes back as a bare string. */
-function metricsFrom(raw: string | string[] | undefined): string[] {
-  if (raw === undefined) throw new ConfigError('metric is required')
-  return Array.isArray(raw) ? raw : [raw]
-}
-
-function requireString(value: string | undefined, name: string): string {
-  if (value === undefined || value === '') throw new ConfigError(`${name} is required`)
-  return value
 }
 
 function optionalPositiveInt(value: string | undefined, name: string): number | undefined {
