@@ -135,6 +135,44 @@ describe('conditional requests on the daily backed routes', () => {
     expect(repeat.headers.etag).toBe(both.headers.etag)
   })
 
+  // combineStamps has to fold in every metric's stamp, not just carry the first one through: a
+  // bug that only looked at metrics[0] would still pass the test above, since steps changes
+  // there too. Holding the metric set fixed and moving only the second metric's data is what
+  // catches that specifically.
+  it('moves the /series ETag when only the second of two requested metrics changes', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', value: 900, updatedAtMs: 1000 })
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'floors', value: 12, updatedAtMs: 1000 })
+    const before = await get(harness, token, '/series?metric=steps&metric=floors&agg=sum&from=2026-08-01&to=2026-08-01')
+
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'floors', value: 12, updatedAtMs: 9000 })
+    const after = await get(harness, token, '/series?metric=steps&metric=floors&agg=sum&from=2026-08-01&to=2026-08-01')
+
+    expect(after.headers.etag).not.toBe(before.headers.etag)
+  })
+
+  // Batch derivation stamps every row it touches with one shared clock, so after a rebuild a
+  // whole history can carry the same updated_at_ms. Thinning to points=2 always keeps exactly
+  // the first and last row (downsample.ts's lttb: target <= 2 returns [first, last]) regardless
+  // of what changed in between, so a stamp taken from the thinned body would pin both the row
+  // count and, once every row shares a stamp, the max too, and miss a change to any of the 18
+  // rows thinning did not surface.
+  it('moves the /series ETag when a row outside a thinned page changes', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 20; day += 1) {
+      seedDaily(harness, { localDate: `2026-08-${String(day).padStart(2, '0')}`, value: day, updatedAtMs: 1000 })
+    }
+    const range = '/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-20&points=2'
+    const before = await get(harness, token, range)
+    expect(before.json().steps.points.map((p: { localDate: string }) => p.localDate)).toEqual(['2026-08-01', '2026-08-20'])
+
+    // Day 10 is neither endpoint, so points=2 keeps showing exactly the same two rows.
+    seedDaily(harness, { localDate: '2026-08-10', value: 999, updatedAtMs: 5000 })
+    const after = await get(harness, token, range)
+    expect(after.json().steps.points.map((p: { localDate: string }) => p.localDate)).toEqual(['2026-08-01', '2026-08-20'])
+    expect(after.headers.etag).not.toBe(before.headers.etag)
+  })
+
   it('answers a stable ETag for a null /baselines, so a client with no history is not always miss', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const first = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')

@@ -140,6 +140,7 @@ describe('package barrel', () => {
   it('exports the local day and coverage functions', () => {
     expect(typeof core.localDateOf).toBe('function')
     expect(typeof core.localHourOf).toBe('function')
+    expect(typeof core.shiftLocalDate).toBe('function')
     expect(typeof core.coverageOf).toBe('function')
   })
 
@@ -233,6 +234,7 @@ describe('package barrel', () => {
 
     it('exports the baseline function and its constants', () => {
       expect(typeof core.baselineOf).toBe('function')
+      expect(typeof core.baselineWindow).toBe('function')
       expect(typeof core.zScoreOf).toBe('function')
       expect(typeof core.BASELINE_WINDOW_DAYS).toBe('number')
       expect(typeof core.BASELINE_MIN_DAYS).toBe('number')

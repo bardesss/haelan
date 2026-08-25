@@ -4,7 +4,7 @@ import { daily, SESSION_KINDS } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { ConfigError } from '../errors.ts'
-import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
+import { baselineOf, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { coverageIsMeaningful } from './coverageSignal.ts'
 // Aliased: the class has a method of the same name, and an unqualified call inside it
@@ -145,8 +145,7 @@ export class PersonQuery {
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     requirePositiveInteger('windowDays', windowDays)
-    const to = shiftLocalDate(input.on, -1)
-    const from = shiftLocalDate(to, -(windowDays - 1))
+    const { from, to } = baselineWindow(input.on, windowDays)
     const { points } = this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
     })

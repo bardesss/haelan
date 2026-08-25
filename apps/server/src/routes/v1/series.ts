@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, ConfigError, PersonQuery } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, ConfigError, PersonQuery } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
 
@@ -94,17 +94,6 @@ function combineStamps(stamps: readonly Stamp[]): Stamp {
   return { newestMs, rows }
 }
 
-/**
- * Steps a calendar local date by whole days, exactly as core's own `shiftLocalDate` does. Not
- * imported, because the barrel does not export it: `baseline` and `comparePeriods` already
- * compute the window their answer drew on, but return only the figures derived from it, not the
- * points themselves, so this route reopens the same window to read the `updatedAtMs` those points
- * carry and PersonQuery's return value does not.
- */
-function shiftLocalDate(localDate: string, days: number): string {
-  return new Date(Date.parse(`${localDate}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
-}
-
 /** Sets the ETag, then either a 304 with no body or the answer itself, per `notModified`. */
 function sendStamped(reply: FastifyReply, request: FastifyRequest, body: unknown, stamp: Stamp) {
   const etag = stampEtag(stamp.newestMs, stamp.rows)
@@ -131,13 +120,21 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const source = request.query.source
 
     const body: Record<string, SeriesResult> = {}
+    const stamps: Stamp[] = []
     for (const metric of metrics) {
       body[metric] = personQuery.series({ metric, agg, from, to, points, source })
+      // Stamped from the unthinned window, not the thinned body `points` thins to: batch
+      // derivation stamps every row it touches with one shared clock, so after a rebuild a
+      // whole history can carry the same updated_at_ms, and thinning always keeps the target
+      // count regardless of what changed underneath it. A stamp taken from the thinned rows
+      // could then pin both figures while a row thinning did not surface moved. No thinning
+      // means the two calls would answer the same rows, so the second is skipped.
+      const unthinned = points === undefined ? body[metric]! : personQuery.series({ metric, agg, from, to, source })
+      stamps.push(stampOf(unthinned.points))
     }
     // R2's keying means the ETag has to account for every metric asked for, not just the first:
     // a client that added a metric to the same range must not be handed the stale ETag.
-    const stamp = combineStamps(metrics.map((metric) => stampOf(body[metric]!.points)))
-    return sendStamped(reply, request, body, stamp)
+    return sendStamped(reply, request, body, combineStamps(stamps))
   })
 
   app.get<{ Params: PersonParams, Querystring: BaselinesQuery }>('/p/:personId/baselines', async (request, reply) => {
@@ -149,11 +146,10 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const source = request.query.source
     const body = personQuery.baseline({ metric, agg, on, windowDays, source })
 
-    // baseline's own window ends the day before `on`, over windowDays. It answers center, spread
-    // and n, none of which carries updatedAtMs, so the window is reopened here through the same
-    // series() call baseline() made internally, to read the one thing its return value drops.
-    const to = shiftLocalDate(on, -1)
-    const from = shiftLocalDate(to, -(windowDays - 1))
+    // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own
+    // window (the same rule baselineWindow names, which baseline() now calls too) is reopened
+    // here through a fresh series() call, to read the one thing baseline()'s return value drops.
+    const { from, to } = baselineWindow(on, windowDays)
     const { points } = personQuery.series({ metric, agg, from, to, source })
     return sendStamped(reply, request, body, stampOf(points))
   })
