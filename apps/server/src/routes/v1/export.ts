@@ -16,7 +16,11 @@ interface ExportQuery {
   points?: string
 }
 
-const CSV_HEADER = 'localDate,metric,agg,source,value,coverage'
+// Ruling R18: sourceMix earns its own column rather than being dropped. coverage and sourceMix
+// both state the basis of a merged number, and sourceMix is real JSON on every merged row (see
+// merge.ts's encodeMix), so it is what makes the quoting below load bearing on real data: none
+// of the other columns can ever hold a comma, a quote or a newline.
+const CSV_HEADER = 'localDate,metric,agg,source,value,coverage,sourceMix'
 
 /** RFC 4180: a field needing no quoting is written bare; one with a comma, a quote or a
  *  newline is wrapped in double quotes, with an inner quote doubled. */
@@ -28,9 +32,9 @@ function csvRow(fields: readonly string[]): string {
   return fields.map(csvField).join(',')
 }
 
-/** A null coverage or value is an empty field, not the text 'null': the CSV has to say nothing
- *  happened to be measured, not lie that the measurement itself was the word null. */
-function numberOrEmpty(value: number | null): string {
+/** A null coverage, value or sourceMix is an empty field, not the text 'null': the CSV has to
+ *  say nothing happened to be measured, not lie that the measurement itself was the word null. */
+function orEmpty(value: string | number | null): string {
   return value === null ? '' : String(value)
 }
 
@@ -42,7 +46,10 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
   const lines = [CSV_HEADER]
   for (const metric of metrics) {
     for (const point of byMetric[metric]!.points) {
-      lines.push(csvRow([point.localDate, metric, agg, point.source, numberOrEmpty(point.value), numberOrEmpty(point.coverage)]))
+      lines.push(csvRow([
+        point.localDate, metric, agg, point.source,
+        orEmpty(point.value), orEmpty(point.coverage), orEmpty(point.sourceMix),
+      ]))
     }
   }
   return `${lines.join('\n')}\n`

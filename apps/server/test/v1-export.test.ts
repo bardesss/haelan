@@ -30,8 +30,10 @@ function seedDaily(h: Harness, input: {
   }).run()
 }
 
-// Only the JSON round trip test needs a sourceMix, to prove export's JSON body carries it through
-// exactly as /series does. sourceMix is real JSON (see merge.ts's encodeMix), never plain text.
+// sourceMix is real JSON (see merge.ts's encodeMix), never plain text, and it is the one column
+// among the exported seven that can actually contain a comma, a quote or a newline on real data:
+// localDate is a fixed date shape, metric and agg come from a hardcoded catalogue, source is a
+// hex hash, and value and coverage are numbers. Ruling R18.
 function seedDailyWithMix(h: Harness, input: {
   localDate: string
   value: number
@@ -69,47 +71,42 @@ describe('GET /export', () => {
     seedDaily(harness, { localDate: '2026-08-01', value: 900 })
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const [header, first] = response.body.trim().split('\n')
-    expect(header).toBe('localDate,metric,agg,source,value,coverage')
+    expect(header).toBe('localDate,metric,agg,source,value,coverage,sourceMix')
     expect(first).toContain('2026-08-01,steps,sum,merged,900')
   })
 
-  // The pinned header above names every column the CSV has: six, not seven, so sourceMix (a JSON
-  // blob) never lands in it. `source` is the one free text column among the six a device can set
-  // to almost anything, so it is what carries a comma and a quote for this round trip. This is
-  // the whole reason to write a serialiser rather than join with commas.
-  it('quotes a field containing a comma or a quote, doubling the quote, and keeps the row on one line', async () => {
+  // sourceMix is the one free text column, and it is JSON, so it always contains quotes on every
+  // merged row (Ruling R18). This is the whole reason to write a serialiser rather than join with
+  // commas.
+  it('quotes a field containing a comma, a quote or a newline', async () => {
     harness = await withServer(); const token = await harness.signIn()
-    const weirdSource = 'a,"b"'
-    seedDaily(harness, { localDate: '2026-08-01', value: 900, source: weirdSource })
-    const response = await get(
-      harness, token,
-      `/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01&source=${encodeURIComponent(weirdSource)}`,
-    )
+    seedDailyWithMix(harness, { localDate: '2026-08-01', value: 900, sourceMix: '[{"source":"a,b","hours":3}]' })
+    const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
+    // A quote inside a quoted field is doubled, per RFC 4180, and the row still has one line.
     expect(response.body.trim().split('\n')).toHaveLength(2)
-    expect(response.body).toContain('"a,""b"""')
+    expect(response.body).toContain('""source""')
   })
 
-  // A bare newline alone (no comma, no quote) still has to trigger quoting, per RFC 4180. Split
-  // on '\n' cannot be used to count rows here, since the field's own newline is indistinguishable
-  // from a row break to a reader that is not itself CSV aware; checking the quoted field verbatim
-  // is what actually proves the escaper, not a naive line count.
-  it('wraps a field containing a bare newline in quotes', async () => {
-    harness = await withServer(); const token = await harness.signIn()
-    const weirdSource = 'a\nb'
-    seedDaily(harness, { localDate: '2026-08-01', value: 900, source: weirdSource })
-    const response = await get(
-      harness, token,
-      `/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01&source=${encodeURIComponent(weirdSource)}`,
-    )
-    expect(response.body).toContain('"a\nb"')
-  })
-
-  it('answers a null coverage and a null value as an empty field, not the text null', async () => {
+  it('answers a null coverage, value and sourceMix as an empty field, not the text null', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedDaily(harness, { localDate: '2026-08-01', value: 900, coverage: null })
     const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const [, first] = response.body.trim().split('\n')
-    expect(first).toBe('2026-08-01,steps,sum,merged,900,')
+    expect(first).toBe('2026-08-01,steps,sum,merged,900,,')
+  })
+
+  // coverage and sourceMix both state the basis of a merged number; nothing requires every row in
+  // an export to carry the same shape of basis, so a day with neither and a day with one both
+  // have to sit in the same file and both still parse as ordinary rows.
+  it('exports a null sourceMix and a populated one in the same file, and both rows parse', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+    seedDailyWithMix(harness, { localDate: '2026-08-02', value: 950, sourceMix: '[{"source":"watch","hours":24}]' })
+    const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-02')
+    const rows = response.body.trim().split('\n').slice(1)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toBe('2026-08-01,steps,sum,merged,900,,')
+    expect(rows[1]).toContain('""source"":""watch""')
   })
 
   it('answers json as the same shape the read route returns, sourceMix included', async () => {
