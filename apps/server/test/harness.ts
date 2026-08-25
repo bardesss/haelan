@@ -86,6 +86,13 @@ export interface Harness {
   clock: { nowMs: number }
   completeSetup: () => Promise<void>
   connectPerson: () => Promise<void>
+  // Every test file has been rolling its own cookie extraction. One helper instead, returning
+  // the raw session id, which is what both transports carry.
+  signIn: (username?: string, password?: string) => Promise<string>
+  // The isolation suite needs a person the signed in account does not own. The harness seeds
+  // exactly one, and every test that wanted a second has been reaching into the stores itself.
+  addPerson: (input: { id: string, displayName: string, username: string }) =>
+    Promise<{ personId: string, accountId: string }>
   cleanup: () => Promise<void>
 }
 
@@ -125,7 +132,14 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
 
   // What a finished wizard would have left behind, so a test about anything else does not
   // have to walk it.
+  //
+  // Guarded against a second call: PeopleStore.create and AccountStore.create both throw on a
+  // repeat id/username, and signIn below calls this itself so that a test can sign in without
+  // having called it first. That only works if calling it twice is free.
+  let setupComplete = false
   const completeSetup = async () => {
+    if (setupComplete) return
+    setupComplete = true
     // Through the store the wizard itself uses, not seedPerson, because the two now differ in a
     // way that matters here: create stamps the current versions and seedPerson leaves them null,
     // which is a person the sync runner skips. A harness that produced the second while claiming
@@ -162,6 +176,36 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     clock,
     completeSetup,
     connectPerson,
+
+    // Every test file has been rolling its own cookie extraction. One helper instead, returning
+    // the raw session id, which is what both transports carry.
+    signIn: async (username = 'bartus', password = 'a good long password') => {
+      await completeSetup()
+      const response = await app.inject({
+        method: 'POST', url: '/api/auth/login',
+        headers: { origin: 'http://localhost:4235', host: 'localhost:4235' },
+        payload: { username, password },
+      })
+      const cookie = response.cookies.find((c) => c.name === 'haelan_session')
+      if (!cookie) throw new Error(`sign in failed: ${response.statusCode} ${response.body}`)
+      return cookie.value
+    },
+
+    // The isolation suite needs a person the signed in account does not own. The harness seeds
+    // exactly one, and every test that wanted a second has been reaching into the stores itself.
+    addPerson: async (input: { id: string, displayName: string, username: string }) => {
+      await completeSetup()
+      new PeopleStore(instance.db).create({
+        id: input.id, displayName: input.displayName,
+        timezone: 'Europe/Amsterdam', nowMs: clock.nowMs,
+      })
+      await new AccountStore(instance.db).create({
+        id: `a-${input.id}`, personId: input.id, username: input.username,
+        password: 'a good long password', isAdmin: false, nowMs: clock.nowMs,
+      })
+      return { personId: input.id, accountId: `a-${input.id}` }
+    },
+
     cleanup: async () => {
       // A route or a callback may have left a run going. Closing the database under it turns
       // teardown into an unhandled error attributed to whichever test happened to be next.

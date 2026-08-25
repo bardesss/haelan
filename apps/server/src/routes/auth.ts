@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { SESSION_COOKIE, setSessionCookie, clearSessionCookie } from '../auth/cookie.ts'
+import { bearerToken } from '../auth/bearer.ts'
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
@@ -29,6 +30,17 @@ export function registerAuth(app: FastifyInstance): void {
   })
 
   app.decorate('requireSession', async (request: FastifyRequest, reply: FastifyReply) => {
+    // The header wins when present: a native client that sent one meant it, and a stale cookie
+    // riding along on the same connection must not silently decide who the caller is. Only a
+    // cookie failure clears the cookie, so a bearer caller never logs out a browser session that
+    // happens to share the connection.
+    const bearer = bearerToken(request.headers.authorization)
+    if (bearer !== null) {
+      const accountId = app.haelan.stores.sessions.resolve(bearer, app.haelan.now())
+      if (!accountId) return reply.code(401).send({ error: 'no_session' })
+      request.accountId = accountId
+      return
+    }
     const raw = request.cookies[SESSION_COOKIE]
     const accountId = raw ? app.haelan.stores.sessions.resolve(raw, app.haelan.now()) : null
     if (!accountId) {
