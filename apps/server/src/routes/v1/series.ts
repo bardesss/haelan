@@ -130,6 +130,10 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const agg = requireString(request.query.agg, 'agg')
     const from = requireString(request.query.from, 'from')
     const to = requireString(request.query.to, 'to')
+    // Bounded like /trend and /sleep/nights. The review assumed this route already refused a very
+    // wide range as a side effect of the comparison window arithmetic. It did not: a two century
+    // range answered 200. Stated as a limit here rather than left to arithmetic to imply.
+    requireBoundedRange(from, to)
     const source = request.query.source
     const body = personQuery.comparePeriods({ metric, agg, from, to, source })
 

@@ -155,6 +155,16 @@ describe('GET /insights', () => {
     const response = await get(harness, token, '/insights?metric=steps&agg=sum&from=2026-08-14&to=2026-08-08')
     expect(response.statusCode).toBe(400)
   })
+
+  // This was assumed to be refused already, as a side effect of deriving the comparison window.
+  // It was not: a two century range answered 200. The bound is stated here rather than left for
+  // arithmetic to imply, so it cannot be removed by a change that never meant to touch it.
+  it('answers 400 naming the limit for a range wider than the maximum', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/insights?metric=steps&agg=sum&from=1900-01-01&to=2100-01-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
+  })
 })
 
 describe('GET /trend', () => {
