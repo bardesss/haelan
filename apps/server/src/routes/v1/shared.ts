@@ -6,8 +6,8 @@ import { hashEtag, notModified } from '../../api/etag.ts'
  * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
  * route in this plugin runs behind. Narrowing here rather than asserting with ! keeps the reason
  * the type system carries: the guard, not the route, is what makes this safe. Shared rather than
- * copied per file, since series.ts and export.ts both need exactly this and a bug fixed in one
- * copy must not be able to survive in the other.
+ * copied per file, since every route file in this directory needs exactly this and a bug fixed in
+ * one copy must not be able to survive in the other.
  */
 export function personQueryOf(request: FastifyRequest): PersonQuery {
   const personQuery = request.personQuery
@@ -18,6 +18,20 @@ export function personQueryOf(request: FastifyRequest): PersonQuery {
 export function requireString(value: string | undefined, name: string): string {
   if (value === undefined || value === '') throw new ConfigError(`${name} is required`)
   return value
+}
+
+/**
+ * A query string carries text, never numbers, so `points`, `limit` and `windowDays` all arrive
+ * here as strings and all three have to refuse the same set of values. Shared for the reason this
+ * file exists: three byte identical copies of this lived in series.ts, tier2.ts and changes.ts,
+ * and the refusal a caller sees for a bad `limit` must not be able to drift from the one they see
+ * for a bad `points`.
+ */
+export function optionalPositiveInt(value: string | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined
+  const n = Number(value)
+  if (!Number.isInteger(n) || n <= 0) throw new ConfigError(`${name} must be a positive integer, got '${value}'`)
+  return n
 }
 
 /**

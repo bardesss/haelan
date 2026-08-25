@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, baselineWindow, ConfigError } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
-import { metricsFrom, personQueryOf, requireBoundedRange, requireString } from './shared.ts'
+import { metricsFrom, optionalPositiveInt, personQueryOf, requireBoundedRange, requireString } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -37,13 +37,6 @@ interface TrendQuery {
   from?: string
   to?: string
   source?: string
-}
-
-function optionalPositiveInt(value: string | undefined, name: string): number | undefined {
-  if (value === undefined) return undefined
-  const n = Number(value)
-  if (!Number.isInteger(n) || n <= 0) throw new ConfigError(`${name} must be a positive integer, got '${value}'`)
-  return n
 }
 
 interface Stamp { newestMs: number | null, rows: number }

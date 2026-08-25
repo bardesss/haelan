@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { ChangesResult } from '@haelan/core'
-import { personQueryOf, sendHashed } from './shared.ts'
+import { optionalPositiveInt, personQueryOf, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -15,13 +15,6 @@ function requireNumber(value: string | undefined, name: string): number {
   if (value === undefined || value === '') throw new ConfigError(`${name} is required`)
   const n = Number(value)
   if (!Number.isFinite(n)) throw new ConfigError(`${name} must be a number, got '${value}'`)
-  return n
-}
-
-function optionalPositiveInt(value: string | undefined, name: string): number | undefined {
-  if (value === undefined) return undefined
-  const n = Number(value)
-  if (!Number.isInteger(n) || n <= 0) throw new ConfigError(`${name} must be a positive integer, got '${value}'`)
   return n
 }
 

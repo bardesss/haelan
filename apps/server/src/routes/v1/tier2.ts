@@ -1,7 +1,9 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { ConfigError, PersonQuery } from '@haelan/core'
+import type { FastifyInstance } from 'fastify'
+import { ConfigError } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
-import { requireBoundedRange, sendHashed } from './shared.ts'
+import {
+  optionalPositiveInt, personQueryOf, requireBoundedRange, requireString, sendHashed,
+} from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -27,30 +29,6 @@ interface SessionsQuery {
   limit?: string
   cursor?: string
   source?: string
-}
-
-/**
- * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
- * route in this file runs behind. Narrowing here rather than asserting with ! keeps the reason
- * the type system carries: the guard, not the route, is what makes this safe. Matches the pattern
- * series.ts already established.
- */
-function personQueryOf(request: FastifyRequest): PersonQuery {
-  const personQuery = request.personQuery
-  if (personQuery === null) throw new Error('personQuery was not set; the plugin guard did not run')
-  return personQuery
-}
-
-function requireString(value: string | undefined, name: string): string {
-  if (value === undefined || value === '') throw new ConfigError(`${name} is required`)
-  return value
-}
-
-function optionalPositiveInt(value: string | undefined, name: string): number | undefined {
-  if (value === undefined) return undefined
-  const n = Number(value)
-  if (!Number.isInteger(n) || n <= 0) throw new ConfigError(`${name} must be a positive integer, got '${value}'`)
-  return n
 }
 
 /**
