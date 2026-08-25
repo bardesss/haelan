@@ -1,5 +1,6 @@
-import type { FastifyRequest } from 'fastify'
+import type { FastifyReply, FastifyRequest } from 'fastify'
 import { ConfigError, PersonQuery } from '@haelan/core'
+import { hashEtag, notModified } from '../../api/etag.ts'
 
 /**
  * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
@@ -56,4 +57,21 @@ export function requireBoundedRange(from: string, to: string, name = 'range'): v
       `${name} '${from}'..'${to}' spans ${days} days, more than the ${MAX_RANGE_DAYS} day maximum`,
     )
   }
+}
+
+/**
+ * Sets the ETag, then either a 304 with no body or the answer itself.
+ *
+ * The content hash base rather than the stamp plus count one, for the routes whose answer has no
+ * `updated_at_ms` pair that describes it: `samples`, `sessions` and `session_segments` carry no
+ * such column at all, /export's body is a serialisation the row stamps do not determine, and
+ * /changes is a page cut out of a keyset walk whose contents move independently of any one row's
+ * stamp. Called on the assembled body, after any thinning or pagination, so two responses that
+ * differ in what the caller actually receives can never share an ETag.
+ */
+export function sendHashed(reply: FastifyReply, request: FastifyRequest, body: unknown) {
+  const etag = hashEtag(body)
+  reply.header('etag', etag)
+  if (notModified(request, etag)) return reply.code(304).send()
+  return reply.send(body)
 }

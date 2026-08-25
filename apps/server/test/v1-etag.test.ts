@@ -263,3 +263,62 @@ describe('conditional requests on the hash backed routes', () => {
     expect(after.headers.etag).not.toBe(before.headers.etag)
   })
 })
+
+// Task 6 built the ETags before Tasks 7 and 8 added these two routes, so both shipped without
+// one. /changes is the worst place for the gap: it exists to be polled, so a missing ETag means
+// a client re-downloads the same body on every interval forever.
+describe('conditional requests on /changes and /export', () => {
+  it('answers /changes with an ETag, then 304 with no body once the client already has it', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900, updatedAtMs: 1_000 })
+
+    const first = await get(harness, token, '/changes?since=0')
+    expect(first.statusCode).toBe(200)
+    const etag = first.headers.etag
+    expect(typeof etag).toBe('string')
+
+    const second = await get(harness, token, '/changes?since=0', etag as string)
+    expect(second.statusCode).toBe(304)
+    expect(second.body).toBe('')
+  })
+
+  // The polling client's usual answer is the empty page. It still has to be an ETag a later,
+  // non-empty page cannot share, or the client stops seeing changes it asked for.
+  it('changes the /changes ETag once another day moves', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900, updatedAtMs: 1_000 })
+    const before = await get(harness, token, '/changes?since=0')
+
+    seedDaily(harness, { localDate: '2026-08-02', value: 950, updatedAtMs: 2_000 })
+    const after = await get(harness, token, '/changes?since=0')
+    expect(after.headers.etag).not.toBe(before.headers.etag)
+  })
+
+  it('answers /export with an ETag in both formats, honoured by If-None-Match', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+
+    for (const format of ['json', 'csv']) {
+      const path = `/export?format=${format}&metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`
+      const first = await get(harness, token, path)
+      expect(first.statusCode).toBe(200)
+      expect(typeof first.headers.etag).toBe('string')
+
+      const second = await get(harness, token, path, first.headers.etag as string)
+      expect(second.statusCode).toBe(304)
+      expect(second.body).toBe('')
+    }
+  })
+
+  // The two formats are two different bodies over one route, so they must never share a
+  // validator: a client that downloaded the csv and then asked for the json would otherwise be
+  // told it already had it.
+  it('gives the two /export formats different ETags for the same query', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+    const range = 'metric=steps&agg=sum&from=2026-08-01&to=2026-08-02'
+    const json = await get(harness, token, `/export?format=json&${range}`)
+    const csv = await get(harness, token, `/export?format=csv&${range}`)
+    expect(csv.headers.etag).not.toBe(json.headers.etag)
+  })
+})

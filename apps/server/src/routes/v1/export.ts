@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { SeriesResult } from '@haelan/core'
-import { metricsFrom, personQueryOf, requireString } from './shared.ts'
+import { metricsFrom, personQueryOf, requireString, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -68,6 +68,11 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
  * A parameter check, one core call per metric and a serialiser: no try/catch, because
  * registerV1's setErrorHandler turns whatever PersonQuery throws, and the ConfigError below for
  * an unrecognised format, into the right response.
+ *
+ * Both formats answer a content hashed ETag and honour If-None-Match, the same as every other
+ * read here. The hash base rather than the stamp plus count one, because the csv body is a
+ * serialisation the row stamps do not determine: two ranges can share a stamp pair and produce
+ * different files.
  */
 export function registerExportRoutes(app: FastifyInstance): void {
   app.get<{ Params: PersonParams, Querystring: ExportQuery }>('/p/:personId/export', async (request, reply) => {
@@ -87,13 +92,13 @@ export function registerExportRoutes(app: FastifyInstance): void {
       body[metric] = personQuery.series({ metric, agg, from, to, source })
     }
 
-    if (format === 'json') return body
+    if (format === 'json') return sendHashed(reply, request, body)
 
     // Ruling R17: several metrics join in request order with a hyphen, one file, distinguished
     // by the metric column rather than one file per metric.
     const filename = `haelan-${metrics.join('-')}-${from}-${to}.csv`
     reply.header('content-type', 'text/csv; charset=utf-8')
     reply.header('content-disposition', `attachment; filename="${filename}"`)
-    return toCsv(body, metrics, agg)
+    return sendHashed(reply, request, toCsv(body, metrics, agg))
   })
 }

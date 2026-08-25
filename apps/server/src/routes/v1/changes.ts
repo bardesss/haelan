@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { ConfigError, PersonQuery } from '@haelan/core'
+import type { FastifyInstance } from 'fastify'
+import { ConfigError } from '@haelan/core'
 import type { ChangesResult } from '@haelan/core'
+import { personQueryOf, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -8,18 +9,6 @@ interface ChangesQuery {
   since?: string
   limit?: string
   cursor?: string
-}
-
-/**
- * request.personQuery is decorated null and set by registerV1's preHandler hook, which every
- * route in this file runs behind. Narrowing here rather than asserting with ! keeps the reason
- * the type system carries: the guard, not the route, is what makes this safe. Matches the pattern
- * series.ts and tier2.ts already established.
- */
-function personQueryOf(request: FastifyRequest): PersonQuery {
-  const personQuery = request.personQuery
-  if (personQuery === null) throw new Error('personQuery was not set; the plugin guard did not run')
-  return personQuery
 }
 
 function requireNumber(value: string | undefined, name: string): number {
@@ -40,18 +29,22 @@ function optionalPositiveInt(value: string | undefined, name: string): number | 
  * The (localDate, metric) pairs that moved since a moment: the other half of what updated_at_ms
  * exists for, a client refetching the days that changed rather than its whole history.
  *
- * A parameter check, one core call, no serialiser step of its own: PersonQuery.changes already
+ * A parameter check, one core call and the shared ETag serialiser: PersonQuery.changes already
  * answers the paged shape. No try/catch, because registerV1's setErrorHandler turns whatever it
  * throws into the right response.
+ *
+ * The ETag matters more here than anywhere else on this surface: this route exists to be polled,
+ * so without one a client re-downloads a body it already has on every interval, and the common
+ * answer to "what changed" is the empty page it saw last time.
  */
 export function registerChangesRoutes(app: FastifyInstance): void {
-  app.get<{ Params: PersonParams, Querystring: ChangesQuery }>('/p/:personId/changes', async (request) => {
+  app.get<{ Params: PersonParams, Querystring: ChangesQuery }>('/p/:personId/changes', async (request, reply) => {
     const personQuery = personQueryOf(request)
     const since = requireNumber(request.query.since, 'since')
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const cursor = request.query.cursor
 
     const result: ChangesResult = personQuery.changes({ since, limit, cursor })
-    return result
+    return sendHashed(reply, request, result)
   })
 }

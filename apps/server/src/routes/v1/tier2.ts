@@ -1,8 +1,7 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { ConfigError, PersonQuery } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
-import { hashEtag, notModified } from '../../api/etag.ts'
-import { requireBoundedRange } from './shared.ts'
+import { requireBoundedRange, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -95,19 +94,6 @@ function paginate<T>(items: readonly T[], input: {
   const last = page.at(-1)
   const cursor = hasMore && last !== undefined ? encodeCursor(input.keyOf(last)) : null
   return { items: page, cursor }
-}
-
-/**
- * Sets the ETag, then either a 304 with no body or the answer itself. `samples`, `sessions` and
- * `session_segments` carry no `updated_at_ms`, so the ETag hashes the body exactly as it is sent,
- * after thinning and pagination: hashing the rows ahead of that point would let two different
- * responses share an ETag, since it would hash something the caller never actually receives.
- */
-function sendHashed(reply: FastifyReply, request: FastifyRequest, body: unknown) {
-  const etag = hashEtag(body)
-  reply.header('etag', etag)
-  if (notModified(request, etag)) return reply.code(304).send()
-  return reply.send(body)
 }
 
 /**
