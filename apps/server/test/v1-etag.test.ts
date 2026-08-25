@@ -104,6 +104,32 @@ function seedSource(h: Harness, sourceId: string): void {
   }).onConflictDoNothing().run()
 }
 
+// August in Europe/Amsterdam, the offset every harness person carries, matching the constant
+// v1-tier2.test.ts established.
+const OFFSET_MINUTES = 120
+
+// One session, of either kind, for the two routes whose ETag is a hash of the assembled body.
+// `sessions` carries no updated_at_ms at all, which is the whole reason those two routes hash
+// instead of stamping, so a test that moves their data has to move the body rather than a column.
+function seedSession(h: Harness, input: {
+  id: string
+  kind: 'sleep' | 'exercise'
+  localDate: string
+  sourceId?: string
+}): void {
+  const sourceId = input.sourceId ?? 'watch'
+  seedSource(h, sourceId)
+  const startMs = Date.parse(`${input.localDate}T21:00:00Z`) - OFFSET_MINUTES * 60_000
+  const row = {
+    id: input.id, personId: 'p1', sourceId, kind: input.kind, externalId: input.id,
+    startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 3_600_000,
+    endOffsetMinutes: OFFSET_MINUTES, localDate: input.localDate,
+    attrs: JSON.stringify({ mainSleep: input.kind === 'sleep' }), rawPayloadId: null,
+  }
+  h.app.haelan.instance.db.insert(schema.sessions).values(row)
+    .onConflictDoUpdate({ target: schema.sessions.id, set: row }).run()
+}
+
 async function get(h: Harness, token: string, path: string, ifNoneMatch?: string) {
   return h.app.inject({
     method: 'GET',
@@ -136,13 +162,24 @@ describe('conditional requests on the daily backed routes', () => {
     expect(second.headers['content-length']).toBeUndefined()
   })
 
+  // The URL is held fixed and only the data moves. Widening the range between the two requests
+  // as well, which this test used to do, means an implementation stamping nothing but the row
+  // count also passes it: the second request covered a day more and so counted a row more. What
+  // the name claims is that a row changing in place moves the validator, and only a rewritten
+  // row over an unchanged range asserts that.
   it('changes the /series ETag once the underlying row changes', async () => {
     harness = await withServer(); const token = await harness.signIn()
+    const url = '/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-01'
     seedDaily(harness, { localDate: '2026-08-01', value: 900, updatedAtMs: 1_770_000_000_000 })
-    const before = await get(harness, token, '/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
+    const before = await get(harness, token, url)
+    expect(before.json().steps.points).toHaveLength(1)
 
-    seedDaily(harness, { localDate: '2026-08-02', value: 500, updatedAtMs: 1_770_000_001_000 })
-    const after = await get(harness, token, '/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02')
+    // Rewritten in place over the same natural key, which is what a rebuild does to a day it
+    // re-derives: same row, new value, new stamp, and the count does not move.
+    seedDaily(harness, { localDate: '2026-08-01', value: 1200, updatedAtMs: 1_770_000_001_000 })
+    const after = await get(harness, token, url)
+    expect(after.json().steps.points).toHaveLength(1)
+    expect(after.json().steps.points[0].value).toBe(1200)
 
     expect(after.headers.etag).not.toBe(before.headers.etag)
   })
@@ -330,6 +367,50 @@ describe('conditional requests on the hash backed routes', () => {
     const after = await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22')
     expect(after.headers.etag).not.toBe(before.headers.etag)
   })
+
+  // /intraday was the only one of the three hash backed tier 2 routes with coverage here, and it
+  // is the one whose body shape differs from the other two: it answers { points, reduction },
+  // while these two answer a { items, cursor } page out of paginate. sendHashed is called on the
+  // assembled page, after slicing, so these two are where that ordering actually matters.
+  const PAGED: readonly { name: string, url: string, kind: 'sleep' | 'exercise' }[] = [
+    { name: '/sleep/nights', url: '/sleep/nights?from=2026-08-01&to=2026-08-07', kind: 'sleep' },
+    { name: '/sessions', url: '/sessions?kind=exercise&from=2026-08-01&to=2026-08-07', kind: 'exercise' },
+  ]
+
+  describe.each(PAGED)('$name', (route) => {
+    it('answers an ETag, then 304 with no body once the client already has it', async () => {
+      harness = await withServer(); const token = await harness.signIn()
+      seedSession(harness, { id: 'one', kind: route.kind, localDate: '2026-08-01' })
+
+      const first = await get(harness, token, route.url)
+      expect(first.statusCode).toBe(200)
+      const etag = first.headers.etag
+      expect(typeof etag).toBe('string')
+
+      const second = await get(harness, token, route.url, etag as string)
+      expect(second.statusCode).toBe(304)
+      expect(second.headers.etag).toBe(etag)
+      expect(second.body).toBe('')
+      expect(second.headers['content-length']).toBeUndefined()
+    })
+
+    it('moves the ETag once the underlying data changes, though no row carries a timestamp', async () => {
+      harness = await withServer(); const token = await harness.signIn()
+      seedSession(harness, { id: 'one', kind: route.kind, localDate: '2026-08-01' })
+      const before = await get(harness, token, route.url)
+      expect(before.json().items).toHaveLength(1)
+
+      seedSession(harness, { id: 'two', kind: route.kind, localDate: '2026-08-02' })
+      const after = await get(harness, token, route.url)
+      expect(after.json().items).toHaveLength(2)
+      expect(after.headers.etag).not.toBe(before.headers.etag)
+
+      // And the client that held the first validator is told so, rather than handed a 304 over a
+      // body it no longer has.
+      const stale = await get(harness, token, route.url, before.headers.etag as string)
+      expect(stale.statusCode).toBe(200)
+    })
+  })
 })
 
 // Task 6 built the ETags before Tasks 7 and 8 added these two routes, so both shipped without
@@ -375,6 +456,30 @@ describe('conditional requests on /changes and /export', () => {
       const second = await get(harness, token, path, first.headers.etag as string)
       expect(second.statusCode).toBe(304)
       expect(second.body).toBe('')
+    }
+  })
+
+  // The pair /changes already has. /export shipped with the 304 case and the two-formats case but
+  // not this one, so nothing said its validator tracks the data at all: a hash over a body that
+  // never changed would have passed both of the others.
+  it('changes the /export ETag in both formats once the underlying row changes', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+
+    for (const format of ['json', 'csv']) {
+      const path = `/export?format=${format}&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01`
+      const before = await get(harness, token, path)
+
+      // A different value over the same natural key, so the range and the row count both hold
+      // still and only what the file says changes. The hash base is what has to catch that;
+      // /export hashes rather than stamps precisely because its body is a serialisation the row
+      // stamps do not determine.
+      seedDaily(harness, { localDate: '2026-08-01', value: 900 + (format === 'csv' ? 2 : 1) })
+      const after = await get(harness, token, path)
+      expect(after.headers.etag, format).not.toBe(before.headers.etag)
+
+      const stale = await get(harness, token, path, before.headers.etag as string)
+      expect(stale.statusCode, format).toBe(200)
     }
   })
 
