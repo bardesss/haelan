@@ -32,13 +32,22 @@ export function toneOf(delta: Delta | undefined): Tone {
 export type Translate = (key: string, options?: Record<string, unknown>) => string
 
 // Flat below 1% swing: smaller reads as noise, not a real trend.
-export function trend(t: Translate, values: number[], polarity: Polarity = 'neutral'): Delta {
+//
+// Undefined rather than a Delta whose text lies: a series with fewer than two points (the "day"
+// range yields exactly one) hands slice() an empty first half, and 0 reduced over nothing divided
+// by a length of zero is NaN before either mean is even compared. A series whose first half
+// legitimately averages to zero (a real reading, not a gap, for a metric like
+// sleep_asleep_minutes on a night with no sleep) divides by that zero instead and produces
+// Infinity. Both are "no percentage exists to report" rather than two different bugs, so one
+// finite check after computing pct catches both without special-casing either.
+export function trend(t: Translate, values: number[], polarity: Polarity = 'neutral'): Delta | undefined {
   const half = Math.floor(values.length / 2)
   const first = values.slice(0, half)
   const second = values.slice(half)
   const meanFirst = first.reduce((sum, v) => sum + v, 0) / first.length
   const meanSecond = second.reduce((sum, v) => sum + v, 0) / second.length
   const pct = ((meanSecond - meanFirst) / meanFirst) * 100
+  if (!Number.isFinite(pct)) return undefined
   const dir: Delta['dir'] = Math.abs(pct) < 1 ? 'flat' : pct > 0 ? 'up' : 'down'
   const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '→'
   return {

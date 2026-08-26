@@ -68,7 +68,7 @@ describe('trend', () => {
     const { t, calls } = stubT()
     const d = trend(t, [1, 1, 1, 2, 2, 2], 'higher-is-better')
     expect(calls).toEqual([['common.trendBasis', { recent: 3, earlier: 3 }]])
-    expect(d.basis).toBe('t(common.trendBasis)')
+    expect(d!.basis).toBe('t(common.trendBasis)')
   })
 
   it('reports direction and tone as separate facts', () => {
@@ -80,6 +80,31 @@ describe('trend', () => {
 
   it('calls a swing under one per cent flat', () => {
     const { t } = stubT()
-    expect(trend(t, [100, 100, 100, 100.5]).dir).toBe('flat')
+    expect(trend(t, [100, 100, 100, 100.5])!.dir).toBe('flat')
+  })
+
+  // The day range yields exactly one point per card, and an empty series reaches the same
+  // slice() before any data has loaded. Both hand the split an empty first half, and 0 reduced
+  // over nothing divided by a length of zero is NaN before either mean is compared, not after.
+  it('reports no delta for zero or one values, rather than a delta reading NaN%', () => {
+    const { t } = stubT()
+    expect(trend(t, [])).toBeUndefined()
+    expect(trend(t, [42])).toBeUndefined()
+  })
+
+  // A first half that legitimately averages to zero, a real reading rather than a gap, divides
+  // by that zero and prints Infinity% instead of NaN%; same defect, different arithmetic route.
+  it('reports no delta when the earlier half is zero, rather than a delta reading Infinity%', () => {
+    const { t } = stubT()
+    expect(trend(t, [0, 0, 5, 5])).toBeUndefined()
+  })
+
+  // The fix lives in one finite check after pct is computed, so this pins the ordinary path
+  // (two or more values, a non-zero earlier half) to prove that check did not also swallow it.
+  it('still reports a delta for two or more values with a non-zero earlier half', () => {
+    const { t } = stubT()
+    const d = trend(t, [1, 1, 1, 2, 2, 2], 'higher-is-better')
+    expect(d).not.toBeUndefined()
+    expect(d).toMatchObject({ dir: 'up', tone: 'good' })
   })
 })

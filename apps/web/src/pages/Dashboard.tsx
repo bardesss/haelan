@@ -85,14 +85,13 @@ export function Dashboard() {
     if (empty !== null) {
       return <EmptyState title={t(`emptyState.${empty}.title`)} detail={t(`emptyState.${empty}.detail`)} />
     }
-    // Undefined rather than a delta computed over nothing: the isPending check above already
-    // forces empty to null so the tile does not flash "no_data" while the first fetch is still in
-    // flight, but trend() divides by the length of what it is handed, so that same window would
-    // hand it two empty halves and print "NaN%" for the instant before real points arrive.
+    // trend() itself answers "no delta" (undefined) for a window with too few points to compare,
+    // which covers both the pending fetch (points still empty) and the day range (exactly one
+    // point), so there is nothing left for this call site to guard against.
     return (
       <StatTile label={t(labelKey)} value={format(points)} unit={unit}
         basis={t(`${labelKey.replace('.label', '')}.basis`, basisOf(points))}
-        delta={points.length > 0 ? trend(t, values(points), direction) : undefined}>
+        delta={trend(t, values(points), direction)}>
         <Sparkline values={points.map((p) => p.value)} labels={points.map((p) => p.localDate)}
           label={t(chartLabelKey, { period: `${controls.from} to ${controls.to}` })} unit={t(unitKey)} />
       </StatTile>

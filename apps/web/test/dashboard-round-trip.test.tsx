@@ -79,6 +79,40 @@ function stubFetch(seen: string[]): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Answers every requested metric with exactly one point, rather than the fixed `steps`-only body
+ * `stubFetch` returns. A single canned metric leaves three of the four cards empty (no data, no
+ * trend() call at all) regardless of range, which would prove nothing about the day range
+ * specifically. This lets every card reach trend() with a one-point series, which is what the
+ * day range actually hands it.
+ */
+function stubFetchOnePointPerMetric(seen: string[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    seen.push(url)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify({
+        personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true,
+        timezone: 'Europe/Amsterdam',
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = {
+          points: [{ localDate: '2026-08-15', value: 100, coverage: 0.9, sourceMix: null }],
+          reduction: null,
+        }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Dashboard round trip', () => {
   // The whole behaviour, across both units: the control row pushes a parameter, the URL changes,
   // the hook re-parses it, the query key changes, and a new request goes out for the new range.
@@ -122,6 +156,27 @@ describe('the Dashboard round trip', () => {
     expect(seriesCalls.length).toBeLessThan(4)
     expect(seriesCalls).toHaveLength(3)
     expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
+    restore()
+  })
+
+  // datesFor('day', anchor) returns from === to, so every card's series is exactly one point on
+  // this range, the case trend() used to divide 0 by 0 for. Checked end to end through the real
+  // page rather than only at trend()'s own unit tests, since that is the path the coordinator's
+  // review flagged as the one that actually reaches the bug in production.
+  it('renders the day range with no NaN or Infinity delta on any card', async () => {
+    const seen: string[] = []
+    const restore = stubFetchOnePointPerMetric(seen)
+    window.history.replaceState(null, '', '/dashboard?range=day&on=2026-08-15')
+
+    mount(withQuery(<Dashboard />))
+    await act(async () => { await Promise.resolve() })
+
+    expect(container!.querySelectorAll('.card')).toHaveLength(4)
+    expect(container!.innerHTML).not.toContain('NaN')
+    expect(container!.innerHTML).not.toContain('Infinity')
+    // Not just absent text: no delta chip should exist at all for a window with one point, since
+    // there is no earlier half to compare it against.
+    expect(container!.querySelectorAll('.delta')).toHaveLength(0)
     restore()
   })
 
