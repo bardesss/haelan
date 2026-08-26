@@ -14,6 +14,17 @@ export interface Baseline {
 }
 
 /**
+ * Exported so the request shape, including the all sources sentinel's omission, can be asserted
+ * without mounting a component. Mirrors seriesPath in useSeries.ts for the same reason.
+ */
+export function baselinePath(personId: string, metric: string, on: string, source: string, agg: string): string {
+  const params = new URLSearchParams({ metric, agg, on })
+  const resolvedSource = sourceParam(source)
+  if (resolvedSource !== undefined) params.set('source', resolvedSource)
+  return `/api/v1/p/${personId}/baselines?${params.toString()}`
+}
+
+/**
  * personId comes from the session, never a parameter, for the same reason useSeries does not
  * take one: an account owns exactly one person.
  *
@@ -27,14 +38,9 @@ export function useBaseline(
 ): UseQueryResult<{ baseline: Baseline | null }> {
   const session = useSession()
   const personId = session.data?.personId
-  const params = new URLSearchParams({ metric, agg, on })
-  const resolvedSource = sourceParam(source)
-  if (resolvedSource !== undefined) params.set('source', resolvedSource)
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'baselines', { metric, on, source, agg }),
     enabled: personId !== undefined,
-    queryFn: () => apiGet<{ baseline: Baseline | null }>(
-      `/api/v1/p/${personId!}/baselines?${params.toString()}`,
-    ),
+    queryFn: () => apiGet<{ baseline: Baseline | null }>(baselinePath(personId!, metric, on, source, agg)),
   })
 }

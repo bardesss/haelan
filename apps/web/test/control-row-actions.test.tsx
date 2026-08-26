@@ -11,6 +11,7 @@ import type { Session } from '../src/auth/session.js'
 import { ControlRow } from '../src/components/ControlRow.js'
 import type { PageControlsState } from '../src/controls/usePageControls.js'
 import { syncStatusKey } from '../src/data/useSyncStatus.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -57,7 +58,7 @@ function withQuery(node: ReactNode): ReactNode {
 
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
   return {
-    tab: 'month', anchor: '2026-08-15', source: 'merged',
+    tab: 'month', anchor: '2026-08-15', source: ALL_SOURCES,
     from: '2026-08-01', to: '2026-08-31',
     setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
     ...over,
