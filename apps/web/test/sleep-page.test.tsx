@@ -88,6 +88,34 @@ function stubSleep(urls: string[]): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Every metric gets stubSleep's usual 420 except sleep_nap_count, which gets `napCount` on its
+ * own single day. napCount sums the same way sleep_nap_count's own card does (Sleep.tsx's
+ * `napCountTotal`), so a stubbed value of 1 is the total the basis line pluralises on, not one
+ * of several days averaged away.
+ */
+function stubSleepNapCount(napCount: number): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        const value = metric === 'sleep_nap_count' ? napCount : 420
+        body[metric] = { points: [{ localDate: '2026-08-15', value, coverage: coverageFor(metric), sourceMix: null }], reduction: null }
+      }
+      return json(body)
+    }
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Sleep page', () => {
   // The shape that produced M3d-1's Critical: sleep rows carry a null coverage because a night
   // has no samples underneath it, and reading that as zero rendered "device not worn" over a
@@ -97,7 +125,15 @@ describe('the Sleep page', () => {
     const { client, tree } = withQuery(<Sleep />)
     mount(tree)
     await flush(client, () => container!.innerHTML)
-    expect(container!.textContent).not.toContain('emptyState.not_worn.title')
+    // A structural marker, not the raw key: this test does not wrap I18nProvider, so an
+    // untranslated t() happens to hand back the key literally today, which made the original
+    // assertion pass for the right reason here but for the wrong one, since it would keep passing
+    // even against real, resolved English text ("Device not worn" is not the string
+    // "emptyState.not_worn.title" either). EmptyState is the one component that renders
+    // className="empty" (components/EmptyState.tsx), for any of the three kinds MetricCard can
+    // pick, so its absence is the actual claim this test makes: no card fell back to an empty
+    // state at all, not-worn or otherwise.
+    expect(container!.querySelector('.empty')).toBeNull()
     expect(container!.textContent).toContain('7h 00m')
     restore()
   })
@@ -151,6 +187,32 @@ describe('the Sleep page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('Diep')
     expect(container!.innerHTML).not.toContain('>Deep<')
+    restore()
+  })
+
+  // Every other test in this file stubs sleep_nap_count at 420, so only sleep.napCount.basis_other
+  // ever renders and the singular half the brief asked for (basis_one, {{count}} nap rather than
+  // naps) has never actually been exercised. Confirming it is reachable is the point, not merely
+  // that the plural is: i18next only reaches _one when the interpolated count is really 1, so a
+  // stub that always hands over a bigger number could hide a catalogue typo in the singular form
+  // forever.
+  it('reaches the singular nap count form, not only the plural every other stub hits', async () => {
+    const restore = stubSleepNapCount(1)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).toContain('1 nap,')
+    expect(container!.textContent).not.toContain('1 naps,')
+    restore()
+  })
+
+  it('picks the Dutch singular nap count too', async () => {
+    const restore = stubSleepNapCount(1)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).toContain('1 dutje,')
+    expect(container!.textContent).not.toContain('1 dutjes,')
     restore()
   })
 })

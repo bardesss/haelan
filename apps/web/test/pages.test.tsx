@@ -5,6 +5,9 @@ import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { Activity } from '../src/pages/Activity.js'
+import { Recovery } from '../src/pages/Recovery.js'
+import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -82,16 +85,31 @@ function stubFetch(): () => void {
   return () => { globalThis.fetch = original }
 }
 
-/** Mounts the Dashboard for real, waits for every query to settle, and returns the settled markup. */
-async function settledDashboard(lng: string): Promise<string> {
+// One path and anchor per page, sharing Dashboard's own week and gap (2026-08-10 through -16,
+// only four of the seven days answering): the same partial week that gives every basis line on
+// Dashboard a denominator bigger than its numerator does the same for whichever cards Activity,
+// Recovery and Sleep draw from the identical DAYS array stubFetch answers every /series call with.
+const ACTIVITY_ROUTE = '/activity?range=week&on=2026-08-12'
+const RECOVERY_ROUTE = '/recovery?range=week&on=2026-08-12'
+const SLEEP_ROUTE = '/sleep?range=week&on=2026-08-12'
+
+/**
+ * Mounts one page for real, waits for every query to settle, and returns the settled markup.
+ *
+ * Extracted out of what used to be Dashboard's own `settledDashboard`, once Activity, Recovery and
+ * Sleep needed byte identical mount/flush/unmount plumbing around three different components: a
+ * fourth copy of this function differing only in which component it renders was the same shape
+ * pageShell.ts already exists to rule out one level up, just not yet written down at this level.
+ */
+async function settledPage(Page: () => ReactNode, route: string, lng: string): Promise<string> {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  window.history.replaceState(null, '', RANGE)
+  window.history.replaceState(null, '', route)
   const tree: ReactNode = (
-    <I18nProvider lng={lng}><QueryClientProvider client={client}><Dashboard /></QueryClientProvider></I18nProvider>
+    <I18nProvider lng={lng}><QueryClientProvider client={client}><Page /></QueryClientProvider></I18nProvider>
   )
   act(() => { root.render(tree) })
   await flush(client, () => container.innerHTML)
@@ -101,19 +119,44 @@ async function settledDashboard(lng: string): Promise<string> {
   return html
 }
 
+const settledDashboard = (lng: string) => settledPage(Dashboard, RANGE, lng)
+const settledActivity = (lng: string) => settledPage(Activity, ACTIVITY_ROUTE, lng)
+const settledRecovery = (lng: string) => settledPage(Recovery, RECOVERY_ROUTE, lng)
+const settledSleep = (lng: string) => settledPage(Sleep, SLEEP_ROUTE, lng)
+
 const restore = stubFetch()
-// Sleep left this harness once it went off fixtures (M3d2): it used to resolve nothing, so a
-// static renderToStaticMarkup was the whole of its render, and this file could treat it as a
-// second synchronous page beside Dashboard. A real Sleep asks for its own session and its own
-// three metric groups, which a bare QueryClient never resolves and renderToStaticMarkup never
-// waits for, so the same static render now shows nothing but loading state throughout. Sleep's
-// own dedicated coverage lives in sleep-page.test.tsx, following Activity.tsx and Recovery.tsx,
-// neither of which was ever added here either once they made the same move.
+// Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
+// found that Activity and Recovery, converted off fixtures in the two tasks before Sleep, had
+// never been added here either, so three new pages and twenty odd new cards sat outside every
+// assertion below. All four settle for real now through the same stubFetch week, rather than
+// excluding a whole page because one of its charts cannot answer every assertion (see
+// HAS_ABSENCE_CHART below for the one assertion that genuinely does not apply to every page).
 const pages = {
   Dashboard: await settledDashboard('en'),
+  Activity: await settledActivity('en'),
+  Recovery: await settledRecovery('en'),
+  Sleep: await settledSleep('en'),
 }
 const dashboardNl = await settledDashboard('nl')
 restore()
+
+// Whether a page carries at least one dense, by-position chart that draws an explicit absence
+// mark for a calendar day nothing answered (Dashboard's HeartRateRange, Activity's own steps
+// heatmap). An ordinary Sparkline, which is every chart on Recovery and every chart on Sleep in
+// this task, builds its accessible table straight from the points a query actually returned
+// (SeriesPoint.value is never null, so there is no gap value to render a word for; see
+// useSeries.ts's own comment), not from a dense day-by-day array with a placeholder for the days
+// it left out. So a gapped week changes how many rows a Sparkline's table has, never what a
+// missing one says, and "not worn"/"no reading" can never appear in either page's markup no
+// matter what the stub answers. This is not a coverage question either: none of Recovery's three
+// metrics carries a wear signal (Recovery.tsx's own card() comment) and neither does any sleep
+// metric (emptyState.ts's own coverageIsWearSignal), so even a wear-signal-capable metric drawn
+// this way would still say nothing, the same reason Activity's own distance and floors cards
+// cannot either despite steps, right beside them, being able to through the one chart that draws
+// densely.
+const HAS_ABSENCE_CHART: Record<string, boolean> = {
+  Dashboard: true, Activity: true, Recovery: false, Sleep: false,
+}
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
 // live. Asserting against the whole page cannot tell a chart's table apart from a card's basis
@@ -163,19 +206,25 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     }
   })
 
-  it('never renders absence as a zero', () => {
-    // Both halves of the rule, against a page that has really answered. A day with no row shows a
-    // word in the table alternatives, and no headline value is the zero a formatter produces when
-    // it is handed nothing.
-    expect(tables(html)).toMatch(/not worn|no reading/)
+  // The half of the rule every page can be held to regardless of which chart it draws: no
+  // headline value is the zero a formatter produces when it is handed nothing to summarise.
+  it('never renders a zero for an absent value', () => {
     expect(html).not.toMatch(/<div class="value">0(<|&nbsp;| )/)
   })
 
-  // These two pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // The other half, only for a page carrying a chart that can actually say it: a day with no row
+  // shows a word in that chart's own table alternative. See HAS_ABSENCE_CHART's own comment for
+  // why Recovery and Sleep are excluded by name rather than by leaving the whole page out of this
+  // describe.each the way the review round that added them here was asked not to repeat.
+  it.skipIf(!HAS_ABSENCE_CHART[_name])('states absence in the accessible table, not silently', () => {
+    expect(tables(html)).toMatch(/not worn|no reading/)
+  })
+
+  // These four pages carry most of the catalogue, so a mistyped key would otherwise render as
   // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
   // them look for the shape a missing translation actually takes.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts)\.[a-zA-Z][a-zA-Z.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState)\.[a-zA-Z][a-zA-Z.]*\b/)
   })
 })
 
