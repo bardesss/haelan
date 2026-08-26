@@ -158,6 +158,40 @@
       "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
     }
   },
+  "recovery": {
+    "title": "Herstel",
+    "units": {
+      "beatsPerMinute": "Slagen per minuut",
+      "bpm": "bpm",
+      "milliseconds": "Milliseconden",
+      "ms": "ms",
+      "breathsPerMinute": "Ademhalingen per minuut",
+      "breathsPerMinuteShort": "ademh./min"
+    },
+    "baselineNote": {
+      "unknown": "de baseline kon niet worden gelezen, dus er is geen vergelijking te zien",
+      "none": "nog geen baseline om mee te vergelijken",
+      "thin": "de baseline uit de 60 dagen vóór {{on}} is te dun om mee te vergelijken",
+      "below": "↓ onder de baseline van {{low}} tot {{high}}",
+      "above": "↑ boven de baseline van {{low}} tot {{high}}",
+      "within": "→ binnen de baseline van {{low}} tot {{high}}"
+    },
+    "restingHeartRate": {
+      "label": "Rusthartslag",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
+      "chartLabel": "Dagelijkse rusthartslag in {{period}}"
+    },
+    "dailyHrv": {
+      "label": "Hartslagvariabiliteit",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
+      "chartLabel": "Dagelijkse hartslagvariabiliteit in {{period}}"
+    },
+    "respiratoryRate": {
+      "label": "Ademhalingsfrequentie",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
+      "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
+    }
+  },
   "charts": {
     "columns": {
       "date": "Datum",

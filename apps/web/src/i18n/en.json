@@ -158,6 +158,40 @@
       "emptyDetail": "Anomaly detection reads typed events, which nothing connected reports yet."
     }
   },
+  "recovery": {
+    "title": "Recovery",
+    "units": {
+      "beatsPerMinute": "Beats per minute",
+      "bpm": "bpm",
+      "milliseconds": "Milliseconds",
+      "ms": "ms",
+      "breathsPerMinute": "Breaths per minute",
+      "breathsPerMinuteShort": "breaths/min"
+    },
+    "baselineNote": {
+      "unknown": "the baseline could not be read, so no comparison is shown",
+      "none": "no baseline yet to compare against",
+      "thin": "the baseline from the 60 days before {{on}} is too thin to compare against",
+      "below": "↓ below the {{low}} to {{high}} baseline",
+      "above": "↑ above the {{low}} to {{high}} baseline",
+      "within": "→ within the {{low}} to {{high}} baseline"
+    },
+    "restingHeartRate": {
+      "label": "Resting heart rate",
+      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
+      "chartLabel": "Daily resting heart rate through {{period}}"
+    },
+    "dailyHrv": {
+      "label": "Heart rate variability",
+      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
+      "chartLabel": "Daily heart rate variability through {{period}}"
+    },
+    "respiratoryRate": {
+      "label": "Respiratory rate",
+      "basis": "mean, {{reported}} of {{total}} days; {{note}}",
+      "chartLabel": "Daily respiratory rate through {{period}}"
+    }
+  },
   "charts": {
     "columns": {
       "date": "Date",
