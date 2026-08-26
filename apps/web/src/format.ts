@@ -4,10 +4,15 @@ export function formatDuration(minutes: number): string {
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`
 }
 
+// Wrapped into the day before splitting, and wrapped in the direction that survives a negative.
+// A bed time is minutes from the local midnight of the date the night ENDED (see
+// packages/core/src/derive/metrics.ts on sleep_bedtime_minutes: "an 23:30 bedtime is -30"), so
+// negatives reach here as ordinary values rather than as mistakes. JavaScript's % keeps the sign
+// of its left operand, which rendered -40 as "-1:-40"; the double modulo below reads it as 23:20,
+// which is the clock time that minute actually names.
 export function formatClock(minutesPastMidnight: number): string {
-  const total = Math.round(minutesPastMidnight)
-  const hours = Math.floor(total / 60) % 24
-  return `${String(hours).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+  const total = ((Math.round(minutesPastMidnight) % 1440) + 1440) % 1440
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
 export type Tone = 'good' | 'bad' | 'neutral'

@@ -41,12 +41,25 @@ body {
 
 .stepper { display: flex; align-items: center; padding: 2px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .stepper-label { font-size: var(--font-size-xs); color: var(--text-secondary); padding: 0 var(--space-2); min-width: 96px; text-align: center; }
+/* The stepper's third control, so it borrows the label's type rather than the browser's default
+   form font, which is a different family at a different size and breaks the row's baseline. */
+.date-picker {
+  appearance: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-secondary);
+  background: none; border: 0; padding: 0 var(--space-2); cursor: pointer;
+}
+.date-picker::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; }
+.date-picker:hover { color: var(--text-primary); }
 
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
 .button:hover { color: var(--text-primary); border-color: var(--text-faint); }
 .button svg, .icon-button svg { width: 15px; height: 15px; }
-.button-count { color: var(--text-faint); }
+/* The source selector is a bare <select> wrapped in a .button label, so it inherits the button's
+   box and contributes only its own text; without this it draws a second border inside the first. */
+.button select {
+  appearance: none; font: inherit; font-size: var(--font-size-xs); color: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
 .button-primary { color: var(--accent-soft); background: var(--surface-accent); border-color: var(--border-accent); }
 .button-primary:hover { color: var(--text-primary); background: var(--surface-accent-hover); }
 .button-primary:disabled, .button-primary[aria-disabled='true'] {

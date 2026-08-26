@@ -34,6 +34,16 @@ describe('formatClock', () => {
     expect(formatClock(23 * 60 + 30)).toBe('23:30')
     expect(formatClock(25 * 60)).toBe('01:00')
   })
+
+  // A bedtime is measured from the midnight of the morning the night ended, so an 23:20 bedtime
+  // arrives here as -40. Dashboard.tsx's inWindow keeps that page away from this case; nothing
+  // stops the next caller, and the answer used to be the string "-1:-40".
+  it('reads a minute before midnight as an evening clock time, not as a negative', () => {
+    expect(formatClock(-40)).toBe('23:20')
+    expect(formatClock(-1)).toBe('23:59')
+    expect(formatClock(-24 * 60)).toBe('00:00')
+    expect(formatClock(-25 * 60)).toBe('23:00')
+  })
 })
 
 describe('tone', () => {
