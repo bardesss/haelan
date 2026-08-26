@@ -42,10 +42,10 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam',
 }
 
-function withQuery(node: ReactNode): ReactNode {
+function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+  return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
 }
 
 type Baseline = { center: number, spread: number, n: number, thin: boolean } | null
@@ -112,8 +112,9 @@ describe('a card whose request failed', () => {
   it('says the request failed rather than that there is nothing recorded', async () => {
     const seen: string[] = []
     const restore = stubFailingReads(seen)
-    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('This did not load.')
     expect(container!.textContent).not.toContain('Nothing has been recorded for this period.')
     restore()
@@ -122,8 +123,9 @@ describe('a card whose request failed', () => {
   it('offers a retry that asks again', async () => {
     const seen: string[] = []
     const restore = stubFailingReads(seen)
-    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
 
     const before = seen.filter((u) => u.includes('/series')).length
     const retry = container!.querySelector('.empty button') as HTMLButtonElement
@@ -141,16 +143,18 @@ describe('the remaining Dashboard cards', () => {
   // as one computed from thirty, and thin is the reader's only signal that it is not.
   it('draws no baseline band when the baseline is thin', async () => {
     const restore = stubFetch({ baseline: { center: 60, spread: 4, n: 3, thin: true } })
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
     expect(container!.querySelector('[data-baseline-band]')).toBeNull()
     restore()
   })
 
   it('draws the band when the baseline is not thin', async () => {
     const restore = stubFetch({ baseline: { center: 60, spread: 4, n: 28, thin: false } })
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
     expect(container!.querySelector('[data-baseline-band]')).not.toBeNull()
     restore()
   })
@@ -162,8 +166,9 @@ describe('the remaining Dashboard cards', () => {
     // whichever instance was created last as react-i18next's default, so a provider-less render
     // resolves the catalogue anyway once any other test in the file has mounted one, and the
     // assertion silently depended on this test running first.
-    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('No flagged days yet.')
     restore()
   })
@@ -176,8 +181,9 @@ describe('the remaining Dashboard cards', () => {
     const restore = stubFetch({ baseline: null })
     // Real interpolation needed here, unlike the other tests in this file: without an
     // I18nProvider, t() returns the raw key and the numbers this test reads never appear as text.
-    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
     const match = container!.textContent!.match(/(\d+) of (\d+) days worn/)
     expect(match).not.toBeNull()
     expect(Number(match![2])).toBeGreaterThan(1)
@@ -189,8 +195,9 @@ describe('the remaining Dashboard cards', () => {
   // month of real nights while the mean was never drawn at all.
   it('draws the sleep mean over rows whose coverage is null rather than calling the device unworn', async () => {
     const restore = stubFetch({ baseline: null })
-    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
     // 60 minutes is what the stub answers for every metric, so this string belongs to the one
     // card that formats its value as a duration.
     expect(container!.textContent).toContain('1h 00m')

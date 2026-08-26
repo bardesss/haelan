@@ -96,7 +96,7 @@ async function settledDashboard(lng: string): Promise<string> {
     <I18nProvider lng={lng}><QueryClientProvider client={client}><Dashboard /></QueryClientProvider></I18nProvider>
   )
   act(() => { root.render(tree) })
-  await flush(() => container.innerHTML)
+  await flush(client, () => container.innerHTML)
   const html = container.innerHTML
   act(() => { root.unmount() })
   container.remove()
