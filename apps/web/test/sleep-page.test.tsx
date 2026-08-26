@@ -144,6 +144,46 @@ function stubSleep(
 }
 
 /**
+ * Four nights per metric rather than stubSleep's one, so trend() has two halves to compare and the
+ * tiles' deltas actually render: with a single point it divides a one element slice against
+ * nothing and returns undefined, which is why no test in this file had ever seen a delta at all.
+ *
+ * The bedtime pair is 23:58 twice then 23:30 twice, in sleep_bedtime_minutes' own convention
+ * (minutes from the wake day's midnight, negative before it), which is a person going to bed
+ * earlier; the wake pair is 06:00 twice then 07:30 twice. Every other metric moves 400 to 440, a
+ * plain ten percent on a scale where a percentage means something.
+ */
+function stubSleepTrend(): () => void {
+  const original = globalThis.fetch
+  const DATES = ['2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15']
+  const seriesFor = (metric: string): number[] => {
+    if (metric === 'sleep_bedtime_minutes') return [-2, -2, -30, -30]
+    if (metric === 'sleep_waketime_minutes') return [360, 360, 450, 450]
+    return [400, 400, 440, 440]
+  }
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      return json(Object.fromEntries(metrics.map((metric) => [metric, {
+        points: seriesFor(metric).map((value, index) => ({
+          localDate: DATES[index], value, coverage: coverageFor(metric),
+          source: 'merged', sourceMix: null, updatedAtMs: 1_755_000_000_000,
+        })),
+        reduction: null,
+      }])))
+    }
+    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse())
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
  * Every metric gets stubSleep's usual 420 except sleep_nap_count, which gets `napCount` on its
  * own single day. napCount sums the same way sleep_nap_count's own card does (Sleep.tsx's
  * `napCountTotal`), so a stubbed value of 1 is the total the basis line pluralises on, not one
@@ -288,6 +328,32 @@ describe('the Sleep page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('1 dutje,')
     expect(container!.textContent).not.toContain('1 dutjes,')
+    restore()
+  })
+
+  // trend() is a percentage change between the period's two halves, which needs a scale where a
+  // ratio means something. sleep_bedtime_minutes is a clock offset from the wake day's midnight,
+  // negative before it, so a fortnight averaging 23:58 against one averaging 23:30 is a person
+  // going to bed half an hour earlier and came out of the tile as an up arrow reading 1400%.
+  // sleep_waketime_minutes shares the scale and is less absurd only by accident of sign.
+  //
+  // Every other stub in this file hands one point per metric, which makes trend() return undefined
+  // outright, so no test here could see the delta at all. This one hands four, and asserts a
+  // sibling tile on the same page still shows its delta: without that half, a page that had simply
+  // stopped rendering deltas anywhere would pass.
+  it('states no percentage change over a bedtime or a wake time, which are clock offsets', async () => {
+    const restore = stubSleepTrend()
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const cardFor = (label: string) => [...container!.querySelectorAll('.card')]
+      .find((card) => card.querySelector('.label')?.textContent === label)
+    for (const label of ['Bedtime', 'Wake time']) {
+      const card = cardFor(label)
+      expect(card, label).toBeDefined()
+      expect(card!.querySelector('.delta'), label).toBeNull()
+    }
+    expect(cardFor('Deep')!.querySelector('.delta')).not.toBeNull()
     restore()
   })
 

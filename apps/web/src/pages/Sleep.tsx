@@ -275,9 +275,18 @@ export function Sleep() {
   // tier, and the sleep family has no data type of its own to appear in it), so MetricCard's wear
   // branch can never fire for any card on this page, the same reasoning Recovery.tsx's own card()
   // states for its three metrics.
+  //
+  // `polarity` is nullable, and null means no delta at all rather than a delta with no good
+  // direction. trend() reports a percentage change between the period's two halves, which needs a
+  // scale where a ratio means something, and sleep_bedtime_minutes is not one: it is a clock offset
+  // from the wake day's midnight, negative before it ("-30 is not thirty minutes of anything, it is
+  // thirty minutes before midnight", packages/core/src/derive/metrics.ts). A fortnight averaging
+  // 23:58 against one averaging 23:30 is a person going to bed half an hour earlier and comes out
+  // of trend() as "up 1400%", arrow included. sleep_waketime_minutes is the same scale and less
+  // absurd only by accident of sign.
   const tile = (
     metric: string, span: number, label: string, basisKey: string, chartLabelKey: string,
-    value: string, unitKey: string, shortUnit: string | undefined, polarity: Polarity,
+    value: string, unitKey: string, shortUnit: string | undefined, polarity: Polarity | null,
     extra: Record<string, unknown> = {}, band?: { low: number, high: number },
   ) => {
     const points = metricGroups.pointsOf(metric)
@@ -286,7 +295,8 @@ export function Sleep() {
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
         {(basis) => (
-          <StatTile label={label} value={value} unit={shortUnit} basis={basis} delta={trend(t, values(points), polarity)}>
+          <StatTile label={label} value={value} unit={shortUnit} basis={basis}
+            delta={polarity === null ? undefined : trend(t, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band} />
           </StatTile>
@@ -371,10 +381,10 @@ export function Sleep() {
           'sleep.units.minutes', undefined, 'lower-is-better')}
         {tile('sleep_bedtime_minutes', 4, t('sleep.bedtimeMinutes.label'), 'sleep.bedtimeMinutes.basis',
           'sleep.bedtimeMinutes.chartLabel', formatClock(bedtimeMean), 'sleep.units.minutesFromMidnight', undefined,
-          'neutral')}
+          null)}
         {tile('sleep_waketime_minutes', 4, t('sleep.waketimeMinutes.label'), 'sleep.waketimeMinutes.basis',
           'sleep.waketimeMinutes.chartLabel', formatClock(waketimeMean), 'sleep.units.minutesFromMidnight', undefined,
-          'neutral')}
+          null)}
 
         {tile('sleep_nap_count', 6, t('sleep.napCount.label'), 'sleep.napCount.basis',
           'sleep.napCount.chartLabel', String(napCountTotal), 'sleep.units.naps', t('sleep.units.napsShort'),
