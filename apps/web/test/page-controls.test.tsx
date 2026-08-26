@@ -1,10 +1,12 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
 import { usePageControls } from '../src/controls/usePageControls.js'
 import type { PageControlsState } from '../src/controls/usePageControls.js'
 
@@ -26,6 +28,9 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  // A safety net rather than the primary reset: the clock test restores real timers itself, but
+  // an assertion failure there would otherwise leak a mocked clock into whatever test runs next.
+  vi.useRealTimers()
 })
 
 /** Mounts a tree and flushes effects. Every render in these tests goes through act. */
@@ -33,9 +38,22 @@ function mount(node: ReactNode): void {
   act(() => { root?.render(node) })
 }
 
-/** A client that does not retry, so a failed query surfaces in the test rather than after it. */
-function withQuery(node: ReactNode): ReactNode {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam',
+}
+
+/**
+ * A client that does not retry, so a failed query surfaces in the test rather than after it.
+ * Seeds the session directly, following shell-session.test.tsx's pattern, rather than letting
+ * useSession fetch: an unmocked fetch to /api/auth/me is not merely slow here, something on this
+ * machine actually answers on :3000, so a unit test would be making a real network call. Infinite
+ * staleTime matters here in a way it does not in shell-session.test.tsx: that file renders once
+ * with renderToStaticMarkup, which never runs effects, but these tests mount for real, so without
+ * it TanStack Query's refetch-on-mount would fire the same live fetch straight back in.
+ */
+function withQuery(node: ReactNode, session: Session = PERSON): ReactNode {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), session)
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
@@ -46,10 +64,8 @@ function Probe() {
   return null
 }
 
-// The session supplies the person's timezone. A stub client is enough: these tests are about the
-// URL round trip, not about fetching.
-function mountProbe(): void {
-  mount(withQuery(<Probe />))
+function mountProbe(session?: Session): void {
+  mount(withQuery(<Probe />, session))
 }
 
 describe('usePageControls', () => {
@@ -107,5 +123,18 @@ describe('usePageControls', () => {
     expect(seen!.source).toBe('watch')
     act(() => { seen!.setSource('merged') })
     expect(seen!.source).toBe('merged')
+  })
+
+  // Task 3 carried people.timezone all the way to the browser for exactly this default. Every
+  // other test in this file pins an explicit on=, so none of them would notice if the hook read
+  // the machine's zone instead of the session's. Honolulu and this machine's Amsterdam disagree
+  // about the date for part of the day, and the system clock is pinned so the test discriminates
+  // regardless of when it runs, rather than only on a run that happens to straddle midnight.
+  it("resolves an absent 'on' to the person's today, not the machine's", () => {
+    vi.setSystemTime(new Date('2026-08-15T23:30:00Z'))
+    window.history.replaceState(null, '', '/dashboard')
+    mountProbe({ ...PERSON, timezone: 'Pacific/Honolulu' })
+    expect(seen!.anchor).toBe('2026-08-15')
+    vi.useRealTimers()
   })
 })
