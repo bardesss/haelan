@@ -47,6 +47,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@haelan/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@haelan/tokens':
         specifier: workspace:*
         version: link:../../packages/tokens

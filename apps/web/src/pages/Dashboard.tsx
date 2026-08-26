@@ -1,4 +1,6 @@
 import { useMemo } from 'react'
+import { METRICS } from '@haelan/core/metrics'
+import type { DailyAgg } from '@haelan/core/metrics'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
@@ -52,16 +54,45 @@ import { formatClock, formatDuration, trend } from '../format.js'
 // resting_heart_rate; see the comment where they are read for why the sleep schedule card uses
 // these instead of /sleep/nights.
 //
-// apps/web does not depend on @haelan/core (BackfillStep.tsx documents the same boundary for the
-// intraday cap): that package's one export pulls in better-sqlite3 and argon2, native modules a
-// browser bundle cannot carry. So this mapping is written out here rather than imported, which
-// duplicates a fact the catalogue also states; it is confined to this one place instead of spread
-// across every card, and it is exactly the id-to-agg pairing above, nothing wider.
-const SUM_METRICS = ['steps', 'sleep_asleep_minutes'] as const
-const LAST_METRICS = ['resting_heart_rate', 'sleep_bedtime_minutes', 'sleep_waketime_minutes'] as const
-const MEAN_METRICS = ['heart_rate'] as const
-const MIN_METRICS = ['heart_rate'] as const
-const MAX_METRICS = ['heart_rate'] as const
+// Which agg a card shows is this page's decision, so REQUESTS is declared here: the catalogue
+// says which aggs a metric HAS rows under, never which of them a given card is SHOWING, and
+// heart_rate carries five while three separate cards want three of them. What the catalogue does
+// settle is whether a pairing is answerable at all, and `under` below is where that is asked.
+export const REQUESTS = {
+  sum: ['steps', 'sleep_asleep_minutes'],
+  last: ['resting_heart_rate', 'sleep_bedtime_minutes', 'sleep_waketime_minutes'],
+  mean: ['heart_rate'],
+  min: ['heart_rate'],
+  max: ['heart_rate'],
+} as const satisfies Partial<Record<DailyAgg, readonly string[]>>
+
+/**
+ * The metrics to actually put on the wire under one agg, filtered against the catalogue.
+ *
+ * This page used to restate the catalogue instead ("steps and sleep_asleep_minutes are TOTAL
+ * metrics, resting_heart_rate is a once-a-day reading"), because apps/web could not depend on
+ * @haelan/core at all: its one export reached better-sqlite3 and argon2 through the barrel, native
+ * modules no browser bundle can carry. @haelan/core/metrics is the second entry point that ended
+ * that, and reading the real thing matters more here than tidiness does. /series takes one agg for
+ * a whole call and rejects the call outright if any metric in it has no rows under that agg, so an
+ * unanswerable pairing does not cost one card its number: it 500s the request and blanks every
+ * card riding along with it, three of them in the 'last' group. Dropping the pair here keeps the
+ * request valid and leaves the one bad card to fall through to its own empty state, which is a
+ * failure this page knows how to render.
+ *
+ * It should never come to that: dashboard-metrics.test.ts holds every pairing above to the
+ * catalogue, so a metric renamed or an agg dropped upstream is a red test rather than a card that
+ * quietly went blank.
+ */
+function under(agg: keyof typeof REQUESTS): string[] {
+  return REQUESTS[agg].filter((metric) => METRICS[metric]?.aggs.includes(agg) ?? false)
+}
+
+const SUM_METRICS = under('sum')
+const LAST_METRICS = under('last')
+const MEAN_METRICS = under('mean')
+const MIN_METRICS = under('min')
+const MAX_METRICS = under('max')
 
 // One array for every prop and every fallback that is deliberately empty. A fresh [] on every
 // render gives the chart's `build` callback a new identity, which useChart reads as "rebuild", so
@@ -143,9 +174,12 @@ function datesBetween(from: string, to: string): string[] {
   return dates
 }
 
-// Mirrors packages/core/src/derive/localDay.ts's localMinutesOf, the one piece of that file the
-// sleep charts need: minutes from the local midnight of `localDate`, negative before it. Not
-// imported for the same reason the agg map above is not: apps/web cannot depend on @haelan/core.
+// Minutes from the local midnight of `localDate`, negative before it: the convention
+// packages/core/src/derive/localDay.ts sets and sleep_bedtime_minutes is stored in. Written here
+// rather than imported because core has no such function to import; localDay.ts computes local
+// dates and hours, not this offset. It is also not reachable: `metrics` is the only browser safe
+// subpath @haelan/core publishes, and localDay.ts, pure though it is, has no entry point of its
+// own yet.
 function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number): number {
   const wall = utcMs + offsetMinutes * 60_000
   return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / 60_000)
@@ -276,10 +310,13 @@ export function Dashboard() {
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
 
+  // Keyed off REQUESTS rather than the filtered lists above, so this stays total: a card whose
+  // pairing `under` dropped still resolves to the query its group would have ridden in, finds no
+  // series under its own name there, and renders its empty state instead of throwing.
   const groups = [
-    { metrics: SUM_METRICS as readonly string[], query: sumSeries },
-    { metrics: LAST_METRICS as readonly string[], query: lastSeries },
-    { metrics: MEAN_METRICS as readonly string[], query: meanSeries },
+    { metrics: REQUESTS.sum as readonly string[], query: sumSeries },
+    { metrics: REQUESTS.last as readonly string[], query: lastSeries },
+    { metrics: REQUESTS.mean as readonly string[], query: meanSeries },
   ]
   const queryFor = (metric: string) => groups.find((g) => g.metrics.includes(metric))!.query
 

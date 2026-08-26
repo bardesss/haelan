@@ -10,6 +10,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@haelan/core": "workspace:*",
     "@haelan/tokens": "workspace:*",
     "@tanstack/react-query": "^5.102.0",
     "echarts": "^6.1.0",
