@@ -1,0 +1,94 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { I18nProvider } from '../src/i18n/index.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
+import { ControlRow } from '../src/components/ControlRow.js'
+import type { PageControlsState } from '../src/controls/usePageControls.js'
+import { syncStatusKey } from '../src/data/useSyncStatus.js'
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+/**
+ * Mounts a tree and flushes effects, wrapped in a real I18nProvider rather than the
+ * renderToStaticMarkup pattern the rest of the suite uses for static copy: this component sets
+ * real click and change handlers, and those only exist once the tree is mounted for real.
+ */
+function mount(node: ReactNode): void {
+  act(() => { root?.render(<I18nProvider lng="en">{node}</I18nProvider>) })
+}
+
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam',
+}
+
+/**
+ * ControlRow now reads the session and the sync status through TanStack Query, so it needs a
+ * client in the tree the way it did not before Task 12. Both are seeded directly, following
+ * dashboard-round-trip.test.tsx's pattern, rather than left to fetch: an unmocked fetch to either
+ * route would be a real network call in this environment, not merely a slow one. The sync status
+ * seed also keeps the button enabled for the test below that clicks it.
+ */
+function withQuery(node: ReactNode): ReactNode {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), PERSON)
+  client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+}
+
+function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
+  return {
+    tab: 'month', anchor: '2026-08-15', source: 'merged',
+    from: '2026-08-01', to: '2026-08-31',
+    setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
+    ...over,
+  }
+}
+
+describe('the control row actions', () => {
+  it('posts to the sync route when sync is clicked', async () => {
+    const posted: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') posted.push(String(input))
+      return new Response('{}', { status: 202, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />))
+    const sync = container!.querySelector('.button-primary') as HTMLButtonElement
+    act(() => { sync.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await Promise.resolve() })
+
+    globalThis.fetch = original
+    expect(posted).toEqual(['/api/sync/run'])
+  })
+
+  // The export route answers a file. A link is the right element for that: it needs no fetch, no
+  // blob and no object URL, and the browser's own download handling does the rest.
+  it('offers raw download as a link to the export route, carrying the current range', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4}
+      exportPath="/api/v1/p/p1/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-31" />))
+    const link = container!.querySelector('a[href*="/export"]') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toContain('format=csv')
+    expect(link.getAttribute('href')).toContain('from=2026-08-01')
+  })
+})

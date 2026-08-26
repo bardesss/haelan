@@ -1,7 +1,11 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { RANGE_KEYS } from '../controls/range.js'
 import type { PageControlsState } from '../controls/usePageControls.js'
+import { apiSend } from '../api/client.js'
+import { useSession } from '../auth/session.js'
+import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
 
 /**
  * A link can name a source this person does not have, and a source can be removed after a link
@@ -19,13 +23,28 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: 
   controls: PageControlsState
   sources: string[]
   syncedMinutesAgo: number
-  // Unread until Task 12 wires the download button to it. Declared now so that landing it later
-  // is not a breaking change to every call site and every test written against this shape.
+  // Optional rather than required: Sleep.tsx (still fixture backed) has no real range to build one
+  // from yet and renders the download link with no href, same as a page with no export to offer.
   exportPath?: string
 }) {
   const { t } = useTranslation()
   const options = ['merged', ...sources]
   const selected = resolveSource(controls.source, options)
+
+  const session = useSession()
+  const personId = session.data?.personId
+  const queryClient = useQueryClient()
+  const status = useSyncStatus()
+  // tryStart on the server takes the mutex synchronously and answers before the run finishes
+  // (routes/sync.ts, runner.ts's tryStart), so this mutation's own pending state is only the
+  // moment of that one request, not the run it kicks off. status.data?.running, refreshed by the
+  // invalidation below, is what actually disables the button for the run's whole duration.
+  const runSync = useMutation({
+    mutationFn: () => apiSend('POST', '/api/sync/run'),
+    onSuccess: () => {
+      if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: syncStatusKey(personId) })
+    },
+  })
 
   return (
     <div className="controls">
@@ -60,8 +79,14 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: 
             ))}
           </select>
         </label>
-        <button type="button" className="button"><Icon name="download" />{t('controlRow.downloadRaw')}</button>
-        <button type="button" className="button button-primary"><Icon name="sync" />{t('controlRow.sync')}</button>
+        {/* A link, not a fetch: the export route answers a file and the browser already knows how
+            to save one, so there is no blob and no object URL for this component to manage. */}
+        <a className="button" href={exportPath}><Icon name="download" />{t('controlRow.downloadRaw')}</a>
+        <button type="button" className="button button-primary"
+          disabled={runSync.isPending || status.data?.running === true}
+          onClick={() => runSync.mutate()}>
+          <Icon name="sync" />{t('controlRow.sync')}
+        </button>
         <span className="synced">{t('controlRow.syncedAgo', { count: syncedMinutesAgo })}</span>
       </div>
     </div>

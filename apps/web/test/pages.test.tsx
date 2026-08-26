@@ -5,11 +5,13 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { I18nProvider } from '../src/i18n/index.js'
 
-// Dashboard now reads usePageControls and useSeries, both of which call useSession underneath,
-// so it needs a QueryClient in the tree the way Sleep (still fixture backed) does not. A fresh,
-// empty client rather than a seeded one: renderToStaticMarkup never waits on a promise, so
-// leaving the session query unresolved and the series query disabled is what a server render of
-// this page actually sees, not an approximation of it.
+// Dashboard reads usePageControls and useSeries, both of which call useSession underneath, so it
+// needs a QueryClient in the tree. Sleep is still fixture backed and does not read either, but its
+// ControlRow (Task 12) now reads the session and the sync status itself regardless of what page
+// renders it, so it needs one too. A fresh, empty client rather than a seeded one:
+// renderToStaticMarkup never waits on a promise, so leaving the session query unresolved and the
+// series query disabled is what a server render of these pages actually sees, not an
+// approximation of it.
 const withQuery = (node: React.ReactNode) => (
   <QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>
 )
@@ -21,7 +23,7 @@ const withQuery = (node: React.ReactNode) => (
 // Dutch machine would render Dutch and break every literal-text assertion below.
 const pages = {
   Dashboard: renderToStaticMarkup(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>),
-  Sleep: renderToStaticMarkup(<I18nProvider lng="en"><Sleep /></I18nProvider>),
+  Sleep: renderToStaticMarkup(<I18nProvider lng="en">{withQuery(<Sleep />)}</I18nProvider>),
 }
 
 describe.each(Object.entries(pages))('%s', (_name, html) => {
@@ -68,7 +70,7 @@ describe('chart tables follow the active language', () => {
   // Every chart's accessible table used to be built from English literals regardless of the
   // active language, which meant a Dutch screen reader user got an English table on both pages.
   const dashboardNl = renderToStaticMarkup(<I18nProvider lng="nl">{withQuery(<Dashboard />)}</I18nProvider>)
-  const sleepNl = renderToStaticMarkup(<I18nProvider lng="nl"><Sleep /></I18nProvider>)
+  const sleepNl = renderToStaticMarkup(<I18nProvider lng="nl">{withQuery(<Sleep />)}</I18nProvider>)
 
   it('translates column headers, weekday labels and absence words', () => {
     expect(dashboardNl).toContain('Datum')

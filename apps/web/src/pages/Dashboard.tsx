@@ -1,3 +1,4 @@
+import type { UseQueryResult } from '@tanstack/react-query'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
@@ -11,11 +12,13 @@ import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { deepLink } from '../controls/deepLink.js'
 import { Link } from '../router.js'
+import { useSession } from '../auth/session.js'
 import { useSeries } from '../data/useSeries.js'
-import type { SeriesPoint } from '../data/useSeries.js'
+import type { MetricSeries, SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
+import { useSyncStatus } from '../data/useSyncStatus.js'
 import { emptyStateFor } from '../data/emptyState.js'
 import type { EmptyStateKind } from '../data/emptyState.js'
 import { formatClock, formatDuration, trend } from '../format.js'
@@ -60,6 +63,56 @@ const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
+
+// sourceMix is nullable, and when present is JSON this app did not itself just produce
+// (packages/core/src/derive/merge.ts's encodeMix writes it, but a row from an older mapping
+// version or a hand edited value is just a string as far as this reads it): a malformed value
+// must not take the page down over what is, at worst, a temporarily incomplete source list.
+function sourcesIn(raw: string | null): string[] {
+  if (raw === null) return []
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return []
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((entry) => (entry !== null && typeof entry === 'object' ? (entry as { source?: unknown }).source : undefined))
+    .filter((source): source is string => typeof source === 'string')
+}
+
+// The device names offered in the control row's source selector, read off data this page already
+// fetches rather than a route of its own: sourceMix (merge.ts's encodeMix) records which devices
+// contributed to each merged row, so every source this person has shows up in it somewhere as
+// long as at least one point on the page is a merged row.
+function distinctSources(queries: readonly UseQueryResult<Record<string, MetricSeries>>[]): string[] {
+  const found = new Set<string>()
+  for (const query of queries) {
+    for (const series of Object.values(query.data ?? {})) {
+      for (const point of series.points) {
+        for (const source of sourcesIn(point.sourceMix)) found.add(source)
+      }
+    }
+  }
+  return [...found].sort()
+}
+
+// The one download link the control row offers, built from the same SUM_METRICS group the steps
+// and sleep tiles read. /export takes exactly one `agg` per call, the same restriction /series has
+// (requireMetricAndAgg in packages/core/src/query/personQuery.ts), so one link cannot carry the
+// five aggs this page fetches across; the primary totals are the ones a reader downloading "the
+// raw numbers behind this page" is most likely to mean.
+function exportPathFor(personId: string, range: { from: string, to: string, source: string }): string {
+  const params = new URLSearchParams()
+  for (const metric of SUM_METRICS) params.append('metric', metric)
+  params.set('format', 'csv')
+  params.set('agg', 'sum')
+  params.set('from', range.from)
+  params.set('to', range.to)
+  params.set('source', range.source)
+  return `/api/v1/p/${personId}/export?${params.toString()}`
+}
 
 // Every calendar date from `from` to `to`, inclusive. /series and /sleep/nights both drop a day
 // entirely rather than sending a null row for it (see useSeries.ts and useNights.ts), so a chart
@@ -150,6 +203,7 @@ function oneNightPerDate(items: readonly Night[]): Night[] {
 
 export function Dashboard() {
   const { t, i18n } = useTranslation()
+  const session = useSession()
   const controls = usePageControls()
   const range = { from: controls.from, to: controls.to, source: controls.source }
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
@@ -166,6 +220,17 @@ export function Dashboard() {
   // the same way it would for /series.
   const hrBaseline = useBaseline('heart_rate', controls.anchor, controls.source, 'mean')
   const nights = useNights(range)
+  const syncStatus = useSyncStatus()
+
+  // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago":
+  // nothing synced yet reads as 0, the same value this literally was before Task 12 wired it,
+  // rather than a special case this card has no copy for.
+  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
+    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
+    : 0
+  const sources = distinctSources([sumSeries, lastSeries, meanSeries, minHrSeries, maxHrSeries])
+  const personId = session.data?.personId
+  const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
 
   const groups = [
     { metrics: SUM_METRICS as readonly string[], query: sumSeries },
@@ -341,7 +406,7 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow controls={controls} sources={[]} syncedMinutesAgo={0} />
+      <ControlRow controls={controls} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
         <Card span={3}>
           {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.chartLabel', 'dashboard.units.steps',
