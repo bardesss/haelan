@@ -11,7 +11,9 @@ import { signOutAndResetSession } from '../src/auth/signOutRequest.js'
 
 afterEach(() => { vi.unstubAllGlobals() })
 
-const PERSON: Session = { personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false }
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam',
+}
 
 // Seeds the session query into the exact cache shape TanStack Query leaves behind after a
 // successful fetch followed by a failed refetch: state.data survives, status flips to 'error'.

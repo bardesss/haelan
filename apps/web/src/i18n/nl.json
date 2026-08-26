@@ -29,10 +29,16 @@
     },
     "previousPeriod": "Vorige periode",
     "nextPeriod": "Volgende periode",
+    "pickDate": "Kies een datum",
     "sources": "Bronnen",
-    "downloadRaw": "Ruwe data downloaden",
+    "sourceMerged": "Alle bronnen",
+    "downloadTotals": "Dagtotalen downloaden",
     "sync": "Synchroniseren",
-    "syncedAgo": "Gesynchroniseerd {{count}} min geleden"
+    "syncedAgo": "Gesynchroniseerd {{count}} min geleden",
+    "neverSynced": "Nog nooit gesynchroniseerd",
+    "syncUnknown": "Synchronisatiestatus onbekend",
+    "syncAlreadyRunning": "Er loopt al een synchronisatie.",
+    "syncFailed": "Synchroniseren is niet gestart."
   },
   "sidebar": {
     "sectionsLabel": "Secties",
@@ -55,13 +61,23 @@
     "periodLabel": "juli 2026",
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
-    "julyAbbrev": "jul",
     "to": "tot",
+    "loading": "Laden",
     "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
     "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
     "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
     "deviceNotWorn": "Het apparaat werd niet gedragen.",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
+  },
+  "errorState": {
+    "title": "Dit kon niet worden geladen.",
+    "detail": "De instantie gaf een foutmelding, dus hier valt niets te tekenen. Dat zegt niets over jouw gegevens.",
+    "retry": "Opnieuw proberen"
+  },
+  "emptyState": {
+    "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
+    "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
+    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -73,32 +89,48 @@
     },
     "steps": {
       "label": "Stappen",
-      "basis": "som, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse stappen in {{period}}"
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "som, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse stappen in {{period}}",
+      "viewAll": "Bekijk activiteit"
     },
     "restingHr": {
       "label": "Rusthartslag",
-      "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse rusthartslag in {{period}}"
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse rusthartslag in {{period}}",
+      "viewAll": "Bekijk herstel"
     },
     "sleep": {
       "label": "Slaap",
-      "basis": "gemiddelde, {{worn}} van {{total}} nachten, {{unworn}} nachten niet gedragen",
-      "chartLabel": "Nachtelijke slaapduur in {{period}}"
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
+      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} nachten, {{count}} nacht niet gedragen",
+      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} nachten, {{count}} nachten niet gedragen",
+      "chartLabel": "Nachtelijke slaapduur in {{period}}",
+      "viewAll": "Bekijk slaap"
     },
     "meanHr": {
       "label": "Gemiddelde hartslag",
-      "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}"
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
+      "viewAll": "Bekijk herstel"
     },
     "heartRateRange": {
       "label": "Hartslagbereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline van 60 dagen",
+      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
+      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
+      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
+      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
-      "basis": "{{count}} van {{total}} dagen gemarkeerd, geannoteerd op de hartslaggrafiek"
+      "emptyTitle": "Nog geen gemarkeerde dagen.",
+      "emptyDetail": "Gemarkeerde dagen lezen getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
     },
     "sleepStages": {
       "label": "Slaapfasen",
@@ -106,7 +138,8 @@
       "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
     },
     "sleepSchedule": {
-      "label": "Slaapschema"
+      "label": "Slaapschema",
+      "basis": "bedtijd en waaktijd, {{nights}} nachten"
     },
     "dailySteps": {
       "label": "Dagelijkse stappen",
@@ -120,9 +153,8 @@
     },
     "anomalies": {
       "label": "Slaapafwijkingen",
-      "emptyTitle": "Geen nachten met nul geregistreerde slaap in juli.",
-      "emptyDetail": "Gecontroleerd: {{worn}} van {{total}} nachten werd het apparaat gedragen. De overige {{unworn}} nachten hebben helemaal geen meting, wat een ander soort gat is.",
-      "summary": "{{count}} van {{worn}} gedragen nachten registreerden nul minuten slaap: {{dates}}."
+      "emptyTitle": "Nog geen afwijkingsdetectie.",
+      "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
     }
   },
   "charts": {

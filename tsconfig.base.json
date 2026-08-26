@@ -6,6 +6,13 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // Nothing in this repo consumes tsc's output: the web app is built by Vite and the server
+    // runs its TypeScript directly. An emit is therefore always an accident, and a costly one,
+    // because every import here names a .js file. A stray tsc run drops a compiled snapshot
+    // beside each source, module resolution prefers it, and tests then assert against code that
+    // is however many edits out of date. packages/core and apps/server already set this; putting
+    // it in the base means a new package cannot forget it.
+    "noEmit": true
   }
 }

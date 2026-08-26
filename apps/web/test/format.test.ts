@@ -34,6 +34,16 @@ describe('formatClock', () => {
     expect(formatClock(23 * 60 + 30)).toBe('23:30')
     expect(formatClock(25 * 60)).toBe('01:00')
   })
+
+  // A bedtime is measured from the midnight of the morning the night ended, so an 23:20 bedtime
+  // arrives here as -40. Dashboard.tsx's inWindow keeps that page away from this case; nothing
+  // stops the next caller, and the answer used to be the string "-1:-40".
+  it('reads a minute before midnight as an evening clock time, not as a negative', () => {
+    expect(formatClock(-40)).toBe('23:20')
+    expect(formatClock(-1)).toBe('23:59')
+    expect(formatClock(-24 * 60)).toBe('00:00')
+    expect(formatClock(-25 * 60)).toBe('23:00')
+  })
 })
 
 describe('tone', () => {
@@ -68,7 +78,7 @@ describe('trend', () => {
     const { t, calls } = stubT()
     const d = trend(t, [1, 1, 1, 2, 2, 2], 'higher-is-better')
     expect(calls).toEqual([['common.trendBasis', { recent: 3, earlier: 3 }]])
-    expect(d.basis).toBe('t(common.trendBasis)')
+    expect(d!.basis).toBe('t(common.trendBasis)')
   })
 
   it('reports direction and tone as separate facts', () => {
@@ -80,6 +90,31 @@ describe('trend', () => {
 
   it('calls a swing under one per cent flat', () => {
     const { t } = stubT()
-    expect(trend(t, [100, 100, 100, 100.5]).dir).toBe('flat')
+    expect(trend(t, [100, 100, 100, 100.5])!.dir).toBe('flat')
+  })
+
+  // The day range yields exactly one point per card, and an empty series reaches the same
+  // slice() before any data has loaded. Both hand the split an empty first half, and 0 reduced
+  // over nothing divided by a length of zero is NaN before either mean is compared, not after.
+  it('reports no delta for zero or one values, rather than a delta reading NaN%', () => {
+    const { t } = stubT()
+    expect(trend(t, [])).toBeUndefined()
+    expect(trend(t, [42])).toBeUndefined()
+  })
+
+  // A first half that legitimately averages to zero, a real reading rather than a gap, divides
+  // by that zero and prints Infinity% instead of NaN%; same defect, different arithmetic route.
+  it('reports no delta when the earlier half is zero, rather than a delta reading Infinity%', () => {
+    const { t } = stubT()
+    expect(trend(t, [0, 0, 5, 5])).toBeUndefined()
+  })
+
+  // The fix lives in one finite check after pct is computed, so this pins the ordinary path
+  // (two or more values, a non-zero earlier half) to prove that check did not also swallow it.
+  it('still reports a delta for two or more values with a non-zero earlier half', () => {
+    const { t } = stubT()
+    const d = trend(t, [1, 1, 1, 2, 2, 2], 'higher-is-better')
+    expect(d).not.toBeUndefined()
+    expect(d).toMatchObject({ dir: 'up', tone: 'good' })
   })
 })

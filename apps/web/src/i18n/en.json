@@ -29,10 +29,16 @@
     },
     "previousPeriod": "Previous period",
     "nextPeriod": "Next period",
+    "pickDate": "Pick a date",
     "sources": "Sources",
-    "downloadRaw": "Download raw",
+    "sourceMerged": "All sources",
+    "downloadTotals": "Download daily totals",
     "sync": "Sync",
-    "syncedAgo": "Synced {{count}} min ago"
+    "syncedAgo": "Synced {{count}} min ago",
+    "neverSynced": "Never synced",
+    "syncUnknown": "Sync status unknown",
+    "syncAlreadyRunning": "A sync is already running.",
+    "syncFailed": "Sync did not start."
   },
   "sidebar": {
     "sectionsLabel": "Sections",
@@ -55,13 +61,23 @@
     "periodLabel": "July 2026",
     "bedLabel": "Bed {{time}}",
     "bedTimeNotRecorded": "Bed time not recorded",
-    "julyAbbrev": "Jul",
     "to": "to",
+    "loading": "Loading",
     "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
     "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
     "deviceNotWorn": "Device was not worn.",
     "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}"
+  },
+  "errorState": {
+    "title": "This did not load.",
+    "detail": "The instance answered with an error, so there is nothing to draw here. That is not a statement about your record.",
+    "retry": "Try again"
+  },
+  "emptyState": {
+    "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
+    "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
+    "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -73,32 +89,48 @@
     },
     "steps": {
       "label": "Steps",
-      "basis": "sum, {{worn}} of {{total}} days, {{unworn}} days not worn",
-      "chartLabel": "Daily steps through {{period}}"
+      "basis": "sum, {{reported}} of {{total}} days",
+      "basisWorn_one": "sum, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "sum, {{worn}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily steps through {{period}}",
+      "viewAll": "View activity"
     },
     "restingHr": {
       "label": "Resting heart rate",
-      "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
-      "chartLabel": "Daily resting heart rate through {{period}}"
+      "basis": "mean, {{reported}} of {{total}} days",
+      "basisWorn_one": "mean, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "mean, {{worn}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily resting heart rate through {{period}}",
+      "viewAll": "View recovery"
     },
     "sleep": {
       "label": "Sleep",
-      "basis": "mean, {{worn}} of {{total}} nights, {{unworn}} nights not worn",
-      "chartLabel": "Nightly sleep duration through {{period}}"
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "basisWorn_one": "mean, {{worn}} of {{total}} nights, {{count}} night not worn",
+      "basisWorn_other": "mean, {{worn}} of {{total}} nights, {{count}} nights not worn",
+      "chartLabel": "Nightly sleep duration through {{period}}",
+      "viewAll": "View sleep"
     },
     "meanHr": {
       "label": "Mean heart rate",
-      "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
-      "chartLabel": "Daily mean heart rate through {{period}}"
+      "basis": "mean, {{reported}} of {{total}} days",
+      "basisWorn_one": "mean, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "mean, {{worn}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily mean heart rate through {{period}}",
+      "viewAll": "View recovery"
     },
     "heartRateRange": {
       "label": "Heart rate range",
-      "basis": "daily minimum, mean and maximum, shaded band is the 60 day baseline",
+      "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",
+      "basisThin": "daily minimum, mean and maximum; the baseline from the 60 days before {{on}} is too thin to draw a band from",
+      "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
+      "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
       "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
     },
     "flaggedDays": {
       "label": "Flagged days",
-      "basis": "{{count}} of {{total}} days flagged, annotated on the heart rate chart"
+      "emptyTitle": "No flagged days yet.",
+      "emptyDetail": "Flagged days read typed events, which nothing connected reports yet."
     },
     "sleepStages": {
       "label": "Sleep stages",
@@ -106,7 +138,8 @@
       "chartLabel": "Sleep stages through the night of {{date}}"
     },
     "sleepSchedule": {
-      "label": "Sleep schedule"
+      "label": "Sleep schedule",
+      "basis": "bed and wake time, {{nights}} nights"
     },
     "dailySteps": {
       "label": "Daily steps",
@@ -120,9 +153,8 @@
     },
     "anomalies": {
       "label": "Sleep anomalies",
-      "emptyTitle": "No nights with zero recorded sleep in July.",
-      "emptyDetail": "Checked {{worn}} of {{total}} nights the device was worn. The remaining {{unworn}} nights have no reading at all, which is a different kind of gap.",
-      "summary": "{{count}} of {{worn}} worn nights recorded zero minutes of sleep: {{dates}}."
+      "emptyTitle": "No anomaly detection yet.",
+      "emptyDetail": "Anomaly detection reads typed events, which nothing connected reports yet."
     }
   },
   "charts": {

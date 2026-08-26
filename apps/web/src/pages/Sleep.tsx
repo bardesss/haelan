@@ -4,6 +4,7 @@ import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import type { PageControlsState } from '../controls/usePageControls.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
 import { july } from '../fixtures/july.js'
@@ -39,11 +40,28 @@ function baselineDelta(t: Translate, minutes: number, low: number, high: number)
 export function Sleep() {
   const { t } = useTranslation()
   const period = t('common.periodLabel')
+  const dayLabel = lastDay?.date ?? ''
+  // This page is still fixture data for a fixed night, not wired to usePageControls, so its row
+  // is a static stand-in with no-op setters rather than the live hook: the hook reads the URL
+  // through useSession, which needs a QueryClientProvider this page's own tests do not set up,
+  // and wiring the two together for real is a later task.
+  const controls: PageControlsState = {
+    tab: 'day', anchor: dayLabel || '2026-07-31', source: 'merged',
+    from: dayLabel, to: dayLabel,
+    setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
+  }
 
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
-      <ControlRow range="day" label={lastDay?.date ?? ''} sources="2/2" syncedMinutesAgo={12} />
+      {/* The row beneath this one is still fixture data for July regardless of what range or
+          source gets picked here; wiring the two together is a later task. Sources is empty
+          rather than invented device names, since this page has no real source list yet.
+          canSync is false and there is no export path, because both of those controls do
+          something real: the sync button posts and starts an actual run, and the synced label
+          claims a time. A page that cannot honour the range it is handed should not be offering
+          them, and "Synced 12 min ago" was a hardcoded number besides. */}
+      <ControlRow controls={controls} sources={[]} syncedMinutesAgo={null} canSync={false} />
       <div className="grid">
         <Card span={4}>
           {lastDay?.sleepMinutes != null ? (

@@ -80,7 +80,21 @@ describe('auth', () => {
     })
     expect(response.json()).toEqual({
       personId: 'p1', displayName: 'Bartus', username: 'bartus', isAdmin: true,
+      timezone: 'Europe/Amsterdam',
     })
+  })
+
+  // Every local date in this system is the person's, not the viewer's. The browser needs the
+  // person's zone to work out which day "today" is, and a laptop in another timezone must not
+  // change which day a page opens on.
+  it('returns the person timezone, so the browser can resolve the person own today', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().timezone).toBe('Europe/Amsterdam')
   })
 
   it('makes logout immediate rather than eventual', async () => {

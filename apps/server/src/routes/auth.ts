@@ -110,6 +110,8 @@ export function registerAuth(app: FastifyInstance): void {
       displayName: person?.displayName ?? account.username,
       username: account.username,
       isAdmin: account.isAdmin,
+      // The browser resolves the person's today from this rather than from its own clock's zone.
+      timezone: person?.timezone ?? 'UTC',
     })
   })
 }
