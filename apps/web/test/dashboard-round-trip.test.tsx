@@ -103,7 +103,14 @@ describe('the Dashboard round trip', () => {
     restore()
   })
 
-  it('asks for every card metric in one request rather than one per card', async () => {
+  // Not "one request for every card metric": /series takes exactly one agg for the whole call,
+  // and the four cards need three different ones (steps and sleep_asleep_minutes share sum,
+  // resting_heart_rate needs last, heart_rate needs mean), so one shared request would ask at
+  // least two of them for an agg their own catalogue entry refuses and 500 the lot. What batching
+  // by agg actually buys is fewer requests than cards: metrics that share an agg ride together,
+  // so this is three requests for four cards, not four, and one of the three carries more than
+  // one metric.
+  it('batches by shared agg rather than firing one request per card', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
@@ -112,8 +119,9 @@ describe('the Dashboard round trip', () => {
     await act(async () => { await Promise.resolve() })
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
-    expect(seriesCalls).toHaveLength(1)
-    expect(seriesCalls[0]!.match(/metric=/g)!.length).toBeGreaterThan(1)
+    expect(seriesCalls.length).toBeLessThan(4)
+    expect(seriesCalls).toHaveLength(3)
+    expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
     restore()
   })
 
