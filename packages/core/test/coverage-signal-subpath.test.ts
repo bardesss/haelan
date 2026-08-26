@@ -27,6 +27,17 @@ describe('the @haelan/core/coverage-signal subpath', () => {
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
   })
 
+  it('imports nothing from coverageSignal.ts itself but the catalogue', () => {
+    // The entry point the subpath actually resolves to, not a file one hop further in. Vitest
+    // runs under Node, where better-sqlite3 loads without complaint, so a stray import added
+    // straight into coverageSignal.ts (the file a future author would actually edit) would sail
+    // through every other test in this suite and only break the bundle, silently. This is the
+    // one check standing between an edit here and that failure mode.
+    const signalSource = read('../src/query/coverageSignal.ts')
+    const importLines = [...signalSource.matchAll(/^import\s.*$/gm)].map((m) => m[0])
+    expect(importLines).toEqual(["import { DATA_TYPES } from '../api/catalogue.ts'"])
+  })
+
   it('reaches catalogue.ts through nothing but an erased type import', () => {
     const catalogueSource = read('../src/api/catalogue.ts')
     const importLines = [...catalogueSource.matchAll(/^import\s.*$/gm)].map((m) => m[0])
