@@ -13,19 +13,21 @@ let test: TestDatabase
 beforeEach(() => {
   test = createTestDatabase()
   seedPerson(test.db, 'p1')
-  test.db.insert(sources).values({
-    id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch',
-    kind: 'device', createdAtMs: 0,
-  }).run()
+  for (const id of ['watch', 'phone']) {
+    test.db.insert(sources).values({
+      id, personId: 'p1', externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
+    }).run()
+  }
 })
 afterEach(() => test.cleanup())
 
 // One helper taking a kind, rather than two near copies of an insert for sleep and for exercise.
 const rawInsertSession = (o: {
   id: string, kind: SessionKind, startMs: number, endMs: number, localDate: string, attrs?: unknown,
+  sourceId?: string,
 }) =>
   test.db.insert(sessions).values({
-    id: o.id, personId: 'p1', sourceId: 'watch', kind: o.kind, externalId: o.id,
+    id: o.id, personId: 'p1', sourceId: o.sourceId ?? 'watch', kind: o.kind, externalId: o.id,
     startMs: o.startMs, startOffsetMinutes: 120, endMs: o.endMs, endOffsetMinutes: 120,
     localDate: o.localDate, attrs: JSON.stringify(o.attrs ?? { mainSleep: true }), rawPayloadId: null,
   }).run()
@@ -33,7 +35,9 @@ const rawInsertSession = (o: {
 const insertSession = (o: { id: string, startMs: number, endMs: number, localDate: string }) =>
   rawInsertSession({ ...o, kind: 'sleep' })
 
-const insertExercise = (o: { id: string, startMs: number, endMs: number, localDate: string, attrs?: unknown }) =>
+const insertExercise = (o: {
+  id: string, startMs: number, endMs: number, localDate: string, attrs?: unknown, sourceId?: string,
+}) =>
   rawInsertSession({ ...o, kind: 'exercise', attrs: o.attrs ?? {} })
 
 describe('readSessions', () => {
@@ -92,5 +96,26 @@ describe('readSessions', () => {
 
     const out = readSessions(test.db, { personId: 'p1', kind: 'exercise', from: '2026-08-21', to: '2026-08-21' })
     expect(out[0]?.attrs).toBeNull()
+  })
+
+  // Two devices can each report an exercise session in the same range. Choosing between sources
+  // is the derive layer's job; this reader keeps every source's rows separate and lets a caller
+  // ask for one with sourceId, the same contract readIntraday and readSleepNights already give.
+  it('filters to the requested source rather than every device in range', () => {
+    insertExercise({ id: 'watch-run', startMs: BEDTIME - 4 * H, endMs: BEDTIME - 3 * H, localDate: '2026-08-21', sourceId: 'watch' })
+    insertExercise({ id: 'phone-run', startMs: BEDTIME - 2 * H, endMs: BEDTIME - H, localDate: '2026-08-21', sourceId: 'phone' })
+
+    const out = readSessions(test.db, {
+      personId: 'p1', kind: 'exercise', from: '2026-08-21', to: '2026-08-21', sourceId: 'watch',
+    })
+    expect(out).toEqual([expect.objectContaining({ id: 'watch-run', sourceId: 'watch' })])
+  })
+
+  it('returns every source when none is requested', () => {
+    insertExercise({ id: 'watch-run', startMs: BEDTIME - 4 * H, endMs: BEDTIME - 3 * H, localDate: '2026-08-21', sourceId: 'watch' })
+    insertExercise({ id: 'phone-run', startMs: BEDTIME - 2 * H, endMs: BEDTIME - H, localDate: '2026-08-21', sourceId: 'phone' })
+
+    const out = readSessions(test.db, { personId: 'p1', kind: 'exercise', from: '2026-08-21', to: '2026-08-21' })
+    expect(out.map((s) => s.id).sort()).toEqual(['phone-run', 'watch-run'])
   })
 })

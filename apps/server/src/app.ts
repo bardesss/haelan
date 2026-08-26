@@ -12,6 +12,7 @@ import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
 import { registerSettings } from './routes/settings.ts'
+import { registerV1 } from './routes/v1/index.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
 
@@ -49,6 +50,22 @@ export interface ServerDeps {
    * in its cleanup; the tests that are actually about sprint depth pass the real 90 explicitly.
    */
   sprintDays?: number
+  /**
+   * Lets a test register an extra route inside the /api/v1 plugin scope, with no preHandler of
+   * its own, to prove the versioned surface's guard hook covers a route nobody remembered to
+   * guard rather than relying on a per-route list. Unset in production.
+   */
+  v1TestExtra?: (app: FastifyInstance) => void
+  /**
+   * Lets a test observe every route exactly as fastify registers it: one call per (method, url)
+   * pair, in registration order, with neither of printRoutes' two distortions. printRoutes merges
+   * several methods on the same path onto one line, and nests a route whose path extends another
+   * registered route's path under that route's line rather than printing it in full - both of
+   * which the isolation suite's route-coverage guard needs to not have (see v1-isolation.test.ts).
+   * Set before any route is registered, so it also sees the routes this file adds directly.
+   * Unset in production.
+   */
+  onRouteForTest?: (route: { method: string, url: string }) => void
 }
 
 export interface Stores {
@@ -74,6 +91,17 @@ declare module 'fastify' {
 
 export function buildServer(deps: ServerDeps): FastifyInstance {
   const app = Fastify({ logger: false })
+  if (deps.onRouteForTest) {
+    const onRouteForTest = deps.onRouteForTest
+    // Added before any route below is registered, so it also fires for the HEAD fastify adds
+    // itself for every GET (a separate registration call, and so a separate event here) and for
+    // routes registered through app.register's deferred plugins, since a child context inherits
+    // whatever hooks its parent held at the point it was registered.
+    app.addHook('onRoute', (route) => {
+      const methods = Array.isArray(route.method) ? route.method : [route.method]
+      for (const method of methods) onRouteForTest({ method, url: route.url })
+    })
+  }
   const stores: Stores = {
     accounts: new AccountStore(deps.instance.db),
     people: new PeopleStore(deps.instance.db),
@@ -102,6 +130,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerSync(app)
   registerSettings(app)
   registerSetupGate(app)
+  // Registered through app.register, not called directly like the routes above: the /api/v1
+  // prefix and Fastify's plugin encapsulation are what keep this surface's error handler and
+  // its isolation rule from touching anything outside it.
+  void app.register((instance) => registerV1(instance, deps.v1TestExtra), { prefix: '/api/v1' })
   if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
 
   return app

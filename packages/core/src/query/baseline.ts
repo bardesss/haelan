@@ -7,10 +7,23 @@
  * value. Reading `daily` excludes overridden values by construction.
  */
 
+import { shiftLocalDate } from '../derive/localDay.ts'
 import { INSIGHT_MIN_DAY_FRACTION } from './insights.ts'
 
 /** The default window. Long enough to survive a bad week, short enough to follow a real change. */
 export const BASELINE_WINDOW_DAYS = 60
+
+/**
+ * The window `baseline()` reads: back `windowDays`, ending the day before `on`, so a reading is
+ * never part of the baseline it is judged against. Exported so a caller that needs the same
+ * window for a different reason, such as the HTTP surface's ETag, computes it once rather than
+ * growing a second copy of the rule.
+ */
+export function baselineWindow(on: string, windowDays: number = BASELINE_WINDOW_DAYS): { from: string, to: string } {
+  const to = shiftLocalDate(on, -1)
+  const from = shiftLocalDate(to, -(windowDays - 1))
+  return { from, to }
+}
 
 /**
  * The statistical floor: below this many contributing days a spread is not worth standing on.

@@ -34,6 +34,10 @@ export interface WithServerOptions {
    * this suite's speed-picked default.
    */
   backfillBatchDays?: number
+  /** See ServerDeps.v1TestExtra. Unset by every test but the one that exercises it. */
+  v1TestExtra?: (app: FastifyInstance) => void
+  /** See ServerDeps.onRouteForTest. Unset by every test but the isolation suite's route-coverage guard. */
+  onRouteForTest?: (route: { method: string, url: string }) => void
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -86,6 +90,11 @@ export interface Harness {
   clock: { nowMs: number }
   completeSetup: () => Promise<void>
   connectPerson: () => Promise<void>
+  // Every test file has been rolling its own cookie extraction. One helper instead, returning
+  // the raw session id, which is what both transports carry.
+  signIn: (username?: string, password?: string) => Promise<string>
+  // The isolation suite needs a person the signed in account does not own. The harness seeds
+  // exactly one, and every test that wanted a second has been reaching into the stores itself.
   addPerson: (input: { id: string, displayName: string, username: string }) =>
     Promise<{ personId: string, accountId: string }>
   cleanup: () => Promise<void>
@@ -122,16 +131,23 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // How deep a sprint walks before this instance settles into the trickle. See
     // WithServerOptions.sprintDays above for why this defaults small.
     sprintDays: options.sprintDays ?? 2,
+    v1TestExtra: options.v1TestExtra,
+    onRouteForTest: options.onRouteForTest,
   })
   await app.ready()
 
   // What a finished wizard would have left behind, so a test about anything else does not
-  // have to walk it. Idempotent, because addPerson below bootstraps it too: a test that connects
-  // the first person and then adds a second would otherwise hit the p1 insert twice.
-  let setupDone = false
+  // have to walk it.
+  //
+  // Guarded against a second call: PeopleStore.create and AccountStore.create both throw on a
+  // repeat id/username, and both signIn and addPerson below call this themselves so a test can
+  // use either without having called it first. That only works if calling it twice is free,
+  // which needs the flag set after the work succeeds, not before: setting it early would make a
+  // failed first call look like a finished one to every caller after it, turning one loud
+  // failure into a silent no-op somewhere else.
+  let setupComplete = false
   const completeSetup = async () => {
-    if (setupDone) return
-    setupDone = true
+    if (setupComplete) return
     // Through the store the wizard itself uses, not seedPerson, because the two now differ in a
     // way that matters here: create stamps the current versions and seedPerson leaves them null,
     // which is a person the sync runner skips. A harness that produced the second while claiming
@@ -150,6 +166,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
       clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: clock.nowMs,
     })
     settings.markSetupComplete(clock.nowMs)
+    setupComplete = true
   }
 
   // completeSetup leaves the state between the console step and consent: a client, no token.
@@ -168,6 +185,20 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     clock,
     completeSetup,
     connectPerson,
+
+    // Every test file has been rolling its own cookie extraction. One helper instead, returning
+    // the raw session id, which is what both transports carry.
+    signIn: async (username = 'bartus', password = 'a good long password') => {
+      await completeSetup()
+      const response = await app.inject({
+        method: 'POST', url: '/api/auth/login',
+        headers: { origin: 'http://localhost:4235', host: 'localhost:4235' },
+        payload: { username, password },
+      })
+      const cookie = response.cookies.find((c) => c.name === 'haelan_session')
+      if (!cookie) throw new Error(`sign in failed: ${response.statusCode} ${response.body}`)
+      return cookie.value
+    },
 
     // A second household member: a person and an account of their own, no refresh token. Nothing
     // here grants them any data, which is the point - the isolation tests need an account that

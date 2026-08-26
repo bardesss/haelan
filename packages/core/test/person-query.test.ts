@@ -18,7 +18,7 @@ afterEach(() => test.cleanup())
 
 const insertDaily = (o: {
   localDate: string, value: number | null, metric?: string, agg?: string,
-  source?: string, coverage?: number | null, personId?: string,
+  source?: string, coverage?: number | null, personId?: string, updatedAtMs?: number | null,
 }) => {
   test.db.insert(daily).values({
     personId: o.personId ?? 'p1',
@@ -30,6 +30,7 @@ const insertDaily = (o: {
     coverage: o.coverage === undefined ? 0.9 : o.coverage,
     sourceMix: null,
     derivationVersion: 4,
+    updatedAtMs: o.updatedAtMs === undefined ? null : o.updatedAtMs,
   }).run()
 }
 
@@ -90,6 +91,10 @@ describe('PersonQuery.series', () => {
   })
 
   it('reads one source when asked, so provenance stays reachable', () => {
+    // Registered as well as written to `daily`, because series() now refuses a source this
+    // person does not have. A row whose source is in no registry cannot arise from a real
+    // derivation either: mapping registers the device before it writes a thing under its id.
+    insertSource('watch')
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'watch' })
     insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
     const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01', source: 'watch' })
@@ -146,6 +151,16 @@ describe('PersonQuery.series', () => {
     insertDaily({ localDate: '2026-08-01', value: 400, source: 'provider' })
     const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([900])
+  })
+
+  // The HTTP surface's ETag needs the newest updated_at_ms among the rows an answer drew on,
+  // and daily is the only reader over that column anywhere in core.
+  it('carries updatedAtMs through, including a null one', () => {
+    insertDaily({ localDate: '2026-08-01', value: 900, updatedAtMs: 1_770_000_000_000 })
+    insertDaily({ localDate: '2026-08-02', value: 800 })
+    const { points } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-02' })
+    expect(points[0]?.updatedAtMs).toBe(1_770_000_000_000)
+    expect(points[1]?.updatedAtMs).toBeNull()
   })
 
   it('returns only merged rows when merged is named, so provenance stays askable', () => {
@@ -397,6 +412,76 @@ describe('PersonQuery argument validation', () => {
   })
 })
 
+// `source` was the last parameter on this surface still answering a value it could not honour
+// with 200 and an empty result. Every read that takes one narrows with an equality test, so a
+// typo matched no row and came back indistinguishable from "this person has no data" for the
+// range asked for, which in M4 becomes an agent stating a false thing about a health record.
+describe('PersonQuery source validation', () => {
+  const RANGE = { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-07' }
+
+  it('refuses an unknown source on every daily backed read', () => {
+    insertSource('watch')
+    expect(() => query.series({ ...RANGE, source: 'wtach' })).toThrow(ConfigError)
+    expect(() => query.baseline({ metric: 'steps', agg: 'sum', on: '2026-08-07', source: 'wtach' }))
+      .toThrow(ConfigError)
+    expect(() => query.comparePeriods({ ...RANGE, source: 'wtach' })).toThrow(ConfigError)
+    expect(() => query.trend({ ...RANGE, source: 'wtach' })).toThrow(ConfigError)
+  })
+
+  it('refuses an unknown source on every tier 2 read', () => {
+    insertSource('p1-watch')
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: '2026-08-22', sourceId: 'p1-wtach' }))
+      .toThrow(ConfigError)
+    expect(() => query.sleepNights({ from: '2026-08-01', to: '2026-08-07', sourceId: 'p1-wtach' }))
+      .toThrow(ConfigError)
+    expect(() => query.sessions({ kind: 'exercise', from: '2026-08-01', to: '2026-08-07', sourceId: 'p1-wtach' }))
+      .toThrow(ConfigError)
+  })
+
+  it('names the value it refused and what this person actually has', () => {
+    insertSource('watch')
+    expect(() => query.series({ ...RANGE, source: 'wtach' })).toThrow(/'wtach'/)
+    expect(() => query.series({ ...RANGE, source: 'wtach' })).toThrow(/watch/)
+  })
+
+  it('says plainly when the person has no sources at all, rather than listing nothing', () => {
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: '2026-08-22', sourceId: 'watch' }))
+      .toThrow(/no sources at all/)
+  })
+
+  // The registry, not the rows in range: a device that reported nothing on the days asked for is
+  // a real source whose answer is genuinely empty, and refusing it would turn a true empty result
+  // into an error.
+  it('accepts a registered source with no rows in the range asked for', () => {
+    insertSource('watch')
+    expect(query.series({ ...RANGE, source: 'watch' }).points).toEqual([])
+  })
+
+  it('keeps accepting merged and provider on a daily backed read, since neither is a device', () => {
+    insertDaily({ localDate: '2026-08-01', value: 900, source: 'merged' })
+    insertDaily({ localDate: '2026-08-02', value: 800, source: 'provider' })
+    expect(query.series({ ...RANGE, source: 'merged' }).points.map((p) => p.value)).toEqual([900])
+    expect(query.series({ ...RANGE, source: 'provider' }).points.map((p) => p.value)).toEqual([800])
+  })
+
+  // `samples`, `sessions` and `session_segments` are the normalized tier, written per device.
+  // Nothing there ever carries a merge's name, so asking for one is the same empty answer a typo
+  // gave, and gets the same refusal.
+  it('refuses merged on a tier 2 read, where no row can ever carry it', () => {
+    insertSource('p1-watch')
+    expect(() => query.intraday({ metric: 'heart_rate', localDate: '2026-08-22', sourceId: 'merged' }))
+      .toThrow(ConfigError)
+  })
+
+  // The registry is read per person, so this is the isolation rule showing up in a refusal: the
+  // id exists, and it still is not one of this person's to ask about.
+  it("refuses another person's source id", () => {
+    seedPerson(test.db, 'other')
+    insertSource('other-watch', 'other')
+    expect(() => query.series({ ...RANGE, source: 'other-watch' })).toThrow(ConfigError)
+  })
+})
+
 describe('PersonQuery.baseline', () => {
   const seedRun = (fromDay: number, count: number, value: (at: number) => number) => {
     for (let at = 0; at < count; at += 1) {
@@ -625,6 +710,20 @@ describe('PersonQuery.comparePeriods', () => {
     expect(insight.previousDays).toBe(7)
     expect(insight.currentCoverage).toBeCloseTo(0.9, 10)
     expect(insight.delta).toBeNull()
+  })
+
+  // The comparison period is derived, never supplied. Stepping a wide range back by its own
+  // length lands outside the calendar, and the refusal used to name that derived date: a caller
+  // who sent 1000-01-01 read `got '-008000-01'` and had a range to find in their own code that
+  // was not in it.
+  it('names the range the caller passed when the period before it falls off the calendar', () => {
+    const wide = { metric: 'steps', agg: 'sum', from: '1000-01-01', to: '9999-12-31' }
+    expect(() => query.comparePeriods(wide)).toThrow(ConfigError)
+    expect(() => query.comparePeriods(wide)).toThrow(/1000-01-01/)
+    expect(() => query.comparePeriods(wide)).toThrow(/9999-12-31/)
+    // And says where the range it is refusing came from, since the caller never wrote that one.
+    expect(() => query.comparePeriods(wide)).toThrow(/period of equal length immediately before/)
+    expect(() => query.comparePeriods(wide)).not.toThrow(/-008000/)
   })
 })
 

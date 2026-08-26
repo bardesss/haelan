@@ -1,10 +1,10 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily, SESSION_KINDS } from '../db/schema/index.ts'
+import { daily, SESSION_KINDS, sources } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { ConfigError } from '../errors.ts'
-import { baselineOf, BASELINE_WINDOW_DAYS } from './baseline.ts'
+import { baselineOf, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
 import { coverageIsMeaningful } from './coverageSignal.ts'
 // Aliased: the class has a method of the same name, and an unqualified call inside it
@@ -23,6 +23,8 @@ import { readSessions } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
+import { readChanges } from './changes.ts'
+import type { ChangesResult } from './changes.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -31,6 +33,13 @@ export interface DailyPoint {
   coverage: number | null
   source: string
   sourceMix: string | null
+  /**
+   * When this row was last written. Null for a row derived before M3b added the column, and for
+   * any row a rebuild has not touched since. The HTTP surface's conditional requests are the
+   * reason this is here: an ETag over `daily` needs the newest stamp among the rows an answer
+   * drew on, and there was no reader over the column anywhere in core until now.
+   */
+  updatedAtMs: number | null
 }
 
 export interface SeriesResult {
@@ -81,6 +90,7 @@ export class PersonQuery {
   }): SeriesResult {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const source = input.source
     const rows = this.#db.select({
@@ -89,6 +99,7 @@ export class PersonQuery {
       coverage: daily.coverage,
       source: daily.source,
       sourceMix: daily.sourceMix,
+      updatedAtMs: daily.updatedAtMs,
     }).from(daily).where(and(
       eq(daily.personId, this.#personId),
       eq(daily.metric, input.metric),
@@ -134,11 +145,11 @@ export class PersonQuery {
   }): Baseline | null {
     requireMetricAndAgg(input.metric, input.agg)
     requireDate('on', input.on)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const windowDays = input.windowDays ?? BASELINE_WINDOW_DAYS
     requirePositiveInteger('windowDays', windowDays)
-    const to = shiftLocalDate(input.on, -1)
-    const from = shiftLocalDate(to, -(windowDays - 1))
+    const { from, to } = baselineWindow(input.on, windowDays)
     const { points } = this.series({
       metric: input.metric, agg: input.agg, from, to, source: input.source,
     })
@@ -168,10 +179,24 @@ export class PersonQuery {
   }): Insight {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const periodDays = daysBetween(input.from, input.to)
     const previousTo = shiftLocalDate(input.from, -1)
     const previousFrom = shiftLocalDate(previousTo, -(periodDays - 1))
+
+    // The comparison period is derived here, never supplied. Stepping a wide range back by its
+    // own length lands outside the calendar, and the ConfigError series() then threw named a date
+    // the caller had never written: `from must be a YYYY-MM-DD local date, got '-008000-01'` in
+    // answer to a request that said 1000-01-01. Whoever read that had a range to go and find in
+    // their own code that was not in it. Refused here instead, in terms of what was passed, and
+    // saying where the range the message does not name came from.
+    if (!ISO_DATE.test(previousFrom) || !ISO_DATE.test(previousTo)) {
+      throw new ConfigError(
+        `from '${input.from}' to '${input.to}' spans ${periodDays} days, and the period of equal `
+        + 'length immediately before it, which is what this compares against, starts before year 0001',
+      )
+    }
 
     // Coverage is a fraction of the day's hours, so a once-a-day metric reads 0.0417 when it is
     // perfect. Handing that number to a gate built for continuously sampled data suppresses the
@@ -211,6 +236,7 @@ export class PersonQuery {
   }): IntradayResult {
     requireMetric(input.metric)
     requireDate('localDate', input.localDate)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntraday(this.#db, {
       personId: this.#personId,
       metric: input.metric,
@@ -227,6 +253,7 @@ export class PersonQuery {
     sourceId?: string
   }): Night[] {
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
     return readSleepNights(this.#db, {
       personId: this.#personId,
       from: input.from,
@@ -240,14 +267,17 @@ export class PersonQuery {
     kind: 'sleep' | 'exercise'
     from: string
     to: string
+    sourceId?: string
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
       from: input.from,
       to: input.to,
+      sourceId: input.sourceId,
     })
   }
 
@@ -264,6 +294,7 @@ export class PersonQuery {
   }): TrendPoint[] {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const { points } = this.series({
       metric: input.metric, agg: input.agg, from: input.from, to: input.to, source: input.source,
@@ -277,6 +308,26 @@ export class PersonQuery {
     })
 
     return trendOf(withGaps)
+  }
+
+  /**
+   * The (localDate, metric) pairs whose derived rows moved after `since`. See readChanges for
+   * why the pairs are distinct rather than one per row, why a rebuild's whole-history answer is
+   * correct rather than a bug, and why provider rows are in scope.
+   */
+  changes(input: {
+    since: number
+    limit?: number
+    cursor?: string
+  }): ChangesResult {
+    requireFiniteNumber('since', input.since)
+    if (input.limit !== undefined) requirePositiveInteger('limit', input.limit)
+    return readChanges(this.#db, {
+      personId: this.#personId,
+      since: input.since,
+      limit: input.limit,
+      cursor: input.cursor,
+    })
   }
 }
 
@@ -332,6 +383,17 @@ function requirePositiveInteger(label: string, value: number): void {
   }
 }
 
+/**
+ * `since` reaches PersonQuery from an HTTP query string and a language model's tool arguments,
+ * neither of which the type system protects: a value that failed to parse to a number arrives
+ * here as NaN rather than being caught on the way in.
+ */
+function requireFiniteNumber(label: string, value: number): void {
+  if (!Number.isFinite(value)) {
+    throw new ConfigError(`${label} must be a number, got ${value}`)
+  }
+}
+
 /** The catalogue decides which aggregates a metric has. Summing heart rate is not an answer. */
 function requireMetricAndAgg(metric: string, agg: string): void {
   const spec = metricSpec(metric)
@@ -349,6 +411,41 @@ function requireMetricAndAgg(metric: string, agg: string): void {
  */
 function requireMetric(metric: string): void {
   if (metricSpec(metric) === undefined) throw new ConfigError(`no metric named '${metric}'`)
+}
+
+/**
+ * The two `daily.source` values that are not a source id at all. See rollup.ts for what each
+ * means and why they are kept apart from one another.
+ */
+const DERIVED_SOURCES: readonly string[] = [MERGED_SOURCE, PROVIDER_SOURCE]
+
+/**
+ * The same refusal `requireMetric` gives a metric, for the one parameter that was still answering
+ * a typo with an empty result: every read that takes a source narrowed to it with an equality
+ * test, so an id nobody has matched no row and came back as 200 with nothing, indistinguishable
+ * from "this person has no data" for the range asked for.
+ *
+ * Validated against `sources`, the registry of what this person actually has, rather than against
+ * the distinct values present in the table being read: a device that reported nothing on the days
+ * asked for is a real source with an empty answer, and refusing it would turn a true empty result
+ * into an error. `alsoAllowed` carries the `daily` backed reads' two extra values, which name a
+ * merge rather than a device and so appear in no registry.
+ *
+ * The listing is the person's own source ids, which a caller holding a PersonQuery is already
+ * bound to by construction, so it discloses nothing the same caller cannot read from `/sources`.
+ */
+function requireSource(
+  db: DbOrTx, personId: string, source: string | undefined, alsoAllowed: readonly string[],
+): void {
+  if (source === undefined) return
+  // Ordered, so two identical requests cannot produce two different messages.
+  const registered = db.select({ id: sources.id }).from(sources)
+    .where(eq(sources.personId, personId)).orderBy(asc(sources.id)).all().map((row) => row.id)
+  const known = [...registered, ...alsoAllowed]
+  if (known.includes(source)) return
+  throw new ConfigError(known.length === 0
+    ? `no source named '${source}', and this person has no sources at all`
+    : `no source named '${source}', only ${known.join(', ')}`)
 }
 
 /**

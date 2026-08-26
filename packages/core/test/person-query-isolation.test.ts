@@ -127,6 +127,24 @@ describe('PersonQuery isolation, the readers bound to samples and sessions', () 
     expect(nights[0]?.sessionIds).toEqual(['alice-night'])
   })
 
+  it('reads changes only for its own person', () => {
+    // Different metrics, deliberately: a leak would surface as bart's pair appearing alongside
+    // alice's, which same-shaped rows on the same metric would not make visible.
+    test.db.insert(daily).values([
+      {
+        personId: 'alice', localDate: '2026-08-01', metric: 'weight', agg: 'mean', source: 'merged',
+        value: 70, coverage: null, sourceMix: null, derivationVersion: 4, updatedAtMs: 5_000,
+      },
+      {
+        personId: 'bart', localDate: '2026-08-01', metric: 'body_fat', agg: 'mean', source: 'merged',
+        value: 20, coverage: null, sourceMix: null, derivationVersion: 4, updatedAtMs: 5_000,
+      },
+    ]).run()
+
+    const result = alice.changes({ since: 1_000 })
+    expect(result.items).toEqual([{ localDate: '2026-08-01', metric: 'weight' }])
+  })
+
   it('reads sessions only for its own person', () => {
     insertSource('alice-watch', 'alice')
     insertSource('bart-watch', 'bart')
