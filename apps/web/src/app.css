@@ -73,6 +73,11 @@ body {
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
+/* A card's own entry point to its detail page, so the reader who wants more than the summary
+   has somewhere to go without hunting the rail for it. */
+.card-link { display: inline-block; margin-top: var(--space-2); font-size: var(--font-size-xs); color: var(--accent-soft); text-decoration: none; }
+.card-link:hover { text-decoration: underline; }
+
 /* Forms. The dashboard had none, and M3's override controls, notes and typed events all need
    the same vocabulary, so it lives here rather than beside the first screen that wanted it. */
 .field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }

@@ -80,22 +80,26 @@
     "steps": {
       "label": "Steps",
       "basis": "sum, {{worn}} of {{total}} days, {{unworn}} days not worn",
-      "chartLabel": "Daily steps through {{period}}"
+      "chartLabel": "Daily steps through {{period}}",
+      "viewAll": "View activity"
     },
     "restingHr": {
       "label": "Resting heart rate",
       "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
-      "chartLabel": "Daily resting heart rate through {{period}}"
+      "chartLabel": "Daily resting heart rate through {{period}}",
+      "viewAll": "View recovery"
     },
     "sleep": {
       "label": "Sleep",
       "basis": "mean, {{worn}} of {{total}} nights, {{unworn}} nights not worn",
-      "chartLabel": "Nightly sleep duration through {{period}}"
+      "chartLabel": "Nightly sleep duration through {{period}}",
+      "viewAll": "View sleep"
     },
     "meanHr": {
       "label": "Mean heart rate",
       "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
-      "chartLabel": "Daily mean heart rate through {{period}}"
+      "chartLabel": "Daily mean heart rate through {{period}}",
+      "viewAll": "View recovery"
     },
     "heartRateRange": {
       "label": "Heart rate range",

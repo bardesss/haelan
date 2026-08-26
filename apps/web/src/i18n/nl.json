@@ -80,22 +80,26 @@
     "steps": {
       "label": "Stappen",
       "basis": "som, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse stappen in {{period}}"
+      "chartLabel": "Dagelijkse stappen in {{period}}",
+      "viewAll": "Bekijk activiteit"
     },
     "restingHr": {
       "label": "Rusthartslag",
       "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse rusthartslag in {{period}}"
+      "chartLabel": "Dagelijkse rusthartslag in {{period}}",
+      "viewAll": "Bekijk herstel"
     },
     "sleep": {
       "label": "Slaap",
       "basis": "gemiddelde, {{worn}} van {{total}} nachten, {{unworn}} nachten niet gedragen",
-      "chartLabel": "Nachtelijke slaapduur in {{period}}"
+      "chartLabel": "Nachtelijke slaapduur in {{period}}",
+      "viewAll": "Bekijk slaap"
     },
     "meanHr": {
       "label": "Gemiddelde hartslag",
       "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}"
+      "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
+      "viewAll": "Bekijk herstel"
     },
     "heartRateRange": {
       "label": "Hartslagbereik",

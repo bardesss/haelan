@@ -9,6 +9,8 @@ import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule, AXIS_MIN, AXIS_MAX } from '../charts/SleepSchedule.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
+import { deepLink } from '../controls/deepLink.js'
+import { Link } from '../router.js'
 import { useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
@@ -344,21 +346,33 @@ export function Dashboard() {
         <Card span={3}>
           {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.chartLabel', 'dashboard.units.steps',
             (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better')}
+          <Link to={deepLink('/activity', controls)} className="card-link">
+            {t('dashboard.steps.viewAll')}
+          </Link>
         </Card>
         <Card span={3}>
           {tile('resting_heart_rate', 'dashboard.restingHr.label', 'dashboard.restingHr.basis', 'dashboard.restingHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'lower-is-better', t('dashboard.units.bpm'))}
+          <Link to={deepLink('/recovery', controls)} className="card-link">
+            {t('dashboard.restingHr.viewAll')}
+          </Link>
         </Card>
         <Card span={3}>
           {tile('sleep_asleep_minutes', 'dashboard.sleep.label', 'dashboard.sleep.basis', 'dashboard.sleep.chartLabel',
             'dashboard.units.minutesAsleep',
             (p) => formatDuration(mean(values(p))), 'higher-is-better')}
+          <Link to={deepLink('/sleep', controls)} className="card-link">
+            {t('dashboard.sleep.viewAll')}
+          </Link>
         </Card>
         <Card span={3}>
           {tile('heart_rate', 'dashboard.meanHr.label', 'dashboard.meanHr.basis', 'dashboard.meanHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'neutral', t('dashboard.units.bpm'))}
+          <Link to={deepLink('/recovery', controls)} className="card-link">
+            {t('dashboard.meanHr.viewAll')}
+          </Link>
         </Card>
 
         {/* basis withheld when heartRateEmpty is set, the same way tile() returns EmptyState in
