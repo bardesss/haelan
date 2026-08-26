@@ -39,6 +39,15 @@ export interface MetricGroup {
 export interface MetricGroups {
   /** The query that answers a given metric's group. Throws if `metric` is in none of `groups`. */
   queryFor: (metric: string) => UseQueryResult<Record<string, MetricSeries>>
+  /**
+   * The query for the group that requested a given agg, by the agg itself rather than by naming
+   * one of its member metrics as a stand in. `queryFor('steps')` reads right at the call site but
+   * ties a caller to a metric that has nothing to do with what it actually wants (the sum group's
+   * query, not steps specifically), and a later edit that drops 'steps' from that group (a
+   * catalogue change, a card removed) breaks a call site nowhere near the one that changed. Throws
+   * for an agg nothing in `groups` requested, the same loud-on-a-typo posture as `queryFor`.
+   */
+  queryForAgg: (agg: string) => UseQueryResult<Record<string, MetricSeries>>
   /** `metric`'s points, or the one shared EMPTY array below when its query has none. */
   pointsOf: (metric: string) => SeriesPoint[]
   /** Every group's query, in the same order as `groups`, for a caller that needs to await or
@@ -75,6 +84,32 @@ function indexOfGroup(groups: readonly MetricGroup[], metric: string): number {
   return index
 }
 
+// findIndex above returns the FIRST group covering a metric, which is loud on the metric nothing
+// covers and silent on the metric two groups both cover: the second case never throws, it just
+// always resolves to whichever group happens to come first, no matter which one a caller actually
+// meant. heart_rate at min, mean and max (three groups all covering the same name, the exact shape
+// a recovery page reaching for its own min/mean/max range chart is about to hit) would make every
+// card asking for 'heart_rate' silently bind to one of the three, the same bug this hook exists to
+// rule out for the catalogue-disallowed case. Dashboard.tsx's own min/max stay their own useSeries
+// calls outside `groups` for exactly this reason (see its GROUPS comment); this is what keeps that
+// the only way to answer heart_rate at three aggs, rather than one a future caller can rediscover
+// by hand and get wrong.
+function assertNoOverlap(groups: readonly MetricGroup[]): void {
+  const owner = new Map<string, number>()
+  groups.forEach((group, index) => {
+    for (const metric of covering(group)) {
+      const first = owner.get(metric)
+      if (first !== undefined) {
+        throw new Error(
+          `useMetricGroups: '${metric}' is covered by both group ${first} and group ${index}; ` +
+          `a metric needing more than one agg needs its own useSeries call, not a second group`,
+        )
+      }
+      owner.set(metric, index)
+    }
+  })
+}
+
 /**
  * One `useSeries` call per group, and a lookup from a metric back to the query for its group.
  *
@@ -85,12 +120,19 @@ function indexOfGroup(groups: readonly MetricGroup[], metric: string): number {
  * settled.
  */
 export function useMetricGroups(groups: readonly MetricGroup[], range: SeriesRange): MetricGroups {
+  assertNoOverlap(groups)
   const queries = groups.map((group) => useSeries([...group.metrics], range, group.agg))
 
   const queryFor = (metric: string): UseQueryResult<Record<string, MetricSeries>> =>
     queries[indexOfGroup(groups, metric)]!
 
+  const queryForAgg = (agg: string): UseQueryResult<Record<string, MetricSeries>> => {
+    const index = groups.findIndex((group) => group.agg === agg)
+    if (index === -1) throw new Error(`useMetricGroups: no group in this call requests agg '${agg}'`)
+    return queries[index]!
+  }
+
   const pointsOf = (metric: string): SeriesPoint[] => queryFor(metric).data?.[metric]?.points ?? EMPTY
 
-  return { queryFor, pointsOf, queries }
+  return { queryFor, queryForAgg, pointsOf, queries }
 }

@@ -154,4 +154,44 @@ describe('useMetricGroups', () => {
     // request, so there is nothing here for a stub to answer.
     expect(() => mount(withQuery(<TypoProbe />).tree)).toThrow(/not_a_real_metric/)
   })
+
+  // The mistake `queryFor`'s own findIndex cannot see: two groups covering the same metric never
+  // throws on its own, it just always resolves to whichever group came first, silently, no matter
+  // which one a caller meant. heart_rate at min, mean and max in one call (a recovery page's own
+  // range chart beside its tiles) is exactly this shape, so it has to fail at construction rather
+  // than quietly binding every card asking for heart_rate to one of the three.
+  it('throws at construction for a metric two groups both cover', () => {
+    const overlapping = [
+      { agg: 'min', metrics: ['heart_rate'] },
+      { agg: 'max', metrics: ['heart_rate'] },
+    ] as const
+    function OverlapProbe() {
+      useMetricGroups(overlapping, { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES })
+      return null
+    }
+    expect(() => mount(withQuery(<OverlapProbe />).tree)).toThrow(/heart_rate/)
+  })
+
+  // queryForAgg reads a group's query by the agg it requested, not by naming one of its member
+  // metrics as a stand in: a page whose sum group happens to include 'steps' should not have a
+  // catalogue change to a wholly different metric break the one call site checking whether the
+  // sum request as a whole is loading.
+  it('reads a group by its own agg rather than by one of its metrics', async () => {
+    const restore = stubFetch([])
+    const { client, tree } = withQuery(<Probe />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    expect(seen!.queryForAgg('sum')).toBe(seen!.queryFor('steps'))
+    expect(seen!.queryForAgg('last')).toBe(seen!.queryFor('resting_heart_rate'))
+    restore()
+  })
+
+  it('throws for an agg nothing in this call requested', () => {
+    function AggTypoProbe() {
+      useMetricGroups(GROUPS, { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES }).queryForAgg('mean')
+      return null
+    }
+    expect(() => mount(withQuery(<AggTypoProbe />).tree)).toThrow(/mean/)
+  })
 })

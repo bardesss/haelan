@@ -39,7 +39,7 @@ describe('MetricCard', () => {
   // query has isPending false and data undefined, which emptyStateFor reads as "no data yet", so
   // a 500 would render as a statement about the person's record.
   it('renders the error state for a failed request, not an empty period', () => {
-    mount(<MetricCard metric="steps" query={{ isError: true, isPending: false, refetch: () => {} }}
+    mount(<MetricCard metric="steps" span={1} query={{ isError: true, isPending: false, refetch: () => {} }}
       points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
     expect(container!.textContent).toContain('errorState.title')
     expect(container!.textContent).not.toContain('emptyState.no_data.title')
@@ -52,21 +52,21 @@ describe('MetricCard', () => {
   // isError flags and an OR of three isPending flags can both be true at once when one series has
   // failed while another is still in flight. That is the case this test pins.
   it('still shows the error when a composite query is both errored and pending', () => {
-    mount(<MetricCard metric="steps" query={{ isError: true, isPending: true, refetch: () => {} }}
+    mount(<MetricCard metric="steps" span={1} query={{ isError: true, isPending: true, refetch: () => {} }}
       points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
     expect(container!.textContent).toContain('errorState.title')
     expect(container!.textContent).not.toContain('common.loading')
   })
 
   it('claims nothing at all while the query is pending', () => {
-    mount(<MetricCard metric="steps" query={{ isError: false, isPending: true, refetch: () => {} }}
+    mount(<MetricCard metric="steps" span={1} query={{ isError: false, isPending: true, refetch: () => {} }}
       points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
     expect(container!.textContent).not.toContain('drawn')
     expect(container!.textContent).not.toContain('emptyState')
   })
 
   it('renders a genuine zero as data rather than as emptiness', () => {
-    mount(<MetricCard metric="steps" query={OK} points={[point(0, 0.9)]}
+    mount(<MetricCard metric="steps" span={1} query={OK} points={[point(0, 0.9)]}
       basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
     expect(container!.textContent).toContain('drawn')
   })
@@ -75,12 +75,12 @@ describe('MetricCard', () => {
   // and an absent baseline is not a thin one: a card that never asked must not be told its data
   // is insufficient.
   it('tells a thin baseline apart from an absent one', () => {
-    mount(<MetricCard metric="steps" query={OK} points={[point(900, 0.9)]}
+    mount(<MetricCard metric="steps" span={1} query={OK} points={[point(900, 0.9)]}
       baseline={{ center: 900, spread: 10, n: 3, thin: true }}
       basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
     expect(container!.textContent).toContain('emptyState.insufficient.title')
 
-    act(() => { root!.render(<MetricCard metric="steps" query={OK} points={[point(900, 0.9)]}
+    act(() => { root!.render(<MetricCard metric="steps" span={1} query={OK} points={[point(900, 0.9)]}
       basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>) })
     expect(container!.textContent).toContain('drawn')
   })
@@ -88,13 +88,13 @@ describe('MetricCard', () => {
   // The whole reason this component exists. The basis reaches the renderer, so a card cannot
   // print one claim while drawing another.
   it('hands the basis to the renderer rather than letting a page compute its own', () => {
-    mount(<MetricCard metric="steps" query={OK} points={[point(900, 0.9)]}
+    mount(<MetricCard metric="steps" span={1} query={OK} points={[point(900, 0.9)]}
       basisKey="b" basisWornKey="bw">{(basis) => <span>{basis}</span>}</MetricCard>)
     expect(container!.textContent).toContain('bw')
   })
 
   it('chooses the plain basis for a metric that carries no wear signal', () => {
-    mount(<MetricCard metric="sleep_asleep_minutes" query={OK} points={[point(420, null)]}
+    mount(<MetricCard metric="sleep_asleep_minutes" span={1} query={OK} points={[point(420, null)]}
       basisKey="b" basisWornKey="bw">{(basis) => <span>{basis}</span>}</MetricCard>)
     expect(container!.textContent).toContain('b')
     expect(container!.textContent).not.toContain('bw')

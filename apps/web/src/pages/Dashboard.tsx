@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import type { UseQueryResult } from '@tanstack/react-query'
@@ -122,9 +123,13 @@ const GROUPS: readonly MetricGroup[] = [
 // instance on every commit of this page.
 //
 // Frozen because it is shared: `naps` below hands it out under a mutable type, and a consumer
-// that pushed into that one array would be writing into `annotations`, `excluded` and every
-// metric with no rows at the same time. Freezing turns that from a silent corruption into a
-// throw at the line that did it.
+// that pushed into that one array would be writing into `annotations`, `excluded` and every other
+// user of this same array at once. Freezing turns that from a silent corruption into a throw at
+// the line that did it.
+//
+// Only min/max heart rate, the nights query and the sleep schedule's naps field still fall back to
+// this one: useMetricGroups carries its own frozen empty for every metric it resolves, so nothing
+// backed by `metricGroups.pointsOf` reaches this file's copy any more.
 const EMPTY = Object.freeze([]) as never[]
 
 const values = (points: SeriesPoint[]): number[] =>
@@ -311,13 +316,16 @@ export function Dashboard() {
   // max stay their own calls beside it; see GROUPS' own comment for why heart_rate cannot share a
   // metric-keyed group with the mean series above without the two colliding.
   const metricGroups = useMetricGroups(GROUPS, range)
-  // One metric per group, not metricGroups.queries by position: queries is a plain array under
-  // noUncheckedIndexedAccess, so every element reads as possibly undefined even though GROUPS'
-  // length is fixed. queryFor reads the same three query objects back by a name already in each
-  // group's own covers list.
-  const sumSeries = metricGroups.queryFor('steps')
-  const lastSeries = metricGroups.queryFor('resting_heart_rate')
-  const meanSeries = metricGroups.queryFor('heart_rate')
+  // By agg, not by naming one member metric as a stand in for its group: queryFor('steps') reads
+  // right here but ties this line to a metric that has nothing to do with what it actually checks
+  // (whether the sum request as a whole is loading), and dropping 'steps' from REQUESTS.sum for a
+  // reason with nothing to do with this line would silently break it. queryForAgg asks for the
+  // group itself. (metricGroups.queries by position was the other option and is not it: queries is
+  // a plain array under noUncheckedIndexedAccess, so every element reads as possibly undefined even
+  // though GROUPS' length is fixed.)
+  const sumSeries = metricGroups.queryForAgg('sum')
+  const lastSeries = metricGroups.queryForAgg('last')
+  const meanSeries = metricGroups.queryForAgg('mean')
   const minHrSeries = useSeries([...MIN_METRICS], range, 'min')
   const maxHrSeries = useSeries([...MAX_METRICS], range, 'max')
   // 'mean' explicitly: useBaseline defaults to 'sum', which heart_rate's catalogue entry does not
@@ -379,17 +387,23 @@ export function Dashboard() {
   // empty-state gate, and the worn/count/reported arithmetic and the basis/basisWorn key choice
   // built on it (see MetricCard.tsx, moved there comments included). tile() is left as the JSX
   // assembly its four callers share, not a second copy of that gating.
+  // span and after (the "View X" link) are threaded straight to MetricCard: it owns the Card shell
+  // now, so this outer function is the only place left that can still hand the link the same span
+  // as the card it sits beside, and after keeps it visible through every branch MetricCard renders,
+  // not just the data one.
   const tile = (
-    metric: string, labelKey: string, basisKey: string, basisWornKey: string,
+    metric: string, span: number, labelKey: string, basisKey: string, basisWornKey: string,
     chartLabelKey: string, unitKey: string,
     format: (points: SeriesPoint[]) => string,
     direction: 'higher-is-better' | 'lower-is-better' | 'neutral',
+    after: ReactNode,
     unit?: string,
   ) => {
     const points = metricGroups.pointsOf(metric)
     return (
-      <MetricCard metric={metric} query={metricGroups.queryFor(metric)} points={points}
-        basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
+      <MetricCard metric={metric} span={span} query={metricGroups.queryFor(metric)} points={points}
+        basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
+        after={after}>
         {(basis) => (
           // trend() itself answers "no delta" (undefined) for a window with too few points to
           // compare, which is the day range (exactly one point), so there is nothing left for
@@ -468,11 +482,14 @@ export function Dashboard() {
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
   //
-  // Not a MetricCard: the heatmap draws its own absence dots per day rather than trading the whole
-  // chart for a text empty state, so MetricCard's emptyStateFor gate does not belong on this card
-  // (adding it would blank a heatmap that has always drawn something). The worn count its basis
-  // line needs is still the same wornOn arithmetic MetricCard runs internally, just kept here
-  // because nothing else in this card can call through the component.
+  // The one card that opts out of MetricCard rather than being blocked from it: this shape (a
+  // chart that draws its own absence) is real and MetricCard is not meant to close it off. The
+  // heatmap draws a dot for every uncovered day instead of trading the whole chart for a text
+  // empty state, so routing this through MetricCard's emptyStateFor gate would add a full-card
+  // "no data" state that has never existed here, blanking a heatmap that has always drawn
+  // something. The worn count its basis line needs is still the same wornOn arithmetic MetricCard
+  // runs internally, just kept here because opting out means nothing else in this card reaches it
+  // through the component.
   const stepsPoints = metricGroups.pointsOf('steps')
   const stepsWorn = stepsPoints.filter((point) => wornOn('steps', point) === true).length
   const heatmapDays = useMemo(() => {
@@ -558,71 +575,73 @@ export function Dashboard() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
       <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
-        <Card span={3}>
-          {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
-            'dashboard.steps.chartLabel', 'dashboard.units.steps',
-            (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better')}
+        {tile('steps', 3, 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
+          'dashboard.steps.chartLabel', 'dashboard.units.steps',
+          (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better',
           <Link to={deepLink('/activity', resolved)} className="card-link">
             {t('dashboard.steps.viewAll')}
-          </Link>
-        </Card>
-        <Card span={3}>
-          {tile('resting_heart_rate', 'dashboard.restingHr.label', 'dashboard.restingHr.basis',
-            'dashboard.restingHr.basisWorn', 'dashboard.restingHr.chartLabel',
-            'dashboard.units.beatsPerMinute',
-            (p) => String(Math.round(mean(values(p)))), 'lower-is-better', t('dashboard.units.bpm'))}
+          </Link>)}
+        {tile('resting_heart_rate', 3, 'dashboard.restingHr.label', 'dashboard.restingHr.basis',
+          'dashboard.restingHr.basisWorn', 'dashboard.restingHr.chartLabel',
+          'dashboard.units.beatsPerMinute',
+          (p) => String(Math.round(mean(values(p)))), 'lower-is-better',
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.restingHr.viewAll')}
-          </Link>
-        </Card>
-        <Card span={3}>
-          {tile('sleep_asleep_minutes', 'dashboard.sleep.label', 'dashboard.sleep.basis',
-            'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
-            'dashboard.units.minutesAsleep',
-            (p) => formatDuration(mean(values(p))), 'higher-is-better')}
-          {/* Plain, not deep linked: /sleep is still pinned to the July fixtures and ignores
-              every parameter it is handed, so carrying the reader's period into that URL would
-              promise a period the page does not honour. It gets its parameters back when the
-              page can read them. */}
+          </Link>, t('dashboard.units.bpm'))}
+        {tile('sleep_asleep_minutes', 3, 'dashboard.sleep.label', 'dashboard.sleep.basis',
+          'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
+          'dashboard.units.minutesAsleep',
+          (p) => formatDuration(mean(values(p))), 'higher-is-better',
+          // Plain, not deep linked: /sleep is still pinned to the July fixtures and ignores every
+          // parameter it is handed, so carrying the reader's period into that URL would promise a
+          // period the page does not honour. It gets its parameters back when the page can read
+          // them.
           <Link to="/sleep" className="card-link">
             {t('dashboard.sleep.viewAll')}
-          </Link>
-        </Card>
-        <Card span={3}>
-          {tile('heart_rate', 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
-            'dashboard.meanHr.basisWorn', 'dashboard.meanHr.chartLabel',
-            'dashboard.units.beatsPerMinute',
-            (p) => String(Math.round(mean(values(p)))), 'neutral', t('dashboard.units.bpm'))}
+          </Link>)}
+        {tile('heart_rate', 3, 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
+          'dashboard.meanHr.basisWorn', 'dashboard.meanHr.chartLabel',
+          'dashboard.units.beatsPerMinute',
+          (p) => String(Math.round(mean(values(p)))), 'neutral',
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.meanHr.viewAll')}
-          </Link>
-        </Card>
+          </Link>, t('dashboard.units.bpm'))}
 
-        {/* basis withheld whenever there is no chart under it, the same way tile() returns an
-            EmptyState in place of the whole StatTile including its basis: a band clause is a claim
-            about what the chart below draws, and a pending request has drawn nothing yet. */}
-        <Card span={8} label={t('dashboard.heartRateRange.label')}
-          basis={heartRateFailed || heartRatePending || heartRateEmpty !== null
-            ? undefined
-            : t(heartRateBasisKey, { on: controls.to })}>
-          {heartRateFailed ? <ErrorState onRetry={retryHeartRate} />
-            : heartRatePending ? <Loading /> : heartRateEmpty !== null ? (
-            <EmptyState title={t(`emptyState.${heartRateEmpty}.title`)} detail={t(`emptyState.${heartRateEmpty}.detail`)} />
-          ) : (
+        {/* basisKey and basisWornKey are the same string here on purpose: this card's basis is a
+            four way choice driven by the baseline's own validity (unknown, absent, thin, real),
+            not by whether heart_rate carries a wear signal (it does, so MetricCard would otherwise
+            always pick basisWornKey), and MetricCard has no third slot for that choice. Collapsing
+            both props to the one key heartRateBasisKey already selected means MetricCard's own
+            wear/plain switch has nothing left to decide between; whichever branch it takes renders
+            the same text. worn/count/reported still land in the call MetricCard makes for the wear
+            branch, but heartRateBasisKey's four templates reference none of them, so they are
+            unused interpolation values, not a second, competing basis. baseline stays unset here,
+            the same omission the card made by hand before: a thin baseline should blank only the
+            band this chart draws around its lines, not the lines themselves, and passing baseline
+            through would hand that decision to emptyStateFor's own insufficient state instead. */}
+        <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')}
+          query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
+          points={meanHrPoints}
+          basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.to }}>
+          {() => (
             /* Empty until M3c. HeartRateRange has taken both props since D1 and fed them from
                fixtures; annotations and overrides are M3c's subject, and passing them empty here is
                a milestone boundary rather than an oversight. */
             <HeartRateRange days={heartRateDays} baseline={heartRateBand} annotations={EMPTY} excluded={EMPTY}
               label={t('dashboard.heartRateRange.chartLabel', { period })} />
           )}
-        </Card>
+        </MetricCard>
         <Card span={4} label={t('dashboard.flaggedDays.label')}>
           <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
         </Card>
 
-        {/* The date comes off the night being drawn, never off the range end: this card used to
-            head an empty state with "last night, 2026-08-31", naming a night it was not drawing
-            and had no row for, which is what the neighbour above withholds its basis to avoid. */}
+        {/* Still not a MetricCard. The card chrome was never this card's problem, only its basis
+            was hostage to it: what MetricCard cannot take is a night. It wants a metric and that
+            metric's SeriesPoint rows, and this card is gated on useNights (isError, isPending, and
+            an emptiness test, lastNight === null, that has nothing to do with coverage or a wear
+            signal), with a basis line naming lastNight.localDate, a field that exists only once
+            that same check has already passed. Manufacturing a fake metric and a fake points array
+            just to satisfy the prop shape would be the contortion the brief rules out, not a fit. */}
         <Card span={7} label={t('dashboard.sleepStages.label')}
           basis={nights.isError || lastNight === null
             ? undefined
@@ -635,17 +654,21 @@ export function Dashboard() {
               label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
           )}
         </Card>
-        <Card span={5} label={t('dashboard.sleepSchedule.label')}
-          basis={lastSeries.isError || lastSeries.isPending || scheduleNights.length === 0
-            ? undefined
-            : t('dashboard.sleepSchedule.basis', { count: drawnNights })}>
-          {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} />
-            : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
-            <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
-          ) : (
-            <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />
-          )}
-        </Card>
+        {/* metric is sleep_bedtime_minutes only to pick the plain key: neither bedtime nor
+            waketime carries a wear signal (every sleep metric says false, see coverageIsMeaningful),
+            so MetricCard always resolves to basisKey here, and basisWornKey is never reached; it is
+            handed the same string only because the prop is required. points concatenates both
+            metrics' rows rather than naming one: scheduleNights.length === 0, the old empty test,
+            is true exactly when both bedtimePoints and waketimePoints are empty, which is exactly
+            what points.length === 0 reads once the two are joined, so the gate does not narrow to
+            "bedtime is empty" the way naming one metric alone would. count is drawnNights, not the
+            wear clause's own count, which is what un-reserving count on the plain key is for. */}
+        <MetricCard metric="sleep_bedtime_minutes" span={5} label={t('dashboard.sleepSchedule.label')}
+          query={lastSeries} points={[...bedtimePoints, ...waketimePoints]}
+          basisKey="dashboard.sleepSchedule.basis" basisWornKey="dashboard.sleepSchedule.basis"
+          basisValues={{ count: drawnNights }}>
+          {() => <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />}
+        </MetricCard>
 
         <Card span={8} label={t('dashboard.dailySteps.label')}
           basis={sumSeries.isError || stepsPending ? undefined : t('dashboard.dailySteps.basis', {

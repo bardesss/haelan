@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
+import { Card } from './Card.js'
 import { ErrorState } from './ErrorState.js'
 import { Loading } from './Loading.js'
 import { EmptyState } from './EmptyState.js'
@@ -21,19 +22,39 @@ import type { Baseline } from '../data/useBaseline.js'
  *
  * Moved out of Dashboard.tsx's `tile()`, comments included, because those comments are the record
  * of what went wrong and why the order below is the order it is.
+ *
+ * Owns the `Card` shell too, not just the content inside it. The first version left `span`/`label`/
+ * `basis` to the caller's own `<Card>`, which put the basis on a prop this component never touched:
+ * a caller wanting the basis in the header, rather than inside `children`, could not use this
+ * component without either losing the card chrome in the error/pending/empty branches (by putting
+ * `MetricCard` outside `Card`) or hand rolling a second copy of `Card`'s own basis paragraph and
+ * `BasisContext` wiring inside `children` (by putting it inside). Neither is the fix; the fix is
+ * that `Card` renders here, in every branch, so the chrome survives regardless of what is drawn and
+ * the header basis comes from the exact place that decided what to draw.
  */
-export function MetricCard({ metric, query, points, baseline, basisKey, basisWornKey, basisValues, children }: {
+export function MetricCard({ metric, query, points, baseline, span, label, basisKey, basisWornKey, basisValues, after, children }: {
   metric: string
   query: { isError: boolean, isPending: boolean, refetch: () => unknown }
   points: SeriesPoint[]
   baseline?: Baseline | null
+  span: number
+  label?: string
   basisKey: string
   basisWornKey: string
-  // worn, count and reported are typed to never so a caller cannot pass a second, independently
-  // derived copy of the figures this component already computes from metric and points: the type
-  // system's half of the belt-and-braces below, since a runtime precedence rule nothing enforces
-  // at the type level is a rule the next author has to remember instead of one the compiler keeps.
-  basisValues?: Record<string, unknown> & { worn?: never, count?: never, reported?: never }
+  // worn and reported stay reserved: MetricCard always overwrites them after the spread (reported
+  // in both branches, worn only in the wear branch, but a value a caller passed for it would just
+  // sit there unused, which is its own kind of trap), so a caller's own copy could only ever be
+  // silently discarded or silently ignored, never actually used. count is not reserved the same
+  // way any more: it is only ever overwritten in the wear branch below, and a caller routed through
+  // the plain key (a card whose metric carries no wear signal, such as a night count) owns that
+  // clause outright and needs its own count to fill a plural i18next reads no other name for. See
+  // the wear/plain split lower in this file for which branch actually applies it.
+  basisValues?: Record<string, unknown> & { worn?: never, reported?: never }
+  // Rendered inside the Card shell in every branch, error, pending, empty and data alike: a card
+  // link ("View activity") sits beside the metric content today and stayed visible through every
+  // state before this component owned the shell, so folding the shell in must not make it vanish
+  // the moment a request fails or a period comes back empty.
+  after?: ReactNode
   children: (basis: string) => ReactNode
 }): ReactNode {
   const { t } = useTranslation()
@@ -44,14 +65,21 @@ export function MetricCard({ metric, query, points, baseline, basisKey, basisWor
   // this same shape) can have one series still pending while another has already failed, and an
   // errored query has isPending false and data undefined, which is exactly the shape emptyStateFor
   // reads as "no data yet".
-  if (query.isError) return <ErrorState onRetry={() => void query.refetch()} />
+  if (query.isError) {
+    return <Card span={span} label={label}><ErrorState onRetry={() => void query.refetch()} />{after}</Card>
+  }
   // Nothing has been asked yet, so there is nothing to state. format() over an empty array is a
   // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
-  if (query.isPending) return <Loading />
+  if (query.isPending) return <Card span={span} label={label}><Loading />{after}</Card>
 
   const empty = emptyStateFor(metric, points, baseline)
   if (empty !== null) {
-    return <EmptyState title={t(`emptyState.${empty}.title`)} detail={t(`emptyState.${empty}.detail`)} />
+    return (
+      <Card span={span} label={label}>
+        <EmptyState title={t(`emptyState.${empty}.title`)} detail={t(`emptyState.${empty}.detail`)} />
+        {after}
+      </Card>
+    )
   }
 
   // worn and unworn count only the points that can answer the wear question (see wornOn): a day
@@ -78,16 +106,15 @@ export function MetricCard({ metric, query, points, baseline, basisKey, basisWor
   // and an _other to choose between: passing it to a key with neither would ask i18next to
   // pluralise a string nobody wrote a plural for.
   //
-  // basisValues spreads first, not last: this is the load bearing line of the whole component.
-  // worn, count and reported are computed above from the same metric and points that gated the
-  // states above them, and a caller's own copy of those figures (Dashboard.tsx's basisOf returns
-  // exactly this shape) landing after them in the spread would silently overwrite a truthful
+  // basisValues spreads first, not last, in the wear branch: worn, count and reported are computed
+  // above from the same metric and points that gated the states above them, and a caller's own copy
+  // of those figures landing after them in the spread would silently overwrite a truthful
   // computation with a second, independently derived one, the very split this component exists to
-  // make impossible. basisValues exists only to carry what this component cannot know on its own,
-  // such as the requested range length.
+  // make impossible. The plain branch only owns `reported` the same way, so a caller's own `count`
+  // (a night count, a workout count, anything the wear clause never speaks to) survives there.
   const basis = coverageIsWearSignal(metric)
     ? t(basisWornKey, { ...basisValues, worn, count, reported })
     : t(basisKey, { ...basisValues, reported })
 
-  return <>{children(basis)}</>
+  return <Card span={span} label={label} basis={basis}>{children(basis)}{after}</Card>
 }
