@@ -199,7 +199,10 @@
     },
     "dailySteps": {
       "label": "Daily steps",
-      "basis": "calendar heatmap, {{worn}} of {{total}} days worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
+      "basis": "calendar heatmap, {{reported}} of {{total}} days, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
+      "basisWorn_one": "calendar heatmap, {{reported}} of {{total}} days, {{count}} day not worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
+      "basisWorn_other": "calendar heatmap, {{reported}} of {{total}} days, {{count}} days not worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
+      "basisNoData": "calendar heatmap, no readings in these {{total}} days, every day carries an absence dot",
       "chartLabel": "Steps per day through {{period}}"
     },
     "distance": {

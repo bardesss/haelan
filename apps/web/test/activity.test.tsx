@@ -92,6 +92,34 @@ function stubActivity(urls: string[]): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * The same routes, but with the steps series dictated point by point and every other metric empty.
+ * The heatmap card's basis is the one claim on this page whose numerator, denominator and wear
+ * clause are three different counts, and stubActivity's uniform "one worn point per metric" cannot
+ * tell them apart: reported and worn are both 1 under it, so a card that swapped one for the other
+ * reads identically. Points carry `source` and `updatedAtMs` because a real /series row does.
+ */
+function stubSteps(points: readonly { localDate: string, value: number, coverage: number | null }[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      return json(Object.fromEntries(metrics.map((metric) => [metric, {
+        points: metric === 'steps'
+          ? points.map((p) => ({ ...p, source: 'merged', sourceMix: null, updatedAtMs: 1_755_000_000_000 }))
+          : [],
+        reduction: null,
+      }])))
+    }
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Activity page', () => {
   // The two provider only metrics are the reason Task 1 of this milestone exists. If the request
   // carried a source parameter at all, both would come back empty here (see stubActivity's own
@@ -146,16 +174,58 @@ describe('the Activity page', () => {
 
   // The heatmap's own dense denominator, carried over from dashboard-cards.test.tsx's equivalent
   // check when the card moved here: /series omits a day with no row entirely, so points.length is
-  // "days that reported", and a month missing most of its days must not read "1 of 1 days worn".
+  // "days that reported", and a month missing most of its days must not read "1 of 1 days".
   it('states the heatmap total against every calendar day in range, not just the days that reported', async () => {
     window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
     const restore = stubActivity([])
     const { client, tree } = withQuery(<Activity />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
-    const match = container!.textContent!.match(/(\d+) of (\d+) days worn/)
+    const match = container!.textContent!.match(/calendar heatmap, (\d+) of (\d+) days/)
     expect(match).not.toBeNull()
     expect(Number(match![2])).toBeGreaterThan(1)
+    restore()
+  })
+
+  // The numerator, which the denominator test above never looks at. It read "days worn" against a
+  // dense calendar denominator, so a month with one reporting day claimed thirty days not worn
+  // while ActivityHeatmap's own accessible table called those same days "no reading" on the stated
+  // grounds that an absent row names no cause. One card, two contradictory claims about the same
+  // thirty days. The numerator is now what the chart itself can defend, the days that reported,
+  // with the wear count in its own clause over those days alone.
+  it('counts the days that reported, and keeps not worn to a clause about them', async () => {
+    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
+    // Two steps days out of a thirty one day August, and deliberately only one of them worn: with
+    // a stub where every reporting day is also a worn day, the reported and worn numerators are
+    // the same number and the old wording would pass this unchanged. NOT_WORN_MAX_COVERAGE is an
+    // hour and the comparison is strict, so 1/24 is the not worn day.
+    const restore = stubSteps([
+      { localDate: '2026-08-15', value: 4000, coverage: 0.9 },
+      { localDate: '2026-08-16', value: 30, coverage: 1 / 24 },
+    ])
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const text = container!.textContent!
+    expect(text).toContain('calendar heatmap, 2 of 31 days, 1 day not worn')
+    expect(text).not.toContain('1 of 31 days worn')
+    restore()
+  })
+
+  // A period with no steps at all is neither pending nor errored, so the basis rendered anyway:
+  // "0 of 31 days worn, 0 to 0 steps", a specific false claim about the person's month plus a
+  // colour domain read off no readings whatever. The chart still draws its thirty one absence
+  // dots, so the card is not empty; only the counting clause has nothing to stand on.
+  it('states no readings rather than a count and a colour domain for an empty period', async () => {
+    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
+    const restore = stubSteps([])
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const text = container!.textContent!
+    expect(text).toContain('calendar heatmap, no readings in these 31 days')
+    expect(text).not.toContain('0 to 0 steps')
+    expect(text).not.toMatch(/calendar heatmap, 0 of/)
     restore()
   })
 

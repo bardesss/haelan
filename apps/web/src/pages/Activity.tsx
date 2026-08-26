@@ -19,7 +19,7 @@ import type { SeriesPoint } from '../data/useSeries.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { wornOn } from '../data/emptyState.js'
+import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { trend } from '../format.js'
 
@@ -132,7 +132,6 @@ export function Activity() {
   // over Task 5's own review: it draws its own absence dot per day instead of a full-card empty
   // state, which MetricCard's emptyStateFor gate would add on top of a chart that has always drawn.
   const stepsPoints = metricGroups.pointsOf('steps')
-  const stepsWorn = stepsPoints.filter((point) => wornOn('steps', point) === true).length
   const heatmapDays = useMemo(() => {
     const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
     return rangeDates.map((date) => {
@@ -146,9 +145,31 @@ export function Activity() {
   }, [rangeDates, stepsPoints])
   const maxSteps = Math.max(0, ...values(stepsPoints))
   // Nothing is stated while the request is in flight: heatmapDays is dense from the moment the page
-  // mounts, so counting it before anything has settled would read "0 of 31 days worn", a specific
-  // false claim rather than a vacuous one.
-  const stepsPending = metricGroups.queryFor('steps').isPending
+  // mounts, so counting it before anything has settled would read "0 of 31 days", a specific false
+  // claim rather than a vacuous one.
+  const stepsQuery = metricGroups.queryFor('steps')
+
+  // The same split MetricCard makes for every other card on this page, made by hand because this
+  // card draws an absence dot per day rather than a full-card empty state and so stays outside it.
+  // Getting it wrong here is what the old wording did: it counted only wornOn === true against
+  // every calendar day in range and called the difference "not worn", while the chart's own
+  // accessible table read "no reading" for those same days on the stated grounds that absence names
+  // no cause (ActivityHeatmap.tsx). Reported against total is the claim the data supports; the wear
+  // count is a separate clause over the days that actually answered the question.
+  const stepsBasis = (): string | undefined => {
+    if (stepsQuery.isError || stepsQuery.isPending) return undefined
+    // A settled but empty period is neither pending nor errored, so without this it rendered
+    // "0 of 31 days, 0 to 0 steps": a count of nothing, plus a colour domain claimed from no
+    // readings at all.
+    if (stepsPoints.length === 0) return t('activity.dailySteps.basisNoData', { total: rangeDates.length })
+    const answers = stepsPoints.map((point) => wornOn('steps', point))
+    const stated = {
+      reported: stepsPoints.length, total: rangeDates.length, maxSteps: groupNumber(maxSteps),
+    }
+    return coverageIsWearSignal('steps')
+      ? t('activity.dailySteps.basisWorn', { ...stated, count: answers.filter((w) => w === false).length })
+      : t('activity.dailySteps.basis', stated)
+  }
 
   // Every sparkline tile on this page shares one shape: a metric, a sum over the period, and a
   // basis line stating how many of the range's calendar days answered. Parameterised on
@@ -188,12 +209,9 @@ export function Activity() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
       <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
-        <Card span={12} label={t('activity.dailySteps.label')}
-          basis={sumSeries.isError || stepsPending ? undefined : t('activity.dailySteps.basis', {
-            worn: stepsWorn, total: rangeDates.length, maxSteps: groupNumber(maxSteps),
-          })}>
-          {sumSeries.isError ? <ErrorState onRetry={() => void sumSeries.refetch()} />
-            : stepsPending ? <Loading /> : (
+        <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
+          {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} />
+            : stepsQuery.isPending ? <Loading /> : (
             <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })} />
           )}
         </Card>

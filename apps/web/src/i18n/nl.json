@@ -199,7 +199,10 @@
     },
     "dailySteps": {
       "label": "Dagelijkse stappen",
-      "basis": "kalenderwarmtekaart, {{worn}} van {{total}} dagen gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basis": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basisWorn_one": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basisWorn_other": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basisNoData": "kalenderwarmtekaart, geen metingen in deze {{total}} dagen, elke dag heeft een afwezigheidsstip",
       "chartLabel": "Stappen per dag in {{period}}"
     },
     "distance": {
