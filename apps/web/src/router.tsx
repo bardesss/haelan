@@ -57,10 +57,18 @@ function subscribe(listener: () => void): () => void {
   }
 }
 
-// pushState does not fire popstate, so navigate tells the subscribers itself.
-export function navigate(to: string): void {
-  window.history.pushState(null, '', to)
+// pushState does not fire popstate, and neither does replaceState, so navigate tells the
+// subscribers itself either way.
+export function navigate(to: string, options: { replace?: boolean } = {}): void {
+  if (options.replace === true) window.history.replaceState(null, '', to)
+  else window.history.pushState(null, '', to)
   for (const listener of listeners) listener()
+}
+
+// Exported for the router's own test. useSyncExternalStore subscribes through this, and the
+// test needs to prove replaceState notifies as well as pushState, which nothing else observes.
+export function subscribeForTest(listener: () => void): () => void {
+  return subscribe(listener)
 }
 
 export function useRoute(): string {
