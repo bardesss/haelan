@@ -158,4 +158,34 @@ describe('the Activity page', () => {
     expect(Number(match![2])).toBeGreaterThan(1)
     restore()
   })
+
+  // Carried over from pages.test.tsx's own "states the heatmap colour domain" assertion, which
+  // the previous round deleted without replacing: that assertion pinned two claims the denominator
+  // test above does not touch at all, the maxSteps interpolation and the static "stronger colour"
+  // copy, and a broken interpolation or a dropped clause would have passed every other test in
+  // this file. stubActivity answers every metric with a single point at value 60, so 60 is both
+  // the sum and the maximum steps reads for the one day it reports.
+  it('states the heatmap colour domain from the steps it actually drew', async () => {
+    const restore = stubActivity([])
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).toContain('0 to 60 steps')
+    expect(container!.textContent).toContain('stronger colour is more steps')
+    restore()
+  })
+
+  // The other half of pages.test.tsx's own language parity check that the heatmap's move left
+  // uncovered: ActivityHeatmap is the only chart anywhere in this app that renders a weekday
+  // column, so with it gone from Dashboard, translating that column into Dutch was exercised
+  // nowhere at all once the heatmap-specific pages.test.tsx assertion was removed.
+  it('translates the heatmap weekday column into Dutch', async () => {
+    const restore = stubActivity([])
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.innerHTML).toContain('Weekdag')
+    expect(container!.innerHTML).not.toContain('>Weekday<')
+    restore()
+  })
 })
