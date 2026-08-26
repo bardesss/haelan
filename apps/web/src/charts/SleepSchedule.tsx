@@ -15,7 +15,18 @@ export const AXIS_MAX = 36 * 60
 // Parked above every real span: inside the range it once read as an unusually early wake time.
 export const NO_DATA_Y = 35 * 60
 
-export function SleepSchedule({ nights, label, showNaps = true }: { nights: Night[]; label: string; showNaps?: boolean }) {
+// The default axis window, unchanged: Dashboard's own card stays noon to noon and compact. A
+// caller wanting more room (Sleep.tsx, for a night that runs past this window's own noon) passes
+// its own window rather than this one changing under it; see that page for why and the hand
+// verified numbers this default's boundary case needed.
+const DEFAULT_WINDOW = { min: AXIS_MIN, max: AXIS_MAX }
+
+export function SleepSchedule({ nights, label, showNaps = true, window = DEFAULT_WINDOW }: {
+  nights: Night[]
+  label: string
+  showNaps?: boolean
+  window?: { min: number, max: number }
+}) {
   const { t } = useTranslation()
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
@@ -24,7 +35,7 @@ export function SleepSchedule({ nights, label, showNaps = true }: { nights: Nigh
       grid: base.grid({ left: 40 }),
       xAxis: { type: 'category' as const, data: nights.map((n) => n.date.slice(8)),
         ...base.labelledAxis, axisLabel: { ...base.axisLabel, interval: 4 } },
-      yAxis: { type: 'value' as const, min: AXIS_MIN, max: AXIS_MAX, inverse: false,
+      yAxis: { type: 'value' as const, min: window.min, max: window.max, inverse: false,
         axisLabel: { ...base.axisLabel, formatter: (v: number) => formatClock(v).slice(0, 2) + ':00' },
         splitLine: base.splitLine },
       series: [
@@ -61,7 +72,12 @@ export function SleepSchedule({ nights, label, showNaps = true }: { nights: Nigh
           : []),
       ],
     }
-  }, [nights, showNaps])
+    // window.min/max rather than window itself: SleepSchedule's own default is a module level
+    // constant so it never churns, but a caller building its own window prop (Sleep.tsx passes a
+    // module level constant of its own, for the same reason) should not have to guarantee object
+    // identity across renders just to avoid disposing and rebuilding this chart every commit, the
+    // defect useChart.ts's own doc comment already names for a freshly constructed array.
+  }, [nights, showNaps, window.min, window.max])
 
   const { host, style } = useChart(build, 150)
   const baseColumns = [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke')]

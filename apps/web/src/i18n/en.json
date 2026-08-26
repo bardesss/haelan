@@ -369,6 +369,16 @@
       "label": "Nap time",
       "basis": "sum, {{reported}} of {{total}} nights",
       "chartLabel": "Nightly nap time through {{period}}"
+    },
+    "sleepStages": {
+      "label": "Sleep stages",
+      "basis": "most recent night, {{date}}",
+      "chartLabel": "Sleep stages through the night of {{date}}"
+    },
+    "sleepSchedule": {
+      "label": "Sleep schedule",
+      "basis_one": "bed and wake time, {{count}} night",
+      "basis_other": "bed and wake time, {{count}} nights"
     }
   },
   "setup": {

@@ -369,6 +369,16 @@
       "label": "Dutjesduur",
       "basis": "som, {{reported}} van {{total}} nachten",
       "chartLabel": "Dutjesduur per nacht in {{period}}"
+    },
+    "sleepStages": {
+      "label": "Slaapfasen",
+      "basis": "meest recente nacht, {{date}}",
+      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
+    },
+    "sleepSchedule": {
+      "label": "Slaapschema",
+      "basis_one": "bedtijd en waaktijd, {{count}} nacht",
+      "basis_other": "bedtijd en waaktijd, {{count}} nachten"
     }
   },
   "setup": {
