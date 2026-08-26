@@ -51,7 +51,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: 
       <div className="controls-end">
         <label className="button">
           <Icon name="sources" />
-          <span className="visually-hidden">{t('controlRow.sources')}</span>
+          <span className="sr-only">{t('controlRow.sources')}</span>
           <select value={selected} onChange={(e) => controls.setSource(e.currentTarget.value)}>
             {options.map((source) => (
               <option key={source} value={source}>
