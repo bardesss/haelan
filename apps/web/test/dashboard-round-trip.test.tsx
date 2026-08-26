@@ -120,6 +120,51 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Answers /series with a sourceMix that depends on the request's own `source` parameter, the way
+ * the real store does: rollup.ts writes sourceMix: null for every per source rollup and only
+ * mergeDay's merged rows carry a real mix. A stub that always returned the same sourceMix
+ * regardless of source could not catch the bug this file's "keeps a picked device" test exists
+ * for, since that bug is specifically the selector losing the mix the instant a request stops
+ * asking for merged.
+ */
+function stubFetchBySource(seen: string[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    seen.push(url)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify({
+        personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true,
+        timezone: 'Europe/Amsterdam',
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const params = new URLSearchParams(url.split('?')[1] ?? '')
+      const metrics = params.getAll('metric')
+      const source = params.get('source')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = {
+          points: [source === 'merged'
+            ? {
+                localDate: '2026-08-15', value: 100, coverage: 0.9, source: 'merged',
+                sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
+              }
+            : { localDate: '2026-08-15', value: 100, coverage: 0.9, source: 'watch', sourceMix: null }],
+          reduction: null,
+        }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Dashboard round trip', () => {
   // The whole behaviour, across both units: the control row pushes a parameter, the URL changes,
   // the hook re-parses it, the query key changes, and a new request goes out for the new range.
@@ -218,6 +263,25 @@ describe('the Dashboard round trip', () => {
     // Not just absent text: no delta chip should exist at all for a window with one point, since
     // there is no earlier half to compare it against.
     expect(container!.querySelectorAll('.delta')).toHaveLength(0)
+    restore()
+  })
+
+  // The regression this exists for: distinctSources used to be fed the range scoped queries,
+  // which fetch under whatever source the control row has selected, so picking a real device
+  // wiped out every sourceMix the selector reads and the select silently fell back to "All
+  // sources" while the numbers on screen stayed device filtered. The fix reads a query pinned to
+  // source: 'merged' instead of whatever the reader picked.
+  it('keeps a picked device selected and offered in the source selector', async () => {
+    const seen: string[] = []
+    const restore = stubFetchBySource(seen)
+    window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15&source=watch')
+
+    mount(withQuery(<Dashboard />))
+    await flush(() => container!.innerHTML)
+
+    const select = container!.querySelector('select') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toContain('watch')
+    expect(select.value).toBe('watch')
     restore()
   })
 

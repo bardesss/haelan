@@ -82,8 +82,13 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: 
         {/* A link, not a fetch: the export route answers a file and the browser already knows how
             to save one, so there is no blob and no object URL for this component to manage. */}
         <a className="button" href={exportPath}><Icon name="download" />{t('controlRow.downloadRaw')}</a>
+        {/* personId === undefined guards the same race useSeries and useSyncStatus guard with
+            their own `enabled` checks: a click before the session resolves would still post
+            (apiSend needs no personId), but onSuccess's invalidation is keyed on personId and
+            silently does nothing without it, leaving the status stale with no retry. Disabling
+            here means that request is never sent in the first place. */}
         <button type="button" className="button button-primary"
-          disabled={runSync.isPending || status.data?.running === true}
+          disabled={personId === undefined || runSync.isPending || status.data?.running === true}
           onClick={() => runSync.mutate()}>
           <Icon name="sync" />{t('controlRow.sync')}
         </button>

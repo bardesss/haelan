@@ -82,10 +82,10 @@ function sourcesIn(raw: string | null): string[] {
     .filter((source): source is string => typeof source === 'string')
 }
 
-// The device names offered in the control row's source selector, read off data this page already
-// fetches rather than a route of its own: sourceMix (merge.ts's encodeMix) records which devices
-// contributed to each merged row, so every source this person has shows up in it somewhere as
-// long as at least one point on the page is a merged row.
+// The device names offered in the control row's source selector, pulled off whichever query
+// results are passed in rather than a route of its own. Every caller must pass a query that is
+// scoped to source: 'merged': see the comment at the one call site (sourceEnumeration, below) for
+// why an ordinary range scoped query silently breaks this the moment a device filter is active.
 function distinctSources(queries: readonly UseQueryResult<Record<string, MetricSeries>>[]): string[] {
   const found = new Set<string>()
   for (const query of queries) {
@@ -222,13 +222,30 @@ export function Dashboard() {
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
 
+  // The control row's source selector has to be read off a MERGED row, not off whatever source is
+  // currently selected: rollup.ts writes sourceMix: null for every per source rollup
+  // (packages/core/src/derive/rollup.ts:154, and exercise.ts:68 reads it the same way), and only
+  // mergeDay's merged rows carry a real mix (merge.ts's encodeMix, called unconditionally there).
+  // Feeding distinctSources the five range scoped queries above therefore worked only for the one
+  // reader who had never touched the selector: the moment somebody picked a real device, every
+  // series request became scoped to that device, none of the returned rows carried a sourceMix,
+  // distinctSources returned nothing, resolveSource fell back to 'merged', and the select
+  // silently relabelled itself "All sources" while the charts above it kept showing the device
+  // filtered numbers, no way back to another device short of hand editing the URL. So this is its
+  // own query, pinned to source: 'merged' regardless of what the reader has chosen. When the
+  // reader has not touched the selector this key is identical to sumSeries's own key and React
+  // Query serves it from that same cache entry rather than issuing a second request; the extra
+  // request only happens while a device filter is actually active, which is exactly the state
+  // this exists to recover from.
+  const sourceEnumeration = useSeries([...SUM_METRICS], { ...range, source: 'merged' }, 'sum')
+
   // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago":
   // nothing synced yet reads as 0, the same value this literally was before Task 12 wired it,
   // rather than a special case this card has no copy for.
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
     ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
     : 0
-  const sources = distinctSources([sumSeries, lastSeries, meanSeries, minHrSeries, maxHrSeries])
+  const sources = distinctSources([sourceEnumeration])
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
 
