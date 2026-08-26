@@ -7,6 +7,7 @@ export interface Session {
   displayName: string
   username: string
   isAdmin: boolean
+  timezone: string
 }
 
 // The person is the session's, never the URL's. An account owns exactly one person
