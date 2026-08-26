@@ -18,7 +18,7 @@ async function sessionCookie(h: Harness): Promise<string> {
 // tryStart leaves a run going. Letting it finish keeps the database open until it is done,
 // rather than closing it underneath a backfill in cleanup.
 async function settle(h: Harness): Promise<void> {
-  while (h.app.haelan.runner.status().running) {
+  while (h.app.haelan.runner.runState().running) {
     await new Promise((resolve) => setImmediate(resolve))
   }
 }
@@ -90,7 +90,7 @@ describe('sync routes', () => {
     // The point of 202 over 200: a backfill batch runs for minutes and the browser follows it
     // through the stream. A route that awaited the run would still be holding the socket here,
     // and this line would never be reached.
-    expect(harness.app.haelan.runner.status().running).toBe(true)
+    expect(harness.app.haelan.runner.runState().running).toBe(true)
 
     release()
     await settle(harness)

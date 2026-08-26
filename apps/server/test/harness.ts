@@ -140,11 +140,11 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
   // have to walk it.
   //
   // Guarded against a second call: PeopleStore.create and AccountStore.create both throw on a
-  // repeat id/username, and signIn below calls this itself so that a test can sign in without
-  // having called it first. That only works if calling it twice is free, which needs the flag
-  // set after the work succeeds, not before: setting it early would make a failed first call
-  // look like a finished one to every caller after it, turning one loud failure into a silent
-  // no-op somewhere else.
+  // repeat id/username, and both signIn and addPerson below call this themselves so a test can
+  // use either without having called it first. That only works if calling it twice is free,
+  // which needs the flag set after the work succeeds, not before: setting it early would make a
+  // failed first call look like a finished one to every caller after it, turning one loud
+  // failure into a silent no-op somewhere else.
   let setupComplete = false
   const completeSetup = async () => {
     if (setupComplete) return
@@ -200,8 +200,9 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
       return cookie.value
     },
 
-    // The isolation suite needs a person the signed in account does not own. The harness seeds
-    // exactly one, and every test that wanted a second has been reaching into the stores itself.
+    // A second household member: a person and an account of their own, no refresh token. Nothing
+    // here grants them any data, which is the point - the isolation tests need an account that
+    // can sign in and must still see nothing of anybody else's.
     addPerson: async (input: { id: string, displayName: string, username: string }) => {
       await completeSetup()
       new PeopleStore(instance.db).create({
