@@ -29,7 +29,9 @@
     },
     "previousPeriod": "Previous period",
     "nextPeriod": "Next period",
+    "pickDate": "Pick a date",
     "sources": "Sources",
+    "sourceMerged": "All sources",
     "downloadRaw": "Download raw",
     "sync": "Sync",
     "syncedAgo": "Synced {{count}} min ago"

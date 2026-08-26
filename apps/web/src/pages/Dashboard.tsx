@@ -3,6 +3,7 @@ import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import type { PageControlsState } from '../controls/usePageControls.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
@@ -35,6 +36,16 @@ const zeroSleepNights = worn.filter((d) => d.sleepMinutes === 0)
 export function Dashboard() {
   const { t, i18n } = useTranslation()
   const period = t('common.periodLabel')
+  // This page is still fixture data for a fixed July, not wired to usePageControls, so its row is
+  // a static stand-in with no-op setters rather than the live hook: the hook reads the URL through
+  // useSession, which needs a QueryClientProvider this page's own tests do not set up, and wiring
+  // the two together for real is a later task. from and to both read as the fixture's own month
+  // so the stepper label matches what it always said, rather than a literal placeholder.
+  const controls: PageControlsState = {
+    tab: 'month', anchor: '2026-07-31', source: 'merged',
+    from: period, to: period,
+    setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
+  }
   // The active language, not a pinned locale: a bilingual app whose numbers only ever group like
   // English is not actually speaking Dutch when it renders Dutch.
   const groupNumber = (value: number) => value.toLocaleString(i18n.language)
@@ -45,7 +56,10 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow range="month" label={period} sources="2/2" syncedMinutesAgo={4} />
+      {/* The row beneath this one is still fixture data for July regardless of what range or
+          source gets picked here; wiring the two together is a later task. Sources is empty
+          rather than invented device names, since this page has no real source list yet. */}
+      <ControlRow controls={controls} sources={[]} syncedMinutesAgo={4} />
       <div className="grid">
         <Card span={3}>
           <StatTile label={t('dashboard.steps.label')} value={groupNumber(totalSteps)}

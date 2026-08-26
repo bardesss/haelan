@@ -1,0 +1,112 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import type { ReactNode } from 'react'
+import { I18nProvider } from '../src/i18n/index.js'
+import { ControlRow, resolveSource } from '../src/components/ControlRow.js'
+import type { PageControlsState } from '../src/controls/usePageControls.js'
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+/**
+ * Mounts a tree and flushes effects, wrapped in a real I18nProvider rather than the
+ * renderToStaticMarkup pattern the rest of the suite uses for static copy: this component sets
+ * real click and change handlers, and those only exist once the tree is mounted for real.
+ */
+function mount(node: ReactNode): void {
+  act(() => { root?.render(<I18nProvider lng="en">{node}</I18nProvider>) })
+}
+
+function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
+  return {
+    tab: 'month', anchor: '2026-08-15', source: 'merged',
+    from: '2026-08-01', to: '2026-08-31',
+    setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
+    ...over,
+  }
+}
+
+describe('ControlRow', () => {
+  it('marks the active range and only the active range', () => {
+    mount(<ControlRow controls={stubControls({ tab: 'week' })} sources={['merged']} syncedMinutesAgo={4} />)
+    const pressed = [...container!.querySelectorAll('.segment')]
+      .filter((b) => b.getAttribute('aria-pressed') === 'true')
+    expect(pressed).toHaveLength(1)
+  })
+
+  // The defect this catches is the one the component shipped with: aria-pressed set correctly
+  // and no handler behind it, so it looked right and did nothing.
+  it('calls setTab when a range is clicked', () => {
+    const chosen: string[] = []
+    mount(<ControlRow controls={stubControls({ setTab: (t) => chosen.push(t) })} sources={['merged']} syncedMinutesAgo={4} />)
+    const segments = [...container!.querySelectorAll('.segment')] as HTMLButtonElement[]
+    act(() => { segments[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(chosen).toHaveLength(1)
+  })
+
+  it('steps backwards and forwards through the stepper buttons', () => {
+    const steps: number[] = []
+    mount(<ControlRow controls={stubControls({ step: (d) => steps.push(d) })} sources={['merged']} syncedMinutesAgo={4} />)
+    const buttons = [...container!.querySelectorAll('.stepper .icon-button')] as HTMLButtonElement[]
+    act(() => { buttons[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    act(() => { buttons[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(steps).toEqual([-1, 1])
+  })
+
+  it('sets the anchor from the calendar picker', () => {
+    const picked: string[] = []
+    mount(<ControlRow controls={stubControls({ setAnchor: (a) => picked.push(a) })} sources={['merged']} syncedMinutesAgo={4} />)
+    const picker = container!.querySelector('input[type="date"]') as HTMLInputElement
+    // React installs its own setter on a controlled input's value property to track what it last
+    // rendered. Assigning picker.value directly goes through that same setter, which quietly
+    // updates the tracker too, so the later event finds nothing changed and onChange never fires,
+    // pass or fail, no matter what the handler does. Going through the native prototype setter
+    // first bypasses React's tracking exactly the way a real keystroke or picker selection would,
+    // and 'input' rather than 'change' is the event React actually listens for on a date input.
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    nativeValueSetter.call(picker, '2026-09-02')
+    act(() => { picker.dispatchEvent(new Event('input', { bubbles: true })) })
+    expect(picked).toEqual(['2026-09-02'])
+  })
+
+  it('offers merged plus every source the person has, and marks the chosen one', () => {
+    mount(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} syncedMinutesAgo={4} />)
+    const select = container!.querySelector('select') as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toEqual(['merged', 'watch', 'phone'])
+    expect(select.value).toBe('watch')
+  })
+
+  // A link can name a source this person does not have, and a source can be removed after a
+  // link is made. Neither should render a select with no matching option.
+  it('falls back to merged when the chosen source is not one this person has', () => {
+    mount(<ControlRow controls={stubControls({ source: 'someone-elses' })} sources={['watch']} syncedMinutesAgo={4} />)
+    const select = container!.querySelector('select') as HTMLSelectElement
+    expect(select.value).toBe('merged')
+  })
+
+  // The DOM assertion above cannot fail for the reason it names: a browser's own <select> quietly
+  // defaults an unmatched controlled value to whichever option renders first, which is always
+  // merged in this component regardless of whether resolveSource's own membership check runs at
+  // all. Deleting that check leaves the test above green. This calls the resolver directly, which
+  // has no such blind spot, so it is the one that actually stands guard on the fallback.
+  it('resolveSource falls back to merged only when the source is not among the options', () => {
+    expect(resolveSource('someone-elses', ['merged', 'watch'])).toBe('merged')
+    expect(resolveSource('watch', ['merged', 'watch'])).toBe('watch')
+  })
+})

@@ -29,7 +29,9 @@
     },
     "previousPeriod": "Vorige periode",
     "nextPeriod": "Volgende periode",
+    "pickDate": "Kies een datum",
     "sources": "Bronnen",
+    "sourceMerged": "Alle bronnen",
     "downloadRaw": "Ruwe data downloaden",
     "sync": "Synchroniseren",
     "syncedAgo": "Gesynchroniseerd {{count}} min geleden"
