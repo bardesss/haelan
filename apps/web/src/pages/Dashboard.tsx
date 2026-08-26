@@ -13,6 +13,7 @@ import { SleepSchedule, AXIS_MIN, AXIS_MAX } from '../charts/SleepSchedule.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { deepLink } from '../controls/deepLink.js'
+import { resolveSource } from '../controls/source.js'
 import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
 import { useSeries } from '../data/useSeries.js'
@@ -213,8 +214,34 @@ export function Dashboard() {
   const { t, i18n } = useTranslation()
   const session = useSession()
   const controls = usePageControls()
-  const range = { from: controls.from, to: controls.to, source: controls.source }
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
+
+  // The control row's source selector has to be read off a MERGED row, not off whatever source is
+  // currently selected: rollup.ts writes sourceMix: null for every per source rollup
+  // (packages/core/src/derive/rollup.ts:154, and exercise.ts:68 reads it the same way), and only
+  // mergeDay's merged rows carry a real mix (merge.ts's encodeMix, called unconditionally there).
+  // Feeding distinctSources the range scoped queries below therefore worked only for the one
+  // reader who had never touched the selector: the moment somebody picked a real device, every
+  // series request became scoped to that device, none of the returned rows carried a sourceMix,
+  // distinctSources returned nothing, the source fell back to 'merged', and the select silently
+  // relabelled itself "All sources" while the charts above it kept showing the device filtered
+  // numbers, no way back to another device short of hand editing the URL. So this is its own
+  // query, pinned to source: 'merged' regardless of what the reader has chosen. When the reader
+  // has not touched the selector this key is identical to sumSeries's own key and React Query
+  // serves it from that same cache entry rather than issuing a second request; the extra request
+  // only happens while a device filter is actually active, which is exactly the state this exists
+  // to recover from.
+  //
+  // It runs before the range scoped queries because it is what tells them which source to ask
+  // for: a link naming a source this person does not have used to correct only the select while
+  // every card underneath queried the foreign value.
+  const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: 'merged' }, 'sum')
+  const sources = distinctSources([sourceEnumeration])
+  const source = resolveSource(controls.source, ['merged', ...sources])
+  const range = { from: controls.from, to: controls.to, source }
+  // One state object from here down, so the row, the card links and every request are talking
+  // about the same source.
+  const resolved = { ...controls, source }
 
   // Fixed groups, not derived from a response: this hook runs the same five times in the same
   // order on every render regardless of what any of them returns.
@@ -230,26 +257,9 @@ export function Dashboard() {
   // before `on`, and the chart under this band draws from..to. Anchoring it inside the drawn
   // window puts a band over days it was computed from, and a Year view drew a sixty day band
   // across twelve months without the basis line ever saying when it ended. It says so now.
-  const hrBaseline = useBaseline('heart_rate', controls.to, controls.source, 'mean')
+  const hrBaseline = useBaseline('heart_rate', controls.to, source, 'mean')
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
-
-  // The control row's source selector has to be read off a MERGED row, not off whatever source is
-  // currently selected: rollup.ts writes sourceMix: null for every per source rollup
-  // (packages/core/src/derive/rollup.ts:154, and exercise.ts:68 reads it the same way), and only
-  // mergeDay's merged rows carry a real mix (merge.ts's encodeMix, called unconditionally there).
-  // Feeding distinctSources the five range scoped queries above therefore worked only for the one
-  // reader who had never touched the selector: the moment somebody picked a real device, every
-  // series request became scoped to that device, none of the returned rows carried a sourceMix,
-  // distinctSources returned nothing, resolveSource fell back to 'merged', and the select
-  // silently relabelled itself "All sources" while the charts above it kept showing the device
-  // filtered numbers, no way back to another device short of hand editing the URL. So this is its
-  // own query, pinned to source: 'merged' regardless of what the reader has chosen. When the
-  // reader has not touched the selector this key is identical to sumSeries's own key and React
-  // Query serves it from that same cache entry rather than issuing a second request; the extra
-  // request only happens while a device filter is actually active, which is exactly the state
-  // this exists to recover from.
-  const sourceEnumeration = useSeries([...SUM_METRICS], { ...range, source: 'merged' }, 'sum')
 
   // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago":
   // nothing synced yet reads as 0, the same value this literally was before Task 12 wired it,
@@ -257,7 +267,6 @@ export function Dashboard() {
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
     ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
     : 0
-  const sources = distinctSources([sourceEnumeration])
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
 
@@ -469,13 +478,13 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow controls={controls} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
+      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
         <Card span={3}>
           {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
             'dashboard.steps.chartLabel', 'dashboard.units.steps',
             (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better')}
-          <Link to={deepLink('/activity', controls)} className="card-link">
+          <Link to={deepLink('/activity', resolved)} className="card-link">
             {t('dashboard.steps.viewAll')}
           </Link>
         </Card>
@@ -484,7 +493,7 @@ export function Dashboard() {
             'dashboard.restingHr.basisWorn', 'dashboard.restingHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'lower-is-better', t('dashboard.units.bpm'))}
-          <Link to={deepLink('/recovery', controls)} className="card-link">
+          <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.restingHr.viewAll')}
           </Link>
         </Card>
@@ -493,7 +502,7 @@ export function Dashboard() {
             'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
             'dashboard.units.minutesAsleep',
             (p) => formatDuration(mean(values(p))), 'higher-is-better')}
-          <Link to={deepLink('/sleep', controls)} className="card-link">
+          <Link to={deepLink('/sleep', resolved)} className="card-link">
             {t('dashboard.sleep.viewAll')}
           </Link>
         </Card>
@@ -502,7 +511,7 @@ export function Dashboard() {
             'dashboard.meanHr.basisWorn', 'dashboard.meanHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'neutral', t('dashboard.units.bpm'))}
-          <Link to={deepLink('/recovery', controls)} className="card-link">
+          <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.meanHr.viewAll')}
           </Link>
         </Card>

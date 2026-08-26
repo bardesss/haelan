@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { ControlRow, resolveSource } from '../src/components/ControlRow.js'
+import { ControlRow } from '../src/components/ControlRow.js'
 import type { PageControlsState } from '../src/controls/usePageControls.js'
 import { syncStatusKey } from '../src/data/useSyncStatus.js'
 
@@ -114,21 +114,9 @@ describe('ControlRow', () => {
     expect(select.value).toBe('watch')
   })
 
-  // A link can name a source this person does not have, and a source can be removed after a
-  // link is made. Neither should render a select with no matching option.
-  it('falls back to merged when the chosen source is not one this person has', () => {
-    mount(withQuery(<ControlRow controls={stubControls({ source: 'someone-elses' })} sources={['watch']} syncedMinutesAgo={4} />))
-    const select = container!.querySelector('select') as HTMLSelectElement
-    expect(select.value).toBe('merged')
-  })
-
-  // The DOM assertion above cannot fail for the reason it names: a browser's own <select> quietly
-  // defaults an unmatched controlled value to whichever option renders first, which is always
-  // merged in this component regardless of whether resolveSource's own membership check runs at
-  // all. Deleting that check leaves the test above green. This calls the resolver directly, which
-  // has no such blind spot, so it is the one that actually stands guard on the fallback.
-  it('resolveSource falls back to merged only when the source is not among the options', () => {
-    expect(resolveSource('someone-elses', ['merged', 'watch'])).toBe('merged')
-    expect(resolveSource('watch', ['merged', 'watch'])).toBe('watch')
-  })
+  // The fallback that used to live here now lives in the state layer, where the page builds its
+  // requests from the same value: see source.test.ts, and dashboard-round-trip.test.tsx for the
+  // page level version. Nothing is asserted here about an unmatched value, because nothing here
+  // could: a browser select silently defaults one to its first option no matter what this
+  // component does.
 })

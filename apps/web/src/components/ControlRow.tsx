@@ -7,18 +7,6 @@ import { apiSend } from '../api/client.js'
 import { useSession } from '../auth/session.js'
 import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
 
-/**
- * A link can name a source this person does not have, and a source can be removed after a link
- * was made. Both land here, and both should read as the merged view rather than as a select with
- * no matching option. Kept as a standalone function rather than inlined in the render: a real
- * browser select silently defaults an unmatched controlled value to whichever option renders
- * first, which is always merged here, so a test that only reads the mounted select back cannot
- * tell that fallback apart from having none at all. This is what a direct test can.
- */
-export function resolveSource(source: string, options: string[]): string {
-  return options.includes(source) ? source : 'merged'
-}
-
 export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: {
   controls: PageControlsState
   sources: string[]
@@ -28,8 +16,10 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: 
   exportPath?: string
 }) {
   const { t } = useTranslation()
+  // Shown exactly as handed over. controls.source has already been resolved against this same
+  // list in the state layer (controls/source.ts), so the label here and the source the page is
+  // querying under cannot drift apart: they are one value.
   const options = ['merged', ...sources]
-  const selected = resolveSource(controls.source, options)
 
   const session = useSession()
   const personId = session.data?.personId
@@ -71,7 +61,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath }: 
         <label className="button">
           <Icon name="sources" />
           <span className="sr-only">{t('controlRow.sources')}</span>
-          <select value={selected} onChange={(e) => controls.setSource(e.currentTarget.value)}>
+          <select value={controls.source} onChange={(e) => controls.setSource(e.currentTarget.value)}>
             {options.map((source) => (
               <option key={source} value={source}>
                 {source === 'merged' ? t('controlRow.sourceMerged') : source}

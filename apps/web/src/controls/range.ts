@@ -93,6 +93,9 @@ export function parseControls(search: string, today: string): PageControls {
   return {
     tab: (RANGE_KEYS as readonly string[]).includes(tab ?? '') ? tab as RangeKey : 'month',
     anchor: anchor !== null && isRealDate(anchor) ? anchor : today,
-    source: source ?? 'merged',
+    // An empty source is a parameter that was written and left blank, not a choice. Nothing
+    // narrower is possible here: which sources exist is a fact about this person's data, not
+    // about the URL, so the enumerated check happens where that list is known (controls/source.ts).
+    source: source === null || source === '' ? 'merged' : source,
   }
 }

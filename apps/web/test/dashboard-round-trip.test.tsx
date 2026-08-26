@@ -286,6 +286,27 @@ describe('the Dashboard round trip', () => {
     restore()
   })
 
+  // The defect the earlier fix went in the wrong layer to close. resolveSource corrected what
+  // the select showed and left the page building `range` from the raw controls.source, so a
+  // stale or foreign link read "All sources" above cards querying somebody else's device name.
+  it('queries the merged rows for a source this person does not have, not the foreign name', async () => {
+    const seen: string[] = []
+    const restore = stubFetchBySource(seen)
+    window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15&source=someone-elses')
+
+    mount(withQuery(<Dashboard />))
+    await flush(() => container!.innerHTML)
+
+    const seriesCalls = seen.filter((u) => u.includes('/series'))
+    expect(seriesCalls.length).toBeGreaterThan(0)
+    expect(seriesCalls.some((u) => u.includes('source=someone-elses'))).toBe(false)
+    // The baseline is a separate route reading the same resolved value.
+    expect(seen.some((u) => u.includes('/baselines') && u.includes('source=someone-elses'))).toBe(false)
+    const select = container!.querySelector('select') as HTMLSelectElement
+    expect(select.value).toBe('merged')
+    restore()
+  })
+
   it('does not import the fixtures', async () => {
     const source = await import('node:fs/promises')
       .then((fs) => fs.readFile('apps/web/src/pages/Dashboard.tsx', 'utf8'))
