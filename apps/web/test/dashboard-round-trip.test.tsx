@@ -273,6 +273,33 @@ describe('the Dashboard round trip', () => {
     restore()
   })
 
+  // Every card link, not the two that already did it. The sleep card stayed plain on a comment
+  // saying /sleep "is still pinned to the July fixtures and ignores every parameter it is handed",
+  // which this milestone made untrue: Sleep.tsx reads usePageControls the same as the others. A
+  // reader on a month view following that one link landed back on the default period while the two
+  // links beside it carried theirs. Checking every .card-link rather than naming three keeps a
+  // fourth from arriving plain.
+  it('carries the reader\'s period into every card link', async () => {
+    const seen: string[] = []
+    const restore = stubFetchOnePointPerMetric(seen)
+    window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
+
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    const links = [...container!.querySelectorAll('a.card-link')]
+    expect(links.length).toBeGreaterThan(2)
+    expect(links.map((a) => a.getAttribute('href')!.split('?')[0])).toContain('/sleep')
+    for (const link of links) {
+      const href = link.getAttribute('href')!
+      const params = new URLSearchParams(href.split('?')[1] ?? '')
+      expect(params.get('range'), href).toBe('month')
+      expect(params.get('on'), href).toBe('2026-08-15')
+    }
+    restore()
+  })
+
   // The regression this exists for: distinctSources used to be fed the range scoped queries,
   // which fetch under whatever source the control row has selected, so picking a real device
   // wiped out every sourceMix the selector reads and the select silently fell back to "All

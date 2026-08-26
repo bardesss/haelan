@@ -471,11 +471,7 @@ export function Dashboard() {
           'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
           'dashboard.units.minutesAsleep',
           (p) => formatDuration(mean(values(p))), 'higher-is-better',
-          // Plain, not deep linked: /sleep is still pinned to the July fixtures and ignores every
-          // parameter it is handed, so carrying the reader's period into that URL would promise a
-          // period the page does not honour. It gets its parameters back when the page can read
-          // them.
-          <Link to="/sleep" className="card-link">
+          <Link to={deepLink('/sleep', resolved)} className="card-link">
             {t('dashboard.sleep.viewAll')}
           </Link>)}
         {tile('heart_rate', 3, 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
