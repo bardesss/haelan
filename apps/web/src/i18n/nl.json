@@ -65,6 +65,11 @@
     "deviceNotWorn": "Het apparaat werd niet gedragen.",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
   },
+  "errorState": {
+    "title": "Dit kon niet worden geladen.",
+    "detail": "De instantie gaf een foutmelding, dus hier valt niets te tekenen. Dat zegt niets over jouw gegevens.",
+    "retry": "Opnieuw proberen"
+  },
   "emptyState": {
     "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
     "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
@@ -111,6 +116,7 @@
       "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
       "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
       "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
+      "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
     "flaggedDays": {

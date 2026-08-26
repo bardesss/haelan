@@ -86,6 +86,56 @@ function stubFetch(opts: { baseline: Baseline }): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Fails every read the cards draw from, the way a 500, a bad source or a dropped connection
+ * reaches this app: an ApiError out of apiSend, which leaves the query with isPending false and
+ * data undefined. That is the same shape as a settled empty response, which is why every card
+ * used to render "No data yet. Nothing has been recorded for this period." over a failure.
+ */
+function stubFailingReads(seen: string[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    seen.push(url)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ error: { code: 'internal' } }), { status: 500, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+describe('a card whose request failed', () => {
+  // The rule the whole branch is about, applied to the one case nothing on the page handled: a
+  // 500 is not a statement about somebody's health record, and "Nothing has been recorded for
+  // this period" is.
+  it('says the request failed rather than that there is nothing recorded', async () => {
+    const seen: string[] = []
+    const restore = stubFailingReads(seen)
+    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
+    await flush(() => container!.innerHTML)
+    expect(container!.textContent).toContain('This did not load.')
+    expect(container!.textContent).not.toContain('Nothing has been recorded for this period.')
+    restore()
+  })
+
+  it('offers a retry that asks again', async () => {
+    const seen: string[] = []
+    const restore = stubFailingReads(seen)
+    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
+    await flush(() => container!.innerHTML)
+
+    const before = seen.filter((u) => u.includes('/series')).length
+    const retry = container!.querySelector('.empty button') as HTMLButtonElement
+    expect(retry.textContent).toBe('Try again')
+    act(() => { retry.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    expect(seen.filter((u) => u.includes('/series')).length).toBeGreaterThan(before)
+    restore()
+  })
+})
+
 describe('the remaining Dashboard cards', () => {
   // The rule the band exists for. A band computed from three days looks exactly as authoritative
   // as one computed from thirty, and thin is the reader's only signal that it is not.
@@ -108,12 +158,13 @@ describe('the remaining Dashboard cards', () => {
   // Not a placeholder and not a lie. No route serves typed events yet.
   it('shows flagged days as empty rather than wiring it to something event shaped', async () => {
     const restore = stubFetch({ baseline: null })
-    mount(withQuery(<Dashboard />))
+    // Through a real I18nProvider rather than asserting on the raw key: initReactI18next installs
+    // whichever instance was created last as react-i18next's default, so a provider-less render
+    // resolves the catalogue anyway once any other test in the file has mounted one, and the
+    // assertion silently depended on this test running first.
+    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
     await flush(() => container!.innerHTML)
-    // No I18nProvider in this tree, the same way dashboard-round-trip.test.tsx mounts it: without
-    // one react-i18next has no catalogue to resolve against and renders the key itself, which is
-    // what this asserts on rather than the English prose.
-    expect(container!.textContent).toContain('dashboard.flaggedDays.emptyTitle')
+    expect(container!.textContent).toContain('No flagged days yet.')
     restore()
   })
 

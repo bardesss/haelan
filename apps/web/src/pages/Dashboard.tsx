@@ -4,6 +4,7 @@ import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
+import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
@@ -308,9 +309,14 @@ export function Dashboard() {
     direction: 'higher-is-better' | 'lower-is-better' | 'neutral',
     unit?: string,
   ) => {
+    // A failed request is not an empty period, and it outranks the pending check: an errored
+    // query has isPending false and data undefined, which is exactly the shape emptyStateFor
+    // reads as "no data yet".
+    const query = queryFor(metric)
+    if (query.isError) return <ErrorState onRetry={() => void query.refetch()} />
     // Nothing has been asked yet, so there is nothing to state. format() over an empty array is a
     // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
-    if (queryFor(metric).isPending) return <Loading />
+    if (query.isPending) return <Loading />
 
     const points = pointsOf(metric)
     const empty: EmptyStateKind | null = emptyStateFor(metric, points)
@@ -361,17 +367,27 @@ export function Dashboard() {
     : undefined
   // The basis line's band clause tracks whether heartRateBand is actually defined above, rather
   // than a single static string claiming a band that a thin or absent baseline never draws.
-  const heartRateBasisKey = rawBaseline === null
-    ? 'dashboard.heartRateRange.basisNoBaseline'
-    : rawBaseline.thin
-      ? 'dashboard.heartRateRange.basisThin'
-      : 'dashboard.heartRateRange.basis'
+  const heartRateBasisKey = hrBaseline.isError
+    // "No baseline yet" would be a claim about the person's history. A request that failed says
+    // nothing about how much history there is.
+    ? 'dashboard.heartRateRange.basisBaselineUnknown'
+    : rawBaseline === null
+      ? 'dashboard.heartRateRange.basisNoBaseline'
+      : rawBaseline.thin
+        ? 'dashboard.heartRateRange.basisThin'
+        : 'dashboard.heartRateRange.basis'
   // Guarded like the tiles: emptyStateFor's own doc comment forbids a chart drawing an empty axis
   // when there is nothing to draw. No baseline argument here, since a thin baseline suppresses
   // only the band (above), not the whole card; the mean/min/max lines are a real chart on their
   // own even when the baseline behind the band is too thin to stand on.
   // All three requests, not only the mean: a card drawing three series has not settled until
-  // the last of them has.
+  // the last of them has, and has failed if any of them did.
+  const heartRateFailed = meanSeries.isError || minHrSeries.isError || maxHrSeries.isError
+  const retryHeartRate = () => {
+    void meanSeries.refetch()
+    void minHrSeries.refetch()
+    void maxHrSeries.refetch()
+  }
   const heartRatePending = meanSeries.isPending || minHrSeries.isPending || maxHrSeries.isPending
   const heartRateEmpty: EmptyStateKind | null = heartRatePending ? null : emptyStateFor('heart_rate', pointsOf('heart_rate'))
 
@@ -495,8 +511,11 @@ export function Dashboard() {
             EmptyState in place of the whole StatTile including its basis: a band clause is a claim
             about what the chart below draws, and a pending request has drawn nothing yet. */}
         <Card span={8} label={t('dashboard.heartRateRange.label')}
-          basis={heartRatePending || heartRateEmpty !== null ? undefined : t(heartRateBasisKey, { on: controls.to })}>
-          {heartRatePending ? <Loading /> : heartRateEmpty !== null ? (
+          basis={heartRateFailed || heartRatePending || heartRateEmpty !== null
+            ? undefined
+            : t(heartRateBasisKey, { on: controls.to })}>
+          {heartRateFailed ? <ErrorState onRetry={retryHeartRate} />
+            : heartRatePending ? <Loading /> : heartRateEmpty !== null ? (
             <EmptyState title={t(`emptyState.${heartRateEmpty}.title`)} detail={t(`emptyState.${heartRateEmpty}.detail`)} />
           ) : (
             /* Empty until M3c. HeartRateRange has taken both props since D1 and fed them from
@@ -514,8 +533,11 @@ export function Dashboard() {
             head an empty state with "last night, 2026-08-31", naming a night it was not drawing
             and had no row for, which is what the neighbour above withholds its basis to avoid. */}
         <Card span={7} label={t('dashboard.sleepStages.label')}
-          basis={lastNight === null ? undefined : t('dashboard.sleepStages.basis', { date: lastNight.localDate })}>
-          {nights.isPending ? <Loading /> : lastNight === null ? (
+          basis={nights.isError || lastNight === null
+            ? undefined
+            : t('dashboard.sleepStages.basis', { date: lastNight.localDate })}>
+          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} />
+            : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
             <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
@@ -523,10 +545,11 @@ export function Dashboard() {
           )}
         </Card>
         <Card span={5} label={t('dashboard.sleepSchedule.label')}
-          basis={lastSeries.isPending || scheduleNights.length === 0
+          basis={lastSeries.isError || lastSeries.isPending || scheduleNights.length === 0
             ? undefined
             : t('dashboard.sleepSchedule.basis', { nights: drawnNights })}>
-          {lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
+          {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} />
+            : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
             <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />
@@ -534,10 +557,11 @@ export function Dashboard() {
         </Card>
 
         <Card span={8} label={t('dashboard.dailySteps.label')}
-          basis={stepsPending ? undefined : t('dashboard.dailySteps.basis', {
+          basis={sumSeries.isError || stepsPending ? undefined : t('dashboard.dailySteps.basis', {
             ...basisOf('steps', stepsPoints), maxSteps: groupNumber(maxSteps),
           })}>
-          {stepsPending ? <Loading /> : (
+          {sumSeries.isError ? <ErrorState onRetry={() => void sumSeries.refetch()} />
+            : stepsPending ? <Loading /> : (
             <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
           )}
         </Card>
