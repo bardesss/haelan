@@ -94,9 +94,14 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M3** Dashboard | Eight pages, the full chart set, notes and typed events, baseline bands, override controls, i18n | Not started |
 | **M3a** Web foundations | Routing with parameters, sign-in and sign-out, session expiry handled without a stale dashboard behind it, person binding, i18next with English and Dutch across every page and chart, interaction and motion tokens, TanStack Query | Done, [#64](https://github.com/bardesss/haelan/pull/64) |
 | **M3b-1** Core read stack | Units on every metric, written-at timestamp on derived rows, sample counts for SpO2, HRV and heart rate, workout counts and durations from exercise sessions, one derivation and mapping version bump, query layer with shared downsampler, intraday, nights, sessions and weight trend bound to one person | Done, [#65](https://github.com/bardesss/haelan/pull/65) |
-| **M3b-2** HTTP surface | Bearer auth alongside the cookie, the response envelope, `requirePerson`, daily backed and tier 2 reads with weak ETags, `/changes`, CSV and JSON export, the person isolation suite | In review |
+| **M3b-2** HTTP surface | Bearer auth alongside the cookie, the response envelope, `requirePerson`, daily backed and tier 2 reads with weak ETags, `/changes`, CSV and JSON export, the person isolation suite | Done, [#67](https://github.com/bardesss/haelan/pull/67) |
+| **M3d-1** Page spine and Dashboard | The shared control row and its URL backed state, the data hooks the pages read through, and the Dashboard converted off fixtures as their first consumer | In review |
+| **M3d-2** Activity, Sleep and Recovery | The three remaining M3d pages, off the same control row and data hooks M3d-1 built | Not started |
+| **M3c** Annotations and corrections | Store CRUD, write routes with transactional re-derive enqueueing, the chart-click panel, excluded rendering, the management list, note and event entry, chart annotations | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish, the person switcher and member management | Not started |
+
+**M3d comes before M3c in this table**, out of milestone letter order: section 6's creation flow is a click on a plotted point, and the pages that plot real points are M3d's, so building the annotation panel first would mean targeting fixture points that correspond to no row an override could name.
 
 M1a through M1d are a decomposition of the spec's single M1, not phases the spec names: store,
 client, sync and wizard each produce working, testable software on their own. **M1 itself is
