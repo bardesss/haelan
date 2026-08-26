@@ -1,9 +1,19 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { july } from '../src/fixtures/july.js'
 import { I18nProvider } from '../src/i18n/index.js'
+
+// Dashboard now reads usePageControls and useSeries, both of which call useSession underneath,
+// so it needs a QueryClient in the tree the way Sleep (still fixture backed) does not. A fresh,
+// empty client rather than a seeded one: renderToStaticMarkup never waits on a promise, so
+// leaving the session query unresolved and the series query disabled is what a server render of
+// this page actually sees, not an approximation of it.
+const withQuery = (node: React.ReactNode) => (
+  <QueryClientProvider client={new QueryClient()}>{node}</QueryClientProvider>
+)
 
 // The chart hosts render on the server; ECharts only touches them in an effect,
 // so this exercises every prop, every basis string and every table alternative
@@ -11,7 +21,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 // catalogue, and an unpinned instance falls back to navigator.language, which on a
 // Dutch machine would render Dutch and break every literal-text assertion below.
 const pages = {
-  Dashboard: renderToStaticMarkup(<I18nProvider lng="en"><Dashboard /></I18nProvider>),
+  Dashboard: renderToStaticMarkup(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>),
   Sleep: renderToStaticMarkup(<I18nProvider lng="en"><Sleep /></I18nProvider>),
 }
 
@@ -58,7 +68,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
 describe('chart tables follow the active language', () => {
   // Every chart's accessible table used to be built from English literals regardless of the
   // active language, which meant a Dutch screen reader user got an English table on both pages.
-  const dashboardNl = renderToStaticMarkup(<I18nProvider lng="nl"><Dashboard /></I18nProvider>)
+  const dashboardNl = renderToStaticMarkup(<I18nProvider lng="nl">{withQuery(<Dashboard />)}</I18nProvider>)
   const sleepNl = renderToStaticMarkup(<I18nProvider lng="nl"><Sleep /></I18nProvider>)
 
   it('translates column headers, weekday labels and absence words', () => {

@@ -65,6 +65,11 @@
     "deviceNotWorn": "Het apparaat werd niet gedragen.",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
   },
+  "emptyState": {
+    "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
+    "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
+    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
+  },
   "dashboard": {
     "title": "Dashboard",
     "units": {
