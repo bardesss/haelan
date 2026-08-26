@@ -45,6 +45,19 @@ describe('MetricCard', () => {
     expect(container!.textContent).not.toContain('emptyState.no_data.title')
   })
 
+  // The only input where the order between the two checks is actually observable: isError and
+  // isPending are mutually exclusive for a single query, so a plain line swap between them is a
+  // no-op there. A composite query is not single, though. Dashboard.tsx already ORs several
+  // queries into one of this exact shape (heartRateFailed, heartRatePending), and an OR of three
+  // isError flags and an OR of three isPending flags can both be true at once when one series has
+  // failed while another is still in flight. That is the case this test pins.
+  it('still shows the error when a composite query is both errored and pending', () => {
+    mount(<MetricCard metric="steps" query={{ isError: true, isPending: true, refetch: () => {} }}
+      points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
+    expect(container!.textContent).toContain('errorState.title')
+    expect(container!.textContent).not.toContain('common.loading')
+  })
+
   it('claims nothing at all while the query is pending', () => {
     mount(<MetricCard metric="steps" query={{ isError: false, isPending: true, refetch: () => {} }}
       points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)

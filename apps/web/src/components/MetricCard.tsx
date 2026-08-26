@@ -29,14 +29,21 @@ export function MetricCard({ metric, query, points, baseline, basisKey, basisWor
   baseline?: Baseline | null
   basisKey: string
   basisWornKey: string
-  basisValues?: Record<string, unknown>
+  // worn, count and reported are typed to never so a caller cannot pass a second, independently
+  // derived copy of the figures this component already computes from metric and points: the type
+  // system's half of the belt-and-braces below, since a runtime precedence rule nothing enforces
+  // at the type level is a rule the next author has to remember instead of one the compiler keeps.
+  basisValues?: Record<string, unknown> & { worn?: never, count?: never, reported?: never }
   children: (basis: string) => ReactNode
 }): ReactNode {
   const { t } = useTranslation()
 
-  // A failed request is not an empty period, and it outranks the pending check: an errored query
-  // has isPending false and data undefined, which is exactly the shape emptyStateFor reads as "no
-  // data yet".
+  // A failed request is not an empty period, and it outranks the pending check even when both
+  // flags are true at once: a composite query built by OR-ing several requests together (the
+  // heart rate range card ORs three isError flags and three isPending flags into one query of
+  // this same shape) can have one series still pending while another has already failed, and an
+  // errored query has isPending false and data undefined, which is exactly the shape emptyStateFor
+  // reads as "no data yet".
   if (query.isError) return <ErrorState onRetry={() => void query.refetch()} />
   // Nothing has been asked yet, so there is nothing to state. format() over an empty array is a
   // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
@@ -70,9 +77,17 @@ export function MetricCard({ metric, query, points, baseline, basisKey, basisWor
   // Only the wear clause carries `count`, and it is handed over only to the key that has an _one
   // and an _other to choose between: passing it to a key with neither would ask i18next to
   // pluralise a string nobody wrote a plural for.
+  //
+  // basisValues spreads first, not last: this is the load bearing line of the whole component.
+  // worn, count and reported are computed above from the same metric and points that gated the
+  // states above them, and a caller's own copy of those figures (Dashboard.tsx's basisOf returns
+  // exactly this shape) landing after them in the spread would silently overwrite a truthful
+  // computation with a second, independently derived one, the very split this component exists to
+  // make impossible. basisValues exists only to carry what this component cannot know on its own,
+  // such as the requested range length.
   const basis = coverageIsWearSignal(metric)
-    ? t(basisWornKey, { worn, count, reported, ...basisValues })
-    : t(basisKey, { reported, ...basisValues })
+    ? t(basisWornKey, { ...basisValues, worn, count, reported })
+    : t(basisKey, { ...basisValues, reported })
 
   return <>{children(basis)}</>
 }
