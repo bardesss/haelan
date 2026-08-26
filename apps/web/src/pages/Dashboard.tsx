@@ -6,7 +6,7 @@ import { ControlRow } from '../components/ControlRow.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
-import { SleepSchedule, AXIS_MIN } from '../charts/SleepSchedule.js'
+import { SleepSchedule, AXIS_MIN, AXIS_MAX } from '../charts/SleepSchedule.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { useSeries } from '../data/useSeries.js'
@@ -94,6 +94,23 @@ function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number)
 // value on its way to formatClock, which otherwise renders a negative bedtime as "-1:-40".
 function inWindow(minutes: number): number {
   return minutes < AXIS_MIN ? minutes + 1440 : minutes
+}
+
+// inWindow corrects the common case (an evening bedtime, an early morning wake) with one +1440
+// shift, but one shift cannot correct every case. A wake time that is itself past noon on the
+// wake day (rare, but the catalogue does not rule it out) is left unshifted by inWindow, since it
+// already reads as "past noon" without knowing it is on the wrong day, which draws a span that
+// ends before it starts; and a bed time early enough that the night is longer than about
+// fourteen hours still lands before noon after one shift, which draws below the grid entirely.
+// Rather than trying to guess a second shift, this checks the result: a bed and wake that do not
+// both land inside [AXIS_MIN, AXIS_MAX] with wake after bed are not something this axis can draw
+// honestly, so both fall back to null, which SleepSchedule already renders as its no-data mark,
+// the same as a night with no reading at all.
+function withinSchedule(bed: number | null, wake: number | null): { bed: number | null, wake: number | null } {
+  if (bed === null || wake === null) return { bed: null, wake: null }
+  const inRange = (m: number) => m >= AXIS_MIN && m <= AXIS_MAX
+  if (!inRange(bed) || !inRange(wake) || wake <= bed) return { bed: null, wake: null }
+  return { bed, wake }
 }
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
@@ -252,8 +269,17 @@ export function Dashboard() {
   // whole month did, since a day with no point is simply absent from stepsPoints rather than
   // present with a false reading. heatmapDays is already dense over the whole range, so counting
   // worn there states the coverage the grid actually draws.
+  //
+  // Pending-gated the way tile() and heartRateEmpty are, but on the numbers rather than on
+  // swapping in a whole empty state: heatmapDays is dense from the moment the page mounts, before
+  // any request has settled, so its own count would otherwise read "0 of 31 days worn" while
+  // nothing has actually been checked yet, a stronger and more specific false claim than the "0
+  // of 0" the sparse stat tiles harmlessly show in the same pending moment. Falling back to that
+  // same vacuous 0 of 0 here keeps this card from asserting a total before it has one.
   const heatmapWorn = heatmapDays.filter((d) => d.worn).length
-  const heatmapBasisStats = { worn: heatmapWorn, total: heatmapDays.length, unworn: heatmapDays.length - heatmapWorn }
+  const heatmapBasisStats = queryFor('steps').isPending
+    ? { worn: 0, total: 0, unworn: 0 }
+    : { worn: heatmapWorn, total: heatmapDays.length, unworn: heatmapDays.length - heatmapWorn }
 
   // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
   // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
@@ -268,6 +294,11 @@ export function Dashboard() {
       to: Math.round((s.endMs - lastNight.startMs) / 60_000),
     }))
     .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)
+  // Inherits the same nap contamination the comment below documents for /sleep/nights: startMs is
+  // the earliest instant across every session sharing this night's date and source, so a 13:00
+  // nap sharing the date still becomes this label's "Bed 13:00" rather than the real bedtime.
+  // Known, not fixed here: fixing it means the hypnogram card gaining the same /series-based
+  // bedtime this schedule card already switched to, which is more than this label alone needs.
   const lastNightBedMinutes = lastNight === null
     ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes))
   const startLabel = lastNightBedMinutes !== null
@@ -290,10 +321,14 @@ export function Dashboard() {
   const scheduleNights = scheduleDates.map((date) => {
     const bedPoint = bedtimeByDate.get(date)
     const wakePoint = waketimeByDate.get(date)
+    const { bed, wake } = withinSchedule(
+      bedPoint ? inWindow(bedPoint.value) : null,
+      wakePoint ? inWindow(wakePoint.value) : null,
+    )
     return {
       date,
-      bed: bedPoint ? inWindow(bedPoint.value) : null,
-      wake: wakePoint ? inWindow(wakePoint.value) : null,
+      bed,
+      wake,
       // Neither metric carries naps (see above), and there is no other route this call site can
       // read a nap's clock time from, so this stays empty rather than a guess.
       naps: [] as number[],
@@ -326,7 +361,11 @@ export function Dashboard() {
             (p) => String(Math.round(mean(values(p)))), 'neutral', t('dashboard.units.bpm'))}
         </Card>
 
-        <Card span={8} label={t('dashboard.heartRateRange.label')} basis={t(heartRateBasisKey)}>
+        {/* basis withheld when heartRateEmpty is set, the same way tile() returns EmptyState in
+            place of the whole StatTile including its basis: a band clause is a claim about what
+            the chart below draws, and there is no chart below when this reads "No data yet". */}
+        <Card span={8} label={t('dashboard.heartRateRange.label')}
+          basis={heartRateEmpty !== null ? undefined : t(heartRateBasisKey)}>
           {heartRateEmpty !== null ? (
             <EmptyState title={t(`emptyState.${heartRateEmpty}.title`)} detail={t(`emptyState.${heartRateEmpty}.detail`)} />
           ) : (

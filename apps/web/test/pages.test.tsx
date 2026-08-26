@@ -95,6 +95,11 @@ describe('Dashboard specifics', () => {
     // domain, not the fixture's old maximum surviving by coincidence, which is what this pins.
     expect(html).toContain('0 to 0 steps')
     expect(html).toContain('stronger colour is more steps')
+    // Pinned separately from the total in dashboard-cards.test.tsx's settled render: the heatmap
+    // grid is dense (one cell per calendar day) from the moment the page mounts, so without its
+    // own pending guard this would read "0 of 31 days worn" here, a specific false claim, rather
+    // than the same vacuous "0 of 0" every sparse stat tile already shows before anything loads.
+    expect(html).toContain('0 of 0 days worn')
   })
 
   it('does not label two different cards with the same name', () => {
