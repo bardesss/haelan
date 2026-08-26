@@ -19,7 +19,7 @@ import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
-import { emptyStateFor } from '../data/emptyState.js'
+import { emptyStateFor, wornOn } from '../data/emptyState.js'
 import type { EmptyStateKind } from '../data/emptyState.js'
 import { formatClock, formatDuration, trend } from '../format.js'
 
@@ -276,7 +276,7 @@ export function Dashboard() {
     unit?: string,
   ) => {
     const points = pointsOf(metric)
-    const empty: EmptyStateKind | null = queryFor(metric).isPending ? null : emptyStateFor(points)
+    const empty: EmptyStateKind | null = queryFor(metric).isPending ? null : emptyStateFor(metric, points)
     if (empty !== null) {
       return <EmptyState title={t(`emptyState.${empty}.title`)} detail={t(`emptyState.${empty}.detail`)} />
     }
@@ -311,8 +311,8 @@ export function Dashboard() {
       // true (not worn) when there is no point at all: a missing point already reads as "no
       // reading" through the null cells above, and adding "not worn" on top of that would assert
       // a specific reason for the gap this data does not support. false only when a point exists
-      // and its own coverage says so.
-      worn: meanPoint === undefined || (meanPoint.coverage !== null && meanPoint.coverage > 0),
+      // and its own coverage answers the question.
+      worn: meanPoint === undefined || (wornOn('heart_rate', meanPoint) ?? true),
     }
   })
   const rawBaseline = hrBaseline.data?.baseline ?? null
@@ -333,7 +333,7 @@ export function Dashboard() {
   // when there is nothing to draw. No baseline argument here, since a thin baseline suppresses
   // only the band (above), not the whole card; the mean/min/max lines are a real chart on their
   // own even when the baseline behind the band is too thin to stand on.
-  const heartRateEmpty: EmptyStateKind | null = meanSeries.isPending ? null : emptyStateFor(pointsOf('heart_rate'))
+  const heartRateEmpty: EmptyStateKind | null = meanSeries.isPending ? null : emptyStateFor('heart_rate', pointsOf('heart_rate'))
 
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
@@ -344,7 +344,7 @@ export function Dashboard() {
     return {
       date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
       steps: point?.value ?? null,
-      worn: point !== undefined && point.coverage !== null && point.coverage > 0,
+      worn: point !== undefined && (wornOn('steps', point) ?? true),
     }
   })
   const maxSteps = Math.max(0, ...values(stepsPoints))

@@ -11,6 +11,7 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush } from './flush.js'
+import { coverageFor } from './metricCoverage.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
 // charts draw for real here, and echarts.init's effect throws "missing chart token" without it.
@@ -68,7 +69,7 @@ function stubFetch(opts: { baseline: Baseline }): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 60, coverage: 0.9, sourceMix: null }],
+          points: [{ localDate: '2026-08-15', value: 60, coverage: coverageFor(metric), sourceMix: null }],
           reduction: null,
         }
       }
@@ -129,6 +130,20 @@ describe('the remaining Dashboard cards', () => {
     const match = container!.textContent!.match(/(\d+) of (\d+) days worn/)
     expect(match).not.toBeNull()
     expect(Number(match![2])).toBeGreaterThan(1)
+    restore()
+  })
+
+  // The defect the stub above was hiding. Every sleep row the server can send carries
+  // coverage: null, and reading that as a zero made the card render "Device not worn" over a
+  // month of real nights while the mean was never drawn at all.
+  it('draws the sleep mean over rows whose coverage is null rather than calling the device unworn', async () => {
+    const restore = stubFetch({ baseline: null })
+    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
+    await flush(() => container!.innerHTML)
+    // 60 minutes is what the stub answers for every metric, so this string belongs to the one
+    // card that formats its value as a duration.
+    expect(container!.textContent).toContain('1h 00m')
+    expect(container!.textContent).not.toContain('Device not worn')
     restore()
   })
 

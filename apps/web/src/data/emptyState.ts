@@ -4,6 +4,59 @@ import type { Baseline } from './useBaseline.js'
 export type EmptyStateKind = 'no_data' | 'not_worn' | 'insufficient'
 
 /**
+ * The metrics whose coverage is a statement about whether a device was worn.
+ *
+ * Mirrors packages/core/src/query/coverageSignal.ts, which asks the same question of the
+ * catalogue's intraday tier. Written out rather than imported for the reason Dashboard.tsx gives
+ * for its own metric-to-agg map: apps/web cannot depend on @haelan/core, whose one export pulls
+ * in better-sqlite3 and argon2.
+ *
+ * The distinction matters more here than the list does. Coverage is the fraction of the day's
+ * hours carrying a sample, which is comparable within a metric and meaningless across metrics: a
+ * resting heart rate arrives once a day, so a perfect one reads 1/24, and a heart rate at 1/24 is
+ * a watch worn for an hour. Judging both against one number reads the second's failure into the
+ * first's normal. The six per level names underneath the active minute and zone minute families
+ * (active_minutes_light and the rest) are absent on purpose, as they are there: their coverage
+ * measures how much of the day somebody was ACTIVE rather than how much of it was observed, so a
+ * quiet day would read as an unworn one.
+ */
+const WEAR_SIGNAL_METRICS = new Set([
+  'steps', 'distance', 'active_minutes', 'active_zone_minutes', 'active_energy',
+  'heart_rate', 'hrv', 'spo2',
+])
+
+export function coverageIsWearSignal(metric: string): boolean {
+  return WEAR_SIGNAL_METRICS.has(metric)
+}
+
+/**
+ * The highest coverage that still means nobody was wearing anything.
+ *
+ * packages/core/src/derive/coverage.ts computes coverage as `hours.size / 24`, and a row is only
+ * emitted where at least one sample fed it, so the smallest coverage a real row can carry is
+ * 1/24: zero is not a value the derivation can write. "Rows exist and coverage is zero" therefore
+ * describes a row nothing can produce, which left the not_worn branch unreachable for the thing
+ * it means and reachable only where it was false. One hour is what the threshold has to be
+ * instead: a continuously sampled metric that touched a single hour of the day is a device that
+ * was picked up, not one that was worn.
+ */
+export const NOT_WORN_MAX_COVERAGE = 1 / 24
+
+/**
+ * Whether a point's own coverage says the device was worn that day: null when the point cannot
+ * answer, which is a third case and never a false.
+ *
+ * A sleep row carries `coverage: null` on purpose (packages/core/src/derive/sleep.ts: "a night
+ * has no samples underneath it, so the fraction of the day's hours carrying one is not a question
+ * this row can answer"), and a metric outside the wear signal list carries a coverage that means
+ * something other than wear. Reading either as a zero states a cause the data refuses to.
+ */
+export function wornOn(metric: string, point: SeriesPoint): boolean | null {
+  if (!coverageIsWearSignal(metric) || point.coverage === null) return null
+  return point.coverage > NOT_WORN_MAX_COVERAGE
+}
+
+/**
  * Which of the three empty states a card should render, or null to render the data.
  *
  * The parent spec requires these read differently and that none renders as zero or as a blank
@@ -11,15 +64,17 @@ export type EmptyStateKind = 'no_data' | 'not_worn' | 'insufficient'
  * three different statements and only one of them is a number.
  */
 export function emptyStateFor(
-  points: SeriesPoint[] | undefined, baseline?: Baseline | null,
+  metric: string, points: SeriesPoint[] | undefined, baseline?: Baseline | null,
 ): EmptyStateKind | null {
   // Ordered strongest first. Nothing at all outranks a thin baseline: telling a reader their
   // baseline is thin implies there is a series it was thin against.
   if (points === undefined || points.length === 0) return 'no_data'
 
-  // Zero is an answer and null is the absence of one, so this tests coverage rather than value.
-  const worn = points.some((p) => p.coverage !== null && p.coverage > 0)
-  if (!worn) return 'not_worn'
+  // Only the rows that can answer the coverage question get a vote, and a metric with no such
+  // row never reaches this state at all. Zero is an answer and null is the absence of one, which
+  // is the rule this function is named for and used to break one field over.
+  const answers = points.map((point) => wornOn(metric, point)).filter((w): w is boolean => w !== null)
+  if (answers.length > 0 && !answers.includes(true)) return 'not_worn'
 
   if (baseline != null && baseline.thin) return 'insufficient'
 

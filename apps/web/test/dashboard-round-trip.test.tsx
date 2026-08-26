@@ -10,6 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
+import { coverageFor } from './metricCoverage.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
 // custom properties. Every other happy-dom test in this suite sidesteps that by never mounting a
@@ -72,7 +73,7 @@ function stubFetch(seen: string[]): () => void {
     }
     if (url.includes('/series')) {
       return new Response(JSON.stringify({
-        steps: { points: [{ localDate: '2026-08-01', value: 900, coverage: 0.9, sourceMix: null }], reduction: null },
+        steps: { points: [{ localDate: '2026-08-01', value: 900, coverage: coverageFor('steps'), sourceMix: null }], reduction: null },
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/sleep/nights')) {
@@ -106,7 +107,7 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 100, coverage: 0.9, sourceMix: null }],
+          points: [{ localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), sourceMix: null }],
           reduction: null,
         }
       }
@@ -148,10 +149,10 @@ function stubFetchBySource(seen: string[]): () => void {
         body[metric] = {
           points: [source === 'merged'
             ? {
-                localDate: '2026-08-15', value: 100, coverage: 0.9, source: 'merged',
+                localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'merged',
                 sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
               }
-            : { localDate: '2026-08-15', value: 100, coverage: 0.9, source: 'watch', sourceMix: null }],
+            : { localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'watch', sourceMix: null }],
           reduction: null,
         }
       }
