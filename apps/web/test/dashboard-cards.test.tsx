@@ -138,6 +138,41 @@ describe('a card whose request failed', () => {
   })
 })
 
+/**
+ * One real night: distinct bed and wake minutes, unlike stubFetch's one-point-per-metric answer,
+ * which hands sleep_bedtime_minutes and sleep_waketime_minutes the same value and so gets nulled
+ * out by withinSchedule (wake <= bed) rather than counted as a drawn night.
+ */
+function stubOneNight(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        const value = metric === 'sleep_bedtime_minutes' ? -30 : metric === 'sleep_waketime_minutes' ? 420 : 60
+        body[metric] = {
+          points: [{ localDate: '2026-08-15', value, coverage: coverageFor(metric), sourceMix: null }],
+          reduction: null,
+        }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the remaining Dashboard cards', () => {
   // The rule the band exists for. A band computed from three days looks exactly as authoritative
   // as one computed from thirty, and thin is the reader's only signal that it is not.
@@ -202,6 +237,21 @@ describe('the remaining Dashboard cards', () => {
     // card that formats its value as a duration.
     expect(container!.textContent).toContain('1h 00m')
     expect(container!.textContent).not.toContain('Device not worn')
+    restore()
+  })
+
+  // dashboard.sleepSchedule.basis had no plural form and 1 is reachable, the surviving instance
+  // of the hazard M3d-1 fixed on the wear clause ("1 days not worn").
+  it('renders the sleep schedule basis in the singular for one night', async () => {
+    const restore = stubOneNight()
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    // Scoped to the sleep schedule's own basis text: dashboard.sleep's unrelated basis line also
+    // reports against "nights" and, with this stub's single point, happens to read "1 of 31
+    // nights" too.
+    expect(container!.textContent).toContain('bed and wake time, 1 night')
+    expect(container!.textContent).not.toContain('bed and wake time, 1 nights')
     restore()
   })
 

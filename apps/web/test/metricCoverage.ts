@@ -9,8 +9,21 @@
  * a null coverage render as "device not worn" over a fully populated month through thirteen task
  * reviews, so the shape lives here once rather than being remembered per stub.
  *
- * 0.9 for everything else is a fully worn day, which is what the stubs already meant.
+ * A once a day metric observes one hour out of twenty four, so a real row reads 1/24 and never
+ * 0.9. Stating the true shape here is not tidiness: a stub that cannot express a real response
+ * is a stub that hides a real defect, which is how a card claiming "device not worn" over a full
+ * month of sleep survived thirteen reviews.
  */
+const ONCE_DAILY = new Set(['resting_heart_rate', 'daily_hrv', 'respiratory_rate'])
+
 export function coverageFor(metric: string): number | null {
-  return metric.startsWith('sleep_') ? null : 0.9
+  if (metric.startsWith('sleep_')) return null
+  if (ONCE_DAILY.has(metric)) return 1 / 24
+  return 0.9
 }
+
+/**
+ * Metrics a provider (rather than a wearable's own sampling) reports for the whole day at once,
+ * so a stub can mark their rows `source: 'provider'` the way a real one would.
+ */
+export const PROVIDER_METRICS = new Set(['floors', 'total_calories'])

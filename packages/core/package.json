@@ -6,7 +6,8 @@
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./metrics": "./src/derive/metrics.ts"
+    "./metrics": "./src/derive/metrics.ts",
+    "./coverage-signal": "./src/query/coverageSignal.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"

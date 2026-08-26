@@ -139,7 +139,8 @@
     },
     "sleepSchedule": {
       "label": "Sleep schedule",
-      "basis": "bed and wake time, {{nights}} nights"
+      "basis_one": "bed and wake time, {{count}} night",
+      "basis_other": "bed and wake time, {{count}} nights"
     },
     "dailySteps": {
       "label": "Daily steps",

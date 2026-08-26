@@ -1,32 +1,28 @@
+import { coverageIsMeaningful } from '@haelan/core/coverage-signal'
 import type { SeriesPoint } from './useSeries.js'
 import type { Baseline } from './useBaseline.js'
 
 export type EmptyStateKind = 'no_data' | 'not_worn' | 'insufficient'
 
 /**
- * The metrics whose coverage is a statement about whether a device was worn.
+ * Whether a metric's coverage is a statement about whether a device was worn.
  *
- * Mirrors packages/core/src/query/coverageSignal.ts, which asks the same question of the
- * catalogue's intraday tier. Written out rather than imported for the reason Dashboard.tsx gives
- * for its own metric-to-agg map: apps/web cannot depend on @haelan/core, whose one export pulls
- * in better-sqlite3 and argon2.
+ * Imported rather than copied, unlike Dashboard.tsx's own metric-to-agg map: this question is
+ * answered by packages/core/src/query/coverageSignal.ts, which packages/core publishes through
+ * the browser safe @haelan/core/coverage-signal subpath (catalogue.ts imports only a type from
+ * the schema, erased by verbatimModuleSyntax, so nothing native rides along). A copy here used to
+ * mean a ninth intraday metric added to core would silently make wornOn return null for it, so
+ * not_worn could never fire and the basis line would quietly drop its wear clause, with nothing
+ * in apps/web able to detect either.
  *
  * The distinction matters more here than the list does. Coverage is the fraction of the day's
  * hours carrying a sample, which is comparable within a metric and meaningless across metrics: a
  * resting heart rate arrives once a day, so a perfect one reads 1/24, and a heart rate at 1/24 is
  * a watch worn for an hour. Judging both against one number reads the second's failure into the
- * first's normal. The six per level names underneath the active minute and zone minute families
- * (active_minutes_light and the rest) are absent on purpose, as they are there: their coverage
- * measures how much of the day somebody was ACTIVE rather than how much of it was observed, so a
- * quiet day would read as an unworn one.
+ * first's normal.
  */
-const WEAR_SIGNAL_METRICS = new Set([
-  'steps', 'distance', 'active_minutes', 'active_zone_minutes', 'active_energy',
-  'heart_rate', 'hrv', 'spo2',
-])
-
 export function coverageIsWearSignal(metric: string): boolean {
-  return WEAR_SIGNAL_METRICS.has(metric)
+  return coverageIsMeaningful(metric)
 }
 
 /**

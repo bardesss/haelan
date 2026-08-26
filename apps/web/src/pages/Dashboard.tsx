@@ -295,9 +295,10 @@ export function Dashboard() {
   // list, and the default would 400 the request (ConfigError, requireSource/requireMetricAndAgg)
   // the same way it would for /series.
   // Anchored on the range end, not on controls.anchor: baselineWindow reads the sixty days
-  // before `on`, and the chart under this band draws from..to. Anchoring it inside the drawn
-  // window puts a band over days it was computed from, and a Year view drew a sixty day band
-  // across twelve months without the basis line ever saying when it ended. It says so now.
+  // before `on`, and the chart under this band draws from..to. Anchoring on controls.to rather
+  // than controls.anchor is what lets the basis line state when the window actually ends: a Year
+  // view's anchor can sit months away from the range the chart draws, and the basis line used to
+  // report that anchor date instead of the one the drawn band was really computed against.
   const hrBaseline = useBaseline('heart_rate', controls.to, source, 'mean')
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
@@ -652,7 +653,7 @@ export function Dashboard() {
         <Card span={5} label={t('dashboard.sleepSchedule.label')}
           basis={lastSeries.isError || lastSeries.isPending || scheduleNights.length === 0
             ? undefined
-            : t('dashboard.sleepSchedule.basis', { nights: drawnNights })}>
+            : t('dashboard.sleepSchedule.basis', { count: drawnNights })}>
           {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} />
             : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
