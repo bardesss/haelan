@@ -127,14 +127,36 @@ describe('usePageControls', () => {
 
   // Task 3 carried people.timezone all the way to the browser for exactly this default. Every
   // other test in this file pins an explicit on=, so none of them would notice if the hook read
-  // the machine's zone instead of the session's. Honolulu and this machine's Amsterdam disagree
-  // about the date for part of the day, and the system clock is pinned so the test discriminates
-  // regardless of when it runs, rather than only on a run that happens to straddle midnight.
+  // the machine's zone instead of the session's. No single fixture zone catches that fallback on
+  // every machine this suite might run on: at a given instant, every negative offset (Honolulu
+  // included) and UTC itself agree with each other, so a fixture picked to disagree with one
+  // machine can still agree with another, including the UTC runners CI actually uses. What holds
+  // regardless of where the test runs is that changing the person's timezone changes the answer,
+  // so this pins one instant and mounts twice, once per fixture fourteen hours apart, and checks
+  // both the specific dates and that they differ. The fallback reads the same machine zone both
+  // times, so it would make the two mounts agree everywhere, not just on some machines.
   it("resolves an absent 'on' to the person's today, not the machine's", () => {
     vi.setSystemTime(new Date('2026-08-15T23:30:00Z'))
     window.history.replaceState(null, '', '/dashboard')
+
+    mountProbe({ ...PERSON, timezone: 'Pacific/Kiritimati' })
+    const kiritimati = seen!.anchor
+
+    // A fresh root for the second fixture, not a re-render into the first one: swapping the
+    // QueryClientProvider's client mid-tree does not flush TanStack Query's observer
+    // synchronously, so the second mount read the first client's cached data rather than its own.
+    act(() => { root?.unmount() })
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+
     mountProbe({ ...PERSON, timezone: 'Pacific/Honolulu' })
-    expect(seen!.anchor).toBe('2026-08-15')
+    const honolulu = seen!.anchor
+
+    expect(kiritimati).toBe('2026-08-16')
+    expect(honolulu).toBe('2026-08-15')
+    expect(kiritimati).not.toBe(honolulu)
+
     vi.useRealTimers()
   })
 })
