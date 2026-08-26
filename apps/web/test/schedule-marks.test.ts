@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nightMark } from '../src/charts/schedule.js'
+import { nightMark, noDataYFor, WIDE_WINDOW } from '../src/charts/schedule.js'
 import { AXIS_MIN, AXIS_MAX, NO_DATA_Y } from '../src/charts/SleepSchedule.js'
 import { july } from '../src/fixtures/july.js'
 import type { ChartTokens } from '../src/charts/tokens.js'
@@ -58,6 +58,39 @@ describe('no-data marker placement', () => {
     expect(NO_DATA_Y).toBeGreaterThan(AXIS_MIN)
     expect(NO_DATA_Y).toBeLessThan(AXIS_MAX)
     expect(AXIS_MAX - NO_DATA_Y).toBeGreaterThanOrEqual(60)
+  })
+})
+
+describe('no-data marker placement under the wide window', () => {
+  // NO_DATA_Y (the default window's own dot, at AXIS_MAX - 60 = 2100) is pinned to the module
+  // constants above and cannot see a caller's own window, so a wider window needs its own dot: a
+  // previous round of this task widened the axis for Sleep.tsx without moving the dot, which left
+  // it 60 minutes from 2160 (the exact wake time a sixteen hour night, 20:00 to 12:00, draws to,
+  // and also the default window's own top gridline), half the 120 minute clearance this file
+  // otherwise requires. noDataYFor(window) computes the dot from whichever window is actually in
+  // force instead.
+  const wideNoDataY = noDataYFor(WIDE_WINDOW)
+
+  it('places the wide window\'s own dot at its own top, not the default window\'s', () => {
+    expect(wideNoDataY).toBe(WIDE_WINDOW.max - 60)
+    expect(wideNoDataY).not.toBe(NO_DATA_Y)
+  })
+
+  it('keeps the wide dot a full clearance from 2160, the default window\'s top gridline and a real wake time under the wide one', () => {
+    expect(Math.abs(wideNoDataY - 2160)).toBeGreaterThan(120)
+  })
+
+  it('keeps the wide dot inside the wide axis, with the same 60 minute margin as the default window', () => {
+    expect(wideNoDataY).toBeGreaterThan(WIDE_WINDOW.min)
+    expect(wideNoDataY).toBeLessThan(WIDE_WINDOW.max)
+    expect(WIDE_WINDOW.max - wideNoDataY).toBeGreaterThanOrEqual(60)
+  })
+
+  it('parks the wide dot clear of every bed time, wake time and nap the fixture recorded, the same as the default window', () => {
+    const recorded = july.schedule.flatMap((n) => [n.bed, n.wake, ...n.naps].filter((v): v is number => v !== null))
+    for (const value of recorded) {
+      expect(Math.abs(wideNoDataY - value), `${value} is too close to the wide dot`).toBeGreaterThan(120)
+    }
   })
 })
 

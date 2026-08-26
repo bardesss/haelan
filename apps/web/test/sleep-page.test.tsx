@@ -63,18 +63,51 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
  * express that shape is the exact gap that let a null coverage render as "device not worn" over a
  * fully populated month through thirteen task reviews.
  */
+// A fixed night for the hypnogram card, independent of whatever the schedule override below asks
+// for: the two cards read different sources since the schedule fix (sleep_bedtime_minutes/
+// sleep_waketime_minutes, not /sleep/nights, see Sleep.tsx's own scheduleNights comment for why),
+// and the hypnogram has no reason to change shape from test to test.
+const HYPNOGRAM_NIGHT_DATE = '2026-08-15'
+function hypnogramNightsResponse(): unknown {
+  const wakeMidnight = Date.parse(`${HYPNOGRAM_NIGHT_DATE}T00:00:00Z`)
+  const startMs = wakeMidnight - 40 * 60_000 // 23:20 the day before
+  const endMs = wakeMidnight + 425 * 60_000 // 07:05
+  return {
+    items: [{
+      localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
+      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0,
+      segments: [{ stage: 'LIGHT', startMs, endMs }],
+    }],
+    cursor: null,
+  }
+}
+
 /**
- * One night for the hypnogram and sleep schedule cards, built from literal clock times rather
- * than the already-shifted minutes-from-midnight a /series row would carry: bedMinutes is the
- * clock time on the day BEFORE localDate (or, for `sameDay`, a daytime-only span sharing it),
- * wakeMinutes the clock time on localDate itself, matching the real convention useNights.ts
- * documents (the night's own localDate is the date it ENDED on). Defaults to a normal 23:20 to
- * 07:05 night so every other test in this file, which does not care about the schedule chart,
- * still gets a real night rather than tripping the empty state (see the ".empty" assertion
- * below).
+ * Answers every route Sleep calls: the session, /series for whichever metrics land in each of the
+ * three groups, /sleep/nights (the hypnogram card's own fixed night, see above), /api/sync/status
+ * (the control row's own query, answered generically by the fallback below) and /baselines for
+ * sleep_asleep_minutes' own baseline. Every sleep metric is handed 420 (7h 00m), not the 60
+ * Activity.tsx and Recovery.tsx use for their own metrics: 420 both reads as a plausible night's
+ * sleep, unlike 60, and is the same value regardless of which of this page's cards compute a mean
+ * and which compute a sum, since every stubbed metric here carries exactly one point.
+ *
+ * `schedule` overrides sleep_bedtime_minutes/sleep_waketime_minutes specifically, in the exact
+ * convention those two metrics carry on the wire (minutes from local midnight, negative before
+ * it; packages/core/src/derive/metrics.ts's own "an 23:30 bedtime is -30"), because that pair, not
+ * /sleep/nights, is what the sleep schedule card draws since the contamination fix (see Sleep.tsx's
+ * own scheduleNights comment). Defaults to the same 23:20 to 07:05 night the hypnogram gets
+ * (bedtime -40, waketime 425), so every other test in this file, which does not care about the
+ * schedule chart specifically, still gets a real night rather than tripping the empty state (see
+ * the ".empty" assertion below).
+ *
+ * coverageFor is read off metricCoverage.ts rather than written as a literal here: every sleep
+ * metric there answers null, because packages/core/src/derive/sleep.ts writes coverage null for
+ * every sleep row on purpose (a night has no samples underneath it), and a stub that could not
+ * express that shape is the exact gap that let a null coverage render as "device not worn" over a
+ * fully populated month through thirteen task reviews.
  */
 function stubSleep(
-  urls: string[], night: { bedMinutes: number, wakeMinutes: number, sameDay?: boolean } = { bedMinutes: 23 * 60 + 20, wakeMinutes: 7 * 60 + 5 },
+  urls: string[], schedule: { bedtimeMinutes: number, waketimeMinutes: number } = { bedtimeMinutes: -40, waketimeMinutes: 425 },
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -87,29 +120,17 @@ function stubSleep(
       const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
+        const value = metric === 'sleep_bedtime_minutes' ? schedule.bedtimeMinutes
+          : metric === 'sleep_waketime_minutes' ? schedule.waketimeMinutes
+          : 420
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 420, coverage: coverageFor(metric), sourceMix: null }],
+          points: [{ localDate: '2026-08-15', value, coverage: coverageFor(metric), sourceMix: null }],
           reduction: null,
         }
       }
       return json(body)
     }
-    if (url.includes('/sleep/nights')) {
-      const wakeDate = '2026-08-15'
-      const wakeMidnight = Date.parse(`${wakeDate}T00:00:00Z`)
-      const startMs = night.sameDay
-        ? wakeMidnight + night.bedMinutes * 60_000
-        : wakeMidnight - 24 * 3_600_000 + night.bedMinutes * 60_000
-      const endMs = wakeMidnight + night.wakeMinutes * 60_000
-      return json({
-        items: [{
-          localDate: wakeDate, sourceId: 'watch', sessionIds: ['s1'],
-          startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0,
-          segments: [{ stage: 'LIGHT', startMs, endMs }],
-        }],
-        cursor: null,
-      })
-    }
+    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse())
     if (url.includes('/baselines')) return json({ baseline: null })
     return json({})
   }) as typeof fetch
@@ -203,19 +224,21 @@ describe('the Sleep page', () => {
     restore()
   })
 
-  // The axis change this task is for. The default noon-to-noon window (SleepSchedule's own
-  // AXIS_MIN/AXIS_MAX) suppresses a night running past its own noon as no data (withinSchedule's
-  // wake<=bed check, backed by the hand verification in the task report); this page passes a wider
-  // window instead, so a genuine long night draws rather than vanishing. Asserted against the
-  // accessible table, never the canvas: happy-dom applies no stylesheet and echarts draws to
-  // canvas, so no test here can see a span.
-  it('draws a long night rather than suppressing it as no data', async () => {
-    const restore = stubSleep([], { bedMinutes: 20 * 60, wakeMinutes: 12 * 60 })
+  // The axis change this task is for, corrected in review: a sixteen hour night (20:00 to 12:00)
+  // turned out to clear the DEFAULT noon-to-noon window too once the schedule math itself was
+  // fixed (see schedule.test.ts's own "sixteen hour night" case), so it no longer demonstrates the
+  // wider window earning its keep. A night running past the wide window's own far noon does: 20:00
+  // to 22:00 the next day is 26 hours, which the default window (top at 2160, noon the next day)
+  // cannot hold (bed lands at 1200, wake at 2760) but the wide one (top at 2880) can. Asserted
+  // against the accessible table, never the canvas: happy-dom applies no stylesheet and echarts
+  // draws to canvas, so no test here can see a span.
+  it('draws a night running past the default window rather than suppressing it as no data', async () => {
+    const restore = stubSleep([], { bedtimeMinutes: -4 * 60, waketimeMinutes: 22 * 60 })
     const { client, tree } = withQuery(<Sleep />)
     mount(tree)
     await flush(client, () => container!.innerHTML)
     const tables = [...container!.querySelectorAll('table.sr-only')]
-    const scheduleTable = tables.find((table) => table.textContent?.includes('20:00'))
+    const scheduleTable = tables.find((table) => table.textContent?.includes('22:00'))
     expect(scheduleTable, tables.map((t) => t.textContent).join('\n---\n')).toBeDefined()
     expect(scheduleTable!.textContent).not.toContain('charts.absence.noReading')
     restore()

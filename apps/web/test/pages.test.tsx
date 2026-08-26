@@ -142,18 +142,21 @@ restore()
 
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
 // mark for a calendar day nothing answered (Dashboard's HeartRateRange, Activity's own steps
-// heatmap). An ordinary Sparkline, which is every chart on Recovery and every chart on Sleep in
-// this task, builds its accessible table straight from the points a query actually returned
-// (SeriesPoint.value is never null, so there is no gap value to render a word for; see
-// useSeries.ts's own comment), not from a dense day-by-day array with a placeholder for the days
-// it left out. So a gapped week changes how many rows a Sparkline's table has, never what a
-// missing one says, and "not worn"/"no reading" can never appear in either page's markup no
-// matter what the stub answers. This is not a coverage question either: none of Recovery's three
-// metrics carries a wear signal (Recovery.tsx's own card() comment) and neither does any sleep
-// metric (emptyState.ts's own coverageIsWearSignal), so even a wear-signal-capable metric drawn
-// this way would still say nothing, the same reason Activity's own distance and floors cards
-// cannot either despite steps, right beside them, being able to through the one chart that draws
-// densely.
+// heatmap). An ordinary Sparkline, which is every per-metric tile chart on Recovery and Sleep,
+// builds its accessible table straight from the points a query actually returned (SeriesPoint.value
+// is never null, so there is no gap value to render a word for; see useSeries.ts's own comment),
+// not from a dense day-by-day array with a placeholder for the days it left out. Sleep's other two
+// charts (Hypnogram, SleepSchedule, added this task) are not Sparklines but are not dense
+// by-position calendar charts either: a hypnogram draws the one night a query actually returned,
+// and a schedule row exists only for a night a query actually returned, neither drawing a fixed
+// calendar position with a placeholder for a day nothing answered. So a gapped week changes how
+// many rows any of these charts' tables have, never what a missing one says, and "not worn"/
+// "no reading" can never appear in either page's markup no matter what the stub answers. This is
+// not a coverage question either: none of Recovery's three metrics carries a wear signal
+// (Recovery.tsx's own card() comment) and neither does any sleep metric (emptyState.ts's own
+// coverageIsWearSignal), so even a wear-signal-capable metric drawn this way would still say
+// nothing, the same reason Activity's own distance and floors cards cannot either despite steps,
+// right beside them, being able to through the one chart that draws densely.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: false, Sleep: false,
 }
