@@ -103,7 +103,7 @@ describe('the charts across a rerender', () => {
     )
 
     act(() => { root!.render(tree(<Dashboard />)) })
-    await flush(() => container!.innerHTML)
+    await flush(client, () => container!.innerHTML)
 
     const before = chartRoots()
     expect(before.length).toBeGreaterThan(0)

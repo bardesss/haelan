@@ -53,10 +53,10 @@ const PERSON: Session = {
  * page-controls.test.tsx's pattern: the session is seeded directly rather than fetched, so the
  * page mounts without a real /api/auth/me round trip.
  */
-function withQuery(node: ReactNode): ReactNode {
+function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+  return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
 }
 
 /** Answers the session and the series, so the page can mount without a server. */
@@ -175,13 +175,14 @@ describe('the Dashboard round trip', () => {
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
 
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     const before = seen.filter((u) => u.includes('/series')).length
     const week = [...container!.querySelectorAll('.segment')][1] as HTMLButtonElement
     act(() => { week.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await flush(() => container!.innerHTML)
+    await flush(client, () => container!.innerHTML)
 
     expect(window.location.search).toContain('range=week')
     const after = seen.filter((u) => u.includes('/series'))
@@ -209,7 +210,7 @@ describe('the Dashboard round trip', () => {
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
 
-    mount(withQuery(<Dashboard />))
+    mount(withQuery(<Dashboard />).tree)
     await act(async () => { await Promise.resolve() })
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
@@ -233,8 +234,9 @@ describe('the Dashboard round trip', () => {
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
 
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
     const aggs = seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg'))
@@ -252,8 +254,9 @@ describe('the Dashboard round trip', () => {
     const restore = stubFetchOnePointPerMetric(seen)
     window.history.replaceState(null, '', '/dashboard?range=day&on=2026-08-15')
 
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     // 4 stat tiles plus the seven cards task 10 restored (heart rate range, flagged days, sleep
     // stages, sleep schedule, daily steps, recovery, anomalies), not 4: this test predates their
@@ -277,8 +280,9 @@ describe('the Dashboard round trip', () => {
     const restore = stubFetchBySource(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15&source=watch')
 
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     const select = container!.querySelector('select') as HTMLSelectElement
     expect([...select.options].map((o) => o.value)).toContain('watch')
@@ -294,8 +298,9 @@ describe('the Dashboard round trip', () => {
     const restore = stubFetchBySource(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15&source=someone-elses')
 
-    mount(withQuery(<Dashboard />))
-    await flush(() => container!.innerHTML)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
     expect(seriesCalls.length).toBeGreaterThan(0)
