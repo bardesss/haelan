@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readdirSync, readFileSync } from 'node:fs'
 import {
   withinSchedule, localMinutesOf, inWindow, noDataYFor, AXIS_MIN, AXIS_MAX, DEFAULT_WINDOW, WIDE_WINDOW,
 } from '../src/charts/schedule.js'
@@ -158,5 +159,30 @@ describe('noDataYFor', () => {
 
   it('keeps AXIS_MIN and the default window in the shape every caller assumes', () => {
     expect(DEFAULT_WINDOW).toEqual({ min: AXIS_MIN, max: AXIS_MAX })
+  })
+})
+
+// The claim at the top of this file, checked rather than asserted in prose. A page that renders
+// SleepSchedule and works out its own bed/wake placement is invisible to every other test here:
+// echarts draws to canvas, so a wrong span renders silently, and the arithmetic tested above only
+// protects the callers that actually reach it. Dashboard.tsx kept its own untested copy through
+// the whole of the task that moved Sleep.tsx across, in the pre fix independently shifted form,
+// which is the regression this guards.
+describe('every SleepSchedule caller goes through this module', () => {
+  const PAGES = 'apps/web/src/pages'
+  const pages = readdirSync(PAGES).filter((f) => f.endsWith('.tsx'))
+  const sources = new Map(pages.map((page) => [page, readFileSync(`${PAGES}/${page}`, 'utf8')]))
+  const callers = pages.filter((page) => /<SleepSchedule[\s>]/.test(sources.get(page)!))
+
+  it.each(callers)('%s imports the schedule arithmetic rather than redeclaring it', (page) => {
+    const source = sources.get(page)!
+    expect(source).toMatch(/from '\.\.\/charts\/schedule\.js'/)
+    // A local declaration of any of the three, not a mere mention: the names appear in prose in
+    // several of these files, and a comment naming withinSchedule proves nothing either way.
+    expect(source).not.toMatch(/(?:function|const)\s+(?:localMinutesOf|inWindow|withinSchedule)\b/)
+  })
+
+  it('finds the callers it claims to check', () => {
+    expect(callers.length).toBeGreaterThan(1)
   })
 })

@@ -13,7 +13,8 @@ import { ControlRow } from '../components/ControlRow.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
-import { SleepSchedule, AXIS_MIN, AXIS_MAX } from '../charts/SleepSchedule.js'
+import { SleepSchedule } from '../charts/SleepSchedule.js'
+import { localMinutesOf, inWindow, withinSchedule, DEFAULT_WINDOW } from '../charts/schedule.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { deepLink } from '../controls/deepLink.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
@@ -147,49 +148,6 @@ function datesBetween(from: string, to: string): string[] {
     dates.push(new Date(cursor).toISOString().slice(0, 10))
   }
   return dates
-}
-
-// Minutes from the local midnight of `localDate`, negative before it: the convention
-// packages/core/src/derive/localDay.ts sets and sleep_bedtime_minutes is stored in. Written here
-// rather than imported because core has no such function to import; localDay.ts computes local
-// dates and hours, not this offset. It is also not reachable: `metrics` is the only browser safe
-// subpath @haelan/core publishes, and localDay.ts, pure though it is, has no entry point of its
-// own yet.
-function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number): number {
-  const wall = utcMs + offsetMinutes * 60_000
-  return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / 60_000)
-}
-
-// A night's localDate, and a sleep_bedtime_minutes/sleep_waketime_minutes row's date, are both the
-// date the night ENDED (db/schema/derived.ts: "a night spanning midnight belongs to the morning";
-// sync/runJob.ts sets it from localDateOf(endMs); the same convention is documented again on
-// sleep_bedtime_minutes itself in packages/core/src/derive/metrics.ts: "an 23:30 bedtime is -30").
-// So localMinutesOf(localDate, ...) measures a bed time from the WRONG midnight: a 23:20 bedtime
-// comes back as -40, and SleepSchedule's axis runs noon to noon from a single midnight, the BED
-// date's. A value that lands before noon in the wake-day frame needs a day added to land in the
-// bed-day frame instead; a value already past noon (a genuine daytime nap, or an unusually late
-// wake) is already correctly placed and must not be shifted, which is why this is conditional
-// rather than a blanket +1440. Applied to bed, wake, and any other minutes-from-local-midnight
-// value on its way to formatClock, which otherwise renders a negative bedtime as "-1:-40".
-function inWindow(minutes: number): number {
-  return minutes < AXIS_MIN ? minutes + 1440 : minutes
-}
-
-// inWindow corrects the common case (an evening bedtime, an early morning wake) with one +1440
-// shift, but one shift cannot correct every case. A wake time that is itself past noon on the
-// wake day (rare, but the catalogue does not rule it out) is left unshifted by inWindow, since it
-// already reads as "past noon" without knowing it is on the wrong day, which draws a span that
-// ends before it starts; and a bed time early enough that the night is longer than about
-// fourteen hours still lands before noon after one shift, which draws below the grid entirely.
-// Rather than trying to guess a second shift, this checks the result: a bed and wake that do not
-// both land inside [AXIS_MIN, AXIS_MAX] with wake after bed are not something this axis can draw
-// honestly, so both fall back to null, which SleepSchedule already renders as its no-data mark,
-// the same as a night with no reading at all.
-function withinSchedule(bed: number | null, wake: number | null): { bed: number | null, wake: number | null } {
-  if (bed === null || wake === null) return { bed: null, wake: null }
-  const inRange = (m: number) => m >= AXIS_MIN && m <= AXIS_MAX
-  if (!inRange(bed) || !inRange(wake) || wake <= bed) return { bed: null, wake: null }
-  return { bed, wake }
 }
 
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
@@ -441,7 +399,7 @@ export function Dashboard() {
   // Known, not fixed here: fixing it means the hypnogram card gaining the same /series-based
   // bedtime this schedule card already switched to, which is more than this label alone needs.
   const lastNightBedMinutes = lastNight === null
-    ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes))
+    ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes), DEFAULT_WINDOW)
   const startLabel = lastNightBedMinutes !== null
     ? t('common.bedLabel', { time: formatClock(lastNightBedMinutes) })
     : t('common.bedTimeNotRecorded')
@@ -465,9 +423,11 @@ export function Dashboard() {
     return dates.map((date) => {
       const bedPoint = bedtimeByDate.get(date)
       const wakePoint = waketimeByDate.get(date)
+      // DEFAULT_WINDOW rather than Sleep.tsx's WIDE_WINDOW: a span this compact card's noon to
+      // noon axis cannot hold comes back as an absence dot here, which is a defensible trade on a
+      // four line summary card and the wrong one on the page whose whole subject is sleep.
       const { bed, wake } = withinSchedule(
-        bedPoint ? inWindow(bedPoint.value) : null,
-        wakePoint ? inWindow(wakePoint.value) : null,
+        bedPoint?.value ?? null, wakePoint?.value ?? null, DEFAULT_WINDOW,
       )
       return {
         date,
