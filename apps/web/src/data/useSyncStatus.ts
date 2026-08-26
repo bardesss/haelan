@@ -14,6 +14,25 @@ export interface SyncStatus {
 }
 
 /**
+ * How often the status is re-read while a run is going.
+ *
+ * A run takes minutes and the status is otherwise fetched exactly once, on mount, and invalidated
+ * only when a mutation succeeds: without this the button stayed disabled and the label frozen for
+ * the whole run while the reader watched, and a run started anywhere else (the scheduler, another
+ * tab) never showed up at all. Three seconds is cheap against a local instance and short enough
+ * that "it finished" arrives while the reader is still looking.
+ */
+export const SYNC_POLL_MS = 3_000
+
+/**
+ * false, not zero, when nothing is running: a polling interval is a cost paid on every open tab
+ * forever, and there is nothing to learn between one sync and the next.
+ */
+export function syncPollInterval(status: SyncStatus | undefined): number | false {
+  return status?.running === true ? SYNC_POLL_MS : false
+}
+
+/**
  * One query key, shared with the sync mutation's invalidation in ControlRow: both have to agree
  * on exactly this key, or a successful run would invalidate a cache entry nothing is reading.
  * personId comes from the session, never from a parameter, for the same reason useSeries does
@@ -38,5 +57,6 @@ export function useSyncStatus(): UseQueryResult<SyncStatus> {
     // against, and cache a status answer under a key naming no person.
     enabled: personId !== undefined,
     queryFn: () => apiGet<SyncStatus>('/api/sync/status'),
+    refetchInterval: (query) => syncPollInterval(query.state.data),
   })
 }

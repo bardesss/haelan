@@ -32,9 +32,13 @@
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
     "sourceMerged": "Alle bronnen",
-    "downloadRaw": "Ruwe data downloaden",
+    "downloadTotals": "Dagtotalen downloaden",
     "sync": "Synchroniseren",
-    "syncedAgo": "Gesynchroniseerd {{count}} min geleden"
+    "syncedAgo": "Gesynchroniseerd {{count}} min geleden",
+    "neverSynced": "Nog nooit gesynchroniseerd",
+    "syncUnknown": "Synchronisatiestatus onbekend",
+    "syncAlreadyRunning": "Er loopt al een synchronisatie.",
+    "syncFailed": "Synchroniseren is niet gestart."
   },
   "sidebar": {
     "sectionsLabel": "Secties",

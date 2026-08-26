@@ -262,12 +262,12 @@ export function Dashboard() {
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
 
-  // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago":
-  // nothing synced yet reads as 0, the same value this literally was before Task 12 wired it,
-  // rather than a special case this card has no copy for.
+  // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago". Null
+  // rather than zero when no run has ever finished: the row has its own copy for that now, and
+  // for the moment before the status query has answered.
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
     ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : 0
+    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
 
@@ -536,7 +536,11 @@ export function Dashboard() {
             'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
             'dashboard.units.minutesAsleep',
             (p) => formatDuration(mean(values(p))), 'higher-is-better')}
-          <Link to={deepLink('/sleep', resolved)} className="card-link">
+          {/* Plain, not deep linked: /sleep is still pinned to the July fixtures and ignores
+              every parameter it is handed, so carrying the reader's period into that URL would
+              promise a period the page does not honour. It gets its parameters back when the
+              page can read them. */}
+          <Link to="/sleep" className="card-link">
             {t('dashboard.sleep.viewAll')}
           </Link>
         </Card>

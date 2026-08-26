@@ -33,8 +33,8 @@ afterEach(() => {
  * renderToStaticMarkup pattern the rest of the suite uses for static copy: this component sets
  * real click and change handlers, and those only exist once the tree is mounted for real.
  */
-function mount(node: ReactNode): void {
-  act(() => { root?.render(<I18nProvider lng="en">{node}</I18nProvider>) })
+function mount(node: ReactNode, lng = 'en'): void {
+  act(() => { root?.render(<I18nProvider lng={lng}>{node}</I18nProvider>) })
 }
 
 const PERSON: Session = {
@@ -52,6 +52,19 @@ function withQuery(node: ReactNode): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+}
+
+/**
+ * The same tree with no sync status cached and nothing answering for it, which is the state every
+ * page is in for the first moment after it mounts. Separate from withQuery rather than an
+ * optional argument, for the reason data-hooks.test.tsx gives: an optional parameter defaults
+ * when a caller passes undefined explicitly, so a test meaning to withhold the status would
+ * quietly get it anyway.
+ */
+function withQueryAwaitingStatus(node: ReactNode): ReactNode {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), PERSON)
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
@@ -112,6 +125,48 @@ describe('ControlRow', () => {
     const select = container!.querySelector('select') as HTMLSelectElement
     expect([...select.options].map((o) => o.value)).toEqual(['merged', 'watch', 'phone'])
     expect(select.value).toBe('watch')
+  })
+
+  // "Synced 0 min ago" reads as "synced seconds ago", and it was what a fresh instance and a
+  // page still loading both printed. A missing copy string is not a reason to print a false one.
+  it('says never synced rather than zero minutes ago when no run has finished', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={null} />))
+    expect(container!.textContent).toContain('Never synced')
+    expect(container!.textContent).not.toContain('Synced 0 min ago')
+  })
+
+  it('says the status is unknown while it is still being read', () => {
+    const original = globalThis.fetch
+    // Never settles: this is the moment between mount and the status route answering.
+    globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch
+    mount(withQueryAwaitingStatus(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={null} />))
+    expect(container!.textContent).toContain('Sync status unknown')
+    expect(container!.textContent).not.toContain('Never synced')
+    globalThis.fetch = original
+  })
+
+  it('still reports a real time as one', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={7} />))
+    expect(container!.textContent).toContain('Synced 7 min ago')
+  })
+
+  // no-hardcoded-strings.test.ts cannot see this one: its regex reads text between tags, not
+  // inside an expression, so an English "to" sat in the stepper label of a Dutch page while every
+  // card underneath it read Dutch.
+  it('joins the two dates with the catalogue word, not an English one', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />), 'nl')
+    const label = container!.querySelector('.stepper-label')!
+    expect(label.textContent).toBe('2026-08-01 tot 2026-08-31')
+  })
+
+  // Before this branch the whole row was inert everywhere, so a placeholder was obviously a mock.
+  // The sync button now really posts and the label really claims a time, which a page pinned to
+  // fixtures cannot honour.
+  it('hides the sync and download controls on a page that cannot honour them', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={null} canSync={false} />))
+    expect(container!.querySelector('.button-primary')).toBeNull()
+    expect(container!.querySelector('.synced')).toBeNull()
+    expect(container!.querySelector('a.button')).toBeNull()
   })
 
   // The fallback that used to live here now lives in the state layer, where the page builds its

@@ -56,8 +56,12 @@ export function Sleep() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
       {/* The row beneath this one is still fixture data for July regardless of what range or
           source gets picked here; wiring the two together is a later task. Sources is empty
-          rather than invented device names, since this page has no real source list yet. */}
-      <ControlRow controls={controls} sources={[]} syncedMinutesAgo={12} />
+          rather than invented device names, since this page has no real source list yet.
+          canSync is false and there is no export path, because both of those controls do
+          something real: the sync button posts and starts an actual run, and the synced label
+          claims a time. A page that cannot honour the range it is handed should not be offering
+          them, and "Synced 12 min ago" was a hardcoded number besides. */}
+      <ControlRow controls={controls} sources={[]} syncedMinutesAgo={null} canSync={false} />
       <div className="grid">
         <Card span={4}>
           {lastDay?.sleepMinutes != null ? (

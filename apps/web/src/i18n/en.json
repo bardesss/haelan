@@ -32,9 +32,13 @@
     "pickDate": "Pick a date",
     "sources": "Sources",
     "sourceMerged": "All sources",
-    "downloadRaw": "Download raw",
+    "downloadTotals": "Download daily totals",
     "sync": "Sync",
-    "syncedAgo": "Synced {{count}} min ago"
+    "syncedAgo": "Synced {{count}} min ago",
+    "neverSynced": "Never synced",
+    "syncUnknown": "Sync status unknown",
+    "syncAlreadyRunning": "A sync is already running.",
+    "syncFailed": "Sync did not start."
   },
   "sidebar": {
     "sectionsLabel": "Sections",

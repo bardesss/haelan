@@ -82,6 +82,31 @@ describe('the control row actions', () => {
     expect(posted).toEqual(['/api/sync/run'])
   })
 
+  // /api/sync/run answers 409 when a run is already going, apiSend maps 409 to its
+  // setup_incomplete kind, and runSync had no onError, so a refused click did nothing at all and
+  // said nothing about it.
+  it('says so when a run is refused because one is already going', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return new Response(JSON.stringify({ error: { code: 'sync_running' } }), {
+          status: 409, headers: { 'content-type': 'application/json' },
+        })
+      }
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />))
+    const sync = container!.querySelector('.button-primary') as HTMLButtonElement
+    act(() => { sync.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = original
+    expect(container!.textContent).toContain('A sync is already running.')
+  })
+
   // The export route answers a file. A link is the right element for that: it needs no fetch, no
   // blob and no object URL, and the browser's own download handling does the rest.
   it('offers raw download as a link to the export route, carrying the current range', () => {
@@ -90,5 +115,13 @@ describe('the control row actions', () => {
     const link = container!.querySelector('a[href*="/export"]') as HTMLAnchorElement
     expect(link.getAttribute('href')).toContain('format=csv')
     expect(link.getAttribute('href')).toContain('from=2026-08-01')
+    // One /export call takes one agg, so this link genuinely cannot carry heart rate. The label
+    // names the scope it does carry rather than implying every number on the page.
+    expect(link.textContent).toBe('Download daily totals')
+  })
+
+  it('offers no download link at all on a page with no export path', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />))
+    expect(container!.querySelector('a.button')).toBeNull()
   })
 })
