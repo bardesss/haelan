@@ -1,12 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Dashboard } from '../src/pages/Dashboard.js'
-import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -104,19 +102,17 @@ async function settledDashboard(lng: string): Promise<string> {
 }
 
 const restore = stubFetch()
-// Sleep is still fixture backed and resolves nothing, so a static render is the whole of it. Its
-// ControlRow reads the session and the sync status, hence the client in the tree.
-const sleepHtml = (lng: string) => renderToStaticMarkup(
-  <I18nProvider lng={lng}>
-    <QueryClientProvider client={new QueryClient()}><Sleep /></QueryClientProvider>
-  </I18nProvider>,
-)
+// Sleep left this harness once it went off fixtures (M3d2): it used to resolve nothing, so a
+// static renderToStaticMarkup was the whole of its render, and this file could treat it as a
+// second synchronous page beside Dashboard. A real Sleep asks for its own session and its own
+// three metric groups, which a bare QueryClient never resolves and renderToStaticMarkup never
+// waits for, so the same static render now shows nothing but loading state throughout. Sleep's
+// own dedicated coverage lives in sleep-page.test.tsx, following Activity.tsx and Recovery.tsx,
+// neither of which was ever added here either once they made the same move.
 const pages = {
   Dashboard: await settledDashboard('en'),
-  Sleep: sleepHtml('en'),
 }
 const dashboardNl = await settledDashboard('nl')
-const sleepNl = sleepHtml('nl')
 restore()
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
@@ -204,10 +200,9 @@ describe('chart tables follow the active language', () => {
     expect(nlTables).not.toContain('no reading')
   })
 
-  it('translates sleep stage names through the shared sleep.stage keys, not a second set', () => {
-    expect(sleepNl).toContain('Diep')
-    expect(sleepNl).not.toContain('>Deep<')
-  })
+  // Sleep's own stage name translation moved to sleep-page.test.tsx's "translates sleep stage
+  // names through the shared sleep.stage keys, not a second set" alongside the rest of Sleep's
+  // coverage, once Sleep left this file's static-render harness (see the comment above `pages`).
 })
 
 describe('Dashboard specifics', () => {

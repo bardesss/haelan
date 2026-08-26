@@ -58,15 +58,11 @@
     }
   },
   "common": {
-    "periodLabel": "juli 2026",
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
     "to": "tot",
     "loading": "Laden",
-    "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
     "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
-    "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
-    "deviceNotWorn": "Het apparaat werd niet gedragen.",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
   },
   "errorState": {
@@ -300,40 +296,80 @@
   },
   "sleep": {
     "title": "Slaap",
-    "noDate": "geen datum",
-    "lastRecordedNightFallback": "de laatst geregistreerde nacht",
-    "lastNight": {
-      "label": "Afgelopen nacht",
-      "basis": "geregistreerd, {{date}}",
-      "emptyTitle": "Geen slaap geregistreerd voor deze nacht."
-    },
-    "stages": {
-      "label": "Slaapfasen",
-      "basis": "afgelopen nacht, {{date}}, per minuut",
-      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
-    },
     "stage": {
       "deep": "Diep",
       "light": "Licht",
       "rem": "REM",
       "awake": "Wakker"
     },
-    "nap": {
-      "label": "Dutje",
-      "summary_one": "een dutje geregistreerd, begonnen om {{times}}, {{date}}",
-      "summary_other": "{{count}} dutjes geregistreerd, begonnen om {{times}}, {{date}}",
-      "emptyTitle": "Geen dutje geregistreerd afgelopen nacht.",
-      "wornAbsence": "Het apparaat werd gedragen op {{date}}, dus dit is een echte afwezigheid en geen ontbrekende data.",
-      "notWornEither": "Het apparaat werd niet gedragen, dus is er sowieso geen meting."
+    "baselineNote": {
+      "unknown": "de baseline kon niet worden gelezen, dus er wordt geen vergelijking getoond",
+      "none": "nog geen baseline om mee te vergelijken",
+      "thin": "de baseline van de 60 nachten voor {{on}} is te dun om mee te vergelijken",
+      "below": "↓ onder de baseline van {{low}} tot {{high}}",
+      "above": "↑ boven de baseline van {{low}} tot {{high}}",
+      "within": "→ binnen de baseline van {{low}} tot {{high}}"
     },
-    "schedule": {
-      "label": "Slaapschema, maand"
+    "units": {
+      "minutes": "Minuten",
+      "percent": "Percentage",
+      "percentShort": "%",
+      "minutesFromMidnight": "Minuten vanaf middernacht",
+      "naps": "Dutjes",
+      "napsShort": "dutjes"
     },
-    "baselineRange": "de baseline van {{low}} tot {{high}}",
-    "baselineBasis": "baseline is het eigen bereik van {{low}} tot {{high}} van deze slaper",
-    "belowBaseline": "↓ onder {{range}}",
-    "aboveBaseline": "↑ boven {{range}}",
-    "withinBaseline": "→ binnen {{range}}"
+    "asleepMinutes": {
+      "label": "Tijd geslapen",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten; {{note}}",
+      "chartLabel": "Tijd geslapen per nacht in {{period}}"
+    },
+    "deepMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Diepe slaap per nacht in {{period}}"
+    },
+    "lightMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Lichte slaap per nacht in {{period}}"
+    },
+    "remMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "REM-slaap per nacht in {{period}}"
+    },
+    "awakeMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Tijd wakker per nacht in {{period}}"
+    },
+    "inBedMinutes": {
+      "label": "Tijd in bed",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Tijd in bed per nacht in {{period}}"
+    },
+    "efficiency": {
+      "label": "Slaapefficiëntie",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Slaapefficiëntie per nacht in {{period}}"
+    },
+    "bedtimeMinutes": {
+      "label": "Bedtijd",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Bedtijd per nacht in {{period}}"
+    },
+    "waketimeMinutes": {
+      "label": "Wektijd",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Wektijd per nacht in {{period}}"
+    },
+    "napCount": {
+      "label": "Dutjes",
+      "basis_one": "{{count}} dutje, {{reported}} van {{total}} nachten",
+      "basis_other": "{{count}} dutjes, {{reported}} van {{total}} nachten",
+      "chartLabel": "Dutjes per nacht in {{period}}"
+    },
+    "napMinutes": {
+      "label": "Dutjesduur",
+      "basis": "som, {{reported}} van {{total}} nachten",
+      "chartLabel": "Dutjesduur per nacht in {{period}}"
+    }
   },
   "setup": {
     "genericError": "dat lukte niet",

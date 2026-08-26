@@ -58,15 +58,11 @@
     }
   },
   "common": {
-    "periodLabel": "July 2026",
     "bedLabel": "Bed {{time}}",
     "bedTimeNotRecorded": "Bed time not recorded",
     "to": "to",
     "loading": "Loading",
-    "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
-    "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
-    "deviceNotWorn": "Device was not worn.",
     "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}"
   },
   "errorState": {
@@ -300,40 +296,80 @@
   },
   "sleep": {
     "title": "Sleep",
-    "noDate": "no date",
-    "lastRecordedNightFallback": "the last recorded night",
-    "lastNight": {
-      "label": "Last night",
-      "basis": "recorded, {{date}}",
-      "emptyTitle": "No sleep recorded for this night."
-    },
-    "stages": {
-      "label": "Sleep stages",
-      "basis": "last night, {{date}}, per minute",
-      "chartLabel": "Sleep stages through the night of {{date}}"
-    },
     "stage": {
       "deep": "Deep",
       "light": "Light",
       "rem": "REM",
       "awake": "Awake"
     },
-    "nap": {
-      "label": "Nap",
-      "summary_one": "recorded a nap starting at {{times}}, {{date}}",
-      "summary_other": "recorded {{count}} naps starting at {{times}}, {{date}}",
-      "emptyTitle": "No nap recorded last night.",
-      "wornAbsence": "Device was worn on {{date}}, so this is a real absence rather than missing data.",
-      "notWornEither": "Device was not worn, so no reading exists either way."
+    "baselineNote": {
+      "unknown": "the baseline could not be read, so no comparison is shown",
+      "none": "no baseline yet to compare against",
+      "thin": "the baseline from the 60 nights before {{on}} is too thin to compare against",
+      "below": "↓ below the {{low}} to {{high}} baseline",
+      "above": "↑ above the {{low}} to {{high}} baseline",
+      "within": "→ within the {{low}} to {{high}} baseline"
     },
-    "schedule": {
-      "label": "Sleep schedule, month"
+    "units": {
+      "minutes": "Minutes",
+      "percent": "Percent",
+      "percentShort": "%",
+      "minutesFromMidnight": "Minutes from midnight",
+      "naps": "Naps",
+      "napsShort": "naps"
     },
-    "baselineRange": "the {{low}} to {{high}} baseline",
-    "baselineBasis": "baseline is this sleeper's own {{low}} to {{high}} range",
-    "belowBaseline": "↓ below {{range}}",
-    "aboveBaseline": "↑ above {{range}}",
-    "withinBaseline": "→ within {{range}}"
+    "asleepMinutes": {
+      "label": "Time asleep",
+      "basis": "mean, {{reported}} of {{total}} nights; {{note}}",
+      "chartLabel": "Nightly time asleep through {{period}}"
+    },
+    "deepMinutes": {
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly deep sleep through {{period}}"
+    },
+    "lightMinutes": {
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly light sleep through {{period}}"
+    },
+    "remMinutes": {
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly REM sleep through {{period}}"
+    },
+    "awakeMinutes": {
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly time awake through {{period}}"
+    },
+    "inBedMinutes": {
+      "label": "Time in bed",
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly time in bed through {{period}}"
+    },
+    "efficiency": {
+      "label": "Sleep efficiency",
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly sleep efficiency through {{period}}"
+    },
+    "bedtimeMinutes": {
+      "label": "Bedtime",
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly bedtime through {{period}}"
+    },
+    "waketimeMinutes": {
+      "label": "Wake time",
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly wake time through {{period}}"
+    },
+    "napCount": {
+      "label": "Naps",
+      "basis_one": "{{count}} nap, {{reported}} of {{total}} nights",
+      "basis_other": "{{count}} naps, {{reported}} of {{total}} nights",
+      "chartLabel": "Naps per night through {{period}}"
+    },
+    "napMinutes": {
+      "label": "Nap time",
+      "basis": "sum, {{reported}} of {{total}} nights",
+      "chartLabel": "Nightly nap time through {{period}}"
+    }
   },
   "setup": {
     "genericError": "that did not work",
