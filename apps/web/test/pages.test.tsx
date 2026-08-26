@@ -153,6 +153,20 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(html).not.toContain('NaN')
   })
 
+  // The Critical MetricCard shipped once it owned the Card shell: giving Card a basis unconditionally
+  // on top of a tile card that already prints one through its own StatTile put the same sentence on
+  // the page twice, the second copy carrying the delta clause the first lacked. Cards do not nest in
+  // this markup, so a non-greedy match up to the next closing section stays inside one card's own
+  // subtree.
+  it('draws at most one basis line per card', () => {
+    const cards = [...html.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
+    expect(cards.length).toBeGreaterThan(0)
+    for (const card of cards) {
+      const basisLines = [...card.matchAll(/<p class="basis"/g)].length
+      expect(basisLines, card).toBeLessThanOrEqual(1)
+    }
+  })
+
   it('never renders absence as a zero', () => {
     // Both halves of the rule, against a page that has really answered. A day with no row shows a
     // word in the table alternatives, and no headline value is the zero a formatter produces when

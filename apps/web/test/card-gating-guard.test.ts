@@ -17,15 +17,27 @@ import { readdirSync, readFileSync } from 'node:fs'
 // from tripping its own guard.
 const HAND_ROLLED_GATING = /<ErrorState[\s>]|<Loading[\s/>]|emptyState\.\w+\.(?:title|detail)/
 
-describe('pages route their cards through MetricCard', () => {
+// A JSX tag, not a bare substring: toContain('MetricCard') would have matched a comment that only
+// names the component, proving nothing about whether the page actually renders one.
+const USES_METRIC_CARD = /<MetricCard[\s>]/
+
+// What this actually checks, read honestly: not "no card hand rolls gating" (it is file
+// granularity, so a page hand rolling two of its eight cards and routing the other six through
+// MetricCard still passes), but "no page hand rolls every card and says nothing about the shared
+// component existing." Dashboard.tsx passes today only because its tile cards, heart rate range
+// and sleep schedule route through MetricCard; its still hand rolled sleep stages and daily steps
+// cards are not individually checked against it. A true per card guard needs to attribute a given
+// ErrorState/Loading/emptyState occurrence to the JSX block it sits in, which needs more than a
+// whole file regex; this is the cheap version, and its name and this comment describe what it is.
+describe('pages are not entirely hand rolled and silent about MetricCard', () => {
   const pages = readdirSync('apps/web/src/pages').filter((f) => f.endsWith('.tsx'))
   const sources = new Map(pages.map((page) => [page, readFileSync(`apps/web/src/pages/${page}`, 'utf8')]))
   const withGating = pages.filter((page) => HAND_ROLLED_GATING.test(sources.get(page)!))
 
-  it.each(pages)('%s does not hand roll the gating', (page) => {
+  it.each(pages)('%s does not hand roll every card without using MetricCard anywhere', (page) => {
     const source = sources.get(page)!
     if (!HAND_ROLLED_GATING.test(source)) return
-    expect(source).toContain('MetricCard')
+    expect(source).toMatch(USES_METRIC_CARD)
   })
 
   it('finds the pages it claims to check', () => {

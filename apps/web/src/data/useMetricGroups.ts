@@ -94,10 +94,19 @@ function indexOfGroup(groups: readonly MetricGroup[], metric: string): number {
 // calls outside `groups` for exactly this reason (see its GROUPS comment); this is what keeps that
 // the only way to answer heart_rate at three aggs, rather than one a future caller can rediscover
 // by hand and get wrong.
+//
+// Checked against `metrics` and `covers` separately, not against `covering(group)`'s already
+// merged result: `covering` returns `covers` whenever a caller set it, which can legitimately omit
+// one of that same group's own `metrics` (a card naming a pairing `under` filtered out of the wire
+// list). Checking only the merged result would let that dropped metric collide with another
+// group's `covers` unnoticed, since nothing in `covering`'s own output still says it was also this
+// group's `metrics` entry. Not a live defect today (indexOfGroup reads the same merged list this
+// would have to diverge from to matter), but the two are meant to stay in lock step and only one
+// of them was actually being checked.
 function assertNoOverlap(groups: readonly MetricGroup[]): void {
   const owner = new Map<string, number>()
   groups.forEach((group, index) => {
-    for (const metric of covering(group)) {
+    for (const metric of new Set([...group.metrics, ...covering(group)])) {
       const first = owner.get(metric)
       if (first !== undefined) {
         throw new Error(
@@ -107,6 +116,20 @@ function assertNoOverlap(groups: readonly MetricGroup[]): void {
       }
       owner.set(metric, index)
     }
+  })
+
+  // The same silent-first-match failure, one level up: queryForAgg resolves an agg to a group by
+  // findIndex too, so two groups sharing an agg would bind every caller of that agg to whichever
+  // group happened to come first, exactly the mistake this function exists to rule out for a
+  // metric. A page building GROUPS by hand from a per agg loop is the shape most likely to
+  // reintroduce this without meaning to.
+  const aggOwner = new Map<string, number>()
+  groups.forEach((group, index) => {
+    const first = aggOwner.get(group.agg)
+    if (first !== undefined) {
+      throw new Error(`useMetricGroups: agg '${group.agg}' is requested by both group ${first} and group ${index}`)
+    }
+    aggOwner.set(group.agg, index)
   })
 }
 

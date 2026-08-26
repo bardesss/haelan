@@ -31,14 +31,26 @@ import type { Baseline } from '../data/useBaseline.js'
  * `BasisContext` wiring inside `children` (by putting it inside). Neither is the fix; the fix is
  * that `Card` renders here, in every branch, so the chrome survives regardless of what is drawn and
  * the header basis comes from the exact place that decided what to draw.
+ *
+ * `basisPlacement` has no default because one is the exact bug this component then shipped: giving
+ * `Card` the basis unconditionally, on top of a tile card that already renders it through
+ * `StatTile`, printed the same sentence twice, the second copy carrying the delta clause the first
+ * lacked. There is no placement that is right for every caller, so there is no placement that is
+ * right for a caller that says nothing, the same reasoning `worn` and `reported` are typed `never`
+ * on `basisValues` rather than merely documented as reserved.
  */
-export function MetricCard({ metric, query, points, baseline, span, label, basisKey, basisWornKey, basisValues, after, children }: {
+export function MetricCard({ metric, query, points, baseline, span, label, basisPlacement, basisKey, basisWornKey, basisValues, after, children }: {
   metric: string
   query: { isError: boolean, isPending: boolean, refetch: () => unknown }
   points: SeriesPoint[]
   baseline?: Baseline | null
   span: number
   label?: string
+  // 'header' hands the basis to Card, which renders it above children the way the heart rate range
+  // and sleep schedule cards want it. 'body' withholds it from Card and leaves it to `children`,
+  // which is what a tile card needs: StatTile renders its own basis paragraph directly beneath the
+  // value, and Card would otherwise print a second one above the label.
+  basisPlacement: 'header' | 'body'
   basisKey: string
   basisWornKey: string
   // worn and reported stay reserved: MetricCard always overwrites them after the spread (reported
@@ -116,5 +128,11 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
     ? t(basisWornKey, { ...basisValues, worn, count, reported })
     : t(basisKey, { ...basisValues, reported })
 
-  return <Card span={span} label={label} basis={basis}>{children(basis)}{after}</Card>
+  // children always receives the real basis string regardless of placement, since a 'body' caller
+  // still needs it to hand to its own StatTile; only Card's own copy is conditional.
+  return (
+    <Card span={span} label={label} basis={basisPlacement === 'header' ? basis : undefined}>
+      {children(basis)}{after}
+    </Card>
+  )
 }

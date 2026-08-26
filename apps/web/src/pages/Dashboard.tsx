@@ -29,8 +29,7 @@ import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
-import { emptyStateFor, wornOn } from '../data/emptyState.js'
-import type { EmptyStateKind } from '../data/emptyState.js'
+import { wornOn } from '../data/emptyState.js'
 import { formatClock, formatDuration, trend } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
@@ -401,7 +400,7 @@ export function Dashboard() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     return (
-      <MetricCard metric={metric} span={span} query={metricGroups.queryFor(metric)} points={points}
+      <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
         after={after}>
         {(basis) => (
@@ -464,12 +463,10 @@ export function Dashboard() {
       : rawBaseline.thin
         ? 'dashboard.heartRateRange.basisThin'
         : 'dashboard.heartRateRange.basis'
-  // Guarded like the tiles: emptyStateFor's own doc comment forbids a chart drawing an empty axis
-  // when there is nothing to draw. No baseline argument here, since a thin baseline suppresses
-  // only the band (above), not the whole card; the mean/min/max lines are a real chart on their
-  // own even when the baseline behind the band is too thin to stand on.
   // All three requests, not only the mean: a card drawing three series has not settled until
-  // the last of them has, and has failed if any of them did.
+  // the last of them has, and has failed if any of them did. The empty check itself, and the
+  // baseline omission it depends on, now live in MetricCard: this composite query is only built
+  // here because MetricCard takes one query object, not three.
   const heartRateFailed = meanSeries.isError || minHrSeries.isError || maxHrSeries.isError
   const retryHeartRate = () => {
     void meanSeries.refetch()
@@ -477,19 +474,12 @@ export function Dashboard() {
     void maxHrSeries.refetch()
   }
   const heartRatePending = meanSeries.isPending || minHrSeries.isPending || maxHrSeries.isPending
-  const heartRateEmpty: EmptyStateKind | null = heartRatePending ? null : emptyStateFor('heart_rate', meanHrPoints)
 
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
   //
-  // The one card that opts out of MetricCard rather than being blocked from it: this shape (a
-  // chart that draws its own absence) is real and MetricCard is not meant to close it off. The
-  // heatmap draws a dot for every uncovered day instead of trading the whole chart for a text
-  // empty state, so routing this through MetricCard's emptyStateFor gate would add a full-card
-  // "no data" state that has never existed here, blanking a heatmap that has always drawn
-  // something. The worn count its basis line needs is still the same wornOn arithmetic MetricCard
-  // runs internally, just kept here because opting out means nothing else in this card reaches it
-  // through the component.
+  // Not a MetricCard, on purpose: it draws its own absence dot per day instead of a full-card
+  // empty state, which MetricCard's emptyStateFor gate would add and has never existed here.
   const stepsPoints = metricGroups.pointsOf('steps')
   const stepsWorn = stepsPoints.filter((point) => wornOn('steps', point) === true).length
   const heatmapDays = useMemo(() => {
@@ -619,7 +609,7 @@ export function Dashboard() {
             the same omission the card made by hand before: a thin baseline should blank only the
             band this chart draws around its lines, not the lines themselves, and passing baseline
             through would hand that decision to emptyStateFor's own insufficient state instead. */}
-        <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')}
+        <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
           query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
           points={meanHrPoints}
           basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.to }}>
@@ -635,13 +625,11 @@ export function Dashboard() {
           <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
         </Card>
 
-        {/* Still not a MetricCard. The card chrome was never this card's problem, only its basis
-            was hostage to it: what MetricCard cannot take is a night. It wants a metric and that
-            metric's SeriesPoint rows, and this card is gated on useNights (isError, isPending, and
-            an emptiness test, lastNight === null, that has nothing to do with coverage or a wear
-            signal), with a basis line naming lastNight.localDate, a field that exists only once
-            that same check has already passed. Manufacturing a fake metric and a fake points array
-            just to satisfy the prop shape would be the contortion the brief rules out, not a fit. */}
+        {/* The date comes off the night being drawn, never off the range end: this card used to
+            head an empty state with "last night, 2026-08-31", naming a night it was not drawing
+            and had no row for, which is what the guard below avoids by naming lastNight's own
+            date rather than the range end.
+            Not a MetricCard: gated on a night from useNights, not a metric and its points. */}
         <Card span={7} label={t('dashboard.sleepStages.label')}
           basis={nights.isError || lastNight === null
             ? undefined
@@ -663,7 +651,7 @@ export function Dashboard() {
             what points.length === 0 reads once the two are joined, so the gate does not narrow to
             "bedtime is empty" the way naming one metric alone would. count is drawnNights, not the
             wear clause's own count, which is what un-reserving count on the plain key is for. */}
-        <MetricCard metric="sleep_bedtime_minutes" span={5} label={t('dashboard.sleepSchedule.label')}
+        <MetricCard metric="sleep_bedtime_minutes" span={5} label={t('dashboard.sleepSchedule.label')} basisPlacement="header"
           query={lastSeries} points={[...bedtimePoints, ...waketimePoints]}
           basisKey="dashboard.sleepSchedule.basis" basisWornKey="dashboard.sleepSchedule.basis"
           basisValues={{ count: drawnNights }}>

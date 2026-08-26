@@ -172,6 +172,22 @@ describe('useMetricGroups', () => {
     expect(() => mount(withQuery(<OverlapProbe />).tree)).toThrow(/heart_rate/)
   })
 
+  // The same silent-first-match mistake one level up: queryForAgg resolves an agg to a group by
+  // findIndex too, so two groups requesting the same agg (a page building GROUPS from a per agg
+  // loop that produced a duplicate) would silently bind every queryForAgg('sum') call to whichever
+  // group came first, the exact bug the metric level check above exists to rule out.
+  it('throws at construction for an agg two groups both request', () => {
+    const duplicateAgg = [
+      { agg: 'sum', metrics: ['steps'] },
+      { agg: 'sum', metrics: ['sleep_asleep_minutes'] },
+    ] as const
+    function DuplicateAggProbe() {
+      useMetricGroups(duplicateAgg, { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES })
+      return null
+    }
+    expect(() => mount(withQuery(<DuplicateAggProbe />).tree)).toThrow(/sum/)
+  })
+
   // queryForAgg reads a group's query by the agg it requested, not by naming one of its member
   // metrics as a stand in: a page whose sum group happens to include 'steps' should not have a
   // catalogue change to a wholly different metric break the one call site checking whether the
