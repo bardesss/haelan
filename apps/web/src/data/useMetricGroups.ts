@@ -18,7 +18,22 @@ import type { MetricSeries, SeriesPoint, SeriesRange } from './useSeries.js'
  */
 export interface MetricGroup {
   agg: string
+  /** Metrics actually put on the wire in this group's `useSeries` call. */
   metrics: readonly string[]
+  /**
+   * Metrics `queryFor`/`pointsOf` resolve to this group's query. Defaults to `metrics`, so the
+   * common case (every named metric is both requested and answered) stays a single list.
+   *
+   * Separate from `metrics` because a card can legitimately name a metric the catalogue does not
+   * offer at this agg: Dashboard.tsx's `under()` filters exactly that out of what gets requested,
+   * so the group it would have ridden in still resolves the card to itself, finds no series under
+   * its own name in the response, and renders that card's own empty state. Folding `covers` into
+   * `metrics` would put the disallowed metric back on the wire and 500 every card riding along
+   * with it (requireMetricAndAgg rejects the whole call the moment one metric in it lacks the
+   * requested agg); leaving `covers` out entirely would make `queryFor`/`pointsOf` throw for a
+   * metric that is a legitimate, if unanswerable-today, card, not a typo.
+   */
+  covers?: readonly string[]
 }
 
 export interface MetricGroups {
@@ -39,9 +54,22 @@ export interface MetricGroups {
 // EMPTY at once, silently, since they are all the same array.
 const EMPTY = Object.freeze([]) as never[]
 
+// What a group answers for, not what it requests: `covers` when the caller gave one, `metrics`
+// otherwise. A metric present here but absent from `metrics` was deliberately left off the wire
+// (see MetricGroup's own doc comment), so it resolves to this group's query without ever having
+// been asked for, and pointsOf then falls through to EMPTY for it the same way an ordinary metric
+// with no rows does.
+function covering(group: MetricGroup): readonly string[] {
+  return group.covers ?? group.metrics
+}
+
 function indexOfGroup(groups: readonly MetricGroup[], metric: string): number {
-  const index = groups.findIndex((group) => group.metrics.includes(metric))
+  const index = groups.findIndex((group) => covering(group).includes(metric))
   if (index === -1) {
+    // Not in any group's requested OR covered list: a typo or a card wired to a metric nobody
+    // told this hook about, as opposed to a metric this hook knows about but the catalogue
+    // disallows at this agg (that case is `covers` above, and resolves quietly). The two are
+    // different failures and only one of them is a mistake worth failing loud for.
     throw new Error(`useMetricGroups: '${metric}' is not listed in any of the groups it was given`)
   }
   return index

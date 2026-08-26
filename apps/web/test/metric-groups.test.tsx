@@ -116,4 +116,42 @@ describe('useMetricGroups', () => {
     expect(seen!.pointsOf('steps')).toBe(seen!.pointsOf('floors'))
     restore()
   })
+
+  // 'floors' names a real card, not a typo: it is left out of `metrics` (what actually reaches
+  // /series) the way Dashboard.tsx's `under()` leaves a catalogue-disallowed pairing off the wire,
+  // but it still belongs to this group's `covers`, so its card resolves to this group's query and
+  // renders its own empty state instead of the whole page either 500ing on a bad request or
+  // throwing on a metric this hook was never told about.
+  it('resolves a metric a group covers but does not request to no points, without throwing', async () => {
+    const coveringGroups = [
+      { agg: 'sum', metrics: ['steps'], covers: ['steps', 'floors'] },
+    ] as const
+    let coveringSeen: MetricGroups | null = null
+    function CoveringProbe() {
+      coveringSeen = useMetricGroups(coveringGroups, { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES })
+      return null
+    }
+
+    const restore = stubFetch([])
+    const { client, tree } = withQuery(<CoveringProbe />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    expect(() => coveringSeen!.queryFor('floors')).not.toThrow()
+    expect(coveringSeen!.pointsOf('floors')).toEqual([])
+    restore()
+  })
+
+  // A metric in neither `metrics` nor `covers` of any group is not a filtered-out card, it is a
+  // card nobody told this hook about at all, which is the typo case the covering test above is
+  // not: that one is left to throw on purpose, loud rather than a silent blank card.
+  it('throws for a metric in neither list', () => {
+    function TypoProbe() {
+      useMetricGroups(GROUPS, { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES }).queryFor('not_a_real_metric')
+      return null
+    }
+    // No fetch stub: the throw happens during render, before TanStack Query's effect would fire a
+    // request, so there is nothing here for a stub to answer.
+    expect(() => mount(withQuery(<TypoProbe />).tree)).toThrow(/not_a_real_metric/)
+  })
 })
