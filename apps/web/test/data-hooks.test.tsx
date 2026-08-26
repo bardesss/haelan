@@ -42,10 +42,13 @@ function withoutSession(node: ReactNode): ReactNode {
 describe('seriesPath', () => {
   // One request for four cards. /series takes a repeated metric parameter, which M3b-2 added
   // precisely so a dashboard does not open four connections to draw four sparklines.
+  // Real catalogue ids. 'sleep_minutes' is not a metric packages/core/src/derive/metrics.ts
+  // defines, and while a path builder does not care, it is exactly the string a future reader
+  // copies into a request that then 400s.
   it('repeats the metric parameter rather than making one call per metric', () => {
-    const path = seriesPath('p1', ['steps', 'sleep_minutes'], { from: '2026-08-01', to: '2026-08-31', source: 'merged' }, 'sum')
+    const path = seriesPath('p1', ['steps', 'sleep_asleep_minutes'], { from: '2026-08-01', to: '2026-08-31', source: 'merged' }, 'sum')
     expect(path).toContain('metric=steps')
-    expect(path).toContain('metric=sleep_minutes')
+    expect(path).toContain('metric=sleep_asleep_minutes')
     expect(path.match(/metric=/g)).toHaveLength(2)
   })
 
