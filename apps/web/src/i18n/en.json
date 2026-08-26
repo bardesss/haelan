@@ -90,28 +90,32 @@
     "steps": {
       "label": "Steps",
       "basis": "sum, {{reported}} of {{total}} days",
-      "basisWorn": "sum, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "basisWorn_one": "sum, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "sum, {{worn}} of {{total}} days, {{count}} days not worn",
       "chartLabel": "Daily steps through {{period}}",
       "viewAll": "View activity"
     },
     "restingHr": {
       "label": "Resting heart rate",
       "basis": "mean, {{reported}} of {{total}} days",
-      "basisWorn": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "basisWorn_one": "mean, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "mean, {{worn}} of {{total}} days, {{count}} days not worn",
       "chartLabel": "Daily resting heart rate through {{period}}",
       "viewAll": "View recovery"
     },
     "sleep": {
       "label": "Sleep",
       "basis": "mean, {{reported}} of {{total}} nights",
-      "basisWorn": "mean, {{worn}} of {{total}} nights, {{unworn}} nights not worn",
+      "basisWorn_one": "mean, {{worn}} of {{total}} nights, {{count}} night not worn",
+      "basisWorn_other": "mean, {{worn}} of {{total}} nights, {{count}} nights not worn",
       "chartLabel": "Nightly sleep duration through {{period}}",
       "viewAll": "View sleep"
     },
     "meanHr": {
       "label": "Mean heart rate",
       "basis": "mean, {{reported}} of {{total}} days",
-      "basisWorn": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "basisWorn_one": "mean, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "mean, {{worn}} of {{total}} days, {{count}} days not worn",
       "chartLabel": "Daily mean heart rate through {{period}}",
       "viewAll": "View recovery"
     },

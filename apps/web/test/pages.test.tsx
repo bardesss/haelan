@@ -208,6 +208,21 @@ describe('Dashboard specifics', () => {
     expect(html).not.toMatch(/(\d+) of \1 days/)
   })
 
+  // The wear clause was structurally always zero until the coverage fix, so it only ever rendered
+  // its plural and nothing noticed it had no singular. The stubbed week reaches both in one
+  // render: heart rate has exactly one day at the derivation's coverage floor, and steps has none.
+  it('counts one unworn day in the singular and none in the plural', () => {
+    expect(html).toContain('1 day not worn')
+    expect(html).not.toContain('1 days not worn')
+    expect(html).toContain('0 days not worn')
+  })
+
+  it('picks the Dutch singular and plural too, not one form for both', () => {
+    expect(dashboardNl).toContain('1 dag niet gedragen')
+    expect(dashboardNl).not.toContain('1 dagen niet gedragen')
+    expect(dashboardNl).toContain('0 dagen niet gedragen')
+  })
+
   it('does not label two different cards with the same name', () => {
     const labels = [...html.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
     expect(new Set(labels).size).toBe(labels.length)

@@ -63,11 +63,16 @@ const MEAN_METRICS = ['heart_rate'] as const
 const MIN_METRICS = ['heart_rate'] as const
 const MAX_METRICS = ['heart_rate'] as const
 
-// One frozen array for every prop that is deliberately empty. A fresh [] on every render gives
-// the chart's `build` callback a new identity, which useChart reads as "rebuild", so two literals
-// in one JSX attribute list were enough to dispose and re-initialise an echarts instance on every
-// commit of this page.
-const EMPTY: never[] = []
+// One array for every prop and every fallback that is deliberately empty. A fresh [] on every
+// render gives the chart's `build` callback a new identity, which useChart reads as "rebuild", so
+// two literals in one JSX attribute list were enough to dispose and re-initialise an echarts
+// instance on every commit of this page.
+//
+// Frozen because it is shared: `naps` below hands it out under a mutable type, and a consumer
+// that pushed into that one array would be writing into `annotations`, `excluded` and every
+// metric with no rows at the same time. Freezing turns that from a silent corruption into a
+// throw at the line that did it.
+const EMPTY = Object.freeze([]) as never[]
 
 const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
@@ -320,11 +325,16 @@ export function Dashboard() {
   // coverage says nothing about wear contributes to neither. That is why the caller picks between
   // a basis line carrying the wear clause and one without it, rather than printing a zero over a
   // metric that could never have produced anything else.
+  //
+  // The unworn figure is named `count` because i18next reads that one name and no other when it
+  // picks between a key's _one and _other forms. It was `unworn` while the number was
+  // structurally always zero, which read as "0 days not worn" in every language and hid the
+  // missing plural; the coverage fix made one reachable, and one is where a missing plural shows.
   const basisOf = (metric: string, points: SeriesPoint[]) => {
     const answers = points.map((point) => wornOn(metric, point))
     return {
       worn: answers.filter((w) => w === true).length,
-      unworn: answers.filter((w) => w === false).length,
+      count: answers.filter((w) => w === false).length,
       reported: points.length,
       total: rangeDates.length,
     }
@@ -355,12 +365,19 @@ export function Dashboard() {
     if (empty !== null) {
       return <EmptyState title={t(`emptyState.${empty}.title`)} detail={t(`emptyState.${empty}.detail`)} />
     }
+    // Only the wear clause carries `count`, and it is handed over only to the key that has an
+    // _one and an _other to choose between: passing it to a key with neither would ask i18next to
+    // pluralise a string nobody wrote a plural for.
+    const stats = basisOf(metric, points)
+    const basis = coverageIsWearSignal(metric)
+      ? t(basisWornKey, stats)
+      : t(basisKey, { reported: stats.reported, total: stats.total })
     // trend() itself answers "no delta" (undefined) for a window with too few points to compare,
     // which is the day range (exactly one point), so there is nothing left for this call site to
     // guard against.
     return (
       <StatTile label={t(labelKey)} value={format(points)} unit={unit}
-        basis={t(coverageIsWearSignal(metric) ? basisWornKey : basisKey, basisOf(metric, points))}
+        basis={basis}
         delta={trend(t, values(points), direction)}>
         <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
           label={t(chartLabelKey, { period })} unit={t(unitKey)} />
@@ -431,6 +448,9 @@ export function Dashboard() {
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
   const stepsPoints = pointsOf('steps')
+  // Named fields rather than a spread, for the reason tile() gives: this line has no plural to
+  // choose between, so it is handed no count to choose one with.
+  const stepsBasis = basisOf('steps', stepsPoints)
   const heatmapDays = useMemo(() => {
     const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
     return rangeDates.map((date) => {
@@ -605,7 +625,7 @@ export function Dashboard() {
 
         <Card span={8} label={t('dashboard.dailySteps.label')}
           basis={sumSeries.isError || stepsPending ? undefined : t('dashboard.dailySteps.basis', {
-            ...basisOf('steps', stepsPoints), maxSteps: groupNumber(maxSteps),
+            worn: stepsBasis.worn, total: stepsBasis.total, maxSteps: groupNumber(maxSteps),
           })}>
           {sumSeries.isError ? <ErrorState onRetry={() => void sumSeries.refetch()} />
             : stepsPending ? <Loading /> : (
