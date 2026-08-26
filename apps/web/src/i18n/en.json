@@ -58,6 +58,7 @@
     "bedLabel": "Bed {{time}}",
     "bedTimeNotRecorded": "Bed time not recorded",
     "to": "to",
+    "loading": "Loading",
     "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
     "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
@@ -79,32 +80,36 @@
     },
     "steps": {
       "label": "Steps",
-      "basis": "sum, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "basisWorn": "sum, {{worn}} of {{total}} days, {{unworn}} days not worn",
       "chartLabel": "Daily steps through {{period}}",
       "viewAll": "View activity"
     },
     "restingHr": {
       "label": "Resting heart rate",
-      "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "basisWorn": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
       "chartLabel": "Daily resting heart rate through {{period}}",
       "viewAll": "View recovery"
     },
     "sleep": {
       "label": "Sleep",
-      "basis": "mean, {{worn}} of {{total}} nights, {{unworn}} nights not worn",
+      "basis": "mean, {{reported}} of {{total}} nights",
+      "basisWorn": "mean, {{worn}} of {{total}} nights, {{unworn}} nights not worn",
       "chartLabel": "Nightly sleep duration through {{period}}",
       "viewAll": "View sleep"
     },
     "meanHr": {
       "label": "Mean heart rate",
-      "basis": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "basisWorn": "mean, {{worn}} of {{total}} days, {{unworn}} days not worn",
       "chartLabel": "Daily mean heart rate through {{period}}",
       "viewAll": "View recovery"
     },
     "heartRateRange": {
       "label": "Heart rate range",
-      "basis": "daily minimum, mean and maximum, shaded band is the 60 day baseline",
-      "basisThin": "daily minimum, mean and maximum; the 60 day baseline is too thin to draw a band from",
+      "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",
+      "basisThin": "daily minimum, mean and maximum; the baseline from the 60 days before {{on}} is too thin to draw a band from",
       "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
       "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
     },

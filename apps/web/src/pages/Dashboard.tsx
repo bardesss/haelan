@@ -3,6 +3,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { EmptyState } from '../components/EmptyState.js'
+import { Loading } from '../components/Loading.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
@@ -19,7 +20,7 @@ import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
-import { emptyStateFor, wornOn } from '../data/emptyState.js'
+import { emptyStateFor, wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import type { EmptyStateKind } from '../data/emptyState.js'
 import { formatClock, formatDuration, trend } from '../format.js'
 
@@ -58,6 +59,12 @@ const LAST_METRICS = ['resting_heart_rate', 'sleep_bedtime_minutes', 'sleep_wake
 const MEAN_METRICS = ['heart_rate'] as const
 const MIN_METRICS = ['heart_rate'] as const
 const MAX_METRICS = ['heart_rate'] as const
+
+// One frozen array for every prop that is deliberately empty. A fresh [] on every render gives
+// the chart's `build` callback a new identity, which useChart reads as "rebuild", so two literals
+// in one JSX attribute list were enough to dispose and re-initialise an echarts instance on every
+// commit of this page.
+const EMPTY: never[] = []
 
 const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
@@ -218,7 +225,11 @@ export function Dashboard() {
   // 'mean' explicitly: useBaseline defaults to 'sum', which heart_rate's catalogue entry does not
   // list, and the default would 400 the request (ConfigError, requireSource/requireMetricAndAgg)
   // the same way it would for /series.
-  const hrBaseline = useBaseline('heart_rate', controls.anchor, controls.source, 'mean')
+  // Anchored on the range end, not on controls.anchor: baselineWindow reads the sixty days
+  // before `on`, and the chart under this band draws from..to. Anchoring it inside the drawn
+  // window puts a band over days it was computed from, and a Year view drew a sixty day band
+  // across twelve months without the basis line ever saying when it ended. It says so now.
+  const hrBaseline = useBaseline('heart_rate', controls.to, controls.source, 'mean')
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
 
@@ -262,30 +273,56 @@ export function Dashboard() {
 
   const pointsOf = (metric: string): SeriesPoint[] => queryFor(metric).data?.[metric]?.points ?? []
 
-  // Coverage is per point and comes straight off the envelope, so the basis line states what the
-  // number actually rests on rather than asserting a figure nobody computed.
-  const basisOf = (points: SeriesPoint[]) => {
-    const worn = points.filter((p) => p.coverage !== null && p.coverage > 0).length
-    return { worn, total: points.length, unworn: points.length - worn }
+  // Every calendar day in the range, computed once: the dense denominator every basis line and
+  // both by-position charts on this page count against.
+  const rangeDates = datesBetween(controls.from, controls.to)
+
+  // The denominator is the days in the period, not the days that answered. /series omits a day
+  // with no row entirely, so points.length is "days that reported", and a month missing eleven of
+  // them read "20 of 20 days, 0 days not worn". The reasoning was already written for the heatmap
+  // and applied to one card out of five.
+  //
+  // worn and unworn count only the points that can answer the wear question (see wornOn): a day
+  // with no row is neither, since a gap has no cause this data can name, and a metric whose
+  // coverage says nothing about wear contributes to neither. That is why the caller picks between
+  // a basis line carrying the wear clause and one without it, rather than printing a zero over a
+  // metric that could never have produced anything else.
+  const basisOf = (metric: string, points: SeriesPoint[]) => {
+    const answers = points.map((point) => wornOn(metric, point))
+    return {
+      worn: answers.filter((w) => w === true).length,
+      unworn: answers.filter((w) => w === false).length,
+      reported: points.length,
+      total: rangeDates.length,
+    }
   }
 
+  // basisKey and basisWornKey both arrive as literal strings, and which of the two renders is
+  // decided here from the metric rather than at the call site: a card whose metric changed to one
+  // whose coverage cannot speak to wear would otherwise keep a wear clause that can only ever
+  // print zeroes, which is the Critical this page already fixed once.
   const tile = (
-    metric: string, labelKey: string, basisKey: string, chartLabelKey: string, unitKey: string,
+    metric: string, labelKey: string, basisKey: string, basisWornKey: string,
+    chartLabelKey: string, unitKey: string,
     format: (points: SeriesPoint[]) => string,
     direction: 'higher-is-better' | 'lower-is-better' | 'neutral',
     unit?: string,
   ) => {
+    // Nothing has been asked yet, so there is nothing to state. format() over an empty array is a
+    // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
+    if (queryFor(metric).isPending) return <Loading />
+
     const points = pointsOf(metric)
-    const empty: EmptyStateKind | null = queryFor(metric).isPending ? null : emptyStateFor(metric, points)
+    const empty: EmptyStateKind | null = emptyStateFor(metric, points)
     if (empty !== null) {
       return <EmptyState title={t(`emptyState.${empty}.title`)} detail={t(`emptyState.${empty}.detail`)} />
     }
     // trend() itself answers "no delta" (undefined) for a window with too few points to compare,
-    // which covers both the pending fetch (points still empty) and the day range (exactly one
-    // point), so there is nothing left for this call site to guard against.
+    // which is the day range (exactly one point), so there is nothing left for this call site to
+    // guard against.
     return (
       <StatTile label={t(labelKey)} value={format(points)} unit={unit}
-        basis={t(basisKey, basisOf(points))}
+        basis={t(coverageIsWearSignal(metric) ? basisWornKey : basisKey, basisOf(metric, points))}
         delta={trend(t, values(points), direction)}>
         <Sparkline values={points.map((p) => p.value)} labels={points.map((p) => p.localDate)}
           label={t(chartLabelKey, { period })} unit={t(unitKey)} />
@@ -300,7 +337,7 @@ export function Dashboard() {
   const meanHrByDate = new Map(pointsOf('heart_rate').map((p) => [p.localDate, p]))
   const minHrByDate = new Map((minHrSeries.data?.heart_rate?.points ?? []).map((p) => [p.localDate, p]))
   const maxHrByDate = new Map((maxHrSeries.data?.heart_rate?.points ?? []).map((p) => [p.localDate, p]))
-  const heartRateDays = datesBetween(controls.from, controls.to).map((date) => {
+  const heartRateDays = rangeDates.map((date) => {
     const meanPoint = meanHrByDate.get(date)
     return {
       date,
@@ -333,13 +370,16 @@ export function Dashboard() {
   // when there is nothing to draw. No baseline argument here, since a thin baseline suppresses
   // only the band (above), not the whole card; the mean/min/max lines are a real chart on their
   // own even when the baseline behind the band is too thin to stand on.
-  const heartRateEmpty: EmptyStateKind | null = meanSeries.isPending ? null : emptyStateFor('heart_rate', pointsOf('heart_rate'))
+  // All three requests, not only the mean: a card drawing three series has not settled until
+  // the last of them has.
+  const heartRatePending = meanSeries.isPending || minHrSeries.isPending || maxHrSeries.isPending
+  const heartRateEmpty: EmptyStateKind | null = heartRatePending ? null : emptyStateFor('heart_rate', pointsOf('heart_rate'))
 
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
   const stepsPoints = pointsOf('steps')
   const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
-  const heatmapDays = datesBetween(controls.from, controls.to).map((date) => {
+  const heatmapDays = rangeDates.map((date) => {
     const point = stepsByDate.get(date)
     return {
       date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
@@ -348,29 +388,16 @@ export function Dashboard() {
     }
   })
   const maxSteps = Math.max(0, ...values(stepsPoints))
-  // Worn against every calendar day in range, not against however many points happened to
-  // arrive: basisOf(stepsPoints) would read the same "N of N" whether N days reported or the
-  // whole month did, since a day with no point is simply absent from stepsPoints rather than
-  // present with a false reading. heatmapDays is already dense over the whole range, so counting
-  // worn there states the coverage the grid actually draws.
-  //
-  // Pending-gated the way tile() and heartRateEmpty are, but on the numbers rather than on
-  // swapping in a whole empty state: heatmapDays is dense from the moment the page mounts, before
-  // any request has settled, so its own count would otherwise read "0 of 31 days worn" while
-  // nothing has actually been checked yet, a stronger and more specific false claim than the "0
-  // of 0" the sparse stat tiles harmlessly show in the same pending moment. Falling back to that
-  // same vacuous 0 of 0 here keeps this card from asserting a total before it has one.
-  const heatmapWorn = heatmapDays.filter((d) => d.worn).length
-  const heatmapBasisStats = queryFor('steps').isPending
-    ? { worn: 0, total: 0, unworn: 0 }
-    : { worn: heatmapWorn, total: heatmapDays.length, unworn: heatmapDays.length - heatmapWorn }
+  // Nothing is stated while the request is in flight. heatmapDays is dense from the moment the
+  // page mounts, so counting it before anything has settled reads "0 of 31 days worn", a specific
+  // false claim rather than a vacuous one, and the card draws a placeholder instead.
+  const stepsPending = queryFor('steps').isPending
 
   // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
   // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
   // between mount and the request resolving.
   const collapsedNights = oneNightPerDate(nights.data?.items ?? [])
   const lastNight = collapsedNights.at(-1) ?? null
-  const nightEmpty: EmptyStateKind | null = nights.isPending ? null : (lastNight === null ? 'no_data' : null)
   const hypnogramSegments = lastNight === null ? [] : lastNight.segments
     .map((s) => ({
       stage: stageOf(s.stage),
@@ -418,7 +445,10 @@ export function Dashboard() {
       naps: [] as number[],
     }
   })
-  const scheduleEmpty: EmptyStateKind | null = lastSeries.isPending ? null : (scheduleDates.length === 0 ? 'no_data' : null)
+  // The nights this card actually draws a bed and a wake for. withinSchedule nulls out any
+  // night the axis cannot place honestly and SleepSchedule draws those as absence dots, so
+  // counting the dates would claim a bed and wake time for a row that shows neither.
+  const drawnNights = scheduleNights.filter((n) => n.bed !== null && n.wake !== null).length
 
   return (
     <>
@@ -426,14 +456,16 @@ export function Dashboard() {
       <ControlRow controls={controls} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
         <Card span={3}>
-          {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.chartLabel', 'dashboard.units.steps',
+          {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
+            'dashboard.steps.chartLabel', 'dashboard.units.steps',
             (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better')}
           <Link to={deepLink('/activity', controls)} className="card-link">
             {t('dashboard.steps.viewAll')}
           </Link>
         </Card>
         <Card span={3}>
-          {tile('resting_heart_rate', 'dashboard.restingHr.label', 'dashboard.restingHr.basis', 'dashboard.restingHr.chartLabel',
+          {tile('resting_heart_rate', 'dashboard.restingHr.label', 'dashboard.restingHr.basis',
+            'dashboard.restingHr.basisWorn', 'dashboard.restingHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'lower-is-better', t('dashboard.units.bpm'))}
           <Link to={deepLink('/recovery', controls)} className="card-link">
@@ -441,7 +473,8 @@ export function Dashboard() {
           </Link>
         </Card>
         <Card span={3}>
-          {tile('sleep_asleep_minutes', 'dashboard.sleep.label', 'dashboard.sleep.basis', 'dashboard.sleep.chartLabel',
+          {tile('sleep_asleep_minutes', 'dashboard.sleep.label', 'dashboard.sleep.basis',
+            'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
             'dashboard.units.minutesAsleep',
             (p) => formatDuration(mean(values(p))), 'higher-is-better')}
           <Link to={deepLink('/sleep', controls)} className="card-link">
@@ -449,7 +482,8 @@ export function Dashboard() {
           </Link>
         </Card>
         <Card span={3}>
-          {tile('heart_rate', 'dashboard.meanHr.label', 'dashboard.meanHr.basis', 'dashboard.meanHr.chartLabel',
+          {tile('heart_rate', 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
+            'dashboard.meanHr.basisWorn', 'dashboard.meanHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'neutral', t('dashboard.units.bpm'))}
           <Link to={deepLink('/recovery', controls)} className="card-link">
@@ -457,18 +491,18 @@ export function Dashboard() {
           </Link>
         </Card>
 
-        {/* basis withheld when heartRateEmpty is set, the same way tile() returns EmptyState in
-            place of the whole StatTile including its basis: a band clause is a claim about what
-            the chart below draws, and there is no chart below when this reads "No data yet". */}
+        {/* basis withheld whenever there is no chart under it, the same way tile() returns an
+            EmptyState in place of the whole StatTile including its basis: a band clause is a claim
+            about what the chart below draws, and a pending request has drawn nothing yet. */}
         <Card span={8} label={t('dashboard.heartRateRange.label')}
-          basis={heartRateEmpty !== null ? undefined : t(heartRateBasisKey)}>
-          {heartRateEmpty !== null ? (
+          basis={heartRatePending || heartRateEmpty !== null ? undefined : t(heartRateBasisKey, { on: controls.to })}>
+          {heartRatePending ? <Loading /> : heartRateEmpty !== null ? (
             <EmptyState title={t(`emptyState.${heartRateEmpty}.title`)} detail={t(`emptyState.${heartRateEmpty}.detail`)} />
           ) : (
             /* Empty until M3c. HeartRateRange has taken both props since D1 and fed them from
                fixtures; annotations and overrides are M3c's subject, and passing them empty here is
                a milestone boundary rather than an oversight. */
-            <HeartRateRange days={heartRateDays} baseline={heartRateBand} annotations={[]} excluded={[]}
+            <HeartRateRange days={heartRateDays} baseline={heartRateBand} annotations={EMPTY} excluded={EMPTY}
               label={t('dashboard.heartRateRange.chartLabel', { period })} />
           )}
         </Card>
@@ -476,29 +510,36 @@ export function Dashboard() {
           <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
         </Card>
 
+        {/* The date comes off the night being drawn, never off the range end: this card used to
+            head an empty state with "last night, 2026-08-31", naming a night it was not drawing
+            and had no row for, which is what the neighbour above withholds its basis to avoid. */}
         <Card span={7} label={t('dashboard.sleepStages.label')}
-          basis={t('dashboard.sleepStages.basis', { date: lastNight?.localDate ?? controls.to })}>
-          {nightEmpty !== null ? (
-            <EmptyState title={t(`emptyState.${nightEmpty}.title`)} detail={t(`emptyState.${nightEmpty}.detail`)} />
+          basis={lastNight === null ? undefined : t('dashboard.sleepStages.basis', { date: lastNight.localDate })}>
+          {nights.isPending ? <Loading /> : lastNight === null ? (
+            <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
             <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
-              label={t('dashboard.sleepStages.chartLabel', { date: lastNight?.localDate ?? controls.to })} />
+              label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
           )}
         </Card>
         <Card span={5} label={t('dashboard.sleepSchedule.label')}
-          basis={t('dashboard.sleepSchedule.basis', { nights: scheduleDates.length })}>
-          {scheduleEmpty !== null ? (
-            <EmptyState title={t(`emptyState.${scheduleEmpty}.title`)} detail={t(`emptyState.${scheduleEmpty}.detail`)} />
+          basis={lastSeries.isPending || scheduleNights.length === 0
+            ? undefined
+            : t('dashboard.sleepSchedule.basis', { nights: drawnNights })}>
+          {lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
+            <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
             <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />
           )}
         </Card>
 
         <Card span={8} label={t('dashboard.dailySteps.label')}
-          basis={t('dashboard.dailySteps.basis', {
-            ...heatmapBasisStats, maxSteps: groupNumber(maxSteps),
+          basis={stepsPending ? undefined : t('dashboard.dailySteps.basis', {
+            ...basisOf('steps', stepsPoints), maxSteps: groupNumber(maxSteps),
           })}>
-          <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
+          {stepsPending ? <Loading /> : (
+            <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
+          )}
         </Card>
         <Card span={4} label={t('dashboard.recovery.label')}>
           <EmptyState title={t('dashboard.recovery.emptyTitle')}

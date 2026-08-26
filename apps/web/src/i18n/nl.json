@@ -58,6 +58,7 @@
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
     "to": "tot",
+    "loading": "Laden",
     "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
     "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
     "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
@@ -79,32 +80,36 @@
     },
     "steps": {
       "label": "Stappen",
-      "basis": "som, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "basisWorn": "som, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
       "chartLabel": "Dagelijkse stappen in {{period}}",
       "viewAll": "Bekijk activiteit"
     },
     "restingHr": {
       "label": "Rusthartslag",
-      "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "basisWorn": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
       "chartLabel": "Dagelijkse rusthartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
     "sleep": {
       "label": "Slaap",
-      "basis": "gemiddelde, {{worn}} van {{total}} nachten, {{unworn}} nachten niet gedragen",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
+      "basisWorn": "gemiddelde, {{worn}} van {{total}} nachten, {{unworn}} nachten niet gedragen",
       "chartLabel": "Nachtelijke slaapduur in {{period}}",
       "viewAll": "Bekijk slaap"
     },
     "meanHr": {
       "label": "Gemiddelde hartslag",
-      "basis": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "basisWorn": "gemiddelde, {{worn}} van {{total}} dagen, {{unworn}} dagen niet gedragen",
       "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
     "heartRateRange": {
       "label": "Hartslagbereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline van 60 dagen",
-      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline van 60 dagen is te dun om een band uit te tekenen",
+      "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
+      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
       "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
