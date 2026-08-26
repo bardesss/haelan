@@ -10,7 +10,10 @@ import type { DayRow } from '../fixtures/july.js'
 
 type Props = {
   days: DayRow[]
-  baseline: { low: number; high: number }
+  // Optional and, when present, never thin: the call site only ever passes a baseline that
+  // cleared useBaseline's own thin check, since a band this project cannot stand behind reads as
+  // more authoritative than a band built from thirty real days, not less.
+  baseline?: { low: number; high: number }
   annotations: { date: string; text: string }[]
   excluded: string[]
   label: string
@@ -38,8 +41,8 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label }:
           areaStyle: { color: tokens.stageLight, opacity: OPACITY.rangeBand } },
         { name: 'mean', type: 'line' as const, data: days.map((d) => d.hrMean), showSymbol: false, connectNulls: false,
           lineStyle: { width: STROKE.series, color: tokens.series },
-          markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
-            data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] },
+          ...(baseline && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
+            data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] } }),
           markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
             // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands off the fitted range.
             // Anchor each marker at the day's actual mean instead, and drop it if that day has no reading.
@@ -57,15 +60,22 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label }:
 
   const { host, style } = useChart(build, 170)
   return (
-    <ChartFigure label={label} host={host} style={style}
-      table={{
-        columns: [t('charts.columns.date'), t('charts.columns.minimum'), t('charts.columns.mean'), t('charts.columns.maximum'), t('charts.columns.note')],
-        rows: days.map((d) => [
-          d.date,
-          d.hrMin ?? t('charts.absence.noReading'), d.hrMean ?? t('charts.absence.noReading'), d.hrMax ?? t('charts.absence.noReading'),
-          [!d.worn ? t('charts.absence.notWorn') : '', excluded.includes(d.date) ? t('charts.absence.excluded') : '',
-            annotations.find((a) => a.date === d.date)?.text ?? ''].filter(Boolean).join(', '),
-        ]),
-      }} />
+    <>
+      <ChartFigure label={label} host={host} style={style}
+        table={{
+          columns: [t('charts.columns.date'), t('charts.columns.minimum'), t('charts.columns.mean'), t('charts.columns.maximum'), t('charts.columns.note')],
+          rows: days.map((d) => [
+            d.date,
+            d.hrMin ?? t('charts.absence.noReading'), d.hrMean ?? t('charts.absence.noReading'), d.hrMax ?? t('charts.absence.noReading'),
+            [!d.worn ? t('charts.absence.notWorn') : '', excluded.includes(d.date) ? t('charts.absence.excluded') : '',
+              annotations.find((a) => a.date === d.date)?.text ?? ''].filter(Boolean).join(', '),
+          ]),
+        }} />
+      {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
+          query. This is a deliberate, invisible seam so a test can assert the band's presence
+          without depending on echarts' internal structure or on D1's token classes, which are
+          free to change. */}
+      {baseline && <span data-baseline-band aria-hidden="true" style={{ display: 'none' }} />}
+    </>
   )
 }

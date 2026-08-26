@@ -74,6 +74,9 @@ function stubFetch(seen: string[]): () => void {
         steps: { points: [{ localDate: '2026-08-01', value: 900, coverage: 0.9, sourceMix: null }], reduction: null },
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -108,6 +111,9 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
       }
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -137,13 +143,19 @@ describe('the Dashboard round trip', () => {
     restore()
   })
 
-  // Not "one request for every card metric": /series takes exactly one agg for the whole call,
-  // and the four cards need three different ones (steps and sleep_asleep_minutes share sum,
-  // resting_heart_rate needs last, heart_rate needs mean), so one shared request would ask at
-  // least two of them for an agg their own catalogue entry refuses and 500 the lot. What batching
-  // by agg actually buys is fewer requests than cards: metrics that share an agg ride together,
-  // so this is three requests for four cards, not four, and one of the three carries more than
-  // one metric.
+  // Not "one request for every card metric": /series takes exactly one agg for the whole call, and
+  // a metric only has rows under the aggs its own catalogue entry lists, so one shared request
+  // would ask at least one card for an agg its metric refuses and 500 the lot. What batching by
+  // agg actually buys is fewer requests than cards: metrics that share an agg ride together.
+  //
+  // Asserted as a property, not a count. The number of distinct aggs the dashboard needs is a
+  // detail of which cards exist and what each draws (task 10 added two more requests, 'min' and
+  // 'max', so the range card could draw a real band instead of a bare mean line), and a count
+  // pinned here is a count someone has to remember to update every time a card's data needs
+  // change, or worse, a count that quietly starts arguing a chart out of a series it should draw
+  // rather than the other way around. What is actually worth defending: requests are batched by
+  // agg (one request per distinct agg value, not one per metric), and that is fewer requests than
+  // there are cards on the page.
   it('batches by shared agg rather than firing one request per card', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen)
@@ -153,8 +165,12 @@ describe('the Dashboard round trip', () => {
     await act(async () => { await Promise.resolve() })
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
-    expect(seriesCalls.length).toBeLessThan(4)
-    expect(seriesCalls).toHaveLength(3)
+    const distinctAggs = new Set(seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg')))
+    const cardCount = container!.querySelectorAll('.card').length
+    // One request per distinct agg: if two metrics sharing an agg fired separate requests instead
+    // of riding one together, seriesCalls.length would exceed distinctAggs.size.
+    expect(seriesCalls).toHaveLength(distinctAggs.size)
+    expect(seriesCalls.length).toBeLessThan(cardCount)
     expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
     restore()
   })
@@ -171,7 +187,10 @@ describe('the Dashboard round trip', () => {
     mount(withQuery(<Dashboard />))
     await act(async () => { await Promise.resolve() })
 
-    expect(container!.querySelectorAll('.card')).toHaveLength(4)
+    // 4 stat tiles plus the seven cards task 10 restored (heart rate range, flagged days, sleep
+    // stages, sleep schedule, daily steps, recovery, anomalies), not 4: this test predates their
+    // return and only ever meant "every card on the page", not "exactly the tiles".
+    expect(container!.querySelectorAll('.card')).toHaveLength(11)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

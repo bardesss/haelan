@@ -57,8 +57,6 @@
     "periodLabel": "July 2026",
     "bedLabel": "Bed {{time}}",
     "bedTimeNotRecorded": "Bed time not recorded",
-    "julyAbbrev": "Jul",
-    "to": "to",
     "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
     "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
@@ -105,7 +103,8 @@
     },
     "flaggedDays": {
       "label": "Flagged days",
-      "basis": "{{count}} of {{total}} days flagged, annotated on the heart rate chart"
+      "emptyTitle": "No flagged days.",
+      "emptyDetail": "Flagging a day reads typed events, which nothing connected reports yet."
     },
     "sleepStages": {
       "label": "Sleep stages",
@@ -127,9 +126,8 @@
     },
     "anomalies": {
       "label": "Sleep anomalies",
-      "emptyTitle": "No nights with zero recorded sleep in July.",
-      "emptyDetail": "Checked {{worn}} of {{total}} nights the device was worn. The remaining {{unworn}} nights have no reading at all, which is a different kind of gap.",
-      "summary": "{{count}} of {{worn}} worn nights recorded zero minutes of sleep: {{dates}}."
+      "emptyTitle": "No anomaly detection yet.",
+      "emptyDetail": "Anomaly detection reads typed events, which nothing connected reports yet."
     }
   },
   "charts": {

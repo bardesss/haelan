@@ -57,8 +57,6 @@
     "periodLabel": "juli 2026",
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
-    "julyAbbrev": "jul",
-    "to": "tot",
     "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
     "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
     "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
@@ -105,7 +103,8 @@
     },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
-      "basis": "{{count}} van {{total}} dagen gemarkeerd, geannoteerd op de hartslaggrafiek"
+      "emptyTitle": "Geen gemarkeerde dagen.",
+      "emptyDetail": "Een dag markeren vereist getypeerde gebeurtenissen, die nog door niets wordt gerapporteerd."
     },
     "sleepStages": {
       "label": "Slaapfasen",
@@ -127,9 +126,8 @@
     },
     "anomalies": {
       "label": "Slaapafwijkingen",
-      "emptyTitle": "Geen nachten met nul geregistreerde slaap in juli.",
-      "emptyDetail": "Gecontroleerd: {{worn}} van {{total}} nachten werd het apparaat gedragen. De overige {{unworn}} nachten hebben helemaal geen meting, wat een ander soort gat is.",
-      "summary": "{{count}} van {{worn}} gedragen nachten registreerden nul minuten slaap: {{dates}}."
+      "emptyTitle": "Nog geen afwijkingsdetectie.",
+      "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets wordt gerapporteerd."
     }
   },
   "charts": {
