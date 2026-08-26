@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
@@ -281,11 +282,33 @@ export function Dashboard() {
   // English is not actually speaking Dutch when it renders Dutch.
   const groupNumber = (value: number) => value.toLocaleString(i18n.language)
 
-  const pointsOf = (metric: string): SeriesPoint[] => queryFor(metric).data?.[metric]?.points ?? []
+  // EMPTY rather than a fresh [], for the same reason the literals below the charts are hoisted:
+  // a new array each render is a new identity, and every chart on this page keys its build
+  // callback on the arrays it was handed.
+  const pointsOf = (metric: string): SeriesPoint[] => queryFor(metric).data?.[metric]?.points ?? EMPTY
+
+  // Everything from here to the return is memoised on the query data it comes from, and nothing
+  // below it constructs an array or an object inline in JSX. useChart keys its effect on `build`
+  // and disposes the chart in that effect's cleanup, and every chart's `build` is a useCallback
+  // over its own data props, so one freshly constructed array is enough to tear down and rebuild
+  // an echarts instance. With eight queries settling at different moments the page commits about
+  // eight times on a single load, and each commit was disposing and re-initialising five charts.
+  // ActivityHeatmap memoises its calendar layout internally against exactly this, and handing it
+  // a new `days` array defeated that memo from the outside.
+  const sparklines = useMemo(() => {
+    const out = new Map<string, { values: (number | null)[], labels: string[] }>()
+    for (const metric of [...SUM_METRICS, ...LAST_METRICS, ...MEAN_METRICS]) {
+      const points = pointsOf(metric)
+      out.set(metric, { values: points.map((p) => p.value), labels: points.map((p) => p.localDate) })
+    }
+    return out
+    // The three query results pointsOf reads for these metrics, named directly: pointsOf itself
+    // is rebuilt every render and is not a dependency worth tracking.
+  }, [sumSeries.data, lastSeries.data, meanSeries.data])
 
   // Every calendar day in the range, computed once: the dense denominator every basis line and
   // both by-position charts on this page count against.
-  const rangeDates = datesBetween(controls.from, controls.to)
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // The denominator is the days in the period, not the days that answered. /series omits a day
   // with no row entirely, so points.length is "days that reported", and a month missing eleven of
@@ -339,7 +362,7 @@ export function Dashboard() {
       <StatTile label={t(labelKey)} value={format(points)} unit={unit}
         basis={t(coverageIsWearSignal(metric) ? basisWornKey : basisKey, basisOf(metric, points))}
         delta={trend(t, values(points), direction)}>
-        <Sparkline values={points.map((p) => p.value)} labels={points.map((p) => p.localDate)}
+        <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
           label={t(chartLabelKey, { period })} unit={t(unitKey)} />
       </StatTile>
     )
@@ -349,31 +372,36 @@ export function Dashboard() {
   // zipped by array position, because each of the three requests can be silent on a different day
   // (a source that only samples during waking hours never reports a night-time minimum) and the
   // three arrays are not guaranteed to line up index for index.
-  const meanHrByDate = new Map(pointsOf('heart_rate').map((p) => [p.localDate, p]))
-  const minHrByDate = new Map((minHrSeries.data?.heart_rate?.points ?? []).map((p) => [p.localDate, p]))
-  const maxHrByDate = new Map((maxHrSeries.data?.heart_rate?.points ?? []).map((p) => [p.localDate, p]))
-  const heartRateDays = rangeDates.map((date) => {
-    const meanPoint = meanHrByDate.get(date)
-    return {
-      date,
-      steps: null, sleepMinutes: null,
-      hrMin: minHrByDate.get(date)?.value ?? null,
-      hrMean: meanPoint?.value ?? null,
-      hrMax: maxHrByDate.get(date)?.value ?? null,
-      // true (not worn) when there is no point at all: a missing point already reads as "no
-      // reading" through the null cells above, and adding "not worn" on top of that would assert
-      // a specific reason for the gap this data does not support. false only when a point exists
-      // and its own coverage answers the question.
-      worn: meanPoint === undefined || (wornOn('heart_rate', meanPoint) ?? true),
-    }
-  })
+  const meanHrPoints = pointsOf('heart_rate')
+  const minHrPoints = minHrSeries.data?.heart_rate?.points ?? EMPTY
+  const maxHrPoints = maxHrSeries.data?.heart_rate?.points ?? EMPTY
+  const heartRateDays = useMemo(() => {
+    const meanHrByDate = new Map(meanHrPoints.map((p) => [p.localDate, p]))
+    const minHrByDate = new Map(minHrPoints.map((p) => [p.localDate, p]))
+    const maxHrByDate = new Map(maxHrPoints.map((p) => [p.localDate, p]))
+    return rangeDates.map((date) => {
+      const meanPoint = meanHrByDate.get(date)
+      return {
+        date,
+        steps: null, sleepMinutes: null,
+        hrMin: minHrByDate.get(date)?.value ?? null,
+        hrMean: meanPoint?.value ?? null,
+        hrMax: maxHrByDate.get(date)?.value ?? null,
+        // true (not worn) when there is no point at all: a missing point already reads as "no
+        // reading" through the null cells above, and adding "not worn" on top of that would
+        // assert a specific reason for the gap this data does not support. false only when a
+        // point exists and its own coverage answers the question.
+        worn: meanPoint === undefined || (wornOn('heart_rate', meanPoint) ?? true),
+      }
+    })
+  }, [rangeDates, meanHrPoints, minHrPoints, maxHrPoints])
   const rawBaseline = hrBaseline.data?.baseline ?? null
   // Thin stays undefined, not a band drawn thin: a band computed from three days looks exactly as
   // authoritative as one computed from thirty, and thin is the reader's only signal that it is
   // not.
-  const heartRateBand = rawBaseline !== null && !rawBaseline.thin
+  const heartRateBand = useMemo(() => (rawBaseline !== null && !rawBaseline.thin
     ? { low: rawBaseline.center - rawBaseline.spread, high: rawBaseline.center + rawBaseline.spread }
-    : undefined
+    : undefined), [rawBaseline])
   // The basis line's band clause tracks whether heartRateBand is actually defined above, rather
   // than a single static string claiming a band that a thin or absent baseline never draws.
   const heartRateBasisKey = hrBaseline.isError
@@ -403,15 +431,17 @@ export function Dashboard() {
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
   const stepsPoints = pointsOf('steps')
-  const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
-  const heatmapDays = rangeDates.map((date) => {
-    const point = stepsByDate.get(date)
-    return {
-      date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
-      steps: point?.value ?? null,
-      worn: point !== undefined && (wornOn('steps', point) ?? true),
-    }
-  })
+  const heatmapDays = useMemo(() => {
+    const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
+    return rangeDates.map((date) => {
+      const point = stepsByDate.get(date)
+      return {
+        date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
+        steps: point?.value ?? null,
+        worn: point !== undefined && (wornOn('steps', point) ?? true),
+      }
+    })
+  }, [rangeDates, stepsPoints])
   const maxSteps = Math.max(0, ...values(stepsPoints))
   // Nothing is stated while the request is in flight. heatmapDays is dense from the moment the
   // page mounts, so counting it before anything has settled reads "0 of 31 days worn", a specific
@@ -421,15 +451,15 @@ export function Dashboard() {
   // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
   // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
   // between mount and the request resolving.
-  const collapsedNights = oneNightPerDate(nights.data?.items ?? [])
-  const lastNight = collapsedNights.at(-1) ?? null
-  const hypnogramSegments = lastNight === null ? [] : lastNight.segments
+  const nightItems = nights.data?.items ?? EMPTY
+  const lastNight = useMemo(() => oneNightPerDate(nightItems).at(-1) ?? null, [nightItems])
+  const hypnogramSegments = useMemo(() => (lastNight === null ? EMPTY : lastNight.segments
     .map((s) => ({
       stage: stageOf(s.stage),
       from: Math.round((s.startMs - lastNight.startMs) / 60_000),
       to: Math.round((s.endMs - lastNight.startMs) / 60_000),
     }))
-    .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)
+    .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)), [lastNight])
   // Inherits the same nap contamination the comment below documents for /sleep/nights: startMs is
   // the earliest instant across every session sharing this night's date and source, so a 13:00
   // nap sharing the date still becomes this label's "Bed 13:00" rather than the real bedtime.
@@ -451,25 +481,29 @@ export function Dashboard() {
   // includes any nap that landed in the same local date; sleep_bedtime_minutes and
   // sleep_waketime_minutes are pushed in packages/core/src/derive/sleep.ts from the `night` group
   // assembleNights already separated from `naps`, so they do not carry that contamination.
-  const bedtimeByDate = new Map(pointsOf('sleep_bedtime_minutes').map((p) => [p.localDate, p]))
-  const waketimeByDate = new Map(pointsOf('sleep_waketime_minutes').map((p) => [p.localDate, p]))
-  const scheduleDates = [...new Set([...bedtimeByDate.keys(), ...waketimeByDate.keys()])].sort()
-  const scheduleNights = scheduleDates.map((date) => {
-    const bedPoint = bedtimeByDate.get(date)
-    const wakePoint = waketimeByDate.get(date)
-    const { bed, wake } = withinSchedule(
-      bedPoint ? inWindow(bedPoint.value) : null,
-      wakePoint ? inWindow(wakePoint.value) : null,
-    )
-    return {
-      date,
-      bed,
-      wake,
-      // Neither metric carries naps (see above), and there is no other route this call site can
-      // read a nap's clock time from, so this stays empty rather than a guess.
-      naps: [] as number[],
-    }
-  })
+  const bedtimePoints = pointsOf('sleep_bedtime_minutes')
+  const waketimePoints = pointsOf('sleep_waketime_minutes')
+  const scheduleNights = useMemo(() => {
+    const bedtimeByDate = new Map(bedtimePoints.map((p) => [p.localDate, p]))
+    const waketimeByDate = new Map(waketimePoints.map((p) => [p.localDate, p]))
+    const dates = [...new Set([...bedtimeByDate.keys(), ...waketimeByDate.keys()])].sort()
+    return dates.map((date) => {
+      const bedPoint = bedtimeByDate.get(date)
+      const wakePoint = waketimeByDate.get(date)
+      const { bed, wake } = withinSchedule(
+        bedPoint ? inWindow(bedPoint.value) : null,
+        wakePoint ? inWindow(wakePoint.value) : null,
+      )
+      return {
+        date,
+        bed,
+        wake,
+        // Neither metric carries naps (see above), and there is no other route this call site can
+        // read a nap's clock time from, so this stays empty rather than a guess.
+        naps: EMPTY as number[],
+      }
+    })
+  }, [bedtimePoints, waketimePoints])
   // The nights this card actually draws a bed and a wake for. withinSchedule nulls out any
   // night the axis cannot place honestly and SleepSchedule draws those as absence dots, so
   // counting the dates would claim a bed and wake time for a row that shows neither.
