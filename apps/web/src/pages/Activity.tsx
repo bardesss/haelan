@@ -1,0 +1,240 @@
+import { useMemo } from 'react'
+import { METRICS } from '@haelan/core/metrics'
+import type { DailyAgg } from '@haelan/core/metrics'
+import type { Polarity } from '../format.js'
+import { useTranslation } from '../i18n/index.js'
+import { Card } from '../components/Card.js'
+import { StatTile } from '../components/StatTile.js'
+import { MetricCard } from '../components/MetricCard.js'
+import { ErrorState } from '../components/ErrorState.js'
+import { Loading } from '../components/Loading.js'
+import { ControlRow } from '../components/ControlRow.js'
+import { Sparkline } from '../charts/Sparkline.js'
+import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
+import { usePageControls } from '../controls/usePageControls.js'
+import { ALL_SOURCES, resolveSource } from '../controls/source.js'
+import { useSession } from '../auth/session.js'
+import { useSeries } from '../data/useSeries.js'
+import type { SeriesPoint } from '../data/useSeries.js'
+import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useMetricGroups } from '../data/useMetricGroups.js'
+import type { MetricGroup } from '../data/useMetricGroups.js'
+import { wornOn } from '../data/emptyState.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
+import { trend } from '../format.js'
+
+// Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
+// taken on faith from the brief that named them: steps, distance, floors, total_calories and the
+// six active-minute/active-zone-minute sub-dimension metrics are all TOTAL (aggs: ['sum']), as is
+// workout_minutes; workout_count is the one metric on this page whose only aggregate is `count`.
+// Two aggs, two requests, the same REQUESTS/under('agg') shape Dashboard.tsx and Recovery.tsx
+// already use, so a pairing the catalogue cannot answer drops out of the wire list rather than
+// 500ing every card riding along with it (see under()'s own comment on Dashboard.tsx for why).
+//
+// floors and total_calories carry the reason Task 1 of this milestone existed: both are written
+// only as `provider` rows (Google reconciles them itself; there is no per-source sample underneath
+// either for a merge to work from), so both have zero rows under `merged`. This page reaches them
+// correctly for the same reason every other card here does and nothing here does specially: it
+// never names a source of its own, and usePageControls/resolveSource default to ALL_SOURCES, whose
+// sourceParam omits the `source` query parameter entirely. Naming a literal source (merged or
+// otherwise) here would ask for rows that were never written, exactly the defect Task 1 closed.
+export const REQUESTS = {
+  sum: [
+    'steps', 'distance', 'floors', 'total_calories',
+    'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
+    'active_zone_minutes_fat_burn', 'active_zone_minutes_cardio', 'active_zone_minutes_peak',
+    'workout_minutes',
+  ],
+  count: ['workout_count'],
+} as const satisfies Partial<Record<DailyAgg, readonly string[]>>
+
+function under(agg: keyof typeof REQUESTS): string[] {
+  return REQUESTS[agg].filter((metric) => METRICS[metric]?.aggs.includes(agg) ?? false)
+}
+
+const SUM_METRICS = under('sum')
+const COUNT_METRICS = under('count')
+
+const GROUPS: readonly MetricGroup[] = [
+  { agg: 'sum', metrics: SUM_METRICS, covers: REQUESTS.sum },
+  { agg: 'count', metrics: COUNT_METRICS, covers: REQUESTS.count },
+]
+
+const values = (points: SeriesPoint[]): number[] =>
+  points.map((p) => p.value).filter((v): v is number => v !== null)
+
+const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
+
+// Every calendar date from `from` to `to`, inclusive. /series drops a day entirely rather than
+// sending a null row for it, so the heatmap, which plots by array position, needs this to rebuild
+// the full calendar and place an absence dot where a source is silent rather than quietly shrink
+// its own grid to only the days that reported. Byte identical to Dashboard.tsx's own copy, which
+// this replaces there: the heatmap card moves here in this task and brings its denominator with it.
+function datesBetween(from: string, to: string): string[] {
+  const dates: string[] = []
+  const end = Date.parse(`${to}T00:00:00Z`)
+  for (let cursor = Date.parse(`${from}T00:00:00Z`); cursor <= end; cursor += 86_400_000) {
+    dates.push(new Date(cursor).toISOString().slice(0, 10))
+  }
+  return dates
+}
+
+export function Activity() {
+  const { t, i18n } = useTranslation()
+  const session = useSession()
+  const controls = usePageControls()
+  const period = `${controls.from} ${t('common.to')} ${controls.to}`
+
+  // The active language, not a pinned locale: grouped thousands should read the way the reader's
+  // own language groups them, the same reasoning Dashboard.tsx's groupNumber already states.
+  const groupNumber = (value: number) => value.toLocaleString(i18n.language)
+
+  // Pinned to the all sources sentinel for the same reason as every sibling page: a per source
+  // rollup carries no sourceMix (only a merged row does), so reading the selector's own options off
+  // a request scoped to whatever the reader picked would go empty the moment a device filter became
+  // active and silently strand them on it.
+  const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'sum')
+  const sources = distinctSources([sourceEnumeration])
+  const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
+  const range = { from: controls.from, to: controls.to, source }
+  const resolved = { ...controls, source }
+
+  const metricGroups = useMetricGroups(GROUPS, range)
+  const sumSeries = metricGroups.queryForAgg('sum')
+
+  const syncStatus = useSyncStatus()
+  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
+    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
+    : null
+  const personId = session.data?.personId
+  const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
+
+  // Stable array identities for the reason every sibling page's own copy of this memo states:
+  // useChart keys its rebuild on `build`, itself a useCallback over `values`, so a freshly
+  // constructed array on every render disposes and reinitialises the chart.
+  const sparklines = useMemo(() => {
+    const out = new Map<string, { values: (number | null)[], labels: string[] }>()
+    for (const metric of [...SUM_METRICS, ...COUNT_METRICS]) {
+      const points = metricGroups.pointsOf(metric)
+      out.set(metric, { values: points.map((p) => p.value), labels: points.map((p) => p.localDate) })
+    }
+    return out
+    // sumSeries and the count query are what pointsOf actually reads for these metrics; metricGroups
+    // itself is rebuilt every render and is not worth tracking.
+  }, [sumSeries.data, metricGroups.queryForAgg('count').data])
+
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
+  // Daily steps heatmap, moved here from Dashboard.tsx rather than copied: same dense-by-date
+  // treatment (a day nothing reported still gets a calendar cell, drawn as an absence dot, instead
+  // of silently compressing the grid), same dense denominator (every calendar day in range, not
+  // just the days that reported), and the same reason it stays outside MetricCard confirmed twice
+  // over Task 5's own review: it draws its own absence dot per day instead of a full-card empty
+  // state, which MetricCard's emptyStateFor gate would add on top of a chart that has always drawn.
+  const stepsPoints = metricGroups.pointsOf('steps')
+  const stepsWorn = stepsPoints.filter((point) => wornOn('steps', point) === true).length
+  const heatmapDays = useMemo(() => {
+    const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
+    return rangeDates.map((date) => {
+      const point = stepsByDate.get(date)
+      return {
+        date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
+        steps: point?.value ?? null,
+        worn: point !== undefined && (wornOn('steps', point) ?? true),
+      }
+    })
+  }, [rangeDates, stepsPoints])
+  const maxSteps = Math.max(0, ...values(stepsPoints))
+  // Nothing is stated while the request is in flight: heatmapDays is dense from the moment the page
+  // mounts, so counting it before anything has settled would read "0 of 31 days worn", a specific
+  // false claim rather than a vacuous one.
+  const stepsPending = metricGroups.queryFor('steps').isPending
+
+  // Every sparkline tile on this page shares one shape: a metric, a sum over the period, and a
+  // basis line stating how many of the range's calendar days answered. Parameterised on
+  // basisWornKey rather than always deriving it from basisKey, the same choice Recovery.tsx's own
+  // card() makes, because MetricCard picks between the two by the metric's own coverage signal
+  // (coverageIsWearSignal) and not every metric here carries one: steps and distance are
+  // continuously sampled (packages/core/src/api/catalogue.ts tier 'intraday') and do, while floors
+  // and total_calories are daily-tier provider rollups and do not, and the six sub-dimension
+  // metrics and the two workout metrics reach false the same way (see coverageSignal.ts's own
+  // comment). A metric with no wear signal never reaches basisWornKey, so passing it the same
+  // string as basisKey (rather than inventing an unreachable second template) is what
+  // Dashboard.tsx's sleep schedule card already does for the same reason.
+  const card = (
+    metric: string, span: number, labelKey: string, basisKey: string, basisWornKey: string,
+    chartLabelKey: string, unitKey: string, shortUnitKey: string | undefined,
+    format: (total: number) => string, polarity: Polarity,
+  ) => {
+    const points = metricGroups.pointsOf(metric)
+    const total = sum(values(points))
+    const spark = sparklines.get(metric)!
+    return (
+      <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
+        basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
+        {(basis) => (
+          <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
+            basis={basis} delta={trend(t, values(points), polarity)}>
+            <Sparkline values={spark.values} labels={spark.labels}
+              label={t(chartLabelKey, { period })} unit={t(unitKey)} />
+          </StatTile>
+        )}
+      </MetricCard>
+    )
+  }
+
+  return (
+    <>
+      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
+      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
+      <div className="grid">
+        <Card span={12} label={t('activity.dailySteps.label')}
+          basis={sumSeries.isError || stepsPending ? undefined : t('activity.dailySteps.basis', {
+            worn: stepsWorn, total: rangeDates.length, maxSteps: groupNumber(maxSteps),
+          })}>
+          {sumSeries.isError ? <ErrorState onRetry={() => void sumSeries.refetch()} />
+            : stepsPending ? <Loading /> : (
+            <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })} />
+          )}
+        </Card>
+
+        {card('distance', 4, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
+          'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km',
+          (total) => (total / 1_000_000).toFixed(1), 'higher-is-better')}
+        {card('floors', 4, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
+          'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort',
+          (total) => groupNumber(total), 'higher-is-better')}
+        {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',
+          'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort',
+          (total) => groupNumber(total), 'higher-is-better')}
+
+        {card('active_minutes_light', 4, 'activity.activeMinutesLight.label', 'activity.activeMinutesLight.basis', 'activity.activeMinutesLight.basis',
+          'activity.activeMinutesLight.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'higher-is-better')}
+        {card('active_minutes_moderate', 4, 'activity.activeMinutesModerate.label', 'activity.activeMinutesModerate.basis', 'activity.activeMinutesModerate.basis',
+          'activity.activeMinutesModerate.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'higher-is-better')}
+        {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
+          'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'higher-is-better')}
+
+        {card('active_zone_minutes_fat_burn', 4, 'activity.activeZoneMinutesFatBurn.label', 'activity.activeZoneMinutesFatBurn.basis', 'activity.activeZoneMinutesFatBurn.basis',
+          'activity.activeZoneMinutesFatBurn.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'higher-is-better')}
+        {card('active_zone_minutes_cardio', 4, 'activity.activeZoneMinutesCardio.label', 'activity.activeZoneMinutesCardio.basis', 'activity.activeZoneMinutesCardio.basis',
+          'activity.activeZoneMinutesCardio.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'higher-is-better')}
+        {card('active_zone_minutes_peak', 4, 'activity.activeZoneMinutesPeak.label', 'activity.activeZoneMinutesPeak.basis', 'activity.activeZoneMinutesPeak.basis',
+          'activity.activeZoneMinutesPeak.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'higher-is-better')}
+
+        {card('workout_count', 4, 'activity.workoutCount.label', 'activity.workoutCount.basis', 'activity.workoutCount.basis',
+          'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort',
+          (total) => groupNumber(total), 'neutral')}
+        {card('workout_minutes', 4, 'activity.workoutMinutes.label', 'activity.workoutMinutes.basis', 'activity.workoutMinutes.basis',
+          'activity.workoutMinutes.chartLabel', 'activity.units.minutes', 'activity.units.min',
+          (total) => groupNumber(total), 'neutral')}
+      </div>
+    </>
+  )
+}

@@ -260,10 +260,11 @@ describe('the Dashboard round trip', () => {
     mount(tree)
     await flush(client, () => container!.innerHTML)
 
-    // 4 stat tiles plus the seven cards task 10 restored (heart rate range, flagged days, sleep
-    // stages, sleep schedule, daily steps, recovery, anomalies), not 4: this test predates their
-    // return and only ever meant "every card on the page", not "exactly the tiles".
-    expect(container!.querySelectorAll('.card')).toHaveLength(11)
+    // 4 stat tiles plus the six remaining cards task 10 restored (heart rate range, flagged days,
+    // sleep stages, sleep schedule, recovery, anomalies), not 4: this test predates their return
+    // and only ever meant "every card on the page", not "exactly the tiles". Daily steps (the
+    // heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
+    expect(container!.querySelectorAll('.card')).toHaveLength(10)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

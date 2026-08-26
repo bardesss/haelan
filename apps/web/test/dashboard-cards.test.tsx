@@ -208,23 +208,6 @@ describe('the remaining Dashboard cards', () => {
     restore()
   })
 
-  // stubFetch answers every requested metric with exactly one point (2026-08-15), so a real
-  // month range has far more calendar days than reporting days. The basis must count the former;
-  // basisOf(stepsPoints) would have read the same "1 of 1" it would for a single-day range, which
-  // is the regression pages.test.tsx once pinned in as correct.
-  it('states the heatmap total against every calendar day in range, not just the days that reported', async () => {
-    const restore = stubFetch({ baseline: null })
-    // Real interpolation needed here, unlike the other tests in this file: without an
-    // I18nProvider, t() returns the raw key and the numbers this test reads never appear as text.
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const match = container!.textContent!.match(/(\d+) of (\d+) days worn/)
-    expect(match).not.toBeNull()
-    expect(Number(match![2])).toBeGreaterThan(1)
-    restore()
-  })
-
   // The defect the stub above was hiding. Every sleep row the server can send carries
   // coverage: null, and reading that as a zero made the card render "Device not worn" over a
   // month of real nights while the mean was never drawn at all.

@@ -142,11 +142,6 @@
       "basis_one": "bedtijd en waaktijd, {{count}} nacht",
       "basis_other": "bedtijd en waaktijd, {{count}} nachten"
     },
-    "dailySteps": {
-      "label": "Dagelijkse stappen",
-      "basis": "kalenderwarmtekaart, {{worn}} van {{total}} dagen gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
-      "chartLabel": "Stappen per dag in {{period}}"
-    },
     "recovery": {
       "label": "Herstel",
       "emptyTitle": "Geen bron levert deze data.",
@@ -190,6 +185,83 @@
       "label": "Ademhalingsfrequentie",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
       "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
+    }
+  },
+  "activity": {
+    "title": "Activiteit",
+    "units": {
+      "distance": "Afstand in kilometers",
+      "km": "km",
+      "floors": "Beklommen verdiepingen",
+      "floorsShort": "verdiepingen",
+      "kcal": "Kilocalorieën",
+      "kcalShort": "kcal",
+      "minutes": "Minuten",
+      "min": "min",
+      "workouts": "Work-outs",
+      "workoutsShort": "work-outs"
+    },
+    "dailySteps": {
+      "label": "Dagelijkse stappen",
+      "basis": "kalenderwarmtekaart, {{worn}} van {{total}} dagen gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "chartLabel": "Stappen per dag in {{period}}"
+    },
+    "distance": {
+      "label": "Afstand",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "som, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse afstand in {{period}}"
+    },
+    "floors": {
+      "label": "Beklommen verdiepingen",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijks beklommen verdiepingen in {{period}}"
+    },
+    "totalCalories": {
+      "label": "Totale calorieën",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse totale calorieën in {{period}}"
+    },
+    "activeMinutesLight": {
+      "label": "Lichte activiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse minuten lichte activiteit in {{period}}"
+    },
+    "activeMinutesModerate": {
+      "label": "Matige activiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse minuten matige activiteit in {{period}}"
+    },
+    "activeMinutesVigorous": {
+      "label": "Intensieve activiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse minuten intensieve activiteit in {{period}}"
+    },
+    "activeZoneMinutesFatBurn": {
+      "label": "Vetverbrandingszone-minuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse vetverbrandingszone-minuten in {{period}}"
+    },
+    "activeZoneMinutesCardio": {
+      "label": "Cardiozone-minuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse cardiozone-minuten in {{period}}"
+    },
+    "activeZoneMinutesPeak": {
+      "label": "Piekzone-minuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse piekzone-minuten in {{period}}"
+    },
+    "workoutCount": {
+      "label": "Work-outs",
+      "basis": "aantal, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijks aantal work-outs in {{period}}"
+    },
+    "workoutMinutes": {
+      "label": "Work-outminuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse work-outminuten in {{period}}"
     }
   },
   "charts": {

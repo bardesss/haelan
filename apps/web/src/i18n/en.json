@@ -142,11 +142,6 @@
       "basis_one": "bed and wake time, {{count}} night",
       "basis_other": "bed and wake time, {{count}} nights"
     },
-    "dailySteps": {
-      "label": "Daily steps",
-      "basis": "calendar heatmap, {{worn}} of {{total}} days worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
-      "chartLabel": "Steps per day through {{period}}"
-    },
     "recovery": {
       "label": "Recovery",
       "emptyTitle": "No source is providing this data.",
@@ -190,6 +185,83 @@
       "label": "Respiratory rate",
       "basis": "mean, {{reported}} of {{total}} days; {{note}}",
       "chartLabel": "Daily respiratory rate through {{period}}"
+    }
+  },
+  "activity": {
+    "title": "Activity",
+    "units": {
+      "distance": "Distance in kilometers",
+      "km": "km",
+      "floors": "Floors climbed",
+      "floorsShort": "floors",
+      "kcal": "Kilocalories",
+      "kcalShort": "kcal",
+      "minutes": "Minutes",
+      "min": "min",
+      "workouts": "Workouts",
+      "workoutsShort": "workouts"
+    },
+    "dailySteps": {
+      "label": "Daily steps",
+      "basis": "calendar heatmap, {{worn}} of {{total}} days worn, 0 to {{maxSteps}} steps, stronger colour is more steps, days with no reading carry an absence dot",
+      "chartLabel": "Steps per day through {{period}}"
+    },
+    "distance": {
+      "label": "Distance",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "basisWorn_one": "sum, {{worn}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "sum, {{worn}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily distance through {{period}}"
+    },
+    "floors": {
+      "label": "Floors climbed",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily floors climbed through {{period}}"
+    },
+    "totalCalories": {
+      "label": "Total calories",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily total calories through {{period}}"
+    },
+    "activeMinutesLight": {
+      "label": "Light activity",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily light activity minutes through {{period}}"
+    },
+    "activeMinutesModerate": {
+      "label": "Moderate activity",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily moderate activity minutes through {{period}}"
+    },
+    "activeMinutesVigorous": {
+      "label": "Vigorous activity",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily vigorous activity minutes through {{period}}"
+    },
+    "activeZoneMinutesFatBurn": {
+      "label": "Fat burn zone minutes",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily fat burn zone minutes through {{period}}"
+    },
+    "activeZoneMinutesCardio": {
+      "label": "Cardio zone minutes",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily cardio zone minutes through {{period}}"
+    },
+    "activeZoneMinutesPeak": {
+      "label": "Peak zone minutes",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily peak zone minutes through {{period}}"
+    },
+    "workoutCount": {
+      "label": "Workouts",
+      "basis": "count, {{reported}} of {{total}} days",
+      "chartLabel": "Daily workout count through {{period}}"
+    },
+    "workoutMinutes": {
+      "label": "Workout minutes",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily workout minutes through {{period}}"
     }
   },
   "charts": {

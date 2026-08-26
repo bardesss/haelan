@@ -14,7 +14,6 @@ import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule, AXIS_MIN, AXIS_MAX } from '../charts/SleepSchedule.js'
-import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { deepLink } from '../controls/deepLink.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
@@ -308,8 +307,6 @@ export function Dashboard() {
   // over its own data props, so one freshly constructed array is enough to tear down and rebuild
   // an echarts instance. With eight queries settling at different moments the page commits about
   // eight times on a single load, and each commit was disposing and re-initialising five charts.
-  // ActivityHeatmap memoises its calendar layout internally against exactly this, and handing it
-  // a new `days` array defeated that memo from the outside.
   const sparklines = useMemo(() => {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of [...SUM_METRICS, ...LAST_METRICS, ...MEAN_METRICS]) {
@@ -322,15 +319,16 @@ export function Dashboard() {
   }, [sumSeries.data, lastSeries.data, meanSeries.data])
 
   // Every calendar day in the range, computed once: the dense denominator every basis line and
-  // both by-position charts on this page count against.
+  // the heart rate range chart, the one remaining by-position chart on this page, count against.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // The denominator is the days in the period, not the days that answered. /series omits a day
   // with no row entirely, so points.length is "days that reported", and a month missing eleven of
-  // them read "20 of 20 days, 0 days not worn". The reasoning was already written for the heatmap
-  // and applied to one card out of five. `total` is the one figure MetricCard cannot compute for
-  // itself (it knows a metric and its points, not the calendar range those points were requested
-  // against), so it is the one field every tile() call below hands in through basisValues.
+  // them read "20 of 20 days, 0 days not worn". The reasoning was first written for the heatmap
+  // that used to live here (now Activity.tsx's) and applied to one card out of five. `total` is
+  // the one figure MetricCard cannot compute for itself (it knows a metric and its points, not
+  // the calendar range those points were requested against), so it is the one field every tile()
+  // call below hands in through basisValues.
   //
   // MetricCard now owns the rest of what used to live here: the error-before-pending order, the
   // empty-state gate, and the worn/count/reported arithmetic and the basis/basisWorn key choice
@@ -424,30 +422,6 @@ export function Dashboard() {
     void maxHrSeries.refetch()
   }
   const heartRatePending = meanSeries.isPending || minHrSeries.isPending || maxHrSeries.isPending
-
-  // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
-  // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
-  //
-  // Not a MetricCard, on purpose: it draws its own absence dot per day instead of a full-card
-  // empty state, which MetricCard's emptyStateFor gate would add and has never existed here.
-  const stepsPoints = metricGroups.pointsOf('steps')
-  const stepsWorn = stepsPoints.filter((point) => wornOn('steps', point) === true).length
-  const heatmapDays = useMemo(() => {
-    const stepsByDate = new Map(stepsPoints.map((p) => [p.localDate, p]))
-    return rangeDates.map((date) => {
-      const point = stepsByDate.get(date)
-      return {
-        date, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null,
-        steps: point?.value ?? null,
-        worn: point !== undefined && (wornOn('steps', point) ?? true),
-      }
-    })
-  }, [rangeDates, stepsPoints])
-  const maxSteps = Math.max(0, ...values(stepsPoints))
-  // Nothing is stated while the request is in flight. heatmapDays is dense from the moment the
-  // page mounts, so counting it before anything has settled reads "0 of 31 days worn", a specific
-  // false claim rather than a vacuous one, and the card draws a placeholder instead.
-  const stepsPending = metricGroups.queryFor('steps').isPending
 
   // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
   // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
@@ -608,15 +582,9 @@ export function Dashboard() {
           {() => <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />}
         </MetricCard>
 
-        <Card span={8} label={t('dashboard.dailySteps.label')}
-          basis={sumSeries.isError || stepsPending ? undefined : t('dashboard.dailySteps.basis', {
-            worn: stepsWorn, total: rangeDates.length, maxSteps: groupNumber(maxSteps),
-          })}>
-          {sumSeries.isError ? <ErrorState onRetry={() => void sumSeries.refetch()} />
-            : stepsPending ? <Loading /> : (
-            <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
-          )}
-        </Card>
+        {/* The heatmap that used to sit here moved to Activity.tsx in M3d2: the Dashboard keeps
+            its own steps tile above and loses the calendar drill-down, whose "View activity" deep
+            link now lands somewhere that adds something instead of returning to this same page. */}
         <Card span={4} label={t('dashboard.recovery.label')}>
           <EmptyState title={t('dashboard.recovery.emptyTitle')}
             detail={t('dashboard.recovery.emptyDetail')} />

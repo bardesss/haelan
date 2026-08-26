@@ -186,16 +186,20 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
 describe('chart tables follow the active language', () => {
   // Every chart's accessible table used to be built from English literals regardless of the
   // active language, which meant a Dutch screen reader user got an English table on both pages.
-  it('translates column headers, weekday labels and absence words', () => {
+  //
+  // Weekday labels are not checked here any more: the only chart on either of these two pages
+  // that carried a weekday column was the daily steps heatmap, and M3d2 moved it to Activity.tsx,
+  // which this file's own round trip harness does not stub. Date and absence words still come
+  // through every ordinary Sparkline and the heart rate range chart, both of which stay on
+  // Dashboard, so they are still worth pinning here.
+  it('translates column headers and absence words', () => {
     const nlTables = tables(dashboardNl)
     expect(nlTables).toContain('Datum')
-    expect(nlTables).toContain('Weekdag')
     // In a chart table, not merely somewhere on the page: this used to be satisfied by a tile's
     // own basis line while every table below it stayed English.
     expect(nlTables).toContain('niet gedragen')
     expect(nlTables).toContain('geen meting')
     expect(nlTables).not.toContain('>Date<')
-    expect(nlTables).not.toContain('>Weekday<')
     expect(nlTables).not.toContain('not worn')
     expect(nlTables).not.toContain('no reading')
   })
@@ -209,13 +213,10 @@ describe('chart tables follow the active language', () => {
 describe('Dashboard specifics', () => {
   const html = pages.Dashboard
 
-  it('states the heatmap colour domain from the steps it actually drew', () => {
-    // The stub's largest step count. Read off the data rather than pinned to a fixture maximum,
-    // and no longer the "0 to 0" a page that had asked nothing used to print.
-    expect(html).toContain('0 to 81 steps')
-    expect(html).toContain('stronger colour is more steps')
-  })
-
+  // The daily steps heatmap this used to check moved to Activity.tsx in M3d2, along with the
+  // colour domain and "stronger colour is more steps" copy it drew; activity.test.tsx covers its
+  // dense-denominator basis line directly rather than through this file's own round trip harness,
+  // which stubs only Dashboard and Sleep.
   it('counts the basis against every calendar day in the period, not the days that answered', () => {
     // The stubbed week is seven days and only three of them report.
     expect(html).toContain('3 of 7 days')
