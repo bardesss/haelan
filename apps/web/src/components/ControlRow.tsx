@@ -1,8 +1,7 @@
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
-
-const RANGE_KEYS = ['day', 'week', 'month', '3months', 'year'] as const
-export type RangeKey = (typeof RANGE_KEYS)[number]
+import { RANGE_KEYS } from '../controls/range.js'
+import type { RangeKey } from '../controls/range.js'
 
 export function ControlRow({ range, label, sources, syncedMinutesAgo }: {
   range: RangeKey

@@ -1,0 +1,98 @@
+export const RANGE_KEYS = ['day', 'week', 'month', '3months', 'year'] as const
+export type RangeKey = (typeof RANGE_KEYS)[number]
+
+export interface PageControls {
+  tab: RangeKey
+  anchor: string
+  source: string
+}
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Every function here works on YYYY-MM-DD strings and does its arithmetic in UTC. Constructing
+ * a local Date from a date string is the bug this avoids: new Date('2026-08-15') is parsed as
+ * UTC midnight, so in any negative offset it reads back as the 14th. Date.UTC keeps the
+ * arithmetic on the calendar rather than on an instant.
+ */
+function partsOf(date: string): { year: number, month: number, day: number } {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number]
+  return { year, month, day }
+}
+
+function toDate(year: number, month: number, day: number): string {
+  const utc = new Date(Date.UTC(year, month - 1, day))
+  return utc.toISOString().slice(0, 10)
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+function isRealDate(date: string): boolean {
+  if (!DATE_PATTERN.test(date)) return false
+  const { year, month, day } = partsOf(date)
+  if (month < 1 || month > 12) return false
+  return day >= 1 && day <= daysInMonth(year, month)
+}
+
+/** Shifts by whole days. Safe across month and year boundaries because it goes through epoch ms. */
+function addDays(date: string, days: number): string {
+  const { year, month, day } = partsOf(date)
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/** Shifts by whole months, clamping the day onto the target month's length. */
+function addMonths(date: string, months: number): string {
+  const { year, month, day } = partsOf(date)
+  const target = new Date(Date.UTC(year, month - 1 + months, 1))
+  const targetYear = target.getUTCFullYear()
+  const targetMonth = target.getUTCMonth() + 1
+  return toDate(targetYear, targetMonth, Math.min(day, daysInMonth(targetYear, targetMonth)))
+}
+
+export function datesFor(tab: RangeKey, anchor: string): { from: string, to: string } {
+  const { year, month } = partsOf(anchor)
+  switch (tab) {
+    case 'day':
+      return { from: anchor, to: anchor }
+    case 'week': {
+      // getUTCDay is 0 for Sunday, so a Sunday is six days after its Monday rather than the
+      // start of the next week.
+      const weekday = new Date(`${anchor}T00:00:00Z`).getUTCDay()
+      const back = weekday === 0 ? 6 : weekday - 1
+      const from = addDays(anchor, -back)
+      return { from, to: addDays(from, 6) }
+    }
+    case 'month':
+      return { from: toDate(year, month, 1), to: toDate(year, month, daysInMonth(year, month)) }
+    case '3months': {
+      const start = addMonths(toDate(year, month, 1), -2)
+      return { from: start, to: toDate(year, month, daysInMonth(year, month)) }
+    }
+    case 'year':
+      return { from: toDate(year, 1, 1), to: toDate(year, 12, 31) }
+  }
+}
+
+export function stepAnchor(tab: RangeKey, anchor: string, direction: -1 | 1): string {
+  switch (tab) {
+    case 'day': return addDays(anchor, direction)
+    case 'week': return addDays(anchor, 7 * direction)
+    case 'month': return addMonths(anchor, direction)
+    case '3months': return addMonths(anchor, 3 * direction)
+    case 'year': return addMonths(anchor, 12 * direction)
+  }
+}
+
+export function parseControls(search: string, today: string): PageControls {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const tab = params.get('range')
+  const anchor = params.get('on')
+  const source = params.get('source')
+  return {
+    tab: (RANGE_KEYS as readonly string[]).includes(tab ?? '') ? tab as RangeKey : 'month',
+    anchor: anchor !== null && isRealDate(anchor) ? anchor : today,
+    source: source ?? 'merged',
+  }
+}
