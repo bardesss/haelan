@@ -15,7 +15,7 @@ export const AXIS_MAX = 36 * 60
 // Parked above every real span: inside the range it once read as an unusually early wake time.
 export const NO_DATA_Y = 35 * 60
 
-export function SleepSchedule({ nights, label }: { nights: Night[]; label: string }) {
+export function SleepSchedule({ nights, label, showNaps = true }: { nights: Night[]; label: string; showNaps?: boolean }) {
   const { t } = useTranslation()
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
@@ -52,23 +52,33 @@ export function SleepSchedule({ nights, label }: { nights: Night[]; label: strin
           },
           encode: { x: 0 },
           data: nights.map((n, i) => [i, n.bed]) },
-        { type: 'scatter' as const, symbolSize: SYMBOL.nap, itemStyle: { color: tokens.stageAwake },
-          data: nights.flatMap((n, i) => n.naps.map((nap) => [i, nap])) },
+        // Omitted rather than left to draw nothing: a caller passing showNaps=false is telling
+        // this chart it has no nap data at all, and a data-less series is still a series, not the
+        // same statement as one that was never asked to exist.
+        ...(showNaps
+          ? [{ type: 'scatter' as const, symbolSize: SYMBOL.nap, itemStyle: { color: tokens.stageAwake },
+              data: nights.flatMap((n, i) => n.naps.map((nap) => [i, nap])) }]
+          : []),
       ],
     }
-  }, [nights])
+  }, [nights, showNaps])
 
   const { host, style } = useChart(build, 150)
-  return (
-    <ChartFigure label={label} host={host} style={style}
-      table={{
-        columns: [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke'), t('charts.columns.naps')],
-        rows: nights.map((n) => [
-          n.date,
-          n.bed === null ? t('charts.absence.noReading') : formatClock(n.bed),
-          n.wake === null ? t('charts.absence.noReading') : formatClock(n.wake),
-          n.naps.length === 0 ? t('charts.absence.none') : n.naps.map((nap) => formatClock(nap)).join(', '),
-        ]),
-      }} />
-  )
+  const baseColumns = [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke')]
+  // A "none" in a naps column states that a check was made and found nothing; this source has
+  // never made that check (see the caller for why), so the honest move is to drop the column
+  // rather than fill it with a claim nothing here can back.
+  const columns = showNaps ? [...baseColumns, t('charts.columns.naps')] : baseColumns
+  const rows = nights.map((n) => {
+    const base = [
+      n.date,
+      n.bed === null ? t('charts.absence.noReading') : formatClock(n.bed),
+      n.wake === null ? t('charts.absence.noReading') : formatClock(n.wake),
+    ]
+    return showNaps
+      ? [...base, n.naps.length === 0 ? t('charts.absence.none') : n.naps.map((nap) => formatClock(nap)).join(', ')]
+      : base
+  })
+
+  return <ChartFigure label={label} host={host} style={style} table={{ columns, rows }} />
 }

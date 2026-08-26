@@ -66,7 +66,11 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
     <ChartFigure label={label} host={host} style={style}
       table={{
         columns: [t('charts.columns.date'), t('charts.columns.weekday'), t('charts.columns.steps')],
-        rows: cells.map((c, i) => [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.notWorn')]),
+        // A day's own DayRow.steps is only ever null because no point exists for it (a real
+        // reading is never itself null; see useSeries.ts), not because a coverage figure said the
+        // device was off. "not worn" states a cause this table cannot establish; "no reading" is
+        // the one thing that is always true of a blank cell.
+        rows: cells.map((c, i) => [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.noReading')]),
       }} />
   )
 }

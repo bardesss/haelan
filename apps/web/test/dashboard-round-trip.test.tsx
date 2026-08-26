@@ -9,6 +9,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
+import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
 // custom properties. Every other happy-dom test in this suite sidesteps that by never mounting a
@@ -129,12 +130,12 @@ describe('the Dashboard round trip', () => {
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
 
     mount(withQuery(<Dashboard />))
-    await act(async () => { await Promise.resolve() })
+    await flush(() => container!.innerHTML)
 
     const before = seen.filter((u) => u.includes('/series')).length
     const week = [...container!.querySelectorAll('.segment')][1] as HTMLButtonElement
     act(() => { week.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await act(async () => { await Promise.resolve() })
+    await flush(() => container!.innerHTML)
 
     expect(window.location.search).toContain('range=week')
     const after = seen.filter((u) => u.includes('/series'))
@@ -145,8 +146,9 @@ describe('the Dashboard round trip', () => {
 
   // Not "one request for every card metric": /series takes exactly one agg for the whole call, and
   // a metric only has rows under the aggs its own catalogue entry lists, so one shared request
-  // would ask at least one card for an agg its metric refuses and 500 the lot. What batching by
-  // agg actually buys is fewer requests than cards: metrics that share an agg ride together.
+  // would ask at least one card for an agg its metric refuses and 400 the lot
+  // (requireMetricAndAgg's ConfigError). What batching by agg actually buys is fewer requests than
+  // cards: metrics that share an agg ride together.
   //
   // Asserted as a property, not a count. The number of distinct aggs the dashboard needs is a
   // detail of which cards exist and what each draws (task 10 added two more requests, 'min' and
@@ -175,6 +177,26 @@ describe('the Dashboard round trip', () => {
     restore()
   })
 
+  // The batching test above only pins that requests are grouped by agg, which three requests
+  // satisfy as happily as five: it has no opinion on which aggs the page actually asks for. This
+  // is what stops a future change quietly dropping 'min' and 'max' to save a round trip and
+  // reproducing the exact defect fixed once already, the heart rate range card naming three
+  // series in its basis line while drawing one.
+  it('fetches heart_rate under min and max, not only mean', async () => {
+    const seen: string[] = []
+    const restore = stubFetch(seen)
+    window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
+
+    mount(withQuery(<Dashboard />))
+    await flush(() => container!.innerHTML)
+
+    const seriesCalls = seen.filter((u) => u.includes('/series'))
+    const aggs = seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg'))
+    expect(aggs).toContain('min')
+    expect(aggs).toContain('max')
+    restore()
+  })
+
   // datesFor('day', anchor) returns from === to, so every card's series is exactly one point on
   // this range, the case trend() used to divide 0 by 0 for. Checked end to end through the real
   // page rather than only at trend()'s own unit tests, since that is the path the coordinator's
@@ -185,7 +207,7 @@ describe('the Dashboard round trip', () => {
     window.history.replaceState(null, '', '/dashboard?range=day&on=2026-08-15')
 
     mount(withQuery(<Dashboard />))
-    await act(async () => { await Promise.resolve() })
+    await flush(() => container!.innerHTML)
 
     // 4 stat tiles plus the seven cards task 10 restored (heart rate range, flagged days, sleep
     // stages, sleep schedule, daily steps, recovery, anomalies), not 4: this test predates their

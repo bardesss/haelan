@@ -57,6 +57,7 @@
     "periodLabel": "juli 2026",
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
+    "to": "tot",
     "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
     "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
     "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
@@ -99,12 +100,14 @@
     "heartRateRange": {
       "label": "Hartslagbereik",
       "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline van 60 dagen",
+      "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline van 60 dagen is te dun om een band uit te tekenen",
+      "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
-      "emptyTitle": "Geen gemarkeerde dagen.",
-      "emptyDetail": "Een dag markeren vereist getypeerde gebeurtenissen, die nog door niets wordt gerapporteerd."
+      "emptyTitle": "Nog geen gemarkeerde dagen.",
+      "emptyDetail": "Gemarkeerde dagen lezen getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
     },
     "sleepStages": {
       "label": "Slaapfasen",
@@ -112,7 +115,8 @@
       "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
     },
     "sleepSchedule": {
-      "label": "Slaapschema"
+      "label": "Slaapschema",
+      "basis": "bedtijd en waaktijd, {{nights}} nachten"
     },
     "dailySteps": {
       "label": "Dagelijkse stappen",
@@ -127,7 +131,7 @@
     "anomalies": {
       "label": "Slaapafwijkingen",
       "emptyTitle": "Nog geen afwijkingsdetectie.",
-      "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets wordt gerapporteerd."
+      "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
     }
   },
   "charts": {

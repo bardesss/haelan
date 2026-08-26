@@ -39,8 +39,9 @@ export function useNights(
   // useSeries and useBaseline send it as-is. Tier 2 reads (this route) go straight to `sessions`,
   // which carries only per-device source ids; requireSource's tier 2 call sites pass no extra
   // allowed values (packages/core/src/query/personQuery.ts), so a literal 'merged' here is not a
-  // known source and the request 500s. Omitting it, the same way an unset source does, is what
-  // actually means "every device" for this route.
+  // known source and the request 400s (ConfigError, mapped by apps/server/src/api/envelope.ts's
+  // statusFor('config')). Omitting it, the same way an unset source does, is what actually means
+  // "every device" for this route.
   if (range.source !== 'merged') params.set('source', range.source)
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'sleep-nights', range),

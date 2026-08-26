@@ -6,13 +6,14 @@ import { ControlRow } from '../components/ControlRow.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
-import { SleepSchedule } from '../charts/SleepSchedule.js'
+import { SleepSchedule, AXIS_MIN } from '../charts/SleepSchedule.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
+import type { Night } from '../data/useNights.js'
 import { emptyStateFor } from '../data/emptyState.js'
 import type { EmptyStateKind } from '../data/emptyState.js'
 import { formatClock, formatDuration, trend } from '../format.js'
@@ -20,24 +21,27 @@ import { formatClock, formatDuration, trend } from '../format.js'
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
 // (requireMetricAndAgg in packages/core/src/query/personQuery.ts checks every metric against
 // that same value), and a metric only has rows under the aggs its own catalogue entry lists. So
-// "one request per card" is not achievable here: the six card metrics below need four different
-// aggs, and asking heart_rate or resting_heart_rate for 'sum' (or steps for 'last') 500s the whole
-// request, not just that metric. What is achievable, and what actually prevents six separate
-// round trips, is one request per distinct agg, with every metric that shares an agg riding along.
+// "one request per card" is not achievable here, and one request for everything is not achievable
+// either: what is achievable, and what this page actually does, is one request per distinct agg,
+// with every metric that shares an agg riding along. Five requests below, one each for sum, last,
+// mean, min and max.
 //
 // Checked against packages/core/src/derive/metrics.ts rather than against the card labels:
 // 'sleep_minutes' is not a metric the catalogue defines, so this uses 'sleep_asleep_minutes', the
-// real id for the summed minutes a night's sleep segments cover. 'steps', 'resting_heart_rate' and
-// 'heart_rate' are real ids as written. Per the catalogue: steps and sleep_asleep_minutes are
-// TOTAL metrics (aggs: ['sum']); resting_heart_rate is a once-a-day reading (aggs: ['last'], no
-// 'mean' to average since there is only ever one row a day to begin with); heart_rate is intraday
-// (aggs: ['min', 'mean', 'max', 'p50', 'count']). The mean-HR tile asks for 'mean', which is what
-// its own label ("Mean heart rate") and basis line ("mean, ... days") claim to show. The heart
-// rate range card draws all three of min, mean and max, which its own basis line has always
-// claimed ("daily minimum, mean and maximum"): a chart naming three series while drawing one,
-// because a nearby test happened to count requests, would be the same kind of untrue basis line
-// this project refuses to draw for an empty state, so 'min' and 'max' are two further requests
-// rather than two blank channels.
+// real id for the summed minutes a night's sleep segments cover. 'steps', 'resting_heart_rate',
+// 'heart_rate', 'sleep_bedtime_minutes' and 'sleep_waketime_minutes' are real ids as written. Per
+// the catalogue: steps and sleep_asleep_minutes are TOTAL metrics (aggs: ['sum']);
+// resting_heart_rate, sleep_bedtime_minutes and sleep_waketime_minutes are once-a-day readings
+// (aggs: ['last'] only, no 'mean' to average since there is only ever one row a day to begin
+// with); heart_rate is intraday (aggs: ['min', 'mean', 'max', 'p50', 'count']). The mean-HR tile
+// asks for 'mean', which is what its own label ("Mean heart rate") and basis line ("mean, ...
+// days") claim to show. The heart rate range card draws all three of min, mean and max, which its
+// own basis line has always claimed ("daily minimum, mean and maximum"): a chart naming three
+// series while drawing one would be the same kind of untrue basis line this project refuses to
+// draw for an empty state, so 'min' and 'max' are two further requests rather than two blank
+// channels. sleep_bedtime_minutes and sleep_waketime_minutes ride the same 'last' request as
+// resting_heart_rate; see the comment where they are read for why the sleep schedule card uses
+// these instead of /sleep/nights.
 //
 // apps/web does not depend on @haelan/core (BackfillStep.tsx documents the same boundary for the
 // intraday cap): that package's one export pulls in better-sqlite3 and argon2, native modules a
@@ -45,7 +49,7 @@ import { formatClock, formatDuration, trend } from '../format.js'
 // duplicates a fact the catalogue also states; it is confined to this one place instead of spread
 // across every card, and it is exactly the id-to-agg pairing above, nothing wider.
 const SUM_METRICS = ['steps', 'sleep_asleep_minutes'] as const
-const LAST_METRICS = ['resting_heart_rate'] as const
+const LAST_METRICS = ['resting_heart_rate', 'sleep_bedtime_minutes', 'sleep_waketime_minutes'] as const
 const MEAN_METRICS = ['heart_rate'] as const
 const MIN_METRICS = ['heart_rate'] as const
 const MAX_METRICS = ['heart_rate'] as const
@@ -77,26 +81,59 @@ function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number)
   return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / 60_000)
 }
 
+// A night's localDate, and a sleep_bedtime_minutes/sleep_waketime_minutes row's date, are both the
+// date the night ENDED (db/schema/derived.ts: "a night spanning midnight belongs to the morning";
+// sync/runJob.ts sets it from localDateOf(endMs); the same convention is documented again on
+// sleep_bedtime_minutes itself in packages/core/src/derive/metrics.ts: "an 23:30 bedtime is -30").
+// So localMinutesOf(localDate, ...) measures a bed time from the WRONG midnight: a 23:20 bedtime
+// comes back as -40, and SleepSchedule's axis runs noon to noon from a single midnight, the BED
+// date's. A value that lands before noon in the wake-day frame needs a day added to land in the
+// bed-day frame instead; a value already past noon (a genuine daytime nap, or an unusually late
+// wake) is already correctly placed and must not be shifted, which is why this is conditional
+// rather than a blanket +1440. Applied to bed, wake, and any other minutes-from-local-midnight
+// value on its way to formatClock, which otherwise renders a negative bedtime as "-1:-40".
+function inWindow(minutes: number): number {
+  return minutes < AXIS_MIN ? minutes + 1440 : minutes
+}
+
 // Hypnogram's own Stage type lives in the July fixtures module, which this page cannot import
 // (see the "does not import the fixtures" test): a local, structurally identical union avoids
 // that import for the one type this file needs from it.
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
 // packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGE are the only recognised
-// values a segment's stage carries ('DEEP', 'LIGHT', 'REM', 'AWAKE'); anything else is a
-// vocabulary neither this reader nor the derive layer recognises. Falling back to 'light' rather
-// than throwing matches Hypnogram's own renderItem, which already treats an unmapped lane the
-// same way.
-function stageOf(raw: string): Stage {
+// values a segment's stage carries ('DEEP', 'LIGHT', 'REM', 'AWAKE'); the derive layer itself
+// refuses to count anything outside that vocabulary toward either asleep or awake (sleep.ts:180)
+// rather than guessing. A segment whose stage this app does not recognise is dropped for the same
+// reason, leaving a visible gap in the hypnogram, rather than drawn, coloured and tabulated as
+// LIGHT: a device reporting a value nobody staged is not the same case as an internal lane index
+// falling out of range, which is the only place Hypnogram itself still falls back.
+function stageOf(raw: string): Stage | null {
   const known: Record<string, Stage> = { DEEP: 'deep', LIGHT: 'light', REM: 'rem', AWAKE: 'awake' }
-  return known[raw] ?? 'light'
+  return known[raw] ?? null
+}
+
+// /sleep/nights returns one row per (localDate, sourceId), so two sources reporting sleep on the
+// same date is two rows for what is, to a reader, one night. Collapsed to one per date with a
+// stated rule rather than left to whatever order the route happens to return: the longest
+// duration entry wins, since a second device capturing the same night is more likely to hold a
+// shorter, partial recording than the source that actually stayed on through it.
+function oneNightPerDate(items: readonly Night[]): Night[] {
+  const byDate = new Map<string, Night>()
+  for (const n of items) {
+    const existing = byDate.get(n.localDate)
+    if (existing === undefined || (n.endMs - n.startMs) > (existing.endMs - existing.startMs)) {
+      byDate.set(n.localDate, n)
+    }
+  }
+  return [...byDate.values()].sort((a, b) => a.localDate.localeCompare(b.localDate))
 }
 
 export function Dashboard() {
   const { t, i18n } = useTranslation()
   const controls = usePageControls()
   const range = { from: controls.from, to: controls.to, source: controls.source }
-  const period = `${controls.from} to ${controls.to}`
+  const period = `${controls.from} ${t('common.to')} ${controls.to}`
 
   // Fixed groups, not derived from a response: this hook runs the same five times in the same
   // order on every render regardless of what any of them returns.
@@ -106,7 +143,8 @@ export function Dashboard() {
   const minHrSeries = useSeries([...MIN_METRICS], range, 'min')
   const maxHrSeries = useSeries([...MAX_METRICS], range, 'max')
   // 'mean' explicitly: useBaseline defaults to 'sum', which heart_rate's catalogue entry does not
-  // list, and the default would 500 the request the same way it would for /series.
+  // list, and the default would 400 the request (ConfigError, requireSource/requireMetricAndAgg)
+  // the same way it would for /series.
   const hrBaseline = useBaseline('heart_rate', controls.anchor, controls.source, 'mean')
   const nights = useNights(range)
 
@@ -131,7 +169,7 @@ export function Dashboard() {
   }
 
   const tile = (
-    metric: string, labelKey: string, chartLabelKey: string, unitKey: string,
+    metric: string, labelKey: string, basisKey: string, chartLabelKey: string, unitKey: string,
     format: (points: SeriesPoint[]) => string,
     direction: 'higher-is-better' | 'lower-is-better' | 'neutral',
     unit?: string,
@@ -144,15 +182,9 @@ export function Dashboard() {
     // trend() itself answers "no delta" (undefined) for a window with too few points to compare,
     // which covers both the pending fetch (points still empty) and the day range (exactly one
     // point), so there is nothing left for this call site to guard against.
-    //
-    // cardKey rather than labelKey.replace('.label', ''): catalogue-usage.test.ts can only see a
-    // dynamically built key through its own `` `prefix.${` `` heuristic, and a string built by
-    // .replace() has no such literal prefix in source for it to find, which is why
-    // dashboard.steps.basis and its three siblings read as orphaned without this.
-    const cardKey = labelKey.split('.')[1]
     return (
       <StatTile label={t(labelKey)} value={format(points)} unit={unit}
-        basis={t(`dashboard.${cardKey}.basis`, basisOf(points))}
+        basis={t(basisKey, basisOf(points))}
         delta={trend(t, values(points), direction)}>
         <Sparkline values={points.map((p) => p.value)} labels={points.map((p) => p.localDate)}
           label={t(chartLabelKey, { period })} unit={t(unitKey)} />
@@ -175,7 +207,11 @@ export function Dashboard() {
       hrMin: minHrByDate.get(date)?.value ?? null,
       hrMean: meanPoint?.value ?? null,
       hrMax: maxHrByDate.get(date)?.value ?? null,
-      worn: meanPoint !== undefined && meanPoint.coverage !== null && meanPoint.coverage > 0,
+      // true (not worn) when there is no point at all: a missing point already reads as "no
+      // reading" through the null cells above, and adding "not worn" on top of that would assert
+      // a specific reason for the gap this data does not support. false only when a point exists
+      // and its own coverage says so.
+      worn: meanPoint === undefined || (meanPoint.coverage !== null && meanPoint.coverage > 0),
     }
   })
   const rawBaseline = hrBaseline.data?.baseline ?? null
@@ -185,6 +221,18 @@ export function Dashboard() {
   const heartRateBand = rawBaseline !== null && !rawBaseline.thin
     ? { low: rawBaseline.center - rawBaseline.spread, high: rawBaseline.center + rawBaseline.spread }
     : undefined
+  // The basis line's band clause tracks whether heartRateBand is actually defined above, rather
+  // than a single static string claiming a band that a thin or absent baseline never draws.
+  const heartRateBasisKey = rawBaseline === null
+    ? 'dashboard.heartRateRange.basisNoBaseline'
+    : rawBaseline.thin
+      ? 'dashboard.heartRateRange.basisThin'
+      : 'dashboard.heartRateRange.basis'
+  // Guarded like the tiles: emptyStateFor's own doc comment forbids a chart drawing an empty axis
+  // when there is nothing to draw. No baseline argument here, since a thin baseline suppresses
+  // only the band (above), not the whole card; the mean/min/max lines are a real chart on their
+  // own even when the baseline behind the band is too thin to stand on.
+  const heartRateEmpty: EmptyStateKind | null = meanSeries.isPending ? null : emptyStateFor(pointsOf('heart_rate'))
 
   // Daily steps heatmap: same dense-by-date treatment, so a day nothing reported still gets a
   // calendar cell (drawn as an absence dot) instead of silently compressing the grid.
@@ -199,33 +247,59 @@ export function Dashboard() {
     }
   })
   const maxSteps = Math.max(0, ...values(stepsPoints))
+  // Worn against every calendar day in range, not against however many points happened to
+  // arrive: basisOf(stepsPoints) would read the same "N of N" whether N days reported or the
+  // whole month did, since a day with no point is simply absent from stepsPoints rather than
+  // present with a false reading. heatmapDays is already dense over the whole range, so counting
+  // worn there states the coverage the grid actually draws.
+  const heatmapWorn = heatmapDays.filter((d) => d.worn).length
+  const heatmapBasisStats = { worn: heatmapWorn, total: heatmapDays.length, unworn: heatmapDays.length - heatmapWorn }
 
-  // Sleep nights: the most recent one in range for the hypnogram, every one for the schedule.
-  // Nights is pending-tolerant the same way tile() is, rather than flashing "no data" the instant
+  // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
+  // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
   // between mount and the request resolving.
-  const nightItems = nights.data?.items ?? []
-  const lastNight = nightItems.at(-1) ?? null
+  const collapsedNights = oneNightPerDate(nights.data?.items ?? [])
+  const lastNight = collapsedNights.at(-1) ?? null
   const nightEmpty: EmptyStateKind | null = nights.isPending ? null : (lastNight === null ? 'no_data' : null)
-  const hypnogramSegments = lastNight === null ? [] : lastNight.segments.map((s) => ({
-    stage: stageOf(s.stage),
-    from: Math.round((s.startMs - lastNight.startMs) / 60_000),
-    to: Math.round((s.endMs - lastNight.startMs) / 60_000),
-  }))
+  const hypnogramSegments = lastNight === null ? [] : lastNight.segments
+    .map((s) => ({
+      stage: stageOf(s.stage),
+      from: Math.round((s.startMs - lastNight.startMs) / 60_000),
+      to: Math.round((s.endMs - lastNight.startMs) / 60_000),
+    }))
+    .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)
   const lastNightBedMinutes = lastNight === null
-    ? null : localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes)
+    ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes))
   const startLabel = lastNightBedMinutes !== null
     ? t('common.bedLabel', { time: formatClock(lastNightBedMinutes) })
     : t('common.bedTimeNotRecorded')
-  // /sleep/nights groups every sleep session sharing a date and source into one entry (see
-  // packages/core/src/query/sleepNights.ts), naps included, so there is no separate nap list left
-  // to plot here the way the fixture's schedule carried one; leaving it empty is honest about
-  // what this route actually distinguishes rather than a loss this call site introduced.
-  const scheduleNights = nightItems.map((n) => ({
-    date: n.localDate,
-    bed: localMinutesOf(n.localDate, n.startMs, n.startOffsetMinutes),
-    wake: localMinutesOf(n.localDate, n.endMs, n.endOffsetMinutes),
-    naps: [] as number[],
-  }))
+
+  // Sleep schedule: sleep_bedtime_minutes and sleep_waketime_minutes, riding the same 'last'
+  // request as resting_heart_rate, rather than /sleep/nights. Two reasons. First, /series's own
+  // merge (personQuery.series's preferMerged) gives one row per date regardless of how many
+  // sources reported, where /sleep/nights gives one row per (localDate, sourceId) and has no
+  // merge of its own (the hypnogram above still needs it for segments, which is not something
+  // /series carries, so it collapses devices itself instead). Second, /sleep/nights groups every
+  // sleep session sharing a date and source into one entry, so a startMs/endMs span drawn from it
+  // includes any nap that landed in the same local date; sleep_bedtime_minutes and
+  // sleep_waketime_minutes are pushed in packages/core/src/derive/sleep.ts from the `night` group
+  // assembleNights already separated from `naps`, so they do not carry that contamination.
+  const bedtimeByDate = new Map(pointsOf('sleep_bedtime_minutes').map((p) => [p.localDate, p]))
+  const waketimeByDate = new Map(pointsOf('sleep_waketime_minutes').map((p) => [p.localDate, p]))
+  const scheduleDates = [...new Set([...bedtimeByDate.keys(), ...waketimeByDate.keys()])].sort()
+  const scheduleNights = scheduleDates.map((date) => {
+    const bedPoint = bedtimeByDate.get(date)
+    const wakePoint = waketimeByDate.get(date)
+    return {
+      date,
+      bed: bedPoint ? inWindow(bedPoint.value) : null,
+      wake: wakePoint ? inWindow(wakePoint.value) : null,
+      // Neither metric carries naps (see above), and there is no other route this call site can
+      // read a nap's clock time from, so this stays empty rather than a guess.
+      naps: [] as number[],
+    }
+  })
+  const scheduleEmpty: EmptyStateKind | null = lastSeries.isPending ? null : (scheduleDates.length === 0 ? 'no_data' : null)
 
   return (
     <>
@@ -233,32 +307,35 @@ export function Dashboard() {
       <ControlRow controls={controls} sources={[]} syncedMinutesAgo={0} />
       <div className="grid">
         <Card span={3}>
-          {tile('steps', 'dashboard.steps.label', 'dashboard.steps.chartLabel', 'dashboard.units.steps',
+          {tile('steps', 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.chartLabel', 'dashboard.units.steps',
             (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better')}
         </Card>
         <Card span={3}>
-          {tile('resting_heart_rate', 'dashboard.restingHr.label', 'dashboard.restingHr.chartLabel',
+          {tile('resting_heart_rate', 'dashboard.restingHr.label', 'dashboard.restingHr.basis', 'dashboard.restingHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'lower-is-better', t('dashboard.units.bpm'))}
         </Card>
         <Card span={3}>
-          {tile('sleep_asleep_minutes', 'dashboard.sleep.label', 'dashboard.sleep.chartLabel',
+          {tile('sleep_asleep_minutes', 'dashboard.sleep.label', 'dashboard.sleep.basis', 'dashboard.sleep.chartLabel',
             'dashboard.units.minutesAsleep',
             (p) => formatDuration(mean(values(p))), 'higher-is-better')}
         </Card>
         <Card span={3}>
-          {tile('heart_rate', 'dashboard.meanHr.label', 'dashboard.meanHr.chartLabel',
+          {tile('heart_rate', 'dashboard.meanHr.label', 'dashboard.meanHr.basis', 'dashboard.meanHr.chartLabel',
             'dashboard.units.beatsPerMinute',
             (p) => String(Math.round(mean(values(p)))), 'neutral', t('dashboard.units.bpm'))}
         </Card>
 
-        <Card span={8} label={t('dashboard.heartRateRange.label')}
-          basis={t('dashboard.heartRateRange.basis')}>
-          {/* Empty until M3c. HeartRateRange has taken both props since D1 and fed them from
-              fixtures; annotations and overrides are M3c's subject, and passing them empty here is
-              a milestone boundary rather than an oversight. */}
-          <HeartRateRange days={heartRateDays} baseline={heartRateBand} annotations={[]} excluded={[]}
-            label={t('dashboard.heartRateRange.chartLabel', { period })} />
+        <Card span={8} label={t('dashboard.heartRateRange.label')} basis={t(heartRateBasisKey)}>
+          {heartRateEmpty !== null ? (
+            <EmptyState title={t(`emptyState.${heartRateEmpty}.title`)} detail={t(`emptyState.${heartRateEmpty}.detail`)} />
+          ) : (
+            /* Empty until M3c. HeartRateRange has taken both props since D1 and fed them from
+               fixtures; annotations and overrides are M3c's subject, and passing them empty here is
+               a milestone boundary rather than an oversight. */
+            <HeartRateRange days={heartRateDays} baseline={heartRateBand} annotations={[]} excluded={[]}
+              label={t('dashboard.heartRateRange.chartLabel', { period })} />
+          )}
         </Card>
         <Card span={4} label={t('dashboard.flaggedDays.label')}>
           <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
@@ -274,13 +351,17 @@ export function Dashboard() {
           )}
         </Card>
         <Card span={5} label={t('dashboard.sleepSchedule.label')}
-          basis={t('common.bedWakeBasis', { nights: nightItems.length })}>
-          <SleepSchedule nights={scheduleNights} label={t('common.bedWakeChartLabel', { period })} />
+          basis={t('dashboard.sleepSchedule.basis', { nights: scheduleDates.length })}>
+          {scheduleEmpty !== null ? (
+            <EmptyState title={t(`emptyState.${scheduleEmpty}.title`)} detail={t(`emptyState.${scheduleEmpty}.detail`)} />
+          ) : (
+            <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />
+          )}
         </Card>
 
         <Card span={8} label={t('dashboard.dailySteps.label')}
           basis={t('dashboard.dailySteps.basis', {
-            ...basisOf(stepsPoints), maxSteps: groupNumber(maxSteps),
+            ...heatmapBasisStats, maxSteps: groupNumber(maxSteps),
           })}>
           <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('dashboard.dailySteps.chartLabel', { period })} />
         </Card>

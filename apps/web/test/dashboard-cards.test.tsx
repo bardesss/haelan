@@ -9,6 +9,8 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
+import { I18nProvider } from '../src/i18n/index.js'
+import { flush } from './flush.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
 // charts draw for real here, and echarts.init's effect throws "missing chart token" without it.
@@ -33,26 +35,6 @@ afterEach(() => {
 
 function mount(node: ReactNode): void {
   act(() => { root?.render(node) })
-}
-
-/**
- * Waits until the mounted tree stops changing, rather than a fixed number of ticks. This page
- * fires five independent queries (three series groups, a baseline, sleep nights), each its own
- * fetch-then-parse chain, and a single microtask tick is not enough hops for all five to settle;
- * a fixed tick count that happened to be enough for one query was still a race against the
- * others, which is exactly how "draws the band when not thin" passed on some runs and failed on
- * others against the same, correct code. Polling until two consecutive snapshots of the rendered
- * HTML agree is a wait for "nothing left pending" that does not have to name which query it is
- * waiting on.
- */
-async function flush(): Promise<void> {
-  let previous: string | null = null
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
-    const current = container!.innerHTML
-    if (current === previous) return
-    previous = current
-  }
 }
 
 const PERSON: Session = {
@@ -109,7 +91,7 @@ describe('the remaining Dashboard cards', () => {
   it('draws no baseline band when the baseline is thin', async () => {
     const restore = stubFetch({ baseline: { center: 60, spread: 4, n: 3, thin: true } })
     mount(withQuery(<Dashboard />))
-    await flush()
+    await flush(() => container!.innerHTML)
     expect(container!.querySelector('[data-baseline-band]')).toBeNull()
     restore()
   })
@@ -117,7 +99,7 @@ describe('the remaining Dashboard cards', () => {
   it('draws the band when the baseline is not thin', async () => {
     const restore = stubFetch({ baseline: { center: 60, spread: 4, n: 28, thin: false } })
     mount(withQuery(<Dashboard />))
-    await flush()
+    await flush(() => container!.innerHTML)
     expect(container!.querySelector('[data-baseline-band]')).not.toBeNull()
     restore()
   })
@@ -126,11 +108,27 @@ describe('the remaining Dashboard cards', () => {
   it('shows flagged days as empty rather than wiring it to something event shaped', async () => {
     const restore = stubFetch({ baseline: null })
     mount(withQuery(<Dashboard />))
-    await flush()
+    await flush(() => container!.innerHTML)
     // No I18nProvider in this tree, the same way dashboard-round-trip.test.tsx mounts it: without
     // one react-i18next has no catalogue to resolve against and renders the key itself, which is
     // what this asserts on rather than the English prose.
     expect(container!.textContent).toContain('dashboard.flaggedDays.emptyTitle')
+    restore()
+  })
+
+  // stubFetch answers every requested metric with exactly one point (2026-08-15), so a real
+  // month range has far more calendar days than reporting days. The basis must count the former;
+  // basisOf(stepsPoints) would have read the same "1 of 1" it would for a single-day range, which
+  // is the regression pages.test.tsx once pinned in as correct.
+  it('states the heatmap total against every calendar day in range, not just the days that reported', async () => {
+    const restore = stubFetch({ baseline: null })
+    // Real interpolation needed here, unlike the other tests in this file: without an
+    // I18nProvider, t() returns the raw key and the numbers this test reads never appear as text.
+    mount(<I18nProvider lng="en">{withQuery(<Dashboard />)}</I18nProvider>)
+    await flush(() => container!.innerHTML)
+    const match = container!.textContent!.match(/(\d+) of (\d+) days worn/)
+    expect(match).not.toBeNull()
+    expect(Number(match![2])).toBeGreaterThan(1)
     restore()
   })
 

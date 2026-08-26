@@ -57,6 +57,7 @@
     "periodLabel": "July 2026",
     "bedLabel": "Bed {{time}}",
     "bedTimeNotRecorded": "Bed time not recorded",
+    "to": "to",
     "bedWakeBasis": "bed and wake time, {{nights}} nights, dot marks a nap",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
     "deviceWornGap": "Device was worn, so this is a real gap in the reading.",
@@ -99,12 +100,14 @@
     "heartRateRange": {
       "label": "Heart rate range",
       "basis": "daily minimum, mean and maximum, shaded band is the 60 day baseline",
+      "basisThin": "daily minimum, mean and maximum; the 60 day baseline is too thin to draw a band from",
+      "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
       "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
     },
     "flaggedDays": {
       "label": "Flagged days",
-      "emptyTitle": "No flagged days.",
-      "emptyDetail": "Flagging a day reads typed events, which nothing connected reports yet."
+      "emptyTitle": "No flagged days yet.",
+      "emptyDetail": "Flagged days read typed events, which nothing connected reports yet."
     },
     "sleepStages": {
       "label": "Sleep stages",
@@ -112,7 +115,8 @@
       "chartLabel": "Sleep stages through the night of {{date}}"
     },
     "sleepSchedule": {
-      "label": "Sleep schedule"
+      "label": "Sleep schedule",
+      "basis": "bed and wake time, {{nights}} nights"
     },
     "dailySteps": {
       "label": "Daily steps",
