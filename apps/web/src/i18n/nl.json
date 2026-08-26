@@ -31,7 +31,7 @@
     "nextPeriod": "Volgende periode",
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
-    "sourceMerged": "Alle bronnen",
+    "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
     "sync": "Synchroniseren",
     "syncedAgo": "Gesynchroniseerd {{count}} min geleden",

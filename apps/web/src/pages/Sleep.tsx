@@ -12,6 +12,7 @@ import type { Stage } from '../fixtures/july.js'
 import { formatClock, formatDuration, toneFor } from '../format.js'
 import type { Delta, Translate } from '../format.js'
 import { STAGE_LABEL_KEY } from '../charts/stage.js'
+import { ALL_SOURCES } from '../controls/source.js'
 
 const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
 // Token names, not literal strings: a rename in chart.ts becomes a compile error, and the swatch follows theme switches via CSS inheritance.
@@ -46,7 +47,7 @@ export function Sleep() {
   // through useSession, which needs a QueryClientProvider this page's own tests do not set up,
   // and wiring the two together for real is a later task.
   const controls: PageControlsState = {
-    tab: 'day', anchor: dayLabel || '2026-07-31', source: 'merged',
+    tab: 'day', anchor: dayLabel || '2026-07-31', source: ALL_SOURCES,
     from: dayLabel, to: dayLabel,
     setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
   }

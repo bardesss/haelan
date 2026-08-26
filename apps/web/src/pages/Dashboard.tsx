@@ -16,7 +16,7 @@ import { SleepSchedule, AXIS_MIN, AXIS_MAX } from '../charts/SleepSchedule.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { deepLink } from '../controls/deepLink.js'
-import { resolveSource } from '../controls/source.js'
+import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
 import { useSeries } from '../data/useSeries.js'
@@ -129,8 +129,8 @@ function sourcesIn(raw: string | null): string[] {
 }
 
 // The device names offered in the control row's source selector, pulled off whichever query
-// results are passed in rather than a route of its own. Every caller must pass a query that is
-// scoped to source: 'merged': see the comment at the one call site (sourceEnumeration, below) for
+// results are passed in rather than a route of its own. Every caller must pass a query scoped to
+// the all sources sentinel: see the comment at the one call site (sourceEnumeration, below) for
 // why an ordinary range scoped query silently breaks this the moment a device filter is active.
 function distinctSources(queries: readonly UseQueryResult<Record<string, MetricSeries>>[]): string[] {
   const found = new Set<string>()
@@ -256,28 +256,29 @@ export function Dashboard() {
   const controls = usePageControls()
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
 
-  // The control row's source selector has to be read off a MERGED row, not off whatever source is
-  // currently selected: rollup.ts writes sourceMix: null for every per source rollup
-  // (packages/core/src/derive/rollup.ts:154, and exercise.ts:68 reads it the same way), and only
-  // mergeDay's merged rows carry a real mix (merge.ts's encodeMix, called unconditionally there).
-  // Feeding distinctSources the range scoped queries below therefore worked only for the one
-  // reader who had never touched the selector: the moment somebody picked a real device, every
-  // series request became scoped to that device, none of the returned rows carried a sourceMix,
-  // distinctSources returned nothing, the source fell back to 'merged', and the select silently
-  // relabelled itself "All sources" while the charts above it kept showing the device filtered
-  // numbers, no way back to another device short of hand editing the URL. So this is its own
-  // query, pinned to source: 'merged' regardless of what the reader has chosen. When the reader
-  // has not touched the selector this key is identical to sumSeries's own key and React Query
-  // serves it from that same cache entry rather than issuing a second request; the extra request
-  // only happens while a device filter is actually active, which is exactly the state this exists
-  // to recover from.
+  // The control row's source selector has to be read off the unfiltered (merged-preferring) view,
+  // not off whatever source is currently selected: rollup.ts writes sourceMix: null for every per
+  // source rollup (packages/core/src/derive/rollup.ts:154, and exercise.ts:68 reads it the same
+  // way), and only mergeDay's merged rows carry a real mix (merge.ts's encodeMix, called
+  // unconditionally there). Feeding distinctSources the range scoped queries below therefore
+  // worked only for the one reader who had never touched the selector: the moment somebody picked
+  // a real device, every series request became scoped to that device, none of the returned rows
+  // carried a sourceMix, distinctSources returned nothing, the source fell back to the sentinel,
+  // and the select silently relabelled itself "All sources" while the charts above it kept showing
+  // the device filtered numbers, no way back to another device short of hand editing the URL. So
+  // this is its own query, pinned to the all sources sentinel regardless of what the reader has
+  // chosen. When the reader has not touched the selector this key is identical to sumSeries's own
+  // key (both omit the source parameter and both let preferMerged answer) and React Query serves
+  // it from that same cache entry rather than issuing a second request; the extra request only
+  // happens while a device filter is actually active, which is exactly the state this exists to
+  // recover from.
   //
   // It runs before the range scoped queries because it is what tells them which source to ask
   // for: a link naming a source this person does not have used to correct only the select while
   // every card underneath queried the foreign value.
-  const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: 'merged' }, 'sum')
+  const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'sum')
   const sources = distinctSources([sourceEnumeration])
-  const source = resolveSource(controls.source, ['merged', ...sources])
+  const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   // One state object from here down, so the row, the card links and every request are talking
   // about the same source.

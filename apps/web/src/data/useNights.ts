@@ -3,6 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import { sourceParam } from '../controls/source.js'
 
 // Mirrors packages/core/src/query/sleepNights.ts's Night, as sent by
 // apps/server/src/routes/v1/tier2.ts's GET /p/:personId/sleep/nights: one row per night per
@@ -36,13 +37,15 @@ export function useNights(
   const personId = session.data?.personId
   const params = new URLSearchParams({ from: range.from, to: range.to })
   // 'merged' is a real row value on the tier 1 `daily` rollup (MERGED_SOURCE), which is why
-  // useSeries and useBaseline send it as-is. Tier 2 reads (this route) go straight to `sessions`,
-  // which carries only per-device source ids; requireSource's tier 2 call sites pass no extra
-  // allowed values (packages/core/src/query/personQuery.ts), so a literal 'merged' here is not a
-  // known source and the request 400s (ConfigError, mapped by apps/server/src/api/envelope.ts's
-  // statusFor('config')). Omitting it, the same way an unset source does, is what actually means
-  // "every device" for this route.
-  if (range.source !== 'merged') params.set('source', range.source)
+  // useSeries and useBaseline can send it as-is. Tier 2 reads (this route) go straight to
+  // `sessions`, which carries only per-device source ids; requireSource's tier 2 call sites pass
+  // no extra allowed values (packages/core/src/query/personQuery.ts), so a literal 'merged' here
+  // is not a known source and the request 400s (ConfigError, mapped by
+  // apps/server/src/api/envelope.ts's statusFor('config')). sourceParam already omits the all
+  // sources sentinel the same way an unset source does, which is what actually means "every
+  // device" for this route; a real per-device name still passes through unchanged.
+  const source = sourceParam(range.source)
+  if (source !== undefined) params.set('source', source)
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'sleep-nights', range),
     // Without this the hook would request /api/v1/p/undefined/sleep/nights on first render, which

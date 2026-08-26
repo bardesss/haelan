@@ -6,6 +6,7 @@ import type { PageControlsState } from '../controls/usePageControls.js'
 import { apiSend, ApiError } from '../api/client.js'
 import { useSession } from '../auth/session.js'
 import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
+import { ALL_SOURCES } from '../controls/source.js'
 
 export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, canSync = true }: {
   controls: PageControlsState
@@ -26,7 +27,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
   // Shown exactly as handed over. controls.source has already been resolved against this same
   // list in the state layer (controls/source.ts), so the label here and the source the page is
   // querying under cannot drift apart: they are one value.
-  const options = ['merged', ...sources]
+  const options = [ALL_SOURCES, ...sources]
 
   const session = useSession()
   const personId = session.data?.personId
@@ -88,7 +89,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
           <select value={controls.source} onChange={(e) => controls.setSource(e.currentTarget.value)}>
             {options.map((source) => (
               <option key={source} value={source}>
-                {source === 'merged' ? t('controlRow.sourceMerged') : source}
+                {source === ALL_SOURCES ? t('controlRow.sourceAll') : source}
               </option>
             ))}
           </select>

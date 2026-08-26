@@ -3,6 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import { sourceParam } from '../controls/source.js'
 
 // Matches packages/core/src/query/baseline.ts exactly: center, spread, n, thin, nothing more.
 export interface Baseline {
@@ -26,7 +27,9 @@ export function useBaseline(
 ): UseQueryResult<{ baseline: Baseline | null }> {
   const session = useSession()
   const personId = session.data?.personId
-  const params = new URLSearchParams({ metric, agg, on, source })
+  const params = new URLSearchParams({ metric, agg, on })
+  const resolvedSource = sourceParam(source)
+  if (resolvedSource !== undefined) params.set('source', resolvedSource)
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'baselines', { metric, on, source, agg }),
     enabled: personId !== undefined,

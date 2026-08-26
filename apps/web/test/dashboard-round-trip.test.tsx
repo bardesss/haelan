@@ -11,6 +11,7 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
 import { coverageFor } from './metricCoverage.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
 // custom properties. Every other happy-dom test in this suite sidesteps that by never mounting a
@@ -122,12 +123,13 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
 }
 
 /**
- * Answers /series with a sourceMix that depends on the request's own `source` parameter, the way
- * the real store does: rollup.ts writes sourceMix: null for every per source rollup and only
- * mergeDay's merged rows carry a real mix. A stub that always returned the same sourceMix
- * regardless of source could not catch the bug this file's "keeps a picked device" test exists
- * for, since that bug is specifically the selector losing the mix the instant a request stops
- * asking for merged.
+ * Answers /series with a sourceMix that depends on whether the request's own `source` parameter
+ * is present, the way the real store does: rollup.ts writes sourceMix: null for every per source
+ * rollup and only mergeDay's merged rows carry a real mix, and preferMerged answers a merged row
+ * only when the caller omits `source` (the all sources sentinel). A stub that always returned the
+ * same sourceMix regardless of source could not catch the bug this file's "keeps a picked device"
+ * test exists for, since that bug is specifically the selector losing the mix the instant a
+ * request stops asking for every source.
  */
 function stubFetchBySource(seen: string[]): () => void {
   const original = globalThis.fetch
@@ -147,7 +149,7 @@ function stubFetchBySource(seen: string[]): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [source === 'merged'
+          points: [source === null
             ? {
                 localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'merged',
                 sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
@@ -274,7 +276,7 @@ describe('the Dashboard round trip', () => {
   // which fetch under whatever source the control row has selected, so picking a real device
   // wiped out every sourceMix the selector reads and the select silently fell back to "All
   // sources" while the numbers on screen stayed device filtered. The fix reads a query pinned to
-  // source: 'merged' instead of whatever the reader picked.
+  // the all sources sentinel instead of whatever the reader picked.
   it('keeps a picked device selected and offered in the source selector', async () => {
     const seen: string[] = []
     const restore = stubFetchBySource(seen)
@@ -308,7 +310,7 @@ describe('the Dashboard round trip', () => {
     // The baseline is a separate route reading the same resolved value.
     expect(seen.some((u) => u.includes('/baselines') && u.includes('source=someone-elses'))).toBe(false)
     const select = container!.querySelector('select') as HTMLSelectElement
-    expect(select.value).toBe('merged')
+    expect(select.value).toBe(ALL_SOURCES)
     restore()
   })
 

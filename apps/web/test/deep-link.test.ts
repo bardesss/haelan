@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { deepLink } from '../src/controls/deepLink.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 const controls = { tab: 'month', anchor: '2026-08-15', source: 'watch' } as const
 
@@ -12,7 +13,7 @@ describe('deepLink', () => {
   })
 
   it('leaves a default source out rather than pinning it', () => {
-    expect(deepLink('/sleep', { ...controls, source: 'merged' }))
+    expect(deepLink('/sleep', { ...controls, source: ALL_SOURCES }))
       .toBe('/sleep?range=month&on=2026-08-15')
   })
 

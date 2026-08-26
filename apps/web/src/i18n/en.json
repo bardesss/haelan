@@ -31,7 +31,7 @@
     "nextPeriod": "Next period",
     "pickDate": "Pick a date",
     "sources": "Sources",
-    "sourceMerged": "All sources",
+    "sourceAll": "All sources",
     "downloadTotals": "Download daily totals",
     "sync": "Sync",
     "syncedAgo": "Synced {{count}} min ago",

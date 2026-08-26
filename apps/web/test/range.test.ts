@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { datesFor, stepAnchor, parseControls } from '../src/controls/range.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 describe('datesFor', () => {
   it('gives a single day for the day tab', () => {
@@ -72,8 +73,8 @@ describe('stepAnchor', () => {
 describe('parseControls', () => {
   const today = '2026-08-26'
 
-  it('defaults an empty search to the month containing today, merged', () => {
-    expect(parseControls('', today)).toEqual({ tab: 'month', anchor: today, source: 'merged' })
+  it('defaults an empty search to the month containing today, all sources', () => {
+    expect(parseControls('', today)).toEqual({ tab: 'month', anchor: today, source: ALL_SOURCES })
   })
 
   it('reads all three parameters', () => {
