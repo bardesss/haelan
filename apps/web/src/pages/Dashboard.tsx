@@ -364,11 +364,16 @@ export function Dashboard() {
     // "No baseline yet" would be a claim about the person's history. A request that failed says
     // nothing about how much history there is.
     ? 'dashboard.heartRateRange.basisBaselineUnknown'
-    : rawBaseline === null
-      ? 'dashboard.heartRateRange.basisNoBaseline'
-      : rawBaseline.thin
-        ? 'dashboard.heartRateRange.basisThin'
-        : 'dashboard.heartRateRange.basis'
+    // Ahead of the null test for the same reason: /baselines settles independently of the three
+    // heart rate series MetricCard gates on, so `data` is undefined for a while after this card
+    // has drawn, and reading that as "no baseline yet" is the claim the comment above refuses.
+    : hrBaseline.isPending
+      ? 'dashboard.heartRateRange.basisBaselinePending'
+      : rawBaseline === null
+        ? 'dashboard.heartRateRange.basisNoBaseline'
+        : rawBaseline.thin
+          ? 'dashboard.heartRateRange.basisThin'
+          : 'dashboard.heartRateRange.basis'
   // All three requests, not only the mean: a card drawing three series has not settled until
   // the last of them has, and has failed if any of them did. The empty check itself, and the
   // baseline omission it depends on, now live in MetricCard: this composite query is only built

@@ -120,6 +120,7 @@
       "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",
       "basisThin": "daily minimum, mean and maximum; the baseline from the 60 days before {{on}} is too thin to draw a band from",
       "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
+      "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
       "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
       "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
     },
@@ -160,6 +161,7 @@
       "breathsPerMinuteShort": "breaths/min"
     },
     "baselineNote": {
+      "pending": "the baseline is still loading",
       "unknown": "the baseline could not be read, so no comparison is shown",
       "none": "no baseline yet to compare against",
       "thin": "the baseline from the 60 days before {{on}} is too thin to compare against",
@@ -306,6 +308,7 @@
       "awake": "Awake"
     },
     "baselineNote": {
+      "pending": "the baseline is still loading",
       "unknown": "the baseline could not be read, so no comparison is shown",
       "none": "no baseline yet to compare against",
       "thin": "the baseline from the 60 nights before {{on}} is too thin to compare against",

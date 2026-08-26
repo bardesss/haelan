@@ -83,6 +83,11 @@ function baselineNote(
   t: Translate, value: number, query: UseQueryResult<{ baseline: Baseline | null }>, precision: number, on: string,
 ): string {
   if (query.isError) return t('recovery.baselineNote.unknown')
+  // Before the null test, not after it. /baselines is its own request and settles independently of
+  // the series MetricCard gates on, so a card can be past its own pending state while this one is
+  // still in flight; `data` is undefined then, and the null branch below would read that as "no
+  // baseline yet", a claim about the person's history made before anything was asked.
+  if (query.isPending) return t('recovery.baselineNote.pending')
   const raw = query.data?.baseline ?? null
   if (raw === null) return t('recovery.baselineNote.none')
   if (raw.thin) return t('recovery.baselineNote.thin', { on })

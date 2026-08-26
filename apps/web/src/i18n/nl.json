@@ -120,6 +120,7 @@
       "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
       "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
       "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
+      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
       "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
@@ -160,6 +161,7 @@
       "breathsPerMinuteShort": "ademh./min"
     },
     "baselineNote": {
+      "pending": "de baseline wordt nog geladen",
       "unknown": "de baseline kon niet worden gelezen, dus er is geen vergelijking te zien",
       "none": "nog geen baseline om mee te vergelijken",
       "thin": "de baseline uit de 60 dagen vóór {{on}} is te dun om mee te vergelijken",
@@ -306,6 +308,7 @@
       "awake": "Wakker"
     },
     "baselineNote": {
+      "pending": "de baseline wordt nog geladen",
       "unknown": "de baseline kon niet worden gelezen, dus er wordt geen vergelijking getoond",
       "none": "nog geen baseline om mee te vergelijken",
       "thin": "de baseline van de 60 nachten voor {{on}} is te dun om mee te vergelijken",

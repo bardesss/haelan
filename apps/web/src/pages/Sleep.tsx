@@ -136,6 +136,9 @@ function baselineNote(
   t: Translate, minutes: number, query: UseQueryResult<{ baseline: Baseline | null }>, on: string,
 ): string {
   if (query.isError) return t('sleep.baselineNote.unknown')
+  // Same ordering, and the same reason, as Recovery.tsx's own baselineNote: pending has to be
+  // ruled out before the null test, or an in flight request renders as "no baseline yet".
+  if (query.isPending) return t('sleep.baselineNote.pending')
   const raw = query.data?.baseline ?? null
   if (raw === null) return t('sleep.baselineNote.none')
   if (raw.thin) return t('sleep.baselineNote.thin', { on })

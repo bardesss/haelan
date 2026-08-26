@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { flush } from './flush.js'
+import { flush, pumpUntil } from './flush.js'
 import { coverageFor } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
@@ -108,6 +108,10 @@ function hypnogramNightsResponse(): unknown {
  */
 function stubSleep(
   urls: string[], schedule: { bedtimeMinutes: number, waketimeMinutes: number } = { bedtimeMinutes: -40, waketimeMinutes: 425 },
+  // Leaves /baselines in flight forever rather than answering it, for the one test that reads the
+  // asleep card's basis while that request has not settled. A never resolving promise makes that a
+  // resting state instead of a moment in a sequence, so nothing here has to race a delay.
+  hangBaselines = false,
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -131,7 +135,9 @@ function stubSleep(
       return json(body)
     }
     if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse())
-    if (url.includes('/baselines')) return json({ baseline: null })
+    if (url.includes('/baselines')) {
+      return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline: null })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -282,6 +288,21 @@ describe('the Sleep page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('1 dutje,')
     expect(container!.textContent).not.toContain('1 dutjes,')
+    restore()
+  })
+
+  // A rendered state, not a theoretical one. MetricCard gates on the series query and /baselines is
+  // a separate request, so the asleep card draws while the baseline is still in flight; baselineNote
+  // read `data?.baseline ?? null` straight after its error test, so undefined took the null branch
+  // and the card stated "no baseline yet to compare against" before anything had been asked.
+  it('does not claim there is no baseline while the baseline request is in flight', async () => {
+    const restore = stubSleep([], { bedtimeMinutes: -40, waketimeMinutes: 425 }, true)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await pumpUntil(() => container!.textContent!.includes('Time asleep'), 'the time asleep card')
+    const text = container!.textContent!
+    expect(text).toContain('the baseline is still loading')
+    expect(text).not.toContain('no baseline yet to compare against')
     restore()
   })
 })

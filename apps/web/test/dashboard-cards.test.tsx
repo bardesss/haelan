@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { flush } from './flush.js'
+import { flush, pumpUntil } from './flush.js'
 import { coverageFor } from './metricCoverage.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
@@ -57,7 +57,7 @@ type Baseline = { center: number, spread: number, n: number, thin: boolean } | n
  * dashboard-round-trip.test.tsx's stubFetchOnePointPerMetric does, so heart_rate has something to
  * plot and the band, when the baseline says to draw one, has an axis to sit on.
  */
-function stubFetch(opts: { baseline: Baseline }): () => void {
+function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -79,6 +79,9 @@ function stubFetch(opts: { baseline: Baseline }): () => void {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/baselines')) {
+      // Never resolving rather than delayed, so the in flight state is somewhere this page rests
+      // and not a moment a test has to catch it passing through.
+      if (opts.hangBaselines === true) return new Promise<Response>(() => {})
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -235,6 +238,22 @@ describe('the remaining Dashboard cards', () => {
     // nights" too.
     expect(container!.textContent).toContain('bed and wake time, 1 night')
     expect(container!.textContent).not.toContain('bed and wake time, 1 nights')
+    restore()
+  })
+
+  // The principle heartRateBasisKey's own comment states three lines above the branch that broke
+  // it: "no baseline yet" is a claim about the person's history, and an unanswered request makes
+  // no such claim. MetricCard gates the card on the three heart rate series, /baselines settles
+  // separately, so the card draws while this one is still in flight and the null branch spoke for
+  // it.
+  it('does not claim there is no baseline while the baseline request is in flight', async () => {
+    const restore = stubFetch({ baseline: null, hangBaselines: true })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await pumpUntil(() => container!.textContent!.includes('Heart rate range'), 'the heart rate range card')
+    const text = container!.textContent!
+    expect(text).toContain('the baseline is still loading')
+    expect(text).not.toContain('no baseline yet to compare against')
     restore()
   })
 

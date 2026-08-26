@@ -9,7 +9,8 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
-import { flush } from './flush.js'
+import { I18nProvider } from '../src/i18n/index.js'
+import { flush, pumpUntil } from './flush.js'
 import { coverageFor } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
@@ -128,5 +129,40 @@ describe('the Recovery page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.querySelector('[data-baseline-band]')).not.toBeNull()
     restore()
+  })
+
+  // A rendered state, not a theoretical one: MetricCard gates on the series query, /baselines is a
+  // separate request, and the card draws as soon as the first settles. baselineNote read
+  // `data?.baseline ?? null` straight after the error test, so an in flight request came out
+  // undefined and took the null branch, printing "no baseline yet to compare against" before
+  // anything had been asked. The stub hangs /baselines forever rather than delaying it, so the
+  // state under test is where this page rests rather than a moment it passes through.
+  it('does not claim there is no baseline while the baseline request is in flight', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const json = (body: unknown) =>
+        new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+      if (url.includes('/api/auth/me')) return json(PERSON)
+      if (url.includes('/baselines')) return new Promise<Response>(() => {})
+      if (url.includes('/series')) {
+        const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+        return json(Object.fromEntries(metrics.map((metric) => [metric, {
+          points: [{
+            localDate: '2026-08-15', value: 60, coverage: coverageFor(metric),
+            source: 'merged', sourceMix: null, updatedAtMs: 1_755_000_000_000,
+          }],
+          reduction: null,
+        }])))
+      }
+      return json({})
+    }) as typeof fetch
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await pumpUntil(() => container!.textContent!.includes('Resting heart rate'), 'the resting heart rate card')
+    const text = container!.textContent!
+    expect(text).toContain('the baseline is still loading')
+    expect(text).not.toContain('no baseline yet to compare against')
+    globalThis.fetch = original
   })
 })
