@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
-import type { UseQueryResult } from '@tanstack/react-query'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
@@ -22,7 +21,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
 import { useSeries } from '../data/useSeries.js'
-import type { MetricSeries, SeriesPoint } from '../data/useSeries.js'
+import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
@@ -30,6 +29,7 @@ import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { formatClock, formatDuration, trend } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
@@ -135,56 +135,6 @@ const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
-
-// sourceMix is nullable, and when present is JSON this app did not itself just produce
-// (packages/core/src/derive/merge.ts's encodeMix writes it, but a row from an older mapping
-// version or a hand edited value is just a string as far as this reads it): a malformed value
-// must not take the page down over what is, at worst, a temporarily incomplete source list.
-function sourcesIn(raw: string | null): string[] {
-  if (raw === null) return []
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return []
-  }
-  if (!Array.isArray(parsed)) return []
-  return parsed
-    .map((entry) => (entry !== null && typeof entry === 'object' ? (entry as { source?: unknown }).source : undefined))
-    .filter((source): source is string => typeof source === 'string')
-}
-
-// The device names offered in the control row's source selector, pulled off whichever query
-// results are passed in rather than a route of its own. Every caller must pass a query scoped to
-// the all sources sentinel: see the comment at the one call site (sourceEnumeration, below) for
-// why an ordinary range scoped query silently breaks this the moment a device filter is active.
-function distinctSources(queries: readonly UseQueryResult<Record<string, MetricSeries>>[]): string[] {
-  const found = new Set<string>()
-  for (const query of queries) {
-    for (const series of Object.values(query.data ?? {})) {
-      for (const point of series.points) {
-        for (const source of sourcesIn(point.sourceMix)) found.add(source)
-      }
-    }
-  }
-  return [...found].sort()
-}
-
-// The one download link the control row offers, built from the same SUM_METRICS group the steps
-// and sleep tiles read. /export takes exactly one `agg` per call, the same restriction /series has
-// (requireMetricAndAgg in packages/core/src/query/personQuery.ts), so one link cannot carry the
-// five aggs this page fetches across; the primary totals are the ones a reader downloading "the
-// raw numbers behind this page" is most likely to mean.
-function exportPathFor(personId: string, range: { from: string, to: string, source: string }): string {
-  const params = new URLSearchParams()
-  for (const metric of SUM_METRICS) params.append('metric', metric)
-  params.set('format', 'csv')
-  params.set('agg', 'sum')
-  params.set('from', range.from)
-  params.set('to', range.to)
-  params.set('source', range.source)
-  return `/api/v1/p/${personId}/export?${params.toString()}`
-}
 
 // Every calendar date from `from` to `to`, inclusive. /series and /sleep/nights both drop a day
 // entirely rather than sending a null row for it (see useSeries.ts and useNights.ts), so a chart
@@ -346,7 +296,7 @@ export function Dashboard() {
     ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
     : null
   const personId = session.data?.personId
-  const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
+  const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
   // The active language, not a pinned locale: a bilingual app whose numbers only ever group like
   // English is not actually speaking Dutch when it renders Dutch.

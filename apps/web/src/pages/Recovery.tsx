@@ -11,12 +11,13 @@ import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { useSeries } from '../data/useSeries.js'
-import type { MetricSeries, SeriesPoint } from '../data/useSeries.js'
+import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { trend } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
@@ -51,48 +52,6 @@ const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
-
-// sourceMix reading and the all-sources enumeration query below both mirror Dashboard.tsx's own
-// copies byte for byte: this page has the same "the selector must read off an unfiltered query, or
-// picking a real device blanks the list a reader would use to pick a different one" problem, and
-// no shared module extracts either yet (Dashboard.tsx is the only other page wired to real data so
-// far). Duplicated rather than reached for a premature shared module.
-function sourcesIn(raw: string | null): string[] {
-  if (raw === null) return []
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return []
-  }
-  if (!Array.isArray(parsed)) return []
-  return parsed
-    .map((entry) => (entry !== null && typeof entry === 'object' ? (entry as { source?: unknown }).source : undefined))
-    .filter((source): source is string => typeof source === 'string')
-}
-
-function distinctSources(queries: readonly UseQueryResult<Record<string, MetricSeries>>[]): string[] {
-  const found = new Set<string>()
-  for (const query of queries) {
-    for (const series of Object.values(query.data ?? {})) {
-      for (const point of series.points) {
-        for (const source of sourcesIn(point.sourceMix)) found.add(source)
-      }
-    }
-  }
-  return [...found].sort()
-}
-
-function exportPathFor(personId: string, range: { from: string, to: string, source: string }): string {
-  const params = new URLSearchParams()
-  for (const metric of LAST_METRICS) params.append('metric', metric)
-  params.set('format', 'csv')
-  params.set('agg', 'last')
-  params.set('from', range.from)
-  params.set('to', range.to)
-  params.set('source', range.source)
-  return `/api/v1/p/${personId}/export?${params.toString()}`
-}
 
 function datesBetween(from: string, to: string): string[] {
   const dates: string[] = []
@@ -165,7 +124,7 @@ export function Recovery() {
     ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
     : null
   const personId = session.data?.personId
-  const exportPath = personId !== undefined ? exportPathFor(personId, range) : undefined
+  const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
 
   // Stable array identities for the same reason Dashboard.tsx's own `sparklines` memo exists:
   // useChart keys its rebuild on `build`, and `build` is a useCallback over `values`/`baseline`, so

@@ -5,7 +5,7 @@ import { Recovery } from './pages/Recovery.js'
 
 export interface Route { path: string, element: ReactNode }
 
-// Five of these still render Dashboard for now. M3d and M3e replace them. The rail in Sidebar.tsx
+// Six of these still render Dashboard for now. M3d and M3e replace them. The rail in Sidebar.tsx
 // lists its own paths rather than being generated from this table (M3e revisits how the two
 // relate); a test enforces that the two path sets match, so an edit to either cannot silently leave
 // the other with a route nothing links to or a rail item pointing nowhere.
