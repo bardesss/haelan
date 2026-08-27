@@ -6,6 +6,9 @@ import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useSeries, seriesPath } from '../src/data/useSeries.js'
+import { baselinePath } from '../src/data/useBaseline.js'
+import { nightsPath } from '../src/data/useNights.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -57,11 +60,50 @@ describe('seriesPath', () => {
       .toContain('/api/v1/p/p1/series')
   })
 
-  // merged is the default view, and it is a source value the derivation writes, not a sentinel
-  // the client invents. Sending it is what asks for the merged rows.
+  // merged is a real source value the derivation writes, not a sentinel the client invents.
+  // Sending it explicitly is what asks for the merged rows specifically, as distinct from the all
+  // sources sentinel below, which omits the parameter instead.
   it('carries the source through', () => {
     expect(seriesPath('p1', ['steps'], { from: '2026-08-01', to: '2026-08-01', source: 'watch' }, 'sum'))
       .toContain('source=watch')
+  })
+
+  // The option name promises every source. merged is one particular source, the one this app
+  // computed, and two metrics in this database have none at all: sending source=merged for those
+  // asked for rows that were never written. Omitting the parameter is what actually means "all
+  // sources", letting the query layer's own preferMerged take the merged row where there is one.
+  it('builds a series path with no source parameter for the all sentinel', () => {
+    const path = seriesPath('p1', ['floors'], { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES }, 'sum')
+    expect(path).not.toContain('source=')
+  })
+})
+
+describe('baselinePath', () => {
+  // Same distinction as seriesPath's two source tests: a real device name is sent as-is, and the
+  // one thing this task exists to fix is that the all sources sentinel omits the parameter rather
+  // than sending a name (merged) that two metrics in this schema have no rows under.
+  it('carries the source through', () => {
+    expect(baselinePath('p1', 'heart_rate', '2026-08-31', 'watch', 'mean')).toContain('source=watch')
+  })
+
+  it('builds a baseline path with no source parameter for the all sentinel', () => {
+    const path = baselinePath('p1', 'heart_rate', '2026-08-31', ALL_SOURCES, 'mean')
+    expect(path).not.toContain('source=')
+  })
+})
+
+describe('nightsPath', () => {
+  // Tier 2's requireSource refuses a source it does not recognise (no daily-rollup-only values
+  // like merged are registered there), so a real device name still has to reach the request
+  // unchanged for a device filtered sleep page to work at all.
+  it('carries the source through', () => {
+    const path = nightsPath('p1', { from: '2026-08-01', to: '2026-08-31', source: 'watch' })
+    expect(path).toContain('source=watch')
+  })
+
+  it('builds a nights path with no source parameter for the all sentinel', () => {
+    const path = nightsPath('p1', { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES })
+    expect(path).not.toContain('source=')
   })
 })
 

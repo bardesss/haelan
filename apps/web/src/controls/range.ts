@@ -1,3 +1,5 @@
+import { ALL_SOURCES } from './source.js'
+
 export const RANGE_KEYS = ['day', 'week', 'month', '3months', 'year'] as const
 export type RangeKey = (typeof RANGE_KEYS)[number]
 
@@ -96,6 +98,6 @@ export function parseControls(search: string, today: string): PageControls {
     // An empty source is a parameter that was written and left blank, not a choice. Nothing
     // narrower is possible here: which sources exist is a fact about this person's data, not
     // about the URL, so the enumerated check happens where that list is known (controls/source.ts).
-    source: source === null || source === '' ? 'merged' : source,
+    source: source === null || source === '' ? ALL_SOURCES : source,
   }
 }

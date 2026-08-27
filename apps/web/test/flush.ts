@@ -60,3 +60,22 @@ export async function flush(queryClient: QueryClient, getHtml: () => string): Pr
   }
   throw new Error('flush() timed out: the page never settled (or never started changing at all)')
 }
+
+/**
+ * Pumps the tree until `ready()` holds, for the states flush() cannot reach: a page where one
+ * request is deliberately left hanging so a card can be read while it is still in flight. flush()
+ * waits for nothing to be in flight and throws when that never happens, which is the right posture
+ * for a settled page and the wrong one here, since the whole point is that a query never settles.
+ *
+ * `ready` is a predicate on the tree rather than a tick budget, for the same reason flush() counts
+ * queries rather than milliseconds: a budget tuned on one machine is a race on a slower one. The
+ * state being sampled has to be a resting state, not a moment in a sequence, or this is just a
+ * race with extra steps; a request stubbed to never resolve gives exactly that.
+ */
+export async function pumpUntil(ready: () => boolean, what: string): Promise<void> {
+  for (let attempt = 0; attempt < 2000; attempt += 1) {
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    if (ready()) return
+  }
+  throw new Error(`pumpUntil() timed out waiting for ${what}`)
+}

@@ -10,7 +10,8 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
 // custom properties. Every other happy-dom test in this suite sidesteps that by never mounting a
@@ -73,7 +74,7 @@ function stubFetch(seen: string[]): () => void {
     }
     if (url.includes('/series')) {
       return new Response(JSON.stringify({
-        steps: { points: [{ localDate: '2026-08-01', value: 900, coverage: coverageFor('steps'), sourceMix: null }], reduction: null },
+        steps: { points: [seriesPoint('steps', '2026-08-01', 900)], reduction: null },
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/sleep/nights')) {
@@ -107,7 +108,7 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', 100)],
           reduction: null,
         }
       }
@@ -122,12 +123,13 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
 }
 
 /**
- * Answers /series with a sourceMix that depends on the request's own `source` parameter, the way
- * the real store does: rollup.ts writes sourceMix: null for every per source rollup and only
- * mergeDay's merged rows carry a real mix. A stub that always returned the same sourceMix
- * regardless of source could not catch the bug this file's "keeps a picked device" test exists
- * for, since that bug is specifically the selector losing the mix the instant a request stops
- * asking for merged.
+ * Answers /series with a sourceMix that depends on whether the request's own `source` parameter
+ * is present, the way the real store does: rollup.ts writes sourceMix: null for every per source
+ * rollup and only mergeDay's merged rows carry a real mix, and preferMerged answers a merged row
+ * only when the caller omits `source` (the all sources sentinel). A stub that always returned the
+ * same sourceMix regardless of source could not catch the bug this file's "keeps a picked device"
+ * test exists for, since that bug is specifically the selector losing the mix the instant a
+ * request stops asking for every source.
  */
 function stubFetchBySource(seen: string[]): () => void {
   const original = globalThis.fetch
@@ -147,12 +149,9 @@ function stubFetchBySource(seen: string[]): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [source === 'merged'
-            ? {
-                localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'merged',
-                sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
-              }
-            : { localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'watch', sourceMix: null }],
+          points: [source === null
+            ? seriesPoint(metric, '2026-08-15', 100, { sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]) })
+            : seriesPoint(metric, '2026-08-15', 100, { source: 'watch' })],
           reduction: null,
         }
       }
@@ -258,10 +257,11 @@ describe('the Dashboard round trip', () => {
     mount(tree)
     await flush(client, () => container!.innerHTML)
 
-    // 4 stat tiles plus the seven cards task 10 restored (heart rate range, flagged days, sleep
-    // stages, sleep schedule, daily steps, recovery, anomalies), not 4: this test predates their
-    // return and only ever meant "every card on the page", not "exactly the tiles".
-    expect(container!.querySelectorAll('.card')).toHaveLength(11)
+    // 4 stat tiles plus the six remaining cards task 10 restored (heart rate range, flagged days,
+    // sleep stages, sleep schedule, recovery, anomalies), not 4: this test predates their return
+    // and only ever meant "every card on the page", not "exactly the tiles". Daily steps (the
+    // heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
+    expect(container!.querySelectorAll('.card')).toHaveLength(10)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since
@@ -270,11 +270,38 @@ describe('the Dashboard round trip', () => {
     restore()
   })
 
+  // Every card link, not the two that already did it. The sleep card stayed plain on a comment
+  // saying /sleep "is still pinned to the July fixtures and ignores every parameter it is handed",
+  // which this milestone made untrue: Sleep.tsx reads usePageControls the same as the others. A
+  // reader on a month view following that one link landed back on the default period while the two
+  // links beside it carried theirs. Checking every .card-link rather than naming three keeps a
+  // fourth from arriving plain.
+  it('carries the reader\'s period into every card link', async () => {
+    const seen: string[] = []
+    const restore = stubFetchOnePointPerMetric(seen)
+    window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
+
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    const links = [...container!.querySelectorAll('a.card-link')]
+    expect(links.length).toBeGreaterThan(2)
+    expect(links.map((a) => a.getAttribute('href')!.split('?')[0])).toContain('/sleep')
+    for (const link of links) {
+      const href = link.getAttribute('href')!
+      const params = new URLSearchParams(href.split('?')[1] ?? '')
+      expect(params.get('range'), href).toBe('month')
+      expect(params.get('on'), href).toBe('2026-08-15')
+    }
+    restore()
+  })
+
   // The regression this exists for: distinctSources used to be fed the range scoped queries,
   // which fetch under whatever source the control row has selected, so picking a real device
   // wiped out every sourceMix the selector reads and the select silently fell back to "All
   // sources" while the numbers on screen stayed device filtered. The fix reads a query pinned to
-  // source: 'merged' instead of whatever the reader picked.
+  // the all sources sentinel instead of whatever the reader picked.
   it('keeps a picked device selected and offered in the source selector', async () => {
     const seen: string[] = []
     const restore = stubFetchBySource(seen)
@@ -308,7 +335,7 @@ describe('the Dashboard round trip', () => {
     // The baseline is a separate route reading the same resolved value.
     expect(seen.some((u) => u.includes('/baselines') && u.includes('source=someone-elses'))).toBe(false)
     const select = container!.querySelector('select') as HTMLSelectElement
-    expect(select.value).toBe('merged')
+    expect(select.value).toBe(ALL_SOURCES)
     restore()
   })
 

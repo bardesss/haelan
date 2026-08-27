@@ -11,6 +11,7 @@ import type { Session } from '../src/auth/session.js'
 import { ControlRow } from '../src/components/ControlRow.js'
 import type { PageControlsState } from '../src/controls/usePageControls.js'
 import { syncStatusKey } from '../src/data/useSyncStatus.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -70,7 +71,7 @@ function withQueryAwaitingStatus(node: ReactNode): ReactNode {
 
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
   return {
-    tab: 'month', anchor: '2026-08-15', source: 'merged',
+    tab: 'month', anchor: '2026-08-15', source: ALL_SOURCES,
     from: '2026-08-01', to: '2026-08-31',
     setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
     ...over,
@@ -120,10 +121,10 @@ describe('ControlRow', () => {
     expect(picked).toEqual(['2026-09-02'])
   })
 
-  it('offers merged plus every source the person has, and marks the chosen one', () => {
+  it('offers the all sources sentinel plus every source the person has, and marks the chosen one', () => {
     mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} syncedMinutesAgo={4} />))
     const select = container!.querySelector('select') as HTMLSelectElement
-    expect([...select.options].map((o) => o.value)).toEqual(['merged', 'watch', 'phone'])
+    expect([...select.options].map((o) => o.value)).toEqual([ALL_SOURCES, 'watch', 'phone'])
     expect(select.value).toBe('watch')
   })
 

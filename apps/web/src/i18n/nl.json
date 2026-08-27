@@ -31,7 +31,7 @@
     "nextPeriod": "Volgende periode",
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
-    "sourceMerged": "Alle bronnen",
+    "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
     "sync": "Synchroniseren",
     "syncedAgo": "Gesynchroniseerd {{count}} min geleden",
@@ -58,15 +58,11 @@
     }
   },
   "common": {
-    "periodLabel": "juli 2026",
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
     "to": "tot",
     "loading": "Laden",
-    "bedWakeBasis": "bedtijd en waaktijd, {{nights}} nachten, stip geeft een dutje aan",
-    "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
-    "deviceWornGap": "Het apparaat werd gedragen, dus dit is een echt gat in de meting.",
-    "deviceNotWorn": "Het apparaat werd niet gedragen.",
+    "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
   },
   "errorState": {
@@ -90,32 +86,32 @@
     "steps": {
       "label": "Stappen",
       "basis": "som, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "som, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "som, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse stappen in {{period}}",
       "viewAll": "Bekijk activiteit"
     },
     "restingHr": {
       "label": "Rusthartslag",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse rusthartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
     "sleep": {
       "label": "Slaap",
       "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} nachten, {{count}} nacht niet gedragen",
-      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} nachten, {{count}} nachten niet gedragen",
+      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} nachten, {{count}} nacht niet gedragen",
+      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} nachten, {{count}} nachten niet gedragen",
       "chartLabel": "Nachtelijke slaapduur in {{period}}",
       "viewAll": "Bekijk slaap"
     },
     "meanHr": {
       "label": "Gemiddelde hartslag",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
@@ -124,6 +120,7 @@
       "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",
       "basisThin": "dagelijks minimum, gemiddelde en maximum; de baseline uit de 60 dagen vóór {{on}} is te dun om een band uit te tekenen",
       "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
+      "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
       "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
     },
@@ -134,17 +131,13 @@
     },
     "sleepStages": {
       "label": "Slaapfasen",
-      "basis": "afgelopen nacht, {{date}}",
+      "basis": "meest recente nacht, {{date}}",
       "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
     },
     "sleepSchedule": {
       "label": "Slaapschema",
-      "basis": "bedtijd en waaktijd, {{nights}} nachten"
-    },
-    "dailySteps": {
-      "label": "Dagelijkse stappen",
-      "basis": "kalenderwarmtekaart, {{worn}} van {{total}} dagen gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
-      "chartLabel": "Stappen per dag in {{period}}"
+      "basis_one": "bedtijd en wektijd, {{count}} nacht",
+      "basis_other": "bedtijd en wektijd, {{count}} nachten"
     },
     "recovery": {
       "label": "Herstel",
@@ -155,6 +148,121 @@
       "label": "Slaapafwijkingen",
       "emptyTitle": "Nog geen afwijkingsdetectie.",
       "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
+    }
+  },
+  "recovery": {
+    "title": "Herstel",
+    "units": {
+      "beatsPerMinute": "Slagen per minuut",
+      "bpm": "bpm",
+      "milliseconds": "Milliseconden",
+      "ms": "ms",
+      "breathsPerMinute": "Ademhalingen per minuut",
+      "breathsPerMinuteShort": "ademh./min"
+    },
+    "baselineNote": {
+      "pending": "de baseline wordt nog geladen",
+      "unknown": "de baseline kon niet worden gelezen, dus er is geen vergelijking te zien",
+      "none": "nog geen baseline om mee te vergelijken",
+      "thin": "de baseline uit de 60 dagen vóór {{on}} is te dun om mee te vergelijken",
+      "below": "↓ onder de baseline van {{low}} tot {{high}}",
+      "above": "↑ boven de baseline van {{low}} tot {{high}}",
+      "within": "→ binnen de baseline van {{low}} tot {{high}}"
+    },
+    "restingHeartRate": {
+      "label": "Rusthartslag",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
+      "chartLabel": "Dagelijkse rusthartslag in {{period}}"
+    },
+    "dailyHrv": {
+      "label": "Hartslagvariabiliteit",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
+      "chartLabel": "Dagelijkse hartslagvariabiliteit in {{period}}"
+    },
+    "respiratoryRate": {
+      "label": "Ademhalingsfrequentie",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
+      "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
+    }
+  },
+  "activity": {
+    "title": "Activiteit",
+    "units": {
+      "distance": "Afstand in kilometers",
+      "km": "km",
+      "floors": "Beklommen verdiepingen",
+      "floorsShort": "verdiepingen",
+      "kcal": "Kilocalorieën",
+      "kcalShort": "kcal",
+      "minutes": "Minuten",
+      "min": "min",
+      "workouts": "Work-outs",
+      "workoutsShort": "work-outs"
+    },
+    "dailySteps": {
+      "label": "Dagelijkse stappen",
+      "basis": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basisWorn_one": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basisWorn_other": "kalenderwarmtekaart, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen, 0 tot {{maxSteps}} stappen, sterkere kleur is meer stappen, dagen zonder meting hebben een afwezigheidsstip",
+      "basisNoData": "kalenderwarmtekaart, geen metingen in deze {{total}} dagen, elke dag heeft een afwezigheidsstip",
+      "chartLabel": "Stappen per dag in {{period}}"
+    },
+    "distance": {
+      "label": "Afstand",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse afstand in {{period}}"
+    },
+    "floors": {
+      "label": "Beklommen verdiepingen",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijks beklommen verdiepingen in {{period}}"
+    },
+    "totalCalories": {
+      "label": "Totale calorieën",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse totale calorieën in {{period}}"
+    },
+    "activeMinutesLight": {
+      "label": "Lichte activiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse minuten lichte activiteit in {{period}}"
+    },
+    "activeMinutesModerate": {
+      "label": "Matige activiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse minuten matige activiteit in {{period}}"
+    },
+    "activeMinutesVigorous": {
+      "label": "Intensieve activiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse minuten intensieve activiteit in {{period}}"
+    },
+    "activeZoneMinutesFatBurn": {
+      "label": "Vetverbrandingszone-minuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse vetverbrandingszone-minuten in {{period}}"
+    },
+    "activeZoneMinutesCardio": {
+      "label": "Cardiozone-minuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse cardiozone-minuten in {{period}}"
+    },
+    "activeZoneMinutesPeak": {
+      "label": "Piekzone-minuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse piekzone-minuten in {{period}}"
+    },
+    "workoutCount": {
+      "label": "Work-outs",
+      "basis": "aantal, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijks aantal work-outs in {{period}}"
+    },
+    "workoutMinutes": {
+      "label": "Work-outminuten",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse work-outminuten in {{period}}"
     }
   },
   "charts": {
@@ -193,40 +301,91 @@
   },
   "sleep": {
     "title": "Slaap",
-    "noDate": "geen datum",
-    "lastRecordedNightFallback": "de laatst geregistreerde nacht",
-    "lastNight": {
-      "label": "Afgelopen nacht",
-      "basis": "geregistreerd, {{date}}",
-      "emptyTitle": "Geen slaap geregistreerd voor deze nacht."
-    },
-    "stages": {
-      "label": "Slaapfasen",
-      "basis": "afgelopen nacht, {{date}}, per minuut",
-      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
-    },
     "stage": {
       "deep": "Diep",
       "light": "Licht",
       "rem": "REM",
       "awake": "Wakker"
     },
-    "nap": {
-      "label": "Dutje",
-      "summary_one": "een dutje geregistreerd, begonnen om {{times}}, {{date}}",
-      "summary_other": "{{count}} dutjes geregistreerd, begonnen om {{times}}, {{date}}",
-      "emptyTitle": "Geen dutje geregistreerd afgelopen nacht.",
-      "wornAbsence": "Het apparaat werd gedragen op {{date}}, dus dit is een echte afwezigheid en geen ontbrekende data.",
-      "notWornEither": "Het apparaat werd niet gedragen, dus is er sowieso geen meting."
+    "baselineNote": {
+      "pending": "de baseline wordt nog geladen",
+      "unknown": "de baseline kon niet worden gelezen, dus er wordt geen vergelijking getoond",
+      "none": "nog geen baseline om mee te vergelijken",
+      "thin": "de baseline van de 60 nachten voor {{on}} is te dun om mee te vergelijken",
+      "below": "↓ onder de baseline van {{low}} tot {{high}}",
+      "above": "↑ boven de baseline van {{low}} tot {{high}}",
+      "within": "→ binnen de baseline van {{low}} tot {{high}}"
     },
-    "schedule": {
-      "label": "Slaapschema, maand"
+    "units": {
+      "minutes": "Minuten",
+      "percent": "Percentage",
+      "percentShort": "%",
+      "minutesFromMidnight": "Minuten vanaf middernacht",
+      "naps": "Dutjes",
+      "napsShort": "dutjes"
     },
-    "baselineRange": "de baseline van {{low}} tot {{high}}",
-    "baselineBasis": "baseline is het eigen bereik van {{low}} tot {{high}} van deze slaper",
-    "belowBaseline": "↓ onder {{range}}",
-    "aboveBaseline": "↑ boven {{range}}",
-    "withinBaseline": "→ binnen {{range}}"
+    "asleepMinutes": {
+      "label": "Tijd geslapen",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten; {{note}}",
+      "chartLabel": "Tijd geslapen per nacht in {{period}}"
+    },
+    "deepMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Diepe slaap per nacht in {{period}}"
+    },
+    "lightMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Lichte slaap per nacht in {{period}}"
+    },
+    "remMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "REM-slaap per nacht in {{period}}"
+    },
+    "awakeMinutes": {
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Tijd wakker per nacht in {{period}}"
+    },
+    "inBedMinutes": {
+      "label": "Tijd in bed",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Tijd in bed per nacht in {{period}}"
+    },
+    "efficiency": {
+      "label": "Slaapefficiëntie",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Slaapefficiëntie per nacht in {{period}}"
+    },
+    "bedtimeMinutes": {
+      "label": "Bedtijd",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Bedtijd per nacht in {{period}}"
+    },
+    "waketimeMinutes": {
+      "label": "Wektijd",
+      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "chartLabel": "Wektijd per nacht in {{period}}"
+    },
+    "napCount": {
+      "label": "Dutjes",
+      "basis_one": "{{count}} dutje, {{reported}} van {{total}} nachten",
+      "basis_other": "{{count}} dutjes, {{reported}} van {{total}} nachten",
+      "chartLabel": "Dutjes per nacht in {{period}}"
+    },
+    "napMinutes": {
+      "label": "Dutjesduur",
+      "basis": "som, {{reported}} van {{total}} nachten",
+      "chartLabel": "Dutjesduur per nacht in {{period}}"
+    },
+    "sleepStages": {
+      "label": "Slaapfasen",
+      "basis": "meest recente nacht, {{date}}",
+      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
+    },
+    "sleepSchedule": {
+      "label": "Slaapschema",
+      "basis_one": "bedtijd en wektijd, {{count}} nacht",
+      "basis_other": "bedtijd en wektijd, {{count}} nachten"
+    }
   },
   "setup": {
     "genericError": "dat lukte niet",

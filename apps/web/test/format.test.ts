@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatClock, toneFor, toneOf, trend } from '../src/format.js'
+import { formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
 // A stub, not a real i18n instance: trend() only needs something call-shaped like `t`, and a
@@ -116,5 +116,53 @@ describe('trend', () => {
     const d = trend(t, [1, 1, 1, 2, 2, 2], 'higher-is-better')
     expect(d).not.toBeUndefined()
     expect(d).toMatchObject({ dir: 'up', tone: 'good' })
+  })
+})
+
+describe('metricIsClockOffset', () => {
+  // Read off the catalogue's own unit rather than a list kept in the web app, so this asserts the
+  // catalogue really carries the fact rather than that a duplicate list was typed correctly. If
+  // metrics.ts ever renames the unit, this is what says so instead of two clock tiles quietly
+  // regaining a percentage.
+  it('names the two metrics whose values are clock positions', () => {
+    expect(metricIsClockOffset('sleep_bedtime_minutes')).toBe(true)
+    expect(metricIsClockOffset('sleep_waketime_minutes')).toBe(true)
+  })
+
+  // Duration metrics, which are minutes of something and do have meaningful ratios, must not be
+  // caught by a unit test that matched on the substring "minutes".
+  it('leaves ordinary minute durations and counts alone', () => {
+    for (const metric of ['sleep_asleep_minutes', 'sleep_nap_minutes', 'workout_minutes', 'steps', 'heart_rate']) {
+      expect(metricIsClockOffset(metric), metric).toBe(false)
+    }
+  })
+
+  // A card wired to a metric nobody added to the catalogue is a mistake elsewhere; answering false
+  // here keeps it a mistake about that card rather than a crash in every card's delta.
+  it('answers false for a metric the catalogue does not carry', () => {
+    expect(metricIsClockOffset('not_a_metric')).toBe(false)
+  })
+})
+
+describe('deltaFor', () => {
+  // The numbers the defect actually produced, kept here rather than only in a page test: a
+  // fortnight moving from 23:58 to 23:30 is a person going to bed earlier, and trend() reads it as
+  // a 1400% rise. deltaFor is what every page tile calls, so this is the assertion that says the
+  // suppression is a property of the metric and not of whichever page drew it.
+  it('shows no delta over a clock offset, whatever trend would have said about it', () => {
+    const { t } = stubT()
+    const bedtimes = [-2, -2, -30, -30]
+    expect(trend(t, bedtimes)).toMatchObject({ dir: 'up', text: '↑ 1400%' })
+    expect(deltaFor(t, 'sleep_bedtime_minutes', bedtimes, 'neutral')).toBeUndefined()
+    expect(deltaFor(t, 'sleep_waketime_minutes', [360, 360, 450, 450], 'neutral')).toBeUndefined()
+  })
+
+  // The other half: an ordinary metric still gets exactly what trend() computes, so this is not a
+  // helper that quietly suppresses everything.
+  it('passes an ordinary metric straight through to trend', () => {
+    const { t } = stubT()
+    const values = [400, 400, 440, 440]
+    expect(deltaFor(t, 'sleep_asleep_minutes', values, 'higher-is-better'))
+      .toEqual(trend(t, values, 'higher-is-better'))
   })
 })

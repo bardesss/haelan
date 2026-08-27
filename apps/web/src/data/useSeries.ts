@@ -3,6 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import { sourceParam } from '../controls/source.js'
 
 // Mirrors the daily row apps/server/src/routes/v1/series.ts sends over the wire (personQuery's
 // DailyPoint in packages/core/src/query/personQuery.ts), not a trimmed view of only what a
@@ -44,7 +45,8 @@ export function seriesPath(personId: string, metrics: string[], range: SeriesRan
   params.set('agg', agg)
   params.set('from', range.from)
   params.set('to', range.to)
-  params.set('source', range.source)
+  const source = sourceParam(range.source)
+  if (source !== undefined) params.set('source', source)
   return `/api/v1/p/${personId}/series?${params.toString()}`
 }
 

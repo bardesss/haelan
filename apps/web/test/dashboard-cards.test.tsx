@@ -10,8 +10,8 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { flush } from './flush.js'
-import { coverageFor } from './metricCoverage.js'
+import { flush, pumpUntil } from './flush.js'
+import { seriesPoint } from './metricCoverage.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
 // charts draw for real here, and echarts.init's effect throws "missing chart token" without it.
@@ -57,7 +57,7 @@ type Baseline = { center: number, spread: number, n: number, thin: boolean } | n
  * dashboard-round-trip.test.tsx's stubFetchOnePointPerMetric does, so heart_rate has something to
  * plot and the band, when the baseline says to draw one, has an axis to sit on.
  */
-function stubFetch(opts: { baseline: Baseline }): () => void {
+function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -69,7 +69,7 @@ function stubFetch(opts: { baseline: Baseline }): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 60, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', 60)],
           reduction: null,
         }
       }
@@ -79,6 +79,9 @@ function stubFetch(opts: { baseline: Baseline }): () => void {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/baselines')) {
+      // Never resolving rather than delayed, so the in flight state is somewhere this page rests
+      // and not a moment a test has to catch it passing through.
+      if (opts.hangBaselines === true) return new Promise<Response>(() => {})
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -138,6 +141,41 @@ describe('a card whose request failed', () => {
   })
 })
 
+/**
+ * One real night: distinct bed and wake minutes, unlike stubFetch's one-point-per-metric answer,
+ * which hands sleep_bedtime_minutes and sleep_waketime_minutes the same value and so gets nulled
+ * out by withinSchedule (wake <= bed) rather than counted as a drawn night.
+ */
+function stubOneNight(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        const value = metric === 'sleep_bedtime_minutes' ? -30 : metric === 'sleep_waketime_minutes' ? 420 : 60
+        body[metric] = {
+          points: [seriesPoint(metric, '2026-08-15', value)],
+          reduction: null,
+        }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the remaining Dashboard cards', () => {
   // The rule the band exists for. A band computed from three days looks exactly as authoritative
   // as one computed from thirty, and thin is the reader's only signal that it is not.
@@ -173,23 +211,6 @@ describe('the remaining Dashboard cards', () => {
     restore()
   })
 
-  // stubFetch answers every requested metric with exactly one point (2026-08-15), so a real
-  // month range has far more calendar days than reporting days. The basis must count the former;
-  // basisOf(stepsPoints) would have read the same "1 of 1" it would for a single-day range, which
-  // is the regression pages.test.tsx once pinned in as correct.
-  it('states the heatmap total against every calendar day in range, not just the days that reported', async () => {
-    const restore = stubFetch({ baseline: null })
-    // Real interpolation needed here, unlike the other tests in this file: without an
-    // I18nProvider, t() returns the raw key and the numbers this test reads never appear as text.
-    const { client, tree } = withQuery(<Dashboard />)
-    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await flush(client, () => container!.innerHTML)
-    const match = container!.textContent!.match(/(\d+) of (\d+) days worn/)
-    expect(match).not.toBeNull()
-    expect(Number(match![2])).toBeGreaterThan(1)
-    restore()
-  })
-
   // The defect the stub above was hiding. Every sleep row the server can send carries
   // coverage: null, and reading that as a zero made the card render "Device not worn" over a
   // month of real nights while the mean was never drawn at all.
@@ -202,6 +223,46 @@ describe('the remaining Dashboard cards', () => {
     // card that formats its value as a duration.
     expect(container!.textContent).toContain('1h 00m')
     expect(container!.textContent).not.toContain('Device not worn')
+    restore()
+  })
+
+  // dashboard.sleepSchedule.basis had no plural form and 1 is reachable, the surviving instance
+  // of the hazard M3d-1 fixed on the wear clause ("1 days not worn").
+  it('renders the sleep schedule basis in the singular for one night', async () => {
+    const restore = stubOneNight()
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    // Scoped to the sleep schedule's own basis text: dashboard.sleep's unrelated basis line also
+    // reports against "nights" and, with this stub's single point, happens to read "1 of 31
+    // nights" too.
+    expect(container!.textContent).toContain('bed and wake time, 1 night')
+    expect(container!.textContent).not.toContain('bed and wake time, 1 nights')
+    restore()
+  })
+
+  // The principle heartRateBasisKey's own comment states three lines above the branch that broke
+  // it: "no baseline yet" is a claim about the person's history, and an unanswered request makes
+  // no such claim. MetricCard gates the card on the three heart rate series, /baselines settles
+  // separately, so the card draws while this one is still in flight and the null branch spoke for
+  // it.
+  it('does not claim there is no baseline while the baseline request is in flight', async () => {
+    const restore = stubFetch({ baseline: null, hangBaselines: true })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    // Gated on the basis line, not on the card's label: Dashboard passes `label` to MetricCard and
+    // MetricCard renders it in the pending branch too, so waiting for "Heart rate range" can go
+    // true a tick before any basis exists and the assertions below would be reading an empty card.
+    // "daily minimum, mean and maximum" is the shared prefix of all four heartRateRange templates,
+    // so it says a basis has rendered without being the clause under test, which is what keeps a
+    // regression an assertion failure rather than a timeout.
+    await pumpUntil(
+      () => container!.textContent!.includes('daily minimum, mean and maximum'),
+      'the heart rate range basis line',
+    )
+    const text = container!.textContent!
+    expect(text).toContain('the baseline is still loading')
+    expect(text).not.toContain('no baseline yet to compare against')
     restore()
   })
 

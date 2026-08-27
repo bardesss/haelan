@@ -1,17 +1,18 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { Activity } from '../src/pages/Activity.js'
+import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -50,14 +51,18 @@ function stubFetch(): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of params.getAll('metric')) {
         body[metric] = {
-          points: DAYS.map((date, i) => ({
-            localDate: date,
-            source: 'merged',
-            value: metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
-            coverage: metric === 'heart_rate' && date === UNWORN_DAY ? 1 / 24 : coverageFor(metric),
-            sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
-            updatedAtMs: null,
-          })),
+          points: DAYS.map((date, i) => seriesPoint(
+            metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
+            {
+              // The one day heart rate is at the derivation's coverage floor, which is what gives
+              // the wear clause a singular to render (see the unworn day assertions below).
+              ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
+              sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
+              // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
+              // M3b added the column), and this is the one stub that exercises that half.
+              updatedAtMs: null,
+            },
+          )),
           reduction: null,
         }
       }
@@ -84,16 +89,31 @@ function stubFetch(): () => void {
   return () => { globalThis.fetch = original }
 }
 
-/** Mounts the Dashboard for real, waits for every query to settle, and returns the settled markup. */
-async function settledDashboard(lng: string): Promise<string> {
+// One path and anchor per page, sharing Dashboard's own week and gap (2026-08-10 through -16,
+// only four of the seven days answering): the same partial week that gives every basis line on
+// Dashboard a denominator bigger than its numerator does the same for whichever cards Activity,
+// Recovery and Sleep draw from the identical DAYS array stubFetch answers every /series call with.
+const ACTIVITY_ROUTE = '/activity?range=week&on=2026-08-12'
+const RECOVERY_ROUTE = '/recovery?range=week&on=2026-08-12'
+const SLEEP_ROUTE = '/sleep?range=week&on=2026-08-12'
+
+/**
+ * Mounts one page for real, waits for every query to settle, and returns the settled markup.
+ *
+ * Extracted out of what used to be Dashboard's own `settledDashboard`, once Activity, Recovery and
+ * Sleep needed byte identical mount/flush/unmount plumbing around three different components: a
+ * fourth copy of this function differing only in which component it renders was the same shape
+ * pageShell.ts already exists to rule out one level up, just not yet written down at this level.
+ */
+async function settledPage(Page: () => ReactNode, route: string, lng: string): Promise<string> {
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  window.history.replaceState(null, '', RANGE)
+  window.history.replaceState(null, '', route)
   const tree: ReactNode = (
-    <I18nProvider lng={lng}><QueryClientProvider client={client}><Dashboard /></QueryClientProvider></I18nProvider>
+    <I18nProvider lng={lng}><QueryClientProvider client={client}><Page /></QueryClientProvider></I18nProvider>
   )
   act(() => { root.render(tree) })
   await flush(client, () => container.innerHTML)
@@ -103,21 +123,47 @@ async function settledDashboard(lng: string): Promise<string> {
   return html
 }
 
+const settledDashboard = (lng: string) => settledPage(Dashboard, RANGE, lng)
+const settledActivity = (lng: string) => settledPage(Activity, ACTIVITY_ROUTE, lng)
+const settledRecovery = (lng: string) => settledPage(Recovery, RECOVERY_ROUTE, lng)
+const settledSleep = (lng: string) => settledPage(Sleep, SLEEP_ROUTE, lng)
+
 const restore = stubFetch()
-// Sleep is still fixture backed and resolves nothing, so a static render is the whole of it. Its
-// ControlRow reads the session and the sync status, hence the client in the tree.
-const sleepHtml = (lng: string) => renderToStaticMarkup(
-  <I18nProvider lng={lng}>
-    <QueryClientProvider client={new QueryClient()}><Sleep /></QueryClientProvider>
-  </I18nProvider>,
-)
+// Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
+// found that Activity and Recovery, converted off fixtures in the two tasks before Sleep, had
+// never been added here either, so three new pages and twenty odd new cards sat outside every
+// assertion below. All four settle for real now through the same stubFetch week, rather than
+// excluding a whole page because one of its charts cannot answer every assertion (see
+// HAS_ABSENCE_CHART below for the one assertion that genuinely does not apply to every page).
 const pages = {
   Dashboard: await settledDashboard('en'),
-  Sleep: sleepHtml('en'),
+  Activity: await settledActivity('en'),
+  Recovery: await settledRecovery('en'),
+  Sleep: await settledSleep('en'),
 }
 const dashboardNl = await settledDashboard('nl')
-const sleepNl = sleepHtml('nl')
 restore()
+
+// Whether a page carries at least one dense, by-position chart that draws an explicit absence
+// mark for a calendar day nothing answered (Dashboard's HeartRateRange, Activity's own steps
+// heatmap). An ordinary Sparkline, which is every per-metric tile chart on Recovery and Sleep,
+// builds its accessible table straight from the points a query actually returned (SeriesPoint.value
+// is never null, so there is no gap value to render a word for; see useSeries.ts's own comment),
+// not from a dense day-by-day array with a placeholder for the days it left out. Sleep's other two
+// charts (Hypnogram, SleepSchedule, added this task) are not Sparklines but are not dense
+// by-position calendar charts either: a hypnogram draws the one night a query actually returned,
+// and a schedule row exists only for a night a query actually returned, neither drawing a fixed
+// calendar position with a placeholder for a day nothing answered. So a gapped week changes how
+// many rows any of these charts' tables have, never what a missing one says, and "not worn"/
+// "no reading" can never appear in either page's markup no matter what the stub answers. This is
+// not a coverage question either: none of Recovery's three metrics carries a wear signal
+// (Recovery.tsx's own card() comment) and neither does any sleep metric (emptyState.ts's own
+// coverageIsWearSignal), so even a wear-signal-capable metric drawn this way would still say
+// nothing, the same reason Activity's own distance and floors cards cannot either despite steps,
+// right beside them, being able to through the one chart that draws densely.
+const HAS_ABSENCE_CHART: Record<string, boolean> = {
+  Dashboard: true, Activity: true, Recovery: false, Sleep: false,
+}
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
 // live. Asserting against the whole page cannot tell a chart's table apart from a card's basis
@@ -153,59 +199,115 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(html).not.toContain('NaN')
   })
 
-  it('never renders absence as a zero', () => {
-    // Both halves of the rule, against a page that has really answered. A day with no row shows a
-    // word in the table alternatives, and no headline value is the zero a formatter produces when
-    // it is handed nothing.
-    expect(tables(html)).toMatch(/not worn|no reading/)
+  // The Critical MetricCard shipped once it owned the Card shell: giving Card a basis unconditionally
+  // on top of a tile card that already prints one through its own StatTile put the same sentence on
+  // the page twice, the second copy carrying the delta clause the first lacked. Cards do not nest in
+  // this markup, so a non-greedy match up to the next closing section stays inside one card's own
+  // subtree.
+  it('draws at most one basis line per card', () => {
+    const cards = [...html.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
+    expect(cards.length).toBeGreaterThan(0)
+    for (const card of cards) {
+      const basisLines = [...card.matchAll(/<p class="basis"/g)].length
+      expect(basisLines, card).toBeLessThanOrEqual(1)
+    }
+  })
+
+  // The half of the rule every page can be held to regardless of which chart it draws: no
+  // headline value is the zero a formatter produces when it is handed nothing to summarise.
+  it('never renders a zero for an absent value', () => {
     expect(html).not.toMatch(/<div class="value">0(<|&nbsp;| )/)
   })
 
-  // These two pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // The other half, only for a page carrying a chart that can actually say it: a day with no row
+  // shows a word in that chart's own table alternative. See HAS_ABSENCE_CHART's own comment for
+  // why Recovery and Sleep are excluded by name rather than by leaving the whole page out of this
+  // describe.each the way the review round that added them here was asked not to repeat.
+  it.skipIf(!HAS_ABSENCE_CHART[_name])('states absence in the accessible table, not silently', () => {
+    expect(tables(html)).toMatch(/not worn|no reading/)
+  })
+
+  // These four pages carry most of the catalogue, so a mistyped key would otherwise render as
   // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
   // them look for the shape a missing translation actually takes.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts)\.[a-zA-Z][a-zA-Z.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState)\.[a-zA-Z][a-zA-Z.]*\b/)
+  })
+
+  // Both of these ran against Dashboard alone until the review that spotted three more pages had
+  // joined the sweep without them: Activity carries eleven labelled cards and Sleep thirteen, all
+  // of them outside a rule about labels being distinguishable and a rule about a delta stating the
+  // window it compared.
+  it('does not label two different cards with the same name', () => {
+    const labels = [...html.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
+    expect(labels.length).toBeGreaterThan(0)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('states the window every delta compared', () => {
+    const deltas = [...html.matchAll(/class="delta"/g)].length
+    const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
+    expect(deltas).toBeGreaterThan(0)
+    expect(windows).toHaveLength(deltas)
+    // A window comparing nothing against nothing is not a window. The old assertion counted these
+    // on a page where every one of them read "the last 0 readings against the first 0".
+    for (const window of windows) {
+      expect(Number(window[1])).toBeGreaterThan(0)
+      expect(Number(window[2])).toBeGreaterThan(0)
+    }
   })
 })
 
 describe('chart tables follow the active language', () => {
   // Every chart's accessible table used to be built from English literals regardless of the
   // active language, which meant a Dutch screen reader user got an English table on both pages.
-  it('translates column headers, weekday labels and absence words', () => {
+  //
+  // Weekday labels are not checked here any more: the only chart on either of these two pages
+  // that carried a weekday column was the daily steps heatmap, and M3d2 moved it to Activity.tsx,
+  // which this file's own round trip harness does not stub. Date and absence words still come
+  // through every ordinary Sparkline and the heart rate range chart, both of which stay on
+  // Dashboard, so they are still worth pinning here.
+  it('translates column headers and absence words', () => {
     const nlTables = tables(dashboardNl)
     expect(nlTables).toContain('Datum')
-    expect(nlTables).toContain('Weekdag')
     // In a chart table, not merely somewhere on the page: this used to be satisfied by a tile's
     // own basis line while every table below it stayed English.
     expect(nlTables).toContain('niet gedragen')
     expect(nlTables).toContain('geen meting')
     expect(nlTables).not.toContain('>Date<')
-    expect(nlTables).not.toContain('>Weekday<')
     expect(nlTables).not.toContain('not worn')
     expect(nlTables).not.toContain('no reading')
   })
 
-  it('translates sleep stage names through the shared sleep.stage keys, not a second set', () => {
-    expect(sleepNl).toContain('Diep')
-    expect(sleepNl).not.toContain('>Deep<')
-  })
+  // Sleep's own stage name translation moved to sleep-page.test.tsx's "translates sleep stage
+  // names through the shared sleep.stage keys, not a second set" alongside the rest of Sleep's
+  // coverage, once Sleep left this file's static-render harness (see the comment above `pages`).
 })
 
 describe('Dashboard specifics', () => {
   const html = pages.Dashboard
 
-  it('states the heatmap colour domain from the steps it actually drew', () => {
-    // The stub's largest step count. Read off the data rather than pinned to a fixture maximum,
-    // and no longer the "0 to 0" a page that had asked nothing used to print.
-    expect(html).toContain('0 to 81 steps')
-    expect(html).toContain('stronger colour is more steps')
+  // The daily steps heatmap this used to check moved to Activity.tsx in M3d2, along with the
+  // colour domain and "stronger colour is more steps" copy it drew; activity.test.tsx covers its
+  // dense-denominator basis line directly rather than through this file's own round trip harness,
+  // which stubs only Dashboard and Sleep.
+  it('counts the basis against every calendar day in the period, not the days that answered', () => {
+    // The stubbed week is seven calendar days and DAYS answers four of them, so every card reads
+    // "4 of 7": the denominator is the range and the numerator is the rows the headline figure was
+    // actually computed from.
+    expect(html).toContain('4 of 7 days')
+    expect(html).not.toMatch(/(\d+) of \1 days/)
   })
 
-  it('counts the basis against every calendar day in the period, not the days that answered', () => {
-    // The stubbed week is seven days and only three of them report.
-    expect(html).toContain('3 of 7 days')
-    expect(html).not.toMatch(/(\d+) of \1 days/)
+  // The numerator, which the denominator assertion above cannot see. Five wear-clause templates
+  // led with the worn count against the dense calendar denominator, so heart rate read "mean, 3 of
+  // 7 days, 1 day not worn" over a mean taken across all four reporting days: the stated count was
+  // not the count the number came from, and nothing on the card said which of the two it was.
+  // Falsifiable in the direction that matters, since reverting any of those templates to the worn
+  // count brings 3 back for this exact fixture (heart_rate has one day at the coverage floor).
+  it('leads with the days the figure was computed from, not the worn subset of them', () => {
+    expect(html).toContain('4 of 7 days, 1 day not worn')
+    expect(html).not.toContain('3 of 7 days')
   })
 
   // The wear clause was structurally always zero until the coverage fix, so it only ever rendered
@@ -223,21 +325,4 @@ describe('Dashboard specifics', () => {
     expect(dashboardNl).toContain('0 dagen niet gedragen')
   })
 
-  it('does not label two different cards with the same name', () => {
-    const labels = [...html.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
-    expect(new Set(labels).size).toBe(labels.length)
-  })
-
-  it('states the window every delta compared', () => {
-    const deltas = [...html.matchAll(/class="delta"/g)].length
-    const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
-    expect(deltas).toBeGreaterThan(0)
-    expect(windows).toHaveLength(deltas)
-    // A window comparing nothing against nothing is not a window. The old assertion counted these
-    // on a page where every one of them read "the last 0 readings against the first 0".
-    for (const window of windows) {
-      expect(Number(window[1])).toBeGreaterThan(0)
-      expect(Number(window[2])).toBeGreaterThan(0)
-    }
-  })
 })

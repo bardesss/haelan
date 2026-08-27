@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -52,10 +52,7 @@ function stubFetch(): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')) {
         body[metric] = {
-          points: DAYS.map((date, i) => ({
-            localDate: date, source: 'merged', value: 400 + i * 10,
-            coverage: coverageFor(metric), sourceMix: null, updatedAtMs: null,
-          })),
+          points: DAYS.map((date, i) => seriesPoint(metric, date, 400 + i * 10)),
           reduction: null,
         }
       }
