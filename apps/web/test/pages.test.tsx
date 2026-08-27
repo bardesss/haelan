@@ -292,12 +292,22 @@ describe('Dashboard specifics', () => {
   // dense-denominator basis line directly rather than through this file's own round trip harness,
   // which stubs only Dashboard and Sleep.
   it('counts the basis against every calendar day in the period, not the days that answered', () => {
-    // The stubbed week is seven calendar days and DAYS answers four of them. "3 of 7 days" is
-    // therefore heart rate's wear clause rather than any card's reported count: four days answered
-    // and UNWORN_DAY is one of them, leaving three worn. Either way the point holds, that a
-    // denominator is the range and not the rows, which the second assertion is what actually pins.
-    expect(html).toContain('3 of 7 days')
+    // The stubbed week is seven calendar days and DAYS answers four of them, so every card reads
+    // "4 of 7": the denominator is the range and the numerator is the rows the headline figure was
+    // actually computed from.
+    expect(html).toContain('4 of 7 days')
     expect(html).not.toMatch(/(\d+) of \1 days/)
+  })
+
+  // The numerator, which the denominator assertion above cannot see. Five wear-clause templates
+  // led with the worn count against the dense calendar denominator, so heart rate read "mean, 3 of
+  // 7 days, 1 day not worn" over a mean taken across all four reporting days: the stated count was
+  // not the count the number came from, and nothing on the card said which of the two it was.
+  // Falsifiable in the direction that matters, since reverting any of those templates to the worn
+  // count brings 3 back for this exact fixture (heart_rate has one day at the coverage floor).
+  it('leads with the days the figure was computed from, not the worn subset of them', () => {
+    expect(html).toContain('4 of 7 days, 1 day not worn')
+    expect(html).not.toContain('3 of 7 days')
   })
 
   // The wear clause was structurally always zero until the coverage fix, so it only ever rendered

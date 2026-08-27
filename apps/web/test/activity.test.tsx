@@ -204,7 +204,10 @@ describe('the Activity page', () => {
     await flush(client, () => container!.innerHTML)
     const text = container!.textContent!
     expect(text).toContain('calendar heatmap, 2 of 31 days, 1 day not worn')
-    expect(text).not.toContain('1 of 31 days worn')
+    // The worn numerator specifically, which for this stub is 1 against the same denominator.
+    // "1 of 31 days worn" was the earlier form of this assertion and could not fail, since the
+    // trailing "worn" left neither catalogue; this names a string the defect really would produce.
+    expect(text).not.toContain('calendar heatmap, 1 of 31 days')
     restore()
   })
 

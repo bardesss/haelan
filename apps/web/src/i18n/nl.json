@@ -86,32 +86,32 @@
     "steps": {
       "label": "Stappen",
       "basis": "som, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "som, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "som, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse stappen in {{period}}",
       "viewAll": "Bekijk activiteit"
     },
     "restingHr": {
       "label": "Rusthartslag",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse rusthartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
     "sleep": {
       "label": "Slaap",
       "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} nachten, {{count}} nacht niet gedragen",
-      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} nachten, {{count}} nachten niet gedragen",
+      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} nachten, {{count}} nacht niet gedragen",
+      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} nachten, {{count}} nachten niet gedragen",
       "chartLabel": "Nachtelijke slaapduur in {{period}}",
       "viewAll": "Bekijk slaap"
     },
     "meanHr": {
       "label": "Gemiddelde hartslag",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "gemiddelde, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
@@ -210,8 +210,8 @@
     "distance": {
       "label": "Afstand",
       "basis": "som, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "som, {{worn}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "som, {{worn}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
       "chartLabel": "Dagelijkse afstand in {{period}}"
     },
     "floors": {

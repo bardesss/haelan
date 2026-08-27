@@ -53,14 +53,19 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   basisPlacement: 'header' | 'body'
   basisKey: string
   basisWornKey: string
-  // worn and reported stay reserved: MetricCard always overwrites them after the spread (reported
-  // in both branches, worn only in the wear branch, but a value a caller passed for it would just
-  // sit there unused, which is its own kind of trap), so a caller's own copy could only ever be
-  // silently discarded or silently ignored, never actually used. count is not reserved the same
-  // way any more: it is only ever overwritten in the wear branch below, and a caller routed through
-  // the plain key (a card whose metric carries no wear signal, such as a night count) owns that
-  // clause outright and needs its own count to fill a plural i18next reads no other name for. See
-  // the wear/plain split lower in this file for which branch actually applies it.
+  // reported stays reserved because MetricCard always overwrites it after the spread, in both
+  // branches, so a caller's own copy could only ever be silently discarded.
+  //
+  // worn stays reserved for a different reason now: this component no longer computes one, and no
+  // basis template names one. A caller supplying it would therefore not be discarded, it would
+  // reach i18next and render, which is the only way back to a card leading with a worn count over
+  // a headline computed from every reporting day. Reserving it is what makes that unbuildable
+  // rather than merely absent today.
+  //
+  // count is not reserved either way: it is only ever overwritten in the wear branch below, and a
+  // caller routed through the plain key (a card whose metric carries no wear signal, such as a
+  // night count) owns that clause outright and needs its own count to fill a plural i18next reads
+  // no other name for. See the wear/plain split lower in this file for which branch applies it.
   basisValues?: Record<string, unknown> & { worn?: never, reported?: never }
   // Rendered inside the Card shell in every branch, error, pending, empty and data alike: a card
   // link ("View activity") sits beside the metric content today and stayed visible through every
@@ -104,8 +109,13 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   // picks between a key's _one and _other forms. It was `unworn` while the number was
   // structurally always zero, which read as "0 days not worn" in every language and hid the
   // missing plural; the coverage fix made one reachable, and one is where a missing plural shows.
+  //
+  // No worn count is computed, and that is the point rather than an omission. Every basis line
+  // leads with `reported`, because `reported` is the set the headline figure above it was computed
+  // from: a mean over four reporting days headed "3 of 7 days" states a count the number does not
+  // come from, and the reader has no way to see which of the two is the real basis. The wear
+  // clause below is a statement about those same reporting days, not a competing numerator.
   const answers = points.map((point) => wornOn(metric, point))
-  const worn = answers.filter((w) => w === true).length
   const count = answers.filter((w) => w === false).length
   const reported = points.length
 
@@ -118,14 +128,14 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   // and an _other to choose between: passing it to a key with neither would ask i18next to
   // pluralise a string nobody wrote a plural for.
   //
-  // basisValues spreads first, not last, in the wear branch: worn, count and reported are computed
-  // above from the same metric and points that gated the states above them, and a caller's own copy
-  // of those figures landing after them in the spread would silently overwrite a truthful
-  // computation with a second, independently derived one, the very split this component exists to
-  // make impossible. The plain branch only owns `reported` the same way, so a caller's own `count`
+  // basisValues spreads first, not last, in the wear branch: count and reported are computed above
+  // from the same metric and points that gated the states above them, and a caller's own copy of
+  // those figures landing after them in the spread would silently overwrite a truthful computation
+  // with a second, independently derived one, the very split this component exists to make
+  // impossible. The plain branch only owns `reported` the same way, so a caller's own `count`
   // (a night count, a workout count, anything the wear clause never speaks to) survives there.
   const basis = coverageIsWearSignal(metric)
-    ? t(basisWornKey, { ...basisValues, worn, count, reported })
+    ? t(basisWornKey, { ...basisValues, count, reported })
     : t(basisKey, { ...basisValues, reported })
 
   // children always receives the real basis string regardless of placement, since a 'body' caller
