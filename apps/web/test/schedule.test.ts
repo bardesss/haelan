@@ -168,21 +168,31 @@ describe('noDataYFor', () => {
 // protects the callers that actually reach it. Dashboard.tsx kept its own untested copy through
 // the whole of the task that moved Sleep.tsx across, in the pre fix independently shifted form,
 // which is the regression this guards.
+// Every read happens inside the test rather than in the describe body, which vitest runs at
+// collection time. A root relative path read during collection throws before any test exists, so a
+// run from a different working directory took this whole file down, arithmetic assertions and all,
+// instead of failing the one guard that actually depends on the filesystem. The rest of this file
+// is pure and has no reason to share that fate.
+//
+// One test looping rather than it.each over the discovered files, for the same reason: it.each
+// needs its cases enumerated at collection time, which is the read this is moving. Each assertion
+// names the page it is about, so a failure still says which file is wrong.
 describe('every SleepSchedule caller goes through this module', () => {
-  const PAGES = 'apps/web/src/pages'
-  const pages = readdirSync(PAGES).filter((f) => f.endsWith('.tsx'))
-  const sources = new Map(pages.map((page) => [page, readFileSync(`${PAGES}/${page}`, 'utf8')]))
-  const callers = pages.filter((page) => /<SleepSchedule[\s>]/.test(sources.get(page)!))
-
-  it.each(callers)('%s imports the schedule arithmetic rather than redeclaring it', (page) => {
-    const source = sources.get(page)!
-    expect(source).toMatch(/from '\.\.\/charts\/schedule\.js'/)
-    // A local declaration of any of the three, not a mere mention: the names appear in prose in
-    // several of these files, and a comment naming withinSchedule proves nothing either way.
-    expect(source).not.toMatch(/(?:function|const)\s+(?:localMinutesOf|inWindow|withinSchedule)\b/)
-  })
-
-  it('finds the callers it claims to check', () => {
+  it('imports the schedule arithmetic in every page that renders the chart, rather than redeclaring it', () => {
+    const dir = 'apps/web/src/pages'
+    const sources = readdirSync(dir)
+      .filter((file) => file.endsWith('.tsx'))
+      .map((file) => [file, readFileSync(`${dir}/${file}`, 'utf8')] as const)
+    const callers = sources.filter(([, source]) => /<SleepSchedule[\s>]/.test(source))
+    // More than one, so the sweep cannot pass by matching nothing: the claim at the top of this
+    // file is about both callers, and a regex that stopped matching would otherwise look like
+    // agreement.
     expect(callers.length).toBeGreaterThan(1)
+    for (const [page, source] of callers) {
+      expect(source, page).toMatch(/from '\.\.\/charts\/schedule\.js'/)
+      // A local declaration of any of the three, not a mere mention: the names appear in prose in
+      // several of these files, and a comment naming withinSchedule proves nothing either way.
+      expect(source, page).not.toMatch(/(?:function|const)\s+(?:localMinutesOf|inWindow|withinSchedule)\b/)
+    }
   })
 })

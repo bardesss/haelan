@@ -156,7 +156,14 @@ describe('the Recovery page', () => {
     }) as typeof fetch
     const { client, tree } = withQuery(<Recovery />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await pumpUntil(() => container!.textContent!.includes('Resting heart rate'), 'the resting heart rate card')
+    // The card's own basis paragraph, not just its label: a label can render in the pending
+    // branch (Dashboard's copy of this test proves it), and only a basis says the card is past
+    // it. Scoped to the card under test so a sibling settling first cannot answer for it.
+    await pumpUntil(
+      () => [...container!.querySelectorAll('.card')].some((card) =>
+        card.querySelector('.label')?.textContent === 'Resting heart rate' && card.querySelector('.basis') !== null),
+      'the resting heart rate basis line',
+    )
     const text = container!.textContent!
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')

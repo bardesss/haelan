@@ -250,7 +250,16 @@ describe('the remaining Dashboard cards', () => {
     const restore = stubFetch({ baseline: null, hangBaselines: true })
     const { client, tree } = withQuery(<Dashboard />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await pumpUntil(() => container!.textContent!.includes('Heart rate range'), 'the heart rate range card')
+    // Gated on the basis line, not on the card's label: Dashboard passes `label` to MetricCard and
+    // MetricCard renders it in the pending branch too, so waiting for "Heart rate range" can go
+    // true a tick before any basis exists and the assertions below would be reading an empty card.
+    // "daily minimum, mean and maximum" is the shared prefix of all four heartRateRange templates,
+    // so it says a basis has rendered without being the clause under test, which is what keeps a
+    // regression an assertion failure rather than a timeout.
+    await pumpUntil(
+      () => container!.textContent!.includes('daily minimum, mean and maximum'),
+      'the heart rate range basis line',
+    )
     const text = container!.textContent!
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
