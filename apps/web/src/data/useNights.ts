@@ -42,11 +42,11 @@ export interface Night {
  * apps/server/src/api/envelope.ts's statusFor('config')). sourceParam only omits the all sources
  * sentinel, the same way an unset source does, which is what actually means "every device" for
  * this route; a real per-device name still passes through unchanged, and so, unguarded here,
- * would a literal 'merged'. Dashboard is this hook's only caller today and always feeds it a
- * value that has already gone through resolveSource, which never resolves to 'merged' (its own
- * fallback is the sentinel, not that literal), so the 400 case above is unreachable in practice
- * rather than prevented in this function. A future caller that skips resolveSource and passes an
- * unresolved source straight through would not be caught here.
+ * would a literal 'merged'. Both callers today, Dashboard.tsx and Sleep.tsx, feed it a value that
+ * has already gone through resolveSource, which never resolves to 'merged' (its own fallback is
+ * the sentinel, not that literal), so the 400 case above is unreachable in practice rather than
+ * prevented in this function. A future caller that skips resolveSource and passes an unresolved
+ * source straight through would not be caught here.
  */
 export function nightsPath(personId: string, range: { from: string, to: string, source: string }): string {
   const params = new URLSearchParams({ from: range.from, to: range.to })

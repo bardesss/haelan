@@ -229,6 +229,29 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   it('renders no raw message key', () => {
     expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState)\.[a-zA-Z][a-zA-Z.]*\b/)
   })
+
+  // Both of these ran against Dashboard alone until the review that spotted three more pages had
+  // joined the sweep without them: Activity carries eleven labelled cards and Sleep thirteen, all
+  // of them outside a rule about labels being distinguishable and a rule about a delta stating the
+  // window it compared.
+  it('does not label two different cards with the same name', () => {
+    const labels = [...html.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
+    expect(labels.length).toBeGreaterThan(0)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+
+  it('states the window every delta compared', () => {
+    const deltas = [...html.matchAll(/class="delta"/g)].length
+    const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
+    expect(deltas).toBeGreaterThan(0)
+    expect(windows).toHaveLength(deltas)
+    // A window comparing nothing against nothing is not a window. The old assertion counted these
+    // on a page where every one of them read "the last 0 readings against the first 0".
+    for (const window of windows) {
+      expect(Number(window[1])).toBeGreaterThan(0)
+      expect(Number(window[2])).toBeGreaterThan(0)
+    }
+  })
 })
 
 describe('chart tables follow the active language', () => {
@@ -265,7 +288,10 @@ describe('Dashboard specifics', () => {
   // dense-denominator basis line directly rather than through this file's own round trip harness,
   // which stubs only Dashboard and Sleep.
   it('counts the basis against every calendar day in the period, not the days that answered', () => {
-    // The stubbed week is seven days and only three of them report.
+    // The stubbed week is seven calendar days and DAYS answers four of them. "3 of 7 days" is
+    // therefore heart rate's wear clause rather than any card's reported count: four days answered
+    // and UNWORN_DAY is one of them, leaving three worn. Either way the point holds, that a
+    // denominator is the range and not the rows, which the second assertion is what actually pins.
     expect(html).toContain('3 of 7 days')
     expect(html).not.toMatch(/(\d+) of \1 days/)
   })
@@ -285,21 +311,4 @@ describe('Dashboard specifics', () => {
     expect(dashboardNl).toContain('0 dagen niet gedragen')
   })
 
-  it('does not label two different cards with the same name', () => {
-    const labels = [...html.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
-    expect(new Set(labels).size).toBe(labels.length)
-  })
-
-  it('states the window every delta compared', () => {
-    const deltas = [...html.matchAll(/class="delta"/g)].length
-    const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
-    expect(deltas).toBeGreaterThan(0)
-    expect(windows).toHaveLength(deltas)
-    // A window comparing nothing against nothing is not a window. The old assertion counted these
-    // on a page where every one of them read "the last 0 readings against the first 0".
-    for (const window of windows) {
-      expect(Number(window[1])).toBeGreaterThan(0)
-      expect(Number(window[2])).toBeGreaterThan(0)
-    }
-  })
 })

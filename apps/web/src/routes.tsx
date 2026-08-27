@@ -6,7 +6,9 @@ import { Recovery } from './pages/Recovery.js'
 
 export interface Route { path: string, element: ReactNode }
 
-// Five of these still render Dashboard for now. M3d and M3e replace them. The rail in Sidebar.tsx
+// The trailing four paths have no page of their own yet and render Dashboard as a placeholder;
+// M3e replaces them. `/` renders Dashboard because it is the Dashboard, which is a different thing
+// and is why it was never part of that count. The rail in Sidebar.tsx
 // lists its own paths rather than being generated from this table (M3e revisits how the two
 // relate); a test enforces that the two path sets match, so an edit to either cannot silently leave
 // the other with a route nothing links to or a rail item pointing nowhere.
