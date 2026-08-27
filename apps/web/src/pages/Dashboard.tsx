@@ -30,7 +30,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatClock, formatDuration, trend } from '../format.js'
+import { formatClock, formatDuration, deltaFor } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
 // (requireMetricAndAgg in packages/core/src/query/personQuery.ts checks every metric against
@@ -315,7 +315,7 @@ export function Dashboard() {
           // this call site to guard against.
           <StatTile label={t(labelKey)} value={format(points)} unit={unit}
             basis={basis}
-            delta={trend(t, values(points), direction)}>
+            delta={deltaFor(t, metric, values(points), direction)}>
             <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} />
           </StatTile>

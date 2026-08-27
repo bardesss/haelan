@@ -21,7 +21,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { trend } from '../format.js'
+import { deltaFor } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
 // taken on faith from the brief that named them: steps, distance, floors, total_calories and the
@@ -195,7 +195,7 @@ export function Activity() {
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
         {(basis) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
-            basis={basis} delta={trend(t, values(points), polarity)}>
+            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} />
           </StatTile>

@@ -1,3 +1,5 @@
+import { METRICS } from '@haelan/core/metrics'
+
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").
 export function formatDuration(minutes: number): string {
   const total = Math.round(minutes)
@@ -35,6 +37,44 @@ export function toneOf(delta: Delta | undefined): Tone {
 // type surface for one parameter: format.ts has no JSX and no hook access, so the caller (a
 // component) resolves `t` and hands it down.
 export type Translate = (key: string, options?: Record<string, unknown>) => string
+
+/**
+ * Whether a metric's values are positions on a clock rather than quantities, so no percentage
+ * change over them means anything.
+ *
+ * Read off the catalogue's own `unit` rather than a list kept here, because the catalogue is where
+ * the fact lives and where the next such metric will be declared:
+ * packages/core/src/derive/metrics.ts gives sleep_bedtime_minutes and sleep_waketime_minutes
+ * `minutes_from_local_midnight` precisely to say this, in a comment that spells out the
+ * consequence ("-30 is not thirty minutes of anything, it is thirty minutes before midnight").
+ * trend() over that scale rendered a fortnight moving from 23:58 to 23:30, a person going to bed
+ * earlier, as "up 1400%", and 00:10 moving to 23:50 as "down 200%".
+ *
+ * A predicate over the metric rather than an argument at the call site: the delta was first
+ * suppressed by passing null for a positional `polarity`, which meant only the one helper that
+ * grew the parameter could express it, the other three page helpers could not, and the next clock
+ * scaled metric would take whatever a future call site typed. This is the shape MetricCard already
+ * uses for the wear clause, where coverageIsWearSignal decides inside the component and no caller
+ * is asked to know.
+ */
+export function metricIsClockOffset(metric: string): boolean {
+  return METRICS[metric]?.unit === 'minutes_from_local_midnight'
+}
+
+/**
+ * The delta a card should show for a metric, which for a clock offset is none.
+ *
+ * Every page tile goes through this rather than calling trend() directly, so the decision is made
+ * once from the metric a card already names instead of once per page helper. trend() itself keeps
+ * its narrower contract (a percentage over a list of numbers, no opinion about what they mean),
+ * because that is what its own unit tests hold it to and it has no metric to consult.
+ */
+export function deltaFor(
+  t: Translate, metric: string, values: number[], polarity: Polarity,
+): Delta | undefined {
+  if (metricIsClockOffset(metric)) return undefined
+  return trend(t, values, polarity)
+}
 
 // Flat below 1% swing: smaller reads as noise, not a real trend.
 //

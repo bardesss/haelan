@@ -367,7 +367,14 @@ describe('the Sleep page', () => {
     const restore = stubSleep([], { bedtimeMinutes: -40, waketimeMinutes: 425 }, true)
     const { client, tree } = withQuery(<Sleep />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
-    await pumpUntil(() => container!.textContent!.includes('Time asleep'), 'the time asleep card')
+    // The card's own basis paragraph, not just its label: a label can render in the pending
+    // branch (Dashboard's copy of this test proves it), and only a basis says the card is past
+    // it. Scoped to the card under test so a sibling settling first cannot answer for it.
+    await pumpUntil(
+      () => [...container!.querySelectorAll('.card')].some((card) =>
+        card.querySelector('.label')?.textContent === 'Time asleep' && card.querySelector('.basis') !== null),
+      'the time asleep basis line',
+    )
     const text = container!.textContent!
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')

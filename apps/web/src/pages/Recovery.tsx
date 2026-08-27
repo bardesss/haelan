@@ -18,7 +18,7 @@ import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { trend } from '../format.js'
+import { deltaFor } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
 // Recovery is one request: resting_heart_rate, daily_hrv and respiratory_rate are all `aggs:
@@ -174,7 +174,7 @@ export function Recovery() {
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>
         {(basis) => (
           <StatTile label={t(labelKey)} value={headline.toFixed(precision)} unit={t(shortUnitKey)}
-            basis={basis} delta={trend(t, values(points), polarity)}>
+            basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band} />
           </StatTile>
