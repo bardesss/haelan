@@ -11,7 +11,7 @@ import { Recovery } from '../src/pages/Recovery.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush, pumpUntil } from './flush.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
 // this, the same reason dashboard-cards.test.tsx and chart-lifecycle.test.tsx need it.
@@ -70,7 +70,7 @@ function stubRecovery(urls: string[], baseline: BaselineStub = null): () => void
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 60, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', 60)],
           reduction: null,
         }
       }
@@ -148,10 +148,7 @@ describe('the Recovery page', () => {
       if (url.includes('/series')) {
         const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
         return json(Object.fromEntries(metrics.map((metric) => [metric, {
-          points: [{
-            localDate: '2026-08-15', value: 60, coverage: coverageFor(metric),
-            source: 'merged', sourceMix: null, updatedAtMs: 1_755_000_000_000,
-          }],
+          points: [seriesPoint(metric, '2026-08-15', 60)],
           reduction: null,
         }])))
       }

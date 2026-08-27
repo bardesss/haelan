@@ -11,7 +11,7 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush, pumpUntil } from './flush.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
 // charts draw for real here, and echarts.init's effect throws "missing chart token" without it.
@@ -69,7 +69,7 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () =>
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 60, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', 60)],
           reduction: null,
         }
       }
@@ -159,7 +159,7 @@ function stubOneNight(): () => void {
       for (const metric of metrics) {
         const value = metric === 'sleep_bedtime_minutes' ? -30 : metric === 'sleep_waketime_minutes' ? 420 : 60
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', value)],
           reduction: null,
         }
       }

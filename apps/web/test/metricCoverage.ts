@@ -1,3 +1,5 @@
+import type { SeriesPoint } from '../src/data/useSeries.js'
+
 /**
  * The coverage a stubbed /series row would really carry for a metric.
  *
@@ -27,3 +29,33 @@ export function coverageFor(metric: string): number | null {
  * so a stub can mark their rows `source: 'provider'` the way a real one would.
  */
 export const PROVIDER_METRICS = new Set(['floors', 'total_calories'])
+
+/**
+ * One /series row in the shape the server really sends, for a stub to hand back.
+ *
+ * Typed as SeriesPoint rather than left to an object literal inside a JSON.stringify call, which
+ * is what every page stub used to be: those literals reach the wire as `unknown`, so nothing
+ * checked them and several drifted, omitting `source`, `updatedAtMs` or both. useSeries.ts states
+ * the rule the type exists for ("source and updatedAtMs are on every point the server actually
+ * answers ... a type that hid those fields would be lying about a response nothing here
+ * composed"), and one unrealistic field on a stubbed row is what let a null coverage render as
+ * "device not worn" over a full month through thirteen reviews.
+ *
+ * updatedAtMs defaults to a real stamp rather than null. Null is a legitimate value on the wire
+ * (personQuery.ts: a row derived before M3b added the column, or one no rebuild has touched
+ * since), so it stays overridable, but the ordinary row carries a number and a default that does
+ * not is the same kind of unrepresentative stub this helper exists to stop.
+ */
+export function seriesPoint(
+  metric: string, localDate: string, value: number, overrides: Partial<SeriesPoint> = {},
+): SeriesPoint {
+  return {
+    localDate,
+    value,
+    coverage: coverageFor(metric),
+    source: 'merged',
+    sourceMix: null,
+    updatedAtMs: 1_755_000_000_000,
+    ...overrides,
+  }
+}

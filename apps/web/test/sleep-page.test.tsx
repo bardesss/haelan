@@ -11,7 +11,7 @@ import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush, pumpUntil } from './flush.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
 // this, the same reason activity.test.tsx and recovery.test.tsx need it.
@@ -57,11 +57,12 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
  * of this page's cards compute a mean and which compute a sum, since every stubbed metric here
  * carries exactly one point.
  *
- * coverageFor is read off metricCoverage.ts rather than written as a literal here: every sleep
- * metric there answers null, because packages/core/src/derive/sleep.ts writes coverage null for
- * every sleep row on purpose (a night has no samples underneath it), and a stub that could not
- * express that shape is the exact gap that let a null coverage render as "device not worn" over a
- * fully populated month through thirteen task reviews.
+ * Rows are built by metricCoverage.ts's seriesPoint rather than written as literals here, so the
+ * coverage comes off the same table every other stub reads and no field can quietly go missing.
+ * Every sleep metric answers null there, because packages/core/src/derive/sleep.ts writes coverage
+ * null for every sleep row on purpose (a night has no samples underneath it), and a stub that could
+ * not express that shape is the exact gap that let a null coverage render as "device not worn"
+ * over a fully populated month through thirteen task reviews.
  */
 // A fixed night for the hypnogram card, independent of whatever the schedule override below asks
 // for: the two cards read different sources since the schedule fix (sleep_bedtime_minutes/
@@ -100,11 +101,12 @@ function hypnogramNightsResponse(): unknown {
  * schedule chart specifically, still gets a real night rather than tripping the empty state (see
  * the ".empty" assertion below).
  *
- * coverageFor is read off metricCoverage.ts rather than written as a literal here: every sleep
- * metric there answers null, because packages/core/src/derive/sleep.ts writes coverage null for
- * every sleep row on purpose (a night has no samples underneath it), and a stub that could not
- * express that shape is the exact gap that let a null coverage render as "device not worn" over a
- * fully populated month through thirteen task reviews.
+ * Rows are built by metricCoverage.ts's seriesPoint rather than written as literals here, so the
+ * coverage comes off the same table every other stub reads and no field can quietly go missing.
+ * Every sleep metric answers null there, because packages/core/src/derive/sleep.ts writes coverage
+ * null for every sleep row on purpose (a night has no samples underneath it), and a stub that could
+ * not express that shape is the exact gap that let a null coverage render as "device not worn"
+ * over a fully populated month through thirteen task reviews.
  */
 function stubSleep(
   urls: string[], schedule: { bedtimeMinutes: number, waketimeMinutes: number } = { bedtimeMinutes: -40, waketimeMinutes: 425 },
@@ -128,7 +130,7 @@ function stubSleep(
           : metric === 'sleep_waketime_minutes' ? schedule.waketimeMinutes
           : 420
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', value)],
           reduction: null,
         }
       }
@@ -169,10 +171,7 @@ function stubSleepTrend(): () => void {
     if (url.includes('/series')) {
       const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
       return json(Object.fromEntries(metrics.map((metric) => [metric, {
-        points: seriesFor(metric).map((value, index) => ({
-          localDate: DATES[index], value, coverage: coverageFor(metric),
-          source: 'merged', sourceMix: null, updatedAtMs: 1_755_000_000_000,
-        })),
+        points: seriesFor(metric).map((value, index) => seriesPoint(metric, DATES[index]!, value)),
         reduction: null,
       }])))
     }
@@ -201,7 +200,10 @@ function stubSleepNapCount(napCount: number): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         const value = metric === 'sleep_nap_count' ? napCount : 420
-        body[metric] = { points: [{ localDate: '2026-08-15', value, coverage: coverageFor(metric), sourceMix: null }], reduction: null }
+        body[metric] = {
+          points: [seriesPoint(metric, '2026-08-15', value)],
+          reduction: null,
+        }
       }
       return json(body)
     }

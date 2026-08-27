@@ -11,7 +11,7 @@ import { Activity } from '../src/pages/Activity.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { flush } from './flush.js'
-import { coverageFor, PROVIDER_METRICS } from './metricCoverage.js'
+import { seriesPoint, PROVIDER_METRICS } from './metricCoverage.js'
 
 // Sparkline and ActivityHeatmap draw for real here, and echarts.init's effect throws "missing
 // chart token" without this, the same reason every other page test file needs it.
@@ -75,13 +75,8 @@ function stubActivity(urls: string[]): () => void {
       for (const metric of metrics) {
         const isProvider = PROVIDER_METRICS.has(metric)
         body[metric] = {
-          points: isProvider && explicitSource !== null ? [] : [{
-            localDate: '2026-08-15',
-            value: 60,
-            coverage: coverageFor(metric),
-            source: isProvider ? 'provider' : 'merged',
-            sourceMix: null,
-          }],
+          points: isProvider && explicitSource !== null ? []
+            : [seriesPoint(metric, '2026-08-15', 60, isProvider ? { source: 'provider' } : {})],
           reduction: null,
         }
       }
@@ -97,7 +92,8 @@ function stubActivity(urls: string[]): () => void {
  * The heatmap card's basis is the one claim on this page whose numerator, denominator and wear
  * clause are three different counts, and stubActivity's uniform "one worn point per metric" cannot
  * tell them apart: reported and worn are both 1 under it, so a card that swapped one for the other
- * reads identically. Points carry `source` and `updatedAtMs` because a real /series row does.
+ * reads identically. Rows go through metricCoverage.ts's seriesPoint, so they carry every field
+ * a real /series row does.
  */
 function stubSteps(points: readonly { localDate: string, value: number, coverage: number | null }[]): () => void {
   const original = globalThis.fetch
@@ -110,7 +106,7 @@ function stubSteps(points: readonly { localDate: string, value: number, coverage
       const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
       return json(Object.fromEntries(metrics.map((metric) => [metric, {
         points: metric === 'steps'
-          ? points.map((p) => ({ ...p, source: 'merged', sourceMix: null, updatedAtMs: 1_755_000_000_000 }))
+          ? points.map((p) => seriesPoint(metric, p.localDate, p.value, { coverage: p.coverage }))
           : [],
         reduction: null,
       }])))

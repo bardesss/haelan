@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
@@ -74,7 +74,7 @@ function stubFetch(seen: string[]): () => void {
     }
     if (url.includes('/series')) {
       return new Response(JSON.stringify({
-        steps: { points: [{ localDate: '2026-08-01', value: 900, coverage: coverageFor('steps'), sourceMix: null }], reduction: null },
+        steps: { points: [seriesPoint('steps', '2026-08-01', 900)], reduction: null },
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/sleep/nights')) {
@@ -108,7 +108,7 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [{ localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), sourceMix: null }],
+          points: [seriesPoint(metric, '2026-08-15', 100)],
           reduction: null,
         }
       }
@@ -150,11 +150,8 @@ function stubFetchBySource(seen: string[]): () => void {
       for (const metric of metrics) {
         body[metric] = {
           points: [source === null
-            ? {
-                localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'merged',
-                sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
-              }
-            : { localDate: '2026-08-15', value: 100, coverage: coverageFor(metric), source: 'watch', sourceMix: null }],
+            ? seriesPoint(metric, '2026-08-15', 100, { sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]) })
+            : seriesPoint(metric, '2026-08-15', 100, { source: 'watch' })],
           reduction: null,
         }
       }

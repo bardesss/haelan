@@ -12,7 +12,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { coverageFor } from './metricCoverage.js'
+import { seriesPoint } from './metricCoverage.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -51,14 +51,18 @@ function stubFetch(): () => void {
       const body: Record<string, unknown> = {}
       for (const metric of params.getAll('metric')) {
         body[metric] = {
-          points: DAYS.map((date, i) => ({
-            localDate: date,
-            source: 'merged',
-            value: metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
-            coverage: metric === 'heart_rate' && date === UNWORN_DAY ? 1 / 24 : coverageFor(metric),
-            sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
-            updatedAtMs: null,
-          })),
+          points: DAYS.map((date, i) => seriesPoint(
+            metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
+            {
+              // The one day heart rate is at the derivation's coverage floor, which is what gives
+              // the wear clause a singular to render (see the unworn day assertions below).
+              ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
+              sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
+              // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
+              // M3b added the column), and this is the one stub that exercises that half.
+              updatedAtMs: null,
+            },
+          )),
           reduction: null,
         }
       }
