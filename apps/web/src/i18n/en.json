@@ -131,7 +131,7 @@
     },
     "sleepStages": {
       "label": "Sleep stages",
-      "basis": "last night, {{date}}",
+      "basis": "most recent night, {{date}}",
       "chartLabel": "Sleep stages through the night of {{date}}"
     },
     "sleepSchedule": {

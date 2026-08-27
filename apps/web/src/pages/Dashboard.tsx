@@ -511,7 +511,7 @@ export function Dashboard() {
         </Card>
 
         {/* The date comes off the night being drawn, never off the range end: this card used to
-            head an empty state with "last night, 2026-08-31", naming a night it was not drawing
+            head an empty state with the range's own last date, naming a night it was not drawing
             and had no row for, which is what the guard below avoids by naming lastNight's own
             date rather than the range end.
             Not a MetricCard: gated on a night from useNights, not a metric and its points. */}

@@ -62,7 +62,7 @@
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
     "to": "tot",
     "loading": "Laden",
-    "bedWakeChartLabel": "Bed- en waaktijden voor elke nacht van {{period}}",
+    "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
   },
   "errorState": {
@@ -131,13 +131,13 @@
     },
     "sleepStages": {
       "label": "Slaapfasen",
-      "basis": "afgelopen nacht, {{date}}",
+      "basis": "meest recente nacht, {{date}}",
       "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
     },
     "sleepSchedule": {
       "label": "Slaapschema",
-      "basis_one": "bedtijd en waaktijd, {{count}} nacht",
-      "basis_other": "bedtijd en waaktijd, {{count}} nachten"
+      "basis_one": "bedtijd en wektijd, {{count}} nacht",
+      "basis_other": "bedtijd en wektijd, {{count}} nachten"
     },
     "recovery": {
       "label": "Herstel",
@@ -383,8 +383,8 @@
     },
     "sleepSchedule": {
       "label": "Slaapschema",
-      "basis_one": "bedtijd en waaktijd, {{count}} nacht",
-      "basis_other": "bedtijd en waaktijd, {{count}} nachten"
+      "basis_one": "bedtijd en wektijd, {{count}} nacht",
+      "basis_other": "bedtijd en wektijd, {{count}} nachten"
     }
   },
   "setup": {
