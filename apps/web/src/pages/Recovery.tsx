@@ -185,7 +185,7 @@ export function Recovery() {
     const headline = mean(values(points))
     const note = baselineNote(t, headline, baselineQuery, precision, controls.to)
     const spark = sparklines.get(metric)!
-    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>
@@ -194,7 +194,7 @@ export function Recovery() {
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
-              annotations={annotations} excluded={excluded}
+              annotations={annotations} excluded={excluded} corrected={corrected}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}

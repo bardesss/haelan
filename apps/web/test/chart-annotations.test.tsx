@@ -12,6 +12,7 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { Sparkline, sparklinePointDate } from '../src/charts/Sparkline.js'
 import { ActivityHeatmap, heatmapClickDate } from '../src/charts/ActivityHeatmap.js'
+import { HeartRateRange, heartRateRangePointDate } from '../src/charts/HeartRateRange.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { DayRow } from '../src/fixtures/july.js'
 
@@ -120,6 +121,24 @@ describe('Sparkline', () => {
     expect(rows).toContain('Flight to Chicago')
   })
 
+  // A corrected day was not dropped: its replacement value is the number already on screen, so
+  // calling it "excluded" would tell a reader the opposite of what happened. This pins the two
+  // apart, in the one channel this environment can see (chartAnnotations.ts's own doc comment has
+  // the full reasoning; the visual markPoint difference is canvas-only and hand-verified below).
+  it('marks a corrected date differently from an excluded one, carrying its own value', () => {
+    const html = render(
+      <Sparkline values={values} labels={labels} label="steps" unit="steps"
+        annotations={[]} excluded={['2026-08-01']} corrected={[{ date: '2026-08-02', value: 42 }]} />,
+    )
+    const rows = table(html)
+    const excludedRow = rows.slice(rows.indexOf('2026-08-01'), rows.indexOf('2026-08-02'))
+    const correctedRow = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
+    expect(excludedRow).toContain('charts.absence.excluded')
+    expect(excludedRow).not.toContain('charts.absence.correctedTo')
+    expect(correctedRow).toContain('charts.absence.correctedTo')
+    expect(correctedRow).not.toContain('charts.absence.excluded')
+  })
+
   it('leaves the table exactly as before when neither prop is passed', () => {
     // annotations/excluded default to empty rather than being required, so a page that has not
     // been migrated to pass them yet (every current caller) keeps compiling and keeps rendering
@@ -170,6 +189,22 @@ describe('ActivityHeatmap', () => {
     expect(rows).toContain('Three glasses of wine')
   })
 
+  // Same distinction Sparkline's own copy of this test pins, and the same reason: a corrected day
+  // was not dropped, so telling a reader "excluded" over it says the opposite of what happened.
+  it('marks a corrected date differently from an excluded one', () => {
+    const html = render(
+      <ActivityHeatmap days={days} max={9000} label="calendar heatmap"
+        annotations={[]} excluded={['2026-07-06']} corrected={[{ date: '2026-07-07', value: 42 }]} />,
+    )
+    const rows = table(html)
+    const excludedRow = rows.slice(rows.indexOf('2026-07-06'), rows.indexOf('2026-07-07'))
+    const correctedRow = rows.slice(rows.indexOf('2026-07-07'), rows.indexOf('2026-07-08'))
+    expect(excludedRow).toContain('charts.absence.excluded')
+    expect(excludedRow).not.toContain('charts.absence.correctedTo')
+    expect(correctedRow).toContain('charts.absence.correctedTo')
+    expect(correctedRow).not.toContain('charts.absence.excluded')
+  })
+
   it('leaves the table exactly as before when neither prop is passed', () => {
     // Same default-empty-array device Sparkline's own copy of this test guards, and the same
     // reason: every current caller (Activity.tsx) does not pass annotations/excluded yet.
@@ -198,6 +233,104 @@ describe('ActivityHeatmap', () => {
       // weekday] tuple, so this both fails the shape check on its own terms and is guarded by the
       // same componentType check sparklinePointDate uses.
       expect(heatmapClickDate(cells, { componentType: 'markPoint', value: undefined })).toBeUndefined()
+    })
+  })
+})
+
+describe('HeartRateRange', () => {
+  // All three of annotations/excluded/corrected required, unlike Sparkline and ActivityHeatmap:
+  // HeartRateRange has taken this trio since D1 (annotations/excluded) and this task (corrected),
+  // never optional, so every render below passes all three regardless of whether it exercises one.
+  const days: DayRow[] = [
+    { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
+    { date: '2026-08-11', steps: null, hrMin: 54, hrMean: 61, hrMax: 70, sleepMinutes: null, worn: true },
+    { date: '2026-08-12', steps: null, hrMin: 56, hrMean: 59, hrMax: 66, sleepMinutes: null, worn: true },
+  ]
+
+  it('marks an excluded date rather than dropping its row', () => {
+    const html = render(
+      <HeartRateRange days={days} annotations={[]} excluded={['2026-08-11']} corrected={[]} label="hr range" />,
+    )
+    const rows = table(html)
+    expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
+    expect(rows).toContain('2026-08-11')
+    expect(rows).toContain('charts.absence.excluded')
+  })
+
+  it('carries an annotation’s own text into its row', () => {
+    const html = render(
+      <HeartRateRange days={days} annotations={[{ date: '2026-08-12', text: 'Flight to Chicago' }]}
+        excluded={[]} corrected={[]} label="hr range" />,
+    )
+    const rows = table(html)
+    expect(rows).toContain('Flight to Chicago')
+  })
+
+  // Same distinction Sparkline's and ActivityHeatmap's own copies of this test pin: a corrected
+  // day was not dropped, so telling a reader "excluded" over it says the opposite of what
+  // happened. HeartRateRange is the one chart carrying `!d.worn` in the same note cell, so this
+  // also pins that a corrected mark does not fight the wear clause for the same cell.
+  it('marks a corrected date differently from an excluded one', () => {
+    const html = render(
+      <HeartRateRange days={days} annotations={[]} excluded={['2026-08-10']}
+        corrected={[{ date: '2026-08-11', value: 58 }]} label="hr range" />,
+    )
+    const rows = table(html)
+    const excludedRow = rows.slice(rows.indexOf('2026-08-10'), rows.indexOf('2026-08-11'))
+    const correctedRow = rows.slice(rows.indexOf('2026-08-11'), rows.indexOf('2026-08-12'))
+    expect(excludedRow).toContain('charts.absence.excluded')
+    expect(excludedRow).not.toContain('charts.absence.correctedTo')
+    expect(correctedRow).toContain('charts.absence.correctedTo')
+    expect(correctedRow).not.toContain('charts.absence.excluded')
+  })
+
+  describe('heartRateRangePointDate', () => {
+    it('reads the local date off a genuine series click, regardless of which of the three stacked series it landed on', () => {
+      // dataIndex is a position on the shared category axis, not tied to one series: min, range
+      // and mean all report the same dataIndex for the same day.
+      expect(heartRateRangePointDate(days, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-11')
+    })
+
+    it('reports no date for a click on the excluded/corrected markPoint or the annotation markLine', () => {
+      expect(heartRateRangePointDate(days, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
+      expect(heartRateRangePointDate(days, { componentType: 'markLine', dataIndex: 0 })).toBeUndefined()
+    })
+  })
+
+  // The Critical this task's review round found: the markLine data below used to be
+  // `annotations.map(...)` with no membership filter, unlike the markPoint four lines above it in
+  // HeartRateRange.tsx and unlike both Sparkline's and ActivityHeatmap's own markPoint/markLine
+  // filters. This chart's x axis is `days.map(d => d.date.slice(8))`, a day-of-month label that
+  // repeats every month, so an override the person wrote for a day outside the visible range used
+  // to land on whichever visible day happens to share its day-of-month, silently disagreeing with
+  // the chart's own accessible table (which was always built from `days.find`, and so was already
+  // correct). Reads `setOption`'s own captured argument, since a markLine's placement is drawn on
+  // the canvas and the accessible table alone cannot tell this apart from the fix.
+  describe('the annotation markLine only ever names a day this chart is actually drawing', () => {
+    it('drops an annotation for a date outside the visible range rather than placing it on a day sharing its day-of-month', () => {
+      act(() => {
+        root!.render(
+          <HeartRateRange days={days} excluded={[]} corrected={[]}
+            annotations={[{ date: '2026-07-11', text: 'Watch left charging' }]} label="hr range" />,
+        )
+      })
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { series: { markLine?: { data: unknown[] } }[] }
+      const meanSeries = option.series[2]!
+      expect(meanSeries.markLine?.data).toEqual([])
+    })
+
+    it('draws an annotation for a date actually inside the visible range', () => {
+      act(() => {
+        root!.render(
+          <HeartRateRange days={days} excluded={[]} corrected={[]}
+            annotations={[{ date: '2026-08-11', text: 'Watch left charging' }]} label="hr range" />,
+        )
+      })
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { series: { markLine?: { data: unknown[] } }[] }
+      const meanSeries = option.series[2]!
+      expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: '11' }])
     })
   })
 })
@@ -263,6 +396,44 @@ describe('the click each chart hands to onPointClick', () => {
     })
     const handleClick = clickHandlerOf(chartStubs.at(-1)!)
     handleClick({ componentType: 'markPoint', value: undefined })
+    expect(onPointClick).not.toHaveBeenCalled()
+  })
+
+  // HeartRateRange gained onPointClick in this same review round, following the ref based pattern
+  // the two charts above already use: the handler lives outside `build`'s own dependency array
+  // (useChart.ts keeps it in a ref), so a fresh closure every render never disposes the chart.
+  it('HeartRateRange reports the date at the dataIndex a genuine click landed on', () => {
+    const onPointClick = vi.fn()
+    const days: DayRow[] = [
+      { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
+      { date: '2026-08-11', steps: null, hrMin: 54, hrMean: 61, hrMax: 70, sleepMinutes: null, worn: true },
+      { date: '2026-08-12', steps: null, hrMin: 56, hrMean: 59, hrMax: 66, sleepMinutes: null, worn: true },
+    ]
+    act(() => {
+      root!.render(
+        <HeartRateRange days={days} annotations={[]} excluded={[]} corrected={[]} label="hr range"
+          onPointClick={onPointClick} />,
+      )
+    })
+    const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    handleClick({ componentType: 'series', dataIndex: 1 })
+    expect(onPointClick).toHaveBeenCalledTimes(1)
+    expect(onPointClick).toHaveBeenCalledWith('2026-08-11')
+  })
+
+  it('HeartRateRange does not call back for a click on an overlay', () => {
+    const onPointClick = vi.fn()
+    const days: DayRow[] = [
+      { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
+    ]
+    act(() => {
+      root!.render(
+        <HeartRateRange days={days} annotations={[]} excluded={[]} corrected={[]} label="hr range"
+          onPointClick={onPointClick} />,
+      )
+    })
+    const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    handleClick({ componentType: 'markPoint', dataIndex: 0 })
     expect(onPointClick).not.toHaveBeenCalled()
   })
 })

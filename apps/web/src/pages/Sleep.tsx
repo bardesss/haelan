@@ -298,7 +298,7 @@ export function Sleep() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     const spark = sparklines.get(metric)!
-    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
@@ -307,7 +307,7 @@ export function Sleep() {
             delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
-              annotations={annotations} excluded={excluded}
+              annotations={annotations} excluded={excluded} corrected={corrected}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}

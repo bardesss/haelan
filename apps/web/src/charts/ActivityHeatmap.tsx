@@ -39,16 +39,21 @@ export function heatmapClickDate(cells: CalendarCell[], event: Pick<ECElementEve
 // chart-lifecycle.test.tsx guards against.
 const EMPTY = Object.freeze([]) as never[]
 
-export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
+export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, corrected = EMPTY, onPointClick }: {
   days: DayRow[]
   max: number
   label: string
-  // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart
-  // type the same annotations/excluded values instead of building a different shape per chart.
-  // Optional here (HeartRateRange's own pair is required) because Activity.tsx does not pass them
-  // yet; wiring them in is the task after this one.
+  // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart type
+  // the same annotations/excluded/corrected values instead of building a different shape per chart.
+  // Optional here (HeartRateRange's own trio is required) because this chart's own default
+  // parameter (EMPTY, below) has to exist regardless: a card can mount before its overrides query
+  // has answered.
   annotations?: { date: string; text: string }[]
   excluded?: string[]
+  // Kept apart from `excluded`: a corrected day was not dropped, its replacement value is the
+  // number already on screen, so marking it "excluded" would tell a reader the opposite of what
+  // happened. See chartAnnotations.ts's own doc comment on `MetricAnnotations` for the full reasoning.
+  corrected?: { date: string; value: number }[]
   onPointClick?: (localDate: string) => void
 }) {
   const { t } = useTranslation()
@@ -97,6 +102,15 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
                 const cell = cells.find((c) => c.date === date)
                 return cell ? [{ name: 'excluded', coord: [cell.week, cell.weekday], itemStyle: { color: tokens.excluded } }] : []
               }),
+              // A rect, the same shape and colour Sparkline's own corrected mark uses, so a
+              // correction reads the same way on every chart that can draw one.
+              ...corrected.flatMap((c) => {
+                const cell = cells.find((candidate) => candidate.date === c.date)
+                return cell
+                  ? [{ name: 'corrected', coord: [cell.week, cell.weekday], symbol: 'rect', symbolSize: SYMBOL.corrected,
+                    itemStyle: { color: tokens.stageRem } }]
+                  : []
+              }),
               // A diamond rather than the excluded mark's circle, and the annotation colour
               // HeartRateRange's own markLine uses, so the two kinds read apart at a glance.
               ...annotations.flatMap((a) => {
@@ -116,7 +130,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
         },
       ],
     }
-  }, [cells, days, weeks, max, weekdayLabels, excluded, annotations])
+  }, [cells, days, weeks, max, weekdayLabels, excluded, corrected, annotations])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = heatmapClickDate(cells, event)
@@ -132,9 +146,13 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
         // reading is never itself null; see useSeries.ts), not because a coverage figure said the
         // device was off. "not worn" states a cause this table cannot establish; "no reading" is
         // the one thing that is always true of a blank cell.
-        rows: cells.map((c, i) => [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.noReading'),
-          [excluded.includes(c.date) ? t('charts.absence.excluded') : '',
-            annotations.find((a) => a.date === c.date)?.text ?? ''].filter(Boolean).join(', ')]),
+        rows: cells.map((c, i) => {
+          const correctedEntry = corrected.find((entry) => entry.date === c.date)
+          return [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.noReading'),
+            [excluded.includes(c.date) ? t('charts.absence.excluded') : '',
+              correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
+              annotations.find((a) => a.date === c.date)?.text ?? ''].filter(Boolean).join(', ')]
+        }),
       }} />
   )
 }

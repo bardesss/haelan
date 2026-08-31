@@ -207,7 +207,7 @@ export function Activity() {
     const points = metricGroups.pointsOf(metric)
     const total = sum(values(points))
     const spark = sparklines.get(metric)!
-    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
@@ -216,7 +216,7 @@ export function Activity() {
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
-              annotations={annotations} excluded={excluded}
+              annotations={annotations} excluded={excluded} corrected={corrected}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
@@ -233,7 +233,7 @@ export function Activity() {
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} />
             : stepsQuery.isPending ? <Loading /> : (
             <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })}
-              annotations={stepsOverrides.annotations} excluded={stepsOverrides.excluded}
+              annotations={stepsOverrides.annotations} excluded={stepsOverrides.excluded} corrected={stepsOverrides.corrected}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'steps' })} />
           )}
         </Card>

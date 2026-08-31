@@ -17,6 +17,9 @@ export const OPACITY = {
 export const SYMBOL = {
   nap: 6,
   excluded: 7,
+  // Same size as `excluded`: the two marks differ in colour and shape (a corrected point uses
+  // `rect`, an excluded one the default pin), not in how much room they take on the chart.
+  corrected: 7,
   noData: 3,
 } as const
 

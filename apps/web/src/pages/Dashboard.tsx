@@ -325,7 +325,7 @@ export function Dashboard() {
     unit?: string,
   ) => {
     const points = metricGroups.pointsOf(metric)
-    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
@@ -339,7 +339,7 @@ export function Dashboard() {
             delta={deltaFor(t, metric, values(points), direction)}>
             <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
-              annotations={annotations} excluded={excluded}
+              annotations={annotations} excluded={excluded} corrected={corrected}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
@@ -528,12 +528,12 @@ export function Dashboard() {
           {() => (
             // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
             // same lookup tile() uses for every other card, read here under the metric this chart
-            // itself plots. No onPointClick: HeartRateRange has never taken one (Task 9 added the
-            // prop to Sparkline and ActivityHeatmap only), so this chart stays read only until a
-            // later task gives it the same click wiring.
+            // itself plots.
             <HeartRateRange days={heartRateDays} baseline={heartRateBand}
               annotations={heartRateOverrides.annotations} excluded={heartRateOverrides.excluded}
-              label={t('dashboard.heartRateRange.chartLabel', { period })} />
+              corrected={heartRateOverrides.corrected}
+              label={t('dashboard.heartRateRange.chartLabel', { period })}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
           )}
         </MetricCard>
         <Card span={4} label={t('dashboard.flaggedDays.label')}>

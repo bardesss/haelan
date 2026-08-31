@@ -28,7 +28,7 @@ export function sparklinePointDate(labels: string[], event: Pick<ECElementEvent,
 const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
-export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
+export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, corrected = EMPTY, onPointClick }: {
   values: (number | null)[]
   labels: string[]
   label: string
@@ -39,12 +39,17 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   // its own baseline query has cleared the thin check.
   baseline?: { low: number, high: number }
   height?: number
-  // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart
-  // type the same annotations/excluded values instead of building a different shape per chart.
-  // Optional here (HeartRateRange's own pair is required) because the pages that call Sparkline
-  // do not pass them yet; wiring them in is the task after this one.
+  // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart type
+  // the same annotations/excluded/corrected values instead of building a different shape per chart.
+  // Optional here (HeartRateRange's own trio is required) because Sparkline's own default parameter
+  // (EMPTY, below) has to exist regardless: a page can still mount a card before its overrides query
+  // has answered.
   annotations?: { date: string; text: string }[]
   excluded?: string[]
+  // Kept apart from `excluded`: a corrected day was not dropped, its replacement value is the
+  // number already on screen, so marking it "excluded" would tell a reader the opposite of what
+  // happened. See chartAnnotations.ts's own doc comment on `MetricAnnotations` for the full reasoning.
+  corrected?: { date: string; value: number }[]
   onPointClick?: (localDate: string) => void
 }) {
   const { t } = useTranslation()
@@ -62,20 +67,31 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
       markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
         // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands
         // off the fitted range; anchor at the day's own value instead, same as HeartRateRange, and
-        // drop a date this sparkline has no reading for (nothing to anchor the mark to).
-        data: excluded.flatMap((date) => {
-          const i = labels.indexOf(date)
-          const v = i === -1 ? null : values[i]
-          if (v === null || v === undefined) return []
-          return [{ name: 'excluded', xAxis: i, yAxis: v }]
-        }) },
+        // drop a date this sparkline has no reading for (nothing to anchor the mark to). corrected
+        // entries share this same markPoint (echarts draws one per series) but override symbol and
+        // colour so the two read apart at a glance.
+        data: [
+          ...excluded.flatMap((date) => {
+            const i = labels.indexOf(date)
+            const v = i === -1 ? null : values[i]
+            if (v === null || v === undefined) return []
+            return [{ name: 'excluded', xAxis: i, yAxis: v }]
+          }),
+          ...corrected.flatMap((c) => {
+            const i = labels.indexOf(c.date)
+            const v = i === -1 ? null : values[i]
+            if (v === null || v === undefined) return []
+            return [{ name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
+              itemStyle: { color: tokens.stageRem }, xAxis: i, yAxis: v }]
+          }),
+        ] },
       markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
         label: { show: false },
         data: annotations.flatMap((a) => {
           const i = labels.indexOf(a.date)
           return i === -1 ? [] : [{ name: a.text, xAxis: i }]
         }) } }],
-  }), [values, baseline, excluded, annotations, labels])
+  }), [values, baseline, excluded, corrected, annotations, labels])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = sparklinePointDate(labels, event)
@@ -90,8 +106,10 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
           columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
           rows: values.map((v, i) => {
             const date = labels[i] ?? String(i)
+            const correctedEntry = corrected.find((c) => c.date === date)
             return [date, v ?? t('charts.absence.noReading'),
               [excluded.includes(date) ? t('charts.absence.excluded') : '',
+                correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
                 annotations.find((a) => a.date === date)?.text ?? ''].filter(Boolean).join(', ')]
           }),
         }} />

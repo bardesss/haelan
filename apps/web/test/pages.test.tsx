@@ -21,39 +21,47 @@ import { flush } from './flush.js'
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 /**
- * Stands in for the real echarts instance useChart.ts creates, the same device
- * chart-annotations.test.tsx's own `chartStub` is and for the same reason: this file needs to
- * mount a page for real (so the actual `chart.on('click', ...)` call happens) without asking
+ * Delegates to the real `echarts.init`, so every chart in this file still paints a real SVG into
+ * its host div exactly as it would outside a test, and taps only `.on` to remember whichever
+ * handler was registered for `'click'`.
+ *
+ * A full replacement stub (mocking `setOption`/`dispose`/`resize` too, this function's own first
+ * version) silently disarmed four of this file's own assertions: `chart.setOption` never running
+ * means the host div's `role="img"` element stays empty, so `not.toMatch(/>(null|undefined|NaN)</)`,
+ * `not.toContain('NaN')` and "renders no raw message key" all scan zero chart output across all
+ * four pages instead of the rendered SVG (including every markLine `name`, which is exactly where
+ * this task's own annotation text lands). Measured directly: before this file mocked echarts.init
+ * at all, all 35 chart hosts across the four pages contained a rendered `<svg>`; with the full
+ * stub, all 35 were empty strings. Delegating restores every one of them while still letting the
+ * one test that needs it (`annotate wiring`, below) capture the click handler without asking
  * zrender to resolve a coordinate against a rendered SVG, which chart-annotations.test.tsx already
- * established does not work under happy-dom no matter how the click is simulated. Real echarts.init
- * still runs for every other test in this file below; only the click-opens-the-panel test reads
- * `chartStubs` at all, and every other assertion here (the accessible table, the labels, the basis
- * lines) is built from React's own props rather than anything echarts paints, so replacing the
- * paint with a stub changes nothing else this file checks.
+ * established does not work under happy-dom no matter how the click is simulated.
  */
-function chartStub() {
-  return { on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }
-}
-type ChartStub = ReturnType<typeof chartStub>
-const chartStubs: ChartStub[] = []
+type CapturedChart = { onClick?: (event: unknown) => void }
+const capturedCharts: CapturedChart[] = []
 
 vi.mock('echarts/core', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>
+  const actual = (await importOriginal()) as { init: (...args: unknown[]) => { on: (...a: unknown[]) => unknown } } & Record<string, unknown>
   return {
     ...actual,
-    init: () => {
-      const stub = chartStub()
-      chartStubs.push(stub)
-      return stub
+    init: (...args: unknown[]) => {
+      const chart = actual.init(...args)
+      const entry: CapturedChart = {}
+      capturedCharts.push(entry)
+      const originalOn = chart.on.bind(chart)
+      chart.on = (eventName: unknown, handler: unknown) => {
+        if (eventName === 'click') entry.onClick = handler as (event: unknown) => void
+        return originalOn(eventName, handler)
+      }
+      return chart
     },
   }
 })
 
 /** The function useChart.ts actually passed to `chart.on('click', ...)`, i.e. `handleClick`. */
-function clickHandlerOf(stub: ChartStub): (event: unknown) => void {
-  const call = stub.on.mock.calls.find(([event]) => event === 'click')
-  if (!call) throw new Error('chart.on was never called with "click"')
-  return call[1] as (event: unknown) => void
+function clickHandlerOf(entry: CapturedChart): (event: unknown) => void {
+  if (!entry.onClick) throw new Error('chart.on was never called with "click"')
+  return entry.onClick
 }
 
 const PERSON: Session = {
@@ -374,7 +382,7 @@ describe('Dashboard specifics', () => {
 // annotations/excluded pair (Dashboard's own EMPTY, by name, with a comment calling it a
 // milestone boundary) and no chart's onPointClick went anywhere, since no page held a target to
 // open the panel with. Recovery, not Dashboard: three plain Sparklines and nothing else touching
-// useChart, so the first chart stub pushed after this test's own render is unambiguously
+// useChart, so the first entry captured after this test's own render is unambiguously
 // resting_heart_rate's, the same reasoning that picked it for the round trip harness above never
 // needed to state (nothing there clicks).
 describe('annotate wiring', () => {
@@ -394,7 +402,7 @@ describe('annotate wiring', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), PERSON)
     window.history.replaceState(null, '', RECOVERY_ROUTE)
-    const stubsBefore = chartStubs.length
+    const chartsBefore = capturedCharts.length
 
     act(() => {
       root.render(
@@ -403,13 +411,13 @@ describe('annotate wiring', () => {
     })
     await flush(client, () => container.innerHTML)
 
-    // resting_heart_rate is Recovery.tsx's own first card(), so the first chart stub pushed by
-    // this mount (chartStubs already carries every stub from the module level `pages` harness
-    // above, hence the slice) is unambiguously its Sparkline, not daily_hrv's or
+    // resting_heart_rate is Recovery.tsx's own first card(), so the first chart entry captured by
+    // this mount (capturedCharts already carries one entry per chart from the module level `pages`
+    // harness above, hence the slice) is unambiguously its Sparkline, not daily_hrv's or
     // respiratory_rate's.
-    const stub = chartStubs.slice(stubsBefore)[0]
-    if (!stub) throw new Error('no chart mounted')
-    const clickResting = clickHandlerOf(stub)
+    const entry = capturedCharts.slice(chartsBefore)[0]
+    if (!entry) throw new Error('no chart mounted')
+    const clickResting = clickHandlerOf(entry)
 
     return {
       html: container.innerHTML,
