@@ -1,11 +1,13 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { ConfigError, peopleNeedingRebuild, runDerive } from '@haelan/core'
+import { ConfigError, peopleNeedingRebuild, requireDate, runDerive } from '@haelan/core'
 import type { OverrideScope } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { requireString } from './shared.ts'
 
 interface PersonParams { personId: string }
 interface OverrideParams extends PersonParams { overrideId: string }
+interface NoteParams extends PersonParams { localDate: string }
+interface EventParams extends PersonParams { eventId: string }
 
 interface OverrideBody {
   scope?: unknown
@@ -13,6 +15,20 @@ interface OverrideBody {
   action?: unknown
   correctedValue?: unknown
   reason?: unknown
+}
+
+interface NoteBody {
+  body?: unknown
+}
+
+interface EventBody {
+  kind?: unknown
+  startedAtMs?: unknown
+  startedAtOffsetMinutes?: unknown
+  endedAtMs?: unknown
+  endedAtOffsetMinutes?: unknown
+  value?: unknown
+  note?: unknown
 }
 
 interface AffectedRange { from: string, to: string }
@@ -120,6 +136,60 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     })
     overrides.remove({ personId, id: overrideId, nowMs: app.haelan.now() })
     return reply.send({ id: overrideId, ...applyOverride(app, personId, localDate) })
+  })
+
+  // The three routes below take no drain, no loop, no budget and no `applied` field, which is not
+  // an omission next to the two above it. An override changes what a derivation computes, so
+  // writing one leaves a day for runDerive to recompute and the response has to say whether that
+  // recomputation actually ran. A note or an event changes no derived number at all: it is
+  // commentary a reader sees beside the numbers, not an input to any of them. NoteStore and
+  // EventStore carry the same asymmetry one level down, both with a comment saying why, and this
+  // one is its mirror at the HTTP boundary: nothing here marks a day dirty, so there is nothing to
+  // apply and nothing to report applying.
+  app.put<{ Params: NoteParams, Body: NoteBody }>('/p/:personId/notes/:localDate', async (request, reply) => {
+    const personId = personIdOf(request)
+    const localDate = request.params.localDate
+    requireDate('localDate', localDate)
+    const body = request.body ?? {}
+    const noteBody = textField(body.body, 'body')
+
+    const id = app.haelan.instance.notes.put({
+      personId, localDate, body: noteBody, nowMs: app.haelan.now(),
+    })
+    return reply.send({ id })
+  })
+
+  app.post<{ Params: PersonParams, Body: EventBody }>('/p/:personId/events', async (request, reply) => {
+    const personId = personIdOf(request)
+    const body = request.body ?? {}
+    // kind is deliberately not validated against a fixed list: the schema's own column comment
+    // names a seed set but declined to enforce it, so refusing an unlisted kind here would add
+    // back a rule the schema chose not to make.
+    const kind = textField(body.kind, 'kind')
+    const startedAtMs = requiredNumberField(body.startedAtMs, 'startedAtMs')
+    // Offset defaults to 0 (UTC) rather than being required: a caller that only has an instant,
+    // with no local timezone to attach to it, still has an event worth recording.
+    const startedAtOffsetMinutes = numberField(body.startedAtOffsetMinutes, 'startedAtOffsetMinutes') ?? 0
+    const endedAtMs = numberField(body.endedAtMs, 'endedAtMs')
+    const endedAtOffsetMinutes = numberField(body.endedAtOffsetMinutes, 'endedAtOffsetMinutes')
+    const value = numberField(body.value, 'value')
+    const note = optionalTextField(body.note, 'note')
+
+    const id = app.haelan.instance.events.add({
+      personId, kind, startedAtMs, startedAtOffsetMinutes, endedAtMs, endedAtOffsetMinutes, value, note,
+    })
+    return reply.send({ id })
+  })
+
+  app.delete<{ Params: EventParams }>('/p/:personId/events/:eventId', async (request, reply) => {
+    const personId = personIdOf(request)
+    const eventId = request.params.eventId
+    // No existence check first, unlike overrides' DELETE: EventStore carries no get() to check
+    // against, and remove is already scoped by personId as well as id, so a missing or someone
+    // else's event id does nothing rather than something. A 200 here says the id is gone, which
+    // is true whether this call or an earlier one made it so.
+    app.haelan.instance.events.remove({ personId, id: eventId })
+    return reply.send({ id: eventId })
   })
 }
 
@@ -242,4 +312,19 @@ function numberField(value: unknown, name: string): number | undefined {
     throw new ConfigError(`${name} must be a finite number`)
   }
   return value
+}
+
+/** Like numberField, but absent is refused rather than passed through: an event needs a start. */
+function requiredNumberField(value: unknown, name: string): number {
+  if (value === undefined || value === null) throw new ConfigError(`${name} is required`)
+  return numberField(value, name) as number
+}
+
+/**
+ * An event's note is free text same as textField's, except an event without one is as valid as
+ * one with, so absent is allowed through rather than refused.
+ */
+function optionalTextField(value: unknown, name: string): string | undefined {
+  if (value === undefined || value === null) return undefined
+  return textField(value, name)
 }

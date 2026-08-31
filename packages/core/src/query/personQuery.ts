@@ -351,7 +351,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
  * The column holds ISO dates and every comparison against it is a string comparison, so an
  * unpadded '2026-8-1' does not just sort oddly, it silently excludes the whole month.
  */
-function requireDate(label: string, value: string): void {
+export function requireDate(label: string, value: string): void {
   if (!ISO_DATE.test(value)) {
     throw new ConfigError(`${label} must be a YYYY-MM-DD local date, got '${value}'`)
   }
