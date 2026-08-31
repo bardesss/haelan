@@ -13,6 +13,7 @@ import { act } from 'react'
 import { Sparkline, sparklinePointDate } from '../src/charts/Sparkline.js'
 import { ActivityHeatmap, heatmapClickDate } from '../src/charts/ActivityHeatmap.js'
 import { HeartRateRange, heartRateRangePointDate } from '../src/charts/HeartRateRange.js'
+import { SYMBOL } from '../src/charts/base.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { DayRow } from '../src/fixtures/july.js'
 
@@ -341,12 +342,15 @@ describe('HeartRateRange', () => {
     })
 
     // The reviewer's own measurement: a six day range spanning two months, both sharing the same
-    // three day-of-month labels ("10","11","12"), with the override on the second month's day. A
-    // string positioned mark resolves `"11"` against the axis's data and lands on the FIRST match,
+    // three day-of-month labels ("10","11","12"), with an exclude and an annotation override on
+    // the second month's "11" and a correct override on the second month's "10". A string
+    // positioned mark resolves e.g. `"11"` against the axis's data and lands on the FIRST match,
     // 2026-07-11 (index 1), at 2026-07-11's own height; an index positioned mark lands on the day
-    // actually named, 2026-08-11 (index 4), at its own mean. Both the excluded markPoint and the
-    // annotation markLine are checked in one range, since both share the exact defect and the exact
-    // fix.
+    // actually named, 2026-08-11 (index 4), at its own mean. All three mark groups (excluded,
+    // corrected, annotations) are checked in one range, since all three share the exact defect and
+    // the exact fix: the round this test was first written in covered only excluded and
+    // annotations, which left the third of the fix (the corrected markPoint entry, still keyed on
+    // `date.slice(8)` at review time) provably able to regress with the whole suite staying green.
     it('resolves a mark to the day it actually names, not the first day sharing its day-of-month, across a two month range', () => {
       const twoMonthDays: DayRow[] = [
         { date: '2026-07-10', steps: null, hrMin: 50, hrMean: 55, hrMax: 60, sleepMinutes: null, worn: true },
@@ -358,7 +362,8 @@ describe('HeartRateRange', () => {
       ]
       act(() => {
         root!.render(
-          <HeartRateRange days={twoMonthDays} excluded={['2026-08-11']} corrected={[]}
+          <HeartRateRange days={twoMonthDays} excluded={['2026-08-11']}
+            corrected={[{ date: '2026-08-10', value: 58 }]}
             annotations={[{ date: '2026-08-11', text: 'Watch left charging' }]} label="hr range" />,
         )
       })
@@ -367,8 +372,12 @@ describe('HeartRateRange', () => {
         series: { markPoint?: { data: unknown[] }, markLine?: { data: unknown[] } }[]
       }
       const meanSeries = option.series[2]!
-      // Index 4, 2026-08-11's own position, at its own mean (64), never index 1 (2026-07-11, mean 56).
-      expect(meanSeries.markPoint?.data).toEqual([{ name: 'excluded', xAxis: 4, yAxis: 64 }])
+      // excluded at index 4 (2026-08-11, mean 64), never index 1 (2026-07-11, mean 56).
+      // corrected at index 3 (2026-08-10, mean 58), never index 0 (2026-07-10, mean 55).
+      expect(meanSeries.markPoint?.data).toEqual([
+        { name: 'excluded', xAxis: 4, yAxis: 64 },
+        { name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected, itemStyle: { color: '#000000' }, xAxis: 3, yAxis: 58 },
+      ])
       expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: 4 }])
     })
   })
