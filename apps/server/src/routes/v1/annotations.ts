@@ -34,17 +34,38 @@ const ACTIONS = ['exclude', 'correct'] as const
  * Deliberately not SyncRunner's MAX_DERIVE_BATCHES, and deliberately not shared with it. A
  * background job that drains for a minute costs a long job; the same drain in a request handler
  * costs the whole process, because better-sqlite3 is synchronous and the loop never yields, so
- * every other route, every other person and the runner's own timers wait behind it. Sixteen
- * batches is a thousand days, enough to carry a correction out from behind an ordinary backfill
- * backlog, and shared.ts's MAX_RANGE_DAYS is here because a request path holding the event loop
- * has already been treated once as a defect worth its own guard.
+ * every other route, every other person and the runner's own timers wait behind it.
+ *
+ * This precedent is already in the codebase: shared.ts carries MAX_RANGE_DAYS because one
+ * authenticated GET once held the event loop for roughly twelve seconds, and that was treated as
+ * a defect worth a guard of its own rather than as a slow request.
+ *
+ * 128 batches of the size below is a little over a thousand days, which is deep enough to carry a
+ * correction out from behind an ordinary backfill backlog. The budget below, not this, is what
+ * actually stops a drain; this only bounds the loop when every batch is cheap.
  */
-const MAX_DRAIN_BATCHES = 16
+const MAX_DRAIN_BATCHES = 128
+
+/**
+ * Eight days per batch rather than runDerive's default of 64.
+ *
+ * The budget below is checked between batches, so a batch is the granularity at which the drain
+ * can be preempted and its size is how far past the budget a handler can run. At the default a
+ * single batch of dense days could block for seconds with the budget unable to interrupt it,
+ * which is a bound that reads as a guarantee and is not one. Eight keeps the worst overshoot to a
+ * week of days while leaving the per batch overhead, one claim query and one settings read,
+ * negligible against the derivation itself.
+ */
+export const DRAIN_BATCH_DAYS = 8
 
 /**
  * The bound that actually protects the event loop, since how long a batch takes is a property of
- * the data rather than of the count. Wall clock rather than app.haelan.now(), which is the domain
- * clock a test freezes: what is being limited here is real time spent not answering anybody else.
+ * the data rather than of the count.
+ *
+ * performance.now() rather than Date.now(), which is not monotonic: a system clock step, an NTP
+ * correction or a daylight saving jump would otherwise move the budget under a drain in progress.
+ * And rather than app.haelan.now(), the domain clock a test freezes, because what is being
+ * limited here is real time spent not answering anybody else.
  */
 const DRAIN_BUDGET_MS = 1_000
 
@@ -148,7 +169,7 @@ function drain(app: FastifyInstance, personId: string): void {
   const person = app.haelan.stores.people.get(personId)
   if (!person || peopleNeedingRebuild([person]).length > 0) return
 
-  const startedAtMs = Date.now()
+  const startedAtMs = performance.now()
   try {
     for (let batch = 0; batch < MAX_DRAIN_BATCHES; batch++) {
       const report = runDerive({
@@ -158,18 +179,21 @@ function drain(app: FastifyInstance, personId: string): void {
         overrides: instance.overrides,
         settings: instance.settings,
         nowMs: app.haelan.now(),
+        batch: DRAIN_BATCH_DAYS,
         // Scoped to the writer's own person. An unscoped drain would derive other people's dirty
         // days inside this request: work this caller did not ask for and, on a shared instance,
         // work about somebody else's data.
         personIds: [personId],
       })
       if (report.daysDerived === 0) return
-      if (Date.now() - startedAtMs >= DRAIN_BUDGET_MS) {
-        console.log(`overrides: derivation for ${personId} gave up the event loop with days still queued`)
+      if (performance.now() - startedAtMs >= DRAIN_BUDGET_MS) {
+        // Neither line claims anything about what is left queued. A final full batch can have
+        // emptied the queue, and stillQueued asks a line later rather than guessing here.
+        console.log(`overrides: derivation for ${personId} stopped at its ${DRAIN_BUDGET_MS}ms budget`)
         return
       }
     }
-    console.log(`overrides: derivation for ${personId} stopped after ${MAX_DRAIN_BATCHES} batches with days still queued`)
+    console.log(`overrides: derivation for ${personId} stopped after ${MAX_DRAIN_BATCHES} batches`)
   } catch (error) {
     console.error(`overrides: derivation for ${personId} failed, ${messageOf(error)}`)
   }

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import {
   DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, runDerive, sampleTarget, schema,
 } from '@haelan/core'
+import { DRAIN_BATCH_DAYS } from '../src/routes/v1/annotations.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -205,9 +206,13 @@ describe('POST /overrides', () => {
     harness.app.haelan.stores.people.stampBuiltVersions({
       id: 'p1', mappingVersion: MAPPING_VERSION, derivationVersion: DERIVATION_VERSION - 1,
     })
+    const claims = countClaims(harness)
 
     const write = await postOverride(harness, token, 'steps', '2026-08-15')
     expect(write.statusCode).toBe(200)
+    // Zero batches, not merely an unapplied answer: a drain that crashed would also report
+    // applied false, and "did not derive" is the whole subject of the quarantine.
+    expect(claims.count).toBe(0)
     expect(write.json().applied).toBe(false)
     expect(harness.app.haelan.instance.deriveQueue.has({ personId: 'p1', localDate: '2026-08-15' })).toBe(true)
     // The override is stored and the day is untouched, which is what applied false claimed.
@@ -226,19 +231,43 @@ describe('POST /overrides', () => {
     makeTheDrainNeverFinish(harness)
     const claims = countClaims(harness)
 
-    // Every reading a second later than the last, so the budget is spent after the first batch
-    // and the batch bound is not what stops the loop.
+    // Every reading five seconds later than the last, so the budget is spent after the first
+    // batch and the batch bound is not what stops the loop. Restored in a finally: a rejected
+    // inject would otherwise leak a mocked clock into every test after this one.
     let ticks = 0
-    const clock = vi.spyOn(Date, 'now').mockImplementation(() => {
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => {
       ticks += 5_000
-      return 1_770_000_000_000 + ticks
+      return ticks
     })
-    const write = await postOverride(harness, token, 'steps', '2026-08-15')
-    clock.mockRestore()
+    let write
+    try {
+      write = await postOverride(harness, token, 'steps', '2026-08-15')
+    } finally {
+      clock.mockRestore()
+    }
 
     expect(claims.count).toBe(1)
     expect(write.statusCode).toBe(200)
     expect(write.json().applied).toBe(false)
+  })
+
+  // The budget is checked between batches, so a batch is the granularity at which the drain can
+  // be preempted and its size is how far past the budget a handler can run. At runDerive's
+  // default of 64 a single batch of dense days could block for seconds with the budget unable to
+  // interrupt it, which is a bound that reads as a guarantee and is not one.
+  it('takes the drain in small batches, so the budget can interrupt it', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedSamplesFor(harness, '2026-08-15', 'steps', 900)
+    drainOnce(harness)
+    const backlog = 70
+    seedBacklog(harness, backlog)
+    const claims = countClaims(harness)
+
+    const write = await postOverride(harness, token, 'steps', '2026-08-15')
+    expect(write.json().applied).toBe(true)
+    // The backlog plus the day this write marked, in batches of DRAIN_BATCH_DAYS, plus the empty
+    // claim that ends the loop. At the default batch size this would be three.
+    expect(claims.count).toBe(Math.ceil((backlog + 1) / DRAIN_BATCH_DAYS) + 1)
   })
 
   // Resolving the day is a database read for a sample or a session, so it has to happen before
