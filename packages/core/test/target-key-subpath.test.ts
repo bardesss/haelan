@@ -15,6 +15,14 @@ const TARGET = './src/derive/targetKey.ts'
 const read = (relative: string): string =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
 
+// Matches an `import` statement of any shape, and also an `export ... from '...'` re-export,
+// which pulls a module in exactly as surely as an import does but carries no `import` keyword at
+// all: a plain `/^import\s.*$/` scan is blind to `export { x } from '../db/schema.ts'` landing in
+// this file, the same hole metrics-subpath.test.ts's own `from ['"]` check exists to close on its
+// side. A bare `export function` or `export const` line has no `from '...'` clause and does not
+// match, so it does not pollute the exact-equality lists below.
+const IMPORT_LINE = /^(?:import\s.*|export\s.*\bfrom\s*['"].*)$/gm
+
 describe('the @haelan/core/target-key subpath', () => {
   it('is published, and points at the target key module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
@@ -28,13 +36,13 @@ describe('the @haelan/core/target-key subpath', () => {
     // through every other test in this suite and only break the bundle, silently. This is the
     // one check standing between an edit here and that failure mode.
     const targetKeySource = read('../src/derive/targetKey.ts')
-    const importLines = [...targetKeySource.matchAll(/^import\s.*$/gm)].map((m) => m[0])
+    const importLines = [...targetKeySource.matchAll(IMPORT_LINE)].map((m) => m[0])
     expect(importLines).toEqual(["import { ConfigError } from '../errors.ts'"])
   })
 
   it('reaches errors.ts through no import at all', () => {
     const errorsSource = read('../src/errors.ts')
-    const importLines = [...errorsSource.matchAll(/^import\s.*$/gm)].map((m) => m[0])
+    const importLines = [...errorsSource.matchAll(IMPORT_LINE)].map((m) => m[0])
     // Naive on purpose, the same way coverage-signal-subpath.test.ts's own scan is: an empty
     // list is what "imports nothing at all" requires. A single import, of any shape, is exactly
     // the drift this test exists to catch before a bundle does, since errors.ts is the floor

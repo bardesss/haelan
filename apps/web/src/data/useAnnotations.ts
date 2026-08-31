@@ -1,15 +1,21 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import type { QueryClient, UseMutationResult, UseQueryResult } from '@tanstack/react-query'
+import type { OverrideScope } from '@haelan/core/target-key'
 import { apiGet, apiSend, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 
-// Mirrors packages/core/src/derive/targetKey.ts's OverrideScope by value, not by import: the
-// core package's only browser safe subpaths today are ./metrics and ./coverage-signal (see
-// packages/core/package.json), and its main barrel pulls in better-sqlite3 and @node-rs/argon2,
-// neither of which can load in a browser bundle. A third subpath for this one union is a later
-// task's job (the panel that builds target keys), not this data layer's.
-export type OverrideScope = 'sample' | 'session' | 'day_metric'
+// Re-exported under the same name so nothing importing OverrideScope from here has to change:
+// AnnotatePanel.tsx (the panel that builds target keys) added a third browser safe subpath,
+// ./target-key, and packages/core/src/derive/targetKey.ts is the module that actually declares
+// this union, so importing it directly replaced what used to be a by-value copy kept here because
+// no such subpath existed yet.
+export type { OverrideScope }
+
+// OverrideAction has no equivalent subpath to import from: the enum lives in the overrides table
+// (packages/core/src/db/schema/annotations.ts) and the route's own ACTIONS constant
+// (apps/server/src/routes/v1/annotations.ts), neither reachable from a browser bundle, so this
+// one is still mirrored by value rather than by import.
 export type OverrideAction = 'exclude' | 'correct'
 
 // Mirrors the three StoredNote/StoredEvent/StoredOverride rows apps/server/src/routes/v1's three

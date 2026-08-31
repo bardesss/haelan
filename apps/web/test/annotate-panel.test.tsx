@@ -140,12 +140,87 @@ describe('correct requires a value', () => {
     expect(submitButton().disabled).toBe(true)
   })
 
-  it('keeps the submit button disabled when the corrected value cannot parse as a number', () => {
+  // Not a second copy of the "no corrected value" case above: this is the browser's own value
+  // sanitisation algorithm for type="number", proved rather than assumed. It is what makes an
+  // isNaN check on correctedNumber dead code in AnnotatePanel.tsx: no keystroke can leave this
+  // field holding a non-numeric, non-empty string for that check to ever see.
+  it('sanitises a non numeric keystroke in the corrected value field to empty, same as leaving it blank', () => {
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
     click(segment('Correct'))
-    type(fields()[0]!, 'not a number')
+    const valueInput = fields()[0]!
+    type(valueInput, 'not a number')
+    expect(valueInput.value).toBe('')
     type(fields()[1]!, 'watch mis-logged steps')
     expect(submitButton().disabled).toBe(true)
+  })
+})
+
+describe('the correct action', () => {
+  // The whole two-state response was designed around this action: the reader is changing a
+  // number, not just marking a day, so a payload that silently posted 'exclude' or dropped
+  // correctedValue would save the wrong write while looking, from the disabled-button tests
+  // alone, exactly like a correct submission.
+  it('posts action correct and the typed corrected value, not exclude', async () => {
+    let posted: Record<string, unknown> | null = null
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_input, init) => {
+      posted = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
+      return respond(200, { id: 'o1', affected: null, applied: true })
+    }) as typeof fetch
+
+    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
+    click(segment('Correct'))
+    type(fields()[0]!, '8500')
+    type(fields()[1]!, 'watch mis-logged steps')
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+
+    expect(posted).not.toBeNull()
+    expect(posted!['action']).toBe('correct')
+    expect(posted!['correctedValue']).toBe(8500)
+    expect(posted!['targetKey']).toBe(dayMetricTarget(TARGET))
+  })
+
+  // Both applied-outcome tests further down submit on the default exclude tab, which proves the
+  // gate exists but not that the correct branch reaches the same onSuccess wiring: a mutate call
+  // with its own inline `{ onSuccess }` per action is exactly the shape where one branch could
+  // close unconditionally while its sibling stayed gated, and the suite would not notice.
+  it('closes the panel once a correction has applied', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true,
+    })) as typeof fetch
+
+    let closed = false
+    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => { closed = true }} />))
+    click(segment('Correct'))
+    type(fields()[0]!, '8500')
+    type(fields()[1]!, 'watch mis-logged steps')
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+
+    expect(closed).toBe(true)
+  })
+
+  it('stays open and reports not yet applied for a correction that has not applied', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: false,
+    })) as typeof fetch
+
+    let closed = false
+    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => { closed = true }} />))
+    click(segment('Correct'))
+    type(fields()[0]!, '8500')
+    type(fields()[1]!, 'watch mis-logged steps')
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+
+    expect(closed).toBe(false)
+    expect(container!.textContent).toContain('The correction is saved. The numbers behind it have not caught up yet.')
   })
 })
 

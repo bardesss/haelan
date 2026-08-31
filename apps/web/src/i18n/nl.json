@@ -489,7 +489,7 @@
     "noteLabel": "Notitie",
     "kindLabel": "Soort",
     "startedAtLabel": "Begonnen",
-    "endedAtLabel": "Geëindigd, optioneel",
+    "endedAtLabel": "Beëindigd, optioneel",
     "eventValueLabel": "Waarde, optioneel",
     "eventNoteLabel": "Notitie, optioneel",
     "saving": "Bezig met opslaan",
@@ -498,7 +498,7 @@
     "event": {
       "kinds": {
         "illness": "Ziekte",
-        "travel": "Reizen",
+        "travel": "Reis",
         "alcohol": "Alcohol",
         "medication": "Medicatie",
         "injury": "Blessure",

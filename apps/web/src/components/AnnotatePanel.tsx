@@ -62,11 +62,15 @@ export function AnnotatePanel({ target, onClose }: {
   // they clicked already said which day and which metric this panel is about.
   const targetKey = dayMetricTarget({ localDate: target.localDate, metric: target.metric })
 
-  const reasonRequired = action === 'exclude' || action === 'correct'
+  // No isNaN check on correctedNumber: the field it comes from is type="number", and the HTML
+  // value sanitisation algorithm for that type (enforced by every real browser, and by happy-dom
+  // in the test below) rejects a keystroke that would leave the value non-numeric before it ever
+  // reaches this state. A non-empty correctedValue is therefore always a parseable number here;
+  // an isNaN guard on it was dead code checking a state this field cannot produce.
   const correctedNumber = correctedValue.trim() === '' ? null : Number(correctedValue)
   const canSubmit =
     action === 'exclude' ? reason.trim() !== '' :
-    action === 'correct' ? reason.trim() !== '' && correctedNumber !== null && !Number.isNaN(correctedNumber) :
+    action === 'correct' ? reason.trim() !== '' && correctedNumber !== null :
     action === 'note' ? noteBody.trim() !== '' :
     kind.trim() !== '' && startedAt !== ''
 
@@ -155,7 +159,10 @@ export function AnnotatePanel({ target, onClose }: {
               <label className="field">
                 <span className="label">{t('annotate.reasonLabel')}</span>
                 <input className="input" value={reason} onChange={(event) => setReason(event.target.value)} />
-                {reasonRequired && <span className="field-hint">{t('annotate.reasonHint')}</span>}
+                {/* Unconditional, not gated on a flag: this field only ever renders inside the
+                    exclude-or-correct block above, and the schema makes reason notNull for both,
+                    so there is no branch here in which the hint would not apply. */}
+                <span className="field-hint">{t('annotate.reasonHint')}</span>
               </label>
             </>
           )}
