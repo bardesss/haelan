@@ -7,16 +7,26 @@ import type { QueryClient } from '@tanstack/react-query'
  * own fetch-then-parse chain, and a budget tuned against how long that happens to take on one
  * machine is a race everywhere else: a CI runner slower than the laptop it was tuned on hits the
  * ceiling on a page that was still going to settle, and raising the number again only moves the
- * flake to a slower runner still. queryClient.isFetching() sidesteps the guess: it is the count of
- * queries actually in flight, so waiting on it means waiting on the thing this helper actually
- * cares about instead of how long that thing usually takes.
+ * flake to a slower runner still. queryClient.isFetching() + queryClient.isMutating() sidesteps
+ * the guess: it is the count of queries and mutations actually in flight, so waiting on it means
+ * waiting on the thing this helper actually cares about instead of how long that thing usually
+ * takes.
  *
- * Requires isFetching() to have left zero at least once before it will call a later zero
- * "settled". isFetching() reads zero before any query has started as readily as it does once every
- * query has finished, and without this guard a page that has not begun would satisfy "nothing in
- * flight" on the very first sample, exactly the "never got there" case this helper exists to catch
- * rather than paper over (an earlier version of this file had exactly that gap, on a wall clock
- * budget instead of a fetch count, and returning silently instead of throwing).
+ * Both counts, not isFetching() alone: a click triggered mutation (a submit, a remove) is invisible
+ * to isFetching(), so a test that clicks and then calls this helper could settle on the read before
+ * the click's own write and the refetch it invalidates ever registered as in flight, the same gap
+ * the guard below closes for a query that has not started yet. override-list.test.tsx hit exactly
+ * this: a removal's DELETE and the GET it invalidates both resolved inside the same act() the click
+ * already flushed, so isFetching() alone never left zero and sawFetch never armed, and the helper
+ * waited out its own budget for an in-flight state that had already come and gone.
+ *
+ * Requires the combined count to have left zero at least once before it will call a later zero
+ * "settled". The combined count reads zero before anything has started as readily as it does once
+ * every query and mutation has finished, and without this guard a page that has not begun would
+ * satisfy "nothing in flight" on the very first sample, exactly the "never got there" case this
+ * helper exists to catch rather than paper over (an earlier version of this file had exactly that
+ * gap, on a wall clock budget instead of a fetch count, and returning silently instead of
+ * throwing).
  *
  * Nothing in flight is necessary but not sufficient: a query settling can still trigger a render
  * that starts another one (a refetch fired from an effect, say), so this also asks for one more
@@ -33,17 +43,18 @@ import type { QueryClient } from '@tanstack/react-query'
  *
  * 2000 attempts (up to ten seconds), not the 200 (one second) a wall clock version needed: the
  * ceiling is no longer the settle mechanism, only a hang detector, so it can afford to be generous
- * without weakening anything. The common case still returns as soon as isFetching() reaches zero
- * and one more sample confirms the tree agrees, which does not need anywhere near ten seconds; the
- * ceiling only matters for a page that is genuinely stuck.
+ * without weakening anything. The common case still returns as soon as the combined count reaches
+ * zero and one more sample confirms the tree agrees, which does not need anywhere near ten
+ * seconds; the ceiling only matters for a page that is genuinely stuck.
  */
 export async function flush(queryClient: QueryClient, getHtml: () => string): Promise<void> {
-  let sawFetch = queryClient.isFetching() > 0
+  const inFlight = () => queryClient.isFetching() + queryClient.isMutating() > 0
+  let sawFetch = inFlight()
   let previous = getHtml()
   let idleOnce = false
   for (let attempt = 0; attempt < 2000; attempt += 1) {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
-    if (queryClient.isFetching() > 0) {
+    if (inFlight()) {
       sawFetch = true
       idleOnce = false
       previous = getHtml()

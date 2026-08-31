@@ -53,6 +53,13 @@ body {
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
 .button:hover { color: var(--text-primary); border-color: var(--text-faint); }
+/* Unstyled before this: only .button-primary carried a disabled treatment, so a plain .button
+   (the settings list's own remove button, mid removal) read exactly like an idle one while its
+   label switched to "Removing" and its click stopped doing anything. Same tokens
+   .button-primary:disabled already uses, not new ones. */
+.button:disabled, .button[aria-disabled='true'] {
+  background: var(--surface-disabled); color: var(--text-disabled); cursor: not-allowed;
+}
 .button svg, .icon-button svg { width: 15px; height: 15px; }
 /* The source selector is a bare <select> wrapped in a .button label, so it inherits the button's
    box and contributes only its own text; without this it draws a second border inside the first. */

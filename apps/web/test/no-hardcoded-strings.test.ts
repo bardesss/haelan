@@ -17,7 +17,16 @@ function tsxFiles(dir: string): string[] {
 // and deliberately not every possible one: a guard that tried to be exhaustive would fire on
 // punctuation and separators and get switched off. Its job is to make adding a page with inline
 // copy fail once, loudly, at the point somebody would otherwise not notice.
-const TEXT_BETWEEN_TAGS = />\s*([A-Za-z][A-Za-z ,.'!?-]{3,})\s*</g
+//
+// The leading `>` excludes one preceded by `=` or `-`, i.e. `=>` and `->`: an arrow function
+// whose body is a bare call to a generic function, `() => apiGet<T>(...)`, ends in a `>` of its
+// own before the generic's own `<`, and without this exclusion that closing arrow reads as a
+// closing tag and the generic's opening angle bracket as the next one, with the identifier
+// between them (queryFn's own callee name) scored as if it were copy. JSX text is never preceded
+// by `=` or `-` (an attribute's own `=` is always followed by a quote or `{`, never directly by
+// the `>` that starts a text node), so this narrows what counts as a tag boundary without
+// weakening what the check is actually for.
+const TEXT_BETWEEN_TAGS = /(?<![=-])>\s*([A-Za-z][A-Za-z ,.'!?-]{3,})\s*</g
 
 // The product's own name, not copy: it is spelled "haelan" identically in every language the
 // catalogues support, so there is no translation for it to live in. Narrow on purpose, unlike

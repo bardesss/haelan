@@ -9,6 +9,7 @@ import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
+import { Settings } from '../src/pages/Settings.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -152,6 +153,9 @@ function stubFetch(
 const ACTIVITY_ROUTE = '/activity?range=week&on=2026-08-12'
 const RECOVERY_ROUTE = '/recovery?range=week&on=2026-08-12'
 const SLEEP_ROUTE = '/sleep?range=week&on=2026-08-12'
+// No range or anchor query params: Settings never calls usePageControls, so this is just a real
+// path for window.history.replaceState to carry; nothing in the page reads it back.
+const SETTINGS_ROUTE = '/settings'
 
 /**
  * Mounts one page for real, waits for every query to settle, and returns the settled markup.
@@ -183,19 +187,24 @@ const settledDashboard = (lng: string) => settledPage(Dashboard, RANGE, lng)
 const settledActivity = (lng: string) => settledPage(Activity, ACTIVITY_ROUTE, lng)
 const settledRecovery = (lng: string) => settledPage(Recovery, RECOVERY_ROUTE, lng)
 const settledSleep = (lng: string) => settledPage(Sleep, SLEEP_ROUTE, lng)
+const settledSettings = (lng: string) => settledPage(Settings, SETTINGS_ROUTE, lng)
 
 const restore = stubFetch()
 // Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
 // found that Activity and Recovery, converted off fixtures in the two tasks before Sleep, had
 // never been added here either, so three new pages and twenty odd new cards sat outside every
-// assertion below. All four settle for real now through the same stubFetch week, rather than
+// assertion below. All five settle for real now through the same stubFetch week, rather than
 // excluding a whole page because one of its charts cannot answer every assertion (see
-// HAS_ABSENCE_CHART below for the one assertion that genuinely does not apply to every page).
+// HAS_ABSENCE_CHART and IS_CHART_PAGE below for the assertions that genuinely do not apply to
+// every page). Settings is the one page here with no chart and no delta at all, not a page whose
+// chart happens not to draw absences, which is why it gets its own named carve-out rather than
+// reusing HAS_ABSENCE_CHART's.
 const pages = {
   Dashboard: await settledDashboard('en'),
   Activity: await settledActivity('en'),
   Recovery: await settledRecovery('en'),
   Sleep: await settledSleep('en'),
+  Settings: await settledSettings('en'),
 }
 const dashboardNl = await settledDashboard('nl')
 restore()
@@ -218,7 +227,16 @@ restore()
 // nothing, the same reason Activity's own distance and floors cards cannot either despite steps,
 // right beside them, being able to through the one chart that draws densely.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
-  Dashboard: true, Activity: true, Recovery: false, Sleep: false,
+  Dashboard: true, Activity: true, Recovery: false, Sleep: false, Settings: false,
+}
+
+// Whether a page carries any chart (and, riding on the same StatTile/MetricCard machinery, any
+// delta) at all. Settings has neither: it is a table, not a metric page, so "names every chart"
+// and "states the window every delta compared" have nothing to check on it and are gated here by
+// name rather than by leaving Settings out of `pages` entirely, the same instinct HAS_ABSENCE_CHART
+// above already states for a narrower case (a page with charts that just do not draw absences).
+const IS_CHART_PAGE: Record<string, boolean> = {
+  Dashboard: true, Activity: true, Recovery: true, Sleep: true, Settings: false,
 }
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
@@ -229,7 +247,10 @@ function tables(html: string): string {
 }
 
 describe.each(Object.entries(pages))('%s', (_name, html) => {
-  it('names every chart and points it at a description', () => {
+  // Gated on IS_CHART_PAGE, not left to run unconditionally: Settings carries no chart at all
+  // (a table is not a chart, and draws no role="img" host), so "at least one" would be a false
+  // claim about it rather than a broken one.
+  it.skipIf(!IS_CHART_PAGE[_name])('names every chart and points it at a description', () => {
     const hosts = [...html.matchAll(/<div[^>]*role="img"[^>]*>/g)].map((m) => m[0])
     expect(hosts.length).toBeGreaterThan(0)
     for (const host of hosts) {
@@ -283,11 +304,14 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(tables(html)).toMatch(/not worn|no reading/)
   })
 
-  // These four pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // These five pages carry most of the catalogue, so a mistyped key would otherwise render as
   // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
-  // them look for the shape a missing translation actually takes.
+  // them look for the shape a missing translation actually takes. settings and annotate joined
+  // this list with Settings (M3c-12): AnnotatePanel's own keys never reach this file's settled,
+  // no-click renders, but a page with settings.* copy now does, and a namespace absent here is a
+  // namespace this test cannot see break.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState)\.[a-zA-Z][a-zA-Z.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z][a-zA-Z.]*\b/)
   })
 
   // Both of these ran against Dashboard alone until the review that spotted three more pages had
@@ -300,7 +324,9 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(new Set(labels).size).toBe(labels.length)
   })
 
-  it('states the window every delta compared', () => {
+  // Gated the same way as the chart assertion above: Settings has no StatTile and so no delta at
+  // all, and "at least one delta" would be a false claim about a page that draws none.
+  it.skipIf(!IS_CHART_PAGE[_name])('states the window every delta compared', () => {
     const deltas = [...html.matchAll(/class="delta"/g)].length
     const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
     expect(deltas).toBeGreaterThan(0)

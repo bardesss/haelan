@@ -157,7 +157,15 @@ export function OverrideList() {
                     <td>{date}</td>
                     <td>
                       <button type="button" className="button"
-                        aria-label={t('settings.overrides.removeAria', { target: info.target, date })}
+                        // id, not just target and date: target+date reconstructs enough of a
+                        // parsed target key to be unique per row (the store's own unique index is
+                        // on (person, scope, target_key)), but two rows that both failed to parse
+                        // (targetInfo's catch branch) collapse to the identical "Target could not
+                        // be read" / "Not recorded for this scope" pair regardless of how
+                        // different their real, unreadable keys are. The id is always unique and
+                        // always at hand, so it closes that gap for every row rather than only the
+                        // ones whose target happens to parse.
+                        aria-label={t('settings.overrides.removeAria', { target: info.target, date, id: item.id })}
                         disabled={removing}
                         onClick={() => removeOverride.mutate({ overrideId: item.id })}>
                         {removing ? t('settings.overrides.removing') : t('settings.overrides.remove')}

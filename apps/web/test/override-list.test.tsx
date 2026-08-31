@@ -11,9 +11,15 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { OverrideList } from '../src/pages/settings/OverrideList.js'
 import type { StoredOverride } from '../src/data/useAnnotations.js'
+import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+// Set by mockFetch, cleared by afterEach unconditionally: a test that asserts before restoring
+// its own mock (or throws out of an assertion) used to leave globalThis.fetch patched for every
+// test still to run in this file, turning one red test into a cascade of unrelated ones. Cleanup
+// belongs to afterEach because that runs whether the test passed, failed or threw.
+let restoreFetch: (() => void) | null = null
 
 beforeEach(() => {
   container = document.createElement('div')
@@ -26,6 +32,10 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  if (restoreFetch) {
+    restoreFetch()
+    restoreFetch = null
+  }
 })
 
 const PERSON: Session = {
@@ -35,32 +45,36 @@ const PERSON: Session = {
 /** Mounts inside a real I18nProvider (English) and a QueryClientProvider carrying a signed in
  * session, the same shape annotate-panel.test.tsx's own withSession/mount pair uses: this
  * component sets real fetch backed queries and mutations, which only exist once the tree is
- * mounted for real. */
-function mount(node: ReactNode): void {
-  const client = new QueryClient({
+ * mounted for real. Returns the QueryClient so a test can wait on it with flush(). */
+function mount(node: ReactNode): QueryClient {
+  const c = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
   })
-  client.setQueryData(queryKeys.session(), PERSON)
-  act(() => { root?.render(<I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>) })
+  c.setQueryData(queryKeys.session(), PERSON)
+  act(() => { root?.render(<I18nProvider lng="en"><QueryClientProvider client={c}>{node}</QueryClientProvider></I18nProvider>) })
+  return c
 }
 
 function respond(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
+function html(): string {
+  return container!.innerHTML
+}
+
 /**
- * A fixed wait rather than flush()'s isFetching-polling: annotate-panel.test.tsx's own precedent
- * for the same situation (a mounted tree with a mock fetch that resolves fast, waited on after a
- * click). flush() assumes whatever it is waiting for is still in flight by the time it takes its
- * first sample, which holds for a page's own initial load but not here: a mutation's fetch plus
- * the refetch its own onSuccess triggers both resolve against this file's mocked, instantly
- * settling fetch inside the same act() the click already flushed, so by the time a poll loop
- * would take its first reading there is nothing left in flight to see, and flush() waits out its
- * own budget for an in-flight state that already came and went. Proved by running it: it hangs
- * every time, not intermittently.
+ * Points globalThis.fetch at `handler` and registers the restore with afterEach via
+ * `restoreFetch`, rather than handing the caller a function it has to remember to run before
+ * every assertion. `stubFetch` below builds the handler; the one inline fetch override elsewhere
+ * in this file goes through this too, so both paths get the same unconditional cleanup.
  */
-async function settle(): Promise<void> {
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+function mockFetch(handler: (url: string, method: string) => Response | Promise<Response>): void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    return handler(String(input), init?.method ?? 'GET')
+  }) as typeof fetch
+  restoreFetch = () => { globalThis.fetch = original }
 }
 
 /**
@@ -70,12 +84,9 @@ async function settle(): Promise<void> {
  * so a test can drive both outcomes without the stub lying about what a real removal does to the
  * list underneath it.
  */
-function stubFetch(initial: readonly StoredOverride[], removalApplied = true): () => void {
+function stubFetch(initial: readonly StoredOverride[], removalApplied = true): void {
   let items = [...initial]
-  const original = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
+  mockFetch((url, method) => {
     if (method === 'DELETE') {
       const id = url.split('/overrides/')[1]
       items = items.filter((item) => item.id !== id)
@@ -83,8 +94,7 @@ function stubFetch(initial: readonly StoredOverride[], removalApplied = true): (
     }
     if (url.includes('/overrides')) return respond(200, { items })
     return respond(404, {})
-  }) as typeof fetch
-  return () => { globalThis.fetch = original }
+  })
 }
 
 function rows(): HTMLTableRowElement[] {
@@ -130,12 +140,20 @@ const UNPARSEABLE: StoredOverride = {
   action: 'exclude', correctedValue: null, reason: 'a target key from a build ahead of this one',
 }
 
+// A second row that fails to parse the same way UNPARSEABLE does, so its target and date cells
+// read identically ("Target could not be read" / "Not recorded for this scope") despite naming a
+// different real, unreadable key: the one case target+date alone cannot tell two rows apart.
+const UNPARSEABLE_2: StoredOverride = {
+  id: 'o6', scope: 'day_metric',
+  targetKey: '{also not valid json',
+  action: 'exclude', correctedValue: null, reason: 'a second unreadable row',
+}
+
 describe('every scope renders a complete row', () => {
   it('shows scope, target, action, reason and date for a day_metric row', async () => {
-    const restore = stubFetch([DAY_METRIC_EXCLUDE])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([DAY_METRIC_EXCLUDE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     const row = rows()[0]!
     const [scope, target, action, reason, date] = cells(row)
@@ -151,10 +169,9 @@ describe('every scope renders a complete row', () => {
   // what this pins, both in what it shows (the corrected value, not just the verb) and in what it
   // must never show for this row.
   it('shows the corrected value for a correct row, and never the word Exclude', async () => {
-    const restore = stubFetch([DAY_METRIC_CORRECT])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([DAY_METRIC_CORRECT])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     const row = rows()[0]!
     const [, , action] = cells(row)
@@ -163,10 +180,9 @@ describe('every scope renders a complete row', () => {
   })
 
   it('shows a sample row with its source, metric and the sample instant as its date', async () => {
-    const restore = stubFetch([SAMPLE])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([SAMPLE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     const row = rows()[0]!
     const [scope, target, , , date] = cells(row)
@@ -179,10 +195,9 @@ describe('every scope renders a complete row', () => {
 
   // The scope this task exists for: nothing before it could show a session scoped row at all.
   it('shows a session row with its session id, and says plainly that it carries no date', async () => {
-    const restore = stubFetch([SESSION])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([SESSION])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     const row = rows()[0]!
     const [scope, target, , , date] = cells(row)
@@ -192,10 +207,9 @@ describe('every scope renders a complete row', () => {
   })
 
   it('renders a target key this build cannot parse as a complete row, not a dropped one and not raw JSON', async () => {
-    const restore = stubFetch([DAY_METRIC_EXCLUDE, UNPARSEABLE])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([DAY_METRIC_EXCLUDE, UNPARSEABLE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     expect(rows()).toHaveLength(2)
     const broken = rows().find((row) => cells(row)[3] === 'a target key from a build ahead of this one')!
@@ -208,12 +222,42 @@ describe('every scope renders a complete row', () => {
   })
 })
 
+describe('the table names itself for a screen reader', () => {
+  // happy-dom applies no stylesheet, so a visually hidden caption or header cell renders exactly
+  // like a visible one here: nothing about this test tells the two apart, which is exactly why the
+  // structure has to be asserted directly rather than inferred from what a sighted pass looked
+  // like. A corrected day once read "excluded" to a screen reader while looking correct visually
+  // (this milestone's own precedent), which is the class of defect a visual only read cannot catch.
+  it('gives the table a caption naming what it lists', async () => {
+    stubFetch([DAY_METRIC_EXCLUDE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    const caption = container!.querySelector('table > caption')
+    expect(caption).not.toBeNull()
+    expect(caption!.textContent).toBe('Corrections and exclusions')
+  })
+
+  it('marks every column header with scope="col", including the visually hidden remove column', async () => {
+    stubFetch([DAY_METRIC_EXCLUDE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    const headers = [...container!.querySelectorAll('thead th')] as HTMLTableCellElement[]
+    expect(headers.map((h) => h.textContent)).toEqual(
+      ['Scope', 'Target', 'Action', 'Reason', 'Date', 'Remove'],
+    )
+    for (const header of headers) {
+      expect(header.getAttribute('scope'), header.outerHTML).toBe('col')
+    }
+  })
+})
+
 describe('the remove button names its own row', () => {
   it('gives every remove button a distinct accessible name', async () => {
-    const restore = stubFetch([DAY_METRIC_EXCLUDE, DAY_METRIC_CORRECT, SAMPLE, SESSION])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([DAY_METRIC_EXCLUDE, DAY_METRIC_CORRECT, SAMPLE, SESSION])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     const buttons = [...container!.querySelectorAll('tbody button')] as HTMLButtonElement[]
     expect(buttons).toHaveLength(4)
@@ -221,19 +265,32 @@ describe('the remove button names its own row', () => {
     expect(new Set(labels).size).toBe(4)
     expect(labels.every((l) => l !== null && l !== '')).toBe(true)
   })
+
+  // The gap target+date alone cannot close: two rows whose keys both fail to parse read identical
+  // target and date cells ("Target could not be read" / "Not recorded for this scope"), so only
+  // the id folded into the aria-label keeps their remove buttons apart.
+  it('stays distinct even for two rows whose target keys both fail to parse', async () => {
+    stubFetch([UNPARSEABLE, UNPARSEABLE_2])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    expect(rows()).toHaveLength(2)
+    const buttons = [...container!.querySelectorAll('tbody button')] as HTMLButtonElement[]
+    const labels = buttons.map((b) => b.getAttribute('aria-label'))
+    expect(new Set(labels).size).toBe(2)
+  })
 })
 
 describe('removing an override', () => {
   it('takes the row out of the list once the removal has applied', async () => {
-    const restore = stubFetch([DAY_METRIC_EXCLUDE, SAMPLE], true)
-    mount(<OverrideList />)
-    await settle()
+    stubFetch([DAY_METRIC_EXCLUDE, SAMPLE], true)
+    const c = mount(<OverrideList />)
+    await flush(c, html)
     expect(rows()).toHaveLength(2)
 
     const button = container!.querySelector('tbody button') as HTMLButtonElement
     act(() => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await settle()
-    restore()
+    await flush(c, html)
 
     expect(rows()).toHaveLength(1)
     expect(container!.textContent).not.toContain('The numbers behind it have not caught up yet')
@@ -245,14 +302,13 @@ describe('removing an override', () => {
   // disappear silently: this is the list's own answer to the same applied:false state
   // AnnotatePanel handles by staying open.
   it('takes the row out of the list even when the removal has not applied yet, and says so', async () => {
-    const restore = stubFetch([DAY_METRIC_EXCLUDE], false)
-    mount(<OverrideList />)
-    await settle()
+    stubFetch([DAY_METRIC_EXCLUDE], false)
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     const button = container!.querySelector('tbody button') as HTMLButtonElement
     act(() => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await settle()
-    restore()
+    await flush(c, html)
 
     expect(rows()).toHaveLength(0)
     expect(container!.textContent).toContain('Removed. The numbers behind it have not caught up yet.')
@@ -261,21 +317,18 @@ describe('removing an override', () => {
 
 describe('the query states', () => {
   it('shows a retry on a failed read', async () => {
-    const original = globalThis.fetch
-    globalThis.fetch = (async () => respond(500, { error: { message: 'boom' } })) as typeof fetch
-    mount(<OverrideList />)
-    await settle()
-    globalThis.fetch = original
+    mockFetch(() => respond(500, { error: { message: 'boom' } }))
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     expect(container!.textContent).toContain('This did not load.')
     expect(container!.querySelector('button')?.textContent).toBe('Try again')
   })
 
   it('shows an empty state when the person has no overrides at all', async () => {
-    const restore = stubFetch([])
-    mount(<OverrideList />)
-    await settle()
-    restore()
+    stubFetch([])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
 
     expect(container!.textContent).toContain('No corrections yet')
     expect(container!.querySelector('table')).toBeNull()
