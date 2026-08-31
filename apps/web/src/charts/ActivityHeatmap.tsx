@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from 'react'
-import type { EChartsOption } from 'echarts'
+import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { chartBase, SYMBOL } from './base.js'
 import { scaleStops, type ChartTokens } from './tokens.js'
-import { calendarLayout } from './calendar.js'
+import { calendarLayout, type CalendarCell } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import type { DayRow } from '../fixtures/july.js'
@@ -13,7 +13,44 @@ import type { DayRow } from '../fixtures/july.js'
 // the index-correctness test that pins it against real dates.
 const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
-export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: number; label: string }) {
+/**
+ * Which local date a click on this heatmap's own worn/absent cells landed on, or undefined for a
+ * click that missed both series (a markPoint overlay, or empty grid space): a markPoint click
+ * reports its own componentType rather than `'series'`, and its value is a marker descriptor, not
+ * a [week, weekday, ...] cell tuple.
+ *
+ * A plain function, exported and tested on its own for the same reason Sparkline's own
+ * `sparklinePointDate` is: echarts renders to an SVG this project's render environment cannot
+ * hit-test, so the translation from a click event to a date is the one piece of this behaviour a
+ * test can reach. See chart-annotations.test.tsx.
+ */
+export function heatmapClickDate(cells: CalendarCell[], event: Pick<ECElementEvent, 'componentType' | 'value'>): string | undefined {
+  if (event.componentType !== 'series') return undefined
+  const value = event.value
+  if (!Array.isArray(value)) return undefined
+  const [week, weekday] = value as [unknown, unknown]
+  return cells.find((c) => c.week === week && c.weekday === weekday)?.date
+}
+
+// A stable reference for a caller that omits annotations/excluded, the same device Sparkline's
+// own EMPTY constant is and Dashboard.tsx's own EMPTY constant is: a default parameter expression
+// that is a fresh `[]` literal runs on every call, handing `build`'s useCallback a new array
+// identity on every render regardless of what actually changed, which is precisely the defect
+// chart-lifecycle.test.tsx guards against.
+const EMPTY = Object.freeze([]) as never[]
+
+export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
+  days: DayRow[]
+  max: number
+  label: string
+  // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart
+  // type the same annotations/excluded values instead of building a different shape per chart.
+  // Optional here (HeartRateRange's own pair is required) because Activity.tsx does not pass them
+  // yet; wiring them in is the task after this one.
+  annotations?: { date: string; text: string }[]
+  excluded?: string[]
+  onPointClick?: (localDate: string) => void
+}) {
   const { t } = useTranslation()
   // Memoised: an unstable build identity makes useChart dispose and recreate the chart.
   const { weeks, cells } = useMemo(() => calendarLayout(days.map((d) => d.date)), [days])
@@ -50,6 +87,26 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
           data: worn,
           itemStyle: { borderRadius: 2, borderWidth: 1, borderColor: tokens.surface },
           emphasis: { itemStyle: { borderColor: tokens.axis } },
+          // Coordinates are [week, weekday] on the same two category axes the cells themselves
+          // are placed on, not a placeholder: a markPoint with no data-backed position would
+          // collapse to the grid's origin rather than sitting on the day it names.
+          markPoint: {
+            symbolSize: SYMBOL.excluded,
+            data: [
+              ...excluded.flatMap((date) => {
+                const cell = cells.find((c) => c.date === date)
+                return cell ? [{ name: 'excluded', coord: [cell.week, cell.weekday], itemStyle: { color: tokens.excluded } }] : []
+              }),
+              // A diamond rather than the excluded mark's circle, and the annotation colour
+              // HeartRateRange's own markLine uses, so the two kinds read apart at a glance.
+              ...annotations.flatMap((a) => {
+                const cell = cells.find((c) => c.date === a.date)
+                return cell
+                  ? [{ name: a.text, coord: [cell.week, cell.weekday], symbol: 'diamond', itemStyle: { color: tokens.stageAwake } }]
+                  : []
+              }),
+            ],
+          },
         },
         {
           type: 'scatter' as const,
@@ -59,18 +116,25 @@ export function ActivityHeatmap({ days, max, label }: { days: DayRow[]; max: num
         },
       ],
     }
-  }, [cells, days, weeks, max, weekdayLabels])
+  }, [cells, days, weeks, max, weekdayLabels, excluded, annotations])
 
-  const { host, style } = useChart(build, 110)
+  const onClick = useCallback((event: ECElementEvent) => {
+    const date = heatmapClickDate(cells, event)
+    if (date !== undefined) onPointClick?.(date)
+  }, [cells, onPointClick])
+
+  const { host, style } = useChart(build, 110, onClick)
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
-        columns: [t('charts.columns.date'), t('charts.columns.weekday'), t('charts.columns.steps')],
+        columns: [t('charts.columns.date'), t('charts.columns.weekday'), t('charts.columns.steps'), t('charts.columns.note')],
         // A day's own DayRow.steps is only ever null because no point exists for it (a real
         // reading is never itself null; see useSeries.ts), not because a coverage figure said the
         // device was off. "not worn" states a cause this table cannot establish; "no reading" is
         // the one thing that is always true of a blank cell.
-        rows: cells.map((c, i) => [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.noReading')]),
+        rows: cells.map((c, i) => [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.noReading'),
+          [excluded.includes(c.date) ? t('charts.absence.excluded') : '',
+            annotations.find((a) => a.date === c.date)?.text ?? ''].filter(Boolean).join(', ')]),
       }} />
   )
 }

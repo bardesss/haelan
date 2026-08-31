@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { EChartsOption } from 'echarts'
+import type { ECElementEvent, EChartsOption } from 'echarts'
 import * as echarts from 'echarts/core'
 import { CustomChart, HeatmapChart, LineChart, ScatterChart } from 'echarts/charts'
 import {
@@ -18,12 +18,25 @@ echarts.use([
   SVGRenderer,
 ])
 
-export function useChart(build: (t: ChartTokens) => EChartsOption, height: number) {
+export function useChart(
+  build: (t: ChartTokens) => EChartsOption,
+  height: number,
+  onClick?: (event: ECElementEvent) => void,
+) {
   const host = useRef<HTMLDivElement>(null)
+  // A ref, not a `build`-style dependency: a caller's click handler is typically a fresh closure
+  // every render (it captures whatever local date it should report), and folding it into the
+  // effect's own dependency array would dispose and reinitialise the chart on every render for a
+  // reason that has nothing to do with what the chart draws, the exact defect chart-lifecycle.test.tsx
+  // guards on the build side.
+  const onClickRef = useRef(onClick)
+  onClickRef.current = onClick
 
   useEffect(() => {
     if (!host.current) return
     const chart = echarts.init(host.current, undefined, { renderer: 'svg' })
+    const handleClick = (event: ECElementEvent) => onClickRef.current?.(event)
+    chart.on('click', handleClick)
     // Read per render rather than once: the preference can change while the page is open, and
     // the next redraw is the first chance to honour it.
     const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
