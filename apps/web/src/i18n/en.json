@@ -545,7 +545,8 @@
       "correctedTo": "Correct to {{value}}",
       "remove": "Remove",
       "removing": "Removing",
-      "removeAria": "Remove {{target}}, {{date}} ({{id}})",
+      "removeAria": "Remove {{target}}, {{date}}",
+      "removeAriaUnreadable": "Remove {{target}}, {{date}} ({{id}})",
       "removeFailed": "That did not remove. Try again.",
       "removedNotYetApplied": "Removed. The numbers behind it have not caught up yet."
     }

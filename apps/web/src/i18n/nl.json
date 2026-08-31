@@ -545,7 +545,8 @@
       "correctedTo": "Corrigeren naar {{value}}",
       "remove": "Verwijderen",
       "removing": "Bezig met verwijderen",
-      "removeAria": "Verwijder {{target}}, {{date}} ({{id}})",
+      "removeAria": "Verwijder {{target}}, {{date}}",
+      "removeAriaUnreadable": "Verwijder {{target}}, {{date}} ({{id}})",
       "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
       "removedNotYetApplied": "Verwijderd. De cijfers erachter zijn nog niet bijgewerkt."
     }

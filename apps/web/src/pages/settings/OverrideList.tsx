@@ -40,10 +40,15 @@ function useOverridesList(): UseQueryResult<OverridesResponse> {
 }
 
 /** What a row shows in its target and date cells, resolved together because both come off the
- * same parse of the same target key. */
+ * same parse of the same target key. `unreadable` marks the one case target and date alone cannot
+ * keep two rows apart: every parsed shape reconstructs enough of a unique target key on its own
+ * (day_metric's metric+date, sample's metric+source+instant, session's own id), but two rows that
+ * both fail to parse collapse to the identical "Target could not be read" / "Not recorded for this
+ * scope" pair regardless of how different their real, unreadable keys are. */
 interface TargetInfo {
   target: string
   date: string | null
+  unreadable: boolean
 }
 
 /**
@@ -63,13 +68,14 @@ function targetInfo(t: Translate, language: string, item: StoredOverride): Targe
   try {
     if (item.scope === 'day_metric') {
       const { localDate, metric } = parseDayMetricTarget(item.targetKey)
-      return { target: metric, date: localDate }
+      return { target: metric, date: localDate, unreadable: false }
     }
     if (item.scope === 'sample') {
       const { source, metric, utcMs } = parseSampleTarget(item.targetKey)
       return {
         target: t('settings.overrides.target.sample', { metric, source }),
         date: new Date(utcMs).toLocaleString(language, { dateStyle: 'medium', timeStyle: 'short' }),
+        unreadable: false,
       }
     }
     const sessionId = parseSessionTarget(item.targetKey)
@@ -78,9 +84,9 @@ function targetInfo(t: Translate, language: string, item: StoredOverride): Targe
     // there is no date to recover here even when the key parses cleanly. dateText below says
     // that plainly rather than leaving the cell blank, which would read as a fetch that silently
     // failed rather than a scope that never carried a date to begin with.
-    return { target: t('settings.overrides.target.session', { sessionId }), date: null }
+    return { target: t('settings.overrides.target.session', { sessionId }), date: null, unreadable: false }
   } catch {
-    return { target: t('settings.overrides.target.unreadable'), date: null }
+    return { target: t('settings.overrides.target.unreadable'), date: null, unreadable: true }
   }
 }
 
@@ -157,15 +163,14 @@ export function OverrideList() {
                     <td>{date}</td>
                     <td>
                       <button type="button" className="button"
-                        // id, not just target and date: target+date reconstructs enough of a
-                        // parsed target key to be unique per row (the store's own unique index is
-                        // on (person, scope, target_key)), but two rows that both failed to parse
-                        // (targetInfo's catch branch) collapse to the identical "Target could not
-                        // be read" / "Not recorded for this scope" pair regardless of how
-                        // different their real, unreadable keys are. The id is always unique and
-                        // always at hand, so it closes that gap for every row rather than only the
-                        // ones whose target happens to parse.
-                        aria-label={t('settings.overrides.removeAria', { target: info.target, date, id: item.id })}
+                        // id folded in only for an unreadable target (see TargetInfo's own
+                        // comment on why that is the one case target+date cannot disambiguate):
+                        // every other row already reads a clean "Remove steps, 2026-08-15" rather
+                        // than paying 36 characters of hex on every ordinary row for a collision
+                        // only the unreadable case can have.
+                        aria-label={info.unreadable
+                          ? t('settings.overrides.removeAriaUnreadable', { target: info.target, date, id: item.id })
+                          : t('settings.overrides.removeAria', { target: info.target, date })}
                         disabled={removing}
                         onClick={() => removeOverride.mutate({ overrideId: item.id })}>
                         {removing ? t('settings.overrides.removing') : t('settings.overrides.remove')}

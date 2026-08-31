@@ -226,6 +226,11 @@ restore()
 // coverageIsWearSignal), so even a wear-signal-capable metric drawn this way would still say
 // nothing, the same reason Activity's own distance and floors cards cannot either despite steps,
 // right beside them, being able to through the one chart that draws densely.
+//
+// Every gate built on a map like this one is read as `=== false`, never as `!value`: `!undefined`
+// is true, so a page missing from the map would silently skip rather than run, and a page added to
+// `pages` without a matching entry here would inherit an exemption nobody wrote down. `=== false`
+// requires the exemption to be spelled out; anything absent runs the assertion instead.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: false, Sleep: false, Settings: false,
 }
@@ -235,6 +240,8 @@ const HAS_ABSENCE_CHART: Record<string, boolean> = {
 // and "states the window every delta compared" have nothing to check on it and are gated here by
 // name rather than by leaving Settings out of `pages` entirely, the same instinct HAS_ABSENCE_CHART
 // above already states for a narrower case (a page with charts that just do not draw absences).
+// Read as `=== false` at each call site, not `!value`, for the same reason HAS_ABSENCE_CHART is:
+// an unlisted page must run the assertion, not skip it by omission.
 const IS_CHART_PAGE: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: true, Sleep: true, Settings: false,
 }
@@ -250,7 +257,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // Gated on IS_CHART_PAGE, not left to run unconditionally: Settings carries no chart at all
   // (a table is not a chart, and draws no role="img" host), so "at least one" would be a false
   // claim about it rather than a broken one.
-  it.skipIf(!IS_CHART_PAGE[_name])('names every chart and points it at a description', () => {
+  it.skipIf(IS_CHART_PAGE[_name] === false)('names every chart and points it at a description', () => {
     const hosts = [...html.matchAll(/<div[^>]*role="img"[^>]*>/g)].map((m) => m[0])
     expect(hosts.length).toBeGreaterThan(0)
     for (const host of hosts) {
@@ -300,7 +307,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // shows a word in that chart's own table alternative. See HAS_ABSENCE_CHART's own comment for
   // why Recovery and Sleep are excluded by name rather than by leaving the whole page out of this
   // describe.each the way the review round that added them here was asked not to repeat.
-  it.skipIf(!HAS_ABSENCE_CHART[_name])('states absence in the accessible table, not silently', () => {
+  it.skipIf(HAS_ABSENCE_CHART[_name] === false)('states absence in the accessible table, not silently', () => {
     expect(tables(html)).toMatch(/not worn|no reading/)
   })
 
@@ -326,7 +333,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
 
   // Gated the same way as the chart assertion above: Settings has no StatTile and so no delta at
   // all, and "at least one delta" would be a false claim about a page that draws none.
-  it.skipIf(!IS_CHART_PAGE[_name])('states the window every delta compared', () => {
+  it.skipIf(IS_CHART_PAGE[_name] === false)('states the window every delta compared', () => {
     const deltas = [...html.matchAll(/class="delta"/g)].length
     const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
     expect(deltas).toBeGreaterThan(0)
