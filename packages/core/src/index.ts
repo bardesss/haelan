@@ -110,6 +110,10 @@ export type { OverrideScope, SampleTarget, DayMetricTarget } from './derive/targ
 export type { OverrideLike, SessionLike } from './derive/overrides.ts'
 export { OverrideStore } from './store/overrides.ts'
 export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'
+export { NoteStore } from './store/notes.ts'
+export type { PutNoteInput, StoredNote } from './store/notes.ts'
+export { EventStore } from './store/events.ts'
+export type { AddEventInput, StoredEvent } from './store/events.ts'
 export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'
 export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'
 
