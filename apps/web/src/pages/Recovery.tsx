@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
@@ -6,6 +6,8 @@ import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
@@ -15,6 +17,8 @@ import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useAnnotations } from '../data/useAnnotations.js'
+import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
@@ -113,6 +117,18 @@ export function Recovery() {
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
 
+  // The day and metric a chart's own click named, or null when no panel is open. Same single slot
+  // Dashboard.tsx's own copy of this state uses, and the same reason: only one panel is ever open.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const overridesQuery = useAnnotations(range)
+  // Grouped once per render of the overrides list, not once per card: see chartAnnotations.ts's
+  // own comment on why Map.get keeps every chart's annotations/excluded arrays stable across a
+  // render that did not change the overrides list.
+  const overridesByMetricMap = useMemo(
+    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
+    [overridesQuery.overrides.data],
+  )
+
   const metricGroups = useMetricGroups(GROUPS, range)
   const lastSeries = metricGroups.queryForAgg('last')
 
@@ -169,6 +185,7 @@ export function Recovery() {
     const headline = mean(values(points))
     const note = baselineNote(t, headline, baselineQuery, precision, controls.to)
     const spark = sparklines.get(metric)!
+    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>
@@ -176,7 +193,9 @@ export function Recovery() {
           <StatTile label={t(labelKey)} value={headline.toFixed(precision)} unit={t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band} />
+              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
+              annotations={annotations} excluded={excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
       </MetricCard>
@@ -198,6 +217,7 @@ export function Recovery() {
           'recovery.respiratoryRate.chartLabel', 'recovery.units.breathsPerMinute', 'recovery.units.breathsPerMinuteShort',
           1, 'neutral', respiratoryBaseline, respiratoryBand)}
       </div>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
@@ -10,6 +10,8 @@ import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
@@ -24,6 +26,8 @@ import type { Baseline } from '../data/useBaseline.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
+import { useAnnotations } from '../data/useAnnotations.js'
+import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
@@ -165,6 +169,18 @@ export function Sleep() {
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
 
+  // The day and metric a chart's own click named, or null when no panel is open. Same single slot
+  // Dashboard.tsx's own copy of this state uses, and the same reason: only one panel is ever open.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const overridesQuery = useAnnotations(range)
+  // Grouped once per render of the overrides list, not once per card: see chartAnnotations.ts's
+  // own comment on why Map.get keeps every chart's annotations/excluded arrays stable across a
+  // render that did not change the overrides list.
+  const overridesByMetricMap = useMemo(
+    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
+    [overridesQuery.overrides.data],
+  )
+
   const metricGroups = useMetricGroups(GROUPS, range)
   const sumSeries = metricGroups.queryForAgg('sum')
   const lastSeries = metricGroups.queryForAgg('last')
@@ -282,6 +298,7 @@ export function Sleep() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     const spark = sparklines.get(metric)!
+    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
@@ -289,7 +306,9 @@ export function Sleep() {
           <StatTile label={label} value={value} unit={shortUnit} basis={basis}
             delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band} />
+              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
+              annotations={annotations} excluded={excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
       </MetricCard>
@@ -384,6 +403,7 @@ export function Sleep() {
           'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal), 'sleep.units.minutes', undefined,
           'neutral')}
       </div>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
 }

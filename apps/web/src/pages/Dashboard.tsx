@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
@@ -10,6 +10,8 @@ import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
@@ -26,6 +28,8 @@ import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useAnnotations } from '../data/useAnnotations.js'
+import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
@@ -217,6 +221,22 @@ export function Dashboard() {
   // about the same source.
   const resolved = { ...controls, source }
 
+  // The day and metric a chart's own click named, or null when no panel is open. One slot for the
+  // whole page rather than one per chart: only ever one panel can be open at a time, since opening
+  // a second would mean the first's click had already been handed off, so a single nullable target
+  // says everything a per-chart flag would and cannot drift out of sync with itself.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const overridesQuery = useAnnotations(range)
+  // Grouped by metric once per render of the overrides list, not once per chart: every tile() and
+  // the heart rate range card below call annotationsFor on the same Map, and Map.get returns the
+  // exact same array instances every time, which is what keeps a chart's own build callback from
+  // seeing a new identity (and disposing itself, see chart-lifecycle.test.tsx) on a render where
+  // the overrides list itself did not change.
+  const overridesByMetricMap = useMemo(
+    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
+    [overridesQuery.overrides.data],
+  )
+
   // Fixed groups, not derived from a response: useMetricGroups runs one useSeries call per entry
   // in GROUPS, in the same order, on every render regardless of what any of them returns. min and
   // max stay their own calls beside it; see GROUPS' own comment for why heart_rate cannot share a
@@ -305,6 +325,7 @@ export function Dashboard() {
     unit?: string,
   ) => {
     const points = metricGroups.pointsOf(metric)
+    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
@@ -317,7 +338,9 @@ export function Dashboard() {
             basis={basis}
             delta={deltaFor(t, metric, values(points), direction)}>
             <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} />
+              label={t(chartLabelKey, { period })} unit={t(unitKey)}
+              annotations={annotations} excluded={excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
       </MetricCard>
@@ -358,6 +381,10 @@ export function Dashboard() {
   const heartRateBand = useMemo(() => (rawBaseline !== null && !rawBaseline.thin
     ? { low: rawBaseline.center - rawBaseline.spread, high: rawBaseline.center + rawBaseline.spread }
     : undefined), [rawBaseline])
+  // Map.get on overridesByMetricMap, stable across a render that changed nothing (see that map's
+  // own comment): the same object reaches this chart on every render until the overrides list
+  // itself changes.
+  const heartRateOverrides = annotationsFor(overridesByMetricMap, 'heart_rate')
   // The basis line's band clause tracks whether heartRateBand is actually defined above, rather
   // than a single static string claiming a band that a thin or absent baseline never draws.
   const heartRateBasisKey = hrBaseline.isError
@@ -499,10 +526,13 @@ export function Dashboard() {
           points={meanHrPoints}
           basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.to }}>
           {() => (
-            /* Empty until M3c. HeartRateRange has taken both props since D1 and fed them from
-               fixtures; annotations and overrides are M3c's subject, and passing them empty here is
-               a milestone boundary rather than an oversight. */
-            <HeartRateRange days={heartRateDays} baseline={heartRateBand} annotations={EMPTY} excluded={EMPTY}
+            // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
+            // same lookup tile() uses for every other card, read here under the metric this chart
+            // itself plots. No onPointClick: HeartRateRange has never taken one (Task 9 added the
+            // prop to Sparkline and ActivityHeatmap only), so this chart stays read only until a
+            // later task gives it the same click wiring.
+            <HeartRateRange days={heartRateDays} baseline={heartRateBand}
+              annotations={heartRateOverrides.annotations} excluded={heartRateOverrides.excluded}
               label={t('dashboard.heartRateRange.chartLabel', { period })} />
           )}
         </MetricCard>
@@ -555,6 +585,7 @@ export function Dashboard() {
           <EmptyState title={t('dashboard.anomalies.emptyTitle')} detail={t('dashboard.anomalies.emptyDetail')} />
         </Card>
       </div>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
 }

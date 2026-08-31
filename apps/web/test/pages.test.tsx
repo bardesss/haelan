@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { dayMetricTarget } from '@haelan/core/target-key'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
@@ -18,6 +19,42 @@ import { flush } from './flush.js'
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason dashboard-round-trip.test.tsx sets them.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+/**
+ * Stands in for the real echarts instance useChart.ts creates, the same device
+ * chart-annotations.test.tsx's own `chartStub` is and for the same reason: this file needs to
+ * mount a page for real (so the actual `chart.on('click', ...)` call happens) without asking
+ * zrender to resolve a coordinate against a rendered SVG, which chart-annotations.test.tsx already
+ * established does not work under happy-dom no matter how the click is simulated. Real echarts.init
+ * still runs for every other test in this file below; only the click-opens-the-panel test reads
+ * `chartStubs` at all, and every other assertion here (the accessible table, the labels, the basis
+ * lines) is built from React's own props rather than anything echarts paints, so replacing the
+ * paint with a stub changes nothing else this file checks.
+ */
+function chartStub() {
+  return { on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }
+}
+type ChartStub = ReturnType<typeof chartStub>
+const chartStubs: ChartStub[] = []
+
+vi.mock('echarts/core', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    init: () => {
+      const stub = chartStub()
+      chartStubs.push(stub)
+      return stub
+    },
+  }
+})
+
+/** The function useChart.ts actually passed to `chart.on('click', ...)`, i.e. `handleClick`. */
+function clickHandlerOf(stub: ChartStub): (event: unknown) => void {
+  const call = stub.on.mock.calls.find(([event]) => event === 'click')
+  if (!call) throw new Error('chart.on was never called with "click"')
+  return call[1] as (event: unknown) => void
+}
 
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam',
@@ -36,8 +73,13 @@ const UNWORN_DAY = '2026-08-11'
  * single query, which meant every invariant below was checked against four zeroed stat tiles and
  * a heatmap domain of "0 to 0": the one test that named the rule ("never renders absence as a
  * zero") looked only for the presence of a word elsewhere on the page and could not fail.
+ *
+ * `overrides` defaults to none: every page now issues its own GET /overrides through
+ * useAnnotations, and the four page describes below assert a page that carries no override at
+ * all, the same shape they asserted before this task wired the request in. The one test that
+ * wants a real row (see 'annotate wiring' below) passes its own list.
  */
-function stubFetch(): () => void {
+function stubFetch(overrides: readonly unknown[] = []): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -46,6 +88,7 @@ function stubFetch(): () => void {
 
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: Date.now() - 600_000 })
+    if (url.includes('/overrides')) return json({ items: overrides })
     if (url.includes('/series')) {
       const params = new URLSearchParams(url.split('?')[1] ?? '')
       const body: Record<string, unknown> = {}
@@ -325,4 +368,99 @@ describe('Dashboard specifics', () => {
     expect(dashboardNl).toContain('0 dagen niet gedragen')
   })
 
+})
+
+// Task 11's own coverage: until this task every chart on every page was handed an empty
+// annotations/excluded pair (Dashboard's own EMPTY, by name, with a comment calling it a
+// milestone boundary) and no chart's onPointClick went anywhere, since no page held a target to
+// open the panel with. Recovery, not Dashboard: three plain Sparklines and nothing else touching
+// useChart, so the first chart stub pushed after this test's own render is unambiguously
+// resting_heart_rate's, the same reasoning that picked it for the round trip harness above never
+// needed to state (nothing there clicks).
+describe('annotate wiring', () => {
+  const OVERRIDE_DATE = '2026-08-11'
+  const OVERRIDE_METRIC = 'resting_heart_rate'
+  const OVERRIDE_REASON = 'Watch left charging'
+
+  async function mountRecoveryWithOverride(): Promise<{ html: string, clickResting: (event: unknown) => void, cleanup: () => void }> {
+    const restore = stubFetch([{
+      id: 'o1', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: OVERRIDE_DATE, metric: OVERRIDE_METRIC }),
+      action: 'exclude', correctedValue: null, reason: OVERRIDE_REASON,
+    }])
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', RECOVERY_ROUTE)
+    const stubsBefore = chartStubs.length
+
+    act(() => {
+      root.render(
+        <I18nProvider lng="en"><QueryClientProvider client={client}><Recovery /></QueryClientProvider></I18nProvider>,
+      )
+    })
+    await flush(client, () => container.innerHTML)
+
+    // resting_heart_rate is Recovery.tsx's own first card(), so the first chart stub pushed by
+    // this mount (chartStubs already carries every stub from the module level `pages` harness
+    // above, hence the slice) is unambiguously its Sparkline, not daily_hrv's or
+    // respiratory_rate's.
+    const stub = chartStubs.slice(stubsBefore)[0]
+    if (!stub) throw new Error('no chart mounted')
+    const clickResting = clickHandlerOf(stub)
+
+    return {
+      html: container.innerHTML,
+      clickResting,
+      cleanup: () => {
+        act(() => { root.unmount() })
+        container.remove()
+        restore()
+      },
+    }
+  }
+
+  it('marks the excluded day in its own chart table rather than dropping it', async () => {
+    const { html, cleanup } = await mountRecoveryWithOverride()
+    try {
+      // Recovery's first accessible table belongs to resting_heart_rate's own Sparkline, the same
+      // card the override targets; daily_hrv and respiratory_rate get no mark, since the override
+      // named a metric, not a day.
+      const firstTable = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
+      if (!firstTable) throw new Error('no accessible table rendered')
+      const row = firstTable.match(new RegExp(`<tr><th scope="row">${OVERRIDE_DATE}</th>[\\s\\S]*?</tr>`))?.[0]
+      if (!row) throw new Error(`no row for ${OVERRIDE_DATE}`)
+      // 67: DAYS' own resting_heart_rate value for 2026-08-11 (index 1, 60 + 1*7). Still present,
+      // not replaced by an absence word: an override marks a reading, it does not remove it.
+      expect(row).toContain('67')
+      expect(row).toContain('excluded')
+      expect(row).toContain(OVERRIDE_REASON)
+      // The untouched day beside it carries neither mark.
+      const otherRow = firstTable.match(/<tr><th scope="row">2026-08-10<\/th>[\s\S]*?<\/tr>/)?.[0]
+      expect(otherRow, otherRow).not.toContain('excluded')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('opens the panel with the clicked point’s own day and metric, typed by nobody', async () => {
+    const { clickResting, cleanup } = await mountRecoveryWithOverride()
+    try {
+      // dataIndex 1 is DAYS[1], 2026-08-11: the same day the override above targets, clicked
+      // through the chart rather than read off state a caller assembled by hand.
+      act(() => { clickResting({ componentType: 'series', dataIndex: 1 }) })
+      const containers = document.querySelectorAll('[role="dialog"]')
+      expect(containers).toHaveLength(1)
+      const dialogHtml = containers[0]!.innerHTML
+      // annotate.title is "{{metric}} on {{date}}": this asserts the panel opened with the
+      // clicked point's own metric and date, not a target the page had to build by hand
+      // (AnnotatePanel.tsx builds the target key itself; a page only ever hands it these two
+      // fields, see its own doc comment).
+      expect(dialogHtml).toContain(`${OVERRIDE_METRIC} on ${OVERRIDE_DATE}`)
+    } finally {
+      cleanup()
+    }
+  })
 })

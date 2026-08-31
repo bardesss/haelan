@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import type { Polarity } from '../format.js'
@@ -9,6 +9,8 @@ import { MetricCard } from '../components/MetricCard.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
@@ -17,6 +19,8 @@ import { useSession } from '../auth/session.js'
 import { useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useAnnotations } from '../data/useAnnotations.js'
+import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
@@ -99,6 +103,18 @@ export function Activity() {
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
 
+  // The day and metric a chart's own click named, or null when no panel is open. Same single slot
+  // Dashboard.tsx's own copy of this state uses, and the same reason: only one panel is ever open.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const overridesQuery = useAnnotations(range)
+  // Grouped once per render of the overrides list, not once per card: see chartAnnotations.ts's
+  // own comment on why Map.get keeps every chart's annotations/excluded arrays stable across a
+  // render that did not change the overrides list.
+  const overridesByMetricMap = useMemo(
+    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
+    [overridesQuery.overrides.data],
+  )
+
   const metricGroups = useMetricGroups(GROUPS, range)
   const sumSeries = metricGroups.queryForAgg('sum')
 
@@ -148,6 +164,7 @@ export function Activity() {
   // mounts, so counting it before anything has settled would read "0 of 31 days", a specific false
   // claim rather than a vacuous one.
   const stepsQuery = metricGroups.queryFor('steps')
+  const stepsOverrides = annotationsFor(overridesByMetricMap, 'steps')
 
   // The same split MetricCard makes for every other card on this page, made by hand because this
   // card draws an absence dot per day rather than a full-card empty state and so stays outside it.
@@ -190,6 +207,7 @@ export function Activity() {
     const points = metricGroups.pointsOf(metric)
     const total = sum(values(points))
     const spark = sparklines.get(metric)!
+    const { excluded, annotations } = annotationsFor(overridesByMetricMap, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
@@ -197,7 +215,9 @@ export function Activity() {
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} />
+              label={t(chartLabelKey, { period })} unit={t(unitKey)}
+              annotations={annotations} excluded={excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
       </MetricCard>
@@ -212,7 +232,9 @@ export function Activity() {
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} />
             : stepsQuery.isPending ? <Loading /> : (
-            <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })} />
+            <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })}
+              annotations={stepsOverrides.annotations} excluded={stepsOverrides.excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'steps' })} />
           )}
         </Card>
 
@@ -253,6 +275,7 @@ export function Activity() {
           'activity.workoutMinutes.chartLabel', 'activity.units.minutes', 'activity.units.min',
           (total) => groupNumber(total), 'neutral')}
       </div>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
 }
