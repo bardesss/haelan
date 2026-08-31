@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { ConfigError, peopleNeedingRebuild, requireDate, runDerive, shiftLocalDate } from '@haelan/core'
+import {
+  ConfigError, localDateOf, peopleNeedingRebuild, requireDate, runDerive, widenedUtcWindow,
+} from '@haelan/core'
 import type { OverrideScope } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { requireString, sendHashed } from './shared.ts'
@@ -214,18 +216,22 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
 
     // EventStore.listFor takes instants, not local dates: an event carries the offset in force
     // at its own start rather than the account carrying one timezone this route could resolve
-    // `from`/`to` against. The caller still asks in the same local-date shape /notes takes, for
-    // one range vocabulary across all three annotation reads, so the bridge lives here: `from`
-    // at UTC midnight, `to` at the UTC midnight one day later minus a millisecond. That is a UTC
-    // calendar day, not necessarily the day either endpoint reads as in whichever offset the
-    // event itself carries, which is the trade a single account-wide "local day" would not avoid
-    // either, since events do not share one offset among them.
-    const fromMs = Date.parse(`${from}T00:00:00Z`)
-    const toMs = Date.parse(`${shiftLocalDate(to, 1)}T00:00:00Z`) - 1
+    // `from`/`to` against. A UTC calendar day is the wrong boundary for either end: 00:30 local
+    // at UTC+2 on `from` is 22:30Z the day before, outside a `from`T00:00:00Z window even though
+    // its own local day is in range, and the same offset can put a `to + 1` local day inside a
+    // `to`-shaped UTC window. widenedUtcWindow and localDateOf exist for exactly this, the same
+    // pair deriveDayInto and readIntraday use: widen the SQL fetch past every offset the provider
+    // can report, UTC-12 to UTC+14, then narrow row by row using the instant and offset that row
+    // actually carries, which is what makes the wide first pass safe rather than merely broader.
+    const window = { start: widenedUtcWindow(from).start, end: widenedUtcWindow(to).end }
+    const candidates = app.haelan.instance.events.listFor(personId, window.start, window.end)
+    const items = candidates.filter((event) => {
+      const localDate = localDateOf(event.startedAtMs, event.startedAtOffsetMinutes)
+      return localDate >= from && localDate <= to
+    })
 
     // Not paginated, deliberately: events are entered by hand, same as overrides below, so a
     // range wide enough to matter for pagination is not a range a person filled by hand.
-    const items = app.haelan.instance.events.listFor(personId, fromMs, toMs)
     return sendHashed(reply, request, { items })
   })
 

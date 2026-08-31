@@ -18,7 +18,9 @@ async function putNote(h: Harness, token: string, localDate: string, body: strin
   })
 }
 
-async function postEvent(h: Harness, token: string, input: { kind: string, startedAtMs: number }) {
+async function postEvent(
+  h: Harness, token: string, input: { kind: string, startedAtMs: number, startedAtOffsetMinutes?: number },
+) {
   return h.app.inject({
     method: 'POST', url: '/api/v1/p/p1/events',
     headers: { authorization: `Bearer ${token}`, ...ORIGIN },
@@ -197,10 +199,10 @@ describe('GET /events', () => {
     expect(list.json().cursor).toBeUndefined()
   })
 
-  // `from`/`to` bridge to an inclusive UTC calendar day: the instant one millisecond before
-  // 2026-08-01T00:00:00Z falls just outside it, and the instant one millisecond before
-  // 2026-08-02T00:00:00Z falls just inside it, on the last millisecond `to` allows.
-  it('includes the whole UTC day at each end of the range, and nothing past it', async () => {
+  // At offset zero the local day and the UTC day are the same day, so this only proves the
+  // boundary is millisecond exact, not that it is the local day the route claims to answer by.
+  // The nonzero offset case below is what actually exercises that.
+  it('includes the whole UTC day at each end of the range, and nothing past it, at offset zero', async () => {
     harness = await withServer(); const token = await harness.signIn()
     await postEvent(harness, token, { kind: 'before', startedAtMs: Date.parse('2026-07-31T23:59:59.999Z') })
     await postEvent(harness, token, { kind: 'at-start', startedAtMs: Date.parse('2026-08-01T00:00:00.000Z') })
@@ -210,6 +212,36 @@ describe('GET /events', () => {
     const list = await get(harness, token, '/events?from=2026-08-01&to=2026-08-01')
     const kinds = (list.json().items as { kind: string }[]).map((e) => e.kind).sort()
     expect(kinds).toEqual(['at-end', 'at-start'])
+  })
+
+  // The case a UTC calendar day gets wrong. At UTC+2, 00:30 local on `from` is 22:30Z the day
+  // before: a UTC window starting at `from`T00:00:00Z misses it even though its own local day is
+  // in range. And at UTC+2, 00:30 local the day after `to` is 22:30Z on `to` itself: a UTC window
+  // ending at `to`T23:59:59.999Z catches it even though its own local day is out of range. Both
+  // have to be judged by localDateOf(startedAtMs, startedAtOffsetMinutes), the row's own answer
+  // to which day it is on, not by where the row's UTC instant happens to fall.
+  it("honors each event's own offset at the range boundaries, not the UTC calendar day", async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const offset = 120 // UTC+2, Europe/Amsterdam in August, the harness default person's own zone.
+    await postEvent(harness, token, {
+      kind: 'just-after-midnight-on-from',
+      startedAtMs: Date.parse('2026-07-31T22:30:00Z'), // 2026-08-01T00:30 local
+      startedAtOffsetMinutes: offset,
+    })
+    await postEvent(harness, token, {
+      kind: 'late-evening-on-to',
+      startedAtMs: Date.parse('2026-08-10T21:30:00Z'), // 2026-08-10T23:30 local
+      startedAtOffsetMinutes: offset,
+    })
+    await postEvent(harness, token, {
+      kind: 'just-after-midnight-past-to',
+      startedAtMs: Date.parse('2026-08-10T22:30:00Z'), // 2026-08-11T00:30 local, one day past `to`
+      startedAtOffsetMinutes: offset,
+    })
+
+    const list = await get(harness, token, '/events?from=2026-08-01&to=2026-08-10')
+    const kinds = (list.json().items as { kind: string }[]).map((e) => e.kind).sort()
+    expect(kinds).toEqual(['just-after-midnight-on-from', 'late-evening-on-to'])
   })
 
   it('refuses a range where from is after to', async () => {

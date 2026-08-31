@@ -78,7 +78,7 @@ export type {
   RebuildInput, RebuildReport, RebuildPersonReport, RebuildFailure,
 } from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
-export { localDateOf, localHourOf, shiftLocalDate } from './derive/localDay.ts'
+export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
