@@ -7,7 +7,12 @@ const CHART_SOURCES = {
   stageRem: 'stage-rem',
   stageAwake: 'stage-awake',
   series: 'series',
-  seriesAlt: 'series-alt',
+  // No seriesAlt here. It was claimed by the corrected mark on the three by-day charts and by
+  // nothing else, and that mark is gone: OverrideStore.validate refuses a day scoped correction,
+  // so it drew for a row the server will not create. readChartTokens throws on any name in this
+  // map the stylesheet does not define and reads every one of them on every render, so a name no
+  // chart asks for is a cost with no reader. @haelan/tokens still defines series-alt on its own
+  // terms; a future chart that wants a second series colour adds the name back here.
   grid: 'grid',
   axis: 'axis',
   band: 'band-baseline',

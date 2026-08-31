@@ -54,8 +54,10 @@ interface TargetInfo {
 /**
  * The chart click panel only ever writes a day_metric target, so parseDayMetricTarget is the only
  * decoder anything in this app has needed before now. This is the one place a sample or a session
- * scoped row is read back at all, since both are written by the sync layer rather than by a
- * reader, so the branch on `item.scope` below is not optional: a day_metric target key parses
+ * scoped row is read back at all: `POST /overrides` accepts all three scopes and nothing in this
+ * app posts the other two, so a sample or session row reaches this list from a caller of the HTTP
+ * API that is not this app. The branch on `item.scope` below is therefore not optional: a
+ * day_metric target key parses
  * into a local date and a metric, a sample target key parses into a source, a metric and an
  * instant, and a session target key parses into nothing but a session id, and none of the three
  * shapes can be read with another scope's decoder. Deciding by `item.scope` first, a real column
@@ -102,9 +104,13 @@ function dateText(t: Translate, info: TargetInfo): string {
  * action at all now, since a day_metric correction is refused by OverrideStore.validate and has
  * nothing in the derive path to apply it (AnnotatePanel.tsx's own ACTIONS comment has the full
  * reasoning), so reading a correction's label out of the panel's catalogue would leave the one
- * surface that does render corrections depending on a word the panel has no reason to keep. This
- * list renders them because the sync layer writes sample scoped corrections that nothing else in
- * this app reads back. */
+ * surface that does render corrections depending on a word the panel has no reason to keep.
+ *
+ * A correction is a real row and not a leftover, which is why this branch stays where the charts'
+ * own was deleted: `POST /overrides` accepts `sample` with `correct` and a value,
+ * OverrideStore.validate permits exactly that combination, and `applyToSamples` rewrites the
+ * reading at derivation. Nothing in this app writes one and no chart can draw one (a sample target
+ * names an instant, not a day), so this list is the only place one is ever seen. */
 function actionText(t: Translate, item: StoredOverride): string {
   if (item.action === 'correct' && item.correctedValue !== null) {
     return t('settings.overrides.correctedTo', { value: item.correctedValue })
@@ -114,9 +120,10 @@ function actionText(t: Translate, item: StoredOverride): string {
 
 /**
  * Every override for the person, with its scope, target, action, reason and date, and a way to
- * remove one. The only surface in this app where a sample or session scoped override is visible
- * at all: both are written by the sync layer rather than by a chart click, so nothing else ever
- * reads them back.
+ * remove one. The only surface in this app where a sample or session scoped override is visible at
+ * all: the chart click panel writes day_metric alone, so a row at either of the other two scopes
+ * came in over `POST /overrides` from somewhere other than this app, and nothing else here reads
+ * one back.
  *
  * Removal answers `applied` the same two ways a write does (useRemoveOverride drains the same
  * queue a write does before responding), but this list cannot answer it the way the panel does.

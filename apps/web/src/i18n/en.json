@@ -298,7 +298,6 @@
       "notWorn": "not worn",
       "noReading": "no reading",
       "excluded": "excluded",
-      "correctedTo": "corrected to {{value}}",
       "none": "none"
     },
     "event": {

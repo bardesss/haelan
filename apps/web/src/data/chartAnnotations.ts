@@ -2,33 +2,38 @@ import { parseDayMetricTarget } from '@haelan/core/target-key'
 import type { StoredOverride } from './useAnnotations.js'
 
 /**
- * What one metric's chart needs to draw the overrides that touch it: which days were excluded,
- * which were corrected (and to what), and the reason each one gives.
+ * What one metric's chart needs to draw the overrides that touch it: which days were excluded, and
+ * the reason each one gives.
  *
- * `excluded` and `corrected` are kept apart, not folded into one mark. `/series` already returns a
- * corrected day's corrected value, so the headline number above a card and the point a chart draws
- * for that day agree the moment a correction applies; without any mark at all, that agreement would
- * read as "this is what the device measured," which is the silent rewrite a correction must not
- * commit. But a corrected day was not dropped the way an excluded one was: its replacement value is
- * the number on screen, and telling a reader (sighted or on a screen reader) "excluded" over a
- * number that is very much still there says the opposite of what happened. So each action gets its
- * own channel; `reason` still reaches both through `annotations`, since that part of the story
- * (why) does not depend on which of the two things actually happened.
+ * There is no `corrected` channel, and its absence is a fact about what can be written rather than
+ * a gap to fill in. `POST /overrides` is the only writer of an override row anywhere in this
+ * project, and OverrideStore.validate refuses `correct` at every scope but `sample`, while this
+ * function keeps only `day_metric` rows; the two conditions cannot both hold. It was here, drawing
+ * a mark nothing could ever populate, and three tests certified that rendering for a row the server
+ * refuses to create.
+ *
+ * Restoring it would not be dormant, it would lie. deriveDay consults only `excludedMetrics`, so
+ * even if a day scoped correction were inserted past the route, the plotted value would still be
+ * the uncorrected one and the chart would name a replacement the number under the mark does not
+ * have. A milestone that adds day level corrections has to change OverrideStore.validate and
+ * deriveDay first, and this file's callers already import both.
+ *
+ * Corrections themselves are alive at `sample` scope, where the route accepts them and
+ * `applyToSamples` genuinely rewrites the reading at derivation. Nothing on a by-day chart can draw
+ * one: a sample target names an instant, not a day. The settings override list is the only surface
+ * in this app that reads one back.
  */
 export interface MetricAnnotations {
   excluded: string[]
-  corrected: { date: string; value: number }[]
   annotations: { date: string; text: string }[]
 }
 
 // One shared instance for every metric no override has ever touched, the same device
-// useMetricGroups.ts's own EMPTY is: a fresh { excluded: [], corrected: [], annotations: [] }
-// literal on every render would hand a chart's build callback a new identity every time, and
-// useChart disposes and re-initialises the whole chart whenever that identity changes (see
-// chart-lifecycle.test.tsx).
+// useMetricGroups.ts's own EMPTY is: a fresh { excluded: [], annotations: [] } literal on every
+// render would hand a chart's build callback a new identity every time, and useChart disposes and
+// re-initialises the whole chart whenever that identity changes (see chart-lifecycle.test.tsx).
 const NONE: MetricAnnotations = Object.freeze({
   excluded: Object.freeze([]) as never[],
-  corrected: Object.freeze([]) as never[],
   annotations: Object.freeze([]) as never[],
 })
 
@@ -45,21 +50,10 @@ const NONE: MetricAnnotations = Object.freeze({
  * real guard, not defensive dressing; chartAnnotations.test.ts pins it against a malformed row
  * sitting beside two good ones.
  *
- * A `correct` override with no `correctedValue` is dropped from `corrected` for the same reason:
- * the store refuses a correction that carries no value, so a row like that can only be a defect
- * somewhere upstream of this read, and drawing a corrected mark with nothing to anchor it at would
- * be worse than not drawing one. Its `reason` still reaches `annotations`, since that much of the
- * row is not in question.
- *
- * `corrected` is empty in this build, and that is a fact about what can be written rather than dead
- * code to delete. Only `day_metric` rows survive the scope filter above, and OverrideStore.validate
- * refuses `correct` at every scope but `sample`, so nothing can currently land in it. The channel
- * stays because the alternative is worse in both directions: a corrected day keeps its number on
- * screen, so folding it back into `excluded` would tell a reader a number that is right there was
- * thrown away, and dropping the read entirely would mean a scope that gains a day level correction
- * later silently draws nothing. Correcting a value is reachable today at `sample` scope, which
- * needs an intraday chart to name a single reading; the settings override list is the only surface
- * that renders those.
+ * Only an `exclude` row reaches `excluded`, and nothing else has a channel of its own: see
+ * MetricAnnotations above for why a day scoped correction cannot be written and would draw a false
+ * claim if it were. A row that is somehow neither still contributes its `reason` to `annotations`,
+ * since a reason a person wrote is theirs whatever the row around it turned out to be.
  *
  * Called once per page from the one `overrides` query `useAnnotations` already issues, and meant
  * to be memoised there on `overrides.data`: this function is pure, but the Map and every array
@@ -67,7 +61,7 @@ const NONE: MetricAnnotations = Object.freeze({
  * `NONE` above is a single frozen instance rather than a fresh literal per call.
  */
 export function overridesByMetric(items: readonly StoredOverride[]): Map<string, MetricAnnotations> {
-  const map = new Map<string, { excluded: string[]; corrected: { date: string; value: number }[]; annotations: { date: string; text: string }[] }>()
+  const map = new Map<string, { excluded: string[]; annotations: { date: string; text: string }[] }>()
   for (const item of items) {
     if (item.scope !== 'day_metric') continue
     let target
@@ -76,19 +70,15 @@ export function overridesByMetric(items: readonly StoredOverride[]): Map<string,
     } catch {
       continue
     }
-    const entry = map.get(target.metric) ?? { excluded: [], corrected: [], annotations: [] }
-    if (item.action === 'exclude') {
-      entry.excluded.push(target.localDate)
-    } else if (item.correctedValue !== null) {
-      entry.corrected.push({ date: target.localDate, value: item.correctedValue })
-    }
+    const entry = map.get(target.metric) ?? { excluded: [], annotations: [] }
+    if (item.action === 'exclude') entry.excluded.push(target.localDate)
     entry.annotations.push({ date: target.localDate, text: item.reason })
     map.set(target.metric, entry)
   }
   return map
 }
 
-/** `byMetric`'s own entry for `metric`, or the shared empty triple when nothing targets it. */
+/** `byMetric`'s own entry for `metric`, or the shared empty pair when nothing targets it. */
 export function annotationsFor(byMetric: Map<string, MetricAnnotations>, metric: string): MetricAnnotations {
   return byMetric.get(metric) ?? NONE
 }

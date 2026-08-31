@@ -53,21 +53,16 @@ export function heatmapClickDate(
 // chart-lifecycle.test.tsx guards against.
 const EMPTY = Object.freeze([]) as never[]
 
-export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, corrected = EMPTY, onPointClick }: {
+export function ActivityHeatmap({ days, max, label, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
   days: DayRow[]
   max: number
   label: string
   // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart type
-  // the same annotations/excluded/corrected values instead of building a different shape per chart.
-  // Optional here (HeartRateRange's own trio is required) because this chart's own default
-  // parameter (EMPTY, below) has to exist regardless: a card can mount before its overrides query
-  // has answered.
+  // the same annotations/excluded values instead of building a different shape per chart. Optional
+  // here (HeartRateRange's own pair is required) because this chart's own default parameter (EMPTY,
+  // below) has to exist regardless: a card can mount before its overrides query has answered.
   annotations?: { date: string; text: string }[]
   excluded?: string[]
-  // Kept apart from `excluded`: a corrected day was not dropped, its replacement value is the
-  // number already on screen, so marking it "excluded" would tell a reader the opposite of what
-  // happened. See chartAnnotations.ts's own doc comment on `MetricAnnotations` for the full reasoning.
-  corrected?: { date: string; value: number }[]
   onPointClick?: (localDate: string) => void
 }) {
   const { t } = useTranslation()
@@ -91,12 +86,11 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
   // excluded mark through the defect the other two lost theirs to.
   const marks = useMemo(() => [
     ...excluded.map((date) => ({ date, kind: 'excluded' as const, text: '' })),
-    ...corrected.map((entry) => ({ date: entry.date, kind: 'corrected' as const, text: '' })),
     ...annotationsByDate(annotations).map((a) => ({ date: a.date, kind: 'annotation' as const, text: a.text })),
   ].flatMap((mark) => {
     const cell = cells.find((c) => c.date === mark.date)
     return cell === undefined ? [] : [{ ...mark, week: cell.week, weekday: cell.weekday }]
-  }), [cells, excluded, corrected, annotations])
+  }), [cells, excluded, annotations])
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -131,23 +125,19 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
           // collapse to the grid's origin rather than sitting on the day it names.
           markPoint: {
             symbolSize: SYMBOL.excluded,
-            // Suppressed for the whole markPoint, not per entry: excluded, corrected and
-            // annotation all share this one series' markPoint, so a date carrying an override
-            // mark and an annotation mark now lands two entries on the identical coord (a day_metric
-            // override is reachable alongside a note or an event since this task; excluded and
-            // corrected cannot collide with each other, both being drawn from the one override a
-            // (person, scope, targetKey) can ever carry). Two entries at one coord means two labels
-            // at the identical anchor, occluding rather than reading apart. Suppressing the label
-            // here is the same device Sparkline's own annotation markLine already uses
-            // (`label: { show: false }`): the full text belongs in the accessible table beside this
-            // chart, not fighting for the same pixel on the canvas, and shape (circle/rect/diamond)
-            // plus colour still tell the three groups apart with no label at all, which is what
-            // Task 11's own Important 4 requires for a colour-blind reader too.
+            // Suppressed for the whole markPoint, not per entry: excluded and annotation marks
+            // share this one series' markPoint, so a date carrying an override mark and an
+            // annotation mark lands two entries on the identical coord (a day_metric override is
+            // reachable alongside a note or an event since Task 11b). Two entries at one coord
+            // means two labels at the identical anchor, occluding rather than reading apart.
+            // Suppressing the label here is the same device Sparkline's own annotation markLine
+            // already uses (`label: { show: false }`): the full text belongs in the accessible
+            // table beside this chart, not fighting for the same pixel on the canvas, and shape
+            // (circle against diamond) plus colour still tell the two groups apart with no label at
+            // all, which is what Task 11's own Important 4 requires for a colour-blind reader too.
             label: { show: false },
-            // A rect for a correction, the same shape and colour Sparkline's own corrected mark
-            // uses, so a correction reads the same way on every chart that can draw one, and a
-            // diamond in the annotation colour HeartRateRange's own markLine uses for an
-            // annotation, so all three kinds read apart at a glance with no label at all.
+            // A diamond in the annotation colour HeartRateRange's own markLine uses for an
+            // annotation, against the excluded mark's own circle, so the two read apart at a glance.
             //
             // The annotation marks are grouped by date before they reach `marks` above: an override
             // reason, a note and an event can share one date, and one markPoint entry per
@@ -156,12 +146,9 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
             // table below uses.
             data: marks.map((mark) => {
               const coord = [mark.week, mark.weekday]
-              if (mark.kind === 'excluded') return { name: 'excluded', coord, itemStyle: { color: tokens.excluded } }
-              if (mark.kind === 'corrected') {
-                return { name: 'corrected', coord, symbol: 'rect', symbolSize: SYMBOL.corrected,
-                  itemStyle: { color: tokens.seriesAlt } }
-              }
-              return { name: mark.text, coord, symbol: 'diamond', itemStyle: { color: tokens.stageAwake } }
+              return mark.kind === 'excluded'
+                ? { name: 'excluded', coord, itemStyle: { color: tokens.excluded } }
+                : { name: mark.text, coord, symbol: 'diamond', itemStyle: { color: tokens.stageAwake } }
             }),
           },
         },
@@ -191,10 +178,12 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
         // device was off. "not worn" states a cause this table cannot establish; "no reading" is
         // the one thing that is always true of a blank cell.
         rows: cells.map((c, i) => {
-          const correctedEntry = corrected.find((entry) => entry.date === c.date)
-          return [c.date, weekdayLabels[c.weekday] ?? '', days[i]?.steps ?? t('charts.absence.noReading'),
-            [excluded.includes(c.date) ? t('charts.absence.excluded') : '',
-              correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
+          const isExcluded = excluded.includes(c.date)
+          // "excluded", not "no reading", for a day the reader threw out: see Sparkline's own copy
+          // of this comment for the rule.
+          return [c.date, weekdayLabels[c.weekday] ?? '',
+            days[i]?.steps ?? t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading'),
+            [isExcluded ? t('charts.absence.excluded') : '',
               // filter, not find: several annotations (an override reason, a note, an event) can
               // land on the same date now that day level marks join the per-metric ones, and a
               // single find() here would silently show only the first and drop the rest.

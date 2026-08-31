@@ -92,7 +92,7 @@ export function mergeDayAnnotations(
  * override of its own. The fallback is `dayAnnotations` by reference, not a copy: every metric
  * with no override (most of them, on any real page) then shares one array identity across a render
  * that changed neither the overrides list nor the notes/events lists, the same discipline
- * chartAnnotations.ts's own NONE constant holds for `excluded`/`corrected`.
+ * chartAnnotations.ts's own NONE constant holds for `excluded` and `annotations`.
  */
 export function annotationsWithDay(
   merged: ReadonlyMap<string, { date: string; text: string }[]>,

@@ -152,21 +152,25 @@ export function Recovery() {
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
 
+  // Every calendar day in the range, the axis the sparklines below are built along as well as the
+  // denominator every basis line counts against. Declared ahead of them rather than after, which is
+  // where it used to sit, because they are built against it now.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
   // Stable array identities for the same reason Dashboard.tsx's own `sparklines` memo exists:
   // useChart keys its rebuild on `build`, and `build` is a useCallback over `values`/`baseline`, so
   // a freshly constructed array or object on every render disposes and reinitialises the chart.
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
-
   const sparklines = useMemo(() => {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of LAST_METRICS) {
       const points = metricGroups.pointsOf(metric)
-    // denseSeries, not points.map: /series omits a day nothing reported, and an applied exclusion
-    // is exactly such a day (deriveDay deletes the excluded metric's daily row). Handed the points
-    // array directly, a sparkline had no position for that day at all, so its excluded mark, the
-    // reason beside it and its accessible table row all vanished the moment the exclusion took
-    // effect. Dense over the range the reader asked for, the same shape the heart rate range chart
-    // and the heatmap have always been handed, the gap is a position that can be marked.
+      // denseSeries, not points.map: /series omits a day nothing reported, and an applied
+      // exclusion is exactly such a day (deriveDay deletes the excluded metric's daily row).
+      // Handed the points array directly, a sparkline had no position for that day at all, so its
+      // excluded mark, the reason beside it and its accessible table row all vanished the moment
+      // the exclusion took effect. Dense over the range the reader asked for, the same shape the
+      // heart rate range chart and the heatmap have always been handed, the gap is a position
+      // that can be marked.
       out.set(metric, denseSeries(rangeDates, points))
     }
     return out
@@ -175,7 +179,6 @@ export function Recovery() {
   const restingHrBand = useMemo(() => bandFrom(restingHrBaseline.data?.baseline ?? null), [restingHrBaseline.data])
   const hrvBand = useMemo(() => bandFrom(hrvBaseline.data?.baseline ?? null), [hrvBaseline.data])
   const respiratoryBand = useMemo(() => bandFrom(respiratoryBaseline.data?.baseline ?? null), [respiratoryBaseline.data])
-
 
   // Three sparkline cards over the one 'last' group: exactly MetricCard's fit, no ancestor-basis
   // restructuring needed the way four of Dashboard's cards did. basisPlacement is 'body' at every
@@ -197,7 +200,7 @@ export function Recovery() {
     const headline = mean(values(points))
     const note = baselineNote(t, headline, baselineQuery, precision, controls.to)
     const spark = sparklines.get(metric)!
-    const { excluded, corrected } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded } = annotationsFor(overridesByMetricMap, metric)
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
@@ -207,7 +210,7 @@ export function Recovery() {
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
-              annotations={annotations} excluded={excluded} corrected={corrected}
+              annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}

@@ -36,7 +36,7 @@ export function sparklinePointDate(
 const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
-export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, corrected = EMPTY, onPointClick }: {
+export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
   // comment says why a points array straight off /series is not enough. A day with no position on
@@ -54,16 +54,12 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   baseline?: { low: number, high: number }
   height?: number
   // Same prop names and shapes HeartRateRange has taken since D1, so a page hands every chart type
-  // the same annotations/excluded/corrected values instead of building a different shape per chart.
-  // Optional here (HeartRateRange's own trio is required) because Sparkline's own default parameter
-  // (EMPTY, below) has to exist regardless: a page can still mount a card before its overrides query
-  // has answered.
+  // the same annotations/excluded values instead of building a different shape per chart. Optional
+  // here (HeartRateRange's own pair is required) because Sparkline's own default parameter (EMPTY,
+  // below) has to exist regardless: a page can still mount a card before its overrides query has
+  // answered.
   annotations?: { date: string; text: string }[]
   excluded?: string[]
-  // Kept apart from `excluded`: a corrected day was not dropped, its replacement value is the
-  // number already on screen, so marking it "excluded" would tell a reader the opposite of what
-  // happened. See chartAnnotations.ts's own doc comment on `MetricAnnotations` for the full reasoning.
-  corrected?: { date: string; value: number }[]
   onPointClick?: (localDate: string) => void
 }) {
   const { t } = useTranslation()
@@ -73,8 +69,8 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   // two cannot disagree about which mark is which. Memoised for the reason `EMPTY` above exists as
   // well, since a fresh object here every render would rebuild `build` and dispose the chart.
   const marks = useMemo(() => dayMarks({
-    dates: labels, values, excluded, corrected, annotations, excludedText: t('charts.absence.excluded'),
-  }), [labels, values, excluded, corrected, annotations, t])
+    dates: labels, values, excluded, annotations, excludedText: t('charts.absence.excluded'),
+  }), [labels, values, excluded, annotations, t])
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
@@ -91,16 +87,9 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
         // off the fitted range; anchor at the day's own value instead, same as HeartRateRange.
         // dayMarks has already dropped a date this sparkline is not drawing and moved an excluded
         // day with no value left to `atDate`, where it is drawn by position instead of being
-        // silently lost. corrected entries share this same markPoint (echarts draws one per series)
-        // but override symbol and colour so the two read apart at a glance. `seriesAlt`, not
-        // `stageRem`: this project's own token catalogue defines it and nothing on any of these
-        // three charts had claimed it yet, where `stageRem` already means REM sleep on Hypnogram, a
-        // chart that shares a screen with HeartRateRange on the Dashboard - one colour carrying two
-        // meanings in one view.
-        data: marks.atValue.map((mark) => (mark.kind === 'excluded'
-          ? { name: 'excluded', xAxis: mark.index, yAxis: mark.value }
-          : { name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
-            itemStyle: { color: tokens.seriesAlt }, xAxis: mark.index, yAxis: mark.value })) },
+        // silently lost, so everything left here is a day whose number is still on the chart with
+        // the mark sitting on top of it.
+        data: marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })) },
       markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
         label: { show: false },
         // An excluded day with no value left overrides the dashed annotation styling with the
@@ -125,10 +114,12 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
           columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
           rows: values.map((v, i) => {
             const date = labels[i] ?? String(i)
-            const correctedEntry = corrected.find((c) => c.date === date)
-            return [date, v ?? t('charts.absence.noReading'),
-              [excluded.includes(date) ? t('charts.absence.excluded') : '',
-                correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
+            const isExcluded = excluded.includes(date)
+            // "excluded", not "no reading", for a day the reader threw out: there was a reading,
+            // and the day is blank because of something they did rather than because the device
+            // never reported. "no reading" is the honest cell only for the second of those.
+            return [date, v ?? t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading'),
+              [isExcluded ? t('charts.absence.excluded') : '',
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a
                 // single find() here would silently show only the first and drop the rest.

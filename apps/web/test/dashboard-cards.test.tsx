@@ -246,7 +246,9 @@ describe('a day whose exclusion has applied', () => {
     expect(rows.length, 'no table row for the excluded day at all').toBeGreaterThan(0)
     const marked = rows.filter((row) => row.includes('excluded'))
     expect(marked, 'the excluded day is on the page but no card says it was excluded').toHaveLength(1)
-    expect(marked[0]!).toContain('no reading')
+    // "excluded" in the value cell as well as the note cell, never "no reading": there was a
+    // reading and the reader threw it out.
+    expect(marked[0]!).not.toContain('no reading')
     expect(marked[0]!).toContain(EXCLUDED_REASON)
     restore()
   })

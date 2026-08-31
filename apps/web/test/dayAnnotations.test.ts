@@ -116,7 +116,7 @@ describe('mergeDayAnnotations / annotationsWithDay', () => {
 
   it("appends the day level list after a metric's own override annotations", () => {
     const byMetric = new Map<string, MetricAnnotations>([
-      ['steps', { excluded: ['2026-08-10'], corrected: [], annotations: [{ date: '2026-08-10', text: 'Watch left charging' }] }],
+      ['steps', { excluded: ['2026-08-10'], annotations: [{ date: '2026-08-10', text: 'Watch left charging' }] }],
     ])
     const merged = mergeDayAnnotations(byMetric, dayAnnotations)
     expect(annotationsWithDay(merged, dayAnnotations, 'steps')).toEqual([
@@ -150,7 +150,7 @@ describe('mergeDayAnnotations / annotationsWithDay', () => {
   // needless copy of it, the same as a metric absent from the map entirely.
   it('falls back to the day level list by reference for a map entry with no annotations of its own', () => {
     const byMetric = new Map<string, MetricAnnotations>([
-      ['steps', { excluded: [], corrected: [], annotations: [] }],
+      ['steps', { excluded: [], annotations: [] }],
     ])
     const merged = mergeDayAnnotations(byMetric, dayAnnotations)
     expect(annotationsWithDay(merged, dayAnnotations, 'steps')).toBe(dayAnnotations)

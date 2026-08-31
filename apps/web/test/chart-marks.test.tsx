@@ -13,7 +13,7 @@ import { act } from 'react'
 import { Sparkline, sparklinePointDate } from '../src/charts/Sparkline.js'
 import { ActivityHeatmap, heatmapClickDate } from '../src/charts/ActivityHeatmap.js'
 import { HeartRateRange, heartRateRangePointDate } from '../src/charts/HeartRateRange.js'
-import { dayMarks, SYMBOL } from '../src/charts/base.js'
+import { dayMarks } from '../src/charts/base.js'
 import type { DayMarks } from '../src/charts/base.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { DayRow } from '../src/fixtures/july.js'
@@ -133,7 +133,9 @@ describe('Sparkline', () => {
     // Three rows, not two: the day the reader excluded is still in the record, saying what it is.
     expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
     const day2Row = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
-    expect(day2Row).toContain('charts.absence.noReading')
+    // "excluded" in the value cell, not "no reading": there was a reading and the reader threw it
+    // out, so a cell claiming the device reported nothing states a cause this row can rule out.
+    expect(day2Row).not.toContain('charts.absence.noReading')
     expect(day2Row).toContain('charts.absence.excluded')
     expect(day2Row).toContain(EXCLUDED_REASON)
     // The two untouched days carry no such note.
@@ -178,22 +180,20 @@ describe('Sparkline', () => {
     expect(day2Row).toContain('Watch left charging, Flew to Tokyo')
   })
 
-  // A corrected day was not dropped: its replacement value is the number already on screen, so
-  // calling it "excluded" would tell a reader the opposite of what happened. This pins the two
-  // apart, in the one channel this environment can see (chartAnnotations.ts's own doc comment has
-  // the full reasoning; the visual markPoint difference is canvas-only and hand-verified below).
-  it('marks a corrected date differently from an excluded one, carrying its own value', () => {
+  // Only the day named is marked. The version of this test it replaces also pinned a corrected day
+  // reading differently from an excluded one, which certified a rendering for a row the server
+  // refuses to create (a day scoped correction is refused by OverrideStore.validate), so the
+  // corrected channel is gone and what is left is the half that was about real data.
+  it('marks only the excluded date, leaving the days beside it alone', () => {
     const html = render(
       <Sparkline values={values} labels={labels} label="steps" unit="steps"
-        annotations={[]} excluded={['2026-08-01']} corrected={[{ date: '2026-08-02', value: 42 }]} />,
+        annotations={[]} excluded={['2026-08-01']} />,
     )
     const rows = table(html)
     const excludedRow = rows.slice(rows.indexOf('2026-08-01'), rows.indexOf('2026-08-02'))
-    const correctedRow = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
+    const nextRow = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
     expect(excludedRow).toContain('charts.absence.excluded')
-    expect(excludedRow).not.toContain('charts.absence.correctedTo')
-    expect(correctedRow).toContain('charts.absence.correctedTo')
-    expect(correctedRow).not.toContain('charts.absence.excluded')
+    expect(nextRow).not.toContain('charts.absence.excluded')
   })
 
   it('leaves the table exactly as before when neither prop is passed', () => {
@@ -285,7 +285,7 @@ describe('Sparkline', () => {
     // overlay click before, which is why the mark a reader clicked to undo did nothing.
     it('reads the local date off a click on the gap mark an applied exclusion leaves', () => {
       const marks = dayMarks({
-        dates: labels, values: appliedValues, excluded: ['2026-08-02'], corrected: [],
+        dates: labels, values: appliedValues, excluded: ['2026-08-02'],
         annotations: [{ date: '2026-08-02', text: EXCLUDED_REASON }], excludedText: 'excluded',
       })
       expect(sparklinePointDate(labels, marks, { componentType: 'markLine', dataIndex: 0 })).toBe('2026-08-02')
@@ -293,7 +293,7 @@ describe('Sparkline', () => {
 
     it('reads the local date off a click on the mark sitting over a day that still has its value', () => {
       const marks = dayMarks({
-        dates: labels, values, excluded: ['2026-08-02'], corrected: [], annotations: [], excludedText: 'excluded',
+        dates: labels, values, excluded: ['2026-08-02'], annotations: [], excludedText: 'excluded',
       })
       expect(sparklinePointDate(labels, marks, { componentType: 'markPoint', dataIndex: 0 })).toBe('2026-08-02')
     })
@@ -351,20 +351,18 @@ describe('ActivityHeatmap', () => {
     expect(day7Row).toContain('Watch left charging, Flew to Tokyo')
   })
 
-  // Same distinction Sparkline's own copy of this test pins, and the same reason: a corrected day
-  // was not dropped, so telling a reader "excluded" over it says the opposite of what happened.
-  it('marks a corrected date differently from an excluded one', () => {
+  // Same shape Sparkline's own copy of this test pins, and the same reason it lost its corrected
+  // half: only the day named is marked.
+  it('marks only the excluded date, leaving the days beside it alone', () => {
     const html = render(
       <ActivityHeatmap days={days} max={9000} label="calendar heatmap"
-        annotations={[]} excluded={['2026-07-06']} corrected={[{ date: '2026-07-07', value: 42 }]} />,
+        annotations={[]} excluded={['2026-07-06']} />,
     )
     const rows = table(html)
     const excludedRow = rows.slice(rows.indexOf('2026-07-06'), rows.indexOf('2026-07-07'))
-    const correctedRow = rows.slice(rows.indexOf('2026-07-07'), rows.indexOf('2026-07-08'))
+    const nextRow = rows.slice(rows.indexOf('2026-07-07'), rows.indexOf('2026-07-08'))
     expect(excludedRow).toContain('charts.absence.excluded')
-    expect(excludedRow).not.toContain('charts.absence.correctedTo')
-    expect(correctedRow).toContain('charts.absence.correctedTo')
-    expect(correctedRow).not.toContain('charts.absence.excluded')
+    expect(nextRow).not.toContain('charts.absence.excluded')
   })
 
   it('leaves the table exactly as before when neither prop is passed', () => {
@@ -387,7 +385,7 @@ describe('ActivityHeatmap', () => {
     ]
     act(() => {
       root!.render(
-        <ActivityHeatmap days={applied} max={9000} label="calendar heatmap" corrected={[]}
+        <ActivityHeatmap days={applied} max={9000} label="calendar heatmap"
           excluded={['2026-07-07']} annotations={[{ date: '2026-07-07', text: 'phone left at home' }]} />,
       )
     })
@@ -397,7 +395,8 @@ describe('ActivityHeatmap', () => {
     expect(excludedMark).toMatchObject({ coord: [0, 1] })
     const rows = table(container!.innerHTML)
     const day7Row = rows.slice(rows.indexOf('2026-07-07'), rows.indexOf('2026-07-08'))
-    expect(day7Row).toContain('charts.absence.noReading')
+    // Same rule Sparkline's own applied case pins: the steps cell says "excluded", not "no reading".
+    expect(day7Row).not.toContain('charts.absence.noReading')
     expect(day7Row).toContain('charts.absence.excluded')
     expect(day7Row).toContain('phone left at home')
   })
@@ -441,7 +440,7 @@ describe('ActivityHeatmap', () => {
   it('draws one annotation markPoint per date, not one per annotation, with their text joined', () => {
     act(() => {
       root!.render(
-        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]} corrected={[]}
+        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]}
           annotations={[
             { date: '2026-07-07', text: 'Watch left charging' },
             { date: '2026-07-07', text: 'Flew to Tokyo' },
@@ -463,7 +462,7 @@ describe('ActivityHeatmap', () => {
   it('draws the same joined text on the canvas as its own accessible table states for that date', () => {
     act(() => {
       root!.render(
-        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]} corrected={[]}
+        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]}
           annotations={[
             { date: '2026-07-07', text: 'Watch left charging' },
             { date: '2026-07-07', text: 'Flew to Tokyo' },
@@ -479,18 +478,17 @@ describe('ActivityHeatmap', () => {
     expect(diamond?.name).toBe(noteCell)
   })
 
-  // Round 3's other finding: excluded, corrected and annotation all share this series' one
-  // markPoint, and a day_metric override is reachable alongside a note or an event since this
-  // task (excluded/corrected cannot collide with each other or with an annotation the way two
-  // annotations could, but an override mark and an annotation mark on the same date now can).
-  // Two entries at the identical coord each carrying their own label, echarts' own default markPoint
-  // label position, drew as two overlapping strings on one pixel: the same overprint the round 2
-  // fix closed within the annotation group, reachable again across mark groups.
+  // Round 3's other finding: the excluded and annotation marks share this series' one markPoint,
+  // and a day_metric override is reachable alongside a note or an event since Task 11b, so an
+  // override mark and an annotation mark can land on the same date. Two entries at the identical
+  // coord each carrying their own label, echarts' own default markPoint label position, drew as two
+  // overlapping strings on one pixel: the same overprint the round 2 fix closed within the
+  // annotation group, reachable again across mark groups.
   it('suppresses the markPoint label for the whole series, so an excluded date and an annotated one never stack two labels on one coord', () => {
     act(() => {
       root!.render(
         <ActivityHeatmap days={days} max={9000} label="calendar heatmap"
-          excluded={['2026-07-07']} corrected={[]}
+          excluded={['2026-07-07']}
           annotations={[{ date: '2026-07-07', text: 'Watch left charging' }]} />,
       )
     })
@@ -514,9 +512,9 @@ describe('ActivityHeatmap', () => {
 })
 
 describe('HeartRateRange', () => {
-  // All three of annotations/excluded/corrected required, unlike Sparkline and ActivityHeatmap:
-  // HeartRateRange has taken this trio since D1 (annotations/excluded) and this task (corrected),
-  // never optional, so every render below passes all three regardless of whether it exercises one.
+  // Both annotations and excluded required, unlike Sparkline and ActivityHeatmap: HeartRateRange
+  // has taken the pair since D1, never optional, so every render below passes both regardless of
+  // which one it exercises.
   const days: DayRow[] = [
     { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
     { date: '2026-08-11', steps: null, hrMin: 54, hrMean: 61, hrMax: 70, sleepMinutes: null, worn: true },
@@ -525,7 +523,7 @@ describe('HeartRateRange', () => {
 
   it('marks an excluded date rather than dropping its row', () => {
     const html = render(
-      <HeartRateRange days={days} annotations={[]} excluded={['2026-08-11']} corrected={[]} label="hr range" />,
+      <HeartRateRange days={days} annotations={[]} excluded={['2026-08-11']} label="hr range" />,
     )
     const rows = table(html)
     expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
@@ -536,7 +534,7 @@ describe('HeartRateRange', () => {
   it('carries an annotation’s own text into its row', () => {
     const html = render(
       <HeartRateRange days={days} annotations={[{ date: '2026-08-12', text: 'Flight to Chicago' }]}
-        excluded={[]} corrected={[]} label="hr range" />,
+        excluded={[]} label="hr range" />,
     )
     const rows = table(html)
     expect(rows).toContain('Flight to Chicago')
@@ -546,7 +544,7 @@ describe('HeartRateRange', () => {
   // on one date must all reach the table, joined, not just the first found.
   it('joins every annotation on the same date rather than showing only the first', () => {
     const html = render(
-      <HeartRateRange days={days} excluded={[]} corrected={[]}
+      <HeartRateRange days={days} excluded={[]}
         annotations={[
           { date: '2026-08-11', text: 'Watch left charging' },
           { date: '2026-08-11', text: 'Flew to Tokyo' },
@@ -557,22 +555,18 @@ describe('HeartRateRange', () => {
     expect(day11Row).toContain('Watch left charging, Flew to Tokyo')
   })
 
-  // Same distinction Sparkline's and ActivityHeatmap's own copies of this test pin: a corrected
-  // day was not dropped, so telling a reader "excluded" over it says the opposite of what
-  // happened. HeartRateRange is the one chart carrying `!d.worn` in the same note cell, so this
-  // also pins that a corrected mark does not fight the wear clause for the same cell.
-  it('marks a corrected date differently from an excluded one', () => {
+  // Same shape Sparkline's and ActivityHeatmap's own copies of this test pin, and the same reason
+  // all three lost their corrected half. HeartRateRange is the one chart carrying `!d.worn` in the
+  // same note cell, so this also pins that the excluded clause does not fight the wear clause.
+  it('marks only the excluded date, leaving the days beside it alone', () => {
     const html = render(
-      <HeartRateRange days={days} annotations={[]} excluded={['2026-08-10']}
-        corrected={[{ date: '2026-08-11', value: 58 }]} label="hr range" />,
+      <HeartRateRange days={days} annotations={[]} excluded={['2026-08-10']} label="hr range" />,
     )
     const rows = table(html)
     const excludedRow = rows.slice(rows.indexOf('2026-08-10'), rows.indexOf('2026-08-11'))
-    const correctedRow = rows.slice(rows.indexOf('2026-08-11'), rows.indexOf('2026-08-12'))
+    const nextRow = rows.slice(rows.indexOf('2026-08-11'), rows.indexOf('2026-08-12'))
     expect(excludedRow).toContain('charts.absence.excluded')
-    expect(excludedRow).not.toContain('charts.absence.correctedTo')
-    expect(correctedRow).toContain('charts.absence.correctedTo')
-    expect(correctedRow).not.toContain('charts.absence.excluded')
+    expect(nextRow).not.toContain('charts.absence.excluded')
   })
 
   // What an applied exclusion leaves behind on this chart: the whole metric's day is gone, so all
@@ -599,7 +593,7 @@ describe('HeartRateRange', () => {
     function renderApplied(): void {
       act(() => {
         root!.render(
-          <HeartRateRange days={appliedDays} corrected={[]} excluded={['2026-08-11']}
+          <HeartRateRange days={appliedDays} excluded={['2026-08-11']}
             annotations={[{ date: '2026-08-11', text: EXCLUDED_REASON }]} label="hr range" />,
         )
       })
@@ -626,12 +620,15 @@ describe('HeartRateRange', () => {
       expect(markLineEntry?.['name']).toBe(noteCell)
     })
 
-    it('keeps the row in the accessible table, reading no reading and excluded rather than going quiet', () => {
+    it('keeps the row in the accessible table, reading excluded in every cell rather than going quiet', () => {
       renderApplied()
       const rows = table(container!.innerHTML)
       expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
       const day11Row = rows.slice(rows.indexOf('2026-08-11'), rows.indexOf('2026-08-12'))
-      expect(day11Row).toContain('charts.absence.noReading')
+      // All three of min, mean and max say "excluded" rather than "no reading": a day_metric
+      // exclusion names the metric, so the three summaries of it leave together and none of them
+      // is absent because the device stayed quiet.
+      expect(day11Row).not.toContain('charts.absence.noReading')
       expect(day11Row).toContain('charts.absence.excluded')
       expect(day11Row).toContain(EXCLUDED_REASON)
       expect(day11Row).not.toContain('charts.absence.notWorn')
@@ -653,7 +650,7 @@ describe('HeartRateRange', () => {
     it('reads the local date off a click on the gap mark an applied exclusion leaves', () => {
       const marks = dayMarks({
         dates: appliedDays.map((d) => d.date), values: appliedDays.map((d) => d.hrMean),
-        excluded: ['2026-08-11'], corrected: [],
+        excluded: ['2026-08-11'],
         annotations: [{ date: '2026-08-11', text: EXCLUDED_REASON }], excludedText: 'excluded',
       })
       expect(heartRateRangePointDate(appliedDays, marks, { componentType: 'markLine', dataIndex: 0 })).toBe('2026-08-11')
@@ -683,7 +680,7 @@ describe('HeartRateRange', () => {
     it('drops an annotation for a date outside the visible range rather than placing it on a day sharing its day-of-month', () => {
       act(() => {
         root!.render(
-          <HeartRateRange days={days} excluded={[]} corrected={[]}
+          <HeartRateRange days={days} excluded={[]}
             annotations={[{ date: '2026-07-11', text: 'Watch left charging' }]} label="hr range" />,
         )
       })
@@ -696,7 +693,7 @@ describe('HeartRateRange', () => {
     it('draws an annotation for a date actually inside the visible range, positioned by index', () => {
       act(() => {
         root!.render(
-          <HeartRateRange days={days} excluded={[]} corrected={[]}
+          <HeartRateRange days={days} excluded={[]}
             annotations={[{ date: '2026-08-11', text: 'Watch left charging' }]} label="hr range" />,
         )
       })
@@ -715,7 +712,7 @@ describe('HeartRateRange', () => {
     it('draws one annotation markLine per date, not one per annotation, with their text joined', () => {
       act(() => {
         root!.render(
-          <HeartRateRange days={days} excluded={[]} corrected={[]}
+          <HeartRateRange days={days} excluded={[]}
             annotations={[
               { date: '2026-08-11', text: 'Watch left charging' },
               { date: '2026-08-11', text: 'Flew to Tokyo' },
@@ -734,7 +731,7 @@ describe('HeartRateRange', () => {
     it('draws the same joined text on the canvas as its own accessible table states for that date', () => {
       act(() => {
         root!.render(
-          <HeartRateRange days={days} excluded={[]} corrected={[]}
+          <HeartRateRange days={days} excluded={[]}
             annotations={[
               { date: '2026-08-11', text: 'Watch left charging' },
               { date: '2026-08-11', text: 'Flew to Tokyo' },
@@ -752,14 +749,12 @@ describe('HeartRateRange', () => {
 
     // The reviewer's own measurement: a six day range spanning two months, both sharing the same
     // three day-of-month labels ("10","11","12"), with an exclude and an annotation override on
-    // the second month's "11" and a correct override on the second month's "10". A string
-    // positioned mark resolves e.g. `"11"` against the axis's data and lands on the FIRST match,
-    // 2026-07-11 (index 1), at 2026-07-11's own height; an index positioned mark lands on the day
-    // actually named, 2026-08-11 (index 4), at its own mean. All three mark groups (excluded,
-    // corrected, annotations) are checked in one range, since all three share the exact defect and
-    // the exact fix: the round this test was first written in covered only excluded and
-    // annotations, which left the third of the fix (the corrected markPoint entry, still keyed on
-    // `date.slice(8)` at review time) provably able to regress with the whole suite staying green.
+    // the second month's "11". A string positioned mark resolves `"11"` against the axis's data and
+    // lands on the FIRST match, 2026-07-11 (index 1), at 2026-07-11's own height; an index
+    // positioned mark lands on the day actually named, 2026-08-11 (index 4), at its own mean. Both
+    // mark groups this chart still draws are checked in one range, since they share the exact
+    // defect and the exact fix. A third group was checked here too, positioning a corrected mark;
+    // it went with the corrected channel, which drew for a row `POST /overrides` refuses to create.
     it('resolves a mark to the day it actually names, not the first day sharing its day-of-month, across a two month range', () => {
       const twoMonthDays: DayRow[] = [
         { date: '2026-07-10', steps: null, hrMin: 50, hrMean: 55, hrMax: 60, sleepMinutes: null, worn: true },
@@ -772,7 +767,6 @@ describe('HeartRateRange', () => {
       act(() => {
         root!.render(
           <HeartRateRange days={twoMonthDays} excluded={['2026-08-11']}
-            corrected={[{ date: '2026-08-10', value: 58 }]}
             annotations={[{ date: '2026-08-11', text: 'Watch left charging' }]} label="hr range" />,
         )
       })
@@ -782,11 +776,7 @@ describe('HeartRateRange', () => {
       }
       const meanSeries = option.series[2]!
       // excluded at index 4 (2026-08-11, mean 64), never index 1 (2026-07-11, mean 56).
-      // corrected at index 3 (2026-08-10, mean 58), never index 0 (2026-07-10, mean 55).
-      expect(meanSeries.markPoint?.data).toEqual([
-        { name: 'excluded', xAxis: 4, yAxis: 64 },
-        { name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected, itemStyle: { color: '#000000' }, xAxis: 3, yAxis: 58 },
-      ])
+      expect(meanSeries.markPoint?.data).toEqual([{ name: 'excluded', xAxis: 4, yAxis: 64 }])
       expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: 4 }])
     })
   })
@@ -907,7 +897,7 @@ describe('the click each chart hands to onPointClick', () => {
     ]
     act(() => {
       root!.render(
-        <HeartRateRange days={days} annotations={[]} excluded={[]} corrected={[]} label="hr range"
+        <HeartRateRange days={days} annotations={[]} excluded={[]} label="hr range"
           onPointClick={onPointClick} />,
       )
     })
@@ -924,7 +914,7 @@ describe('the click each chart hands to onPointClick', () => {
     ]
     act(() => {
       root!.render(
-        <HeartRateRange days={days} annotations={[]} excluded={[]} corrected={[]} label="hr range"
+        <HeartRateRange days={days} annotations={[]} excluded={[]} label="hr range"
           onPointClick={onPointClick} />,
       )
     })
@@ -941,7 +931,7 @@ describe('the click each chart hands to onPointClick', () => {
     ]
     act(() => {
       root!.render(
-        <HeartRateRange days={days} corrected={[]} excluded={['2026-08-11']}
+        <HeartRateRange days={days} excluded={['2026-08-11']}
           annotations={[{ date: '2026-08-11', text: 'strap was off all day' }]} label="hr range"
           onPointClick={onPointClick} />,
       )

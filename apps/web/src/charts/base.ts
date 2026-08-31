@@ -17,9 +17,6 @@ export const OPACITY = {
 export const SYMBOL = {
   nap: 6,
   excluded: 7,
-  // Same size as `excluded`: the two marks differ in colour and shape (a corrected point uses
-  // `rect`, an excluded one the default pin), not in how much room they take on the chart.
-  corrected: 7,
   noData: 3,
 } as const
 
@@ -87,16 +84,22 @@ export function annotationsByDate(
   return [...byDate].map(([date, texts]) => ({ date, text: texts.join(ANNOTATION_JOIN) }))
 }
 
-/** A mark drawn at a day's own plotted value: the point is still on the chart, and the mark sits
- *  on top of it. `kind` decides shape and colour, never position. */
-export interface ValueMark { date: string; index: number; value: number; kind: 'excluded' | 'corrected' }
+/** An excluded day drawn at its own plotted value: the point is still on the chart, and the mark
+ *  sits on top of it. Only reachable while the write has landed and the re-derive has not, since an
+ *  applied exclusion leaves no value here at all. */
+export interface ValueMark { date: string; index: number; value: number }
 
 /** A mark drawn at a day's position alone, spanning the plot, because that day has no value left
  *  to sit on. `text` is what the day says for itself; `excluded` is why there is nothing there. */
 export interface DateMark { date: string; index: number; text: string; excluded: boolean }
 
 /**
- * Both kinds of mark a by-day chart draws, in the order the chart hands them to echarts.
+ * Both kinds of mark a value axis chart draws, in the order the chart hands them to echarts.
+ *
+ * Sparkline and HeartRateRange only. ActivityHeatmap assembles its own marks inline and does not
+ * call `dayMarks` at all, because the split below does not apply to it: a heatmap cell is a
+ * coordinate on two category axes rather than a height, so a day with nothing to report still has
+ * a cell to mark and never has to move to a by-position mark.
  *
  * The order is the contract, not an incidental: a click on an overlay reports the overlay's own
  * `dataIndex`, which counts into these arrays and nothing else, so the chart's `build` maps over
@@ -126,12 +129,19 @@ export interface DayMarks { atValue: ValueMark[]; atDate: DateMark[] }
  * `excludedText` is folded into an excluded gap's own text so the canvas says the same sentence
  * the accessible table's note cell does for that date, rather than two independently assembled
  * strings that happen to agree; chart-marks.test.tsx compares the two off one render.
+ *
+ * Exclusions and annotations, and no third group for corrections: `POST /overrides` is the only
+ * writer of an override row in this project, and OverrideStore.validate refuses `correct` at every
+ * scope but `sample`, so a day scoped correction cannot be created. A correcting mark here would
+ * also have lied if one ever were: deriveDay consults only excludedMetrics, so the plotted value
+ * would still be the uncorrected one and the mark would name a replacement the number beside it
+ * does not have. A milestone that adds day level corrections has to change validate and deriveDay
+ * first, both of which this file's callers already import.
  */
 export function dayMarks(input: {
   dates: readonly string[]
   values: readonly (number | null | undefined)[]
   excluded: readonly string[]
-  corrected: readonly { date: string; value: number }[]
   annotations: readonly { date: string; text: string }[]
   excludedText: string
 }): DayMarks {
@@ -150,17 +160,7 @@ export function dayMarks(input: {
     if (index === undefined) continue
     const value = valueAt(index)
     if (value === null) gaps.add(date)
-    else atValue.push({ date, index, value, kind: 'excluded' })
-  }
-  for (const entry of input.corrected) {
-    const index = indexOf.get(entry.date)
-    if (index === undefined) continue
-    const value = valueAt(index)
-    // No gap mark for a correction with nothing under it, unlike an exclusion. A correction leaves
-    // the day's number on screen (that replacement value is the whole point), so a corrected day
-    // with no value at all is not a state the derive can produce, and inventing a mark for it would
-    // draw a claim from a row that should not exist rather than from one that should.
-    if (value !== null) atValue.push({ date: entry.date, index, value, kind: 'corrected' })
+    else atValue.push({ date, index, value })
   }
 
   const atDate: DateMark[] = []

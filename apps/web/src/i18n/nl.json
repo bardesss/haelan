@@ -298,7 +298,6 @@
       "notWorn": "niet gedragen",
       "noReading": "geen meting",
       "excluded": "uitgesloten",
-      "correctedTo": "gecorrigeerd naar {{value}}",
       "none": "geen"
     },
     "event": {

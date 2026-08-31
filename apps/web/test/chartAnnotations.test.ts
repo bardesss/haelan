@@ -4,12 +4,11 @@ import { overridesByMetric, annotationsFor } from '../src/data/chartAnnotations.
 import type { StoredOverride } from '../src/data/useAnnotations.js'
 
 /**
- * Direct coverage of `overridesByMetric`'s three branches, none of which a page's own real render
+ * Direct coverage of `overridesByMetric`'s branches, none of which a page's own real render
  * reaches: `pages.test.tsx`'s `annotate wiring` block proves the wiring end to end with one
  * `exclude` row and no scope/parse edge cases, which is the shape a full page render can actually
- * stub. The three cases below (a `correct` row, a non `day_metric` scope, a malformed target key)
- * are the ones a mutation can delete without a single one of this project's 420 other tests
- * noticing: this file exists so they cannot.
+ * stub. The cases below (a non `day_metric` scope, a malformed target key) are the ones a mutation
+ * can delete without another test in this project noticing: this file exists so they cannot.
  */
 function override(over: Partial<StoredOverride>): StoredOverride {
   return {
@@ -20,37 +19,27 @@ function override(over: Partial<StoredOverride>): StoredOverride {
 }
 
 describe('overridesByMetric', () => {
-  it('puts an exclude row in `excluded`, not `corrected`', () => {
+  it('puts an exclude row in `excluded`, with its reason in `annotations`', () => {
     const map = overridesByMetric([override({ action: 'exclude', reason: 'Left it charging' })])
     const entry = annotationsFor(map, 'steps')
     expect(entry.excluded).toEqual(['2026-08-11'])
-    expect(entry.corrected).toEqual([])
     expect(entry.annotations).toEqual([{ date: '2026-08-11', text: 'Left it charging' }])
   })
 
-  // The design decision this task's own commit message states: a correction is not folded into
-  // `excluded`, but it is not dropped either. A mutation that filtered this function down to
-  // `exclude` only (deleting that decision) would still pass a manual smoke test of one exclude
-  // row, since it never touches the branch that decision lives in; this pins that branch directly.
-  it('puts a correct row in `corrected`, carrying its value, not in `excluded`', () => {
+  // A day scoped correction cannot be written at all: `POST /overrides` is the only writer of an
+  // override row and OverrideStore.validate refuses `correct` at every scope but `sample`. This
+  // file used to pin a rendering for one, which certified a response the server refuses to send.
+  // What is pinned now is the guard that would matter if such a row ever appeared: nothing but an
+  // `exclude` marks a day as thrown out, so a correction can never reach a chart as an exclusion,
+  // which is the one way this could tell a reader something false. The reason a person wrote is
+  // still theirs, so it still reaches `annotations`.
+  it('never marks a day excluded for an action that is not exclude, but keeps its reason', () => {
     const map = overridesByMetric([override({
       action: 'correct', correctedValue: 58, reason: 'Chest strap read low',
     })])
     const entry = annotationsFor(map, 'steps')
-    expect(entry.corrected).toEqual([{ date: '2026-08-11', value: 58 }])
     expect(entry.excluded).toEqual([])
-    // The reason still reaches `annotations`, regardless of which of the two actions wrote it.
     expect(entry.annotations).toEqual([{ date: '2026-08-11', text: 'Chest strap read low' }])
-  })
-
-  it('drops a correct row with no corrected value, but keeps its reason', () => {
-    // canSubmit in AnnotatePanel.tsx never lets this combination reach the wire, so a row shaped
-    // like this can only be a defect upstream of this read; nothing here should crash on it, and a
-    // corrected mark with no value to anchor it at would be worse than not drawing one.
-    const map = overridesByMetric([override({ action: 'correct', correctedValue: null, reason: 'Odd row' })])
-    const entry = annotationsFor(map, 'steps')
-    expect(entry.corrected).toEqual([])
-    expect(entry.annotations).toEqual([{ date: '2026-08-11', text: 'Odd row' }])
   })
 
   // `sample` and `session` scoped rows: this milestone's panel never writes either (AnnotatePanel.tsx
@@ -69,12 +58,12 @@ describe('overridesByMetric', () => {
   // actually needs to have: scope decides the row's fate here, not merely whether the key parses.
   it('ignores a sample scoped row even when its target key happens to parse as day_metric shaped', () => {
     const map = overridesByMetric([override({ scope: 'sample', targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'steps' }) })])
-    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], corrected: [], annotations: [] })
+    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], annotations: [] })
   })
 
   it('ignores a session scoped row the same way', () => {
     const map = overridesByMetric([override({ scope: 'session', targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'steps' }) })])
-    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], corrected: [], annotations: [] })
+    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], annotations: [] })
   })
 
   // The real shapes too, for completeness (a sample/session row as the store would actually write
@@ -83,12 +72,12 @@ describe('overridesByMetric', () => {
     const map = overridesByMetric([
       override({ scope: 'sample', targetKey: sampleTarget({ source: 'watch', metric: 'steps', utcMs: 0 }) }),
     ])
-    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], corrected: [], annotations: [] })
+    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], annotations: [] })
   })
 
   it('ignores a session scoped row carrying its own real session-shaped target key', () => {
     const map = overridesByMetric([override({ scope: 'session', targetKey: sessionTarget('sess-1') })])
-    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], corrected: [], annotations: [] })
+    expect(annotationsFor(map, 'steps')).toEqual({ excluded: [], annotations: [] })
   })
 
   // The crash guard: parseDayMetricTarget throws on a target_key this build cannot parse (not
@@ -115,7 +104,7 @@ describe('overridesByMetric', () => {
 })
 
 describe('annotationsFor', () => {
-  it('returns the same frozen empty triple, by identity, for every metric no override touches', () => {
+  it('returns the same frozen empty pair, by identity, for every metric no override touches', () => {
     // Chart props are keyed on this identity: a fresh {excluded:[],...} literal per call would
     // hand useChart's build callback a new identity every render and dispose the chart
     // (chart-lifecycle.test.tsx guards the render side of this; this pins the source of the value).

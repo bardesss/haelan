@@ -17,11 +17,6 @@ type Props = {
   baseline?: { low: number; high: number }
   annotations: { date: string; text: string }[]
   excluded: string[]
-  // Kept apart from `excluded`: a corrected day was not dropped, its replacement value is the
-  // number already on screen (`days[i].hrMean` is the corrected mean, not the raw one, once
-  // `/series` has applied the override), so marking it "excluded" would tell a reader the opposite
-  // of what happened. See chartAnnotations.ts's own doc comment on `MetricAnnotations`.
-  corrected: { date: string; value: number }[]
   label: string
   onPointClick?: (localDate: string) => void
 }
@@ -50,7 +45,7 @@ export function heartRateRangePointDate(
   return days[event.dataIndex]?.date
 }
 
-export function HeartRateRange({ days, baseline, annotations, excluded, corrected, label, onPointClick }: Props) {
+export function HeartRateRange({ days, baseline, annotations, excluded, label, onPointClick }: Props) {
   const { t } = useTranslation()
 
   // Memoised, and read by both `build` and `onClick`, for the reason DayMarks' own doc comment
@@ -58,8 +53,8 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
   // disagree about which mark a dataIndex names.
   const marks = useMemo(() => dayMarks({
     dates: days.map((d) => d.date), values: days.map((d) => d.hrMean),
-    excluded, corrected, annotations, excludedText: t('charts.absence.excluded'),
-  }), [days, excluded, corrected, annotations, t])
+    excluded, annotations, excludedText: t('charts.absence.excluded'),
+  }), [days, excluded, annotations, t])
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -86,8 +81,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
             // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands off the fitted range.
             // Anchor each marker at the day's actual mean instead. dayMarks has already moved an excluded day whose mean
             // is gone to `atDate`, where it is drawn by position and needs no y, rather than dropping it the way this
-            // list built in place used to. corrected entries share this same markPoint (echarts draws one per series)
-            // but override symbol and colour so the two read apart at a glance, the same split Sparkline's markPoint draws.
+            // list built in place used to, so everything left here is a day whose mean is still drawn under its mark.
             //
             // xAxis is the day's own array position, never `date.slice(8)`: the axis itself is
             // still labelled by day-of-month for display (below), but a category axis's
@@ -97,10 +91,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
             // FIRST day carrying that label rather than the day the override actually named,
             // silently swapping months; an index cannot collide, which is why dayMarks resolves
             // every mark to an index before this chart ever sees it.
-            data: marks.atValue.map((mark) => (mark.kind === 'excluded'
-              ? { name: 'excluded', xAxis: mark.index, yAxis: mark.value }
-              : { name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
-                itemStyle: { color: tokens.seriesAlt }, xAxis: mark.index, yAxis: mark.value })) },
+            data: marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })) },
           markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
             label: { color: tokens.stageAwake, fontSize: base.axisLabel.fontSize, formatter: (p: { name: string }) => p.name },
             // Same index-not-label positioning as the markPoint above, and the same reason: a day
@@ -139,12 +130,16 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
         table={{
           columns: [t('charts.columns.date'), t('charts.columns.minimum'), t('charts.columns.mean'), t('charts.columns.maximum'), t('charts.columns.note')],
           rows: days.map((d) => {
-            const correctedEntry = corrected.find((c) => c.date === d.date)
+            const isExcluded = excluded.includes(d.date)
+            // "excluded", not "no reading", in all three value cells of a day the reader threw out:
+            // there were readings, and they are gone because of something they did. All three at
+            // once because a day_metric exclusion names the metric, so min, mean and max leave
+            // together. See Sparkline's own copy of this for the same rule on one column.
+            const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
             return [
               d.date,
-              d.hrMin ?? t('charts.absence.noReading'), d.hrMean ?? t('charts.absence.noReading'), d.hrMax ?? t('charts.absence.noReading'),
-              [!d.worn ? t('charts.absence.notWorn') : '', excluded.includes(d.date) ? t('charts.absence.excluded') : '',
-                correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
+              d.hrMin ?? absent, d.hrMean ?? absent, d.hrMax ?? absent,
+              [!d.worn ? t('charts.absence.notWorn') : '', isExcluded ? t('charts.absence.excluded') : '',
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a
                 // single find() here would silently show only the first and drop the rest.

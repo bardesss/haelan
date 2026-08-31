@@ -288,33 +288,35 @@ export function Dashboard() {
   // English is not actually speaking Dutch when it renders Dutch.
   const groupNumber = (value: number) => value.toLocaleString(i18n.language)
 
+  // Every calendar day in the range, computed once: the dense denominator every basis line counts
+  // against, and the axis every chart on this page is now drawn along. It has to be declared ahead
+  // of the sparklines below rather than after them, which is where it used to sit, because those
+  // are built against it now.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
   // Everything from here to the return is memoised on the query data it comes from, and nothing
   // below it constructs an array or an object inline in JSX. useChart keys its effect on `build`
   // and disposes the chart in that effect's cleanup, and every chart's `build` is a useCallback
   // over its own data props, so one freshly constructed array is enough to tear down and rebuild
   // an echarts instance. With eight queries settling at different moments the page commits about
   // eight times on a single load, and each commit was disposing and re-initialising five charts.
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
-
   const sparklines = useMemo(() => {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of [...SUM_METRICS, ...LAST_METRICS, ...MEAN_METRICS]) {
       const points = metricGroups.pointsOf(metric)
-    // denseSeries, not points.map: /series omits a day nothing reported, and an applied exclusion
-    // is exactly such a day (deriveDay deletes the excluded metric's daily row). Handed the points
-    // array directly, a sparkline had no position for that day at all, so its excluded mark, the
-    // reason beside it and its accessible table row all vanished the moment the exclusion took
-    // effect. Dense over the range the reader asked for, the same shape the heart rate range chart
-    // and the heatmap have always been handed, the gap is a position that can be marked.
+      // denseSeries, not points.map: /series omits a day nothing reported, and an applied
+      // exclusion is exactly such a day (deriveDay deletes the excluded metric's daily row).
+      // Handed the points array directly, a sparkline had no position for that day at all, so its
+      // excluded mark, the reason beside it and its accessible table row all vanished the moment
+      // the exclusion took effect. Dense over the range the reader asked for, the same shape the
+      // heart rate range chart and the heatmap have always been handed, the gap is a position
+      // that can be marked.
       out.set(metric, denseSeries(rangeDates, points))
     }
     return out
     // The three query results metricGroups.pointsOf reads for these metrics, named directly:
     // metricGroups itself is rebuilt every render and is not a dependency worth tracking.
   }, [rangeDates, sumSeries.data, lastSeries.data, meanSeries.data])
-
-  // Every calendar day in the range, computed once: the dense denominator every basis line and
-  // the heart rate range chart, the one remaining by-position chart on this page, count against.
 
   // The denominator is the days in the period, not the days that answered. /series omits a day
   // with no row entirely, so points.length is "days that reported", and a month missing eleven of
@@ -341,7 +343,7 @@ export function Dashboard() {
     unit?: string,
   ) => {
     const points = metricGroups.pointsOf(metric)
-    const { excluded, corrected } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded } = annotationsFor(overridesByMetricMap, metric)
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
@@ -356,7 +358,7 @@ export function Dashboard() {
             delta={deltaFor(t, metric, values(points), direction)}>
             <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
-              annotations={annotations} excluded={excluded} corrected={corrected}
+              annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
@@ -549,7 +551,6 @@ export function Dashboard() {
             <HeartRateRange days={heartRateDays} baseline={heartRateBand}
               annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
               excluded={heartRateOverrides.excluded}
-              corrected={heartRateOverrides.corrected}
               label={t('dashboard.heartRateRange.chartLabel', { period })}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
           )}
