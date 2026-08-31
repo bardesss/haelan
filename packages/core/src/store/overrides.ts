@@ -70,16 +70,20 @@ export class OverrideStore {
     })
   }
 
+  /**
+   * One override, scoped by person as well as id for the reason remove's own WHERE is: an id is
+   * not a secret, and a caller that could read somebody else's row by holding one would learn
+   * which day it names and why it was written. Null covers both "no such override" and "not
+   * yours", which are the same answer to anyone who is not its owner.
+   */
+  get(personId: string, id: string): StoredOverride | null {
+    const row = this.#db.select().from(overrides)
+      .where(and(eq(overrides.id, id), eq(overrides.personId, personId))).get()
+    return row === undefined ? null : toStored(row)
+  }
+
   listFor(personId: string): StoredOverride[] {
-    return this.#db.select().from(overrides).where(eq(overrides.personId, personId)).all()
-      .map((row) => ({
-        id: row.id,
-        scope: row.scope,
-        targetKey: row.targetKey,
-        action: row.action,
-        correctedValue: row.correctedValue ?? null,
-        reason: row.reason,
-      }))
+    return this.#db.select().from(overrides).where(eq(overrides.personId, personId)).all().map(toStored)
   }
 
   /**
@@ -122,6 +126,19 @@ export class OverrideStore {
       eq(samples.utcMs, target.utcMs),
     )).get()
     return row ? localDateOf(target.utcMs, row.tzOffsetMinutes) : null
+  }
+}
+
+// One shape for both readers: a field added to the row and not to one of two copies of this
+// would be a field the derivation sees from listFor and not from get.
+function toStored(row: typeof overrides.$inferSelect): StoredOverride {
+  return {
+    id: row.id,
+    scope: row.scope,
+    targetKey: row.targetKey,
+    action: row.action,
+    correctedValue: row.correctedValue ?? null,
+    reason: row.reason,
   }
 }
 

@@ -1,5 +1,7 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { dayMetricTarget, runDerive, schema } from '@haelan/core'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import {
+  DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, runDerive, sampleTarget, schema,
+} from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -54,6 +56,18 @@ function seedBacklog(h: Harness, days: number): void {
     const localDate = new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10)
     queue.markDirty({ personId: 'p1', localDate, nowMs: h.clock.nowMs - 1_000_000 - i })
   }
+}
+
+/** Counts how many batches the route actually took, through the real object it drains with. */
+function countClaims(h: Harness): { count: number } {
+  const queue = h.app.haelan.instance.deriveQueue
+  const real = queue.claim.bind(queue)
+  const counter = { count: 0 }
+  queue.claim = (limit, personIds) => {
+    counter.count += 1
+    return real(limit, personIds)
+  }
+  return counter
 }
 
 /** The real object the route drains through, made to fail where it reads the queue. */
@@ -179,6 +193,68 @@ describe('POST /overrides', () => {
     expect(harness.app.haelan.instance.overrides.listFor('p1')).toHaveLength(1)
   })
 
+  // The gate SyncRunner#eligible puts in front of its own loop. A person whose boot rebuild
+  // failed carries tier 2 built by an older mapper; deriving their days now would write tier 3 at
+  // the current version over it, which is the mixing the version stamp exists to prevent. The
+  // runner already refuses to schedule that, and an authenticated write must not be another way
+  // in. Ownership is not build state, so requirePerson does not cover this.
+  it('leaves a person whose rebuild is outstanding undrained, and says applied false', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedSamplesFor(harness, '2026-08-15', 'steps', 900)
+    drainOnce(harness)
+    harness.app.haelan.stores.people.stampBuiltVersions({
+      id: 'p1', mappingVersion: MAPPING_VERSION, derivationVersion: DERIVATION_VERSION - 1,
+    })
+
+    const write = await postOverride(harness, token, 'steps', '2026-08-15')
+    expect(write.statusCode).toBe(200)
+    expect(write.json().applied).toBe(false)
+    expect(harness.app.haelan.instance.deriveQueue.has({ personId: 'p1', localDate: '2026-08-15' })).toBe(true)
+    // The override is stored and the day is untouched, which is what applied false claimed.
+    expect(harness.app.haelan.instance.overrides.listFor('p1')).toHaveLength(1)
+    const after = await get(harness, token, STEPS_ON_THE_15TH)
+    expect(after.json().steps.points[0].value).toBe(900)
+  })
+
+  // better-sqlite3 is synchronous, so a drain that runs long in a request holds the event loop
+  // for every other route, every other person and the runner's timers. The batch bound alone
+  // cannot promise anything, since how long a batch takes is a property of the data.
+  it('gives up the event loop when the drain outruns its time budget', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedSamplesFor(harness, '2026-08-15', 'steps', 900)
+    drainOnce(harness)
+    makeTheDrainNeverFinish(harness)
+    const claims = countClaims(harness)
+
+    // Every reading a second later than the last, so the budget is spent after the first batch
+    // and the batch bound is not what stops the loop.
+    let ticks = 0
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => {
+      ticks += 5_000
+      return 1_770_000_000_000 + ticks
+    })
+    const write = await postOverride(harness, token, 'steps', '2026-08-15')
+    clock.mockRestore()
+
+    expect(claims.count).toBe(1)
+    expect(write.statusCode).toBe(200)
+    expect(write.json().applied).toBe(false)
+  })
+
+  // Resolving the day is a database read for a sample or a session, so it has to happen before
+  // the write rather than after it: a throw once the override is committed would be a 500 over a
+  // saved correction, which is the one outcome the 200 with applied false exists to avoid. The
+  // empty store is the assertion; the status only says something went wrong.
+  it('stores nothing when the affected day cannot be resolved', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const overrides = harness.app.haelan.instance.overrides
+    overrides.affectedLocalDate = () => { throw new Error('the day cannot be resolved') }
+
+    const write = await postOverride(harness, token, 'steps', '2026-08-15')
+    expect(write.statusCode).toBe(500)
+    expect(overrides.listFor('p1')).toEqual([])
+  })
+
   // Section 15, at the one moment a request does work on somebody's behalf. An unscoped drain
   // would derive whatever another person had queued, inside a request that never named them.
   it('derives only the writer own days, and leaves another person queued', async () => {
@@ -205,7 +281,10 @@ describe('POST /overrides', () => {
     expect(harness.app.haelan.instance.overrides.listFor('p1')).toEqual([])
   })
 
-  it('answers 400 for a correct action with no value, through the shared error envelope', async () => {
+  // A correction at day scope is refused for naming no source, before the missing value is ever
+  // looked at, so this pins that rule and the one below pins the other. Two cases rather than one
+  // named after a branch it never reaches.
+  it('answers 400 for a correction at day scope, through the shared error envelope', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const write = await harness.app.inject({
       method: 'POST', url: '/api/v1/p/p1/overrides',
@@ -217,6 +296,25 @@ describe('POST /overrides', () => {
     })
     expect(write.statusCode).toBe(400)
     expect(write.json().error.kind).toBe('config')
+    expect(write.json().error.message).toContain('can only exclude')
+  })
+
+  it('answers 400 for a correcting override that carries no value', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const write = await harness.app.inject({
+      method: 'POST', url: '/api/v1/p/p1/overrides',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      payload: {
+        // Sample scope, the one scope a correction is allowed at, so the refusal is about the
+        // missing number rather than about where it was aimed.
+        scope: 'sample',
+        targetKey: sampleTarget({ source: 'watch', metric: 'steps', utcMs: Date.parse('2026-08-15T07:00:00Z') }),
+        action: 'correct', reason: 'meter read high',
+      },
+    })
+    expect(write.statusCode).toBe(400)
+    expect(write.json().error.message).toContain('corrected value')
+    expect(harness.app.haelan.instance.overrides.listFor('p1')).toEqual([])
   })
 
   // JSON carries types a query string cannot, and a scope the store has no branch for would be

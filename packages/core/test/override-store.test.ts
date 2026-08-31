@@ -118,16 +118,29 @@ describe('OverrideStore', () => {
       localDate: LOCAL_DATE, attrs: '{}', rawPayloadId: null,
     }).run()
     const sample = sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: NINE_AM })
-    expect(store.affectedLocalDate({ personId: 'p1', scope: 'sample', targetKey: sample })).toBe(LOCAL_DATE)
+    const reported = store.affectedLocalDate({ personId: 'p1', scope: 'sample', targetKey: sample })
+    expect(reported).toBe(LOCAL_DATE)
     expect(store.affectedLocalDate({
       personId: 'p1', scope: 'session', targetKey: sessionTarget('sess-1'),
     })).toBe(LOCAL_DATE)
     expect(store.affectedLocalDate({
       personId: 'p1', scope: 'day_metric', targetKey: dayMetricTarget({ localDate: LOCAL_DATE, metric: 'steps' }),
     })).toBe(LOCAL_DATE)
+    // The half the name promises: the day reported is the day put marks, compared here rather
+    // than left resting on the two calls happening to share a private method today.
+    excludeSample()
+    expect(queue.claim(10)).toEqual([{ personId: 'p1', localDate: reported }])
     // Nothing marked and nothing to report: the sample is somebody else's, which is the same
     // answer a sample that has not been synced yet gets.
     expect(store.affectedLocalDate({ personId: 'p2', scope: 'sample', targetKey: sample })).toBeNull()
+  })
+
+  // The delete route reads one override by id before removing it, and an id is not a secret.
+  it('reads one override by id, and nothing of another person by theirs', () => {
+    const id = excludeSample()
+    expect(store.get('p1', id)?.reason).toBe('strap glitch')
+    expect(store.get('p1', 'no-such-id')).toBeNull()
+    expect(store.get('p2', id)).toBeNull()
   })
 
   it('refuses to correct a whole day, because that number would have no source', () => {

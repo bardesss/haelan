@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { ConfigError, runDerive } from '@haelan/core'
+import { ConfigError, peopleNeedingRebuild, runDerive } from '@haelan/core'
 import type { OverrideScope } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { requireString } from './shared.ts'
@@ -31,12 +31,22 @@ const SCOPES: readonly OverrideScope[] = ['sample', 'session', 'day_metric']
 const ACTIONS = ['exclude', 'correct'] as const
 
 /**
- * The same bound SyncRunner#derive carries, for the same reason: a drain that cannot finish has
- * to stop rather than hold the request open for as long as the backlog is long. Two hundred
- * batches of 64 is over twelve thousand days, which is more than any one correction should be
- * asked to pay for.
+ * Deliberately not SyncRunner's MAX_DERIVE_BATCHES, and deliberately not shared with it. A
+ * background job that drains for a minute costs a long job; the same drain in a request handler
+ * costs the whole process, because better-sqlite3 is synchronous and the loop never yields, so
+ * every other route, every other person and the runner's own timers wait behind it. Sixteen
+ * batches is a thousand days, enough to carry a correction out from behind an ordinary backfill
+ * backlog, and shared.ts's MAX_RANGE_DAYS is here because a request path holding the event loop
+ * has already been treated once as a defect worth its own guard.
  */
-const MAX_DRAIN_BATCHES = 200
+const MAX_DRAIN_BATCHES = 16
+
+/**
+ * The bound that actually protects the event loop, since how long a batch takes is a property of
+ * the data rather than of the count. Wall clock rather than app.haelan.now(), which is the domain
+ * clock a test freezes: what is being limited here is real time spent not answering anybody else.
+ */
+const DRAIN_BUDGET_MS = 1_000
 
 /**
  * The two override mutations, and the derivation that makes them visible.
@@ -56,10 +66,15 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     const correctedValue = numberField(body.correctedValue, 'correctedValue')
 
     const overrides = app.haelan.instance.overrides
+    // Resolved before the write, not after it. For a sample or a session this reads the database,
+    // and a throw after put has committed would be a 500 over a saved override, which is the
+    // outcome the 200 with applied false exists to avoid. A malformed key throws here instead,
+    // where nothing has been written and the shared 400 is the right answer.
+    const localDate = overrides.affectedLocalDate({ personId, scope, targetKey })
     // No try/catch and no second transaction: put wraps the row and the queue mark in one
     // already, and registerV1's error handler turns its ConfigError into the shared 400.
     const id = overrides.put({ personId, scope, targetKey, action, correctedValue, reason, nowMs: app.haelan.now() })
-    return reply.send({ id, ...applyOverride(app, personId, overrides.affectedLocalDate({ personId, scope, targetKey })) })
+    return reply.send({ id, ...applyOverride(app, personId, localDate) })
   })
 
   app.delete<{ Params: OverrideParams }>('/p/:personId/overrides/:overrideId', async (request, reply) => {
@@ -67,11 +82,11 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     const overrideId = request.params.overrideId
     const overrides = app.haelan.instance.overrides
 
-    // Read through listFor, which is scoped to this person, so somebody else's override id is a
-    // 404 here rather than a 200 over a store call that quietly did nothing. The store refuses it
-    // too; both refusals stay, because the one the caller sees and the one that protects the row
-    // are not the same guarantee.
-    const stored = overrides.listFor(personId).find((row) => row.id === overrideId)
+    // get is scoped by person as well as id, the way remove's own WHERE is, so somebody else's
+    // override id is a 404 here rather than a 200 over a store call that quietly did nothing. The
+    // store refuses it too; both refusals stay, because the one the caller sees and the one that
+    // protects the row are not the same guarantee.
+    const stored = overrides.get(personId, overrideId)
     if (!stored) {
       return reply.code(statusFor('not_found'))
         .send(errorBody('not_found', 'no_such_override', `no override '${overrideId}'`))
@@ -123,6 +138,17 @@ function applyOverride(app: FastifyInstance, personId: string, localDate: string
  */
 function drain(app: FastifyInstance, personId: string): void {
   const instance = app.haelan.instance
+
+  // The gate SyncRunner#eligible puts in front of its own loop, and for the reason that method
+  // records: a person whose boot rebuild failed carries tier 2 built by an older mapper, and
+  // deriving their queued days now writes tier 3 at the current version on top of it. The runner
+  // refuses to schedule that. An authenticated write must not be a second door to it. Returning
+  // leaves the day queued, so the answer is applied false, which is true and needs no branch of
+  // its own. A person who has vanished between the guard and here is nobody to derive either.
+  const person = app.haelan.stores.people.get(personId)
+  if (!person || peopleNeedingRebuild([person]).length > 0) return
+
+  const startedAtMs = Date.now()
   try {
     for (let batch = 0; batch < MAX_DRAIN_BATCHES; batch++) {
       const report = runDerive({
@@ -138,6 +164,10 @@ function drain(app: FastifyInstance, personId: string): void {
         personIds: [personId],
       })
       if (report.daysDerived === 0) return
+      if (Date.now() - startedAtMs >= DRAIN_BUDGET_MS) {
+        console.log(`overrides: derivation for ${personId} gave up the event loop with days still queued`)
+        return
+      }
     }
     console.log(`overrides: derivation for ${personId} stopped after ${MAX_DRAIN_BATCHES} batches with days still queued`)
   } catch (error) {
