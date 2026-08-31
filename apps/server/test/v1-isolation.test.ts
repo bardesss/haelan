@@ -408,11 +408,17 @@ describe('the versioned surface, beyond the per-route table', () => {
   // Every write case below follows the same shape the brief asks for: 401 with no session, 403 for
   // a person the session does not own, and 200 for its own person. The 403 case is the one that
   // matters most, and on a write "matters" means more than the status: a route could act and then
-  // answer 403, and every status-only assertion here would still pass. So every case, 401 included,
-  // reads the row back afterwards through the store rather than the route it just called, and
-  // checks it still says what it said before the request. See task-7-report.md for what that
-  // assertion does and does not reach architecturally in this codebase, and for the canary that
-  // proves it fires when it should.
+  // answer 403, and every status-only assertion here would still pass. So every case reads a row
+  // back afterwards through the store rather than the route it just called, and checks it still
+  // says what it said before the request.
+  //
+  // The row read back differs by case, on purpose. The 401 cases aim the request at p1's own path
+  // (there is no session to resolve it against, so the path segment is otherwise arbitrary) and
+  // read p1's own row afterwards: a guard removed there would let the write through against p1, not
+  // p2, so p2's row was never the one at risk and asserting it proves nothing. The 403 cases aim at
+  // p2's path from a p1 session and read p2's row, the one the request actually named. See
+  // task-7-report.md for what these assertions do and do not reach architecturally in this
+  // codebase, and for the canaries that prove each one fires when it should.
   describe('override writes', () => {
     it('answers 401 with no session at all, before touching anything', async () => {
       harness = await withServer()
@@ -436,6 +442,10 @@ describe('the versioned surface, beyond the per-route table', () => {
 
       const removed = await harness.app.inject({ method: 'DELETE', url: `/api/v1/p/p1/overrides/${theirs}` })
       expect(removed.statusCode).toBe(401)
+      // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
+      // create or delete p1's own row, never p2's. p2's row is read too, for the symmetry, but it
+      // was never the one a broken guard here would touch.
+      expect(overrides.listFor('p1')).toEqual([])
       expect(overrides.listFor('p2').map((row) => row.id)).toEqual([theirs])
     })
 
@@ -462,12 +472,18 @@ describe('the versioned surface, beyond the per-route table', () => {
         },
       })
       expect(written.statusCode).toBe(403)
+      // The envelope, not only the status: auth.ts's origin hook also answers a bare 403 (a flat
+      // { error: 'bad_origin' }), on any mutating request whose Origin and Host disagree. Dropping
+      // ORIGIN's `host` by accident would make this case a same-status, wrong-reason pass; the
+      // code below is what tells the two apart.
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
 
       const removed = await harness.app.inject({
         method: 'DELETE', url: `/api/v1/p/p2/overrides/${theirs}`,
         headers: { authorization: `Bearer ${token}`, ...ORIGIN },
       })
       expect(removed.statusCode).toBe(403)
+      expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
       expect(overrides.listFor('p2').map((row) => row.id)).toEqual([theirs])
     })
 
@@ -500,7 +516,13 @@ describe('the versioned surface, beyond the per-route table', () => {
     // request reach the handler at all, and the risk is the id in the URL rather than the path.
     // OverrideStore.get scopes its existence check by person as well as id (see overrides.ts), so
     // the handler answers 404 before remove() is ever called, the same 404 a made up id gets.
-    // This is the case the removed-scoping canary in task-7-report.md targets.
+    //
+    // The 404 with its code is the load bearing assertion here, not the surviving row: remove() is
+    // separately scoped by personId (see overrides.ts), so theirs survives regardless of whether
+    // get()'s scoping holds. An unscoped get would turn the 404 into a 200 (the existence check
+    // would find someone else's row and let the delete proceed) while the row would still be
+    // deleted, since remove()'s own scoping is a different line of code entirely. Only unscoping
+    // both would move the row; this case pins the first of the two independently.
     it("refuses to delete an override by an id that belongs to another person, and leaves it alone", async () => {
       harness = await withServer()
       const token = await harness.signIn()
@@ -516,6 +538,9 @@ describe('the versioned surface, beyond the per-route table', () => {
         headers: { authorization: `Bearer ${token}`, ...ORIGIN },
       })
       expect(removed.statusCode).toBe(404)
+      // The code, not only the status: an unregistered route also answers a bare 404, and that is
+      // not what this case is proving.
+      expect(removed.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_override' } })
       expect(overrides.listFor('p2').map((row) => row.id)).toEqual([theirs])
     })
   })
@@ -534,6 +559,9 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(401)
       expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+      // p1, not p2: the request names p1 in the path, so a guard that failed open would write
+      // p1's note, never p2's. p2's note is read too, for the symmetry, but it was never at risk.
+      expect(notes.listFor('p1', dateOf(1), dateOf(1))).toEqual([])
       expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
     })
 
@@ -553,6 +581,9 @@ describe('the versioned surface, beyond the per-route table', () => {
         payload: { body: 'not mine to write' },
       })
       expect(written.statusCode).toBe(403)
+      // The envelope, not only the status: see the comment on the override 403 case above for why
+      // a status-only assertion here can pass for the wrong reason.
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
       expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
     })
 
@@ -568,6 +599,32 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(200)
       expect(notes.listFor('p1', dateOf(1), dateOf(1))).toMatchObject([{ body: 'own write' }])
+    })
+
+    // No route in this file supplies a note id: notes carry no id-bearing write route the way
+    // overrides and events do, so the note family has no equivalent of the two "own path, foreign
+    // id" cases above. But it has a different collision: NoteStore.put upserts on
+    // onConflictDoUpdate({ target: [notes.personId, notes.localDate] }) (see notes.ts), so a p1
+    // write for a date p2 also has a note for is only safe because personId is part of that
+    // conflict target. Dropping personId from it would make p1's write for a shared date update
+    // p2's row instead of inserting p1's own, and this is the only case in the file that would
+    // notice: p1's write would still answer 200 and even read back correctly through p1's own
+    // listFor if p2's row now carried p1's body, so p2's row is what has to be checked directly.
+    it("a write for a date another person also has a note for leaves their note alone", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const notes = harness.app.haelan.instance.notes
+      notes.put({ personId: 'p2', localDate: dateOf(1), body: 'theirs', nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: `/api/v1/p/p1/notes/${dateOf(1)}`,
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { body: 'own write on a shared date' },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(notes.listFor('p1', dateOf(1), dateOf(1))).toMatchObject([{ body: 'own write on a shared date' }])
+      expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
     })
   })
 
@@ -589,6 +646,10 @@ describe('the versioned surface, beyond the per-route table', () => {
 
       const removed = await harness.app.inject({ method: 'DELETE', url: `/api/v1/p/p1/events/${theirs}` })
       expect(removed.statusCode).toBe(401)
+      // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
+      // create or delete p1's own event, never p2's. p2's event is read too, for the symmetry, but
+      // it was never the one a broken guard here would touch.
+      expect(events.listFor('p1', startedAtMs - 1_000, startedAtMs + 120_000)).toEqual([])
       expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
     })
 
@@ -608,12 +669,16 @@ describe('the versioned surface, beyond the per-route table', () => {
         payload: { kind: 'illness', startedAtMs: startedAtMs + 60_000 },
       })
       expect(written.statusCode).toBe(403)
+      // The envelope, not only the status: see the comment on the override 403 case above for why
+      // a status-only assertion here can pass for the wrong reason.
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
 
       const removed = await harness.app.inject({
         method: 'DELETE', url: `/api/v1/p/p2/events/${theirs}`,
         headers: { authorization: `Bearer ${token}`, ...ORIGIN },
       })
       expect(removed.statusCode).toBe(403)
+      expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
       expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
     })
 
@@ -696,6 +761,12 @@ describe('the versioned surface, beyond the per-route table', () => {
       },
     })
     try {
+      // Safe today only because `covered` below is hand written from three separate lists; if it
+      // and `registered` were ever both built from one source, both could be empty at once and the
+      // set comparison below would pass on nothing. Asserted directly rather than left to that
+      // coincidence, since this project has shipped a vacuous guard once already.
+      expect(registered.size).toBeGreaterThan(0)
+
       const covered = new Set([
         ...ROUTES.map((route) => `GET ${route.template}`), ...WRITE_ROUTES, ...NOT_PERSON_SCOPED,
       ])
