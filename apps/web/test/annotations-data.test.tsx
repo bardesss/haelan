@@ -77,6 +77,15 @@ function WriteNoteButton({ input }: { input: WriteNoteInput }) {
   return <button type="button" onClick={() => mutation.mutate(input)}>write note</button>
 }
 
+/** Mounts the overrides list as a real active query, alongside the write button, so an
+ * invalidation of that resource has an observer to actually refetch rather than only marking a
+ * cache entry stale with nothing watching it. */
+function OverridesListAndWriteButton({ input }: { input: WriteOverrideInput }) {
+  useAnnotations({ from: '2026-08-01', to: '2026-08-31' })
+  const mutation = useWriteOverride()
+  return <button type="button" onClick={() => mutation.mutate(input)}>write override</button>
+}
+
 function click(): void {
   const button = container!.querySelector('button') as HTMLButtonElement
   act(() => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
@@ -129,10 +138,32 @@ describe('useAnnotations', () => {
   })
 
   // The route ignores range for overrides, and the point of that is a single list a management
-  // page and a day panel can share. A key that varied by range would fetch the identical answer
-  // once per range instead.
-  it('keys the overrides read the same regardless of range, since the route answers the same list either way', () => {
-    expect(queryKeys.resource('p1', 'overrides')).toEqual(queryKeys.resource('p1', 'overrides'))
+  // page and a day panel can share. Mounting useAnnotations twice at two different ranges and
+  // counting the actual /overrides fetches is what makes this a real test of that sharing: a
+  // version that keyed the overrides read by range would still equal itself trivially but would
+  // fetch the list twice here, once per range, instead of once.
+  it('shares one overrides fetch across two different ranges, since the route answers the same list either way', async () => {
+    function TwoRangesProbe() {
+      useAnnotations({ from: '2026-08-01', to: '2026-08-31' })
+      useAnnotations({ from: '2026-09-01', to: '2026-09-30' })
+      return null
+    }
+    const { tree } = withSession(<TwoRangesProbe />)
+    const calls: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls.push(String(input))
+      return respond(200, { items: [] })
+    }) as typeof fetch
+
+    mount(tree)
+    await settle()
+    globalThis.fetch = original
+
+    expect(calls.filter((call) => call.includes('/overrides'))).toHaveLength(1)
+    // Notes and events, by contrast, really do differ by range, so each range fetches its own.
+    expect(calls.filter((call) => call.includes('/notes'))).toHaveLength(2)
+    expect(calls.filter((call) => call.includes('/events'))).toHaveLength(2)
   })
 })
 
@@ -206,6 +237,39 @@ describe('useWriteOverride, applied false', () => {
     globalThis.fetch = original
 
     expect(client.getQueryState(overlapping)?.isInvalidated).toBe(false)
+  })
+
+  // The case the coordinator's original brief would have left broken: the row is written to the
+  // store before applyOverride ever runs (annotations.ts commits, then drains), so the overrides
+  // list has a new row to show regardless of whether the drain caught up. Gating this refetch on
+  // applied the way the date ranged invalidation is gated would mean a write that saved but did
+  // not yet apply never reaches the management list at all.
+  it('still refetches the overrides list itself, since the row exists whether or not the drain caught up', async () => {
+    let overridesFetches = 0
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method === 'POST' && url.includes('/overrides')) {
+        return respond(200, { id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: false })
+      }
+      if (url.includes('/overrides')) {
+        overridesFetches += 1
+        return respond(200, { items: [] })
+      }
+      return respond(200, { items: [] })
+    }) as typeof fetch
+
+    const { tree } = withSession(<OverridesListAndWriteButton input={INPUT} />)
+    mount(tree)
+    await settle()
+    expect(overridesFetches).toBe(1)
+
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(overridesFetches).toBe(2)
   })
 })
 

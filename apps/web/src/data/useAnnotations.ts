@@ -183,7 +183,10 @@ function overlapsAffected(queryKey: readonly unknown[], personId: string, affect
 }
 
 /**
- * The point of this task: applied decides whether anything is invalidated at all.
+ * The point of this task: applied decides whether the *derived* caches are invalidated at all.
+ * This is deliberately narrower than "everything a write touched": the raw row list (the
+ * 'overrides' resource) is handled separately, unconditionally, at each call site, since that list
+ * changes the moment the store commits and does not wait on the drain the way a derived number does.
  *
  * `affected` null means the override named a sample or a session no backfill has reached, so no
  * cached range anywhere can be showing a stale number for it: there is nothing to invalidate.
@@ -203,7 +206,9 @@ function invalidateAffected(queryClient: QueryClient, personId: string, result: 
 
 /** notes and events carry no drain and no applied field: a write to either takes effect the
  * instant it commits, so unlike an override write there is no gate to honour before invalidating
- * the resource that just changed for this person. */
+ * the resource that just changed for this person. Overrides use this too, unconditionally, for
+ * the 'overrides' resource itself: see the comment on its call site in useWriteOverride for why
+ * that one is not gated on applied the way invalidateAffected's date ranged invalidation is. */
 function invalidateResource(queryClient: QueryClient, personId: string, resource: string): void {
   void queryClient.invalidateQueries({
     predicate: (query) => query.queryKey[0] === 'person' && query.queryKey[1] === personId && query.queryKey[2] === resource,
@@ -228,7 +233,15 @@ export function useWriteOverride(): UseMutationResult<OverrideWriteResult, ApiEr
       return apiSend<OverrideWriteResult>('POST', `/api/v1/p/${id}/overrides`, input)
     },
     onSuccess: (result) => {
-      if (personId !== undefined) invalidateAffected(queryClient, personId, result)
+      if (personId === undefined) return
+      // Unconditional, unlike invalidateAffected below: the row is written to the store before
+      // applyOverride ever runs (annotations.ts commits the write, then drains), so the override
+      // exists whether or not the drain caught up. The overrides resource key carries no from/to
+      // (overridesPath sends none, since GET /overrides ignores range), so overlapsAffected can
+      // never match it; without this line the management list would never learn a write happened,
+      // applied true or false alike.
+      invalidateResource(queryClient, personId, 'overrides')
+      invalidateAffected(queryClient, personId, result)
     },
   })
 }
@@ -243,7 +256,12 @@ export function useRemoveOverride(): UseMutationResult<OverrideWriteResult, ApiE
       return apiSend<OverrideWriteResult>('DELETE', `/api/v1/p/${id}/overrides/${input.overrideId}`)
     },
     onSuccess: (result) => {
-      if (personId !== undefined) invalidateAffected(queryClient, personId, result)
+      if (personId === undefined) return
+      // Same reasoning as useWriteOverride's own call: the row is gone from the store before
+      // applyOverride runs, regardless of what the drain then does, so the list has to learn about
+      // a removal unconditionally too.
+      invalidateResource(queryClient, personId, 'overrides')
+      invalidateAffected(queryClient, personId, result)
     },
   })
 }
