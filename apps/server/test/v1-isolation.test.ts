@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
-import { DERIVATION_VERSION, schema } from '@haelan/core'
+import { DERIVATION_VERSION, dayMetricTarget, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -341,6 +341,49 @@ describe('the versioned surface, beyond the per-route table', () => {
     expect(response.statusCode).toBe(401)
   })
 
+  // The mutations, which the GET shaped table above cannot express: a write has no needle to look
+  // for in a body, it has a row that must not exist afterwards. Listed so the coverage guard sees
+  // them, and exercised by the test below rather than merely declared.
+  const WRITE_ROUTES: readonly string[] = [
+    'POST /api/v1/p/:personId/overrides',
+    'DELETE /api/v1/p/:personId/overrides/:overrideId',
+  ]
+
+  // A mutating request is refused by the origin hook unless these two agree, so a write test that
+  // sent neither would pass on a 403 that has nothing to do with whose data it touched.
+  const ORIGIN = { origin: 'http://localhost:4235', host: 'localhost:4235' }
+
+  // Both directions of the first write path in the project: writing into somebody else's record,
+  // and deleting out of it with an id that is not a secret. The surviving row is the assertion
+  // that matters; a 403 alone would also be answered by a route that refused after acting.
+  it('refuses both override writes against another person, and leaves their rows alone', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+    const overrides = harness.app.haelan.instance.overrides
+    const theirs = overrides.put({
+      personId: 'p2', scope: 'day_metric', targetKey: dayMetricTarget({ localDate: dateOf(1), metric: 'steps' }),
+      action: 'exclude', reason: 'theirs', nowMs: harness.clock.nowMs,
+    })
+
+    const written = await harness.app.inject({
+      method: 'POST', url: '/api/v1/p/p2/overrides',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      payload: {
+        scope: 'day_metric', targetKey: dayMetricTarget({ localDate: dateOf(2), metric: 'steps' }),
+        action: 'exclude', reason: 'not mine to write',
+      },
+    })
+    expect(written.statusCode).toBe(403)
+
+    const removed = await harness.app.inject({
+      method: 'DELETE', url: `/api/v1/p/p2/overrides/${theirs}`,
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    })
+    expect(removed.statusCode).toBe(403)
+    expect(overrides.listFor('p2').map((row) => row.id)).toEqual([theirs])
+  })
+
   // Routes under /api/v1 that are deliberately not person scoped, and so carry no isolation case
   // in the table above. Adding one here is a conscious edit to this list; filtering the guard
   // below to only '/api/v1/p/' would instead let such a route slip past it with nobody noticing.
@@ -374,7 +417,9 @@ describe('the versioned surface, beyond the per-route table', () => {
       },
     })
     try {
-      const covered = new Set([...ROUTES.map((route) => `GET ${route.template}`), ...NOT_PERSON_SCOPED])
+      const covered = new Set([
+        ...ROUTES.map((route) => `GET ${route.template}`), ...WRITE_ROUTES, ...NOT_PERSON_SCOPED,
+      ])
       const missing = [...registered].filter((entry) => !covered.has(entry))
       const stale = [...covered].filter((entry) => !registered.has(entry))
       expect({ missing, stale }).toEqual({ missing: [], stale: [] })

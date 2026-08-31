@@ -82,6 +82,18 @@ export class OverrideStore {
       }))
   }
 
+  /**
+   * Which local day a target falls on, or null when nothing names one yet.
+   *
+   * The same answer `#markAffected` marks the queue with, exposed because a caller that writes an
+   * override has to say which day it touched and then ask whether that day is still queued. A
+   * second copy of this resolution in the route would be a day reported that could disagree with
+   * the day marked, which is the one disagreement nobody would notice.
+   */
+  affectedLocalDate(input: { personId: string, scope: OverrideScope, targetKey: string }): string | null {
+    return this.#localDateOf(this.#db, input.personId, input.scope, input.targetKey)
+  }
+
   #markAffected(tx: DbOrTx, personId: string, scope: OverrideScope, targetKey: string, nowMs: number): void {
     const localDate = this.#localDateOf(tx, personId, scope, targetKey)
     // Nothing to mark is an ordinary answer: an override can be written before a backfill has

@@ -108,6 +108,28 @@ describe('OverrideStore', () => {
     expect(queue.claim(10)).toEqual([{ personId: 'p1', localDate: LOCAL_DATE }])
   })
 
+  // The same resolution #markAffected marks with, which is why the write routes read it here
+  // rather than working the day out again: a second copy could disagree with the day marked, and
+  // the disagreement would show up as a correction reported against a day nobody derived.
+  it('reports the day a target lands on, matching the day it marks', () => {
+    test.db.insert(sessions).values({
+      id: 'sess-1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'x',
+      startMs: MIDNIGHT_UTC, startOffsetMinutes: OFFSET, endMs: NINE_AM, endOffsetMinutes: OFFSET,
+      localDate: LOCAL_DATE, attrs: '{}', rawPayloadId: null,
+    }).run()
+    const sample = sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: NINE_AM })
+    expect(store.affectedLocalDate({ personId: 'p1', scope: 'sample', targetKey: sample })).toBe(LOCAL_DATE)
+    expect(store.affectedLocalDate({
+      personId: 'p1', scope: 'session', targetKey: sessionTarget('sess-1'),
+    })).toBe(LOCAL_DATE)
+    expect(store.affectedLocalDate({
+      personId: 'p1', scope: 'day_metric', targetKey: dayMetricTarget({ localDate: LOCAL_DATE, metric: 'steps' }),
+    })).toBe(LOCAL_DATE)
+    // Nothing marked and nothing to report: the sample is somebody else's, which is the same
+    // answer a sample that has not been synced yet gets.
+    expect(store.affectedLocalDate({ personId: 'p2', scope: 'sample', targetKey: sample })).toBeNull()
+  })
+
   it('refuses to correct a whole day, because that number would have no source', () => {
     // A day level corrected value has no source, no aggregate to attach to when the metric
     // declares several, and nothing per source to be inspected against. Rejecting it is better
