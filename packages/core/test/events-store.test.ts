@@ -33,8 +33,25 @@ describe('EventStore', () => {
     })
     events.add({ personId: 'p1', kind: 'illness', startedAtMs: 2100, startedAtOffsetMinutes: 0 })
     const rows = events.listFor('p1', 1000, 3000)
-    expect(rows.find((r) => r.kind === 'alcohol')).toMatchObject({ endedAtMs: 2500, value: 3, note: 'two glasses' })
+    expect(rows.find((r) => r.kind === 'alcohol'))
+      .toMatchObject({ endedAtMs: 2500, endedAtOffsetMinutes: 0, value: 3, note: 'two glasses' })
     expect(rows.find((r) => r.kind === 'illness')).toMatchObject({ endedAtMs: null, value: null, note: null })
+  })
+
+  // ?? rather than || is what lets a recorded zero come back as zero instead of collapsing to the
+  // same null as never having been given at all, and 3 above is truthy so it cannot catch a
+  // regression to ||. A caffeine event with value 0 (decaf, or none) is a real reading, and a
+  // zero offset is UTC, a real timezone rather than a missing one; either falling back to null
+  // would silently turn a recorded zero into an absent value.
+  it('keeps a value of zero and an offset of zero rather than treating them as absent', () => {
+    events.add({
+      personId: 'p1', kind: 'caffeine', startedAtMs: 2000, startedAtOffsetMinutes: 0,
+      endedAtMs: 2000, endedAtOffsetMinutes: 0, value: 0, note: 'decaf',
+    })
+    const row = events.listFor('p1', 1000, 3000)[0]!
+    expect(row.value).toBe(0)
+    expect(row.startedAtOffsetMinutes).toBe(0)
+    expect(row.endedAtOffsetMinutes).toBe(0)
   })
 
   // Section 15: an account touches only its own person's data. A store that filtered on time
