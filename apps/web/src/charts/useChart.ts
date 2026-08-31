@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import * as echarts from 'echarts/core'
 import { CustomChart, HeatmapChart, LineChart, ScatterChart } from 'echarts/charts'
@@ -30,7 +30,7 @@ export function useChart(
   // reason that has nothing to do with what the chart draws, the exact defect chart-lifecycle.test.tsx
   // guards on the build side.
   const onClickRef = useRef(onClick)
-  onClickRef.current = onClick
+  useLayoutEffect(() => { onClickRef.current = onClick })
 
   useEffect(() => {
     if (!host.current) return
