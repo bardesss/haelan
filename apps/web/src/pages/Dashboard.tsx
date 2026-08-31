@@ -289,7 +289,7 @@ export function Dashboard() {
   const groupNumber = (value: number) => value.toLocaleString(i18n.language)
 
   // Every calendar day in the range, computed once: the dense denominator every basis line counts
-  // against, and the axis every chart on this page is now drawn along. It has to be declared ahead
+  // against, and the axis every by-day chart on this page is now drawn along. It has to be declared ahead
   // of the sparklines below rather than after them, which is where it used to sit, because those
   // are built against it now.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
