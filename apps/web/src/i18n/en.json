@@ -44,7 +44,8 @@
     "sectionsLabel": "Sections",
     "groups": {
       "overview": "Overview",
-      "tracking": "Tracking"
+      "tracking": "Tracking",
+      "settings": "Settings"
     },
     "items": {
       "dashboard": "Dashboard",
@@ -54,7 +55,8 @@
       "health": "Health",
       "weight": "Weight",
       "nutrition": "Nutrition",
-      "notes": "Notes"
+      "notes": "Notes",
+      "settings": "Settings"
     }
   },
   "common": {
@@ -509,6 +511,43 @@
         "injury": "Injury",
         "caffeine": "Caffeine"
       }
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "overrides": {
+      "title": "Corrections and exclusions",
+      "empty": {
+        "title": "No corrections yet",
+        "detail": "Nothing has been excluded or corrected for this person yet."
+      },
+      "columns": {
+        "scope": "Scope",
+        "target": "Target",
+        "action": "Action",
+        "reason": "Reason",
+        "date": "Date",
+        "remove": "Remove"
+      },
+      "scope": {
+        "day_metric": "Day and metric",
+        "sample": "Sample",
+        "session": "Session"
+      },
+      "target": {
+        "sample": "{{metric}} from {{source}}",
+        "session": "Session {{sessionId}}",
+        "unreadable": "Target could not be read"
+      },
+      "date": {
+        "unavailable": "Not recorded for this scope"
+      },
+      "correctedTo": "Correct to {{value}}",
+      "remove": "Remove",
+      "removing": "Removing",
+      "removeAria": "Remove {{target}}, {{date}}",
+      "removeFailed": "That did not remove. Try again.",
+      "removedNotYetApplied": "Removed. The numbers behind it have not caught up yet."
     }
   }
 }

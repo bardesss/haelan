@@ -44,7 +44,8 @@
     "sectionsLabel": "Secties",
     "groups": {
       "overview": "Overzicht",
-      "tracking": "Registratie"
+      "tracking": "Registratie",
+      "settings": "Instellingen"
     },
     "items": {
       "dashboard": "Dashboard",
@@ -54,7 +55,8 @@
       "health": "Gezondheid",
       "weight": "Gewicht",
       "nutrition": "Voeding",
-      "notes": "Notities"
+      "notes": "Notities",
+      "settings": "Instellingen"
     }
   },
   "common": {
@@ -509,6 +511,43 @@
         "injury": "Blessure",
         "caffeine": "Cafeïne"
       }
+    }
+  },
+  "settings": {
+    "title": "Instellingen",
+    "overrides": {
+      "title": "Correcties en uitsluitingen",
+      "empty": {
+        "title": "Nog geen correcties",
+        "detail": "Voor deze persoon is nog niets uitgesloten of gecorrigeerd."
+      },
+      "columns": {
+        "scope": "Bereik",
+        "target": "Doel",
+        "action": "Actie",
+        "reason": "Reden",
+        "date": "Datum",
+        "remove": "Verwijderen"
+      },
+      "scope": {
+        "day_metric": "Dag en meetwaarde",
+        "sample": "Meting",
+        "session": "Sessie"
+      },
+      "target": {
+        "sample": "{{metric}} van {{source}}",
+        "session": "Sessie {{sessionId}}",
+        "unreadable": "Doel kon niet worden gelezen"
+      },
+      "date": {
+        "unavailable": "Niet geregistreerd voor dit bereik"
+      },
+      "correctedTo": "Corrigeren naar {{value}}",
+      "remove": "Verwijderen",
+      "removing": "Bezig met verwijderen",
+      "removeAria": "Verwijder {{target}}, {{date}}",
+      "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
+      "removedNotYetApplied": "Verwijderd. De cijfers erachter zijn nog niet bijgewerkt."
     }
   }
 }

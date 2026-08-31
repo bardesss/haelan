@@ -16,6 +16,10 @@ const GROUPS = [
       { path: '/notes', nameKey: 'sidebar.items.notes' },
     ],
   },
+  {
+    labelKey: 'sidebar.groups.settings',
+    items: [{ path: '/settings', nameKey: 'sidebar.items.settings' }],
+  },
 ] as const
 
 // A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and

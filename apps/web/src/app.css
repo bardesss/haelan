@@ -219,5 +219,14 @@ body {
 .annotate-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: 600; }
 /* The applied:false report: the write is saved, only the re-derive has not caught up, which is
-   not an error state and does not borrow form-error's negative tone. */
+   not an error state and does not borrow form-error's negative tone. Reused as-is by
+   OverrideList.tsx for the same report after a removal, not copied under a second name. */
 .annotate-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
+
+/* The overrides management list (OverrideList.tsx): every correction and exclusion the person has
+   written, across all three scopes, the only surface a sample or session scoped override is ever
+   visible from. Row rhythm borrowed from .setup-progress's own list rather than invented fresh. */
+.override-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
+.override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.override-table tbody tr:last-child td { border-bottom: 0; }
