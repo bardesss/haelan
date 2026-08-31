@@ -297,15 +297,20 @@ describe('HeartRateRange', () => {
     })
   })
 
-  // The Critical this task's review round found: the markLine data below used to be
-  // `annotations.map(...)` with no membership filter, unlike the markPoint four lines above it in
-  // HeartRateRange.tsx and unlike both Sparkline's and ActivityHeatmap's own markPoint/markLine
-  // filters. This chart's x axis is `days.map(d => d.date.slice(8))`, a day-of-month label that
-  // repeats every month, so an override the person wrote for a day outside the visible range used
-  // to land on whichever visible day happens to share its day-of-month, silently disagreeing with
-  // the chart's own accessible table (which was always built from `days.find`, and so was already
-  // correct). Reads `setOption`'s own captured argument, since a markLine's placement is drawn on
-  // the canvas and the accessible table alone cannot tell this apart from the fix.
+  // The Critical this task's review round found, in two layers. First: the markLine data below
+  // used to be `annotations.map(...)` with no membership filter, unlike the markPoint four lines
+  // above it in HeartRateRange.tsx and unlike both Sparkline's and ActivityHeatmap's own
+  // markPoint/markLine filters, so an override from outside the visible range reached this chart
+  // at all. Second, and the one the filter alone did not close: this chart's x axis is
+  // `days.map(d => d.date.slice(8))`, a day-of-month label, and a category axis's markPoint/
+  // markLine `xAxis` resolves a string against that axis's own `data` by name, matching the FIRST
+  // entry that carries it. `.slice(8)` was still the positioning key after the filter landed, so
+  // two visible days sharing a day-of-month (`3months`/`year` draw one point per calendar day
+  // across several months, with no downsampling) collided on each other even though both passed
+  // the filter and neither was out of range. Both cases are pinned below: the first against a day
+  // genuinely outside `days`, the second against two in-range days that share a label. Reads
+  // `setOption`'s own captured argument, since a mark's placement is drawn on the canvas and the
+  // accessible table alone cannot tell either defect apart from its fix.
   describe('the annotation markLine only ever names a day this chart is actually drawing', () => {
     it('drops an annotation for a date outside the visible range rather than placing it on a day sharing its day-of-month', () => {
       act(() => {
@@ -320,7 +325,7 @@ describe('HeartRateRange', () => {
       expect(meanSeries.markLine?.data).toEqual([])
     })
 
-    it('draws an annotation for a date actually inside the visible range', () => {
+    it('draws an annotation for a date actually inside the visible range, positioned by index', () => {
       act(() => {
         root!.render(
           <HeartRateRange days={days} excluded={[]} corrected={[]}
@@ -330,7 +335,41 @@ describe('HeartRateRange', () => {
       const stub = chartStubs.at(-1)!
       const option = stub.setOption.mock.calls[0]![0] as { series: { markLine?: { data: unknown[] } }[] }
       const meanSeries = option.series[2]!
-      expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: '11' }])
+      // xAxis is 1, `days`' own array position for 2026-08-11, not the string "11": a numeric
+      // category index cannot collide with another day the way a repeating day-of-month label can.
+      expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: 1 }])
+    })
+
+    // The reviewer's own measurement: a six day range spanning two months, both sharing the same
+    // three day-of-month labels ("10","11","12"), with the override on the second month's day. A
+    // string positioned mark resolves `"11"` against the axis's data and lands on the FIRST match,
+    // 2026-07-11 (index 1), at 2026-07-11's own height; an index positioned mark lands on the day
+    // actually named, 2026-08-11 (index 4), at its own mean. Both the excluded markPoint and the
+    // annotation markLine are checked in one range, since both share the exact defect and the exact
+    // fix.
+    it('resolves a mark to the day it actually names, not the first day sharing its day-of-month, across a two month range', () => {
+      const twoMonthDays: DayRow[] = [
+        { date: '2026-07-10', steps: null, hrMin: 50, hrMean: 55, hrMax: 60, sleepMinutes: null, worn: true },
+        { date: '2026-07-11', steps: null, hrMin: 51, hrMean: 56, hrMax: 61, sleepMinutes: null, worn: true },
+        { date: '2026-07-12', steps: null, hrMin: 52, hrMean: 57, hrMax: 62, sleepMinutes: null, worn: true },
+        { date: '2026-08-10', steps: null, hrMin: 53, hrMean: 58, hrMax: 63, sleepMinutes: null, worn: true },
+        { date: '2026-08-11', steps: null, hrMin: 54, hrMean: 64, hrMax: 70, sleepMinutes: null, worn: true },
+        { date: '2026-08-12', steps: null, hrMin: 55, hrMean: 60, hrMax: 65, sleepMinutes: null, worn: true },
+      ]
+      act(() => {
+        root!.render(
+          <HeartRateRange days={twoMonthDays} excluded={['2026-08-11']} corrected={[]}
+            annotations={[{ date: '2026-08-11', text: 'Watch left charging' }]} label="hr range" />,
+        )
+      })
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as {
+        series: { markPoint?: { data: unknown[] }, markLine?: { data: unknown[] } }[]
+      }
+      const meanSeries = option.series[2]!
+      // Index 4, 2026-08-11's own position, at its own mean (64), never index 1 (2026-07-11, mean 56).
+      expect(meanSeries.markPoint?.data).toEqual([{ name: 'excluded', xAxis: 4, yAxis: 64 }])
+      expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: 4 }])
     })
   })
 })

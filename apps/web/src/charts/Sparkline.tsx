@@ -69,7 +69,10 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
         // off the fitted range; anchor at the day's own value instead, same as HeartRateRange, and
         // drop a date this sparkline has no reading for (nothing to anchor the mark to). corrected
         // entries share this same markPoint (echarts draws one per series) but override symbol and
-        // colour so the two read apart at a glance.
+        // colour so the two read apart at a glance. `seriesAlt`, not `stageRem`: this project's own
+        // token catalogue defines it and nothing on any of these three charts had claimed it yet,
+        // where `stageRem` already means REM sleep on Hypnogram, a chart that shares a screen with
+        // HeartRateRange on the Dashboard - one colour carrying two meanings in one view.
         data: [
           ...excluded.flatMap((date) => {
             const i = labels.indexOf(date)
@@ -82,7 +85,7 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
             const v = i === -1 ? null : values[i]
             if (v === null || v === undefined) return []
             return [{ name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
-              itemStyle: { color: tokens.stageRem }, xAxis: i, yAxis: v }]
+              itemStyle: { color: tokens.seriesAlt }, xAxis: i, yAxis: v }]
           }),
         ] },
       markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },

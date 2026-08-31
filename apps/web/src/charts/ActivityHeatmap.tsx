@@ -108,7 +108,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
                 const cell = cells.find((candidate) => candidate.date === c.date)
                 return cell
                   ? [{ name: 'corrected', coord: [cell.week, cell.weekday], symbol: 'rect', symbolSize: SYMBOL.corrected,
-                    itemStyle: { color: tokens.stageRem } }]
+                    itemStyle: { color: tokens.seriesAlt } }]
                   : []
               }),
               // A diamond rather than the excluded mark's circle, and the annotation colour

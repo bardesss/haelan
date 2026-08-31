@@ -71,30 +71,39 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
             // Anchor each marker at the day's actual mean instead, and drop it if that day has no reading. corrected
             // entries share this same markPoint (echarts draws one per series) but override symbol and colour so the
             // two read apart at a glance, the same split Sparkline's own markPoint draws.
+            //
+            // xAxis is the day's own array position (findIndex), never `date.slice(8)`: the axis
+            // itself is still labelled by day-of-month for display (below), but a category axis's
+            // markPoint/markLine `xAxis` resolves a string against that label by name, and the
+            // label repeats the moment a range crosses a month boundary (3months, year both draw
+            // one point per calendar day with no downsampling). A string key placed the mark on the
+            // FIRST day carrying that label rather than the day the override actually named,
+            // silently swapping months; an index cannot collide, the same reason Sparkline's own
+            // markPoint has always used `labels.indexOf(date)` rather than the label itself.
             data: [
               ...excluded.flatMap((date) => {
-                const day = days.find((d) => d.date === date)
-                if (!day || day.hrMean === null) return []
-                return [{ name: 'excluded', xAxis: date.slice(8), yAxis: day.hrMean }]
+                const i = days.findIndex((d) => d.date === date)
+                if (i === -1 || days[i]!.hrMean === null) return []
+                return [{ name: 'excluded', xAxis: i, yAxis: days[i]!.hrMean }]
               }),
               ...corrected.flatMap((c) => {
-                const day = days.find((d) => d.date === c.date)
-                if (!day || day.hrMean === null) return []
+                const i = days.findIndex((d) => d.date === c.date)
+                if (i === -1 || days[i]!.hrMean === null) return []
                 return [{ name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
-                  itemStyle: { color: tokens.stageRem }, xAxis: c.date.slice(8), yAxis: day.hrMean }]
+                  itemStyle: { color: tokens.seriesAlt }, xAxis: i, yAxis: days[i]!.hrMean }]
               }),
             ] },
           markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
             label: { color: tokens.stageAwake, fontSize: base.axisLabel.fontSize, formatter: (p: { name: string }) => p.name },
-            // Filtered against `days`, the same way the markPoint four lines up already is: this
-            // chart's x axis is `days.map(d => d.date.slice(8))`, a day-of-month label that repeats
-            // every month, and an override from outside the visible range shares that same label
-            // with whatever day in the current range happens to fall on the same day-of-month. An
-            // unfiltered `annotations.map` used to place that override's markLine on the wrong day
-            // in the range being drawn; found by chart-annotations.test.tsx's own regression case.
+            // Same index-not-label positioning as the markPoint above, and the same reason: a day
+            // outside the visible range used to share its day-of-month label with a real day in
+            // range and land on that day instead (chart-annotations.test.tsx's own regression case
+            // for the single-month version of this; the two-month version, where a label repeats
+            // inside one visible range rather than only across an excluded one, is the same defect
+            // one filter short of catching, closed the same way here).
             data: annotations.flatMap((a) => {
-              const day = days.find((d) => d.date === a.date)
-              return day ? [{ name: a.text, xAxis: a.date.slice(8) }] : []
+              const i = days.findIndex((d) => d.date === a.date)
+              return i === -1 ? [] : [{ name: a.text, xAxis: i }]
             }) } },
       ],
     }
