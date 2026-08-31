@@ -31,6 +31,24 @@ describe('NoteStore', () => {
     expect(rows[0]!.updatedAtMs).toBe(2000)
   })
 
+  // The id an edit answers with has to be the id of the row that now holds the text, since that is
+  // the only thing a caller can do anything with. put() used to mint a fresh UUID and return it
+  // whether or not the insert branch ever ran, so the second write below answered an id belonging
+  // to no row at all: PUT /notes/:localDate reported it, nothing read it back, and nothing failed.
+  it('answers the surviving row\'s own id when a second write edits it, not a fresh one', () => {
+    const first = notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'first', nowMs: 1000 })
+    const second = notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'second', nowMs: 2000 })
+    expect(second).toBe(first)
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')[0]!.id).toBe(second)
+  })
+
+  // The other half of the same property, and the half a "return the id you were given back" fix
+  // would break: an insert that really did insert still answers the id the new row carries.
+  it('answers the new row\'s own id for a first write', () => {
+    const id = notes.put({ personId: 'p1', localDate: '2026-08-16', body: 'only', nowMs: 1000 })
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')[0]!.id).toBe(id)
+  })
+
   // Section 15: an account touches only its own person's data. A store that filtered on date alone
   // would pass every other test in this file.
   it('never returns or overwrites another person\'s note', () => {

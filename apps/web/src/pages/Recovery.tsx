@@ -12,7 +12,7 @@ import { Sparkline } from '../charts/Sparkline.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
-import { useSeries } from '../data/useSeries.js'
+import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
@@ -155,20 +155,27 @@ export function Recovery() {
   // Stable array identities for the same reason Dashboard.tsx's own `sparklines` memo exists:
   // useChart keys its rebuild on `build`, and `build` is a useCallback over `values`/`baseline`, so
   // a freshly constructed array or object on every render disposes and reinitialises the chart.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
   const sparklines = useMemo(() => {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of LAST_METRICS) {
       const points = metricGroups.pointsOf(metric)
-      out.set(metric, { values: points.map((p) => p.value), labels: points.map((p) => p.localDate) })
+    // denseSeries, not points.map: /series omits a day nothing reported, and an applied exclusion
+    // is exactly such a day (deriveDay deletes the excluded metric's daily row). Handed the points
+    // array directly, a sparkline had no position for that day at all, so its excluded mark, the
+    // reason beside it and its accessible table row all vanished the moment the exclusion took
+    // effect. Dense over the range the reader asked for, the same shape the heart rate range chart
+    // and the heatmap have always been handed, the gap is a position that can be marked.
+      out.set(metric, denseSeries(rangeDates, points))
     }
     return out
-  }, [lastSeries.data])
+  }, [rangeDates, lastSeries.data])
 
   const restingHrBand = useMemo(() => bandFrom(restingHrBaseline.data?.baseline ?? null), [restingHrBaseline.data])
   const hrvBand = useMemo(() => bandFrom(hrvBaseline.data?.baseline ?? null), [hrvBaseline.data])
   const respiratoryBand = useMemo(() => bandFrom(respiratoryBaseline.data?.baseline ?? null), [respiratoryBaseline.data])
 
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // Three sparkline cards over the one 'last' group: exactly MetricCard's fit, no ancestor-basis
   // restructuring needed the way four of Dashboard's cards did. basisPlacement is 'body' at every

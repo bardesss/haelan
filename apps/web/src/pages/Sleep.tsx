@@ -19,7 +19,7 @@ import { localMinutesOf, inWindow, withinSchedule, WIDE_WINDOW } from '../charts
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
-import { useSeries } from '../data/useSeries.js'
+import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
@@ -277,16 +277,23 @@ export function Sleep() {
   // Stable array identities for the reason every sibling page's own copy of this memo states:
   // useChart keys its rebuild on `build`, itself a useCallback over `values`, so a freshly
   // constructed array on every render disposes and reinitialises the chart.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
   const sparklines = useMemo(() => {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of [...SUM_METRICS, ...LAST_METRICS, ...COUNT_METRICS]) {
       const points = metricGroups.pointsOf(metric)
-      out.set(metric, { values: points.map((p) => p.value), labels: points.map((p) => p.localDate) })
+    // denseSeries, not points.map: /series omits a day nothing reported, and an applied exclusion
+    // is exactly such a day (deriveDay deletes the excluded metric's daily row). Handed the points
+    // array directly, a sparkline had no position for that day at all, so its excluded mark, the
+    // reason beside it and its accessible table row all vanished the moment the exclusion took
+    // effect. Dense over the range the reader asked for, the same shape the heart rate range chart
+    // and the heatmap have always been handed, the gap is a position that can be marked.
+      out.set(metric, denseSeries(rangeDates, points))
     }
     return out
-  }, [sumSeries.data, lastSeries.data, countSeries.data])
+  }, [rangeDates, sumSeries.data, lastSeries.data, countSeries.data])
 
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // Every sparkline tile on this page shares one shape: a metric, a headline the caller has
   // already computed (mean for a typical night, sum for the two episodic nap metrics), and a

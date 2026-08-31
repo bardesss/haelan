@@ -16,19 +16,27 @@ export interface AnnotateTarget {
   metric: string
 }
 
-type Action = 'exclude' | 'correct' | 'note' | 'event'
+type Action = 'exclude' | 'note' | 'event'
 
-const ACTIONS: readonly Action[] = ['exclude', 'correct', 'note', 'event']
+// Three, not four: there is no correct action here, and its absence is deliberate rather than an
+// oversight to restore. A click on a by-day chart can only ever name a day_metric target
+// (`targetKey` below is built with dayMetricTarget and nothing else), and OverrideStore.validate
+// refuses `correct` at every scope but `sample`, so a corrected day_metric write answered 400 on
+// every attempt. Relaxing that rule would not help either: deriveDay consults only excludedMetrics,
+// so a day scoped correction has nothing in the derive path to apply it, and it would save and then
+// silently change no number at all. Correcting a value stays reachable at sample scope, which needs
+// an intraday chart to click a single reading on; this panel has no way to name one.
+const ACTIONS: readonly Action[] = ['exclude', 'note', 'event']
 
 /**
- * The panel a reader opens by clicking a plotted point: exclude, correct, add a note or add an
- * event, all four scoped to the one day and metric the click named.
+ * The panel a reader opens by clicking a plotted point: exclude the day's reading, add a note or
+ * add an event, all three scoped to the one day and metric the click named.
  *
  * `applied` decides what happens after an override write, and only after one: a note or an
  * event carries no drain (useAnnotations.ts's own comment on invalidateResource says why) and
  * always closes the panel once its write lands. An override's `applied: true` means the numbers
  * behind the panel have already changed, so it closes the same way. `applied: false` means the
- * correction saved but the re-derive has not caught up yet, the one state where closing would
+ * exclusion saved but the re-derive has not caught up yet, the one state where closing would
  * let a reader walk away believing a number that has not moved. The panel stays open and says so
  * instead of closing on a write that only half finished.
  */
@@ -41,7 +49,6 @@ export function AnnotatePanel({ target, onClose }: {
 
   const [action, setAction] = useState<Action>('exclude')
   const [reason, setReason] = useState('')
-  const [correctedValue, setCorrectedValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
   const [kind, setKind] = useState('')
   const [startedAt, setStartedAt] = useState(() => `${target.localDate}T12:00`)
@@ -58,24 +65,17 @@ export function AnnotatePanel({ target, onClose }: {
   // they clicked already said which day and which metric this panel is about.
   const targetKey = dayMetricTarget({ localDate: target.localDate, metric: target.metric })
 
-  // No isNaN check on correctedNumber: the field it comes from is type="number", and the HTML
-  // value sanitisation algorithm for that type (enforced by every real browser, and by happy-dom
-  // in the test below) rejects a keystroke that would leave the value non-numeric before it ever
-  // reaches this state. A non-empty correctedValue is therefore always a parseable number here;
-  // an isNaN guard on it was dead code checking a state this field cannot produce.
-  const correctedNumber = correctedValue.trim() === '' ? null : Number(correctedValue)
   const canSubmit =
     action === 'exclude' ? reason.trim() !== '' :
-    action === 'correct' ? reason.trim() !== '' && correctedNumber !== null :
     action === 'note' ? noteBody.trim() !== '' :
     kind.trim() !== '' && startedAt !== ''
 
   const mutation = action === 'note' ? writeNote : action === 'event' ? writeEvent : writeOverride
   const busy = mutation.isPending
 
-  // Sticks around after a successful exclude or correct until a later write replaces it, which
-  // is what lets the note below survive a reader switching tabs to look at the other actions
-  // without losing the one message this whole distinction exists to show.
+  // Sticks around after a successful exclude until a later write replaces it, which is what lets
+  // the note below survive a reader switching tabs to look at the other actions without losing
+  // the one message this whole distinction exists to show.
   const overrideResult = writeOverride.data ?? null
   const notYetApplied = overrideResult !== null && overrideResult.applied === false
 
@@ -87,11 +87,6 @@ export function AnnotatePanel({ target, onClose }: {
       writeOverride.mutate({ scope: 'day_metric', targetKey, action: 'exclude', reason }, {
         onSuccess: (result) => { if (result.applied) onClose() },
       })
-    } else if (action === 'correct') {
-      writeOverride.mutate(
-        { scope: 'day_metric', targetKey, action: 'correct', correctedValue: correctedNumber!, reason },
-        { onSuccess: (result) => { if (result.applied) onClose() } },
-      )
     } else if (action === 'note') {
       writeNote.mutate({ localDate: target.localDate, body: noteBody }, { onSuccess: onClose })
     } else {
@@ -143,24 +138,15 @@ export function AnnotatePanel({ target, onClose }: {
         </div>
 
         <form onSubmit={submit}>
-          {(action === 'exclude' || action === 'correct') && (
-            <>
-              {action === 'correct' && (
-                <label className="field">
-                  <span className="label">{t('annotate.correctedValueLabel')}</span>
-                  <input className="input" type="number" inputMode="decimal" value={correctedValue}
-                    onChange={(event) => setCorrectedValue(event.target.value)} />
-                </label>
-              )}
-              <label className="field">
-                <span className="label">{t('annotate.reasonLabel')}</span>
-                <input className="input" value={reason} onChange={(event) => setReason(event.target.value)} />
-                {/* Unconditional, not gated on a flag: this field only ever renders inside the
-                    exclude-or-correct block above, and the schema makes reason notNull for both,
-                    so there is no branch here in which the hint would not apply. */}
-                <span className="field-hint">{t('annotate.reasonHint')}</span>
-              </label>
-            </>
+          {action === 'exclude' && (
+            <label className="field">
+              <span className="label">{t('annotate.reasonLabel')}</span>
+              <input className="input" value={reason} onChange={(event) => setReason(event.target.value)} />
+              {/* Unconditional, not gated on a flag: this field only ever renders on the exclude
+                  action, and the schema makes reason notNull for it, so there is no branch here
+                  in which the hint would not apply. */}
+              <span className="field-hint">{t('annotate.reasonHint')}</span>
+            </label>
           )}
 
           {action === 'note' && (

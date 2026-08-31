@@ -22,10 +22,15 @@ export class NoteStore {
 
   // The schema's own unique constraint is on (personId, localDate), so a second write for a day
   // already noted is an edit, not a new row: this upserts on that pair rather than inserting blind.
+  //
+  // The id comes back from the statement, not from the randomUUID above it. That id is only ever
+  // the row's own when the insert actually inserted; on the conflict branch the existing row keeps
+  // the id it was created with and the fresh UUID is discarded by the database, so returning it
+  // answered an id no row has ever carried. RETURNING reports whichever of the two rows the
+  // statement settled on, which is the only answer that is true in both branches.
   put(input: PutNoteInput): string {
-    const id = randomUUID()
-    this.#db.insert(notes).values({
-      id,
+    const row = this.#db.insert(notes).values({
+      id: randomUUID(),
       personId: input.personId,
       localDate: input.localDate,
       body: input.body,
@@ -33,8 +38,8 @@ export class NoteStore {
     }).onConflictDoUpdate({
       target: [notes.personId, notes.localDate],
       set: { body: input.body, updatedAtMs: input.nowMs },
-    }).run()
-    return id
+    }).returning({ id: notes.id }).get()
+    return row.id
   }
 
   remove(input: { personId: string, localDate: string }): void {

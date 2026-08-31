@@ -94,13 +94,22 @@ function dateText(t: Translate, info: TargetInfo): string {
   return info.date ?? t('settings.overrides.date.unavailable')
 }
 
-/** "Exclude" or "Correct", the same two words the panel that writes them uses, plus the value for
- * a correction: a bare "Correct" tells a reader something was changed and not what to. */
+/** "Exclude" or "Correct", plus the value for a correction: a bare "Correct" tells a reader
+ * something was changed and not what to.
+ *
+ * These two words are this list's own (`settings.overrides.action.*`), not the annotate panel's
+ * (`annotate.actions.*`), which is where they used to come from. The panel offers no correct
+ * action at all now, since a day_metric correction is refused by OverrideStore.validate and has
+ * nothing in the derive path to apply it (AnnotatePanel.tsx's own ACTIONS comment has the full
+ * reasoning), so reading a correction's label out of the panel's catalogue would leave the one
+ * surface that does render corrections depending on a word the panel has no reason to keep. This
+ * list renders them because the sync layer writes sample scoped corrections that nothing else in
+ * this app reads back. */
 function actionText(t: Translate, item: StoredOverride): string {
   if (item.action === 'correct' && item.correctedValue !== null) {
     return t('settings.overrides.correctedTo', { value: item.correctedValue })
   }
-  return t(`annotate.actions.${item.action}`)
+  return t(`settings.overrides.action.${item.action}`)
 }
 
 /**

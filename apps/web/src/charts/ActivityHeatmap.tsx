@@ -14,17 +14,31 @@ import type { DayRow } from '../fixtures/july.js'
 const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
 
 /**
- * Which local date a click on this heatmap's own worn/absent cells landed on, or undefined for a
- * click that missed both series (a markPoint overlay, or empty grid space): a markPoint click
- * reports its own componentType rather than `'series'`, and its value is a marker descriptor, not
- * a [week, weekday, ...] cell tuple.
+ * Which local date a click on this heatmap landed on: a cell click carries a [week, weekday, ...]
+ * tuple that names a cell, and a click on one of the overlay marks carries a marker descriptor
+ * instead, resolved through `markDates` by the markPoint's own dataIndex.
+ *
+ * `markDates` is the date of every markPoint entry, in the order this chart hands them to echarts,
+ * which is the only handle an overlay click gives (its `value` is the descriptor, not a cell). An
+ * overlay click used to resolve to nothing at all, and on this chart an excluded day's mark sits
+ * directly on top of the absence dot for the same cell, so a click aimed at the mark a reader
+ * wanted to undo landed on the mark and did nothing while a click a few pixels off worked.
  *
  * A plain function, exported and tested on its own for the same reason Sparkline's own
  * `sparklinePointDate` is: echarts renders to an SVG this project's render environment cannot
  * hit-test, so the translation from a click event to a date is the one piece of this behaviour a
- * test can reach. See chart-annotations.test.tsx.
+ * test can reach. See chart-marks.test.tsx.
  */
-export function heatmapClickDate(cells: CalendarCell[], event: Pick<ECElementEvent, 'componentType' | 'value'>): string | undefined {
+export function heatmapClickDate(
+  cells: CalendarCell[], markDates: readonly string[],
+  // dataIndex optional rather than picked off ECElementEvent whole: a real click always carries
+  // one, and only the markPoint branch below reads it, so requiring it would make every cell click
+  // case in a test carry a number nothing looks at.
+  event: Pick<ECElementEvent, 'componentType' | 'value'> & { dataIndex?: number },
+): string | undefined {
+  if (event.componentType === 'markPoint') {
+    return event.dataIndex === undefined ? undefined : markDates[event.dataIndex]
+  }
   if (event.componentType !== 'series') return undefined
   const value = event.value
   if (!Array.isArray(value)) return undefined
@@ -63,6 +77,26 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
   // on every render regardless of the `cells` memoisation two lines up, and useChart disposes
   // and recreates the whole chart whenever `build` changes identity.
   const weekdayLabels = useMemo(() => WEEKDAY_KEYS.map((key) => t(`charts.weekday.${key}`)), [t])
+
+  // Every markPoint this chart draws, resolved to its cell once, in the order echarts receives
+  // them. `build` maps over this list and `onClick` indexes back into it, so a click on a mark and
+  // the mark it was drawn from cannot come apart; assembling the entries in `build` and a second
+  // parallel list of dates for the click handler is exactly the drift this avoids. Memoised for
+  // the reason every other array on this chart is: a fresh one each render rebuilds `build` and
+  // disposes the chart.
+  //
+  // Unlike Sparkline and HeartRateRange, nothing here has to move to a by-position mark when a
+  // day's value is gone. A heatmap cell is a coordinate on two category axes rather than a height,
+  // so an excluded day with no steps still has a cell to mark, which is why this chart kept its
+  // excluded mark through the defect the other two lost theirs to.
+  const marks = useMemo(() => [
+    ...excluded.map((date) => ({ date, kind: 'excluded' as const, text: '' })),
+    ...corrected.map((entry) => ({ date: entry.date, kind: 'corrected' as const, text: '' })),
+    ...annotationsByDate(annotations).map((a) => ({ date: a.date, kind: 'annotation' as const, text: a.text })),
+  ].flatMap((mark) => {
+    const cell = cells.find((c) => c.date === mark.date)
+    return cell === undefined ? [] : [{ ...mark, week: cell.week, weekday: cell.weekday }]
+  }), [cells, excluded, corrected, annotations])
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -110,36 +144,25 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
             // plus colour still tell the three groups apart with no label at all, which is what
             // Task 11's own Important 4 requires for a colour-blind reader too.
             label: { show: false },
-            data: [
-              ...excluded.flatMap((date) => {
-                const cell = cells.find((c) => c.date === date)
-                return cell ? [{ name: 'excluded', coord: [cell.week, cell.weekday], itemStyle: { color: tokens.excluded } }] : []
-              }),
-              // A rect, the same shape and colour Sparkline's own corrected mark uses, so a
-              // correction reads the same way on every chart that can draw one.
-              ...corrected.flatMap((c) => {
-                const cell = cells.find((candidate) => candidate.date === c.date)
-                return cell
-                  ? [{ name: 'corrected', coord: [cell.week, cell.weekday], symbol: 'rect', symbolSize: SYMBOL.corrected,
-                    itemStyle: { color: tokens.seriesAlt } }]
-                  : []
-              }),
-              // A diamond rather than the excluded mark's circle, and the annotation colour
-              // HeartRateRange's own markLine uses, so the two kinds read apart at a glance.
-              //
-              // annotationsByDate first, not annotations directly: an override reason, a note and
-              // an event can share one date now, and one markPoint entry per annotation put every
-              // one of them at the same coord with a label echarts anchors inside the same marker
-              // (markPoint's default label position), overlapping rather than reading apart.
-              // Grouped and joined here with ANNOTATION_JOIN, the same separator the accessible
-              // table already uses, so this draws one mark per date.
-              ...annotationsByDate(annotations).flatMap((a) => {
-                const cell = cells.find((c) => c.date === a.date)
-                return cell
-                  ? [{ name: a.text, coord: [cell.week, cell.weekday], symbol: 'diamond', itemStyle: { color: tokens.stageAwake } }]
-                  : []
-              }),
-            ],
+            // A rect for a correction, the same shape and colour Sparkline's own corrected mark
+            // uses, so a correction reads the same way on every chart that can draw one, and a
+            // diamond in the annotation colour HeartRateRange's own markLine uses for an
+            // annotation, so all three kinds read apart at a glance with no label at all.
+            //
+            // The annotation marks are grouped by date before they reach `marks` above: an override
+            // reason, a note and an event can share one date, and one markPoint entry per
+            // annotation put every one of them at the same coord, overlapping rather than reading
+            // apart. Their texts are joined with ANNOTATION_JOIN, the same separator the accessible
+            // table below uses.
+            data: marks.map((mark) => {
+              const coord = [mark.week, mark.weekday]
+              if (mark.kind === 'excluded') return { name: 'excluded', coord, itemStyle: { color: tokens.excluded } }
+              if (mark.kind === 'corrected') {
+                return { name: 'corrected', coord, symbol: 'rect', symbolSize: SYMBOL.corrected,
+                  itemStyle: { color: tokens.seriesAlt } }
+              }
+              return { name: mark.text, coord, symbol: 'diamond', itemStyle: { color: tokens.stageAwake } }
+            }),
           },
         },
         {
@@ -150,12 +173,13 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
         },
       ],
     }
-  }, [cells, days, weeks, max, weekdayLabels, excluded, corrected, annotations])
+  }, [cells, days, weeks, max, weekdayLabels, marks])
 
+  const markDates = useMemo(() => marks.map((mark) => mark.date), [marks])
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = heatmapClickDate(cells, event)
+    const date = heatmapClickDate(cells, markDates, event)
     if (date !== undefined) onPointClick?.(date)
-  }, [cells, onPointClick])
+  }, [cells, markDates, onPointClick])
 
   const { host, style } = useChart(build, 110, onClick)
   return (
@@ -176,7 +200,8 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
               // single find() here would silently show only the first and drop the rest.
               // ANNOTATION_JOIN, not a second ', ' literal: see Sparkline.tsx's own comment on the
               // same line for why.
-              annotations.filter((a) => a.date === c.date).map((a) => a.text).join(ANNOTATION_JOIN)].filter(Boolean).join(', ')]
+              annotations.filter((a) => a.date === c.date).map((a) => a.text).join(ANNOTATION_JOIN)]
+              .filter(Boolean).join(ANNOTATION_JOIN)]
         }),
       }} />
   )

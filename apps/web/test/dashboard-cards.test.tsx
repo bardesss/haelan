@@ -10,6 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import { dayMetricTarget } from '@haelan/core/target-key'
 import { flush, pumpUntil } from './flush.js'
 import { seriesPoint } from './metricCoverage.js'
 
@@ -175,6 +176,81 @@ function stubOneNight(): () => void {
   }) as typeof fetch
   return () => { globalThis.fetch = original }
 }
+
+/**
+ * What the wire actually looks like once an exclusion has applied: deriveDay deletes the excluded
+ * metric's daily row, so /series answers with that day simply absent, and GET /overrides is the
+ * only thing that still knows it existed. Every point lands on a different day from the excluded
+ * one for exactly that reason.
+ */
+function stubAppliedExclusion(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-14', 60)], reduction: null }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/overrides')) {
+      return new Response(JSON.stringify({
+        items: [{
+          id: 'o1', scope: 'day_metric',
+          targetKey: dayMetricTarget({ localDate: EXCLUDED_DATE, metric: 'steps' }),
+          action: 'exclude', correctedValue: null, reason: EXCLUDED_REASON,
+        }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+const EXCLUDED_DATE = '2026-08-15'
+const EXCLUDED_REASON = 'phone left at home'
+
+describe('a day whose exclusion has applied', () => {
+  // The branch review's second blocker, measured end to end from what the server sends. /series
+  // omits the excluded day, so a card handed the points array directly had no position for it: the
+  // mark, the reason and the accessible table row all went with it, and the day the reader
+  // excluded left the chart looking exactly like a day nothing was ever recorded for. The chart
+  // level tests in chart-marks.test.tsx pin what a chart does with a gap; this pins that a page
+  // still hands its charts one entry per day in the range, which is what makes the gap exist.
+  it('still carries the day, marked and explained, on the card for the metric it names', async () => {
+    window.history.replaceState(null, '', `/?range=month&on=${EXCLUDED_DATE}`)
+    const restore = stubAppliedExclusion()
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+
+    // Every row for that date across the page's charts, not the first one found: the heart rate
+    // range chart has always been dense and so has always had a row for this day, and it is not
+    // the card the steps override names. The property is that the card the override names states
+    // what happened to the day, and reading only the first match would let this pass on a row
+    // belonging to a chart the override never touched.
+    const rows = [...container!.innerHTML.matchAll(
+      new RegExp(`<tr><th scope="row">${EXCLUDED_DATE}</th>[\\s\\S]*?</tr>`, 'g'),
+    )].map((match) => match[0])
+    expect(rows.length, 'no table row for the excluded day at all').toBeGreaterThan(0)
+    const marked = rows.filter((row) => row.includes('excluded'))
+    expect(marked, 'the excluded day is on the page but no card says it was excluded').toHaveLength(1)
+    expect(marked[0]!).toContain('no reading')
+    expect(marked[0]!).toContain(EXCLUDED_REASON)
+    restore()
+  })
+})
 
 describe('the remaining Dashboard cards', () => {
   // The rule the band exists for. A band computed from three days looks exactly as authoritative

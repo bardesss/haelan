@@ -35,7 +35,7 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * at all, all 35 chart hosts across the four pages contained a rendered `<svg>`; with the full
  * stub, all 35 were empty strings. Delegating restores every one of them while still letting the
  * one test that needs it (`annotate wiring`, below) capture the click handler without asking
- * zrender to resolve a coordinate against a rendered SVG, which chart-annotations.test.tsx already
+ * zrender to resolve a coordinate against a rendered SVG, which chart-marks.test.tsx already
  * established does not work under happy-dom no matter how the click is simulated.
  */
 type CapturedChart = { onClick?: (event: unknown) => void }

@@ -486,13 +486,11 @@
     "actionLabel": "What do you want to do",
     "actions": {
       "exclude": "Exclude",
-      "correct": "Correct",
       "note": "Add a note",
       "event": "Add an event"
     },
     "reasonLabel": "Reason",
     "reasonHint": "Required.",
-    "correctedValueLabel": "Corrected value",
     "noteLabel": "Note",
     "kindLabel": "Kind",
     "startedAtLabel": "Started",
@@ -501,7 +499,7 @@
     "eventNoteLabel": "Note, optional",
     "saving": "Saving",
     "saveFailed": "That did not save. Try again.",
-    "notYetApplied": "The correction is saved. The numbers behind it have not caught up yet.",
+    "notYetApplied": "The exclusion is saved. The numbers behind it have not caught up yet.",
     "event": {
       "kinds": {
         "illness": "Illness",
@@ -541,6 +539,10 @@
       },
       "date": {
         "unavailable": "Not recorded for this scope"
+      },
+      "action": {
+        "exclude": "Exclude",
+        "correct": "Correct"
       },
       "correctedTo": "Correct to {{value}}",
       "remove": "Remove",

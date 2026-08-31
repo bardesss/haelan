@@ -1,23 +1,31 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, STROKE, OPACITY, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, dayMarks, markClickDate, STROKE, OPACITY, SYMBOL } from './base.js'
+import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 
 /**
- * Which local date a click on this sparkline's own series landed on, or undefined for a click
- * that missed the line (empty space) or landed on the markPoint/markLine overlays instead: those
- * report a "series" of their own kind (`markPoint`/`markLine`) rather than `componentType:
- * 'series'`, and their dataIndex counts into the overlay's own data array, not `labels`.
+ * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
+ * series' own dataIndex, and a click on one of the overlay marks reads the mark it actually hit
+ * (markClickDate in base.ts says why an overlay cannot be resolved against `labels`). Undefined
+ * for a click that hit neither, which is empty space.
+ *
+ * An overlay click used to resolve to nothing at all. That was right while every mark sat on a
+ * plotted point, since the click fell through to the point beneath it; an excluded day has no
+ * point beneath it once the exclusion applies, and the mark is then the only thing there is to
+ * click to undo it.
  *
  * A plain function, exported and tested on its own: echarts renders to an SVG this project's own
- * render environment cannot hit-test (see chart-annotations.test.tsx's own note), so the
+ * render environment cannot hit-test (see chart-marks.test.tsx's own note), so the
  * translation from a click event to a date is the one piece of this behaviour a test can reach.
  */
-export function sparklinePointDate(labels: string[], event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>): string | undefined {
-  if (event.componentType !== 'series') return undefined
+export function sparklinePointDate(
+  labels: string[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
+): string | undefined {
+  if (event.componentType !== 'series') return markClickDate(marks, event)
   return labels[event.dataIndex]
 }
 
@@ -29,6 +37,12 @@ const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, corrected = EMPTY, onPointClick }: {
+  // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
+  // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
+  // comment says why a points array straight off /series is not enough. A day with no position on
+  // this axis cannot be marked, and an applied exclusion is exactly a day /series stops answering
+  // for, so a sparse pair here silently loses the mark, the reason and the table row for the one
+  // day the reader acted on.
   values: (number | null)[]
   labels: string[]
   label: string
@@ -54,6 +68,14 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
 }) {
   const { t } = useTranslation()
 
+  // Memoised, and read by both `build` and `onClick`: `build` maps over these arrays to produce the
+  // echarts entries, and a click on one of those entries indexes straight back into them, so the
+  // two cannot disagree about which mark is which. Memoised for the reason `EMPTY` above exists as
+  // well, since a fresh object here every render would rebuild `build` and dispose the chart.
+  const marks = useMemo(() => dayMarks({
+    dates: labels, values, excluded, corrected, annotations, excludedText: t('charts.absence.excluded'),
+  }), [labels, values, excluded, corrected, annotations, t])
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
@@ -66,40 +88,34 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
         data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] } }),
       markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
         // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands
-        // off the fitted range; anchor at the day's own value instead, same as HeartRateRange, and
-        // drop a date this sparkline has no reading for (nothing to anchor the mark to). corrected
-        // entries share this same markPoint (echarts draws one per series) but override symbol and
-        // colour so the two read apart at a glance. `seriesAlt`, not `stageRem`: this project's own
-        // token catalogue defines it and nothing on any of these three charts had claimed it yet,
-        // where `stageRem` already means REM sleep on Hypnogram, a chart that shares a screen with
-        // HeartRateRange on the Dashboard - one colour carrying two meanings in one view.
-        data: [
-          ...excluded.flatMap((date) => {
-            const i = labels.indexOf(date)
-            const v = i === -1 ? null : values[i]
-            if (v === null || v === undefined) return []
-            return [{ name: 'excluded', xAxis: i, yAxis: v }]
-          }),
-          ...corrected.flatMap((c) => {
-            const i = labels.indexOf(c.date)
-            const v = i === -1 ? null : values[i]
-            if (v === null || v === undefined) return []
-            return [{ name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
-              itemStyle: { color: tokens.seriesAlt }, xAxis: i, yAxis: v }]
-          }),
-        ] },
+        // off the fitted range; anchor at the day's own value instead, same as HeartRateRange.
+        // dayMarks has already dropped a date this sparkline is not drawing and moved an excluded
+        // day with no value left to `atDate`, where it is drawn by position instead of being
+        // silently lost. corrected entries share this same markPoint (echarts draws one per series)
+        // but override symbol and colour so the two read apart at a glance. `seriesAlt`, not
+        // `stageRem`: this project's own token catalogue defines it and nothing on any of these
+        // three charts had claimed it yet, where `stageRem` already means REM sleep on Hypnogram, a
+        // chart that shares a screen with HeartRateRange on the Dashboard - one colour carrying two
+        // meanings in one view.
+        data: marks.atValue.map((mark) => (mark.kind === 'excluded'
+          ? { name: 'excluded', xAxis: mark.index, yAxis: mark.value }
+          : { name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
+            itemStyle: { color: tokens.seriesAlt }, xAxis: mark.index, yAxis: mark.value })) },
       markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
         label: { show: false },
-        data: annotations.flatMap((a) => {
-          const i = labels.indexOf(a.date)
-          return i === -1 ? [] : [{ name: a.text, xAxis: i }]
-        }) } }],
-  }), [values, baseline, excluded, corrected, annotations, labels])
+        // An excluded day with no value left overrides the dashed annotation styling with the
+        // excluded colour and a solid line, so a gap the reader made reads apart from a day that
+        // merely carries a note, in shape as well as in colour. No label either way: this chart is
+        // 34 pixels tall and draws no text at all, so the reason lives in the accessible table
+        // beside it and in the panel a click on this mark reopens.
+        data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
+          ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } }],
+  }), [values, baseline, marks])
 
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = sparklinePointDate(labels, event)
+    const date = sparklinePointDate(labels, marks, event)
     if (date !== undefined) onPointClick?.(date)
-  }, [labels, onPointClick])
+  }, [labels, marks, onPointClick])
 
   const { host, style } = useChart(build, height, onClick)
   return (
@@ -119,7 +135,8 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
                 // ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate (base.ts) reads the
                 // same constant, so a table cell and a canvas label built from the same annotations
                 // array cannot drift apart on separator alone.
-                annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)].filter(Boolean).join(', ')]
+                annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
+                .filter(Boolean).join(ANNOTATION_JOIN)]
           }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot

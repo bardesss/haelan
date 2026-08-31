@@ -112,55 +112,31 @@ describe('the target key the panel writes with', () => {
   })
 })
 
-describe('exclude and correct require a reason', () => {
-  it('keeps the submit button disabled until a reason is typed, on exclude', () => {
+describe('exclude requires a reason', () => {
+  it('keeps the submit button disabled until a reason is typed', () => {
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
     expect(submitButton().disabled).toBe(true)
     type(fields()[0]!, 'travelling')
     expect(submitButton().disabled).toBe(false)
   })
-
-  it('keeps the submit button disabled on correct until a reason is typed, even with a value entered', () => {
-    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
-    click(segment('Correct'))
-    // Corrected value renders first on this tab, reason second: see the field order in
-    // AnnotatePanel.tsx's action === 'correct' branch.
-    type(fields()[0]!, '8500')
-    expect(submitButton().disabled).toBe(true)
-    type(fields()[1]!, 'watch mis-logged steps')
-    expect(submitButton().disabled).toBe(false)
-  })
 })
 
-describe('correct requires a value', () => {
-  it('keeps the submit button disabled with a reason typed but no corrected value', () => {
+describe('the actions the panel offers', () => {
+  // The blocker the whole branch review found: the panel posted a day_metric correction that
+  // OverrideStore.validate refuses at any scope but sample, so every correction 400d and the
+  // reader was told it did not save. Removing the tab is the fix, and this is what keeps it
+  // removed: a fourth segment reading "Correct" is not a feature returning, it is that write
+  // path returning, and nothing else in this suite would notice it come back.
+  it('offers exclude, note and event, and no correct', () => {
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
-    click(segment('Correct'))
-    type(fields()[1]!, 'watch mis-logged steps')
-    expect(submitButton().disabled).toBe(true)
+    const labels = [...container!.querySelectorAll('.segment')].map((b) => b.textContent)
+    expect(labels).toEqual(['Exclude', 'Add a note', 'Add an event'])
   })
 
-  // Not a second copy of the "no corrected value" case above: this is the browser's own value
-  // sanitisation algorithm for type="number", proved rather than assumed. It is what makes an
-  // isNaN check on correctedNumber dead code in AnnotatePanel.tsx: no keystroke can leave this
-  // field holding a non-numeric, non-empty string for that check to ever see.
-  it('sanitises a non numeric keystroke in the corrected value field to empty, same as leaving it blank', () => {
-    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
-    click(segment('Correct'))
-    const valueInput = fields()[0]!
-    type(valueInput, 'not a number')
-    expect(valueInput.value).toBe('')
-    type(fields()[1]!, 'watch mis-logged steps')
-    expect(submitButton().disabled).toBe(true)
-  })
-})
-
-describe('the correct action', () => {
-  // The whole two-state response was designed around this action: the reader is changing a
-  // number, not just marking a day, so a payload that silently posted 'exclude' or dropped
-  // correctedValue would save the wrong write while looking, from the disabled-button tests
-  // alone, exactly like a correct submission.
-  it('posts action correct and the typed corrected value, not exclude', async () => {
+  // The segment list above is the surface; this is the wire. A tab could be dropped from ACTIONS
+  // while the branch that posts `action: 'correct'` stayed reachable from somewhere else, and the
+  // only thing that actually matters is that no correction ever leaves this panel again.
+  it('posts action exclude, the one override action a day_metric target accepts', async () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch
     globalThis.fetch = (async (_input, init) => {
@@ -169,58 +145,15 @@ describe('the correct action', () => {
     }) as typeof fetch
 
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
-    click(segment('Correct'))
-    type(fields()[0]!, '8500')
-    type(fields()[1]!, 'watch mis-logged steps')
+    type(fields()[0]!, 'phone charging in another room')
     click(submitButton())
     await settle()
     globalThis.fetch = original
 
     expect(posted).not.toBeNull()
-    expect(posted!['action']).toBe('correct')
-    expect(posted!['correctedValue']).toBe(8500)
-    expect(posted!['targetKey']).toBe(dayMetricTarget(TARGET))
-  })
-
-  // Both applied-outcome tests further down submit on the default exclude tab, which proves the
-  // gate exists but not that the correct branch reaches the same onSuccess wiring: a mutate call
-  // with its own inline `{ onSuccess }` per action is exactly the shape where one branch could
-  // close unconditionally while its sibling stayed gated, and the suite would not notice.
-  it('closes the panel once a correction has applied', async () => {
-    const original = globalThis.fetch
-    globalThis.fetch = (async () => respond(200, {
-      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true,
-    })) as typeof fetch
-
-    let closed = false
-    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => { closed = true }} />))
-    click(segment('Correct'))
-    type(fields()[0]!, '8500')
-    type(fields()[1]!, 'watch mis-logged steps')
-    click(submitButton())
-    await settle()
-    globalThis.fetch = original
-
-    expect(closed).toBe(true)
-  })
-
-  it('stays open and reports not yet applied for a correction that has not applied', async () => {
-    const original = globalThis.fetch
-    globalThis.fetch = (async () => respond(200, {
-      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: false,
-    })) as typeof fetch
-
-    let closed = false
-    mount(withSession(<AnnotatePanel target={TARGET} onClose={() => { closed = true }} />))
-    click(segment('Correct'))
-    type(fields()[0]!, '8500')
-    type(fields()[1]!, 'watch mis-logged steps')
-    click(submitButton())
-    await settle()
-    globalThis.fetch = original
-
-    expect(closed).toBe(false)
-    expect(container!.textContent).toContain('The correction is saved. The numbers behind it have not caught up yet.')
+    expect(posted!['action']).toBe('exclude')
+    expect(posted!['scope']).toBe('day_metric')
+    expect(posted!['correctedValue']).toBeUndefined()
   })
 })
 
@@ -273,7 +206,7 @@ describe('the two applied outcomes render differently', () => {
 
   // The one state the brief calls out by name: the write is saved, the drain has not caught up,
   // and closing here would let a reader walk away believing a number that has not moved.
-  it('stays open and reports the correction is saved but not yet applied', async () => {
+  it('stays open and reports the exclusion is saved but not yet applied', async () => {
     const original = globalThis.fetch
     globalThis.fetch = (async () => respond(200, {
       id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: false,
@@ -287,7 +220,7 @@ describe('the two applied outcomes render differently', () => {
     globalThis.fetch = original
 
     expect(closed).toBe(false)
-    expect(container!.textContent).toContain('The correction is saved. The numbers behind it have not caught up yet.')
+    expect(container!.textContent).toContain('The exclusion is saved. The numbers behind it have not caught up yet.')
   })
 })
 

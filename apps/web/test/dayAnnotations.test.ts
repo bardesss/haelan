@@ -4,7 +4,7 @@ import type { StoredEvent, StoredNote } from '../src/data/useAnnotations.js'
 import type { MetricAnnotations } from '../src/data/chartAnnotations.js'
 import type { Translate } from '../src/format.js'
 
-// A hand rolled stand-in for i18next's own t(), the same device chart-annotations.test.tsx's own
+// A hand rolled stand-in for i18next's own t(), the same device chart-marks.test.tsx's own
 // header comment explains for why this file carries no I18nProvider: a real instance would make
 // this file assert against translated copy a locale file is free to reword, rather than against
 // which key and which options dayAnnotations.ts actually asked for. MESSAGES mirrors the real keys

@@ -22,7 +22,7 @@ import { deepLink } from '../controls/deepLink.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
-import { useSeries } from '../data/useSeries.js'
+import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import { useNights } from '../data/useNights.js'
@@ -294,20 +294,27 @@ export function Dashboard() {
   // over its own data props, so one freshly constructed array is enough to tear down and rebuild
   // an echarts instance. With eight queries settling at different moments the page commits about
   // eight times on a single load, and each commit was disposing and re-initialising five charts.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
   const sparklines = useMemo(() => {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of [...SUM_METRICS, ...LAST_METRICS, ...MEAN_METRICS]) {
       const points = metricGroups.pointsOf(metric)
-      out.set(metric, { values: points.map((p) => p.value), labels: points.map((p) => p.localDate) })
+    // denseSeries, not points.map: /series omits a day nothing reported, and an applied exclusion
+    // is exactly such a day (deriveDay deletes the excluded metric's daily row). Handed the points
+    // array directly, a sparkline had no position for that day at all, so its excluded mark, the
+    // reason beside it and its accessible table row all vanished the moment the exclusion took
+    // effect. Dense over the range the reader asked for, the same shape the heart rate range chart
+    // and the heatmap have always been handed, the gap is a position that can be marked.
+      out.set(metric, denseSeries(rangeDates, points))
     }
     return out
     // The three query results metricGroups.pointsOf reads for these metrics, named directly:
     // metricGroups itself is rebuilt every render and is not a dependency worth tracking.
-  }, [sumSeries.data, lastSeries.data, meanSeries.data])
+  }, [rangeDates, sumSeries.data, lastSeries.data, meanSeries.data])
 
   // Every calendar day in the range, computed once: the dense denominator every basis line and
   // the heart rate range chart, the one remaining by-position chart on this page, count against.
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // The denominator is the days in the period, not the days that answered. /series omits a day
   // with no row entirely, so points.length is "days that reported", and a month missing eleven of

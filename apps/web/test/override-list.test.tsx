@@ -111,9 +111,16 @@ const DAY_METRIC_EXCLUDE: StoredOverride = {
   action: 'exclude', correctedValue: null, reason: 'travelling, phone left at home',
 }
 
-const DAY_METRIC_CORRECT: StoredOverride = {
-  id: 'o2', scope: 'day_metric',
-  targetKey: dayMetricTarget({ localDate: '2026-08-16', metric: 'heart_rate' }),
+// A correction at sample scope, which is the only scope OverrideStore.validate accepts one at and
+// the only shape a correct row can actually arrive in. It was a day_metric correction here, which
+// no server in this project can answer with: validate refuses `correct` at day scope, and the
+// panel no longer offers the action at all (AnnotatePanel.tsx's own ACTIONS comment has why), so
+// the row this file used to render a correction from could never have been written. Sample
+// corrections come from the sync layer, and this list is the only surface they are visible on.
+const SAMPLE_CORRECT_UTC_MS = Date.parse('2026-08-16T07:15:00Z')
+const SAMPLE_CORRECT: StoredOverride = {
+  id: 'o2', scope: 'sample',
+  targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: SAMPLE_CORRECT_UTC_MS }),
   action: 'correct', correctedValue: 62, reason: 'watch mis-logged a spike',
 }
 
@@ -169,7 +176,7 @@ describe('every scope renders a complete row', () => {
   // what this pins, both in what it shows (the corrected value, not just the verb) and in what it
   // must never show for this row.
   it('shows the corrected value for a correct row, and never the word Exclude', async () => {
-    stubFetch([DAY_METRIC_CORRECT])
+    stubFetch([SAMPLE_CORRECT])
     const c = mount(<OverrideList />)
     await flush(c, html)
 
@@ -255,7 +262,7 @@ describe('the table names itself for a screen reader', () => {
 
 describe('the remove button names its own row', () => {
   it('gives every remove button a distinct accessible name', async () => {
-    stubFetch([DAY_METRIC_EXCLUDE, DAY_METRIC_CORRECT, SAMPLE, SESSION])
+    stubFetch([DAY_METRIC_EXCLUDE, SAMPLE_CORRECT, SAMPLE, SESSION])
     const c = mount(<OverrideList />)
     await flush(c, html)
 

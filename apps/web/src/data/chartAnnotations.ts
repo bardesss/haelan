@@ -46,10 +46,20 @@ const NONE: MetricAnnotations = Object.freeze({
  * sitting beside two good ones.
  *
  * A `correct` override with no `correctedValue` is dropped from `corrected` for the same reason:
- * the panel's own `canSubmit` never lets that combination be written, so a row like that can only
- * be a defect somewhere upstream of this read, and drawing a corrected mark with nothing to anchor
- * it at would be worse than not drawing one. Its `reason` still reaches `annotations`, since that
- * much of the row is not in question.
+ * the store refuses a correction that carries no value, so a row like that can only be a defect
+ * somewhere upstream of this read, and drawing a corrected mark with nothing to anchor it at would
+ * be worse than not drawing one. Its `reason` still reaches `annotations`, since that much of the
+ * row is not in question.
+ *
+ * `corrected` is empty in this build, and that is a fact about what can be written rather than dead
+ * code to delete. Only `day_metric` rows survive the scope filter above, and OverrideStore.validate
+ * refuses `correct` at every scope but `sample`, so nothing can currently land in it. The channel
+ * stays because the alternative is worse in both directions: a corrected day keeps its number on
+ * screen, so folding it back into `excluded` would tell a reader a number that is right there was
+ * thrown away, and dropping the read entirely would mean a scope that gains a day level correction
+ * later silently draws nothing. Correcting a value is reachable today at `sample` scope, which
+ * needs an intraday chart to name a single reading; the settings override list is the only surface
+ * that renders those.
  *
  * Called once per page from the one `overrides` query `useAnnotations` already issues, and meant
  * to be memoised there on `overrides.data`: this function is pure, but the Map and every array

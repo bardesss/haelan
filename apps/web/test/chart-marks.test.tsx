@@ -13,7 +13,8 @@ import { act } from 'react'
 import { Sparkline, sparklinePointDate } from '../src/charts/Sparkline.js'
 import { ActivityHeatmap, heatmapClickDate } from '../src/charts/ActivityHeatmap.js'
 import { HeartRateRange, heartRateRangePointDate } from '../src/charts/HeartRateRange.js'
-import { SYMBOL } from '../src/charts/base.js'
+import { dayMarks, SYMBOL } from '../src/charts/base.js'
+import type { DayMarks } from '../src/charts/base.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { DayRow } from '../src/fixtures/july.js'
 
@@ -37,7 +38,7 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * under happy-dom no matter how the click is simulated. Capturing the function handed to
  * `chart.on('click', ...)` and calling it directly exercises the same two lines a real click would
  * reach; only the browser's own hit-testing is out of scope, and it was never in scope, since
- * chart-annotations.test.tsx already draws that line at the accessible table for the rest of this
+ * chart-marks.test.tsx already draws that line at the accessible table for the rest of this
  * file.
  */
 function chartStub() {
@@ -114,20 +115,42 @@ function noteCellFor(html: string, date: string): string {
 describe('Sparkline', () => {
   const values = [10, 20, 30]
   const labels = ['2026-08-01', '2026-08-02', '2026-08-03']
+  // What an exclusion actually looks like once it has applied, and the fixture every excluded case
+  // in this file used to get wrong: deriveDay deletes the excluded metric's daily row, /series then
+  // omits that day, and the page's denseSeries turns the omission back into a position holding
+  // null. Pairing an excluded date with a values array that still contains its number described
+  // only the window before the derive caught up, which is precisely the window in which the
+  // exclusion had NOT taken effect.
+  const appliedValues = [10, null, 30]
+  const EXCLUDED_REASON = 'phone left at home'
 
-  it('marks an excluded date rather than dropping its row', () => {
+  it('renders an applied exclusion as a marked, explained gap rather than a missing day', () => {
+    const html = render(
+      <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+        annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
+    )
+    const rows = table(html)
+    // Three rows, not two: the day the reader excluded is still in the record, saying what it is.
+    expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
+    const day2Row = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
+    expect(day2Row).toContain('charts.absence.noReading')
+    expect(day2Row).toContain('charts.absence.excluded')
+    expect(day2Row).toContain(EXCLUDED_REASON)
+    // The two untouched days carry no such note.
+    const day1Row = rows.slice(rows.indexOf('2026-08-01'), rows.indexOf('2026-08-02'))
+    expect(day1Row).not.toContain('charts.absence.excluded')
+  })
+
+  it('marks an excluded date that still has its value, the window before the derive catches up', () => {
     const html = render(
       <Sparkline values={values} labels={labels} label="steps" unit="steps"
         annotations={[]} excluded={['2026-08-02']} />,
     )
     const rows = table(html)
-    // Still three rows: an override marks a point, it does not remove it from the record.
     expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
-    expect(rows).toContain('2026-08-02')
-    expect(rows).toContain('charts.absence.excluded')
-    // The two untouched days carry no such note.
-    const day1Row = rows.slice(rows.indexOf('2026-08-01'), rows.indexOf('2026-08-02'))
-    expect(day1Row).not.toContain('charts.absence.excluded')
+    const day2Row = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
+    expect(day2Row).toContain('charts.absence.excluded')
+    expect(day2Row).not.toContain('charts.absence.noReading')
   })
 
   it('carries an annotation’s own text into its row', () => {
@@ -182,16 +205,106 @@ describe('Sparkline', () => {
     expect(rows).not.toContain('charts.absence.excluded')
   })
 
-  describe('sparklinePointDate', () => {
-    it('reads the local date off a genuine series click', () => {
-      expect(sparklinePointDate(labels, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-02')
+  // The gap a day leaves once its exclusion applies is drawn as a markLine, since there is no
+  // value under it for a markPoint to sit on. Read off the real setOption argument, because a
+  // mark's presence and its placement are canvas-only and the accessible table cannot tell a
+  // drawn mark from a dropped one.
+  describe('the marks it draws for an applied exclusion', () => {
+    function optionOf(): { series: { markPoint?: { data: unknown[] }, markLine?: { data: Record<string, unknown>[] } }[] } {
+      const stub = chartStubs.at(-1)!
+      return stub.setOption.mock.calls[0]![0] as never
+    }
+
+    it('draws the excluded day as a line at its own position, styled apart from an annotation', () => {
+      act(() => {
+        root!.render(
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+            annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
+        )
+      })
+      const series = optionOf().series[0]!
+      // Nothing in the markPoint: there is no value left to anchor one at, which is the exact
+      // reason the mark used to vanish altogether rather than move.
+      expect(series.markPoint?.data).toEqual([])
+      expect(series.markLine?.data).toEqual([{
+        name: `charts.absence.excluded, ${EXCLUDED_REASON}`,
+        xAxis: 1,
+        // Solid and in the excluded colour, against the dashed annotation styling the markLine
+        // carries by default: a gap the reader made has to read apart from a day that merely
+        // carries a note, in line style as well as in colour, since colour alone is not a channel
+        // every reader has.
+        lineStyle: { color: '#000000', type: 'solid' },
+      }])
     })
 
-    it('reports no date for a click on the excluded markPoint overlay', () => {
-      // A markPoint click reports its own componentType, and its dataIndex counts into the
-      // markPoint's own (much shorter) data array, not into `labels`: treating it as a series
-      // click would report the wrong date, or one that does not exist, for most clicks on a mark.
-      expect(sparklinePointDate(labels, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
+    it('says the same thing on the canvas as its own accessible table row states for that date', () => {
+      act(() => {
+        root!.render(
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+            annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
+        )
+      })
+      const markLineEntry = optionOf().series[0]!.markLine?.data[0]
+      const noteCell = noteCellFor(container!.innerHTML, '2026-08-02')
+      expect(noteCell).toBe(`charts.absence.excluded, ${EXCLUDED_REASON}`)
+      expect(markLineEntry?.['name']).toBe(noteCell)
+    })
+
+    it('leaves an ordinary annotation dashed, so the two do not read the same', () => {
+      act(() => {
+        root!.render(
+          <Sparkline values={values} labels={labels} label="steps" unit="steps"
+            annotations={[{ date: '2026-08-02', text: 'Flew to Tokyo' }]} excluded={[]} />,
+        )
+      })
+      expect(optionOf().series[0]!.markLine?.data).toEqual([{ name: 'Flew to Tokyo', xAxis: 1 }])
+    })
+
+    it('draws nothing for an excluded date this sparkline is not showing', () => {
+      act(() => {
+        root!.render(
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+            annotations={[]} excluded={['2026-07-02']} />,
+        )
+      })
+      const series = optionOf().series[0]!
+      expect(series.markPoint?.data).toEqual([])
+      expect(series.markLine?.data).toEqual([])
+    })
+  })
+
+  describe('sparklinePointDate', () => {
+    const noMarks: DayMarks = { atValue: [], atDate: [] }
+
+    it('reads the local date off a genuine series click', () => {
+      expect(sparklinePointDate(labels, noMarks, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-02')
+    })
+
+    // The undo path for an applied exclusion, and the only one left: the day has no plotted point
+    // for a click to land on, so the mark is the click target. This returned undefined for every
+    // overlay click before, which is why the mark a reader clicked to undo did nothing.
+    it('reads the local date off a click on the gap mark an applied exclusion leaves', () => {
+      const marks = dayMarks({
+        dates: labels, values: appliedValues, excluded: ['2026-08-02'], corrected: [],
+        annotations: [{ date: '2026-08-02', text: EXCLUDED_REASON }], excludedText: 'excluded',
+      })
+      expect(sparklinePointDate(labels, marks, { componentType: 'markLine', dataIndex: 0 })).toBe('2026-08-02')
+    })
+
+    it('reads the local date off a click on the mark sitting over a day that still has its value', () => {
+      const marks = dayMarks({
+        dates: labels, values, excluded: ['2026-08-02'], corrected: [], annotations: [], excludedText: 'excluded',
+      })
+      expect(sparklinePointDate(labels, marks, { componentType: 'markPoint', dataIndex: 0 })).toBe('2026-08-02')
+    })
+
+    // An overlay's dataIndex counts into that overlay's own data array, which is much shorter than
+    // `labels`: resolving it against `labels` would report the wrong date for most clicks on a
+    // mark, and reporting a date for an index no mark occupies would report one for a click on
+    // nothing at all.
+    it('reports no date for an overlay index no mark occupies', () => {
+      expect(sparklinePointDate(labels, noMarks, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
+      expect(sparklinePointDate(labels, noMarks, { componentType: 'markLine', dataIndex: 0 })).toBeUndefined()
     })
   })
 })
@@ -262,26 +375,61 @@ describe('ActivityHeatmap', () => {
     expect(rows).not.toContain('charts.absence.excluded')
   })
 
+  // The heatmap is the one chart of the three that never lost its excluded mark, because a cell
+  // is a coordinate on two category axes rather than a height: a day with no steps still has a
+  // cell to mark. This pins that, against the applied shape (steps null) rather than against a
+  // fixture that still carries the excluded day's number.
+  it('keeps the mark and the row for an excluded day whose steps are gone', () => {
+    const applied: DayRow[] = [
+      { date: '2026-07-06', steps: 4000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+      { date: '2026-07-07', steps: null, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+      { date: '2026-07-08', steps: 5000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+    ]
+    act(() => {
+      root!.render(
+        <ActivityHeatmap days={applied} max={9000} label="calendar heatmap" corrected={[]}
+          excluded={['2026-07-07']} annotations={[{ date: '2026-07-07', text: 'phone left at home' }]} />,
+      )
+    })
+    const stub = chartStubs.at(-1)!
+    const option = stub.setOption.mock.calls[0]![0] as { series: { markPoint?: { data: Record<string, unknown>[] } }[] }
+    const excludedMark = option.series[0]!.markPoint?.data.find((d) => d.name === 'excluded')
+    expect(excludedMark).toMatchObject({ coord: [0, 1] })
+    const rows = table(container!.innerHTML)
+    const day7Row = rows.slice(rows.indexOf('2026-07-07'), rows.indexOf('2026-07-08'))
+    expect(day7Row).toContain('charts.absence.noReading')
+    expect(day7Row).toContain('charts.absence.excluded')
+    expect(day7Row).toContain('phone left at home')
+  })
+
   describe('heatmapClickDate', () => {
     const cells = [
       { date: '2026-07-06', week: 0, weekday: 0 },
       { date: '2026-07-07', week: 0, weekday: 1 },
       { date: '2026-07-08', week: 0, weekday: 2 },
     ]
+    const noMarks: string[] = []
 
     it('reads the local date off the [week, weekday, steps] tuple a genuine series click reports', () => {
-      expect(heatmapClickDate(cells, { componentType: 'series', value: [0, 1, 9000] })).toBe('2026-07-07')
+      expect(heatmapClickDate(cells, noMarks, { componentType: 'series', value: [0, 1, 9000] })).toBe('2026-07-07')
     })
 
     it('reads the local date off the shorter [week, weekday] tuple the absence scatter series reports', () => {
-      expect(heatmapClickDate(cells, { componentType: 'series', value: [0, 2] })).toBe('2026-07-08')
+      expect(heatmapClickDate(cells, noMarks, { componentType: 'series', value: [0, 2] })).toBe('2026-07-08')
     })
 
-    it('reports no date for a click on the excluded or annotation markPoint overlay', () => {
-      // A markPoint's own value is a marker descriptor (name/coord/itemStyle), not a [week,
-      // weekday] tuple, so this both fails the shape check on its own terms and is guarded by the
-      // same componentType check sparklinePointDate uses.
-      expect(heatmapClickDate(cells, { componentType: 'markPoint', value: undefined })).toBeUndefined()
+    // An excluded day's mark sits directly on the absence dot for the same cell, so a click aimed
+    // at the mark a reader wants to undo lands on the mark rather than falling through. Resolving
+    // it against `markDates` is what keeps that click working; a markPoint's own value is a marker
+    // descriptor (name/coord/itemStyle) and names no cell, so there is nothing else to read it off.
+    it('reads the local date off a click on a markPoint, by that overlay\'s own index', () => {
+      expect(heatmapClickDate(cells, ['2026-07-07'], { componentType: 'markPoint', dataIndex: 0, value: undefined }))
+        .toBe('2026-07-07')
+    })
+
+    it('reports no date for a markPoint index no mark occupies', () => {
+      expect(heatmapClickDate(cells, noMarks, { componentType: 'markPoint', dataIndex: 0, value: undefined }))
+        .toBeUndefined()
     })
   })
 
@@ -427,16 +575,93 @@ describe('HeartRateRange', () => {
     expect(correctedRow).not.toContain('charts.absence.excluded')
   })
 
+  // What an applied exclusion leaves behind on this chart: the whole metric's day is gone, so all
+  // three of min, mean and max are null and there is no height left for a markPoint to sit at.
+  // Every excluded case above pairs an excluded date with a day that still carries its numbers,
+  // which is only the window before the derive catches up.
+  const appliedDays: DayRow[] = [
+    { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
+    // worn stays true with nothing to report, the same way Dashboard.tsx builds it: a missing point
+    // says nothing about whether the device was on the wrist, so the note cell carries no wear
+    // clause and states only what the reader did to this day.
+    { date: '2026-08-11', steps: null, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+    { date: '2026-08-12', steps: null, hrMin: 56, hrMean: 59, hrMax: 66, sleepMinutes: null, worn: true },
+  ]
+  const EXCLUDED_REASON = 'strap was off all day'
+
+  describe('an exclusion that has applied', () => {
+    function meanSeriesOf(): { markPoint?: { data: unknown[] }, markLine?: { data: Record<string, unknown>[] } } {
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { series: Record<string, never>[] }
+      return option.series[2]! as never
+    }
+
+    function renderApplied(): void {
+      act(() => {
+        root!.render(
+          <HeartRateRange days={appliedDays} corrected={[]} excluded={['2026-08-11']}
+            annotations={[{ date: '2026-08-11', text: EXCLUDED_REASON }]} label="hr range" />,
+        )
+      })
+    }
+
+    it('draws the day as a line at its own position rather than dropping the mark', () => {
+      renderApplied()
+      const meanSeries = meanSeriesOf()
+      // Empty because there is no mean to anchor a markPoint at, which is exactly why the mark
+      // used to disappear the moment the exclusion took effect instead of moving here.
+      expect(meanSeries.markPoint?.data).toEqual([])
+      expect(meanSeries.markLine?.data).toEqual([{
+        name: `charts.absence.excluded, ${EXCLUDED_REASON}`,
+        xAxis: 1,
+        lineStyle: { color: '#000000', type: 'solid' },
+      }])
+    })
+
+    it('labels the line with the same text its own accessible table row states for that date', () => {
+      renderApplied()
+      const markLineEntry = meanSeriesOf().markLine?.data[0]
+      const noteCell = noteCellFor(container!.innerHTML, '2026-08-11')
+      expect(noteCell).toBe(`charts.absence.excluded, ${EXCLUDED_REASON}`)
+      expect(markLineEntry?.['name']).toBe(noteCell)
+    })
+
+    it('keeps the row in the accessible table, reading no reading and excluded rather than going quiet', () => {
+      renderApplied()
+      const rows = table(container!.innerHTML)
+      expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
+      const day11Row = rows.slice(rows.indexOf('2026-08-11'), rows.indexOf('2026-08-12'))
+      expect(day11Row).toContain('charts.absence.noReading')
+      expect(day11Row).toContain('charts.absence.excluded')
+      expect(day11Row).toContain(EXCLUDED_REASON)
+      expect(day11Row).not.toContain('charts.absence.notWorn')
+    })
+  })
+
   describe('heartRateRangePointDate', () => {
+    const noMarks: DayMarks = { atValue: [], atDate: [] }
+
     it('reads the local date off a genuine series click, regardless of which of the three stacked series it landed on', () => {
       // dataIndex is a position on the shared category axis, not tied to one series: min, range
       // and mean all report the same dataIndex for the same day.
-      expect(heartRateRangePointDate(days, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-11')
+      expect(heartRateRangePointDate(days, noMarks, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-11')
     })
 
-    it('reports no date for a click on the excluded/corrected markPoint or the annotation markLine', () => {
-      expect(heartRateRangePointDate(days, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
-      expect(heartRateRangePointDate(days, { componentType: 'markLine', dataIndex: 0 })).toBeUndefined()
+    // The undo path for an applied exclusion: none of the three series is drawn on that day, so
+    // the mark is the only thing a click can land on. Every overlay click used to resolve to
+    // nothing, which left the reader with no way back to the panel for the day they excluded.
+    it('reads the local date off a click on the gap mark an applied exclusion leaves', () => {
+      const marks = dayMarks({
+        dates: appliedDays.map((d) => d.date), values: appliedDays.map((d) => d.hrMean),
+        excluded: ['2026-08-11'], corrected: [],
+        annotations: [{ date: '2026-08-11', text: EXCLUDED_REASON }], excludedText: 'excluded',
+      })
+      expect(heartRateRangePointDate(appliedDays, marks, { componentType: 'markLine', dataIndex: 0 })).toBe('2026-08-11')
+    })
+
+    it('reports no date for an overlay index no mark occupies', () => {
+      expect(heartRateRangePointDate(days, noMarks, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
+      expect(heartRateRangePointDate(days, noMarks, { componentType: 'markLine', dataIndex: 0 })).toBeUndefined()
     })
   })
 
@@ -598,8 +823,27 @@ describe('the click each chart hands to onPointClick', () => {
       )
     })
     const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    // No marks at all on this render, so this index names nothing rather than naming a mark.
     handleClick({ componentType: 'markPoint', dataIndex: 0 })
     expect(onPointClick).not.toHaveBeenCalled()
+  })
+
+  // The undo path, end to end through the wiring rather than through the pure function alone: an
+  // applied exclusion leaves no plotted point on that day, so unless the mark itself reaches
+  // onPointClick the reader cannot reopen the panel on the day they excluded at all.
+  it('Sparkline reports the excluded day when the gap mark it left is clicked', () => {
+    const onPointClick = vi.fn()
+    act(() => {
+      root!.render(
+        <Sparkline values={[10, null, 30]} labels={['2026-08-01', '2026-08-02', '2026-08-03']}
+          label="steps" unit="steps" excluded={['2026-08-02']}
+          annotations={[{ date: '2026-08-02', text: 'phone left at home' }]} onPointClick={onPointClick} />,
+      )
+    })
+    const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    handleClick({ componentType: 'markLine', dataIndex: 0 })
+    expect(onPointClick).toHaveBeenCalledTimes(1)
+    expect(onPointClick).toHaveBeenCalledWith('2026-08-02')
   })
 
   it('ActivityHeatmap reports the date the clicked cell’s [week, weekday, steps] tuple names', () => {
@@ -618,7 +862,7 @@ describe('the click each chart hands to onPointClick', () => {
     expect(onPointClick).toHaveBeenCalledWith('2026-07-07')
   })
 
-  it('ActivityHeatmap does not call back for a click on a markPoint overlay', () => {
+  it('ActivityHeatmap does not call back for a click on a markPoint overlay it drew nothing in', () => {
     const onPointClick = vi.fn()
     const days: DayRow[] = [
       { date: '2026-07-06', steps: 4000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
@@ -627,8 +871,28 @@ describe('the click each chart hands to onPointClick', () => {
       root!.render(<ActivityHeatmap days={days} max={9000} label="calendar heatmap" onPointClick={onPointClick} />)
     })
     const handleClick = clickHandlerOf(chartStubs.at(-1)!)
-    handleClick({ componentType: 'markPoint', value: undefined })
+    handleClick({ componentType: 'markPoint', dataIndex: 0, value: undefined })
     expect(onPointClick).not.toHaveBeenCalled()
+  })
+
+  // An excluded cell's mark sits on top of the absence dot for the same day, so this click is the
+  // one a reader aiming at the mark actually makes.
+  it('ActivityHeatmap reports the excluded day when its own mark is clicked', () => {
+    const onPointClick = vi.fn()
+    const days: DayRow[] = [
+      { date: '2026-07-06', steps: 4000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+      { date: '2026-07-07', steps: null, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+    ]
+    act(() => {
+      root!.render(
+        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={['2026-07-07']}
+          onPointClick={onPointClick} />,
+      )
+    })
+    const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    handleClick({ componentType: 'markPoint', dataIndex: 0, value: undefined })
+    expect(onPointClick).toHaveBeenCalledTimes(1)
+    expect(onPointClick).toHaveBeenCalledWith('2026-07-07')
   })
 
   // HeartRateRange gained onPointClick in this same review round, following the ref based pattern
@@ -653,7 +917,7 @@ describe('the click each chart hands to onPointClick', () => {
     expect(onPointClick).toHaveBeenCalledWith('2026-08-11')
   })
 
-  it('HeartRateRange does not call back for a click on an overlay', () => {
+  it('HeartRateRange does not call back for a click on an overlay it drew nothing in', () => {
     const onPointClick = vi.fn()
     const days: DayRow[] = [
       { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
@@ -667,5 +931,24 @@ describe('the click each chart hands to onPointClick', () => {
     const handleClick = clickHandlerOf(chartStubs.at(-1)!)
     handleClick({ componentType: 'markPoint', dataIndex: 0 })
     expect(onPointClick).not.toHaveBeenCalled()
+  })
+
+  it('HeartRateRange reports the excluded day when the gap mark it left is clicked', () => {
+    const onPointClick = vi.fn()
+    const days: DayRow[] = [
+      { date: '2026-08-10', steps: null, hrMin: 55, hrMean: 60, hrMax: 68, sleepMinutes: null, worn: true },
+      { date: '2026-08-11', steps: null, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+    ]
+    act(() => {
+      root!.render(
+        <HeartRateRange days={days} corrected={[]} excluded={['2026-08-11']}
+          annotations={[{ date: '2026-08-11', text: 'strap was off all day' }]} label="hr range"
+          onPointClick={onPointClick} />,
+      )
+    })
+    const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    handleClick({ componentType: 'markLine', dataIndex: 0 })
+    expect(onPointClick).toHaveBeenCalledTimes(1)
+    expect(onPointClick).toHaveBeenCalledWith('2026-08-11')
   })
 })

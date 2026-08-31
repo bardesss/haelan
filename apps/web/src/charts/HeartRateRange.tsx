@@ -1,7 +1,8 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, annotationsByDate, chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, OPACITY, STROKE, SYMBOL } from './base.js'
+import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { hrTooltip } from './hrTooltip.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -26,24 +27,39 @@ type Props = {
 }
 
 /**
- * Which local date a click on this chart's own min/range/mean series landed on, or undefined for a
- * click that missed all three (a markPoint/markLine overlay, or empty grid space): an overlay click
- * reports its own componentType rather than `'series'`. All three series share one category axis
- * (`days`, by position), so `dataIndex` resolves to the same day regardless of which of the three
- * was actually clicked.
+ * Which local date a click on this chart landed on: a click on one of the min/range/mean series
+ * reads `days` by dataIndex, and a click on one of the overlay marks reads the mark it actually
+ * hit. All three series share one category axis (`days`, by position), so `dataIndex` resolves to
+ * the same day regardless of which of the three was clicked; an overlay's dataIndex counts into
+ * its own data array instead, which is what markClickDate resolves against.
+ *
+ * An overlay click used to resolve to nothing, which was right while every mark sat on a plotted
+ * day: the click fell through to the series underneath it. An excluded day has no mean, no min and
+ * no max left once the exclusion applies, so nothing is drawn there for a click to fall through
+ * to, and the mark is the only thing left to click to undo it.
  *
  * A plain function, exported and tested on its own, the same device Sparkline's own
  * `sparklinePointDate` and ActivityHeatmap's own `heatmapClickDate` are: echarts renders to an SVG
  * this project's render environment cannot hit-test, so the translation from a click event to a
- * date is the one piece of this behaviour a test can reach. See chart-annotations.test.tsx.
+ * date is the one piece of this behaviour a test can reach. See chart-marks.test.tsx.
  */
-export function heartRateRangePointDate(days: DayRow[], event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>): string | undefined {
-  if (event.componentType !== 'series') return undefined
+export function heartRateRangePointDate(
+  days: DayRow[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
+): string | undefined {
+  if (event.componentType !== 'series') return markClickDate(marks, event)
   return days[event.dataIndex]?.date
 }
 
 export function HeartRateRange({ days, baseline, annotations, excluded, corrected, label, onPointClick }: Props) {
   const { t } = useTranslation()
+
+  // Memoised, and read by both `build` and `onClick`, for the reason DayMarks' own doc comment
+  // gives: the echarts entries and the click lookup have to come off the one list or they can
+  // disagree about which mark a dataIndex names.
+  const marks = useMemo(() => dayMarks({
+    dates: days.map((d) => d.date), values: days.map((d) => d.hrMean),
+    excluded, corrected, annotations, excludedText: t('charts.absence.excluded'),
+  }), [days, excluded, corrected, annotations, t])
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -68,58 +84,53 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
             data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] } }),
           markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
             // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands off the fitted range.
-            // Anchor each marker at the day's actual mean instead, and drop it if that day has no reading. corrected
-            // entries share this same markPoint (echarts draws one per series) but override symbol and colour so the
-            // two read apart at a glance, the same split Sparkline's own markPoint draws.
+            // Anchor each marker at the day's actual mean instead. dayMarks has already moved an excluded day whose mean
+            // is gone to `atDate`, where it is drawn by position and needs no y, rather than dropping it the way this
+            // list built in place used to. corrected entries share this same markPoint (echarts draws one per series)
+            // but override symbol and colour so the two read apart at a glance, the same split Sparkline's markPoint draws.
             //
-            // xAxis is the day's own array position (findIndex), never `date.slice(8)`: the axis
-            // itself is still labelled by day-of-month for display (below), but a category axis's
+            // xAxis is the day's own array position, never `date.slice(8)`: the axis itself is
+            // still labelled by day-of-month for display (below), but a category axis's
             // markPoint/markLine `xAxis` resolves a string against that label by name, and the
             // label repeats the moment a range crosses a month boundary (3months, year both draw
             // one point per calendar day with no downsampling). A string key placed the mark on the
             // FIRST day carrying that label rather than the day the override actually named,
-            // silently swapping months; an index cannot collide, the same reason Sparkline's own
-            // markPoint has always used `labels.indexOf(date)` rather than the label itself.
-            data: [
-              ...excluded.flatMap((date) => {
-                const i = days.findIndex((d) => d.date === date)
-                if (i === -1 || days[i]!.hrMean === null) return []
-                return [{ name: 'excluded', xAxis: i, yAxis: days[i]!.hrMean }]
-              }),
-              ...corrected.flatMap((c) => {
-                const i = days.findIndex((d) => d.date === c.date)
-                if (i === -1 || days[i]!.hrMean === null) return []
-                return [{ name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
-                  itemStyle: { color: tokens.seriesAlt }, xAxis: i, yAxis: days[i]!.hrMean }]
-              }),
-            ] },
+            // silently swapping months; an index cannot collide, which is why dayMarks resolves
+            // every mark to an index before this chart ever sees it.
+            data: marks.atValue.map((mark) => (mark.kind === 'excluded'
+              ? { name: 'excluded', xAxis: mark.index, yAxis: mark.value }
+              : { name: 'corrected', symbol: 'rect', symbolSize: SYMBOL.corrected,
+                itemStyle: { color: tokens.seriesAlt }, xAxis: mark.index, yAxis: mark.value })) },
           markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
             label: { color: tokens.stageAwake, fontSize: base.axisLabel.fontSize, formatter: (p: { name: string }) => p.name },
             // Same index-not-label positioning as the markPoint above, and the same reason: a day
             // outside the visible range used to share its day-of-month label with a real day in
-            // range and land on that day instead (chart-annotations.test.tsx's own regression case
+            // range and land on that day instead (chart-marks.test.tsx's own regression case
             // for the single-month version of this; the two-month version, where a label repeats
             // inside one visible range rather than only across an excluded one, is the same defect
             // one filter short of catching, closed the same way here).
             //
-            // annotationsByDate first, not annotations directly: an override reason, a note and an
-            // event can share one date now, and one markLine entry per annotation put every one of
-            // them at the same xAxis with a label echarts anchors at the identical point (position:
-            // 'end' by default), overlapping rather than reading apart. Grouped and joined here
-            // with ANNOTATION_JOIN, the same separator the accessible table already uses, so this
-            // draws one mark per date.
-            data: annotationsByDate(annotations).flatMap((a) => {
-              const i = days.findIndex((d) => d.date === a.date)
-              return i === -1 ? [] : [{ name: a.text, xAxis: i }]
-            }) } },
+            // dayMarks groups by date first: an override reason, a note and an event can share one
+            // date, and one markLine entry per annotation put every one of them at the same xAxis
+            // with a label echarts anchors at the identical point (position: 'end' by default),
+            // overlapping rather than reading apart. One mark per date, its texts joined with
+            // ANNOTATION_JOIN, the same separator the accessible table beside this chart uses.
+            //
+            // An excluded day with no mean left is in this same list, drawn by position because
+            // there is no value under it to sit on, and styled with the excluded colour and a solid
+            // line so it does not read as an ordinary annotation. Its label already carries the
+            // word "excluded" ahead of the reason, so the line says on the canvas what the table
+            // row says in text.
+            data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
+              ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
       ],
     }
-  }, [days, baseline, annotations, excluded, corrected])
+  }, [days, baseline, marks])
 
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = heartRateRangePointDate(days, event)
+    const date = heartRateRangePointDate(days, marks, event)
     if (date !== undefined) onPointClick?.(date)
-  }, [days, onPointClick])
+  }, [days, marks, onPointClick])
 
   const { host, style } = useChart(build, 170, onClick)
   return (
@@ -139,7 +150,8 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
                 // single find() here would silently show only the first and drop the rest.
                 // ANNOTATION_JOIN, not a second ', ' literal: see Sparkline.tsx's own comment on
                 // the same line for why.
-                annotations.filter((a) => a.date === d.date).map((a) => a.text).join(ANNOTATION_JOIN)].filter(Boolean).join(', '),
+                annotations.filter((a) => a.date === d.date).map((a) => a.text).join(ANNOTATION_JOIN)]
+                .filter(Boolean).join(ANNOTATION_JOIN),
             ]
           }),
         }} />
