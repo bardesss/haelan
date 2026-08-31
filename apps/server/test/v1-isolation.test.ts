@@ -347,6 +347,9 @@ describe('the versioned surface, beyond the per-route table', () => {
   const WRITE_ROUTES: readonly string[] = [
     'POST /api/v1/p/:personId/overrides',
     'DELETE /api/v1/p/:personId/overrides/:overrideId',
+    'PUT /api/v1/p/:personId/notes/:localDate',
+    'POST /api/v1/p/:personId/events',
+    'DELETE /api/v1/p/:personId/events/:eventId',
   ]
 
   // A mutating request is refused by the origin hook unless these two agree, so a write test that
@@ -382,6 +385,53 @@ describe('the versioned surface, beyond the per-route table', () => {
     })
     expect(removed.statusCode).toBe(403)
     expect(overrides.listFor('p2').map((row) => row.id)).toEqual([theirs])
+  })
+
+  // The interim case for the note and event write routes, added ahead of Task 7's full isolation
+  // suite for the same reason the override case above was: a route added without one of these is
+  // a route this guard cannot tell from a route that leaks, and a red coverage guard between
+  // commits invites a real regression to hide behind "that one's expected" until Task 7 arrives.
+  // As with the override case, the surviving row is the assertion that matters, since a 403 alone
+  // is also the answer a route that acted first and refused after would give.
+  it('refuses a note write against another person, and leaves their note unchanged', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+    const notes = harness.app.haelan.instance.notes
+    notes.put({ personId: 'p2', localDate: dateOf(1), body: 'theirs', nowMs: harness.clock.nowMs })
+
+    const written = await harness.app.inject({
+      method: 'PUT', url: `/api/v1/p/p2/notes/${dateOf(1)}`,
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      payload: { body: 'not mine to write' },
+    })
+    expect(written.statusCode).toBe(403)
+    expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
+  })
+
+  // Both directions of the event write routes, the same pairing the override case above uses:
+  // creating into somebody else's list, and deleting out of it with an id that is not a secret.
+  it('refuses both event writes against another person, and leaves their events unchanged', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+    const events = harness.app.haelan.instance.events
+    const startedAtMs = Date.parse('2026-08-01T09:00:00Z')
+    const theirs = events.add({ personId: 'p2', kind: 'travel', startedAtMs, startedAtOffsetMinutes: 0 })
+
+    const written = await harness.app.inject({
+      method: 'POST', url: '/api/v1/p/p2/events',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      payload: { kind: 'illness', startedAtMs: startedAtMs + 60_000 },
+    })
+    expect(written.statusCode).toBe(403)
+
+    const removed = await harness.app.inject({
+      method: 'DELETE', url: `/api/v1/p/p2/events/${theirs}`,
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    })
+    expect(removed.statusCode).toBe(403)
+    expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
   })
 
   // Routes under /api/v1 that are deliberately not person scoped, and so carry no isolation case
