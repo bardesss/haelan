@@ -30,7 +30,7 @@ import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
-import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
+import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
@@ -238,22 +238,13 @@ export function Dashboard() {
     [overridesQuery.overrides.data],
   )
   // Notes and events, flattened into the same day level shape every chart's own annotations prop
-  // already takes: neither carries a metric of its own, so unlike overridesByMetricMap above this
-  // is not grouped, it reaches every chart on the page alike. Memoised on the two query results
-  // and on `t` (translation depends on the active language, for a seed event kind): see
-  // dayAnnotations.ts's own comment on why a fresh array here would cost every chart on the page
-  // its identity on any render at all, including the one opening the panel causes.
-  const dayAnnotations = useMemo(
-    () => dayAnnotationsFrom(overridesQuery.notes.data?.items ?? [], overridesQuery.events.data?.items ?? [], t),
-    [overridesQuery.notes.data, overridesQuery.events.data, t],
-  )
-  // Every metric overridesByMetricMap grouped, with dayAnnotations appended once rather than
-  // concatenated per card: see mergeDayAnnotations' own comment for why the concatenation has to
-  // happen here and not inside tile()/the heart rate range block below.
-  const dayAnnotationsByMetric = useMemo(
-    () => mergeDayAnnotations(overridesByMetricMap, dayAnnotations),
-    [overridesByMetricMap, dayAnnotations],
-  )
+  // already takes and merged onto overridesByMetricMap: neither carries a metric of its own, so
+  // dayAnnotations reaches every chart on the page alike, and dayAnnotationsByMetric is what
+  // tile()/the heart rate range block below actually reads through annotationsWithDay. Both stay
+  // memoised inside useDayAnnotations itself; see its own comment for why this used to be two
+  // useMemo calls copied into all four pages.
+  const { dayAnnotations, dayAnnotationsByMetric } =
+    useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
 
   // Fixed groups, not derived from a response: useMetricGroups runs one useSeries call per entry
   // in GROUPS, in the same order, on every render regardless of what any of them returns. min and

@@ -7,14 +7,15 @@ import type { Translate } from '../src/format.js'
 // A hand rolled stand-in for i18next's own t(), the same device chart-annotations.test.tsx's own
 // header comment explains for why this file carries no I18nProvider: a real instance would make
 // this file assert against translated copy a locale file is free to reword, rather than against
-// which key and which options dayAnnotations.ts actually asked for. MESSAGES mirrors the two real
-// keys this module reads (annotate.event.kinds.* and charts.absence.eventWithNote), interpolated
-// the same {{token}} way i18next itself does, so a change to either template's own placeholders
-// would break here too rather than only in production.
+// which key and which options dayAnnotations.ts actually asked for. MESSAGES mirrors the real keys
+// this module reads (annotate.event.kinds.*, charts.event.withNote, charts.event.multiDay),
+// interpolated the same {{token}} way i18next itself does, so a change to any one template's own
+// placeholders would break here too rather than only in production.
 const MESSAGES: Record<string, string> = {
   'annotate.event.kinds.illness': 'Illness',
   'annotate.event.kinds.travel': 'Travel',
-  'charts.absence.eventWithNote': '{{kind}}: {{note}}',
+  'charts.event.withNote': '{{kind}}: {{note}}',
+  'charts.event.multiDay': '{{kind}}, started',
 }
 const t: Translate = (key, options) => {
   let text = MESSAGES[key] ?? key
@@ -56,6 +57,26 @@ describe('dayAnnotationsFrom', () => {
   it("appends an event's own note to its kind rather than dropping it", () => {
     const result = dayAnnotationsFrom([], [event({ kind: 'travel', note: 'delayed flight' })], t)
     expect(result).toEqual([{ date: '2026-08-11', text: 'Travel: delayed flight' }])
+  })
+
+  // The reviewer's own finding: a bare kind label on the one day a multi day event is marked
+  // asserts, by omission, that it was only that day. "started" corrects that without resolving the
+  // end day's own local date (endedAtMs !== null is a null check on a field already on the wire).
+  it('marks a multi day event as started rather than implying it was only that one day', () => {
+    const result = dayAnnotationsFrom([], [event({ kind: 'travel', endedAtMs: 1_770_500_000_000, note: null })], t)
+    expect(result).toEqual([{ date: '2026-08-11', text: 'Travel, started' }])
+  })
+
+  it('leaves a single day event exactly as before, no "started" clause', () => {
+    const result = dayAnnotationsFrom([], [event({ kind: 'travel', endedAtMs: null, note: null })], t)
+    expect(result).toEqual([{ date: '2026-08-11', text: 'Travel' }])
+  })
+
+  it('combines the multi day clause with a note, in that order', () => {
+    const result = dayAnnotationsFrom(
+      [], [event({ kind: 'travel', endedAtMs: 1_770_500_000_000, note: 'delayed flight' })], t,
+    )
+    expect(result).toEqual([{ date: '2026-08-11', text: 'Travel, started: delayed flight' }])
   })
 
   // The task's own multiplicity rule: a note and an event on the same date are two entries, not

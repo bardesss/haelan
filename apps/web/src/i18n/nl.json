@@ -297,8 +297,11 @@
       "noReading": "geen meting",
       "excluded": "uitgesloten",
       "correctedTo": "gecorrigeerd naar {{value}}",
-      "none": "geen",
-      "eventWithNote": "{{kind}}: {{note}}"
+      "none": "geen"
+    },
+    "event": {
+      "withNote": "{{kind}}: {{note}}",
+      "multiDay": "{{kind}}, gestart"
     }
   },
   "sleep": {

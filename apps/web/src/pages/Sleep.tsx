@@ -28,7 +28,7 @@ import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
-import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
+import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
@@ -181,17 +181,10 @@ export function Sleep() {
     () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
     [overridesQuery.overrides.data],
   )
-  // Notes and events, day level rather than metric scoped, reaching every card on this page alike.
-  // See Dashboard.tsx's own copy of these three lines for why the concatenation has to happen once
-  // here and not inside tile() below.
-  const dayAnnotations = useMemo(
-    () => dayAnnotationsFrom(overridesQuery.notes.data?.items ?? [], overridesQuery.events.data?.items ?? [], t),
-    [overridesQuery.notes.data, overridesQuery.events.data, t],
-  )
-  const dayAnnotationsByMetric = useMemo(
-    () => mergeDayAnnotations(overridesByMetricMap, dayAnnotations),
-    [overridesByMetricMap, dayAnnotations],
-  )
+  // Notes and events, day level rather than metric scoped, reaching every card on this page alike:
+  // see useDayAnnotations' own comment for why both memos live there now, not copied per page.
+  const { dayAnnotations, dayAnnotationsByMetric } =
+    useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
 
   const metricGroups = useMetricGroups(GROUPS, range)
   const sumSeries = metricGroups.queryForAgg('sum')

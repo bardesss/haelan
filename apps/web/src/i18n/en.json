@@ -297,8 +297,11 @@
       "noReading": "no reading",
       "excluded": "excluded",
       "correctedTo": "corrected to {{value}}",
-      "none": "none",
-      "eventWithNote": "{{kind}}: {{note}}"
+      "none": "none"
+    },
+    "event": {
+      "withNote": "{{kind}}: {{note}}",
+      "multiDay": "{{kind}}, started"
     }
   },
   "sleep": {

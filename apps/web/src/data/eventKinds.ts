@@ -6,9 +6,9 @@
  *
  * Its own file, not owned by AnnotatePanel.tsx: dayAnnotations.ts reads the same list to decide
  * whether a stored event's own `kind` is one of the six annotate.event.kinds translates, or free
- * text a reader typed past them, and every data module in apps/web/src/data imports from its
- * component layer never the other way (AnnotatePanel.tsx itself imports useAnnotations.ts, not
- * the reverse). A data file reading a component file's constant would invert that, so the list
- * lives here instead, imported by both.
+ * text a reader typed past them, and every component module in apps/web/src/components imports
+ * from the data layer, never the other way (AnnotatePanel.tsx itself imports useAnnotations.ts,
+ * not the reverse). A data file reading a component file's constant would invert that, so the
+ * list lives here instead, imported by both.
  */
 export const SEED_KINDS: readonly string[] = ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine']

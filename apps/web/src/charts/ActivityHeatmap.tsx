@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, SYMBOL } from './base.js'
+import { annotationsByDate, chartBase, SYMBOL } from './base.js'
 import { scaleStops, type ChartTokens } from './tokens.js'
 import { calendarLayout, type CalendarCell } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -113,7 +113,14 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
               }),
               // A diamond rather than the excluded mark's circle, and the annotation colour
               // HeartRateRange's own markLine uses, so the two kinds read apart at a glance.
-              ...annotations.flatMap((a) => {
+              //
+              // annotationsByDate first, not annotations directly: an override reason, a note and
+              // an event can share one date now, and one markPoint entry per annotation put every
+              // one of them at the same coord with a label echarts anchors inside the same marker
+              // (markPoint's default label position), overlapping rather than reading apart.
+              // Grouped and joined here with the same ', ' the accessible table already uses, so
+              // this draws one mark per date.
+              ...annotationsByDate(annotations).flatMap((a) => {
                 const cell = cells.find((c) => c.date === a.date)
                 return cell
                   ? [{ name: a.text, coord: [cell.week, cell.weekday], symbol: 'diamond', itemStyle: { color: tokens.stageAwake } }]

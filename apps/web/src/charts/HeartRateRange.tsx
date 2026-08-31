@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
+import { annotationsByDate, chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { hrTooltip } from './hrTooltip.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -101,7 +101,13 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
             // for the single-month version of this; the two-month version, where a label repeats
             // inside one visible range rather than only across an excluded one, is the same defect
             // one filter short of catching, closed the same way here).
-            data: annotations.flatMap((a) => {
+            //
+            // annotationsByDate first, not annotations directly: an override reason, a note and an
+            // event can share one date now, and one markLine entry per annotation put every one of
+            // them at the same xAxis with a label echarts anchors at the identical point (position:
+            // 'end' by default), overlapping rather than reading apart. Grouped and joined here with
+            // the same ', ' the accessible table already uses, so this draws one mark per date.
+            data: annotationsByDate(annotations).flatMap((a) => {
               const i = days.findIndex((d) => d.date === a.date)
               return i === -1 ? [] : [{ name: a.text, xAxis: i }]
             }) } },

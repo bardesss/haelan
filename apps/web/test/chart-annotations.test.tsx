@@ -267,6 +267,28 @@ describe('ActivityHeatmap', () => {
       expect(heatmapClickDate(cells, { componentType: 'markPoint', value: undefined })).toBeUndefined()
     })
   })
+
+  // Round 2's own finding: an override reason, a note and an event can all land on one date now,
+  // and one markPoint entry per annotation put every one of them at the same coord, each with its
+  // own label at markPoint's default inside-the-marker position, overlapping rather than reading
+  // apart. Reads the real `setOption` argument (the table alone cannot tell one overlapping mark
+  // from several, only the accessible table's own text, which was never in question here).
+  it('draws one annotation markPoint per date, not one per annotation, with their text joined', () => {
+    act(() => {
+      root!.render(
+        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]} corrected={[]}
+          annotations={[
+            { date: '2026-07-07', text: 'Watch left charging' },
+            { date: '2026-07-07', text: 'Flew to Tokyo' },
+          ]} />,
+      )
+    })
+    const stub = chartStubs.at(-1)!
+    const option = stub.setOption.mock.calls[0]![0] as { series: { markPoint?: { data: Record<string, unknown>[] } }[] }
+    const heatmapSeries = option.series[0]!
+    const diamonds = heatmapSeries.markPoint?.data.filter((d) => d.symbol === 'diamond') ?? []
+    expect(diamonds).toEqual([{ name: 'Watch left charging, Flew to Tokyo', coord: [0, 1], symbol: 'diamond', itemStyle: { color: '#000000' } }])
+  })
 })
 
 describe('HeartRateRange', () => {
@@ -385,6 +407,26 @@ describe('HeartRateRange', () => {
       // xAxis is 1, `days`' own array position for 2026-08-11, not the string "11": a numeric
       // category index cannot collide with another day the way a repeating day-of-month label can.
       expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging', xAxis: 1 }])
+    })
+
+    // Round 2's own finding: an override reason, a note and an event can all land on one date now,
+    // and one markLine entry per annotation put every one of them at the same xAxis, each labelled
+    // at echarts' default `position: 'end'` for a markLine label, overlapping rather than reading
+    // apart.
+    it('draws one annotation markLine per date, not one per annotation, with their text joined', () => {
+      act(() => {
+        root!.render(
+          <HeartRateRange days={days} excluded={[]} corrected={[]}
+            annotations={[
+              { date: '2026-08-11', text: 'Watch left charging' },
+              { date: '2026-08-11', text: 'Flew to Tokyo' },
+            ]} label="hr range" />,
+        )
+      })
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { series: { markLine?: { data: unknown[] } }[] }
+      const meanSeries = option.series[2]!
+      expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging, Flew to Tokyo', xAxis: 1 }])
     })
 
     // The reviewer's own measurement: a six day range spanning two months, both sharing the same
