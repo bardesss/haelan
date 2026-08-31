@@ -1,13 +1,14 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { ConfigError, peopleNeedingRebuild, requireDate, runDerive } from '@haelan/core'
+import { ConfigError, peopleNeedingRebuild, requireDate, runDerive, shiftLocalDate } from '@haelan/core'
 import type { OverrideScope } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
-import { requireString } from './shared.ts'
+import { requireString, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 interface OverrideParams extends PersonParams { overrideId: string }
 interface NoteParams extends PersonParams { localDate: string }
 interface EventParams extends PersonParams { eventId: string }
+interface DateRangeQuery { from?: string, to?: string }
 
 interface OverrideBody {
   scope?: unknown
@@ -191,6 +192,70 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     app.haelan.instance.events.remove({ personId, id: eventId })
     return reply.send({ id: eventId })
   })
+
+  // The three list reads: notes, events and overrides. None of them paginates, and none of them
+  // stamps its ETag off updated_at_ms the way the four daily backed reads do, for the same reason
+  // the three tier 2 reads in tier2.ts do neither: see the two comments below and sendHashed.
+  app.get<{ Params: PersonParams, Querystring: DateRangeQuery }>('/p/:personId/notes', async (request, reply) => {
+    const personId = personIdOf(request)
+    const { from, to } = requireDateRange(request.query)
+
+    // Not paginated, deliberately: the schema's own unique constraint is one note per person per
+    // local day, so a year in range is at most 365 rows and a cursor would add pagination's own
+    // machinery, and its own defects, to a list that structurally cannot grow past that. See
+    // paginate in tier2.ts for the shape this route is declining to copy a fourth time.
+    const items = app.haelan.instance.notes.listFor(personId, from, to)
+    return sendHashed(reply, request, { items })
+  })
+
+  app.get<{ Params: PersonParams, Querystring: DateRangeQuery }>('/p/:personId/events', async (request, reply) => {
+    const personId = personIdOf(request)
+    const { from, to } = requireDateRange(request.query)
+
+    // EventStore.listFor takes instants, not local dates: an event carries the offset in force
+    // at its own start rather than the account carrying one timezone this route could resolve
+    // `from`/`to` against. The caller still asks in the same local-date shape /notes takes, for
+    // one range vocabulary across all three annotation reads, so the bridge lives here: `from`
+    // at UTC midnight, `to` at the UTC midnight one day later minus a millisecond. That is a UTC
+    // calendar day, not necessarily the day either endpoint reads as in whichever offset the
+    // event itself carries, which is the trade a single account-wide "local day" would not avoid
+    // either, since events do not share one offset among them.
+    const fromMs = Date.parse(`${from}T00:00:00Z`)
+    const toMs = Date.parse(`${shiftLocalDate(to, 1)}T00:00:00Z`) - 1
+
+    // Not paginated, deliberately: events are entered by hand, same as overrides below, so a
+    // range wide enough to matter for pagination is not a range a person filled by hand.
+    const items = app.haelan.instance.events.listFor(personId, fromMs, toMs)
+    return sendHashed(reply, request, { items })
+  })
+
+  app.get<{ Params: PersonParams }>('/p/:personId/overrides', async (request, reply) => {
+    const personId = personIdOf(request)
+
+    // No from/to here, unlike the two routes above: OverrideStore.listFor takes no range, and
+    // StoredOverride carries no date-like field a route could filter on without decoding a
+    // sample key, a session id and a day_metric date three different ways to recover one. The
+    // management list this feeds wants every correction for the person regardless, so this
+    // returns all of them, not paginated for the same reason as above: overrides are entered by
+    // hand and are fewer than notes.
+    const items = app.haelan.instance.overrides.listFor(personId)
+    return sendHashed(reply, request, { items })
+  })
+}
+
+/**
+ * `from` and `to` both present, both real calendar dates, and not reversed. Shared by /notes and
+ * /events, the two reads a caller ranges by local date, so the refusal a caller sees for a
+ * malformed or backwards range cannot drift between the two the way three independent copies of
+ * this check could.
+ */
+function requireDateRange(query: DateRangeQuery): { from: string, to: string } {
+  const from = requireString(query.from, 'from')
+  const to = requireString(query.to, 'to')
+  requireDate('from', from)
+  requireDate('to', to)
+  if (from > to) throw new ConfigError(`from '${from}' is after to '${to}'`)
+  return { from, to }
 }
 
 /**

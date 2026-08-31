@@ -352,6 +352,18 @@ describe('the versioned surface, beyond the per-route table', () => {
     'DELETE /api/v1/p/:personId/events/:eventId',
   ]
 
+  // Task 6's three list reads. These are GET routes shaped exactly like the ROUTES table above,
+  // but added here as an interim case rather than as full RouteCase entries: a full entry belongs
+  // to Task 7's isolation suite, alongside whichever other reads land between now and then, and a
+  // second attempt at that table before Task 7 arrives is a second place for it to drift from
+  // whatever shape Task 7 settles on. Listed so the coverage guard sees them, and exercised by the
+  // tests below rather than merely declared, the same way the write routes above are.
+  const READ_ROUTES: readonly string[] = [
+    'GET /api/v1/p/:personId/notes',
+    'GET /api/v1/p/:personId/events',
+    'GET /api/v1/p/:personId/overrides',
+  ]
+
   // A mutating request is refused by the origin hook unless these two agree, so a write test that
   // sent neither would pass on a 403 that has nothing to do with whose data it touched.
   const ORIGIN = { origin: 'http://localhost:4235', host: 'localhost:4235' }
@@ -434,6 +446,57 @@ describe('the versioned surface, beyond the per-route table', () => {
     expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
   })
 
+  // The interim case for the three list reads, matching the write cases above in spirit but not
+  // in shape: there is no row to check survives, since a GET changes nothing. What has to be
+  // shown instead is the one thing a 403 alone cannot: that the other person's row was never in
+  // the body the owner's own request got back. One request per route, seeded with both people's
+  // data, is the whole case.
+  it("answers the three list reads with only the caller's own rows, never the other person's", async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+    const { notes, events, overrides } = harness.app.haelan.instance
+
+    notes.put({ personId: 'p1', localDate: dateOf(1), body: 'mine', nowMs: harness.clock.nowMs })
+    notes.put({ personId: 'p2', localDate: dateOf(1), body: 'leaked-note-999999', nowMs: harness.clock.nowMs })
+    const notesResponse = await harness.app.inject({
+      method: 'GET', url: `/api/v1/p/p1/notes?from=${dateOf(1)}&to=${dateOf(1)}`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(notesResponse.statusCode).toBe(200)
+    expect(notesResponse.body).toContain('mine')
+    expect(notesResponse.body).not.toContain('leaked-note-999999')
+
+    const startedAtMs = Date.parse('2026-08-01T09:00:00Z')
+    events.add({ personId: 'p1', kind: 'travel', startedAtMs, startedAtOffsetMinutes: 0 })
+    events.add({ personId: 'p2', kind: 'leaked-kind-999999', startedAtMs, startedAtOffsetMinutes: 0 })
+    const eventsResponse = await harness.app.inject({
+      method: 'GET', url: `/api/v1/p/p1/events?from=${dateOf(1)}&to=${dateOf(1)}`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(eventsResponse.statusCode).toBe(200)
+    expect(eventsResponse.body).toContain('travel')
+    expect(eventsResponse.body).not.toContain('leaked-kind-999999')
+
+    overrides.put({
+      personId: 'p1', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: dateOf(2), metric: 'steps' }),
+      action: 'exclude', reason: 'mine', nowMs: harness.clock.nowMs,
+    })
+    overrides.put({
+      personId: 'p2', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: dateOf(2), metric: 'floors' }),
+      action: 'exclude', reason: 'leaked-reason-999999', nowMs: harness.clock.nowMs,
+    })
+    const overridesResponse = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/overrides',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(overridesResponse.statusCode).toBe(200)
+    expect(overridesResponse.body).toContain('mine')
+    expect(overridesResponse.body).not.toContain('leaked-reason-999999')
+  })
+
   // Routes under /api/v1 that are deliberately not person scoped, and so carry no isolation case
   // in the table above. Adding one here is a conscious edit to this list; filtering the guard
   // below to only '/api/v1/p/' would instead let such a route slip past it with nobody noticing.
@@ -468,7 +531,7 @@ describe('the versioned surface, beyond the per-route table', () => {
     })
     try {
       const covered = new Set([
-        ...ROUTES.map((route) => `GET ${route.template}`), ...WRITE_ROUTES, ...NOT_PERSON_SCOPED,
+        ...ROUTES.map((route) => `GET ${route.template}`), ...WRITE_ROUTES, ...READ_ROUTES, ...NOT_PERSON_SCOPED,
       ])
       const missing = [...registered].filter((entry) => !covered.has(entry))
       const stale = [...covered].filter((entry) => !registered.has(entry))

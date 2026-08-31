@@ -27,6 +27,31 @@ async function postEvent(h: Harness, token: string, input: { kind: string, start
 }
 
 /**
+ * Writes an override straight through the store rather than the HTTP route: the route also
+ * drains derivation, which these read-route tests have no interest in, and a day_metric target
+ * needs no sample or session row to exist first, so the store call alone is enough to seed one.
+ */
+function putOverride(h: Harness, localDate: string, metric: string): string {
+  return h.app.haelan.instance.overrides.put({
+    personId: 'p1', scope: 'day_metric', targetKey: JSON.stringify({ localDate, metric }),
+    action: 'exclude', reason: 'test fixture', nowMs: h.clock.nowMs,
+  })
+}
+
+/**
+ * `get` rather than `h.app.inject` inline: this file's GET tests need to attach `if-none-match`
+ * the same way every write above attaches its own headers, and a fourth copy of that object
+ * literal is the kind of drift `requireString`'s own shared home elsewhere in this codebase
+ * exists to avoid.
+ */
+async function get(h: Harness, token: string, path: string, extraHeaders: Record<string, string> = {}) {
+  return h.app.inject({
+    method: 'GET', url: `/api/v1/p/p1${path}`,
+    headers: { authorization: `Bearer ${token}`, ...extraHeaders },
+  })
+}
+
+/**
  * Counts everything queued for derivation, across every person. There is only ever one person in
  * this file's harness and nothing else in these tests marks a day dirty, so a plain count is
  * enough to answer whether a note or an event write touched the queue at all.
@@ -87,5 +112,141 @@ describe('the note and event routes', () => {
     const before = pendingDeriveCount(harness)
     await putNote(harness, token, '2026-08-15', 'flew to Tokyo')
     expect(pendingDeriveCount(harness)).toBe(before)
+  })
+})
+
+describe('GET /notes', () => {
+  it('answers a 304 for an unchanged list', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-08-15', 'flew to Tokyo')
+    const first = await get(harness, token, '/notes?from=2026-08-01&to=2026-08-31')
+    const again = await get(harness, token, '/notes?from=2026-08-01&to=2026-08-31',
+      { 'if-none-match': first.headers.etag as string })
+    expect(again.statusCode).toBe(304)
+  })
+
+  it('moves the etag when the list changes', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-08-15', 'first')
+    const before = (await get(harness, token, '/notes?from=2026-08-01&to=2026-08-31')).headers.etag
+    await putNote(harness, token, '2026-08-16', 'second')
+    const after = (await get(harness, token, '/notes?from=2026-08-01&to=2026-08-31')).headers.etag
+    expect(after).not.toBe(before)
+  })
+
+  it('returns every row in range without a cursor', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 31; day += 1) {
+      await putNote(harness, token, `2026-08-${String(day).padStart(2, '0')}`, `day ${day}`)
+    }
+    const list = await get(harness, token, '/notes?from=2026-08-01&to=2026-08-31')
+    expect(list.json().items).toHaveLength(31)
+    expect(list.json().cursor).toBeUndefined()
+  })
+
+  it('excludes a note outside the requested range', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-07-31', 'the day before')
+    await putNote(harness, token, '2026-08-01', 'in range')
+    const list = await get(harness, token, '/notes?from=2026-08-01&to=2026-08-31')
+    expect(list.json().items).toHaveLength(1)
+    expect(list.json().items[0].body).toBe('in range')
+  })
+
+  it('refuses a malformed from date', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/notes?from=2026-02-30&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('refuses a range where from is after to', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/notes?from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+})
+
+describe('GET /events', () => {
+  it('answers a 304 for an unchanged list', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await postEvent(harness, token, { kind: 'travel', startedAtMs: Date.parse('2026-08-15T09:00:00Z') })
+    const first = await get(harness, token, '/events?from=2026-08-01&to=2026-08-31')
+    const again = await get(harness, token, '/events?from=2026-08-01&to=2026-08-31',
+      { 'if-none-match': first.headers.etag as string })
+    expect(again.statusCode).toBe(304)
+  })
+
+  it('moves the etag when the list changes', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await postEvent(harness, token, { kind: 'travel', startedAtMs: Date.parse('2026-08-15T09:00:00Z') })
+    const before = (await get(harness, token, '/events?from=2026-08-01&to=2026-08-31')).headers.etag
+    await postEvent(harness, token, { kind: 'illness', startedAtMs: Date.parse('2026-08-16T09:00:00Z') })
+    const after = (await get(harness, token, '/events?from=2026-08-01&to=2026-08-31')).headers.etag
+    expect(after).not.toBe(before)
+  })
+
+  it('returns every event in range without a cursor', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 10; day += 1) {
+      await postEvent(harness, token, { kind: 'travel', startedAtMs: Date.parse(`2026-08-${String(day).padStart(2, '0')}T09:00:00Z`) })
+    }
+    const list = await get(harness, token, '/events?from=2026-08-01&to=2026-08-10')
+    expect(list.json().items).toHaveLength(10)
+    expect(list.json().cursor).toBeUndefined()
+  })
+
+  // `from`/`to` bridge to an inclusive UTC calendar day: the instant one millisecond before
+  // 2026-08-01T00:00:00Z falls just outside it, and the instant one millisecond before
+  // 2026-08-02T00:00:00Z falls just inside it, on the last millisecond `to` allows.
+  it('includes the whole UTC day at each end of the range, and nothing past it', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await postEvent(harness, token, { kind: 'before', startedAtMs: Date.parse('2026-07-31T23:59:59.999Z') })
+    await postEvent(harness, token, { kind: 'at-start', startedAtMs: Date.parse('2026-08-01T00:00:00.000Z') })
+    await postEvent(harness, token, { kind: 'at-end', startedAtMs: Date.parse('2026-08-01T23:59:59.999Z') })
+    await postEvent(harness, token, { kind: 'after', startedAtMs: Date.parse('2026-08-02T00:00:00.000Z') })
+
+    const list = await get(harness, token, '/events?from=2026-08-01&to=2026-08-01')
+    const kinds = (list.json().items as { kind: string }[]).map((e) => e.kind).sort()
+    expect(kinds).toEqual(['at-end', 'at-start'])
+  })
+
+  it('refuses a range where from is after to', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/events?from=2026-08-31&to=2026-08-01')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+})
+
+describe('GET /overrides', () => {
+  it('answers a 304 for an unchanged list', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    putOverride(harness, '2026-08-15', 'steps')
+    const first = await get(harness, token, '/overrides')
+    const again = await get(harness, token, '/overrides', { 'if-none-match': first.headers.etag as string })
+    expect(again.statusCode).toBe(304)
+  })
+
+  it('moves the etag when the list changes', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    putOverride(harness, '2026-08-15', 'steps')
+    const before = (await get(harness, token, '/overrides')).headers.etag
+    putOverride(harness, '2026-08-16', 'floors')
+    const after = (await get(harness, token, '/overrides')).headers.etag
+    expect(after).not.toBe(before)
+  })
+
+  // No from/to: the management list this feeds wants every correction for the person, and
+  // OverrideStore.listFor answers exactly that, with nothing to range against in the response.
+  it('returns every override for the person, unpaginated', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 5; day += 1) {
+      putOverride(harness, `2026-08-${String(day).padStart(2, '0')}`, 'steps')
+    }
+    const list = await get(harness, token, '/overrides')
+    expect(list.json().items).toHaveLength(5)
+    expect(list.json().cursor).toBeUndefined()
   })
 })
