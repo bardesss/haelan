@@ -55,4 +55,16 @@ describe('NoteStore', () => {
     notes.put({ personId: 'p1', localDate: '2026-09-01', body: 'after', nowMs: 1000 })
     expect(notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(0)
   })
+
+  // The exclusion test above only proves the filter exists, not which side of it the bounds fall
+  // on. gte/lte are inclusive, so a note dated exactly on either end of the range has to come
+  // back; a regression to exclusive bounds would drop the first and last day of a month and pass
+  // every other test in this file.
+  it('includes a note dated exactly on either end of the range', () => {
+    notes.put({ personId: 'p1', localDate: '2026-08-01', body: 'first day', nowMs: 1000 })
+    notes.put({ personId: 'p1', localDate: '2026-08-31', body: 'last day', nowMs: 1000 })
+    const rows = notes.listFor('p1', '2026-08-01', '2026-08-31')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.localDate)).toEqual(['2026-08-01', '2026-08-31'])
+  })
 })
