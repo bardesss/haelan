@@ -1,0 +1,231 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import {
+  useAnnotations, useWriteOverride, useWriteNote,
+  notesPath, eventsPath, overridesPath,
+} from '../src/data/useAnnotations.js'
+import type { WriteOverrideInput, WriteNoteInput } from '../src/data/useAnnotations.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+/** Mounts a tree and flushes effects. Every render in these tests goes through act. */
+function mount(node: ReactNode): void {
+  act(() => { root?.render(node) })
+}
+
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam',
+}
+
+/**
+ * A client with no session cached, the exact state on first paint before /api/auth/me answers.
+ * Kept separate from a "with session" helper for the reason data-hooks.test.tsx's own copy of this
+ * gives: an optional parameter defaults when a caller passes `undefined` explicitly, which would
+ * make a test that means to withhold the session quietly get it anyway.
+ */
+function withoutSession(node: ReactNode): ReactNode {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+}
+
+/** A client with the session already resolved, so a mutation's guard against an undefined person
+ * never fires and the test is exercising the invalidation logic rather than that guard. */
+function withSession(node: ReactNode): { client: QueryClient, tree: ReactNode } {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
+  })
+  client.setQueryData(queryKeys.session(), PERSON)
+  return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
+}
+
+function respond(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+}
+
+const INPUT: WriteOverrideInput = {
+  scope: 'day_metric', targetKey: '{"localDate":"2026-08-15","metric":"steps"}', action: 'exclude', reason: 'phone in a bag',
+}
+
+function WriteOverrideButton({ input }: { input: WriteOverrideInput }) {
+  const mutation = useWriteOverride()
+  return <button type="button" onClick={() => mutation.mutate(input)}>write override</button>
+}
+
+function WriteNoteButton({ input }: { input: WriteNoteInput }) {
+  const mutation = useWriteNote()
+  return <button type="button" onClick={() => mutation.mutate(input)}>write note</button>
+}
+
+function click(): void {
+  const button = container!.querySelector('button') as HTMLButtonElement
+  act(() => { button.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+}
+
+async function settle(): Promise<void> {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+}
+
+describe('path builders', () => {
+  it('scopes notesPath to the range and the person', () => {
+    expect(notesPath('p1', { from: '2026-08-01', to: '2026-08-31' }))
+      .toBe('/api/v1/p/p1/notes?from=2026-08-01&to=2026-08-31')
+  })
+
+  it('scopes eventsPath to the range and the person', () => {
+    expect(eventsPath('p1', { from: '2026-08-01', to: '2026-08-31' }))
+      .toBe('/api/v1/p/p1/events?from=2026-08-01&to=2026-08-31')
+  })
+
+  // GET /overrides takes no range at all (apps/server/src/routes/v1/annotations.ts), because the
+  // management list this feeds wants every correction for the person regardless of what range a
+  // caller happens to be looking at. Sending one would ask a question the route already refuses.
+  it('builds overridesPath with no range, since the route takes none', () => {
+    expect(overridesPath('p1')).toBe('/api/v1/p/p1/overrides')
+  })
+})
+
+describe('useAnnotations', () => {
+  it('does not fetch notes, events or overrides until the session has resolved a person', async () => {
+    let calls = 0
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => { calls += 1; return respond(200, {}) }) as typeof fetch
+
+    function Probe() {
+      useAnnotations({ from: '2026-08-01', to: '2026-08-31' })
+      return null
+    }
+    mount(withoutSession(<Probe />))
+    // The session query's own fetch resolves asynchronously, so a synchronous check right after
+    // mount would pass even with every `enabled` guard removed: a disabled query's queryFn simply
+    // never runs, and the only way to see that has to include the trip through microtasks a real
+    // fetch takes, the same reasoning useSeries' own version of this test gives.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    globalThis.fetch = original
+    // Exactly one fetch, the session's own. Three more (notes, events, overrides) firing for an
+    // undefined person would each be a request for /api/v1/p/undefined/....
+    expect(calls).toBe(1)
+  })
+
+  // The route ignores range for overrides, and the point of that is a single list a management
+  // page and a day panel can share. A key that varied by range would fetch the identical answer
+  // once per range instead.
+  it('keys the overrides read the same regardless of range, since the route answers the same list either way', () => {
+    expect(queryKeys.resource('p1', 'overrides')).toEqual(queryKeys.resource('p1', 'overrides'))
+  })
+})
+
+describe('useWriteOverride, applied true', () => {
+  it('invalidates a cached range that overlaps affected, and leaves a disjoint one alone', async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const overlapping = queryKeys.resource('p1', 'series', {
+      metrics: ['steps'], from: '2026-08-14', to: '2026-08-16', agg: 'sum',
+    })
+    const disjoint = queryKeys.resource('p1', 'series', {
+      metrics: ['steps'], from: '2026-09-01', to: '2026-09-30', agg: 'sum',
+    })
+    client.setQueryData(overlapping, { steps: { points: [], reduction: null } })
+    client.setQueryData(disjoint, { steps: { points: [], reduction: null } })
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true,
+    })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(overlapping)?.isInvalidated).toBe(true)
+    expect(client.getQueryState(disjoint)?.isInvalidated).toBe(false)
+  })
+
+  // affected: null means the target names a sample or a session no backfill has reached, so the
+  // store marked no local day dirty at all: there is nothing derived that could be stale, even for
+  // a cached range that happens to cover the day a reader would guess the override targets.
+  it('invalidates nothing when affected is null, even for a range that would otherwise overlap', async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const cached = queryKeys.resource('p1', 'series', {
+      metrics: ['steps'], from: '2026-08-01', to: '2026-08-31', agg: 'sum',
+    })
+    client.setQueryData(cached, { steps: { points: [], reduction: null } })
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, { id: 'o1', affected: null, applied: true })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(cached)?.isInvalidated).toBe(false)
+  })
+})
+
+describe('useWriteOverride, applied false', () => {
+  // The write still saved (the store commits before the drain runs), but the derived numbers have
+  // not caught up, so refetching a cached range would redraw exactly what is already on screen
+  // while the panel is telling the reader the correction has not landed yet.
+  it('leaves a range that overlaps affected alone', async () => {
+    const { client, tree } = withSession(<WriteOverrideButton input={INPUT} />)
+    const overlapping = queryKeys.resource('p1', 'series', {
+      metrics: ['steps'], from: '2026-08-15', to: '2026-08-15', agg: 'sum',
+    })
+    client.setQueryData(overlapping, { steps: { points: [], reduction: null } })
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, {
+      id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: false,
+    })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(overlapping)?.isInvalidated).toBe(false)
+  })
+})
+
+describe('useWriteNote', () => {
+  // A note carries no applied field and no drain: it takes effect the instant it commits, so
+  // unlike an override write there is no gate to honour before refreshing the list that just
+  // changed for this person.
+  it('invalidates the notes resource for this person on success', async () => {
+    const { client, tree } = withSession(<WriteNoteButton input={{ localDate: '2026-08-15', body: 'flew to Tokyo' }} />)
+    const cached = queryKeys.resource('p1', 'notes', { from: '2026-08-01', to: '2026-08-31' })
+    client.setQueryData(cached, { items: [] })
+
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => respond(200, { id: 'n1' })) as typeof fetch
+
+    mount(tree)
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(client.getQueryState(cached)?.isInvalidated).toBe(true)
+  })
+})
