@@ -94,6 +94,23 @@ function table(html: string): string {
   return match[0]
 }
 
+/**
+ * The last `<td>` in `date`'s own row: on all three charts the note column is the rightmost one
+ * (Sparkline's [date, value, note], ActivityHeatmap's [date, weekday, steps, note],
+ * HeartRateRange's [date, min, mean, max, note]), so this reads the same way for whichever chart's
+ * markup it is handed. Used to compare a chart's own canvas label against the exact string its
+ * table states for the same date, from one render, rather than each against its own hardcoded
+ * expectation: two literals that happen to agree today prove nothing about tomorrow.
+ */
+function noteCellFor(html: string, date: string): string {
+  const row = html.match(new RegExp(`<tr><th scope="row">${date}</th>[\\s\\S]*?</tr>`))
+  if (!row) throw new Error(`no row for ${date}`)
+  const cells = [...row[0].matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]!)
+  const last = cells.at(-1)
+  if (last === undefined) throw new Error(`no cells in row for ${date}`)
+  return last
+}
+
 describe('Sparkline', () => {
   const values = [10, 20, 30]
   const labels = ['2026-08-01', '2026-08-02', '2026-08-03']
@@ -289,6 +306,63 @@ describe('ActivityHeatmap', () => {
     const diamonds = heatmapSeries.markPoint?.data.filter((d) => d.symbol === 'diamond') ?? []
     expect(diamonds).toEqual([{ name: 'Watch left charging, Flew to Tokyo', coord: [0, 1], symbol: 'diamond', itemStyle: { color: '#000000' } }])
   })
+
+  // Round 3's own finding: the join above and the table's own join (Sparkline/ActivityHeatmap/
+  // HeartRateRange all filter+join with ANNOTATION_JOIN) were two separate literals that happened
+  // to agree, with nothing comparing them. This reads both off the one render above instead of
+  // each against its own hardcoded string, so a future change to one that the other misses fails
+  // here rather than staying invisible.
+  it('draws the same joined text on the canvas as its own accessible table states for that date', () => {
+    act(() => {
+      root!.render(
+        <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]} corrected={[]}
+          annotations={[
+            { date: '2026-07-07', text: 'Watch left charging' },
+            { date: '2026-07-07', text: 'Flew to Tokyo' },
+          ]} />,
+      )
+    })
+    const stub = chartStubs.at(-1)!
+    const option = stub.setOption.mock.calls[0]![0] as { series: { markPoint?: { data: Record<string, unknown>[] } }[] }
+    const diamond = option.series[0]!.markPoint?.data.find((d) => d.symbol === 'diamond')
+    const noteCell = noteCellFor(container!.innerHTML, '2026-07-07')
+    // Sanity against a vacuous pass (both sides empty or undefined would also satisfy toBe below).
+    expect(noteCell).toBe('Watch left charging, Flew to Tokyo')
+    expect(diamond?.name).toBe(noteCell)
+  })
+
+  // Round 3's other finding: excluded, corrected and annotation all share this series' one
+  // markPoint, and a day_metric override is reachable alongside a note or an event since this
+  // task (excluded/corrected cannot collide with each other or with an annotation the way two
+  // annotations could, but an override mark and an annotation mark on the same date now can).
+  // Two entries at the identical coord each carrying their own label, echarts' own default markPoint
+  // label position, drew as two overlapping strings on one pixel: the same overprint the round 2
+  // fix closed within the annotation group, reachable again across mark groups.
+  it('suppresses the markPoint label for the whole series, so an excluded date and an annotated one never stack two labels on one coord', () => {
+    act(() => {
+      root!.render(
+        <ActivityHeatmap days={days} max={9000} label="calendar heatmap"
+          excluded={['2026-07-07']} corrected={[]}
+          annotations={[{ date: '2026-07-07', text: 'Watch left charging' }]} />,
+      )
+    })
+    const stub = chartStubs.at(-1)!
+    const option = stub.setOption.mock.calls[0]![0] as {
+      series: { markPoint?: { label?: { show: boolean }, data: Record<string, unknown>[] } }[]
+    }
+    const markPoint = option.series[0]!.markPoint!
+    // At most one label drawn per coordinate: the whole series draws none, which is trivially at
+    // most one everywhere, not merely at the one coordinate this fixture exercises.
+    expect(markPoint.label).toEqual({ show: false })
+    // Shape and colour still tell the two groups apart with the label off, which is what Task 11's
+    // own Important 4 requires (a reader, colour-blind or not, has to tell a correction/exclusion
+    // apart from an annotation in every channel this chart draws).
+    const excludedMark = markPoint.data.find((d) => d.name === 'excluded')
+    const annotationMark = markPoint.data.find((d) => d.name === 'Watch left charging')
+    expect(excludedMark).toMatchObject({ coord: [0, 1], itemStyle: { color: '#000000' } })
+    expect(annotationMark).toMatchObject({ coord: [0, 1], symbol: 'diamond' })
+    expect(excludedMark?.symbol).not.toBe(annotationMark?.symbol)
+  })
 })
 
 describe('HeartRateRange', () => {
@@ -427,6 +501,28 @@ describe('HeartRateRange', () => {
       const option = stub.setOption.mock.calls[0]![0] as { series: { markLine?: { data: unknown[] } }[] }
       const meanSeries = option.series[2]!
       expect(meanSeries.markLine?.data).toEqual([{ name: 'Watch left charging, Flew to Tokyo', xAxis: 1 }])
+    })
+
+    // Round 3's own finding: the join above and the table's own join were two separate literals
+    // that happened to agree, with nothing comparing them. Same device ActivityHeatmap's own copy
+    // of this test uses: read both off the one render, not each against its own hardcoded string.
+    it('draws the same joined text on the canvas as its own accessible table states for that date', () => {
+      act(() => {
+        root!.render(
+          <HeartRateRange days={days} excluded={[]} corrected={[]}
+            annotations={[
+              { date: '2026-08-11', text: 'Watch left charging' },
+              { date: '2026-08-11', text: 'Flew to Tokyo' },
+            ]} label="hr range" />,
+        )
+      })
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { series: { markLine?: { data: { name: string, xAxis: number }[] } }[] }
+      const meanSeries = option.series[2]!
+      const markLineEntry = meanSeries.markLine?.data[0]
+      const noteCell = noteCellFor(container!.innerHTML, '2026-08-11')
+      expect(noteCell).toBe('Watch left charging, Flew to Tokyo')
+      expect(markLineEntry?.name).toBe(noteCell)
     })
 
     // The reviewer's own measurement: a six day range spanning two months, both sharing the same

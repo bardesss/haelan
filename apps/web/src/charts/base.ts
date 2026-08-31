@@ -41,10 +41,22 @@ export function withMotionPreference<T extends object>(option: T, reducedMotion:
 }
 
 /**
- * Collapses `annotations` to one entry per date, joining every text that shares a date with the
- * same `', '` the accessible table already uses for the same purpose (Sparkline/ActivityHeatmap/
- * HeartRateRange's own table row builders, all three filter+join rather than find() for exactly
- * this reason).
+ * The one separator every place that joins several annotations' own text into one string reads,
+ * rather than four independent `', '` literals (this file's own `annotationsByDate` below, plus
+ * Sparkline/ActivityHeatmap/HeartRateRange's own table row builders) that happened to agree.
+ * Nothing checked that agreement before: each channel hardcoded and asserted against its own copy,
+ * so a change to one could drift from the other three and every existing test would still pass,
+ * checking only the channel it already knew about. `chart-annotations.test.tsx`'s own
+ * "same joined text on the canvas as the table" cases are what actually locks the property this
+ * constant only makes convenient to keep; this alone would not catch a second literal reappearing.
+ */
+export const ANNOTATION_JOIN = ', '
+
+/**
+ * Collapses `annotations` to one entry per date, joining every text that shares a date with
+ * `ANNOTATION_JOIN`, the same separator the accessible table already uses for the same purpose
+ * (Sparkline/ActivityHeatmap/HeartRateRange's own table row builders, all three filter+join
+ * rather than find() for exactly this reason).
  *
  * An override reason, a note and an event can all land on one date now that day level marks
  * merge with the per-metric ones, where before this task an override alone could not: overrides
@@ -69,7 +81,7 @@ export function annotationsByDate(
     texts.push(a.text)
     byDate.set(a.date, texts)
   }
-  return [...byDate].map(([date, texts]) => ({ date, text: texts.join(', ') }))
+  return [...byDate].map(([date, texts]) => ({ date, text: texts.join(ANNOTATION_JOIN) }))
 }
 
 type Inset = { left?: number; right?: number; top?: number; bottom?: number }

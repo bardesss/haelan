@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { STROKE, OPACITY, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
@@ -116,7 +116,10 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a
                 // single find() here would silently show only the first and drop the rest.
-                annotations.filter((a) => a.date === date).map((a) => a.text).join(', ')].filter(Boolean).join(', ')]
+                // ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate (base.ts) reads the
+                // same constant, so a table cell and a canvas label built from the same annotations
+                // array cannot drift apart on separator alone.
+                annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)].filter(Boolean).join(', ')]
           }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot

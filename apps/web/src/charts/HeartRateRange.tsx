@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { annotationsByDate, chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, annotationsByDate, chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { hrTooltip } from './hrTooltip.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -105,8 +105,9 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
             // annotationsByDate first, not annotations directly: an override reason, a note and an
             // event can share one date now, and one markLine entry per annotation put every one of
             // them at the same xAxis with a label echarts anchors at the identical point (position:
-            // 'end' by default), overlapping rather than reading apart. Grouped and joined here with
-            // the same ', ' the accessible table already uses, so this draws one mark per date.
+            // 'end' by default), overlapping rather than reading apart. Grouped and joined here
+            // with ANNOTATION_JOIN, the same separator the accessible table already uses, so this
+            // draws one mark per date.
             data: annotationsByDate(annotations).flatMap((a) => {
               const i = days.findIndex((d) => d.date === a.date)
               return i === -1 ? [] : [{ name: a.text, xAxis: i }]
@@ -136,7 +137,9 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a
                 // single find() here would silently show only the first and drop the rest.
-                annotations.filter((a) => a.date === d.date).map((a) => a.text).join(', ')].filter(Boolean).join(', '),
+                // ANNOTATION_JOIN, not a second ', ' literal: see Sparkline.tsx's own comment on
+                // the same line for why.
+                annotations.filter((a) => a.date === d.date).map((a) => a.text).join(ANNOTATION_JOIN)].filter(Boolean).join(', '),
             ]
           }),
         }} />

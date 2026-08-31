@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { annotationsByDate, chartBase, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, annotationsByDate, chartBase, SYMBOL } from './base.js'
 import { scaleStops, type ChartTokens } from './tokens.js'
 import { calendarLayout, type CalendarCell } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -97,6 +97,19 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
           // collapse to the grid's origin rather than sitting on the day it names.
           markPoint: {
             symbolSize: SYMBOL.excluded,
+            // Suppressed for the whole markPoint, not per entry: excluded, corrected and
+            // annotation all share this one series' markPoint, so a date carrying an override
+            // mark and an annotation mark now lands two entries on the identical coord (a day_metric
+            // override is reachable alongside a note or an event since this task; excluded and
+            // corrected cannot collide with each other, both being drawn from the one override a
+            // (person, scope, targetKey) can ever carry). Two entries at one coord means two labels
+            // at the identical anchor, occluding rather than reading apart. Suppressing the label
+            // here is the same device Sparkline's own annotation markLine already uses
+            // (`label: { show: false }`): the full text belongs in the accessible table beside this
+            // chart, not fighting for the same pixel on the canvas, and shape (circle/rect/diamond)
+            // plus colour still tell the three groups apart with no label at all, which is what
+            // Task 11's own Important 4 requires for a colour-blind reader too.
+            label: { show: false },
             data: [
               ...excluded.flatMap((date) => {
                 const cell = cells.find((c) => c.date === date)
@@ -118,8 +131,8 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
               // an event can share one date now, and one markPoint entry per annotation put every
               // one of them at the same coord with a label echarts anchors inside the same marker
               // (markPoint's default label position), overlapping rather than reading apart.
-              // Grouped and joined here with the same ', ' the accessible table already uses, so
-              // this draws one mark per date.
+              // Grouped and joined here with ANNOTATION_JOIN, the same separator the accessible
+              // table already uses, so this draws one mark per date.
               ...annotationsByDate(annotations).flatMap((a) => {
                 const cell = cells.find((c) => c.date === a.date)
                 return cell
@@ -161,7 +174,9 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
               // filter, not find: several annotations (an override reason, a note, an event) can
               // land on the same date now that day level marks join the per-metric ones, and a
               // single find() here would silently show only the first and drop the rest.
-              annotations.filter((a) => a.date === c.date).map((a) => a.text).join(', ')].filter(Boolean).join(', ')]
+              // ANNOTATION_JOIN, not a second ', ' literal: see Sparkline.tsx's own comment on the
+              // same line for why.
+              annotations.filter((a) => a.date === c.date).map((a) => a.text).join(ANNOTATION_JOIN)].filter(Boolean).join(', ')]
         }),
       }} />
   )
