@@ -82,12 +82,15 @@ const UNWORN_DAY = '2026-08-11'
  * a heatmap domain of "0 to 0": the one test that named the rule ("never renders absence as a
  * zero") looked only for the presence of a word elsewhere on the page and could not fail.
  *
- * `overrides` defaults to none: every page now issues its own GET /overrides through
- * useAnnotations, and the four page describes below assert a page that carries no override at
- * all, the same shape they asserted before this task wired the request in. The one test that
- * wants a real row (see 'annotate wiring' below) passes its own list.
+ * `overrides`/`notes`/`events` all default to none: every page now issues its own GET /overrides,
+ * /notes and /events through useAnnotations, and the four page describes below assert a page that
+ * carries none of the three, the same shape the override alone asserted before this task wired
+ * the other two requests in. The tests that want a real row (see 'annotate wiring' and 'notes and
+ * events reach the charts' below) pass their own lists.
  */
-function stubFetch(overrides: readonly unknown[] = []): () => void {
+function stubFetch(
+  overrides: readonly unknown[] = [], notes: readonly unknown[] = [], events: readonly unknown[] = [],
+): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -97,6 +100,8 @@ function stubFetch(overrides: readonly unknown[] = []): () => void {
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: Date.now() - 600_000 })
     if (url.includes('/overrides')) return json({ items: overrides })
+    if (url.includes('/notes')) return json({ items: notes })
+    if (url.includes('/events')) return json({ items: events })
     if (url.includes('/series')) {
       const params = new URLSearchParams(url.split('?')[1] ?? '')
       const body: Record<string, unknown> = {}
@@ -467,6 +472,86 @@ describe('annotate wiring', () => {
       // (AnnotatePanel.tsx builds the target key itself; a page only ever hands it these two
       // fields, see its own doc comment).
       expect(dialogHtml).toContain(`${OVERRIDE_METRIC} on ${OVERRIDE_DATE}`)
+    } finally {
+      cleanup()
+    }
+  })
+})
+
+// Task 11b's own coverage: until this task useAnnotations issued GET /notes and GET /events on
+// every page and every range change and threw both away, the gap task-11b's own brief names.
+// Recovery, the same choice 'annotate wiring' above makes and for the same reason: three plain
+// Sparklines and nothing else on the page, so a note or an event landing on all three (or on
+// none) is unambiguous, with no heatmap or heart rate range chart nearby to blur which card a mark
+// actually reached.
+describe('notes and events reach the charts', () => {
+  const DATE = '2026-08-11'
+  const NOTE_BODY = 'felt off today'
+
+  async function mountRecoveryWithDayAnnotations(): Promise<{ html: string, cleanup: () => void }> {
+    const restore = stubFetch(
+      [],
+      [{ id: 'n1', localDate: DATE, body: NOTE_BODY, updatedAtMs: 0 }],
+      [{
+        id: 'e1', kind: 'illness', startedAtMs: Date.parse(`${DATE}T09:00:00Z`), startedAtOffsetMinutes: 0,
+        endedAtMs: null, endedAtOffsetMinutes: null, value: null, note: null, localDate: DATE,
+      }],
+    )
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', RECOVERY_ROUTE)
+
+    act(() => {
+      root.render(
+        <I18nProvider lng="en"><QueryClientProvider client={client}><Recovery /></QueryClientProvider></I18nProvider>,
+      )
+    })
+    await flush(client, () => container.innerHTML)
+
+    return {
+      html: container.innerHTML,
+      cleanup: () => {
+        act(() => { root.unmount() })
+        container.remove()
+        restore()
+      },
+    }
+  }
+
+  // The density judgment call task-11b's report states: a note or an event carries no metric of
+  // its own (unlike an override), so it reaches every chart on the page rather than being
+  // arbitrarily attached to whichever card happens to share its date. Recovery draws exactly
+  // three cards, none of which the note or the event above targets by metric, so all three
+  // carrying the same date's mark is the decision under test, not an accident of the fixture.
+  it('carries a note onto every chart on the page, not just one', async () => {
+    const { html, cleanup } = await mountRecoveryWithDayAnnotations()
+    try {
+      const chartTables = [...html.matchAll(/<table class="sr-only">[\s\S]*?<\/table>/g)].map((m) => m[0])
+      expect(chartTables).toHaveLength(3)
+      for (const t of chartTables) {
+        const row = t.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
+        if (!row) throw new Error(`no row for ${DATE}`)
+        expect(row, row).toContain(NOTE_BODY)
+      }
+    } finally {
+      cleanup()
+    }
+  })
+
+  // The note and the event share a date, so this also pins the multiplicity fix: both texts reach
+  // the same row, joined, rather than one silently replacing the other the way a find() (instead
+  // of the filter+join every chart table now uses) would.
+  it('translates a seed event kind and joins it with a note sharing its date', async () => {
+    const { html, cleanup } = await mountRecoveryWithDayAnnotations()
+    try {
+      const firstTable = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
+      if (!firstTable) throw new Error('no accessible table rendered')
+      const row = firstTable.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
+      if (!row) throw new Error(`no row for ${DATE}`)
+      expect(row).toContain(`${NOTE_BODY}, Illness`)
     } finally {
       cleanup()
     }

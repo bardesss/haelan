@@ -113,7 +113,10 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
             return [date, v ?? t('charts.absence.noReading'),
               [excluded.includes(date) ? t('charts.absence.excluded') : '',
                 correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
-                annotations.find((a) => a.date === date)?.text ?? ''].filter(Boolean).join(', ')]
+                // filter, not find: several annotations (an override reason, a note, an event) can
+                // land on the same date now that day level marks join the per-metric ones, and a
+                // single find() here would silently show only the first and drop the rest.
+                annotations.filter((a) => a.date === date).map((a) => a.text).join(', ')].filter(Boolean).join(', ')]
           }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot

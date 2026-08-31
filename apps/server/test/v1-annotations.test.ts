@@ -199,6 +199,25 @@ describe('GET /events', () => {
     expect(list.json().cursor).toBeUndefined()
   })
 
+  // The point of this task: localDate is computed once, to decide whether a row belongs in the
+  // range at all (the filter just above this route's own handler), and handed back on the item
+  // rather than thrown away, so a browser placing this event on a chart never has to recompute the
+  // same DST sensitive arithmetic itself. Offset 120 (UTC+2) is what makes this a real assertion
+  // rather than a coincidence: at offset zero the local day and the UTC day are the same string
+  // regardless of whether the route actually resolved one.
+  it("answers each event's own localDate, resolved from its offset rather than its UTC instant", async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await postEvent(harness, token, {
+      kind: 'travel',
+      startedAtMs: Date.parse('2026-08-10T22:30:00Z'), // 2026-08-11T00:30 local at UTC+2
+      startedAtOffsetMinutes: 120,
+    })
+    const list = await get(harness, token, '/events?from=2026-08-11&to=2026-08-11')
+    const items = list.json().items as { kind: string, localDate: string }[]
+    expect(items).toHaveLength(1)
+    expect(items[0]!.localDate).toBe('2026-08-11')
+  })
+
   // At offset zero the local day and the UTC day are the same day, so this only proves the
   // boundary is millisecond exact, not that it is the local day the route claims to answer by.
   // The nonzero offset case below is what actually exercises that.

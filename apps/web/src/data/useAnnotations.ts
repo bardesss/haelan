@@ -38,6 +38,13 @@ export interface StoredEvent {
   endedAtOffsetMinutes: number | null
   value: number | null
   note: string | null
+  // The local day localDateOf(startedAtMs, startedAtOffsetMinutes) resolves to, computed once by
+  // apps/server/src/routes/v1/annotations.ts (it already needs the answer to decide whether this
+  // row belongs in the requested range) and handed back on the wire rather than recomputed here:
+  // that arithmetic is DST sensitive and lives in packages/core/src/derive/localDay.ts, which has
+  // no browser safe subpath the way ./target-key and ./metrics do. dayAnnotations.ts is the one
+  // place this field is read.
+  localDate: string
 }
 
 export interface StoredOverride {

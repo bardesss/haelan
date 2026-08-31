@@ -127,7 +127,10 @@ export function HeartRateRange({ days, baseline, annotations, excluded, correcte
               d.hrMin ?? t('charts.absence.noReading'), d.hrMean ?? t('charts.absence.noReading'), d.hrMax ?? t('charts.absence.noReading'),
               [!d.worn ? t('charts.absence.notWorn') : '', excluded.includes(d.date) ? t('charts.absence.excluded') : '',
                 correctedEntry ? t('charts.absence.correctedTo', { value: correctedEntry.value }) : '',
-                annotations.find((a) => a.date === d.date)?.text ?? ''].filter(Boolean).join(', '),
+                // filter, not find: several annotations (an override reason, a note, an event) can
+                // land on the same date now that day level marks join the per-metric ones, and a
+                // single find() here would silently show only the first and drop the rest.
+                annotations.filter((a) => a.date === d.date).map((a) => a.text).join(', ')].filter(Boolean).join(', '),
             ]
           }),
         }} />

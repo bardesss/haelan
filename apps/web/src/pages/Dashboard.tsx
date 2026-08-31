@@ -30,6 +30,7 @@ import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
@@ -236,6 +237,23 @@ export function Dashboard() {
     () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
     [overridesQuery.overrides.data],
   )
+  // Notes and events, flattened into the same day level shape every chart's own annotations prop
+  // already takes: neither carries a metric of its own, so unlike overridesByMetricMap above this
+  // is not grouped, it reaches every chart on the page alike. Memoised on the two query results
+  // and on `t` (translation depends on the active language, for a seed event kind): see
+  // dayAnnotations.ts's own comment on why a fresh array here would cost every chart on the page
+  // its identity on any render at all, including the one opening the panel causes.
+  const dayAnnotations = useMemo(
+    () => dayAnnotationsFrom(overridesQuery.notes.data?.items ?? [], overridesQuery.events.data?.items ?? [], t),
+    [overridesQuery.notes.data, overridesQuery.events.data, t],
+  )
+  // Every metric overridesByMetricMap grouped, with dayAnnotations appended once rather than
+  // concatenated per card: see mergeDayAnnotations' own comment for why the concatenation has to
+  // happen here and not inside tile()/the heart rate range block below.
+  const dayAnnotationsByMetric = useMemo(
+    () => mergeDayAnnotations(overridesByMetricMap, dayAnnotations),
+    [overridesByMetricMap, dayAnnotations],
+  )
 
   // Fixed groups, not derived from a response: useMetricGroups runs one useSeries call per entry
   // in GROUPS, in the same order, on every render regardless of what any of them returns. min and
@@ -325,7 +343,8 @@ export function Dashboard() {
     unit?: string,
   ) => {
     const points = metricGroups.pointsOf(metric)
-    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected } = annotationsFor(overridesByMetricMap, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
@@ -530,7 +549,8 @@ export function Dashboard() {
             // same lookup tile() uses for every other card, read here under the metric this chart
             // itself plots.
             <HeartRateRange days={heartRateDays} baseline={heartRateBand}
-              annotations={heartRateOverrides.annotations} excluded={heartRateOverrides.excluded}
+              annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
+              excluded={heartRateOverrides.excluded}
               corrected={heartRateOverrides.corrected}
               label={t('dashboard.heartRateRange.chartLabel', { period })}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />

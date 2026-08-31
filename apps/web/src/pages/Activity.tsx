@@ -21,6 +21,7 @@ import type { SeriesPoint } from '../data/useSeries.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
@@ -114,6 +115,17 @@ export function Activity() {
     () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
     [overridesQuery.overrides.data],
   )
+  // Notes and events, day level rather than metric scoped, reaching every card on this page alike.
+  // See Dashboard.tsx's own copy of these three lines for why the concatenation has to happen once
+  // here and not inside card()/the heatmap block below.
+  const dayAnnotations = useMemo(
+    () => dayAnnotationsFrom(overridesQuery.notes.data?.items ?? [], overridesQuery.events.data?.items ?? [], t),
+    [overridesQuery.notes.data, overridesQuery.events.data, t],
+  )
+  const dayAnnotationsByMetric = useMemo(
+    () => mergeDayAnnotations(overridesByMetricMap, dayAnnotations),
+    [overridesByMetricMap, dayAnnotations],
+  )
 
   const metricGroups = useMetricGroups(GROUPS, range)
   const sumSeries = metricGroups.queryForAgg('sum')
@@ -165,6 +177,7 @@ export function Activity() {
   // claim rather than a vacuous one.
   const stepsQuery = metricGroups.queryFor('steps')
   const stepsOverrides = annotationsFor(overridesByMetricMap, 'steps')
+  const stepsAnnotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'steps')
 
   // The same split MetricCard makes for every other card on this page, made by hand because this
   // card draws an absence dot per day rather than a full-card empty state and so stays outside it.
@@ -207,7 +220,8 @@ export function Activity() {
     const points = metricGroups.pointsOf(metric)
     const total = sum(values(points))
     const spark = sparklines.get(metric)!
-    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected } = annotationsFor(overridesByMetricMap, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
@@ -233,7 +247,7 @@ export function Activity() {
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} />
             : stepsQuery.isPending ? <Loading /> : (
             <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })}
-              annotations={stepsOverrides.annotations} excluded={stepsOverrides.excluded} corrected={stepsOverrides.corrected}
+              annotations={stepsAnnotations} excluded={stepsOverrides.excluded} corrected={stepsOverrides.corrected}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'steps' })} />
           )}
         </Card>

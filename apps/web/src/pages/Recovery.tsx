@@ -19,6 +19,7 @@ import type { Baseline } from '../data/useBaseline.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
@@ -128,6 +129,17 @@ export function Recovery() {
     () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
     [overridesQuery.overrides.data],
   )
+  // Notes and events, day level rather than metric scoped, reaching every card on this page alike.
+  // See Dashboard.tsx's own copy of these three lines for why the concatenation has to happen once
+  // here and not inside card() below.
+  const dayAnnotations = useMemo(
+    () => dayAnnotationsFrom(overridesQuery.notes.data?.items ?? [], overridesQuery.events.data?.items ?? [], t),
+    [overridesQuery.notes.data, overridesQuery.events.data, t],
+  )
+  const dayAnnotationsByMetric = useMemo(
+    () => mergeDayAnnotations(overridesByMetricMap, dayAnnotations),
+    [overridesByMetricMap, dayAnnotations],
+  )
 
   const metricGroups = useMetricGroups(GROUPS, range)
   const lastSeries = metricGroups.queryForAgg('last')
@@ -185,7 +197,8 @@ export function Recovery() {
     const headline = mean(values(points))
     const note = baselineNote(t, headline, baselineQuery, precision, controls.to)
     const spark = sparklines.get(metric)!
-    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected } = annotationsFor(overridesByMetricMap, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>

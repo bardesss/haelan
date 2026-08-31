@@ -28,6 +28,7 @@ import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
@@ -180,6 +181,17 @@ export function Sleep() {
     () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
     [overridesQuery.overrides.data],
   )
+  // Notes and events, day level rather than metric scoped, reaching every card on this page alike.
+  // See Dashboard.tsx's own copy of these three lines for why the concatenation has to happen once
+  // here and not inside tile() below.
+  const dayAnnotations = useMemo(
+    () => dayAnnotationsFrom(overridesQuery.notes.data?.items ?? [], overridesQuery.events.data?.items ?? [], t),
+    [overridesQuery.notes.data, overridesQuery.events.data, t],
+  )
+  const dayAnnotationsByMetric = useMemo(
+    () => mergeDayAnnotations(overridesByMetricMap, dayAnnotations),
+    [overridesByMetricMap, dayAnnotations],
+  )
 
   const metricGroups = useMetricGroups(GROUPS, range)
   const sumSeries = metricGroups.queryForAgg('sum')
@@ -298,7 +310,8 @@ export function Sleep() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     const spark = sparklines.get(metric)!
-    const { excluded, corrected, annotations } = annotationsFor(overridesByMetricMap, metric)
+    const { excluded, corrected } = annotationsFor(overridesByMetricMap, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>

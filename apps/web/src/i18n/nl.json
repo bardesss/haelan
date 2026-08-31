@@ -297,7 +297,8 @@
       "noReading": "geen meting",
       "excluded": "uitgesloten",
       "correctedTo": "gecorrigeerd naar {{value}}",
-      "none": "geen"
+      "none": "geen",
+      "eventWithNote": "{{kind}}: {{note}}"
     }
   },
   "sleep": {

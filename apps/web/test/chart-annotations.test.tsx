@@ -122,6 +122,22 @@ describe('Sparkline', () => {
     expect(rows).toContain('Flight to Chicago')
   })
 
+  // Task 11b's own rule: an override reason, a note and an event can all land on one date once
+  // day level marks join the per-metric ones, and the table must not silently keep only one of
+  // them the way a find() (rather than a filter+join) would.
+  it('joins every annotation on the same date rather than showing only the first', () => {
+    const html = render(
+      <Sparkline values={values} labels={labels} label="steps" unit="steps"
+        annotations={[
+          { date: '2026-08-02', text: 'Watch left charging' },
+          { date: '2026-08-02', text: 'Flew to Tokyo' },
+        ]} excluded={[]} />,
+    )
+    const rows = table(html)
+    const day2Row = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
+    expect(day2Row).toContain('Watch left charging, Flew to Tokyo')
+  })
+
   // A corrected day was not dropped: its replacement value is the number already on screen, so
   // calling it "excluded" would tell a reader the opposite of what happened. This pins the two
   // apart, in the one channel this environment can see (chartAnnotations.ts's own doc comment has
@@ -188,6 +204,21 @@ describe('ActivityHeatmap', () => {
     )
     const rows = table(html)
     expect(rows).toContain('Three glasses of wine')
+  })
+
+  // Same rule Sparkline's own copy of this test pins: several annotations on one date must all
+  // reach the table, joined, not just the first found.
+  it('joins every annotation on the same date rather than showing only the first', () => {
+    const html = render(
+      <ActivityHeatmap days={days} max={9000} label="calendar heatmap"
+        annotations={[
+          { date: '2026-07-07', text: 'Watch left charging' },
+          { date: '2026-07-07', text: 'Flew to Tokyo' },
+        ]} excluded={[]} />,
+    )
+    const rows = table(html)
+    const day7Row = rows.slice(rows.indexOf('2026-07-07'), rows.indexOf('2026-07-08'))
+    expect(day7Row).toContain('Watch left charging, Flew to Tokyo')
   })
 
   // Same distinction Sparkline's own copy of this test pins, and the same reason: a corrected day
@@ -265,6 +296,21 @@ describe('HeartRateRange', () => {
     )
     const rows = table(html)
     expect(rows).toContain('Flight to Chicago')
+  })
+
+  // Same rule Sparkline's and ActivityHeatmap's own copies of this test pin: several annotations
+  // on one date must all reach the table, joined, not just the first found.
+  it('joins every annotation on the same date rather than showing only the first', () => {
+    const html = render(
+      <HeartRateRange days={days} excluded={[]} corrected={[]}
+        annotations={[
+          { date: '2026-08-11', text: 'Watch left charging' },
+          { date: '2026-08-11', text: 'Flew to Tokyo' },
+        ]} label="hr range" />,
+    )
+    const rows = table(html)
+    const day11Row = rows.slice(rows.indexOf('2026-08-11'), rows.indexOf('2026-08-12'))
+    expect(day11Row).toContain('Watch left charging, Flew to Tokyo')
   })
 
   // Same distinction Sparkline's and ActivityHeatmap's own copies of this test pin: a corrected

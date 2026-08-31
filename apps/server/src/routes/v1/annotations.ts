@@ -225,9 +225,16 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     // actually carries, which is what makes the wide first pass safe rather than merely broader.
     const window = { start: widenedUtcWindow(from).start, end: widenedUtcWindow(to).end }
     const candidates = app.haelan.instance.events.listFor(personId, window.start, window.end)
-    const items = candidates.filter((event) => {
+    // localDate is computed here regardless, to decide whether a candidate is in range at all, so
+    // this hands it back on the item rather than discarding it. A browser placing this event on a
+    // chart needs the same local day this filter just used, and the arithmetic that produces it
+    // (localDateOf, DST sensitive) lives only in packages/core/src/derive/localDay.ts, which has no
+    // browser safe subpath the way target-key and metrics do. Computing it a second time client side
+    // would mean duplicating that arithmetic somewhere it can drift from this one; returning the
+    // answer already sitting in scope here means it never has to.
+    const items = candidates.flatMap((event) => {
       const localDate = localDateOf(event.startedAtMs, event.startedAtOffsetMinutes)
-      return localDate >= from && localDate <= to
+      return localDate >= from && localDate <= to ? [{ ...event, localDate }] : []
     })
 
     // Not paginated, deliberately: events are entered by hand, same as overrides below, so a

@@ -297,7 +297,8 @@
       "noReading": "no reading",
       "excluded": "excluded",
       "correctedTo": "corrected to {{value}}",
-      "none": "none"
+      "none": "none",
+      "eventWithNote": "{{kind}}: {{note}}"
     }
   },
   "sleep": {

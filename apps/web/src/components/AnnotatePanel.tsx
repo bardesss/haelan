@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { dayMetricTarget } from '@haelan/core/target-key'
 import { useTranslation } from '../i18n/index.js'
 import { useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
+import { SEED_KINDS } from '../data/eventKinds.js'
 
 /**
  * What a clicked point hands the panel: a day and a metric, nothing else. The target key is
@@ -18,11 +19,6 @@ export interface AnnotateTarget {
 type Action = 'exclude' | 'correct' | 'note' | 'event'
 
 const ACTIONS: readonly Action[] = ['exclude', 'correct', 'note', 'event']
-
-// Spec section 6's seed set (packages/core/src/db/schema/annotations.ts's own comment on
-// events.kind). A closed list here would contradict the column, which is deliberately not an
-// enum: the datalist below offers these six and accepts anything the reader types past them.
-const SEED_KINDS: readonly string[] = ['illness', 'travel', 'alcohol', 'medication', 'injury', 'caffeine']
 
 /**
  * The panel a reader opens by clicking a plotted point: exclude, correct, add a note or add an
