@@ -202,3 +202,22 @@ body {
    the boxed alert already declared above under "Forms" fits this screen too. */
 .signin { display: grid; place-items: center; min-height: 100vh; padding: var(--space-6); }
 .signin .card { display: grid; gap: var(--space-3); width: min(360px, 100%); }
+
+/* The panel a reader opens by clicking a plotted point (AnnotatePanel.tsx). color-mix over
+   surface-page rather than a flat black, the same device .surface-chosen and .setup-rail's own
+   done state use, so the backdrop stays theme aware instead of hardcoding a value that only
+   suits one of the two palettes. */
+.annotate-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: color-mix(in srgb, var(--surface-page) 80%, transparent);
+  display: grid; place-items: center; padding: var(--space-4);
+}
+.annotate-panel {
+  background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  padding: var(--space-4); width: min(420px, 100%); max-height: 90vh; overflow-y: auto;
+}
+.annotate-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: 600; }
+/* The applied:false report: the write is saved, only the re-derive has not caught up, which is
+   not an error state and does not borrow form-error's negative tone. */
+.annotate-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }

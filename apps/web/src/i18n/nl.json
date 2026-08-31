@@ -472,5 +472,38 @@
       },
       "loadingProgress": "Voortgang wordt geladen"
     }
+  },
+  "annotate": {
+    "title": "{{metric}} op {{date}}",
+    "close": "Sluiten",
+    "actionLabel": "Wat wil je doen",
+    "actions": {
+      "exclude": "Uitsluiten",
+      "correct": "Corrigeren",
+      "note": "Notitie toevoegen",
+      "event": "Gebeurtenis toevoegen"
+    },
+    "reasonLabel": "Reden",
+    "reasonHint": "Verplicht.",
+    "correctedValueLabel": "Gecorrigeerde waarde",
+    "noteLabel": "Notitie",
+    "kindLabel": "Soort",
+    "startedAtLabel": "Begonnen",
+    "endedAtLabel": "Geëindigd, optioneel",
+    "eventValueLabel": "Waarde, optioneel",
+    "eventNoteLabel": "Notitie, optioneel",
+    "saving": "Bezig met opslaan",
+    "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw.",
+    "notYetApplied": "De correctie is opgeslagen. De cijfers erachter zijn nog niet bijgewerkt.",
+    "event": {
+      "kinds": {
+        "illness": "Ziekte",
+        "travel": "Reizen",
+        "alcohol": "Alcohol",
+        "medication": "Medicatie",
+        "injury": "Blessure",
+        "caffeine": "Cafeïne"
+      }
+    }
   }
 }

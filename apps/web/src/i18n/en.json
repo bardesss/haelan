@@ -472,5 +472,38 @@
       },
       "loadingProgress": "Loading progress"
     }
+  },
+  "annotate": {
+    "title": "{{metric}} on {{date}}",
+    "close": "Close",
+    "actionLabel": "What do you want to do",
+    "actions": {
+      "exclude": "Exclude",
+      "correct": "Correct",
+      "note": "Add a note",
+      "event": "Add an event"
+    },
+    "reasonLabel": "Reason",
+    "reasonHint": "Required.",
+    "correctedValueLabel": "Corrected value",
+    "noteLabel": "Note",
+    "kindLabel": "Kind",
+    "startedAtLabel": "Started",
+    "endedAtLabel": "Ended, optional",
+    "eventValueLabel": "Value, optional",
+    "eventNoteLabel": "Note, optional",
+    "saving": "Saving",
+    "saveFailed": "That did not save. Try again.",
+    "notYetApplied": "The correction is saved. The numbers behind it have not caught up yet.",
+    "event": {
+      "kinds": {
+        "illness": "Illness",
+        "travel": "Travel",
+        "alcohol": "Alcohol",
+        "medication": "Medication",
+        "injury": "Injury",
+        "caffeine": "Caffeine"
+      }
+    }
   }
 }

@@ -36,12 +36,13 @@ describe('the @haelan/core/metrics subpath', () => {
   it('is published, and points at the catalogue module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
-    // The barrel is still the only other way in besides the two named subpaths. `exports`
+    // The barrel is still the only other way in besides the three named subpaths. `exports`
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
-    // dragging argon2 along behind it. ./coverage-signal is the other browser-safe entry point;
-    // coverage-signal-subpath.test.ts carries its own guarantee, which is a different shape
-    // because coverageSignal.ts, unlike this file, is not import-free.
-    expect(Object.keys(pkg.exports).sort()).toEqual(['.', './coverage-signal', SUBPATH])
+    // dragging argon2 along behind it. ./coverage-signal and ./target-key are the other two
+    // browser-safe entry points; coverage-signal-subpath.test.ts and target-key-subpath.test.ts
+    // carry their own guarantees, both a different shape because neither module, unlike this
+    // one, is import-free.
+    expect(Object.keys(pkg.exports).sort()).toEqual(['.', './coverage-signal', SUBPATH, './target-key'])
   })
 
   it('reaches no other module, which is the whole of why it is browser safe', () => {
