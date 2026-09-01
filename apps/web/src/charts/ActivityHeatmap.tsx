@@ -65,7 +65,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
   excluded?: string[]
   onPointClick?: (localDate: string) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Memoised: an unstable build identity makes useChart dispose and recreate the chart.
   const { weeks, cells } = useMemo(() => calendarLayout(days.map((d) => d.date)), [days])
   // Also memoised, on the same grounds: a fresh array every render gave `build` a new identity
@@ -136,9 +136,15 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
             const cell = cells[index]
             if (!cell) return ''
             const steps = days[index]?.steps
+            // toLocaleString, not a bare template literal: echarts' own default rendered
+            // thousands-grouped ("11,999"), and the accessible table beside this chart already
+            // groups by the reader's own language (Activity.tsx's groupNumber, same reasoning).
+            // i18n.language is a primitive in `build`'s own deps below, not a fresh identity per
+            // render, so this carries no dispose risk beyond what `t` already causes on a language
+            // change.
             const text = steps === null || steps === undefined
               ? t(excluded.includes(cell.date) ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              : `${t('charts.columns.steps')}: ${steps}`
+              : `${t('charts.columns.steps')}: ${steps.toLocaleString(i18n.language)}`
             return `${cell.date}<br/>${text}`
           }
           return ''
@@ -201,7 +207,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
         },
       ],
     }
-  }, [cells, days, weeks, max, weekdayLabels, marks, excluded, t])
+  }, [cells, days, weeks, max, weekdayLabels, marks, excluded, t, i18n.language])
 
   const markDates = useMemo(() => marks.map((mark) => mark.date), [marks])
   const onClick = useCallback((event: ECElementEvent) => {

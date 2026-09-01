@@ -457,6 +457,42 @@ describe('ActivityHeatmap', () => {
       expect(text).toBe('2026-07-06<br/>charts.absence.excluded')
     })
 
+    // dataIndex counts into `marks`, not always 0: every other markPoint test above only ever
+    // has one mark drawn, so a lookup that silently always read marks[0] (exactly the defect this
+    // task fixed on HeartRateRange, where a mark past the first named the wrong day) would leave
+    // every one of them passing. Two marks here, read at dataIndex 1, closes that.
+    it('resolves a markPoint hover by its own dataIndex, not always the first mark drawn', () => {
+      act(() => {
+        root!.render(
+          <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={['2026-07-06']}
+            annotations={[{ date: '2026-07-08', text: 'Three glasses of wine' }]} />,
+        )
+      })
+      // marks = [excluded 2026-07-06 (dataIndex 0), annotation 2026-07-08 (dataIndex 1)].
+      const text = formatterOf()({ componentType: 'markPoint', dataIndex: 1 })
+      expect(text).toBe('2026-07-08<br/>Three glasses of wine')
+    })
+
+    // The ordinary cell branch's own excluded/no-reading distinction, the same wording rule
+    // pinned everywhere else in this file (Sparkline's and ActivityHeatmap's own table row
+    // tests): a day the reader excluded is not a day the device stayed quiet on.
+    it('names an excluded cell with no steps "excluded" on hover, not "no reading"', () => {
+      const withGap: DayRow[] = [
+        { date: '2026-07-06', steps: 4000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+        { date: '2026-07-07', steps: null, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+        { date: '2026-07-08', steps: 5000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+      ]
+      act(() => {
+        root!.render(
+          <ActivityHeatmap days={withGap} max={9000} label="calendar heatmap"
+            excluded={['2026-07-07']} annotations={[]} />,
+        )
+      })
+      const text = formatterOf()({ componentType: 'series', dataIndex: 0, value: [0, 1] })
+      expect(text).toBe('2026-07-07<br/>charts.absence.excluded')
+      expect(text).not.toContain('charts.absence.noReading')
+    })
+
     // The consequence of owning this formatter at all: the default cell tooltip echarts would
     // otherwise draw names the xAxis category ("Week 1"), not a date, and now that a formatter
     // exists for the mark cases above it has to answer for the ordinary cell too. Reads the cell
@@ -468,7 +504,12 @@ describe('ActivityHeatmap', () => {
         root!.render(<ActivityHeatmap days={days} max={9000} label="calendar heatmap" />)
       })
       const text = formatterOf()({ componentType: 'series', dataIndex: 0, value: [0, 1, 9000] })
-      expect(text).toBe('2026-07-07<br/>charts.columns.steps: 9000')
+      // toLocaleString(undefined) here, not a bare "9000": this file's own no-I18nProvider
+      // convention (see the top-of-file note) leaves i18n.language undefined, and undefined
+      // resolves to whichever locale this runtime's own ICU data defaults to, which is not
+      // necessarily en-US grouping. Building the expectation with the same call the component
+      // makes keeps this test honest about what it is pinning regardless of which machine runs it.
+      expect(text).toBe(`2026-07-07<br/>charts.columns.steps: ${(9000).toLocaleString(undefined)}`)
       expect(text).not.toContain('Week')
     })
 

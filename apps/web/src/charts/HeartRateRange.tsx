@@ -68,9 +68,10 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
         // markPoint/markLine hover reaches this formatter as a single params object rather than
         // the array an axis hover passes. Its dataIndex counts into that mark's own data array
         // (marks.atValue / marks.atDate), never into `days`: `hrTooltip(days, dataIndex)` on that
-        // number named whichever day happened to sit at that small index, not the day the mark
-        // was actually drawn on, wrong for every mark past the first. Resolving through `marks`
-        // first, the same list `build` drew the marks from, keeps the two from disagreeing.
+        // number named whichever day happened to sit at that small index, wrong for every mark
+        // not itself drawn on days[dataIndex] (the first mark included, whenever it sits on a
+        // later day). Resolving through `marks` first, the same list `build` drew the marks from,
+        // keeps the two from disagreeing.
         formatter: (params) => {
           const p = Array.isArray(params) ? params[0] : params
           if (!p) return ''
