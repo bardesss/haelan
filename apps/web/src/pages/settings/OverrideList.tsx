@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '@haelan/core/target-key'
+import { METRICS } from '@haelan/core/metrics'
 import type { Translate } from '../../format.js'
+import { formatMetricValue, formatNumber } from '../../format.js'
 import { useTranslation } from '../../i18n/index.js'
 import { useSession } from '../../auth/session.js'
 import { apiGet } from '../../api/client.js'
@@ -17,6 +19,14 @@ interface OverridesResponse { items: StoredOverride[] }
 function fetchOverrides(personId: string): Promise<OverridesResponse> {
   return apiGet<OverridesResponse>(overridesPath(personId))
 }
+
+// Only reached when a correction's target key fails to parse at all (targetInfo's own catch
+// branch below), so METRICS[metric].precision cannot be looked up for it: that row already
+// reads "Target could not be read" in its own cell, and this keeps the corrected value beside it
+// from also reading as a raw, many-decimal float. Two decimals, not zero: several of the real
+// metrics this store can correct (weight, spo2, respiratory_rate) carry a genuine decimal, and
+// this function has no way to know from here whether the value it cannot place is one of them.
+const UNREADABLE_METRIC_PRECISION = 2
 
 /**
  * Every override this person has ever written, across all three scopes. GET /overrides carries no
@@ -49,6 +59,11 @@ interface TargetInfo {
   target: string
   date: string | null
   unreadable: boolean
+  // The raw metric id, not `target`'s translated display text, so actionText below can look up
+  // METRICS[metric].precision for a correction's value. null for the session scope (no metric
+  // involved at all) and for a target key that failed to parse (the `unreadable` case): both are
+  // real "no metric to consult" states, not a parse this function forgot to attempt.
+  metric: string | null
 }
 
 /**
@@ -70,7 +85,7 @@ function targetInfo(t: Translate, language: string, item: StoredOverride): Targe
   try {
     if (item.scope === 'day_metric') {
       const { localDate, metric } = parseDayMetricTarget(item.targetKey)
-      return { target: metric, date: localDate, unreadable: false }
+      return { target: metric, date: localDate, unreadable: false, metric }
     }
     if (item.scope === 'sample') {
       const { source, metric, utcMs } = parseSampleTarget(item.targetKey)
@@ -78,6 +93,7 @@ function targetInfo(t: Translate, language: string, item: StoredOverride): Targe
         target: t('settings.overrides.target.sample', { metric, source }),
         date: new Date(utcMs).toLocaleString(language, { dateStyle: 'medium', timeStyle: 'short' }),
         unreadable: false,
+        metric,
       }
     }
     const sessionId = parseSessionTarget(item.targetKey)
@@ -86,9 +102,9 @@ function targetInfo(t: Translate, language: string, item: StoredOverride): Targe
     // there is no date to recover here even when the key parses cleanly. dateText below says
     // that plainly rather than leaving the cell blank, which would read as a fetch that silently
     // failed rather than a scope that never carried a date to begin with.
-    return { target: t('settings.overrides.target.session', { sessionId }), date: null, unreadable: false }
+    return { target: t('settings.overrides.target.session', { sessionId }), date: null, unreadable: false, metric: null }
   } catch {
-    return { target: t('settings.overrides.target.unreadable'), date: null, unreadable: true }
+    return { target: t('settings.overrides.target.unreadable'), date: null, unreadable: true, metric: null }
   }
 }
 
@@ -110,10 +126,33 @@ function dateText(t: Translate, info: TargetInfo): string {
  * own was deleted: `POST /overrides` accepts `sample` with `correct` and a value,
  * OverrideStore.validate permits exactly that combination, and `applyToSamples` rewrites the
  * reading at derivation. Nothing in this app writes one and no chart can draw one (a sample target
- * names an instant, not a day), so this list is the only place one is ever seen. */
-function actionText(t: Translate, item: StoredOverride): string {
+ * names an instant, not a day), so this list is the only place one is ever seen.
+ *
+ * `metric`, threaded in from the same parse targetInfo already did (TargetInfo.metric), is what
+ * lets this reach METRICS[metric].precision the way formatMetricValue expects. It is null exactly
+ * when targetInfo's own parse could not name a metric at all (the session scope, or a target key
+ * that failed to parse), and this cell has no metric of its own to fall back on in that case --
+ * see UNREADABLE_METRIC_PRECISION below for what it prints instead.
+ *
+ * `METRICS[metric] !== undefined`, not just `metric !== null`: formatMetricValue now throws on an
+ * unknown metric id (M3e review: a silently wrong precision on a misspelled id was worse than a
+ * loud failure, and every OTHER caller in this app hands it a compile-time literal, on a page its
+ * own test file mounts for real, so a bad literal is a red suite rather than a blank page). Note
+ * that no test pairs those literals against METRICS the way dashboard-metrics.test.ts does for
+ * Dashboard's REQUESTS; the mounting is what catches them. This cell is the one caller that cannot make
+ * that promise: `metric` is parsed off a stored override row this app did not necessarily write
+ * (OverrideList's own comment above says `POST /overrides` accepts a sample scoped correction from
+ * any caller of the HTTP API), and OverrideStore.validate only checks the target key's SHAPE, never
+ * that its metric field still names something the catalogue carries. A metric renamed or removed
+ * after the override was written, or a bad write from outside this app, must fall back to the same
+ * unreadable-precision path the null case already takes, not crash this list the way it would be
+ * right for a typo in Recovery.tsx to. */
+function actionText(t: Translate, language: string, item: StoredOverride, metric: string | null): string {
   if (item.action === 'correct' && item.correctedValue !== null) {
-    return t('settings.overrides.correctedTo', { value: item.correctedValue })
+    const value = metric !== null && METRICS[metric] !== undefined
+      ? formatMetricValue(item.correctedValue, metric, language, '')
+      : formatNumber(item.correctedValue, UNREADABLE_METRIC_PRECISION, language, '')
+    return t('settings.overrides.correctedTo', { value })
   }
   return t(`settings.overrides.action.${item.action}`)
 }
@@ -174,7 +213,7 @@ export function OverrideList() {
                   <tr key={item.id}>
                     <td>{scope}</td>
                     <td>{info.target}</td>
-                    <td>{actionText(t, item)}</td>
+                    <td>{actionText(t, i18n.language, item, info.metric)}</td>
                     <td>{item.reason}</td>
                     <td>{date}</td>
                     <td>

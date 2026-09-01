@@ -300,6 +300,10 @@
       "excluded": "uitgesloten",
       "none": "geen"
     },
+    "hrTooltip": {
+      "mean": "gemiddeld {{value}} bpm",
+      "range": "bereik {{min}} tot {{max}} bpm"
+    },
     "event": {
       "withNote": "{{kind}}: {{note}}",
       "multiDay": "{{kind}}, gestart"

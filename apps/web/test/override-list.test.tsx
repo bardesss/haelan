@@ -124,6 +124,40 @@ const SAMPLE_CORRECT: StoredOverride = {
   action: 'correct', correctedValue: 62, reason: 'watch mis-logged a spike',
 }
 
+// The precision-audit fix this file gained alongside the others: a raw, many-decimal corrected
+// value reached this visible cell exactly the way day.hrMean reached hrTooltip's, with no
+// formatting step between the store and the reader. respiratory_rate's catalogue precision is 1
+// (metrics.ts), not 0 like SAMPLE_CORRECT's heart_rate above, so this also proves the value is
+// rounded by the metric its own target key names rather than to a hardcoded precision.
+const SAMPLE_CORRECT_UNROUNDED: StoredOverride = {
+  id: 'o7', scope: 'sample',
+  targetKey: sampleTarget({ source: 'watch', metric: 'respiratory_rate', utcMs: SAMPLE_CORRECT_UTC_MS }),
+  action: 'correct', correctedValue: 14.666666666666666, reason: 'watch mis-logged a spike',
+}
+
+// A correction whose target key this build cannot parse at all: targetInfo's own catch branch
+// hands actionText a null metric, so METRICS[metric].precision cannot be read for it. Pins the
+// bounded fallback (UNREADABLE_METRIC_PRECISION in OverrideList.tsx) rather than a fifteen digit
+// float reaching this cell the way it would with no fallback at all.
+const SAMPLE_CORRECT_UNREADABLE: StoredOverride = {
+  id: 'o8', scope: 'sample',
+  targetKey: '{not valid json',
+  action: 'correct', correctedValue: 90.18407633664866, reason: 'a correction this build cannot place',
+}
+
+// A sample correction whose target key parses cleanly (unlike SAMPLE_CORRECT_UNREADABLE, whose
+// key itself is malformed JSON) but names a metric the catalogue does not carry: a renamed or
+// removed metric, or a bad write from an external POST /overrides caller that OverrideStore.validate
+// never checked the metric id of (validate only checks the target key's SHAPE, see overrides.ts's
+// own comment). formatMetricValue now throws on an unknown id (M3e review, Minor 4); this pins
+// that the list still falls back to the same bounded UNREADABLE_METRIC_PRECISION path rather than
+// an uncaught throw inside a table row's render blanking the whole list.
+const SAMPLE_CORRECT_UNKNOWN_METRIC: StoredOverride = {
+  id: 'o9', scope: 'sample',
+  targetKey: sampleTarget({ source: 'watch', metric: 'not_a_real_metric', utcMs: SAMPLE_CORRECT_UTC_MS }),
+  action: 'correct', correctedValue: 90.18407633664866, reason: 'a metric this build no longer carries',
+}
+
 const SAMPLE_UTC_MS = Date.parse('2026-08-15T10:32:00Z')
 const SAMPLE: StoredOverride = {
   id: 'o3', scope: 'sample',
@@ -184,6 +218,40 @@ describe('every scope renders a complete row', () => {
     const [, , action] = cells(row)
     expect(action).toBe('Correct to 62')
     expect(container!.textContent).not.toContain('Exclude')
+  })
+
+  // The bug this task fixed, pinned directly on this table: before formatMetricValue existed,
+  // this cell interpolated item.correctedValue raw, so a reader would have seen
+  // "Correct to 14.666666666666666" rather than a value rounded to respiratory_rate's own
+  // catalogue precision (1).
+  it('rounds a corrected value to its own metric\'s catalogue precision, not a raw float', async () => {
+    stubFetch([SAMPLE_CORRECT_UNROUNDED])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    const row = rows()[0]!
+    const [, , action] = cells(row)
+    expect(action).toBe('Correct to 14.7')
+  })
+
+  it('rounds a corrected value it cannot place to a metric to a bounded fallback, not a raw float', async () => {
+    stubFetch([SAMPLE_CORRECT_UNREADABLE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    const row = rows()[0]!
+    const [, , action] = cells(row)
+    expect(action).toBe('Correct to 90.18')
+  })
+
+  it('rounds a corrected value for a metric the catalogue no longer carries to the same bounded fallback, not a crash', async () => {
+    stubFetch([SAMPLE_CORRECT_UNKNOWN_METRIC])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    const row = rows()[0]!
+    const [, , action] = cells(row)
+    expect(action).toBe('Correct to 90.18')
   })
 
   it('shows a sample row with its source, metric and the sample instant as its date', async () => {

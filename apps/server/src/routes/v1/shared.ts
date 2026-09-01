@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, PersonQuery } from '@haelan/core'
+import { ConfigError, metricSpec, PersonQuery } from '@haelan/core'
+import type { SeriesResult } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
 /**
@@ -40,7 +41,7 @@ export function optionalPositiveInt(value: string | undefined, name: string): nu
  * Deduplicated in request order. Asking for the same metric twice is a client bug rather than a
  * request worth refusing, but carrying the duplicate through meant /export wrote every data row
  * into the CSV twice and named the file haelan-steps-steps-..., and /series counted the same rows
- * twice into its ETag, so a body byte identical to one stamped W/"1000-1" came back as W/"1000-2".
+ * twice into its ETag, so a body byte identical to one stamped W/"v1.1000-1" came back as W/"v1.1000-2".
  */
 export function metricsFrom(raw: string | string[] | undefined): string[] {
   if (raw === undefined) throw new ConfigError('metric is required')
@@ -95,4 +96,48 @@ export function sendHashed(reply: FastifyReply, request: FastifyRequest, body: u
   reply.header('etag', etag)
   if (notModified(request, etag)) return reply.code(304).send()
   return reply.send(body)
+}
+
+/**
+ * Rounds a value already expressed in a metric's own stored unit (MetricSpec.precision's own doc
+ * comment: "in the unit this spec declares") to that many decimals. Called only here, at the HTTP
+ * response boundary, and never by anything that writes a row: `daily` and `samples` keep full
+ * precision regardless, the same as before this function existed, because moving a rounding step
+ * into derivation would move DERIVATION_VERSION and force every person's history to rebuild for a
+ * change that is about how a number is shown, not what it is.
+ *
+ * An unknown metric has no declared precision to round to, and passes its value through unchanged
+ * rather than falling back to a guessed decimal count, which would silently truncate a reading
+ * nobody declared a precision for. Every /series, /export, /trend, /insights and /intraday caller
+ * here has already had its metric checked by `requireMetricAndAgg` or `requireMetric` inside
+ * PersonQuery, so for those this branch is a safety net rather than a path a real request takes.
+ * annotations.ts's /overrides caller is the one exception: its metric comes from
+ * `parseSampleTarget` on a stored `target_key`, which never touches PersonQuery, and neither that
+ * parser nor OverrideStore.validate checks it against METRICS. A `POST /overrides` naming a
+ * metric the catalogue has never heard of writes successfully and reaches this branch on the very
+ * next `GET /overrides`, which is why it is tested directly (v1-precision.test.ts).
+ */
+export function roundMetricValue(metric: string, value: number): number {
+  const precision = metricSpec(metric)?.precision
+  return precision === undefined ? value : Number(value.toFixed(precision))
+}
+
+export function roundMetricValueOrNull(metric: string, value: number | null): number | null {
+  return value === null ? null : roundMetricValue(metric, value)
+}
+
+/**
+ * Rounds every point's value in a SeriesResult to its own metric's catalogue precision. Shared by
+ * /series and /export, which serialise the same shape, so the two cannot drift into rounding the
+ * same figure two different ways (v1-export.test.ts holds them to an identical body already).
+ *
+ * Applied after thinning, never before: thin() inside PersonQuery.series picks which points
+ * survive by their real, unrounded shape (downsample.ts's lttb reads point.value directly), so
+ * which points a caller sees must not depend on how many decimals they are eventually shown with.
+ */
+export function roundSeriesResult(metric: string, result: SeriesResult): SeriesResult {
+  return {
+    ...result,
+    points: result.points.map((point) => ({ ...point, value: roundMetricValue(metric, point.value) })),
+  }
 }

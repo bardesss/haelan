@@ -7,6 +7,7 @@ import type { ChartTokens } from './tokens.js'
 import { hrTooltip } from './hrTooltip.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
+import { formatMetricValue } from '../format.js'
 import type { DayRow } from '../fixtures/july.js'
 
 type Props = {
@@ -46,7 +47,7 @@ export function heartRateRangePointDate(
 }
 
 export function HeartRateRange({ days, baseline, annotations, excluded, label, onPointClick }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // Memoised, and read by both `build` and `onClick`, for the reason DayMarks' own doc comment
   // gives: the echarts entries and the click lookup have to come off the one list or they can
@@ -83,7 +84,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             const mark = marks.atDate[p.dataIndex]
             return mark ? `${mark.date}<br/>${mark.text}` : ''
           }
-          return hrTooltip(days, p.dataIndex)
+          return hrTooltip(days, p.dataIndex, t, i18n.language)
         },
       },
       xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },
@@ -137,7 +138,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
               ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
       ],
     }
-  }, [days, baseline, marks, t])
+  }, [days, baseline, marks, t, i18n.language])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = heartRateRangePointDate(days, marks, event)
@@ -159,7 +160,9 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
             return [
               d.date,
-              d.hrMin ?? absent, d.hrMean ?? absent, d.hrMax ?? absent,
+              formatMetricValue(d.hrMin, 'heart_rate', i18n.language, absent),
+              formatMetricValue(d.hrMean, 'heart_rate', i18n.language, absent),
+              formatMetricValue(d.hrMax, 'heart_rate', i18n.language, absent),
               [!d.worn ? t('charts.absence.notWorn') : '', isExcluded ? t('charts.absence.excluded') : '',
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a

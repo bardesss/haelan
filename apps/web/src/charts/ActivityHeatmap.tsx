@@ -6,6 +6,7 @@ import { scaleStops, type ChartTokens } from './tokens.js'
 import { calendarLayout, type CalendarCell } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
+import { formatMetricValue } from '../format.js'
 import type { DayRow } from '../fixtures/july.js'
 
 // Order matches calendar.ts's weekdayIndex (Monday first); the catalogue keys underneath are
@@ -136,15 +137,21 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
             const cell = cells[index]
             if (!cell) return ''
             const steps = days[index]?.steps
-            // toLocaleString, not a bare template literal: echarts' own default rendered
-            // thousands-grouped ("11,999"), and the accessible table beside this chart already
-            // groups by the reader's own language (Activity.tsx's groupNumber, same reasoning).
-            // i18n.language is a primitive in `build`'s own deps below, not a fresh identity per
-            // render, so this carries no dispose risk beyond what `t` already causes on a language
-            // change.
+            // formatMetricValue, not a bare template literal or a standalone toLocaleString call:
+            // echarts' own default rendered thousands-grouped ("11,999") and a bare template
+            // literal would have lost that, so grouping was always needed here. It used to come
+            // from a direct `steps.toLocaleString(i18n.language)` call, on the stated belief that
+            // the accessible table beside this chart already grouped by the same reasoning; an
+            // M3e review found that belief false on both counts (the table read a bare, ungrouped
+            // `days[i]?.steps`, and the `groupNumber` this comment credited had already been
+            // deleted from Activity.tsx by that point). Routing both this tooltip and the table
+            // row below through the one call closes the gap structurally, not by keeping two
+            // independent implementations in agreement by habit. i18n.language is a primitive in
+            // `build`'s own deps below, not a fresh identity per render, so this carries no dispose
+            // risk beyond what `t` already causes on a language change.
             const text = steps === null || steps === undefined
               ? t(excluded.includes(cell.date) ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              : `${t('charts.columns.steps')}: ${steps.toLocaleString(i18n.language)}`
+              : `${t('charts.columns.steps')}: ${formatMetricValue(steps, 'steps', i18n.language, '')}`
             return `${cell.date}<br/>${text}`
           }
           return ''
@@ -228,8 +235,16 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
           const isExcluded = excluded.includes(c.date)
           // "excluded", not "no reading", for a day the reader threw out: see Sparkline's own copy
           // of this comment for the rule.
+          const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
+          // formatMetricValue, not a raw `days[i]?.steps`: this cell used to hand React a bare
+          // number, which rendered ungrouped ("11999") beside a tooltip on the same chart, same
+          // day, that already grouped ("11,999") -- a sighted reader hovering the canvas and a
+          // screen reader landing on this row got two different strings for one fact. Precision
+          // was never wrong here (steps is an integer, catalogue precision 0), only the grouping
+          // channel disagreed with itself, which is what routing both through the one call above
+          // closes.
           return [c.date, weekdayLabels[c.weekday] ?? '',
-            days[i]?.steps ?? t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading'),
+            formatMetricValue(days[i]?.steps ?? null, 'steps', i18n.language, absent),
             [isExcluded ? t('charts.absence.excluded') : '',
               // filter, not find: several annotations (an override reason, a note, an event) can
               // land on the same date now that day level marks join the per-metric ones, and a

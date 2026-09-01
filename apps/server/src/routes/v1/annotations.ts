@@ -2,9 +2,10 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import {
   ConfigError, localDateOf, peopleNeedingRebuild, requireDate, runDerive, widenedUtcWindow,
 } from '@haelan/core'
-import type { OverrideScope } from '@haelan/core'
+import type { OverrideScope, StoredOverride } from '@haelan/core'
+import { parseSampleTarget } from '@haelan/core/target-key'
 import { errorBody, statusFor } from '../../api/envelope.ts'
-import { requireString, sendHashed } from './shared.ts'
+import { requireString, roundMetricValue, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 interface OverrideParams extends PersonParams { overrideId: string }
@@ -251,9 +252,31 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     // management list this feeds wants every correction for the person regardless, so this
     // returns all of them, not paginated for the same reason as above: overrides are entered by
     // hand and are fewer than notes.
-    const items = app.haelan.instance.overrides.listFor(personId)
+    const items = app.haelan.instance.overrides.listFor(personId).map(roundCorrectedValue)
     return sendHashed(reply, request, { items })
   })
+}
+
+/**
+ * A correcting override's correctedValue is a raw reading in its own target's unit, the same
+ * figure /series rounds at its own boundary; a reader of this list deserves the same treatment,
+ * not the 90.18407633664866 the bug report started from with a scope this route can name instead.
+ *
+ * Only a sample scope override can carry one at all: validate() above refuses `correct` at any
+ * other scope, so metric-agnostic scopes (session, day_metric exclusions) never reach the try
+ * block below. A sample target always names its metric too (parseSampleTarget throws if it does
+ * not), so this never has to guess a precision the way a display with no server-side parse would.
+ * The catch exists only for a row a rule written after this one predates, which must not turn a
+ * list of someone's own corrections into a 500 over one unreadable row.
+ */
+function roundCorrectedValue(item: StoredOverride): StoredOverride {
+  if (item.correctedValue === null || item.scope !== 'sample') return item
+  try {
+    const { metric } = parseSampleTarget(item.targetKey)
+    return { ...item, correctedValue: roundMetricValue(metric, item.correctedValue) }
+  } catch {
+    return item
+  }
 }
 
 /**

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
 import {
-  optionalPositiveInt, personQueryOf, requireBoundedRange, requireString, sendHashed,
+  optionalPositiveInt, personQueryOf, requireBoundedRange, requireString, roundMetricValueOrNull, sendHashed,
 } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -95,7 +95,19 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const source = request.query.source
 
     const result: IntradayResult = personQuery.intraday({ metric, localDate: date, points, sourceId: source })
-    return sendHashed(reply, request, result)
+    // Rounded here, at the boundary, not inside readIntraday: min/mean/max are stored and thinned
+    // at full precision (thinBand picks its band edges from the real values), so only the reply
+    // decides how many decimals a reader of this one metric's chart ends up seeing.
+    const rounded: IntradayResult = {
+      ...result,
+      points: result.points.map((point) => ({
+        ...point,
+        min: roundMetricValueOrNull(metric, point.min),
+        mean: roundMetricValueOrNull(metric, point.mean),
+        max: roundMetricValueOrNull(metric, point.max),
+      })),
+    }
+    return sendHashed(reply, request, rounded)
   })
 
   app.get<{ Params: PersonParams, Querystring: NightsQuery }>('/p/:personId/sleep/nights', async (request, reply) => {

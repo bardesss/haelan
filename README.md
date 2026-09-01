@@ -97,7 +97,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M3b-2** HTTP surface | Bearer auth alongside the cookie, the response envelope, `requirePerson`, daily backed and tier 2 reads with weak ETags, `/changes`, CSV and JSON export, the person isolation suite | Done, [#67](https://github.com/bardesss/haelan/pull/67) |
 | **M3d-1** Page spine and Dashboard | The shared control row and its URL backed state, the data hooks the pages read through, and the Dashboard converted off fixtures as their first consumer | Done, [#68](https://github.com/bardesss/haelan/pull/68) |
 | **M3d-2** Activity, Sleep and Recovery | The three remaining M3d pages, off the same control row and data hooks M3d-1 built | Done, [#71](https://github.com/bardesss/haelan/pull/71) |
-| **M3c** Annotations and corrections | Store CRUD, write routes with transactional re-derive enqueueing, the chart-click panel, excluded rendering, the management list, note and event entry, chart annotations | In review |
+| **M3c** Annotations and corrections | Store CRUD, write routes with transactional re-derive enqueueing, the chart-click panel, excluded rendering, the management list, note and event entry, chart annotations | Done, [#76](https://github.com/bardesss/haelan/pull/76) |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish, the person switcher and member management | Not started |
 
@@ -117,6 +117,13 @@ M5 are the only phases the design defines. M1 comes before the dashboard deliber
 life, since the API only retains them for a recent window, so every week without ingestion is a
 week of minute-level history permanently unavailable at that resolution. Charts can be improved
 retroactively; resolution cannot be recovered.
+
+**M5 comes before M4**, also out of letter order, and for two reasons rather than convenience.
+M4's `sql_query` is the widest read surface this project will have, and person isolation is so far
+proven against a database holding one person: M5 brings the person switcher and member management,
+which is where a second person first exists to prove it against. And M5 carries backup and the
+upgrade path while `DERIVATION_VERSION` and `MAPPING_VERSION` still move often enough to force
+rebuilds. M4 adds a surface; M5 retires a risk that is already live.
 
 **Every milestone pull request updates this table**, in the same pull request rather than
 afterwards. Everything else leaves it alone: a dependency bump or a documentation fix has no row

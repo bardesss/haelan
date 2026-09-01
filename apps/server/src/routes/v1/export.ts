@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { SeriesResult } from '@haelan/core'
-import { metricsFrom, personQueryOf, requireString, sendHashed } from './shared.ts'
+import { metricsFrom, personQueryOf, requireString, roundSeriesResult, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -39,6 +39,22 @@ function csvRow(fields: readonly string[]): string {
 function orEmpty(value: string | number | null): string {
   return value === null ? '' : String(value)
 }
+
+/**
+ * coverage is left at full precision, the same as /series, on purpose: a reviewer's own check
+ * found the raw double is not a display artefact the way an unrounded metric value is. It has a
+ * real arithmetic property a rounded one loses -- 23/24 * 24 is exactly 23, while
+ * Number((23/24).toFixed(3)) * 24 is 22.991999999999997 -- and a spreadsheet reader recovering
+ * observed hours with a formula over this column gets the right answer only from the raw one.
+ * coverage is also a computed signal elsewhere in this codebase, not only a display number:
+ * apps/web/src/data/emptyState.ts compares point.coverage against a 1/24 threshold to decide
+ * "not worn", and three decimal places moves a single covered hour (1/24 = 0.041666...) to 0.042,
+ * which is greater than the threshold and flips the answer at exactly the boundary that
+ * comparison exists to catch. Rounding here would not reach that comparison today (it reads
+ * /series, never this route's csv), but leaving a rounding constant in the tree invites exactly
+ * that generalisation later. See toCsv below: this column is written with the same orEmpty(...)
+ * every other unrounded field on this route uses.
+ */
 
 /** One row per point, points in the range's own order, metrics grouped in the order they were
  *  requested. Metric and agg are stamped onto every row rather than read off DailyPoint, since
@@ -104,7 +120,10 @@ export function registerExportRoutes(app: FastifyInstance): void {
 
     const body: Record<string, SeriesResult> = {}
     for (const metric of metrics) {
-      body[metric] = personQuery.series({ metric, agg, from, to, source })
+      // Rounded the same way /series rounds its own points, and through the same helper, so a
+      // file kept from this route and a read from /series can never disagree about the same day:
+      // a kept export is read by a person too, and a raw many-decimal float belongs in neither.
+      body[metric] = roundSeriesResult(metric, personQuery.series({ metric, agg, from, to, source }))
     }
 
     // Ruling R17: several metrics join in request order with a hyphen, one file, distinguished

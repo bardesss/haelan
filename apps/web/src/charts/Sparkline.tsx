@@ -6,6 +6,7 @@ import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
+import { formatMetricValue } from '../format.js'
 
 /**
  * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
@@ -36,7 +37,9 @@ export function sparklinePointDate(
 const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
-export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
+export function Sparkline({
+  values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick,
+}: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
   // comment says why a points array straight off /series is not enough. A day with no position on
@@ -46,7 +49,35 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   values: (number | null)[]
   labels: string[]
   label: string
+  // The accessible table's second column header (already-translated display text, e.g. "steps"),
+  // not a unit code: kept separate from `metric` below because a header string and a catalogue
+  // lookup key answer two different questions and every caller already had the former on hand.
   unit: string
+  // Every value in `values` is presumed to already be in METRICS[metric]'s own stored unit (see
+  // formatMetricValue's doc comment in format.ts): the CHART never converts, since its y axis is
+  // hidden (`show: false` below) and a linear rescale draws an identical shape regardless of unit.
+  // The accessible TABLE is a different question, answered by `formatValue` below: this `metric`
+  // prop alone drives the table's default formatting (`formatMetricValue(v, metric, ...)`), which
+  // is right for every caller except one whose displayed unit differs from the stored one.
+  //
+  // Activity.tsx's own distance card used to be cited right here as proof no caller ever needed
+  // that: an M3e review caught that it was not proof of correctness but the defect itself. Its
+  // Sparkline plots the same per-day millimeter values as every other metric (harmless, per the
+  // paragraph above), but its accessible table cell read those same raw millimeters
+  // ("5,234,567") beside a column header translated as "Distance in kilometers" -- a sighted
+  // reader saw a hand-converted "5.2 km" headline while a screen reader was handed a number seven
+  // digits longer, under a header naming a unit that number was never in. `formatValue` below
+  // exists so that one caller can override the table cell's own formatter without asking this
+  // prop itself to claim a unit conversion the catalogue cannot answer for it.
+  metric: string
+  // Overrides the accessible table's own value-cell formatter (default: `formatMetricValue(v,
+  // metric, language, absent)`), for the one shape formatMetricValue can never be handed safely:
+  // a value already converted out of METRICS[metric]'s stored unit (format.ts's own comment on
+  // formatNumber explains why formatMetricValue has no parameter for this). `values` above stay in
+  // the stored unit regardless (the chart's own y axis is hidden, so nothing there needs a
+  // conversion); this formatter runs per row against the same raw values, so it takes and converts
+  // one value itself rather than being handed an already-converted array.
+  formatValue?: (value: number | null, absent: string) => string
   // Optional and, when present, never thin: the same rule HeartRateRange's own `baseline` prop
   // documents. A band this project cannot stand behind reads as more authoritative than one built
   // from thirty real days, not less, so the caller (Recovery.tsx) only ever hands this over once
@@ -62,7 +93,7 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   excluded?: string[]
   onPointClick?: (localDate: string) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // Memoised, and read by both `build` and `onClick`: `build` maps over these arrays to produce the
   // echarts entries, and a click on one of those entries indexes straight back into them, so the
@@ -118,7 +149,9 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
             // "excluded", not "no reading", for a day the reader threw out: there was a reading,
             // and the day is blank because of something they did rather than because the device
             // never reported. "no reading" is the honest cell only for the second of those.
-            return [date, v ?? t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading'),
+            const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
+            const cell = formatValue ? formatValue(v, absent) : formatMetricValue(v, metric, i18n.language, absent)
+            return [date, cell,
               [isExcluded ? t('charts.absence.excluded') : '',
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a

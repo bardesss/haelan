@@ -18,6 +18,9 @@ const SHARED_HELPERS = [
   'metricsFrom',
   'requireBoundedRange',
   'sendHashed',
+  'roundMetricValue',
+  'roundMetricValueOrNull',
+  'roundSeriesResult',
 ] as const
 
 function filesDeclaring(name: string): string[] {

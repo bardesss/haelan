@@ -26,7 +26,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor } from '../format.js'
+import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
 // taken on faith from the brief that named them: steps, distance, floors, total_calories and the
@@ -89,10 +89,6 @@ export function Activity() {
   const session = useSession()
   const controls = usePageControls()
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
-
-  // The active language, not a pinned locale: grouped thousands should read the way the reader's
-  // own language groups them, the same reasoning Dashboard.tsx's groupNumber already states.
-  const groupNumber = (value: number) => value.toLocaleString(i18n.language)
 
   // Pinned to the all sources sentinel for the same reason as every sibling page: a per source
   // rollup carries no sourceMix (only a merged row does), so reading the selector's own options off
@@ -198,7 +194,8 @@ export function Activity() {
     if (stepsPoints.length === 0) return t('activity.dailySteps.basisNoData', { total: rangeDates.length })
     const answers = stepsPoints.map((point) => wornOn('steps', point))
     const stated = {
-      reported: stepsPoints.length, total: rangeDates.length, maxSteps: groupNumber(maxSteps),
+      reported: stepsPoints.length, total: rangeDates.length,
+      maxSteps: formatMetricValue(maxSteps, 'steps', i18n.language, ''),
     }
     return coverageIsWearSignal('steps')
       ? t('activity.dailySteps.basisWorn', { ...stated, count: answers.filter((w) => w === false).length })
@@ -218,8 +215,24 @@ export function Activity() {
   // Dashboard.tsx's sleep schedule card already does for the same reason.
   const card = (
     metric: string, span: number, labelKey: string, basisKey: string, basisWornKey: string,
-    chartLabelKey: string, unitKey: string, shortUnitKey: string | undefined,
-    format: (total: number) => string, polarity: Polarity,
+    chartLabelKey: string, unitKey: string, shortUnitKey: string | undefined, polarity: Polarity,
+    // Defaults to the catalogue's own precision for `metric`, read through formatMetricValue, so
+    // an ordinary TOTAL card (steps, floors, workouts, ...) needs no format argument of its own
+    // and cannot drift from METRICS[metric].precision the way this page's old per-card groupNumber
+    // calls could. Only distance overrides this: it converts millimeters to kilometers before
+    // display, and formatMetricValue must never see a value already converted out of the
+    // catalogue's stored unit (format.ts's own comment on formatNumber says why), so that one call
+    // site hands in its own formatter instead of taking the default.
+    format: (total: number) => string = (total) => formatMetricValue(total, metric, i18n.language, ''),
+    // The Sparkline's own accessible table cell, separately from `format` above: `format` runs once
+    // on the period's own total, `sparkFormat` runs once per day on `spark.values`, which stay in
+    // the metric's stored unit regardless of what `format` displays (Sparkline's own `metric` prop
+    // comment explains why the chart itself never converts). Undefined for every card but distance,
+    // which otherwise repeats the exact defect an M3e review caught: a table cell reading raw
+    // millimeters beside a "Distance in kilometers" column header, while the headline above it
+    // already converted. Sparkline falls back to formatMetricValue(v, metric, ...) when this is
+    // omitted, the same default `format` above takes.
+    sparkFormat?: (value: number | null, absent: string) => string,
   ) => {
     const points = metricGroups.pointsOf(metric)
     const total = sum(values(points))
@@ -232,7 +245,7 @@ export function Activity() {
         {(basis) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels}
+            <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
               annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
@@ -257,41 +270,46 @@ export function Activity() {
         </Card>
 
         {card('distance', 4, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
-          'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km',
-          (total) => (total / 1_000_000).toFixed(1), 'higher-is-better')}
+          'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km', 'higher-is-better',
+          // distance is stored in millimeters (METRICS.distance, precision 0); this card displays
+          // the period's total as kilometers with one decimal, a precision the catalogue's own
+          // field describes a different unit than, so it cannot answer this card's question (the
+          // audit's own finding #9). Converted here and handed to formatNumber directly with its
+          // own precision, never to formatMetricValue, which would apply millimeters' precision 0
+          // to a kilometers value and print "5" instead of "5.2" (see formatNumber's own comment
+          // in format.ts for why formatMetricValue has no parameter that could do this by accident).
+          (total) => formatNumber(total / 1_000_000, 1, i18n.language, ''),
+          // The Sparkline's own accessible table cell, same conversion applied per day rather than
+          // to the period total: without this, the table sat behind formatMetricValue's default
+          // (metric 'distance', catalogue precision 0, millimeters) and printed the raw per-day
+          // millimeter reading ("5,234,567") under a column header reading "Distance in
+          // kilometers" -- correct for precision, wrong for unit, and exactly what an M3e review
+          // caught. `v === null` first: a day with no reading stays a day with no reading, not
+          // `null / 1_000_000` becoming 0 and reading as a real zero-kilometer day.
+          (v, absent) => formatNumber(v === null ? null : v / 1_000_000, 1, i18n.language, absent))}
         {card('floors', 4, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
-          'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort', 'higher-is-better')}
         {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',
-          'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
 
         {card('active_minutes_light', 4, 'activity.activeMinutesLight.label', 'activity.activeMinutesLight.basis', 'activity.activeMinutesLight.basis',
-          'activity.activeMinutesLight.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.activeMinutesLight.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_minutes_moderate', 4, 'activity.activeMinutesModerate.label', 'activity.activeMinutesModerate.basis', 'activity.activeMinutesModerate.basis',
-          'activity.activeMinutesModerate.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.activeMinutesModerate.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
-          'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
 
         {card('active_zone_minutes_fat_burn', 4, 'activity.activeZoneMinutesFatBurn.label', 'activity.activeZoneMinutesFatBurn.basis', 'activity.activeZoneMinutesFatBurn.basis',
-          'activity.activeZoneMinutesFatBurn.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.activeZoneMinutesFatBurn.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_zone_minutes_cardio', 4, 'activity.activeZoneMinutesCardio.label', 'activity.activeZoneMinutesCardio.basis', 'activity.activeZoneMinutesCardio.basis',
-          'activity.activeZoneMinutesCardio.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.activeZoneMinutesCardio.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_zone_minutes_peak', 4, 'activity.activeZoneMinutesPeak.label', 'activity.activeZoneMinutesPeak.basis', 'activity.activeZoneMinutesPeak.basis',
-          'activity.activeZoneMinutesPeak.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'higher-is-better')}
+          'activity.activeZoneMinutesPeak.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
 
         {card('workout_count', 4, 'activity.workoutCount.label', 'activity.workoutCount.basis', 'activity.workoutCount.basis',
-          'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort',
-          (total) => groupNumber(total), 'neutral')}
+          'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort', 'neutral')}
         {card('workout_minutes', 4, 'activity.workoutMinutes.label', 'activity.workoutMinutes.basis', 'activity.workoutMinutes.basis',
-          'activity.workoutMinutes.chartLabel', 'activity.units.minutes', 'activity.units.min',
-          (total) => groupNumber(total), 'neutral')}
+          'activity.workoutMinutes.chartLabel', 'activity.units.minutes', 'activity.units.min', 'neutral')}
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
