@@ -215,8 +215,8 @@ describe('conditional requests on the daily backed routes', () => {
   })
 
   // A repeated metric produces a body byte identical to the single metric one, so it has to
-  // produce the same validator: counting the same rows twice stamped it W/"1000-2" against the
-  // other's W/"1000-1", and a client comparing the two would refetch a body it already had.
+  // produce the same validator: counting the same rows twice stamped it W/"v1.1000-2" against the
+  // other's W/"v1.1000-1", and a client comparing the two would refetch a body it already had.
   it('gives a repeated metric the same /series ETag as asking for it once', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', value: 900, updatedAtMs: 1000 })

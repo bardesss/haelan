@@ -41,7 +41,7 @@ export function optionalPositiveInt(value: string | undefined, name: string): nu
  * Deduplicated in request order. Asking for the same metric twice is a client bug rather than a
  * request worth refusing, but carrying the duplicate through meant /export wrote every data row
  * into the CSV twice and named the file haelan-steps-steps-..., and /series counted the same rows
- * twice into its ETag, so a body byte identical to one stamped W/"1000-1" came back as W/"1000-2".
+ * twice into its ETag, so a body byte identical to one stamped W/"v1.1000-1" came back as W/"v1.1000-2".
  */
 export function metricsFrom(raw: string | string[] | undefined): string[] {
   if (raw === undefined) throw new ConfigError('metric is required')

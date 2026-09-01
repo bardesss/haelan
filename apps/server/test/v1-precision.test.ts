@@ -159,28 +159,22 @@ describe('GET /export rounds the same way /series does', () => {
     expect(json.json().heart_rate.points[0].value).toBe(90)
   })
 
-  // 23 of 24 hours observed, coverageOf's own k/24 scale (packages/core/src/derive/coverage.ts):
-  // stored as the binary artefact 0.9583333333333334, which a spreadsheet would otherwise show
-  // verbatim next to no unit column to anchor it, the same complaint the value column had.
-  it('rounds the coverage column in the csv to a fixed, disclosed precision, not a catalogue one', async () => {
+  // coverage is deliberately left raw in both formats (see export.ts's own comment on toCsv for
+  // why: it has a real arithmetic property, value/24 recovering the exact observed-hours count,
+  // that rounding destroys, and it feeds a real threshold comparison elsewhere in this codebase
+  // that a rounded value could tip). 23 of 24 hours observed, coverageOf's own k/24 scale
+  // (packages/core/src/derive/coverage.ts), is not a catalogue metric and gets no rounding at all
+  // here, in either format, so csv and json cannot disagree about it the way they must not
+  // disagree about `value` either.
+  it('leaves coverage at full, un-rounded precision in both the csv and the json export', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', agg: 'sum', value: 900, coverage: 23 / 24 })
 
-    const response = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
-    const [, first] = response.body.trim().split('\n')
-    expect(first).toBe('2026-08-01,steps,sum,merged,900,0.958,')
-  })
-
-  // The json export deliberately does NOT round coverage, unlike the csv: it still answers the
-  // exact body /series does (the pre-existing "answers json as the same shape the read route
-  // returns" test elsewhere in this suite holds the two to byte-for-byte equality), and coverage
-  // was never one of the numbers the precision audit found a reader looking at.
-  it('leaves coverage at full precision in the json export, unlike the csv', async () => {
-    harness = await withServer(); const token = await harness.signIn()
-    seedDaily(harness, { localDate: '2026-08-01', metric: 'steps', agg: 'sum', value: 900, coverage: 23 / 24 })
-
-    const response = await get(harness, token, '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
-    expect(response.json().steps.points[0].coverage).toBe(23 / 24)
+    const csv = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
+    const json = await get(harness, token, '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
+    const [, first] = csv.body.trim().split('\n')
+    expect(first).toBe('2026-08-01,steps,sum,merged,900,0.9583333333333334,')
+    expect(json.json().steps.points[0].coverage).toBe(23 / 24)
   })
 })
 
