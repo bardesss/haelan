@@ -40,6 +40,27 @@ function orEmpty(value: string | number | null): string {
   return value === null ? '' : String(value)
 }
 
+/**
+ * coverage is always k/24 for an integer k in [0, 24] (coverageOf, packages/core/src/derive/
+ * coverage.ts, counts distinct observed hours out of a day), which makes the sixteen digit float
+ * a spreadsheet sees today (23 hours observed writes as 0.9583333333333334) a binary
+ * representation artefact of a twenty five value scale, not real precision: those 25 values are
+ * already 1/24 (~0.0417) apart, so three decimal places distinguishes every one of them with room
+ * to spare. Not a catalogue precision: coverage names no metric, and METRICS has nothing to say
+ * about it, so this is a fixed constant chosen for what this column actually holds rather than a
+ * guessed precision for someone's health data (that distinction is the whole reason
+ * roundMetricValue in shared.ts refuses to invent one). Applied to the csv only, not the json
+ * export: the json export deliberately still answers the exact body /series does
+ * (v1-export.test.ts's "answers json as the same shape the read route returns" holds the two to
+ * byte-for-byte equality), and unlike `value`, coverage was never one of the numbers the
+ * precision audit found a reader actually looking at.
+ */
+const COVERAGE_PRECISION = 3
+
+function roundCoverage(value: number | null): number | null {
+  return value === null ? null : Number(value.toFixed(COVERAGE_PRECISION))
+}
+
 /** One row per point, points in the range's own order, metrics grouped in the order they were
  *  requested. Metric and agg are stamped onto every row rather than read off DailyPoint, since
  *  a plain series() answer carries neither: it is this route that is asking about several
@@ -50,7 +71,7 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
     for (const point of byMetric[metric]!.points) {
       lines.push(csvRow([
         point.localDate, metric, agg, point.source,
-        orEmpty(point.value), orEmpty(point.coverage), orEmpty(point.sourceMix),
+        orEmpty(point.value), orEmpty(roundCoverage(point.coverage)), orEmpty(point.sourceMix),
       ]))
     }
   }

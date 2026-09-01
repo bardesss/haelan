@@ -108,9 +108,14 @@ export function sendHashed(reply: FastifyReply, request: FastifyRequest, body: u
  *
  * An unknown metric has no declared precision to round to, and passes its value through unchanged
  * rather than falling back to a guessed decimal count, which would silently truncate a reading
- * nobody declared a precision for. In practice every caller here has already had its metric
- * checked by `requireMetricAndAgg` or `requireMetric` inside PersonQuery, so this branch is a
- * safety net rather than a path a real request takes.
+ * nobody declared a precision for. Every /series, /export, /trend, /insights and /intraday caller
+ * here has already had its metric checked by `requireMetricAndAgg` or `requireMetric` inside
+ * PersonQuery, so for those this branch is a safety net rather than a path a real request takes.
+ * annotations.ts's /overrides caller is the one exception: its metric comes from
+ * `parseSampleTarget` on a stored `target_key`, which never touches PersonQuery, and neither that
+ * parser nor OverrideStore.validate checks it against METRICS. A `POST /overrides` naming a
+ * metric the catalogue has never heard of writes successfully and reaches this branch on the very
+ * next `GET /overrides`, which is why it is tested directly (v1-precision.test.ts).
  */
 export function roundMetricValue(metric: string, value: number): number {
   const precision = metricSpec(metric)?.precision

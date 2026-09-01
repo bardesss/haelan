@@ -122,17 +122,20 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const windowDays = optionalPositiveInt(request.query.windowDays, 'windowDays') ?? BASELINE_WINDOW_DAYS
     const source = request.query.source
     // Deliberately not rounded, unlike every other body in this file. center and spread are not
-    // themselves a number a reader ever sees: Recovery.tsx and Sleep.tsx both compute
-    // `low = center - spread` and `high = center + spread` from these exact fields before their
-    // own formatMetricValue call rounds the result to this same metric's precision (see either
-    // file's baselineNote/bandFrom, and formatMetricValue's own comment on why that arithmetic
-    // needs the metric's raw, un-rounded values to begin with). Rounding center and spread here
-    // independently would make that subtraction the difference of two already-rounded numbers
-    // rather than of the real ones, which can move the displayed band edge by a whole unit of
-    // precision from what the same arithmetic gives today on the raw values. Every number that
-    // does reach a reader from this response still passes through that client-side formatter
-    // regardless of what this sends, so rounding here would buy no reader anything and risks
-    // making the one thing this endpoint feeds, the baseline band, wrong.
+    // themselves a number a reader ever sees: three separate call sites compute
+    // `low = center - spread` and `high = center + spread` from these exact raw fields first --
+    // Recovery.tsx's baselineNote and bandFrom, Sleep.tsx's own baselineNote (which formats the
+    // result through formatDuration, not formatMetricValue: this is a minutes scale, not every
+    // caller's the same formatter), and Dashboard.tsx's heartRateBand -- and only then format
+    // whatever low/high came out of that arithmetic. Rounding center and spread here first would
+    // make that subtraction the difference of two already-rounded numbers rather than of the real
+    // ones, which can move the displayed band edge by a whole unit of precision from what the
+    // same arithmetic gives today on the raw values: a reviewed example, center 60.4 and spread
+    // 0.5, gives a true low of 59.9 (rounds to 60) against 60 - 1 = 59 from rounded operands, a
+    // full unit off. Every number that does reach a reader from this response is still formatted
+    // client side, through whichever of the formatters above its own page uses, regardless of
+    // what this sends, so rounding here would buy no reader anything and risks making the one
+    // thing this endpoint feeds, the baseline band, wrong.
     const baseline = personQuery.baseline({ metric, agg, on, windowDays, source })
 
     // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own

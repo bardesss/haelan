@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { DERIVATION_VERSION, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
-import { stampEtag, hashEtag, notModified } from '../src/api/etag.ts'
+import { stampEtag, hashEtag, notModified, SERIALIZATION_VERSION } from '../src/api/etag.ts'
 
 // stampEtag takes one pair per window an answer drew on. Most of the assertions below are about
 // a single window, so they say so once here rather than building the array eight times.
@@ -30,11 +30,25 @@ it('does not let one window\'s lost row cancel another window\'s gained one', ()
     .not.toBe(stampEtag([{ newestMs: 1000, rows: 1 }, { newestMs: 1000, rows: 2 }]))
 })
 
-// Every route that reads one window still emits exactly what it emitted before, so the change
-// above is not a cache invalidation for /baselines and /trend clients as well.
-it('renders a single window the way it always did', () => {
-  expect(oneWindow(1000, 10)).toBe('W/"1000-10"')
-  expect(oneWindow(null, 0)).toBe('W/"none-0"')
+// Every route that reads one window still emits the same stamp-and-count body it always did, only
+// with the serialization version now prefixed onto it. The window-folding change above is not a
+// second cache invalidation on top of the one below for /baselines and /trend clients as well.
+it('renders a single window the way it always did, under today\'s serialization version', () => {
+  expect(oneWindow(1000, 10)).toBe(`W/"v${SERIALIZATION_VERSION}.1000-10"`)
+  expect(oneWindow(null, 0)).toBe(`W/"v${SERIALIZATION_VERSION}.none-0"`)
+})
+
+// The reason SERIALIZATION_VERSION exists at all: rounding at the response boundary changed what
+// /series, /baselines, /insights and /trend send for the exact same rows under the exact same
+// stamp and count, which newestMs and rows alone cannot see move. A validator computed the way
+// this route rendered one before that change must fail to match today's, or a client holding it
+// would revalidate, get a stamp-and-count match, and be told 304 to keep the old, unrounded body
+// forever.
+it('gives a pre-versioning validator no match against today\'s, so a stale unrounded body cannot survive behind it', () => {
+  const preVersioning = 'W/"1000-10"' // what this exact window rendered before SERIALIZATION_VERSION existed
+  const today = oneWindow(1000, 10)
+  expect(today).not.toBe(preVersioning)
+  expect(notModified({ headers: { 'if-none-match': preVersioning } } as never, today)).toBe(false)
 })
 
 it('hashes a body to something stable and order sensitive', () => {
