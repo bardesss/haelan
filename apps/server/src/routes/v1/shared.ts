@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify'
-import { ConfigError, PersonQuery } from '@haelan/core'
+import { ConfigError, metricSpec, PersonQuery } from '@haelan/core'
+import type { SeriesResult } from '@haelan/core'
 import { hashEtag, notModified } from '../../api/etag.ts'
 
 /**
@@ -95,4 +96,43 @@ export function sendHashed(reply: FastifyReply, request: FastifyRequest, body: u
   reply.header('etag', etag)
   if (notModified(request, etag)) return reply.code(304).send()
   return reply.send(body)
+}
+
+/**
+ * Rounds a value already expressed in a metric's own stored unit (MetricSpec.precision's own doc
+ * comment: "in the unit this spec declares") to that many decimals. Called only here, at the HTTP
+ * response boundary, and never by anything that writes a row: `daily` and `samples` keep full
+ * precision regardless, the same as before this function existed, because moving a rounding step
+ * into derivation would move DERIVATION_VERSION and force every person's history to rebuild for a
+ * change that is about how a number is shown, not what it is.
+ *
+ * An unknown metric has no declared precision to round to, and passes its value through unchanged
+ * rather than falling back to a guessed decimal count, which would silently truncate a reading
+ * nobody declared a precision for. In practice every caller here has already had its metric
+ * checked by `requireMetricAndAgg` or `requireMetric` inside PersonQuery, so this branch is a
+ * safety net rather than a path a real request takes.
+ */
+export function roundMetricValue(metric: string, value: number): number {
+  const precision = metricSpec(metric)?.precision
+  return precision === undefined ? value : Number(value.toFixed(precision))
+}
+
+export function roundMetricValueOrNull(metric: string, value: number | null): number | null {
+  return value === null ? null : roundMetricValue(metric, value)
+}
+
+/**
+ * Rounds every point's value in a SeriesResult to its own metric's catalogue precision. Shared by
+ * /series and /export, which serialise the same shape, so the two cannot drift into rounding the
+ * same figure two different ways (v1-export.test.ts holds them to an identical body already).
+ *
+ * Applied after thinning, never before: thin() inside PersonQuery.series picks which points
+ * survive by their real, unrounded shape (downsample.ts's lttb reads point.value directly), so
+ * which points a caller sees must not depend on how many decimals they are eventually shown with.
+ */
+export function roundSeriesResult(metric: string, result: SeriesResult): SeriesResult {
+  return {
+    ...result,
+    points: result.points.map((point) => ({ ...point, value: roundMetricValue(metric, point.value) })),
+  }
 }

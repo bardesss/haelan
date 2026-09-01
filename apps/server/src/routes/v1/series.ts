@@ -3,7 +3,10 @@ import { BASELINE_WINDOW_DAYS, baselineWindow } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
 import type { Stamp } from '../../api/etag.ts'
-import { metricsFrom, optionalPositiveInt, personQueryOf, requireBoundedRange, requireString } from './shared.ts'
+import {
+  metricsFrom, optionalPositiveInt, personQueryOf, requireBoundedRange, requireString,
+  roundMetricValue, roundMetricValueOrNull, roundSeriesResult,
+} from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -87,15 +90,19 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const body: Record<string, SeriesResult> = {}
     const stamps: Stamp[] = []
     for (const metric of metrics) {
-      body[metric] = personQuery.series({ metric, agg, from, to, points, source })
+      const result = personQuery.series({ metric, agg, from, to, points, source })
       // Stamped from the unthinned window, not the thinned body `points` thins to: batch
       // derivation stamps every row it touches with one shared clock, so after a rebuild a
       // whole history can carry the same updated_at_ms, and thinning always keeps the target
       // count regardless of what changed underneath it. A stamp taken from the thinned rows
       // could then pin both figures while a row thinning did not surface moved. No thinning
       // means the two calls would answer the same rows, so the second is skipped.
-      const unthinned = points === undefined ? body[metric]! : personQuery.series({ metric, agg, from, to, source })
+      const unthinned = points === undefined ? result : personQuery.series({ metric, agg, from, to, source })
       stamps.push(stampOf(unthinned.points))
+      // Rounded last, after the stamp is taken: the ETag above is a function of which rows and
+      // how many, never of their values, so rounding afterward cannot move it. See
+      // roundSeriesResult for why this has to happen after thinning too.
+      body[metric] = roundSeriesResult(metric, result)
     }
     // R2's keying means the ETag has to account for every metric asked for, not just the first:
     // a client that added a metric to the same range must not be handed the stale ETag. Each
@@ -114,6 +121,18 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const on = requireString(request.query.on, 'on')
     const windowDays = optionalPositiveInt(request.query.windowDays, 'windowDays') ?? BASELINE_WINDOW_DAYS
     const source = request.query.source
+    // Deliberately not rounded, unlike every other body in this file. center and spread are not
+    // themselves a number a reader ever sees: Recovery.tsx and Sleep.tsx both compute
+    // `low = center - spread` and `high = center + spread` from these exact fields before their
+    // own formatMetricValue call rounds the result to this same metric's precision (see either
+    // file's baselineNote/bandFrom, and formatMetricValue's own comment on why that arithmetic
+    // needs the metric's raw, un-rounded values to begin with). Rounding center and spread here
+    // independently would make that subtraction the difference of two already-rounded numbers
+    // rather than of the real ones, which can move the displayed band edge by a whole unit of
+    // precision from what the same arithmetic gives today on the raw values. Every number that
+    // does reach a reader from this response still passes through that client-side formatter
+    // regardless of what this sends, so rounding here would buy no reader anything and risks
+    // making the one thing this endpoint feeds, the baseline band, wrong.
     const baseline = personQuery.baseline({ metric, agg, on, windowDays, source })
 
     // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own
@@ -135,14 +154,28 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     // range answered 200. Stated as a limit here rather than left to arithmetic to imply.
     requireBoundedRange(from, to)
     const source = request.query.source
-    const body = personQuery.comparePeriods({ metric, agg, from, to, source })
+    const insight = personQuery.comparePeriods({ metric, agg, from, to, source })
 
     // comparePeriods fills currentRange and previousRange in from the arithmetic it already did,
     // so both windows the answer drew on are read straight off the response rather than redoing
     // the "period before this one" math a second time.
-    const current = personQuery.series({ metric, agg, from: body.currentRange!.from, to: body.currentRange!.to, source })
-    const previous = personQuery.series({ metric, agg, from: body.previousRange!.from, to: body.previousRange!.to, source })
-    return sendStamped(reply, request, body, [stampOf(current.points), stampOf(previous.points)])
+    const currentWindow = personQuery.series({ metric, agg, from: insight.currentRange!.from, to: insight.currentRange!.to, source })
+    const previousWindow = personQuery.series({ metric, agg, from: insight.previousRange!.from, to: insight.previousRange!.to, source })
+    // current and previous round to the metric's own catalogue precision, same as a /series point
+    // would. delta is deliberately NOT insight.delta rounded on its own: comparePeriods computed
+    // that from the stored, unrounded figures, and rounding it independently produced a response
+    // where a reader's own arithmetic on the two numbers in front of them (70 minus 61) disagreed
+    // with the delta printed beside them (10, not 9), because the raw difference crosses a
+    // rounding boundary the two rounded ends do not. delta here is current-after-rounding minus
+    // previous-after-rounding instead, run back through the same rounding step only to settle the
+    // float noise a subtraction of two decimals can reintroduce, so the three numbers this
+    // response carries always agree with each other the way they would if a reader worked it out
+    // by hand from what they were shown.
+    const current = roundMetricValueOrNull(metric, insight.current)
+    const previous = roundMetricValueOrNull(metric, insight.previous)
+    const delta = current === null || previous === null ? null : roundMetricValue(metric, current - previous)
+    const body = { ...insight, current, previous, delta }
+    return sendStamped(reply, request, body, [stampOf(currentWindow.points), stampOf(previousWindow.points)])
   })
 
   app.get<{ Params: PersonParams, Querystring: TrendQuery }>('/p/:personId/trend', async (request, reply) => {
@@ -156,7 +189,12 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     // Wrapped in an object rather than answered as a bare top level array, so this route's shape
     // matches the rest of the surface: a client reads body.points here the same way it reads
     // body[metric].points on /series, instead of branching on whether the body is an array.
+    //
+    // Rounded to the metric's own precision the same way a /series point is: a smoothed line is
+    // still a reading of this metric, in its own unit, and a reader looking at a trend chart's
+    // accessible table deserves the same rounded figure /series would give them for the same day.
     const smoothed = personQuery.trend({ metric, agg, from, to, source })
+      .map((point) => ({ ...point, value: roundMetricValue(metric, point.value) }))
 
     // trend smooths the same series() this reads again, over the same from/to: no window math to
     // redo here, only the read of updatedAtMs the smoothed points themselves do not carry.

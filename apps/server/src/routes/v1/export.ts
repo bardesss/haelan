@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { SeriesResult } from '@haelan/core'
-import { metricsFrom, personQueryOf, requireString, sendHashed } from './shared.ts'
+import { metricsFrom, personQueryOf, requireString, roundSeriesResult, sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 
@@ -104,7 +104,10 @@ export function registerExportRoutes(app: FastifyInstance): void {
 
     const body: Record<string, SeriesResult> = {}
     for (const metric of metrics) {
-      body[metric] = personQuery.series({ metric, agg, from, to, source })
+      // Rounded the same way /series rounds its own points, and through the same helper, so a
+      // file kept from this route and a read from /series can never disagree about the same day:
+      // a kept export is read by a person too, and a raw many-decimal float belongs in neither.
+      body[metric] = roundSeriesResult(metric, personQuery.series({ metric, agg, from, to, source }))
     }
 
     // Ruling R17: several metrics join in request order with a hyphen, one file, distinguished
