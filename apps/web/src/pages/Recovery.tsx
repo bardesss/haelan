@@ -208,7 +208,7 @@ export function Recovery() {
         {(basis) => (
           <StatTile label={t(labelKey)} value={headline.toFixed(precision)} unit={t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels}
+            <Sparkline values={spark.values} labels={spark.labels} metric={metric}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
               annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />

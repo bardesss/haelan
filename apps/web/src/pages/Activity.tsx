@@ -232,7 +232,7 @@ export function Activity() {
         {(basis) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels}
+            <Sparkline values={spark.values} labels={spark.labels} metric={metric}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
               annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />

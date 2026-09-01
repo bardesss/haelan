@@ -6,6 +6,7 @@ import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
+import { formatMetricValue } from '../format.js'
 
 /**
  * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
@@ -36,7 +37,7 @@ export function sparklinePointDate(
 const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
-export function Sparkline({ values, labels, label, unit, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
+export function Sparkline({ values, labels, label, unit, metric, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
   // comment says why a points array straight off /series is not enough. A day with no position on
@@ -46,7 +47,19 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   values: (number | null)[]
   labels: string[]
   label: string
+  // The accessible table's second column header (already-translated display text, e.g. "steps"),
+  // not a unit code: kept separate from `metric` below because a header string and a catalogue
+  // lookup key answer two different questions and every caller already had the former on hand.
   unit: string
+  // Every value in `values` is presumed to already be in METRICS[metric]'s own stored unit (see
+  // formatMetricValue's doc comment in format.ts): this chart never converts. Activity.tsx's own
+  // distance card is the proof this is already true today, not an assumption: its Sparkline
+  // gets the same per-day millimeter values `spark.values` holds for every other metric, and only
+  // the separate headline total (Activity.tsx:261) converts to kilometers for display. A future
+  // caller that wants a converted series plotted here would have to convert every value in
+  // `values` AND supply its own precision, since this prop alone cannot ask for a display unit
+  // different from the metric's stored one.
+  metric: string
   // Optional and, when present, never thin: the same rule HeartRateRange's own `baseline` prop
   // documents. A band this project cannot stand behind reads as more authoritative than one built
   // from thirty real days, not less, so the caller (Recovery.tsx) only ever hands this over once
@@ -62,7 +75,7 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
   excluded?: string[]
   onPointClick?: (localDate: string) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   // Memoised, and read by both `build` and `onClick`: `build` maps over these arrays to produce the
   // echarts entries, and a click on one of those entries indexes straight back into them, so the
@@ -118,7 +131,8 @@ export function Sparkline({ values, labels, label, unit, baseline, height = 34, 
             // "excluded", not "no reading", for a day the reader threw out: there was a reading,
             // and the day is blank because of something they did rather than because the device
             // never reported. "no reading" is the honest cell only for the second of those.
-            return [date, v ?? t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading'),
+            const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
+            return [date, formatMetricValue(v, metric, i18n.language, absent),
               [isExcluded ? t('charts.absence.excluded') : '',
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a

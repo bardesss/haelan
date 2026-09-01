@@ -1,5 +1,41 @@
 import { METRICS } from '@haelan/core/metrics'
 
+/**
+ * Rounds `value` to `precision` decimals and groups thousands per `language`, in whatever unit
+ * the caller already holds it in. The primitive underneath formatMetricValue below: it takes no
+ * metric id and looks nothing up, so it has no way to reach for the wrong precision on its own.
+ *
+ * That matters because MetricSpec.precision (metrics.ts) is declared in the unit a metric is
+ * STORED in, not necessarily the unit a card displays it in: distance is stored in millimeters
+ * with precision 0, and Activity.tsx shows it as kilometers with one decimal, a precision the
+ * catalogue has no way to answer. A call site doing that conversion has to own the converted
+ * precision itself and hand it here directly, never through a metric id, because a metric-id path
+ * would silently apply the STORED unit's precision to a DISPLAYED unit's value and be wrong in
+ * exactly the way #9 of the precision audit describes.
+ */
+export function formatNumber(value: number | null, precision: number, language: string, absent: string): string {
+  if (value === null) return absent
+  return value.toLocaleString(language, { minimumFractionDigits: precision, maximumFractionDigits: precision })
+}
+
+/**
+ * The common case: `value` is still in the unit METRICS[metric] declares (MetricSpec.precision's
+ * own doc comment: "in the unit this spec declares"). Reads precision off the catalogue so a call
+ * site cannot drift from it the way the precision audit found repeatedly (Recovery.tsx's
+ * threaded-literal precision, Sleep.tsx's hardcoded 0, both correct only by coincidence). Before
+ * this function existed anywhere, the four call sites that skipped rounding altogether
+ * (hrTooltip.ts, HeartRateRange.tsx, Sparkline.tsx, OverrideList.tsx) let a raw many-decimal float
+ * reach a reader outright.
+ *
+ * Never for a value that has already been converted to a different display unit. See formatNumber's
+ * own comment above for why: this function has no parameter for a caller-supplied precision, on
+ * purpose, so a converted value has no path through here that would apply the catalogue's
+ * stored-unit precision to it by accident.
+ */
+export function formatMetricValue(value: number | null, metric: string, language: string, absent: string): string {
+  return formatNumber(value, METRICS[metric]?.precision ?? 0, language, absent)
+}
+
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").
 export function formatDuration(minutes: number): string {
   const total = Math.round(minutes)

@@ -18,6 +18,7 @@ import { hrTooltip } from '../src/charts/hrTooltip.js'
 import type { DayMarks } from '../src/charts/base.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { DayRow } from '../src/fixtures/july.js'
+import type { Translate } from '../src/format.js'
 
 // No I18nProvider anywhere in this file, on purpose: the same reason metric-card.test.tsx's own
 // copy of this note gives. With no i18next instance initialised, t() returns the key it was asked
@@ -127,7 +128,7 @@ describe('Sparkline', () => {
 
   it('renders an applied exclusion as a marked, explained gap rather than a missing day', () => {
     const html = render(
-      <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+      <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
         annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
     )
     const rows = table(html)
@@ -146,7 +147,7 @@ describe('Sparkline', () => {
 
   it('marks an excluded date that still has its value, the window before the derive catches up', () => {
     const html = render(
-      <Sparkline values={values} labels={labels} label="steps" unit="steps"
+      <Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
         annotations={[]} excluded={['2026-08-02']} />,
     )
     const rows = table(html)
@@ -158,7 +159,7 @@ describe('Sparkline', () => {
 
   it('carries an annotation’s own text into its row', () => {
     const html = render(
-      <Sparkline values={values} labels={labels} label="steps" unit="steps"
+      <Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
         annotations={[{ date: '2026-08-03', text: 'Flight to Chicago' }]} excluded={[]} />,
     )
     const rows = table(html)
@@ -170,7 +171,7 @@ describe('Sparkline', () => {
   // them the way a find() (rather than a filter+join) would.
   it('joins every annotation on the same date rather than showing only the first', () => {
     const html = render(
-      <Sparkline values={values} labels={labels} label="steps" unit="steps"
+      <Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
         annotations={[
           { date: '2026-08-02', text: 'Watch left charging' },
           { date: '2026-08-02', text: 'Flew to Tokyo' },
@@ -187,7 +188,7 @@ describe('Sparkline', () => {
   // corrected channel is gone and what is left is the half that was about real data.
   it('marks only the excluded date, leaving the days beside it alone', () => {
     const html = render(
-      <Sparkline values={values} labels={labels} label="steps" unit="steps"
+      <Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
         annotations={[]} excluded={['2026-08-01']} />,
     )
     const rows = table(html)
@@ -201,9 +202,32 @@ describe('Sparkline', () => {
     // annotations/excluded default to empty rather than being required, so a page that has not
     // been migrated to pass them yet (every current caller) keeps compiling and keeps rendering
     // the same table it always has.
-    const html = render(<Sparkline values={values} labels={labels} label="steps" unit="steps" />)
+    const html = render(<Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps" />)
     const rows = table(html)
     expect(rows).not.toContain('charts.absence.excluded')
+  })
+
+  // The precision audit's finding #3: this table's value cell used to render `v` (a raw
+  // number|null straight off /series) directly, and Recovery.tsx's own resting_heart_rate,
+  // daily_hrv and respiratory_rate cards all drive this exact component with metrics the audit
+  // confirmed reach here unrounded (no round/toFixed anywhere between ingest and /series).
+  // respiratory_rate's catalogue precision is 1, not 0, so this also proves rounding respects the
+  // metric passed in rather than a hardcoded whole-number assumption Sparkline's steps fixture
+  // elsewhere in this file would not catch.
+  it('rounds an unrounded value to its own metric\'s catalogue precision', () => {
+    const html = render(
+      <Sparkline values={[14.666666666666666]} labels={['2026-08-01']} label="breaths" unit="breaths"
+        metric="respiratory_rate" />,
+    )
+    const rows = table(html)
+    // toLocaleString(undefined), not a hardcoded "14.7": this file's own no-I18nProvider
+    // convention leaves i18n.language undefined (see the top-of-file note, and
+    // ActivityHeatmap's own toLocaleString(undefined) case above), which resolves to whichever
+    // locale this runtime's own ICU data defaults to, not necessarily one that spells a
+    // decimal point with a period.
+    const expected = (14.666666666666666).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    expect(rows).toContain(`<td>${expected}</td>`)
+    expect(rows).not.toContain('14.666666666666666')
   })
 
   // The gap a day leaves once its exclusion applies is drawn as a markLine, since there is no
@@ -219,7 +243,7 @@ describe('Sparkline', () => {
     it('draws the excluded day as a line at its own position, styled apart from an annotation', () => {
       act(() => {
         root!.render(
-          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
             annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
         )
       })
@@ -241,7 +265,7 @@ describe('Sparkline', () => {
     it('says the same thing on the canvas as its own accessible table row states for that date', () => {
       act(() => {
         root!.render(
-          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
             annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
         )
       })
@@ -254,7 +278,7 @@ describe('Sparkline', () => {
     it('leaves an ordinary annotation dashed, so the two do not read the same', () => {
       act(() => {
         root!.render(
-          <Sparkline values={values} labels={labels} label="steps" unit="steps"
+          <Sparkline values={values} labels={labels} label="steps" unit="steps" metric="steps"
             annotations={[{ date: '2026-08-02', text: 'Flew to Tokyo' }]} excluded={[]} />,
         )
       })
@@ -264,7 +288,7 @@ describe('Sparkline', () => {
     it('draws nothing for an excluded date this sparkline is not showing', () => {
       act(() => {
         root!.render(
-          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
             annotations={[]} excluded={['2026-07-02']} />,
         )
       })
@@ -283,7 +307,7 @@ describe('Sparkline', () => {
   it('sets no tooltip at all, so a mark hover shows nothing rather than leaking an internal id', () => {
     act(() => {
       root!.render(
-        <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+        <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
           annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
       )
     })
@@ -696,6 +720,23 @@ describe('HeartRateRange', () => {
     expect(nextRow).not.toContain('charts.absence.excluded')
   })
 
+  // The precision audit's finding #2: this table renders d.hrMin/hrMean/hrMax as plain <td>
+  // children, and before formatMetricValue existed nothing stood between a raw many-decimal
+  // /series value and that cell. Same day rollup.ts's own weighted mean would produce in
+  // practice, min rounding up and max rounding down so a fix that only handled one direction
+  // would not pass.
+  it('rounds min, mean and max to heart_rate\'s own catalogue precision in the accessible table', () => {
+    const unrounded: DayRow[] = [
+      { date: '2026-08-13', steps: null, hrMin: 47.6, hrMean: 90.18407633664866, hrMax: 182.4, sleepMinutes: null, worn: true },
+    ]
+    const html = render(
+      <HeartRateRange days={unrounded} annotations={[]} excluded={[]} label="hr range" />,
+    )
+    const rows = table(html)
+    expect(rows).toContain('<td>48</td><td>90</td><td>182</td>')
+    expect(rows).not.toContain('90.18407633664866')
+  })
+
   // What an applied exclusion leaves behind on this chart: the whole metric's day is gone, so all
   // three of min, mean and max are null and there is no height left for a markPoint to sit at.
   // Every excluded case above pairs an excluded date with a day that still carries its numbers,
@@ -816,7 +857,14 @@ describe('HeartRateRange', () => {
         root!.render(<HeartRateRange days={days} annotations={[]} excluded={[]} label="hr range" />)
       })
       const text = formatterOf()([{ componentType: 'series', dataIndex: 1 }])
-      expect(text).toBe(hrTooltip(days, 1))
+      // The same no-provider echo t() this file's own header comment establishes: with no
+      // I18nProvider mounted, react-i18next's global fallback returns a key verbatim rather than
+      // interpolating it, options included, so a plain key echo reproduces what the component's
+      // own real t actually did. The language argument itself is not under test here (every day
+      // in `days` is a whole number, so no locale grouping or decimal separator can tell 'en'
+      // apart from the real i18n.language this environment leaves undefined); 'en' stands in.
+      const noProviderT: Translate = (key) => key
+      expect(text).toBe(hrTooltip(days, 1, noProviderT, 'en'))
     })
   })
 
@@ -980,7 +1028,7 @@ describe('the click each chart hands to onPointClick', () => {
     act(() => {
       root!.render(
         <Sparkline values={[10, 20, 30]} labels={['2026-08-01', '2026-08-02', '2026-08-03']}
-          label="steps" unit="steps" onPointClick={onPointClick} />,
+          label="steps" unit="steps" metric="steps" onPointClick={onPointClick} />,
       )
     })
     const handleClick = clickHandlerOf(chartStubs.at(-1)!)
@@ -994,7 +1042,7 @@ describe('the click each chart hands to onPointClick', () => {
     act(() => {
       root!.render(
         <Sparkline values={[10, 20, 30]} labels={['2026-08-01', '2026-08-02', '2026-08-03']}
-          label="steps" unit="steps" onPointClick={onPointClick} />,
+          label="steps" unit="steps" metric="steps" onPointClick={onPointClick} />,
       )
     })
     const handleClick = clickHandlerOf(chartStubs.at(-1)!)
@@ -1011,7 +1059,7 @@ describe('the click each chart hands to onPointClick', () => {
     act(() => {
       root!.render(
         <Sparkline values={[10, null, 30]} labels={['2026-08-01', '2026-08-02', '2026-08-03']}
-          label="steps" unit="steps" excluded={['2026-08-02']}
+          label="steps" unit="steps" metric="steps" excluded={['2026-08-02']}
           annotations={[{ date: '2026-08-02', text: 'phone left at home' }]} onPointClick={onPointClick} />,
       )
     })

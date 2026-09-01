@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset } from '../src/format.js'
+import {
+  formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset,
+  formatNumber, formatMetricValue,
+} from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
 // A stub, not a real i18n instance: trend() only needs something call-shaped like `t`, and a
@@ -43,6 +46,47 @@ describe('formatClock', () => {
     expect(formatClock(-1)).toBe('23:59')
     expect(formatClock(-24 * 60)).toBe('00:00')
     expect(formatClock(-25 * 60)).toBe('23:00')
+  })
+})
+
+describe('formatNumber', () => {
+  it('rounds to the requested precision and never leaves a raw many-decimal float', () => {
+    expect(formatNumber(90.18407633664866, 0, 'en', 'absent')).toBe('90')
+    expect(formatNumber(14.666666666666666, 1, 'en', 'absent')).toBe('14.7')
+  })
+
+  it('returns the absent text for null rather than formatting a zero', () => {
+    // A null reading and a real zero reading are two different facts; the absence audit's own
+    // point (Sparkline.tsx, HeartRateRange.tsx) is that a formatter must keep them apart rather
+    // than let `0 ?? absent` collapse them, which is exactly why formatNumber checks `=== null`
+    // rather than falsy.
+    expect(formatNumber(null, 0, 'en', 'no reading')).toBe('no reading')
+    expect(formatNumber(0, 0, 'en', 'no reading')).toBe('0')
+  })
+
+  it('groups thousands and separates decimals per language, not one hardcoded locale', () => {
+    expect(formatNumber(1234.5, 1, 'en', 'absent')).toBe('1,234.5')
+    expect(formatNumber(1234.5, 1, 'nl', 'absent')).toBe('1.234,5')
+  })
+})
+
+describe('formatMetricValue', () => {
+  // The reported bug's own shape, reproduced against the catalogue directly rather than through
+  // a chart: heart_rate's precision is 0 (metrics.ts), so a raw weighted mean has to lose its
+  // decimals here, not just at the one call site that happened to get fixed first.
+  it('reads precision off METRICS[metric] rather than assuming a caller passed the right one', () => {
+    expect(formatMetricValue(90.18407633664866, 'heart_rate', 'en', 'absent')).toBe('90')
+    expect(formatMetricValue(14.666666666666666, 'respiratory_rate', 'en', 'absent')).toBe('14.7')
+  })
+
+  it('never applies a converted-unit precision to a value still in the metric\'s stored unit', () => {
+    // distance's own catalogue precision (0) is declared in millimeters, its stored unit
+    // (metrics.ts's own comment on the entry): a millimeter value is never a fraction, so
+    // precision 0 is right for it regardless of what Activity.tsx later converts a SUM of these
+    // into for display. This is the boundary formatNumber's own doc comment draws: a converted
+    // km value would need its own precision passed to formatNumber directly, never through this
+    // function and a metric id.
+    expect(formatMetricValue(5000000, 'distance', 'en', 'absent')).toBe('5,000,000')
   })
 })
 

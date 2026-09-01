@@ -356,7 +356,7 @@ export function Dashboard() {
           <StatTile label={t(labelKey)} value={format(points)} unit={unit}
             basis={basis}
             delta={deltaFor(t, metric, values(points), direction)}>
-            <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels}
+            <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
               annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
