@@ -145,6 +145,19 @@ const SAMPLE_CORRECT_UNREADABLE: StoredOverride = {
   action: 'correct', correctedValue: 90.18407633664866, reason: 'a correction this build cannot place',
 }
 
+// A sample correction whose target key parses cleanly (unlike SAMPLE_CORRECT_UNREADABLE, whose
+// key itself is malformed JSON) but names a metric the catalogue does not carry: a renamed or
+// removed metric, or a bad write from an external POST /overrides caller that OverrideStore.validate
+// never checked the metric id of (validate only checks the target key's SHAPE, see overrides.ts's
+// own comment). formatMetricValue now throws on an unknown id (M3e review, Minor 4); this pins
+// that the list still falls back to the same bounded UNREADABLE_METRIC_PRECISION path rather than
+// an uncaught throw inside a table row's render blanking the whole list.
+const SAMPLE_CORRECT_UNKNOWN_METRIC: StoredOverride = {
+  id: 'o9', scope: 'sample',
+  targetKey: sampleTarget({ source: 'watch', metric: 'not_a_real_metric', utcMs: SAMPLE_CORRECT_UTC_MS }),
+  action: 'correct', correctedValue: 90.18407633664866, reason: 'a metric this build no longer carries',
+}
+
 const SAMPLE_UTC_MS = Date.parse('2026-08-15T10:32:00Z')
 const SAMPLE: StoredOverride = {
   id: 'o3', scope: 'sample',
@@ -223,6 +236,16 @@ describe('every scope renders a complete row', () => {
 
   it('rounds a corrected value it cannot place to a metric to a bounded fallback, not a raw float', async () => {
     stubFetch([SAMPLE_CORRECT_UNREADABLE])
+    const c = mount(<OverrideList />)
+    await flush(c, html)
+
+    const row = rows()[0]!
+    const [, , action] = cells(row)
+    expect(action).toBe('Correct to 90.18')
+  })
+
+  it('rounds a corrected value for a metric the catalogue no longer carries to the same bounded fallback, not a crash', async () => {
+    stubFetch([SAMPLE_CORRECT_UNKNOWN_METRIC])
     const c = mount(<OverrideList />)
     await flush(c, html)
 

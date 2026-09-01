@@ -88,6 +88,17 @@ describe('formatMetricValue', () => {
     // function and a metric id.
     expect(formatMetricValue(5000000, 'distance', 'en', 'absent')).toBe('5,000,000')
   })
+
+  // M3e review, Minor 4: `METRICS[metric]?.precision ?? 0` used to default a metric this app has
+  // never heard of to precision 0 with no error at all, which would have quietly dropped a decimal
+  // off spo2, daily_spo2, weight, body_fat or respiratory_rate (the catalogue's own precision-1
+  // metrics) the moment a caller misspelled one of their ids. A caller passing a real id gets its
+  // real precision regardless of which metric; a caller passing anything else now finds out
+  // immediately rather than shipping a silently rounder number.
+  it('throws rather than silently defaulting to precision 0 for an id the catalogue does not carry', () => {
+    expect(() => formatMetricValue(14.7, 'respiratory_rat', 'en', 'absent')).toThrow(/respiratory_rat/)
+    expect(() => formatMetricValue(14.7, 'not_a_metric', 'en', 'absent')).toThrow()
+  })
 })
 
 describe('tone', () => {

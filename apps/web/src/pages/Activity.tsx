@@ -224,6 +224,15 @@ export function Activity() {
     // catalogue's stored unit (format.ts's own comment on formatNumber says why), so that one call
     // site hands in its own formatter instead of taking the default.
     format: (total: number) => string = (total) => formatMetricValue(total, metric, i18n.language, ''),
+    // The Sparkline's own accessible table cell, separately from `format` above: `format` runs once
+    // on the period's own total, `sparkFormat` runs once per day on `spark.values`, which stay in
+    // the metric's stored unit regardless of what `format` displays (Sparkline's own `metric` prop
+    // comment explains why the chart itself never converts). Undefined for every card but distance,
+    // which otherwise repeats the exact defect an M3e review caught: a table cell reading raw
+    // millimeters beside a "Distance in kilometers" column header, while the headline above it
+    // already converted. Sparkline falls back to formatMetricValue(v, metric, ...) when this is
+    // omitted, the same default `format` above takes.
+    sparkFormat?: (value: number | null, absent: string) => string,
   ) => {
     const points = metricGroups.pointsOf(metric)
     const total = sum(values(points))
@@ -236,7 +245,7 @@ export function Activity() {
         {(basis) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels} metric={metric}
+            <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
               label={t(chartLabelKey, { period })} unit={t(unitKey)}
               annotations={annotations} excluded={excluded}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
@@ -269,7 +278,15 @@ export function Activity() {
           // own precision, never to formatMetricValue, which would apply millimeters' precision 0
           // to a kilometers value and print "5" instead of "5.2" (see formatNumber's own comment
           // in format.ts for why formatMetricValue has no parameter that could do this by accident).
-          (total) => formatNumber(total / 1_000_000, 1, i18n.language, ''))}
+          (total) => formatNumber(total / 1_000_000, 1, i18n.language, ''),
+          // The Sparkline's own accessible table cell, same conversion applied per day rather than
+          // to the period total: without this, the table sat behind formatMetricValue's default
+          // (metric 'distance', catalogue precision 0, millimeters) and printed the raw per-day
+          // millimeter reading ("5,234,567") under a column header reading "Distance in
+          // kilometers" -- correct for precision, wrong for unit, and exactly what an M3e review
+          // caught. `v === null` first: a day with no reading stays a day with no reading, not
+          // `null / 1_000_000` becoming 0 and reading as a real zero-kilometer day.
+          (v, absent) => formatNumber(v === null ? null : v / 1_000_000, 1, i18n.language, absent))}
         {card('floors', 4, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
           'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort', 'higher-is-better')}
         {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',

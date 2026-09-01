@@ -379,12 +379,15 @@ describe('the remaining Dashboard cards', () => {
   // and the new code apart when it is already a whole thousand-free integer, so this asks for a
   // steps total large enough to group (four figures) and a heart rate mean with a fraction: both
   // render the same today as they did before this task in the case that was already correct, but
-  // a wrong precision or a dropped grouping call would now show up here. Confirmed two ways: the
-  // resting_heart_rate tile reverted to `String(mean(values(p)))` (no rounding at all) failed with
-  // "Received: ...61.7 bpm..." where it expects "62"; the steps tile reverted to
-  // `String(values(p).reduce((a, b) => a + b, 0))` (no grouping at all) failed with
-  // "Received: 12345" where it expects "12,345", and the same revert failed the Dutch test below
-  // with "Received: 11999" where it expects "11.999".
+  // a wrong precision or a dropped grouping call would now show up here.
+  //
+  // toBe, not toContain: "12,345" is a substring of "12,345.00" too, and "62" is a substring of
+  // "61.7" is false but "62.0" is true, so a prefix match here would stay green for a precision
+  // that drifted the wrong way. Confirmed two ways: the resting_heart_rate tile reverted to
+  // `String(mean(values(p)))` (no rounding at all) failed with "Received: 61.7 bpm" where it
+  // expects "62 bpm"; the steps tile reverted to `String(values(p).reduce((a, b) => a + b, 0))`
+  // (no grouping at all) failed with "Received: 12345" where it expects "12,345", and the same
+  // revert failed the Dutch test below with "Received: 11999" where it expects "11.999".
   it('groups a four figure steps total per language and rounds heart rate to its own precision', async () => {
     const restore = stubFetchValues({ steps: 12345, resting_heart_rate: 61.7, heart_rate: 88.4 })
     const { client, tree } = withQuery(<Dashboard />)
@@ -392,9 +395,9 @@ describe('the remaining Dashboard cards', () => {
     await flush(client, () => container!.innerHTML)
     const cardFor = (label: string) => [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === label)
-    expect(cardFor('Steps')?.querySelector('.value')?.textContent).toContain('12,345')
-    expect(cardFor('Resting heart rate')?.querySelector('.value')?.textContent).toContain('62')
-    expect(cardFor('Mean heart rate')?.querySelector('.value')?.textContent).toContain('88')
+    expect(cardFor('Steps')?.querySelector('.value')?.textContent).toBe('12,345')
+    expect(cardFor('Resting heart rate')?.querySelector('.value')?.textContent).toBe('62 bpm')
+    expect(cardFor('Mean heart rate')?.querySelector('.value')?.textContent).toBe('88 bpm')
     restore()
   })
 
@@ -408,7 +411,7 @@ describe('the remaining Dashboard cards', () => {
     await flush(client, () => container!.innerHTML)
     const stepsCard = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Stappen')
-    expect(stepsCard?.querySelector('.value')?.textContent).toContain('11.999')
+    expect(stepsCard?.querySelector('.value')?.textContent).toBe('11.999')
     restore()
   })
 

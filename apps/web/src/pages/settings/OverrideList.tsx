@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '@haelan/core/target-key'
+import { METRICS } from '@haelan/core/metrics'
 import type { Translate } from '../../format.js'
 import { formatMetricValue, formatNumber } from '../../format.js'
 import { useTranslation } from '../../i18n/index.js'
@@ -131,10 +132,22 @@ function dateText(t: Translate, info: TargetInfo): string {
  * lets this reach METRICS[metric].precision the way formatMetricValue expects. It is null exactly
  * when targetInfo's own parse could not name a metric at all (the session scope, or a target key
  * that failed to parse), and this cell has no metric of its own to fall back on in that case --
- * see UNREADABLE_METRIC_PRECISION below for what it prints instead. */
+ * see UNREADABLE_METRIC_PRECISION below for what it prints instead.
+ *
+ * `METRICS[metric] !== undefined`, not just `metric !== null`: formatMetricValue now throws on an
+ * unknown metric id (M3e review: a silently wrong precision on a misspelled id was worse than a
+ * loud failure, and every OTHER caller in this app hands it a compile-time literal that
+ * catalogue-usage.test.ts already holds to METRICS). This cell is the one caller that cannot make
+ * that promise: `metric` is parsed off a stored override row this app did not necessarily write
+ * (OverrideList's own comment above says `POST /overrides` accepts a sample scoped correction from
+ * any caller of the HTTP API), and OverrideStore.validate only checks the target key's SHAPE, never
+ * that its metric field still names something the catalogue carries. A metric renamed or removed
+ * after the override was written, or a bad write from outside this app, must fall back to the same
+ * unreadable-precision path the null case already takes, not crash this list the way it would be
+ * right for a typo in Recovery.tsx to. */
 function actionText(t: Translate, language: string, item: StoredOverride, metric: string | null): string {
   if (item.action === 'correct' && item.correctedValue !== null) {
-    const value = metric !== null
+    const value = metric !== null && METRICS[metric] !== undefined
       ? formatMetricValue(item.correctedValue, metric, language, '')
       : formatNumber(item.correctedValue, UNREADABLE_METRIC_PRECISION, language, '')
     return t('settings.overrides.correctedTo', { value })

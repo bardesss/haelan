@@ -537,6 +537,31 @@ describe('ActivityHeatmap', () => {
       expect(text).not.toContain('Week')
     })
 
+    // M3e review's own finding: this tooltip grouped a four figure steps count while the
+    // accessible table beside it, for the identical day, read the same number bare and ungrouped
+    // ("11999" against "11,999") -- a sighted reader hovering the canvas and a screen reader
+    // reading the row got two different strings for one fact. Both now go through the one
+    // formatMetricValue call (ActivityHeatmap.tsx), so this pins them agreeing from the same
+    // render rather than two hardcoded literals that happen to match today.
+    it('groups a four figure steps count the same way in its tooltip and its accessible table', () => {
+      const bigDay: DayRow[] = [
+        { date: '2026-07-06', steps: 11999, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+      ]
+      act(() => {
+        root!.render(<ActivityHeatmap days={bigDay} max={11999} label="calendar heatmap" />)
+      })
+      // toLocaleString(undefined), not a hardcoded "11,999": this file's own no-I18nProvider
+      // convention leaves i18n.language undefined, which resolves to whatever this runtime's own
+      // ICU data defaults to (see the "9000" test above for the same reasoning).
+      const grouped = (11999).toLocaleString(undefined)
+      const tooltipText = formatterOf()({ componentType: 'series', dataIndex: 0, value: [0, 0, 11999] })
+      expect(tooltipText).toBe(`2026-07-06<br/>charts.columns.steps: ${grouped}`)
+
+      const rowMatch = container!.innerHTML.match(/<tr><th scope="row">2026-07-06<\/th>[\s\S]*?<\/tr>/)
+      if (!rowMatch) throw new Error(`no row for 2026-07-06 in:\n${container!.innerHTML}`)
+      expect(rowMatch[0]).toContain(`<td>${grouped}</td>`)
+    })
+
     it('names the real date on the absent-day scatter series too, whose value carries no steps', () => {
       const withGap: DayRow[] = [
         { date: '2026-07-06', steps: 4000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },

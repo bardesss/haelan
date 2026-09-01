@@ -363,12 +363,16 @@ describe('the Sleep page', () => {
 
   // The refactor this task is for: sleep_efficiency's card used to hardcode
   // `efficiencyMean.toFixed(0)`, which happened to match METRICS.sleep_efficiency.precision (0)
-  // by coincidence rather than by reading it. Confirmed by reverting the formatMetricValue call
-  // back to `efficiencyMean.toFixed(2)`: this failed with "Received: ...87.60%..." where it
-  // expects "88%". Placed after the tests above that already mount an I18nProvider, not before
-  // 'drives the control row from the URL rather than a stub': that test's own assertion depends
-  // on no I18nProvider having been mounted yet in this file (see dashboard-cards.test.tsx's
-  // matching comment on the same hazard), and this test needs one to resolve real labels.
+  // by coincidence rather than by reading it.
+  //
+  // toBe, not toContain: "88" is a substring of "88.0" too, which a dropped
+  // minimumFractionDigits/maximumFractionDigits pin would still render. Confirmed by reverting the
+  // formatMetricValue call back to `efficiencyMean.toFixed(2)`: this failed with
+  // "Received: 87.60 %" where it expects "88 %". Placed after the tests above that already mount
+  // an I18nProvider, not before 'drives the control row from the URL rather than a stub': that
+  // test's own assertion depends on no I18nProvider having been mounted yet in this file (see
+  // dashboard-cards.test.tsx's matching comment on the same hazard), and this test needs one to
+  // resolve real labels.
   it('rounds sleep efficiency to its own catalogue precision, not a copied-in literal', async () => {
     const restore = stubSleepEfficiency(87.6)
     const { client, tree } = withQuery(<Sleep />)
@@ -376,8 +380,7 @@ describe('the Sleep page', () => {
     await flush(client, () => container!.innerHTML)
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Sleep efficiency')
-    expect(card?.querySelector('.value')?.textContent).toContain('88')
-    expect(card?.querySelector('.value')?.textContent).not.toContain('87.6')
+    expect(card?.querySelector('.value')?.textContent).toBe('88 %')
     restore()
   })
 

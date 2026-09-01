@@ -279,9 +279,12 @@ describe('the Activity page', () => {
   // with an explicit precision of 1, never through formatMetricValue (which would read millimeters'
   // own precision 0 and drop the decimal). 5,234,567 mm is chosen so millimeters-to-kilometers does
   // not divide evenly, which a broken conversion or a wrong precision would show up in immediately.
+  //
+  // toBe, not toContain: a prefix match here would stay green if precision drifted the other way
+  // too (a forced precision+2 renders "5.235 km", and "5.2" is still a substring of "5.235").
   // Confirmed by reverting the distance card back to `formatMetricValue(total, 'distance', ...)`
   // (the accidental path this design exists to close, which never divides by a million at all):
-  // that failed with "Received: 5,234,567 km" where it expects "5.2".
+  // that failed with "Received: 5,234,567 km" where it expects "5.2 km".
   it('converts distance from stored millimeters to displayed kilometers at its own precision', async () => {
     const restore = stubActivityValues({ distance: 5_234_567 })
     const { client, tree } = withQuery(<Activity />)
@@ -289,16 +292,44 @@ describe('the Activity page', () => {
     await flush(client, () => container!.innerHTML)
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Distance')
-    expect(card?.querySelector('.value')?.textContent).toContain('5.2')
+    expect(card?.querySelector('.value')?.textContent).toBe('5.2 km')
+    restore()
+  })
+
+  // M3e review's own finding: the headline above converts millimeters to kilometers, but the
+  // Sparkline beside it used to be hand formatMetricValue('distance', ...) by default, which reads
+  // METRICS.distance's own stored-unit precision (0, millimeters) and printed the raw per-day
+  // reading ("5,234,567") in its accessible table, under a column header (activity.units.distance)
+  // that reads "Distance in kilometers". A sighted reader saw the correct "5.2 km" headline while a
+  // screen reader landing on the sparkline's own table got a number six figures longer, under a
+  // header naming a unit that number was never in. range/on pinned to the stub's own date so the
+  // sparkline's dense series actually carries a row for it, rather than depending on whatever "this
+  // month" resolves to on the machine running the test.
+  it('shows the distance sparkline table in kilometers too, not the raw stored millimeters', async () => {
+    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
+    const restore = stubActivityValues({ distance: 5_234_567 })
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Distance')
+    const rowMatch = card?.innerHTML.match(/<tr><th scope="row">2026-08-15<\/th>[\s\S]*?<\/tr>/)
+    expect(rowMatch, card?.innerHTML ?? 'no Distance card found').toBeTruthy()
+    expect(rowMatch![0]).toContain('<td>5.2</td>')
+    expect(rowMatch![0]).not.toContain('5234567')
+    expect(rowMatch![0]).not.toContain('5,234,567')
     restore()
   })
 
   // The refactor this task is for on the other nine cards: Activity's own local groupNumber (a
   // byte-identical copy of Dashboard.tsx's) is gone, replaced by formatMetricValue reading
   // METRICS[metric].precision through card()'s own default formatter. A four figure floors total
-  // is what tells the old ungrouped code and the new grouped code apart. Confirmed by reverting
+  // is what tells the old ungrouped code and the new grouped code apart.
+  //
+  // toBe, not toContain: "12,345" is a substring of "12,345.00" too, which a dropped
+  // minimumFractionDigits/maximumFractionDigits pin would still render. Confirmed by reverting
   // card()'s default formatter to `String(total)`: that failed with "Received: 12345" where it
-  // expects "12,345".
+  // expects "12,345 floors".
   it('groups a four figure floors total per language, through the shared formatter', async () => {
     const restore = stubActivityValues({ floors: 12345 })
     const { client, tree } = withQuery(<Activity />)
@@ -306,7 +337,7 @@ describe('the Activity page', () => {
     await flush(client, () => container!.innerHTML)
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Floors climbed')
-    expect(card?.querySelector('.value')?.textContent).toContain('12,345')
+    expect(card?.querySelector('.value')?.textContent).toBe('12,345 floors')
     restore()
   })
 

@@ -30,10 +30,19 @@ export function formatNumber(value: number | null, precision: number, language: 
  * Never for a value that has already been converted to a different display unit. See formatNumber's
  * own comment above for why: this function has no parameter for a caller-supplied precision, on
  * purpose, so a converted value has no path through here that would apply the catalogue's
- * stored-unit precision to it by accident.
+ * stored-unit precision to it by accident. That guard only catches a value passed under the WRONG
+ * metric id being absent from the catalogue entirely; a converted value passed under its OWN,
+ * correctly spelled metric id (Activity.tsx's distance card handed 'distance' after converting to
+ * kilometers, rather than before) still compiles and still silently prints the stored unit's
+ * precision, because the catalogue has no way to know the caller already changed the unit. Nothing
+ * short of a distinct type for "already converted" can close that path; the throw below closes the
+ * other one, an unknown or misspelled metric id, which used to default to precision 0 and would
+ * have quietly dropped a decimal off spo2, daily_spo2, weight, body_fat or respiratory_rate.
  */
 export function formatMetricValue(value: number | null, metric: string, language: string, absent: string): string {
-  return formatNumber(value, METRICS[metric]?.precision ?? 0, language, absent)
+  const spec = METRICS[metric]
+  if (spec === undefined) throw new Error(`formatMetricValue: "${metric}" is not a metric in METRICS`)
+  return formatNumber(value, spec.precision, language, absent)
 }
 
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").

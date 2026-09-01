@@ -129,9 +129,14 @@ describe('the Recovery page', () => {
   // formatMetricValue. All three literals already matched the catalogue, so this cannot catch a
   // literal drifting from it by itself; what it does pin is that the rendered headline is the
   // catalogue's own rounding of an unrounded mean, which is what a broken formatMetricValue call
-  // (or a reintroduced literal precision) would get wrong. Confirmed by reverting `card()`'s
+  // (or a reintroduced literal precision) would get wrong.
+  //
+  // toBe, not toContain: a prefix match here stays green even if precision drifts (a forced
+  // precision+1 renders "61.7 bpm", and "62" would no longer even be a substring of that, but a
+  // forced precision+1 on respiratory_rate renders "14.70 breaths/min", where "14.7" IS still a
+  // substring -- toContain would have missed exactly that case). Confirmed by reverting `card()`'s
   // formatMetricValue call back to `headline.toFixed(precision)` with precision hardcoded to 2:
-  // this failed with "Received: 61.70" where it expects "62".
+  // this failed with "Received: 61.70 bpm" where it expects "62 bpm".
   it('rounds each headline to its own metric catalogue precision, not a copied-in literal', async () => {
     const restore = stubRecoveryPerMetric({
       resting_heart_rate: 61.7,
@@ -145,11 +150,11 @@ describe('the Recovery page', () => {
       .find((card) => card.querySelector('.label')?.textContent === label)
     // resting_heart_rate and daily_hrv: catalogue precision 0, so a mean of 61.7/45.3 rounds away
     // its own decimal rather than keeping it.
-    expect(cardFor('Resting heart rate')?.querySelector('.value')?.textContent).toContain('62')
-    expect(cardFor('Heart rate variability')?.querySelector('.value')?.textContent).toContain('45')
+    expect(cardFor('Resting heart rate')?.querySelector('.value')?.textContent).toBe('62 bpm')
+    expect(cardFor('Heart rate variability')?.querySelector('.value')?.textContent).toBe('45 ms')
     // respiratory_rate: catalogue precision 1, a many-decimal mean rounds to exactly one place,
     // the same value the reported bug's own fixture (format.test.ts) rounds to.
-    expect(cardFor('Respiratory rate')?.querySelector('.value')?.textContent).toContain('14.7')
+    expect(cardFor('Respiratory rate')?.querySelector('.value')?.textContent).toBe('14.7 breaths/min')
     restore()
   })
 
