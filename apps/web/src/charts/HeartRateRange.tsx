@@ -63,7 +63,27 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
       tooltip: {
         ...base.tooltip,
         trigger: 'axis' as const,
-        formatter: (params) => hrTooltip(days, (Array.isArray(params) ? params[0] : params)?.dataIndex),
+        // A mark's own tooltip.trigger defaults to 'item' (MarkPointModel/MarkLineModel both set
+        // it in their own defaultOption), which overrides this chart's 'axis' trigger above, so a
+        // markPoint/markLine hover reaches this formatter as a single params object rather than
+        // the array an axis hover passes. Its dataIndex counts into that mark's own data array
+        // (marks.atValue / marks.atDate), never into `days`: `hrTooltip(days, dataIndex)` on that
+        // number named whichever day happened to sit at that small index, not the day the mark
+        // was actually drawn on, wrong for every mark past the first. Resolving through `marks`
+        // first, the same list `build` drew the marks from, keeps the two from disagreeing.
+        formatter: (params) => {
+          const p = Array.isArray(params) ? params[0] : params
+          if (!p) return ''
+          if (p.componentType === 'markPoint') {
+            const mark = marks.atValue[p.dataIndex]
+            return mark ? `${mark.date}<br/>${t('charts.absence.excluded')}` : ''
+          }
+          if (p.componentType === 'markLine') {
+            const mark = marks.atDate[p.dataIndex]
+            return mark ? `${mark.date}<br/>${mark.text}` : ''
+          }
+          return hrTooltip(days, p.dataIndex)
+        },
       },
       xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },
       yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
@@ -116,7 +136,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
               ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
       ],
     }
-  }, [days, baseline, marks])
+  }, [days, baseline, marks, t])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = heartRateRangePointDate(days, marks, event)

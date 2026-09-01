@@ -102,7 +102,48 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
     const absent = cells.flatMap((c, i) => (days[i]?.steps === null ? [[c.week, c.weekday]] : []))
     return {
       grid: base.grid({ left: 30, top: 10, bottom: 20 }),
-      tooltip: base.tooltip,
+      tooltip: {
+        ...base.tooltip,
+        // With no formatter, echarts renders a markPoint hover as its series name plus the
+        // item name, and this series carries no `name`, so the series half of that came out
+        // as echarts' own internal id ("series0") rather than nothing: a reader hovering an
+        // excluded or annotated day saw that id sitting above the reason they wrote. And left
+        // to its own default the ordinary cell case names a week index ("Week 5"), which is
+        // exactly the coordinate the reader cannot read a date out of. Owning both cases here
+        // means naming the real day either way, from `cells`/`days` rather than the axis
+        // category label.
+        formatter: (params) => {
+          const p = Array.isArray(params) ? params[0] : params
+          if (!p) return ''
+          if (p.componentType === 'markPoint') {
+            // dataIndex counts into this series' own markPoint data, which `marks` (above) was
+            // built in lockstep with, the same contract heatmapClickDate's own click lookup
+            // relies on: entry N drawn is entry N read back.
+            const mark = marks[p.dataIndex]
+            if (!mark) return ''
+            const text = mark.kind === 'excluded' ? t('charts.absence.excluded') : mark.text
+            return `${mark.date}<br/>${text}`
+          }
+          // The ordinary cell case, for both this chart's series: the worn heatmap and the
+          // absent-day scatter. Both plot `[week, weekday, ...]`, so reading the cell off the
+          // hovered point's own value (the same fields heatmapClickDate reads a click off)
+          // works for either series without needing dataIndex, which counts into each series'
+          // own filtered data and not into `cells`.
+          const value = p.value
+          if (p.componentType === 'series' && Array.isArray(value)) {
+            const [week, weekday] = value as [number, number]
+            const index = cells.findIndex((c) => c.week === week && c.weekday === weekday)
+            const cell = cells[index]
+            if (!cell) return ''
+            const steps = days[index]?.steps
+            const text = steps === null || steps === undefined
+              ? t(excluded.includes(cell.date) ? 'charts.absence.excluded' : 'charts.absence.noReading')
+              : `${t('charts.columns.steps')}: ${steps}`
+            return `${cell.date}<br/>${text}`
+          }
+          return ''
+        },
+      },
       xAxis: {
         type: 'category' as const,
         data: Array.from({ length: weeks }, (_, i) => `Week ${i + 1}`),
@@ -160,7 +201,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
         },
       ],
     }
-  }, [cells, days, weeks, max, weekdayLabels, marks])
+  }, [cells, days, weeks, max, weekdayLabels, marks, excluded, t])
 
   const markDates = useMemo(() => marks.map((mark) => mark.date), [marks])
   const onClick = useCallback((event: ECElementEvent) => {

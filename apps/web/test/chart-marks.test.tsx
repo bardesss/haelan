@@ -14,6 +14,7 @@ import { Sparkline, sparklinePointDate } from '../src/charts/Sparkline.js'
 import { ActivityHeatmap, heatmapClickDate } from '../src/charts/ActivityHeatmap.js'
 import { HeartRateRange, heartRateRangePointDate } from '../src/charts/HeartRateRange.js'
 import { dayMarks } from '../src/charts/base.js'
+import { hrTooltip } from '../src/charts/hrTooltip.js'
 import type { DayMarks } from '../src/charts/base.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import type { DayRow } from '../src/fixtures/july.js'
@@ -273,6 +274,24 @@ describe('Sparkline', () => {
     })
   })
 
+  // Sparkline's own build() never sets a `tooltip` key at all (its own comment: "a sparkline is a
+  // shape, not a chart to consult"), and echarts only creates a component for a mainType present
+  // in the option object handed to setOption, so omitting the key is not an empty tooltip, it is
+  // no tooltip component at all. Confirmed against the real setOption argument rather than assumed
+  // from the source, since ActivityHeatmap's own leak (this task's starting defect) came from the
+  // opposite mistake: a tooltip present with no formatter, not a tooltip absent altogether.
+  it('sets no tooltip at all, so a mark hover shows nothing rather than leaking an internal id', () => {
+    act(() => {
+      root!.render(
+        <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps"
+          annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
+      )
+    })
+    const stub = chartStubs.at(-1)!
+    const option = stub.setOption.mock.calls[0]![0] as { tooltip?: unknown }
+    expect(option.tooltip).toBeUndefined()
+  })
+
   describe('sparklinePointDate', () => {
     const noMarks: DayMarks = { atValue: [], atDate: [] }
 
@@ -399,6 +418,73 @@ describe('ActivityHeatmap', () => {
     expect(day7Row).not.toContain('charts.absence.noReading')
     expect(day7Row).toContain('charts.absence.excluded')
     expect(day7Row).toContain('phone left at home')
+  })
+
+  // The defect this task was opened for: with no formatter, echarts renders a markPoint hover as
+  // its series name plus the item name, and this series carries no `name`, so the series half
+  // came out as echarts' own internal id ("series0") sitting above the reason the reader wrote
+  // underneath it. Calls the real `tooltip.formatter` off the real setOption argument with the
+  // params object echarts would pass for a markPoint hover, per this task's own note that a
+  // tooltip cannot be asserted by rendering and hovering under happy-dom.
+  describe('tooltip', () => {
+    function formatterOf(): (params: unknown) => string {
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { tooltip: { formatter: (params: unknown) => string } }
+      return option.tooltip.formatter
+    }
+
+    it('names the day and the reason on an annotation mark, never the series id', () => {
+      act(() => {
+        root!.render(
+          <ActivityHeatmap days={days} max={9000} label="calendar heatmap" excluded={[]}
+            annotations={[{ date: '2026-07-07', text: 'Ik was ziek.' }]} />,
+        )
+      })
+      // Only entry in `marks` here is the one annotation, so its markPoint dataIndex is 0.
+      const text = formatterOf()({ componentType: 'markPoint', dataIndex: 0 })
+      expect(text).toBe('2026-07-07<br/>Ik was ziek.')
+      expect(text).not.toContain('series0')
+    })
+
+    it('names the day and "excluded" on an exclusion mark, not the empty name it draws with', () => {
+      act(() => {
+        root!.render(
+          <ActivityHeatmap days={days} max={9000} label="calendar heatmap"
+            excluded={['2026-07-06']} annotations={[]} />,
+        )
+      })
+      const text = formatterOf()({ componentType: 'markPoint', dataIndex: 0 })
+      expect(text).toBe('2026-07-06<br/>charts.absence.excluded')
+    })
+
+    // The consequence of owning this formatter at all: the default cell tooltip echarts would
+    // otherwise draw names the xAxis category ("Week 1"), not a date, and now that a formatter
+    // exists for the mark cases above it has to answer for the ordinary cell too. Reads the cell
+    // off the hovered point's own [week, weekday, steps] value, the same fields heatmapClickDate
+    // reads a click off, rather than dataIndex, which counts into this series' own filtered data
+    // (`worn`, built by skipping null-steps cells) and not into `cells`.
+    it('names the real date on an ordinary cell hover, not a week index', () => {
+      act(() => {
+        root!.render(<ActivityHeatmap days={days} max={9000} label="calendar heatmap" />)
+      })
+      const text = formatterOf()({ componentType: 'series', dataIndex: 0, value: [0, 1, 9000] })
+      expect(text).toBe('2026-07-07<br/>charts.columns.steps: 9000')
+      expect(text).not.toContain('Week')
+    })
+
+    it('names the real date on the absent-day scatter series too, whose value carries no steps', () => {
+      const withGap: DayRow[] = [
+        { date: '2026-07-06', steps: 4000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+        { date: '2026-07-07', steps: null, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+        { date: '2026-07-08', steps: 5000, hrMin: null, hrMean: null, hrMax: null, sleepMinutes: null, worn: true },
+      ]
+      act(() => {
+        root!.render(<ActivityHeatmap days={withGap} max={9000} label="calendar heatmap" />)
+      })
+      // The absent scatter series' own value has no third element, unlike the heatmap series above.
+      const text = formatterOf()({ componentType: 'series', dataIndex: 0, value: [0, 1] })
+      expect(text).toBe('2026-07-07<br/>charts.absence.noReading')
+    })
   })
 
   describe('heatmapClickDate', () => {
@@ -632,6 +718,64 @@ describe('HeartRateRange', () => {
       expect(day11Row).toContain('charts.absence.excluded')
       expect(day11Row).toContain(EXCLUDED_REASON)
       expect(day11Row).not.toContain('charts.absence.notWorn')
+    })
+  })
+
+  // MarkPointModel and MarkLineModel both default their own `tooltip.trigger` to 'item' (their
+  // own defaultOption, not this chart's option), which wins over this chart's 'axis' trigger, so
+  // a mark hover reaches the formatter as a single params object rather than the array an axis
+  // hover passes, and its dataIndex counts into the mark's own data array (marks.atValue /
+  // marks.atDate), never into `days`. Calls the real `tooltip.formatter` off the real setOption
+  // argument with the params object echarts would pass, per this task's own note that a tooltip
+  // cannot be asserted by rendering and hovering under happy-dom.
+  describe('tooltip', () => {
+    function formatterOf(): (params: unknown) => string {
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as { tooltip: { formatter: (params: unknown) => string } }
+      return option.tooltip.formatter
+    }
+
+    // Two exclusions whose value has not yet been removed (the window before derive catches up),
+    // so both land in `marks.atValue` and a markPoint dataIndex genuinely counts past 0. The bug
+    // this test exists to catch: `hrTooltip(days, dataIndex)` on that raw dataIndex named
+    // whichever day happened to sit at that small array position (days[1], 2026-08-11) rather
+    // than the day the second mark was actually drawn on (2026-08-15), stating a different day's
+    // numbers under the mark, which the milestone brief calls worse than a leaked id because it
+    // is a chart stating something false rather than something ugly.
+    it('names the day the second markPoint mark actually sits on, not days[its own dataIndex]', () => {
+      const sixDays: DayRow[] = Array.from({ length: 6 }, (_, i) => ({
+        date: `2026-08-${10 + i}`, steps: null, hrMin: 50 + i, hrMean: 60 + i, hrMax: 70 + i,
+        sleepMinutes: null, worn: true,
+      }))
+      act(() => {
+        root!.render(
+          <HeartRateRange days={sixDays} excluded={['2026-08-10', '2026-08-15']} annotations={[]}
+            label="hr range" />,
+        )
+      })
+      // marks.atValue[1] is 2026-08-15 (days[5]); days[1] is 2026-08-11, the wrong day the old
+      // code named.
+      const text = formatterOf()({ componentType: 'markPoint', dataIndex: 1 })
+      expect(text).toBe('2026-08-15<br/>charts.absence.excluded')
+    })
+
+    it('names the day and reason on a markLine gap mark, from the mark itself', () => {
+      act(() => {
+        root!.render(
+          <HeartRateRange days={appliedDays} excluded={['2026-08-11']}
+            annotations={[{ date: '2026-08-11', text: EXCLUDED_REASON }]} label="hr range" />,
+        )
+      })
+      const text = formatterOf()({ componentType: 'markLine', dataIndex: 0 })
+      expect(text).toBe(`2026-08-11<br/>charts.absence.excluded, ${EXCLUDED_REASON}`)
+    })
+
+    it('still resolves an ordinary axis hover through hrTooltip, unaffected by the mark branches', () => {
+      act(() => {
+        root!.render(<HeartRateRange days={days} annotations={[]} excluded={[]} label="hr range" />)
+      })
+      const text = formatterOf()([{ componentType: 'series', dataIndex: 1 }])
+      expect(text).toBe(hrTooltip(days, 1))
     })
   })
 
