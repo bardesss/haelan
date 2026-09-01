@@ -70,16 +70,32 @@ export class OverrideStore {
     })
   }
 
+  /**
+   * One override, scoped by person as well as id for the reason remove's own WHERE is: an id is
+   * not a secret, and a caller that could read somebody else's row by holding one would learn
+   * which day it names and why it was written. Null covers both "no such override" and "not
+   * yours", which are the same answer to anyone who is not its owner.
+   */
+  get(personId: string, id: string): StoredOverride | null {
+    const row = this.#db.select().from(overrides)
+      .where(and(eq(overrides.id, id), eq(overrides.personId, personId))).get()
+    return row === undefined ? null : toStored(row)
+  }
+
   listFor(personId: string): StoredOverride[] {
-    return this.#db.select().from(overrides).where(eq(overrides.personId, personId)).all()
-      .map((row) => ({
-        id: row.id,
-        scope: row.scope,
-        targetKey: row.targetKey,
-        action: row.action,
-        correctedValue: row.correctedValue ?? null,
-        reason: row.reason,
-      }))
+    return this.#db.select().from(overrides).where(eq(overrides.personId, personId)).all().map(toStored)
+  }
+
+  /**
+   * Which local day a target falls on, or null when nothing names one yet.
+   *
+   * The same answer `#markAffected` marks the queue with, exposed because a caller that writes an
+   * override has to say which day it touched and then ask whether that day is still queued. A
+   * second copy of this resolution in the route would be a day reported that could disagree with
+   * the day marked, which is the one disagreement nobody would notice.
+   */
+  affectedLocalDate(input: { personId: string, scope: OverrideScope, targetKey: string }): string | null {
+    return this.#localDateOf(this.#db, input.personId, input.scope, input.targetKey)
   }
 
   #markAffected(tx: DbOrTx, personId: string, scope: OverrideScope, targetKey: string, nowMs: number): void {
@@ -110,6 +126,19 @@ export class OverrideStore {
       eq(samples.utcMs, target.utcMs),
     )).get()
     return row ? localDateOf(target.utcMs, row.tzOffsetMinutes) : null
+  }
+}
+
+// One shape for both readers: a field added to the row and not to one of two copies of this
+// would be a field the derivation sees from listFor and not from get.
+function toStored(row: typeof overrides.$inferSelect): StoredOverride {
+  return {
+    id: row.id,
+    scope: row.scope,
+    targetKey: row.targetKey,
+    action: row.action,
+    correctedValue: row.correctedValue ?? null,
+    reason: row.reason,
   }
 }
 

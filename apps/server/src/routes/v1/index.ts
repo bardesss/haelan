@@ -5,6 +5,7 @@ import { registerSeriesRoutes } from './series.ts'
 import { registerTier2Routes } from './tier2.ts'
 import { registerChangesRoutes } from './changes.ts'
 import { registerExportRoutes } from './export.ts'
+import { registerAnnotationRoutes } from './annotations.ts'
 
 /**
  * Registers the versioned surface. Called through app.register with the /api/v1 prefix (see
@@ -48,6 +49,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
   registerTier2Routes(app)
   registerChangesRoutes(app)
   registerExportRoutes(app)
+  registerAnnotationRoutes(app)
 
   testOnlyExtra?.(app)
 }

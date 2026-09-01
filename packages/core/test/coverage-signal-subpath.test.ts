@@ -21,6 +21,14 @@ const TARGET = './src/query/coverageSignal.ts'
 const read = (relative: string): string =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8')
 
+// Matches an `import` statement of any shape, and also an `export ... from '...'` re-export,
+// which pulls a module in exactly as surely as an import does but carries no `import` keyword at
+// all: a plain `/^import\s.*$/` scan (this file's own original shape, and target-key-subpath.
+// test.ts copied it) is blind to `export { x } from '../db/schema.ts'` landing in either file. A
+// bare `export function` or `export const` line has no `from '...'` clause and does not match, so
+// it does not pollute the exact-equality lists below.
+const IMPORT_LINE = /^(?:import\s.*|export\s.*\bfrom\s*['"].*)$/gm
+
 describe('the @haelan/core/coverage-signal subpath', () => {
   it('is published, and points at the coverage signal module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
@@ -34,13 +42,13 @@ describe('the @haelan/core/coverage-signal subpath', () => {
     // through every other test in this suite and only break the bundle, silently. This is the
     // one check standing between an edit here and that failure mode.
     const signalSource = read('../src/query/coverageSignal.ts')
-    const importLines = [...signalSource.matchAll(/^import\s.*$/gm)].map((m) => m[0])
+    const importLines = [...signalSource.matchAll(IMPORT_LINE)].map((m) => m[0])
     expect(importLines).toEqual(["import { DATA_TYPES } from '../api/catalogue.ts'"])
   })
 
   it('reaches catalogue.ts through nothing but an erased type import', () => {
     const catalogueSource = read('../src/api/catalogue.ts')
-    const importLines = [...catalogueSource.matchAll(/^import\s.*$/gm)].map((m) => m[0])
+    const importLines = [...catalogueSource.matchAll(IMPORT_LINE)].map((m) => m[0])
     // Naive on purpose, the same way metrics-subpath.test.ts's comment-stripping scan is: one
     // line matching `import type { SampleAgg }` and nothing else is what "erased" requires. A
     // second import, of any shape, is exactly the drift this test exists to catch before a bundle

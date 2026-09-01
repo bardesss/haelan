@@ -1,0 +1,88 @@
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import type { TestDatabase } from '../src/testing/fixtures.ts'
+import { NoteStore } from '../src/store/notes.ts'
+
+let test: TestDatabase
+let notes: NoteStore
+
+beforeEach(() => {
+  test = createTestDatabase()
+  seedPerson(test.db, 'p1')
+  notes = new NoteStore(test.db)
+})
+afterEach(() => test.cleanup())
+
+describe('NoteStore', () => {
+  it('writes a note and reads it back in range', () => {
+    notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'flew to Tokyo', nowMs: 1000 })
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31'))
+      .toMatchObject([{ localDate: '2026-08-15', body: 'flew to Tokyo' }])
+  })
+
+  // The schema's own unique constraint says one note per person per day, so a second write is an
+  // edit rather than a second row. Without the upsert this throws and the reader loses the edit.
+  it('replaces the day\'s note rather than adding a second', () => {
+    notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'first', nowMs: 1000 })
+    notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'second', nowMs: 2000 })
+    const rows = notes.listFor('p1', '2026-08-01', '2026-08-31')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.body).toBe('second')
+    expect(rows[0]!.updatedAtMs).toBe(2000)
+  })
+
+  // The id an edit answers with has to be the id of the row that now holds the text, since that is
+  // the only thing a caller can do anything with. put() used to mint a fresh UUID and return it
+  // whether or not the insert branch ever ran, so the second write below answered an id belonging
+  // to no row at all: PUT /notes/:localDate reported it, nothing read it back, and nothing failed.
+  it('answers the surviving row\'s own id when a second write edits it, not a fresh one', () => {
+    const first = notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'first', nowMs: 1000 })
+    const second = notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'second', nowMs: 2000 })
+    expect(second).toBe(first)
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')[0]!.id).toBe(second)
+  })
+
+  // The other half of the same property, and the half a "return the id you were given back" fix
+  // would break: an insert that really did insert still answers the id the new row carries.
+  it('answers the new row\'s own id for a first write', () => {
+    const id = notes.put({ personId: 'p1', localDate: '2026-08-16', body: 'only', nowMs: 1000 })
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')[0]!.id).toBe(id)
+  })
+
+  // Section 15: an account touches only its own person's data. A store that filtered on date alone
+  // would pass every other test in this file.
+  it('never returns or overwrites another person\'s note', () => {
+    seedPerson(test.db, 'p2')
+    notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'mine', nowMs: 1000 })
+    notes.put({ personId: 'p2', localDate: '2026-08-15', body: 'theirs', nowMs: 1000 })
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(1)
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')[0]!.body).toBe('mine')
+  })
+
+  it('removes only the named day and only for that person', () => {
+    seedPerson(test.db, 'p2')
+    notes.put({ personId: 'p1', localDate: '2026-08-15', body: 'mine', nowMs: 1000 })
+    notes.put({ personId: 'p2', localDate: '2026-08-15', body: 'theirs', nowMs: 1000 })
+    notes.remove({ personId: 'p1', localDate: '2026-08-15' })
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(0)
+    expect(notes.listFor('p2', '2026-08-01', '2026-08-31')).toHaveLength(1)
+  })
+
+  it('excludes a note outside the requested range', () => {
+    notes.put({ personId: 'p1', localDate: '2026-07-31', body: 'before', nowMs: 1000 })
+    notes.put({ personId: 'p1', localDate: '2026-09-01', body: 'after', nowMs: 1000 })
+    expect(notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(0)
+  })
+
+  // The exclusion test above only proves the filter exists, not which side of it the bounds fall
+  // on. gte/lte are inclusive, so a note dated exactly on either end of the range has to come
+  // back; a regression to exclusive bounds would drop the first and last day of a month and pass
+  // every other test in this file.
+  it('includes a note dated exactly on either end of the range', () => {
+    notes.put({ personId: 'p1', localDate: '2026-08-01', body: 'first day', nowMs: 1000 })
+    notes.put({ personId: 'p1', localDate: '2026-08-31', body: 'last day', nowMs: 1000 })
+    const rows = notes.listFor('p1', '2026-08-01', '2026-08-31')
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.localDate)).toEqual(['2026-08-01', '2026-08-31'])
+  })
+})

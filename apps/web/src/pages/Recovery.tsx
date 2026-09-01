@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
@@ -6,15 +6,20 @@ import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
-import { useSeries } from '../data/useSeries.js'
+import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useAnnotations } from '../data/useAnnotations.js'
+import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
@@ -113,6 +118,22 @@ export function Recovery() {
   const range = { from: controls.from, to: controls.to, source }
   const resolved = { ...controls, source }
 
+  // The day and metric a chart's own click named, or null when no panel is open. Same single slot
+  // Dashboard.tsx's own copy of this state uses, and the same reason: only one panel is ever open.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const overridesQuery = useAnnotations(range)
+  // Grouped once per render of the overrides list, not once per card: see chartAnnotations.ts's
+  // own comment on why Map.get keeps every chart's annotations/excluded arrays stable across a
+  // render that did not change the overrides list.
+  const overridesByMetricMap = useMemo(
+    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
+    [overridesQuery.overrides.data],
+  )
+  // Notes and events, day level rather than metric scoped, reaching every card on this page alike:
+  // see useDayAnnotations' own comment for why both memos live there now, not copied per page.
+  const { dayAnnotations, dayAnnotationsByMetric } =
+    useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
+
   const metricGroups = useMetricGroups(GROUPS, range)
   const lastSeries = metricGroups.queryForAgg('last')
 
@@ -131,6 +152,11 @@ export function Recovery() {
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
 
+  // Every calendar day in the range, the axis the sparklines below are built along as well as the
+  // denominator every basis line counts against. Declared ahead of them rather than after, which is
+  // where it used to sit, because they are built against it now.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
   // Stable array identities for the same reason Dashboard.tsx's own `sparklines` memo exists:
   // useChart keys its rebuild on `build`, and `build` is a useCallback over `values`/`baseline`, so
   // a freshly constructed array or object on every render disposes and reinitialises the chart.
@@ -138,16 +164,21 @@ export function Recovery() {
     const out = new Map<string, { values: (number | null)[], labels: string[] }>()
     for (const metric of LAST_METRICS) {
       const points = metricGroups.pointsOf(metric)
-      out.set(metric, { values: points.map((p) => p.value), labels: points.map((p) => p.localDate) })
+      // denseSeries, not points.map: /series omits a day nothing reported, and an applied
+      // exclusion is exactly such a day (deriveDay deletes the excluded metric's daily row).
+      // Handed the points array directly, a sparkline had no position for that day at all, so its
+      // excluded mark, the reason beside it and its accessible table row all vanished the moment
+      // the exclusion took effect. Dense over the range the reader asked for, the same shape the
+      // heart rate range chart and the heatmap have always been handed, the gap is a position
+      // that can be marked.
+      out.set(metric, denseSeries(rangeDates, points))
     }
     return out
-  }, [lastSeries.data])
+  }, [rangeDates, lastSeries.data])
 
   const restingHrBand = useMemo(() => bandFrom(restingHrBaseline.data?.baseline ?? null), [restingHrBaseline.data])
   const hrvBand = useMemo(() => bandFrom(hrvBaseline.data?.baseline ?? null), [hrvBaseline.data])
   const respiratoryBand = useMemo(() => bandFrom(respiratoryBaseline.data?.baseline ?? null), [respiratoryBaseline.data])
-
-  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // Three sparkline cards over the one 'last' group: exactly MetricCard's fit, no ancestor-basis
   // restructuring needed the way four of Dashboard's cards did. basisPlacement is 'body' at every
@@ -169,6 +200,8 @@ export function Recovery() {
     const headline = mean(values(points))
     const note = baselineNote(t, headline, baselineQuery, precision, controls.to)
     const spark = sparklines.get(metric)!
+    const { excluded } = annotationsFor(overridesByMetricMap, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>
@@ -176,7 +209,9 @@ export function Recovery() {
           <StatTile label={t(labelKey)} value={headline.toFixed(precision)} unit={t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band} />
+              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
+              annotations={annotations} excluded={excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
           </StatTile>
         )}
       </MetricCard>
@@ -198,6 +233,7 @@ export function Recovery() {
           'recovery.respiratoryRate.chartLabel', 'recovery.units.breathsPerMinute', 'recovery.units.breathsPerMinuteShort',
           1, 'neutral', respiratoryBaseline, respiratoryBand)}
       </div>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
 }

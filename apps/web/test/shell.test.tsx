@@ -23,7 +23,7 @@ describe('the navigation rail', () => {
 describe('the route table', () => {
   it('has an entry for every page the design names', () => {
     expect(ROUTES.map((r) => r.path).sort()).toEqual(
-      ['/', '/activity', '/health', '/notes', '/nutrition', '/recovery', '/sleep', '/weight'].sort(),
+      ['/', '/activity', '/health', '/notes', '/nutrition', '/recovery', '/settings', '/sleep', '/weight'].sort(),
     )
   })
 

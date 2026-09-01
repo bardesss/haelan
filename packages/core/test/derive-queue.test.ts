@@ -67,6 +67,18 @@ describe('the derive queue', () => {
     expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-20', '2026-08-21', '2026-08-22'])
   })
 
+  // What the override write routes answer `applied` with. Both directions in one test on purpose:
+  // a `has` that always returned true would make every correction report itself unapplied, and one
+  // that always returned false would report a stale number as a corrected one.
+  it('says whether one day is still queued, for the person asked about and no other', () => {
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    expect(queue.has({ personId: 'p1', localDate: '2026-08-22' })).toBe(true)
+    expect(queue.has({ personId: 'p1', localDate: '2026-08-23' })).toBe(false)
+    expect(queue.has({ personId: 'p2', localDate: '2026-08-22' })).toBe(false)
+    queue.clear([{ personId: 'p1', localDate: '2026-08-22' }])
+    expect(queue.has({ personId: 'p1', localDate: '2026-08-22' })).toBe(false)
+  })
+
   it('clears nothing when handed nothing', () => {
     queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
     queue.clear([])

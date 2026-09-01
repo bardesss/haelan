@@ -1,13 +1,15 @@
 // @vitest-environment happy-dom
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { dayMetricTarget } from '@haelan/core/target-key'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
+import { Settings } from '../src/pages/Settings.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -18,6 +20,50 @@ import { flush } from './flush.js'
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason dashboard-round-trip.test.tsx sets them.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+/**
+ * Delegates to the real `echarts.init`, so every chart in this file still paints a real SVG into
+ * its host div exactly as it would outside a test, and taps only `.on` to remember whichever
+ * handler was registered for `'click'`.
+ *
+ * A full replacement stub (mocking `setOption`/`dispose`/`resize` too, this function's own first
+ * version) silently disarmed four of this file's own assertions: `chart.setOption` never running
+ * means the host div's `role="img"` element stays empty, so `not.toMatch(/>(null|undefined|NaN)</)`,
+ * `not.toContain('NaN')` and "renders no raw message key" all scan zero chart output across all
+ * four pages instead of the rendered SVG (including every markLine `name`, which is exactly where
+ * this task's own annotation text lands). Measured directly: before this file mocked echarts.init
+ * at all, all 35 chart hosts across the four pages contained a rendered `<svg>`; with the full
+ * stub, all 35 were empty strings. Delegating restores every one of them while still letting the
+ * one test that needs it (`annotate wiring`, below) capture the click handler without asking
+ * zrender to resolve a coordinate against a rendered SVG, which chart-marks.test.tsx already
+ * established does not work under happy-dom no matter how the click is simulated.
+ */
+type CapturedChart = { onClick?: (event: unknown) => void }
+const capturedCharts: CapturedChart[] = []
+
+vi.mock('echarts/core', async (importOriginal) => {
+  const actual = (await importOriginal()) as { init: (...args: unknown[]) => { on: (...a: unknown[]) => unknown } } & Record<string, unknown>
+  return {
+    ...actual,
+    init: (...args: unknown[]) => {
+      const chart = actual.init(...args)
+      const entry: CapturedChart = {}
+      capturedCharts.push(entry)
+      const originalOn = chart.on.bind(chart)
+      chart.on = (eventName: unknown, handler: unknown) => {
+        if (eventName === 'click') entry.onClick = handler as (event: unknown) => void
+        return originalOn(eventName, handler)
+      }
+      return chart
+    },
+  }
+})
+
+/** The function useChart.ts actually passed to `chart.on('click', ...)`, i.e. `handleClick`. */
+function clickHandlerOf(entry: CapturedChart): (event: unknown) => void {
+  if (!entry.onClick) throw new Error('chart.on was never called with "click"')
+  return entry.onClick
+}
 
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam',
@@ -36,8 +82,16 @@ const UNWORN_DAY = '2026-08-11'
  * single query, which meant every invariant below was checked against four zeroed stat tiles and
  * a heatmap domain of "0 to 0": the one test that named the rule ("never renders absence as a
  * zero") looked only for the presence of a word elsewhere on the page and could not fail.
+ *
+ * `overrides`/`notes`/`events` all default to none: every page now issues its own GET /overrides,
+ * /notes and /events through useAnnotations, and the four page describes below assert a page that
+ * carries none of the three, the same shape the override alone asserted before this task wired
+ * the other two requests in. The tests that want a real row (see 'annotate wiring' and 'notes and
+ * events reach the charts' below) pass their own lists.
  */
-function stubFetch(): () => void {
+function stubFetch(
+  overrides: readonly unknown[] = [], notes: readonly unknown[] = [], events: readonly unknown[] = [],
+): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -46,6 +100,9 @@ function stubFetch(): () => void {
 
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: Date.now() - 600_000 })
+    if (url.includes('/overrides')) return json({ items: overrides })
+    if (url.includes('/notes')) return json({ items: notes })
+    if (url.includes('/events')) return json({ items: events })
     if (url.includes('/series')) {
       const params = new URLSearchParams(url.split('?')[1] ?? '')
       const body: Record<string, unknown> = {}
@@ -96,6 +153,9 @@ function stubFetch(): () => void {
 const ACTIVITY_ROUTE = '/activity?range=week&on=2026-08-12'
 const RECOVERY_ROUTE = '/recovery?range=week&on=2026-08-12'
 const SLEEP_ROUTE = '/sleep?range=week&on=2026-08-12'
+// No range or anchor query params: Settings never calls usePageControls, so this is just a real
+// path for window.history.replaceState to carry; nothing in the page reads it back.
+const SETTINGS_ROUTE = '/settings'
 
 /**
  * Mounts one page for real, waits for every query to settle, and returns the settled markup.
@@ -127,19 +187,24 @@ const settledDashboard = (lng: string) => settledPage(Dashboard, RANGE, lng)
 const settledActivity = (lng: string) => settledPage(Activity, ACTIVITY_ROUTE, lng)
 const settledRecovery = (lng: string) => settledPage(Recovery, RECOVERY_ROUTE, lng)
 const settledSleep = (lng: string) => settledPage(Sleep, SLEEP_ROUTE, lng)
+const settledSettings = (lng: string) => settledPage(Settings, SETTINGS_ROUTE, lng)
 
 const restore = stubFetch()
 // Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
 // found that Activity and Recovery, converted off fixtures in the two tasks before Sleep, had
 // never been added here either, so three new pages and twenty odd new cards sat outside every
-// assertion below. All four settle for real now through the same stubFetch week, rather than
+// assertion below. All five settle for real now through the same stubFetch week, rather than
 // excluding a whole page because one of its charts cannot answer every assertion (see
-// HAS_ABSENCE_CHART below for the one assertion that genuinely does not apply to every page).
+// HAS_ABSENCE_CHART and IS_CHART_PAGE below for the assertions that genuinely do not apply to
+// every page). Settings is the one page here with no chart and no delta at all, not a page whose
+// chart happens not to draw absences, which is why it gets its own named carve-out rather than
+// reusing HAS_ABSENCE_CHART's.
 const pages = {
   Dashboard: await settledDashboard('en'),
   Activity: await settledActivity('en'),
   Recovery: await settledRecovery('en'),
   Sleep: await settledSleep('en'),
+  Settings: await settledSettings('en'),
 }
 const dashboardNl = await settledDashboard('nl')
 restore()
@@ -161,8 +226,24 @@ restore()
 // coverageIsWearSignal), so even a wear-signal-capable metric drawn this way would still say
 // nothing, the same reason Activity's own distance and floors cards cannot either despite steps,
 // right beside them, being able to through the one chart that draws densely.
+//
+// Every gate built on a map like this one is read as `=== false`, never as `!value`: `!undefined`
+// is true, so a page missing from the map would silently skip rather than run, and a page added to
+// `pages` without a matching entry here would inherit an exemption nobody wrote down. `=== false`
+// requires the exemption to be spelled out; anything absent runs the assertion instead.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
-  Dashboard: true, Activity: true, Recovery: false, Sleep: false,
+  Dashboard: true, Activity: true, Recovery: false, Sleep: false, Settings: false,
+}
+
+// Whether a page carries any chart (and, riding on the same StatTile/MetricCard machinery, any
+// delta) at all. Settings has neither: it is a table, not a metric page, so "names every chart"
+// and "states the window every delta compared" have nothing to check on it and are gated here by
+// name rather than by leaving Settings out of `pages` entirely, the same instinct HAS_ABSENCE_CHART
+// above already states for a narrower case (a page with charts that just do not draw absences).
+// Read as `=== false` at each call site, not `!value`, for the same reason HAS_ABSENCE_CHART is:
+// an unlisted page must run the assertion, not skip it by omission.
+const IS_CHART_PAGE: Record<string, boolean> = {
+  Dashboard: true, Activity: true, Recovery: true, Sleep: true, Settings: false,
 }
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
@@ -173,7 +254,10 @@ function tables(html: string): string {
 }
 
 describe.each(Object.entries(pages))('%s', (_name, html) => {
-  it('names every chart and points it at a description', () => {
+  // Gated on IS_CHART_PAGE, not left to run unconditionally: Settings carries no chart at all
+  // (a table is not a chart, and draws no role="img" host), so "at least one" would be a false
+  // claim about it rather than a broken one.
+  it.skipIf(IS_CHART_PAGE[_name] === false)('names every chart and points it at a description', () => {
     const hosts = [...html.matchAll(/<div[^>]*role="img"[^>]*>/g)].map((m) => m[0])
     expect(hosts.length).toBeGreaterThan(0)
     for (const host of hosts) {
@@ -223,15 +307,18 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // shows a word in that chart's own table alternative. See HAS_ABSENCE_CHART's own comment for
   // why Recovery and Sleep are excluded by name rather than by leaving the whole page out of this
   // describe.each the way the review round that added them here was asked not to repeat.
-  it.skipIf(!HAS_ABSENCE_CHART[_name])('states absence in the accessible table, not silently', () => {
+  it.skipIf(HAS_ABSENCE_CHART[_name] === false)('states absence in the accessible table, not silently', () => {
     expect(tables(html)).toMatch(/not worn|no reading/)
   })
 
-  // These four pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // These five pages carry most of the catalogue, so a mistyped key would otherwise render as
   // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
-  // them look for the shape a missing translation actually takes.
+  // them look for the shape a missing translation actually takes. settings and annotate joined
+  // this list with Settings (M3c-12): AnnotatePanel's own keys never reach this file's settled,
+  // no-click renders, but a page with settings.* copy now does, and a namespace absent here is a
+  // namespace this test cannot see break.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState)\.[a-zA-Z][a-zA-Z.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z][a-zA-Z.]*\b/)
   })
 
   // Both of these ran against Dashboard alone until the review that spotted three more pages had
@@ -244,7 +331,9 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(new Set(labels).size).toBe(labels.length)
   })
 
-  it('states the window every delta compared', () => {
+  // Gated the same way as the chart assertion above: Settings has no StatTile and so no delta at
+  // all, and "at least one delta" would be a false claim about a page that draws none.
+  it.skipIf(IS_CHART_PAGE[_name] === false)('states the window every delta compared', () => {
     const deltas = [...html.matchAll(/class="delta"/g)].length
     const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
     expect(deltas).toBeGreaterThan(0)
@@ -325,4 +414,179 @@ describe('Dashboard specifics', () => {
     expect(dashboardNl).toContain('0 dagen niet gedragen')
   })
 
+})
+
+// Task 11's own coverage: until this task every chart on every page was handed an empty
+// annotations/excluded pair (Dashboard's own EMPTY, by name, with a comment calling it a
+// milestone boundary) and no chart's onPointClick went anywhere, since no page held a target to
+// open the panel with. Recovery, not Dashboard: three plain Sparklines and nothing else touching
+// useChart, so the first entry captured after this test's own render is unambiguously
+// resting_heart_rate's, the same reasoning that picked it for the round trip harness above never
+// needed to state (nothing there clicks).
+describe('annotate wiring', () => {
+  const OVERRIDE_DATE = '2026-08-11'
+  const OVERRIDE_METRIC = 'resting_heart_rate'
+  const OVERRIDE_REASON = 'Watch left charging'
+
+  async function mountRecoveryWithOverride(): Promise<{ html: string, clickResting: (event: unknown) => void, cleanup: () => void }> {
+    const restore = stubFetch([{
+      id: 'o1', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: OVERRIDE_DATE, metric: OVERRIDE_METRIC }),
+      action: 'exclude', correctedValue: null, reason: OVERRIDE_REASON,
+    }])
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', RECOVERY_ROUTE)
+    const chartsBefore = capturedCharts.length
+
+    act(() => {
+      root.render(
+        <I18nProvider lng="en"><QueryClientProvider client={client}><Recovery /></QueryClientProvider></I18nProvider>,
+      )
+    })
+    await flush(client, () => container.innerHTML)
+
+    // resting_heart_rate is Recovery.tsx's own first card(), so the first chart entry captured by
+    // this mount (capturedCharts already carries one entry per chart from the module level `pages`
+    // harness above, hence the slice) is unambiguously its Sparkline, not daily_hrv's or
+    // respiratory_rate's.
+    const entry = capturedCharts.slice(chartsBefore)[0]
+    if (!entry) throw new Error('no chart mounted')
+    const clickResting = clickHandlerOf(entry)
+
+    return {
+      html: container.innerHTML,
+      clickResting,
+      cleanup: () => {
+        act(() => { root.unmount() })
+        container.remove()
+        restore()
+      },
+    }
+  }
+
+  it('marks the excluded day in its own chart table rather than dropping it', async () => {
+    const { html, cleanup } = await mountRecoveryWithOverride()
+    try {
+      // Recovery's first accessible table belongs to resting_heart_rate's own Sparkline, the same
+      // card the override targets; daily_hrv and respiratory_rate get no mark, since the override
+      // named a metric, not a day.
+      const firstTable = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
+      if (!firstTable) throw new Error('no accessible table rendered')
+      const row = firstTable.match(new RegExp(`<tr><th scope="row">${OVERRIDE_DATE}</th>[\\s\\S]*?</tr>`))?.[0]
+      if (!row) throw new Error(`no row for ${OVERRIDE_DATE}`)
+      // 67: DAYS' own resting_heart_rate value for 2026-08-11 (index 1, 60 + 1*7). Still present,
+      // not replaced by an absence word: an override marks a reading, it does not remove it.
+      expect(row).toContain('67')
+      expect(row).toContain('excluded')
+      expect(row).toContain(OVERRIDE_REASON)
+      // The untouched day beside it carries neither mark.
+      const otherRow = firstTable.match(/<tr><th scope="row">2026-08-10<\/th>[\s\S]*?<\/tr>/)?.[0]
+      expect(otherRow, otherRow).not.toContain('excluded')
+    } finally {
+      cleanup()
+    }
+  })
+
+  it('opens the panel with the clicked point’s own day and metric, typed by nobody', async () => {
+    const { clickResting, cleanup } = await mountRecoveryWithOverride()
+    try {
+      // dataIndex 1 is DAYS[1], 2026-08-11: the same day the override above targets, clicked
+      // through the chart rather than read off state a caller assembled by hand.
+      act(() => { clickResting({ componentType: 'series', dataIndex: 1 }) })
+      const containers = document.querySelectorAll('[role="dialog"]')
+      expect(containers).toHaveLength(1)
+      const dialogHtml = containers[0]!.innerHTML
+      // annotate.title is "{{metric}} on {{date}}": this asserts the panel opened with the
+      // clicked point's own metric and date, not a target the page had to build by hand
+      // (AnnotatePanel.tsx builds the target key itself; a page only ever hands it these two
+      // fields, see its own doc comment).
+      expect(dialogHtml).toContain(`${OVERRIDE_METRIC} on ${OVERRIDE_DATE}`)
+    } finally {
+      cleanup()
+    }
+  })
+})
+
+// Task 11b's own coverage: until this task useAnnotations issued GET /notes and GET /events on
+// every page and every range change and threw both away, the gap task-11b's own brief names.
+// Recovery, the same choice 'annotate wiring' above makes and for the same reason: three plain
+// Sparklines and nothing else on the page, so a note or an event landing on all three (or on
+// none) is unambiguous, with no heatmap or heart rate range chart nearby to blur which card a mark
+// actually reached.
+describe('notes and events reach the charts', () => {
+  const DATE = '2026-08-11'
+  const NOTE_BODY = 'felt off today'
+
+  async function mountRecoveryWithDayAnnotations(): Promise<{ html: string, cleanup: () => void }> {
+    const restore = stubFetch(
+      [],
+      [{ id: 'n1', localDate: DATE, body: NOTE_BODY, updatedAtMs: 0 }],
+      [{
+        id: 'e1', kind: 'illness', startedAtMs: Date.parse(`${DATE}T09:00:00Z`), startedAtOffsetMinutes: 0,
+        endedAtMs: null, endedAtOffsetMinutes: null, value: null, note: null, localDate: DATE,
+      }],
+    )
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', RECOVERY_ROUTE)
+
+    act(() => {
+      root.render(
+        <I18nProvider lng="en"><QueryClientProvider client={client}><Recovery /></QueryClientProvider></I18nProvider>,
+      )
+    })
+    await flush(client, () => container.innerHTML)
+
+    return {
+      html: container.innerHTML,
+      cleanup: () => {
+        act(() => { root.unmount() })
+        container.remove()
+        restore()
+      },
+    }
+  }
+
+  // The density judgment call task-11b's report states: a note or an event carries no metric of
+  // its own (unlike an override), so it reaches every chart on the page rather than being
+  // arbitrarily attached to whichever card happens to share its date. Recovery draws exactly
+  // three cards, none of which the note or the event above targets by metric, so all three
+  // carrying the same date's mark is the decision under test, not an accident of the fixture.
+  it('carries a note onto every chart on the page, not just one', async () => {
+    const { html, cleanup } = await mountRecoveryWithDayAnnotations()
+    try {
+      const chartTables = [...html.matchAll(/<table class="sr-only">[\s\S]*?<\/table>/g)].map((m) => m[0])
+      expect(chartTables).toHaveLength(3)
+      for (const t of chartTables) {
+        const row = t.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
+        if (!row) throw new Error(`no row for ${DATE}`)
+        expect(row, row).toContain(NOTE_BODY)
+      }
+    } finally {
+      cleanup()
+    }
+  })
+
+  // The note and the event share a date, so this also pins the multiplicity fix: both texts reach
+  // the same row, joined, rather than one silently replacing the other the way a find() (instead
+  // of the filter+join every chart table now uses) would.
+  it('translates a seed event kind and joins it with a note sharing its date', async () => {
+    const { html, cleanup } = await mountRecoveryWithDayAnnotations()
+    try {
+      const firstTable = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
+      if (!firstTable) throw new Error('no accessible table rendered')
+      const row = firstTable.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
+      if (!row) throw new Error(`no row for ${DATE}`)
+      expect(row).toContain(`${NOTE_BODY}, Illness`)
+    } finally {
+      cleanup()
+    }
+  })
 })

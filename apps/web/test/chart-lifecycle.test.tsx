@@ -5,6 +5,7 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { dayMetricTarget } from '@haelan/core/target-key'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
@@ -48,6 +49,30 @@ function stubFetch(): () => void {
       new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
     if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: null })
+    // A real override (on steps, so the "metric already has annotations" branch of
+    // mergeDayAnnotations runs, not only the fallback every other metric takes) plus a real note
+    // and a real event, both on the same day: task 11b's own merge has to keep every one of these
+    // arrays stable across the rerender below, on both branches, not only on an empty page.
+    if (url.includes('/overrides')) {
+      return json({
+        items: [{
+          id: 'o1', scope: 'day_metric',
+          targetKey: dayMetricTarget({ localDate: '2026-08-11', metric: 'steps' }),
+          action: 'exclude', correctedValue: null, reason: 'Watch left charging',
+        }],
+      })
+    }
+    if (url.includes('/notes')) {
+      return json({ items: [{ id: 'n1', localDate: '2026-08-11', body: 'felt off', updatedAtMs: 0 }] })
+    }
+    if (url.includes('/events')) {
+      return json({
+        items: [{
+          id: 'e1', kind: 'illness', startedAtMs: Date.parse('2026-08-11T09:00:00Z'), startedAtOffsetMinutes: 0,
+          endedAtMs: null, endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-11',
+        }],
+      })
+    }
     if (url.includes('/series')) {
       const body: Record<string, unknown> = {}
       for (const metric of new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')) {
@@ -91,6 +116,13 @@ describe('the charts across a rerender', () => {
   // the page handed all five of them freshly constructed arrays on every commit. With eight
   // queries settling at different moments that is roughly eight teardowns and rebuilds of five
   // echarts instances on a single page load.
+  //
+  // stubFetch above answers a real override, a real note and a real event now (task 11b), so this
+  // also exercises mergeDayAnnotations on both of its branches: steps carries an override plus the
+  // day level list concatenated onto it, and every other chart on the page falls back to the day
+  // level list by reference. A badly memoised merge on either branch (a fresh concat per render, or
+  // dayAnnotations rebuilt on a render that changed neither query) would fail this the same way the
+  // original defect did.
   it('are not disposed and re-initialised when nothing they draw has changed', async () => {
     const restore = stubFetch()
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })

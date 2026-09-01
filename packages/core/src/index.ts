@@ -78,7 +78,7 @@ export type {
   RebuildInput, RebuildReport, RebuildPersonReport, RebuildFailure,
 } from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
-export { localDateOf, localHourOf, shiftLocalDate } from './derive/localDay.ts'
+export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
@@ -110,6 +110,10 @@ export type { OverrideScope, SampleTarget, DayMetricTarget } from './derive/targ
 export type { OverrideLike, SessionLike } from './derive/overrides.ts'
 export { OverrideStore } from './store/overrides.ts'
 export type { PutOverrideInput, StoredOverride } from './store/overrides.ts'
+export { NoteStore } from './store/notes.ts'
+export type { PutNoteInput, StoredNote } from './store/notes.ts'
+export { EventStore } from './store/events.ts'
+export type { AddEventInput, StoredEvent } from './store/events.ts'
 export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'
 export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'
 
@@ -120,7 +124,7 @@ export { mergeSleepDay } from './derive/sleepMerge.ts'
 export { SLEEP_METRICS } from './derive/metrics.ts'
 
 // M2d. The query layer M3 and M4 both sit on, and the statistics behind it.
-export { PersonQuery } from './query/personQuery.ts'
+export { PersonQuery, requireDate } from './query/personQuery.ts'
 export type { DailyPoint, SeriesResult } from './query/personQuery.ts'
 export { baselineOf, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'

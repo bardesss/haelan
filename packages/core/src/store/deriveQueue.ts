@@ -67,6 +67,23 @@ export class DeriveQueue {
     }
   }
 
+  /**
+   * Whether one day is still waiting to be derived.
+   *
+   * Written for the override write routes, which report whether the correction they saved has
+   * actually been applied. "The drain did not throw" cannot answer that: `claim` takes the
+   * oldest days first, so a day marked now sorts behind any backlog a backfill or a version bump
+   * left queued, and a drain that ran perfectly can still have stopped short of it. Asking the
+   * queue is the only answer that cannot be wrong in the direction that matters, which is
+   * calling a stale number a corrected one.
+   */
+  has(entry: QueueEntry): boolean {
+    const row = this.#db.select({ localDate: deriveQueue.localDate }).from(deriveQueue)
+      .where(and(eq(deriveQueue.personId, entry.personId), eq(deriveQueue.localDate, entry.localDate)))
+      .get()
+    return row !== undefined
+  }
+
   size(): number {
     const row = this.#db.select({ n: sql<number>`count(*)` }).from(deriveQueue).get()
     return row?.n ?? 0

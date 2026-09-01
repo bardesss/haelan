@@ -67,4 +67,11 @@ describe('openHaelan', () => {
     // directory right after would throw or hang instead of succeeding
     expect(() => rmSync(dir, { recursive: true, force: true })).not.toThrow()
   })
+
+  it('exposes the note and event stores on the instance', () => {
+    const instance = openHaelan(dir)
+    expect(instance.notes).toBeDefined()
+    expect(instance.events).toBeDefined()
+    instance.close()
+  })
 })

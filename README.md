@@ -96,8 +96,8 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M3b-1** Core read stack | Units on every metric, written-at timestamp on derived rows, sample counts for SpO2, HRV and heart rate, workout counts and durations from exercise sessions, one derivation and mapping version bump, query layer with shared downsampler, intraday, nights, sessions and weight trend bound to one person | Done, [#65](https://github.com/bardesss/haelan/pull/65) |
 | **M3b-2** HTTP surface | Bearer auth alongside the cookie, the response envelope, `requirePerson`, daily backed and tier 2 reads with weak ETags, `/changes`, CSV and JSON export, the person isolation suite | Done, [#67](https://github.com/bardesss/haelan/pull/67) |
 | **M3d-1** Page spine and Dashboard | The shared control row and its URL backed state, the data hooks the pages read through, and the Dashboard converted off fixtures as their first consumer | Done, [#68](https://github.com/bardesss/haelan/pull/68) |
-| **M3d-2** Activity, Sleep and Recovery | The three remaining M3d pages, off the same control row and data hooks M3d-1 built | In review |
-| **M3c** Annotations and corrections | Store CRUD, write routes with transactional re-derive enqueueing, the chart-click panel, excluded rendering, the management list, note and event entry, chart annotations | Not started |
+| **M3d-2** Activity, Sleep and Recovery | The three remaining M3d pages, off the same control row and data hooks M3d-1 built | Done, [#71](https://github.com/bardesss/haelan/pull/71) |
+| **M3c** Annotations and corrections | Store CRUD, write routes with transactional re-derive enqueueing, the chart-click panel, excluded rendering, the management list, note and event entry, chart annotations | In review |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish, the person switcher and member management | Not started |
 

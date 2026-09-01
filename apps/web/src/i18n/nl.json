@@ -44,7 +44,8 @@
     "sectionsLabel": "Secties",
     "groups": {
       "overview": "Overzicht",
-      "tracking": "Registratie"
+      "tracking": "Registratie",
+      "settings": "Instellingen"
     },
     "items": {
       "dashboard": "Dashboard",
@@ -54,7 +55,8 @@
       "health": "Gezondheid",
       "weight": "Gewicht",
       "nutrition": "Voeding",
-      "notes": "Notities"
+      "notes": "Notities",
+      "settings": "Instellingen"
     }
   },
   "common": {
@@ -297,6 +299,10 @@
       "noReading": "geen meting",
       "excluded": "uitgesloten",
       "none": "geen"
+    },
+    "event": {
+      "withNote": "{{kind}}: {{note}}",
+      "multiDay": "{{kind}}, gestart"
     }
   },
   "sleep": {
@@ -471,6 +477,79 @@
         "consent": "Toestemming"
       },
       "loadingProgress": "Voortgang wordt geladen"
+    }
+  },
+  "annotate": {
+    "title": "{{metric}} op {{date}}",
+    "close": "Sluiten",
+    "actionLabel": "Wat wil je doen",
+    "actions": {
+      "exclude": "Uitsluiten",
+      "note": "Notitie toevoegen",
+      "event": "Gebeurtenis toevoegen"
+    },
+    "reasonLabel": "Reden",
+    "reasonHint": "Verplicht.",
+    "noteLabel": "Notitie",
+    "kindLabel": "Soort",
+    "startedAtLabel": "Begonnen",
+    "endedAtLabel": "Beëindigd, optioneel",
+    "eventValueLabel": "Waarde, optioneel",
+    "eventNoteLabel": "Notitie, optioneel",
+    "saving": "Bezig met opslaan",
+    "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw.",
+    "notYetApplied": "De uitsluiting is opgeslagen. De cijfers erachter zijn nog niet bijgewerkt.",
+    "event": {
+      "kinds": {
+        "illness": "Ziekte",
+        "travel": "Reis",
+        "alcohol": "Alcohol",
+        "medication": "Medicatie",
+        "injury": "Blessure",
+        "caffeine": "Cafeïne"
+      }
+    }
+  },
+  "settings": {
+    "title": "Instellingen",
+    "overrides": {
+      "title": "Correcties en uitsluitingen",
+      "empty": {
+        "title": "Nog geen correcties",
+        "detail": "Voor deze persoon is nog niets uitgesloten of gecorrigeerd."
+      },
+      "columns": {
+        "scope": "Bereik",
+        "target": "Doel",
+        "action": "Actie",
+        "reason": "Reden",
+        "date": "Datum",
+        "remove": "Verwijderen"
+      },
+      "scope": {
+        "day_metric": "Dag en meetwaarde",
+        "sample": "Meting",
+        "session": "Sessie"
+      },
+      "target": {
+        "sample": "{{metric}} van {{source}}",
+        "session": "Sessie {{sessionId}}",
+        "unreadable": "Doel kon niet worden gelezen"
+      },
+      "date": {
+        "unavailable": "Niet geregistreerd voor dit bereik"
+      },
+      "action": {
+        "exclude": "Uitsluiten",
+        "correct": "Corrigeren"
+      },
+      "correctedTo": "Corrigeren naar {{value}}",
+      "remove": "Verwijderen",
+      "removing": "Bezig met verwijderen",
+      "removeAria": "Verwijder {{target}}, {{date}}",
+      "removeAriaUnreadable": "Verwijder {{target}}, {{date}} ({{id}})",
+      "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
+      "removedNotYetApplied": "Verwijderd. De cijfers erachter zijn nog niet bijgewerkt."
     }
   }
 }

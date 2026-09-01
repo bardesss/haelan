@@ -56,6 +56,12 @@ const PATHS: Record<string, React.ReactNode> = {
   ),
   chevronLeft: <path d="M14.5 5.5 8 12l6.5 6.5" />,
   chevronRight: <path d="M9.5 5.5 16 12l-6.5 6.5" />,
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3.2" />
+      <path d="M12 3.5v2.4M12 18.1v2.4M20.5 12h-2.4M5.9 12H3.5M18 6l-1.7 1.7M7.7 16.3 6 18M18 18l-1.7-1.7M7.7 7.7 6 6" />
+    </>
+  ),
 }
 
 export function Icon({ name }: { name: string }) {

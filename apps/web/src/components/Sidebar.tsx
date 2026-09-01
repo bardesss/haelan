@@ -16,6 +16,10 @@ const GROUPS = [
       { path: '/notes', nameKey: 'sidebar.items.notes' },
     ],
   },
+  {
+    labelKey: 'sidebar.groups.settings',
+    items: [{ path: '/settings', nameKey: 'sidebar.items.settings' }],
+  },
 ] as const
 
 // A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and
@@ -47,7 +51,8 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
       ))}
       <div className="rail-foot">
         {/* Not a Link: the account page it would point to returns in M3e. A dead link here would
-            be a ninth way to reach a blank screen. */}
+            be a tenth way to reach a blank screen, now that the rail carries nine (M3c-12 added
+            the ninth, Settings). */}
         <div className="rail-person">
           <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
         </div>

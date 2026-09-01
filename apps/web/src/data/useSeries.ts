@@ -51,6 +51,29 @@ export function seriesPath(personId: string, metrics: string[], range: SeriesRan
 }
 
 /**
+ * One entry per calendar day in `dates`, carrying that day's value or null where the series has
+ * no point for it, which is the shape every by-day chart on these pages draws from.
+ *
+ * `/series` omits a day with no row entirely, so a points array is "the days that reported" and its
+ * positions mean nothing on their own. HeartRateRange and ActivityHeatmap have always been handed
+ * dense arrays built this way from `rangeDates`; the sparklines were handed the points array
+ * directly, which is what made an applied exclusion vanish rather than render. deriveDay deletes an
+ * excluded metric's daily row, so the excluded day is exactly a day that no longer reports: with a
+ * sparse array it had no position at all, its mark was dropped, its accessible table row was never
+ * built, and the day the reader excluded silently left the chart. A gap has to be a position before
+ * anything can be drawn at it.
+ *
+ * Values are read by date, never zipped by index, for the reason Dashboard.tsx's own heart rate
+ * lookup gives: two series over the same range are not guaranteed to answer on the same days.
+ */
+export function denseSeries(
+  dates: readonly string[], points: readonly SeriesPoint[],
+): { labels: string[], values: (number | null)[] } {
+  const byDate = new Map(points.map((point) => [point.localDate, point.value]))
+  return { labels: [...dates], values: dates.map((date) => byDate.get(date) ?? null) }
+}
+
+/**
  * One request for every metric a page needs, because /series takes a repeated `metric` parameter
  * precisely so a dashboard does not open one connection per sparkline.
  *
