@@ -136,8 +136,10 @@ function dateText(t: Translate, info: TargetInfo): string {
  *
  * `METRICS[metric] !== undefined`, not just `metric !== null`: formatMetricValue now throws on an
  * unknown metric id (M3e review: a silently wrong precision on a misspelled id was worse than a
- * loud failure, and every OTHER caller in this app hands it a compile-time literal that
- * catalogue-usage.test.ts already holds to METRICS). This cell is the one caller that cannot make
+ * loud failure, and every OTHER caller in this app hands it a compile-time literal, on a page its
+ * own test file mounts for real, so a bad literal is a red suite rather than a blank page). Note
+ * that no test pairs those literals against METRICS the way dashboard-metrics.test.ts does for
+ * Dashboard's REQUESTS; the mounting is what catches them. This cell is the one caller that cannot make
  * that promise: `metric` is parsed off a stored override row this app did not necessarily write
  * (OverrideList's own comment above says `POST /overrides` accepts a sample scoped correction from
  * any caller of the HTTP API), and OverrideStore.validate only checks the target key's SHAPE, never
