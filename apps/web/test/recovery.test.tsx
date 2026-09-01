@@ -82,6 +82,33 @@ function stubRecovery(urls: string[], baseline: BaselineStub = null): () => void
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Same three routes as stubRecovery, but each of the three 'last' metrics answers its own
+ * value rather than the shared 60 every other test in this file uses: the precision test above
+ * needs the three cards to disagree, since a formatter that quietly used the same precision for
+ * all three could not be told apart from one that reads each metric's own.
+ */
+function stubRecoveryPerMetric(values: Record<string, number>): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', values[metric] ?? 60)], reduction: null }
+      }
+      return json(body)
+    }
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Recovery page', () => {
   // All three metrics share an agg, so the page costs one round trip. Asserting the property
   // rather than a literal count: a pinned number once forced a chart to draw less than it claimed.
@@ -94,6 +121,35 @@ describe('the Recovery page', () => {
     const series = urls.filter((u) => u.includes('/series'))
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(3)
+    restore()
+  })
+
+  // The refactor this task is for: card()'s headline used to thread a literal precision
+  // (0, 0, 1) per call site rather than reading METRICS[metric].precision through
+  // formatMetricValue. All three literals already matched the catalogue, so this cannot catch a
+  // literal drifting from it by itself; what it does pin is that the rendered headline is the
+  // catalogue's own rounding of an unrounded mean, which is what a broken formatMetricValue call
+  // (or a reintroduced literal precision) would get wrong. Confirmed by reverting `card()`'s
+  // formatMetricValue call back to `headline.toFixed(precision)` with precision hardcoded to 2:
+  // this failed with "Received: 61.70" where it expects "62".
+  it('rounds each headline to its own metric catalogue precision, not a copied-in literal', async () => {
+    const restore = stubRecoveryPerMetric({
+      resting_heart_rate: 61.7,
+      daily_hrv: 45.3,
+      respiratory_rate: 14.666666666666666,
+    })
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const cardFor = (label: string) => [...container!.querySelectorAll('.card')]
+      .find((card) => card.querySelector('.label')?.textContent === label)
+    // resting_heart_rate and daily_hrv: catalogue precision 0, so a mean of 61.7/45.3 rounds away
+    // its own decimal rather than keeping it.
+    expect(cardFor('Resting heart rate')?.querySelector('.value')?.textContent).toContain('62')
+    expect(cardFor('Heart rate variability')?.querySelector('.value')?.textContent).toContain('45')
+    // respiratory_rate: catalogue precision 1, a many-decimal mean rounds to exactly one place,
+    // the same value the reported bug's own fixture (format.test.ts) rounds to.
+    expect(cardFor('Respiratory rate')?.querySelector('.value')?.textContent).toContain('14.7')
     restore()
   })
 

@@ -35,7 +35,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatClock, formatDuration, deltaFor } from '../format.js'
+import { formatClock, formatDuration, deltaFor, formatMetricValue } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
 // (requireMetricAndAgg in packages/core/src/query/personQuery.ts checks every metric against
@@ -284,10 +284,6 @@ export function Dashboard() {
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
-  // The active language, not a pinned locale: a bilingual app whose numbers only ever group like
-  // English is not actually speaking Dutch when it renders Dutch.
-  const groupNumber = (value: number) => value.toLocaleString(i18n.language)
-
   // Every calendar day in the range, computed once: the dense denominator every basis line counts
   // against, and the axis every by-day chart on this page is now drawn along. It has to be declared ahead
   // of the sparklines below rather than after them, which is where it used to sit, because those
@@ -502,14 +498,14 @@ export function Dashboard() {
       <div className="grid">
         {tile('steps', 3, 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
           'dashboard.steps.chartLabel', 'dashboard.units.steps',
-          (p) => groupNumber(values(p).reduce((a, b) => a + b, 0)), 'higher-is-better',
+          (p) => formatMetricValue(values(p).reduce((a, b) => a + b, 0), 'steps', i18n.language, ''), 'higher-is-better',
           <Link to={deepLink('/activity', resolved)} className="card-link">
             {t('dashboard.steps.viewAll')}
           </Link>)}
         {tile('resting_heart_rate', 3, 'dashboard.restingHr.label', 'dashboard.restingHr.basis',
           'dashboard.restingHr.basisWorn', 'dashboard.restingHr.chartLabel',
           'dashboard.units.beatsPerMinute',
-          (p) => String(Math.round(mean(values(p)))), 'lower-is-better',
+          (p) => formatMetricValue(mean(values(p)), 'resting_heart_rate', i18n.language, ''), 'lower-is-better',
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.restingHr.viewAll')}
           </Link>, t('dashboard.units.bpm'))}
@@ -523,7 +519,7 @@ export function Dashboard() {
         {tile('heart_rate', 3, 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
           'dashboard.meanHr.basisWorn', 'dashboard.meanHr.chartLabel',
           'dashboard.units.beatsPerMinute',
-          (p) => String(Math.round(mean(values(p)))), 'neutral',
+          (p) => formatMetricValue(mean(values(p)), 'heart_rate', i18n.language, ''), 'neutral',
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.meanHr.viewAll')}
           </Link>, t('dashboard.units.bpm'))}

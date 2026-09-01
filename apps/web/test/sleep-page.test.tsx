@@ -213,6 +213,34 @@ function stubSleepNapCount(napCount: number): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Every metric gets stubSleep's usual 420 except sleep_efficiency, which gets `efficiency` on its
+ * own single day. Used by the precision test below: sleep_efficiency's card used to hardcode
+ * `.toFixed(0)` rather than reading METRICS.sleep_efficiency.precision (0) through
+ * formatMetricValue, and an unrounded mean is what tells the two apart.
+ */
+function stubSleepEfficiency(efficiency: number): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        const value = metric === 'sleep_efficiency' ? efficiency : 420
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', value)], reduction: null }
+      }
+      return json(body)
+    }
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Sleep page', () => {
   // The shape that produced M3d-1's Critical: sleep rows carry a null coverage because a night
   // has no samples underneath it, and reading that as zero rendered "device not worn" over a
@@ -330,6 +358,26 @@ describe('the Sleep page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('1 dutje,')
     expect(container!.textContent).not.toContain('1 dutjes,')
+    restore()
+  })
+
+  // The refactor this task is for: sleep_efficiency's card used to hardcode
+  // `efficiencyMean.toFixed(0)`, which happened to match METRICS.sleep_efficiency.precision (0)
+  // by coincidence rather than by reading it. Confirmed by reverting the formatMetricValue call
+  // back to `efficiencyMean.toFixed(2)`: this failed with "Received: ...87.60%..." where it
+  // expects "88%". Placed after the tests above that already mount an I18nProvider, not before
+  // 'drives the control row from the URL rather than a stub': that test's own assertion depends
+  // on no I18nProvider having been mounted yet in this file (see dashboard-cards.test.tsx's
+  // matching comment on the same hazard), and this test needs one to resolve real labels.
+  it('rounds sleep efficiency to its own catalogue precision, not a copied-in literal', async () => {
+    const restore = stubSleepEfficiency(87.6)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep efficiency')
+    expect(card?.querySelector('.value')?.textContent).toContain('88')
+    expect(card?.querySelector('.value')?.textContent).not.toContain('87.6')
     restore()
   })
 

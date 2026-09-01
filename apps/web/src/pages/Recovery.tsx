@@ -23,7 +23,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor } from '../format.js'
+import { deltaFor, formatMetricValue } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
 // Recovery is one request: resting_heart_rate, daily_hrv and respiratory_rate are all `aggs:
@@ -85,7 +85,8 @@ function bandFrom(baseline: Baseline | null): { low: number, high: number } | un
  * near-duplicate basis templates per metric.
  */
 function baselineNote(
-  t: Translate, value: number, query: UseQueryResult<{ baseline: Baseline | null }>, precision: number, on: string,
+  t: Translate, value: number, query: UseQueryResult<{ baseline: Baseline | null }>,
+  metric: string, language: string, on: string,
 ): string {
   if (query.isError) return t('recovery.baselineNote.unknown')
   // Before the null test, not after it. /baselines is its own request and settles independently of
@@ -98,14 +99,18 @@ function baselineNote(
   if (raw.thin) return t('recovery.baselineNote.thin', { on })
   const low = raw.center - raw.spread
   const high = raw.center + raw.spread
-  const fmt = (n: number) => n.toFixed(precision)
+  // metric, not a precision threaded in by the caller: low/high are baseline arithmetic over this
+  // same metric's own values, in its own stored unit, so METRICS[metric].precision (read inside
+  // formatMetricValue) is always the right precision for them, the same one the headline beside
+  // this note uses.
+  const fmt = (n: number) => formatMetricValue(n, metric, language, '')
   if (value < low) return t('recovery.baselineNote.below', { low: fmt(low), high: fmt(high) })
   if (value > high) return t('recovery.baselineNote.above', { low: fmt(low), high: fmt(high) })
   return t('recovery.baselineNote.within', { low: fmt(low), high: fmt(high) })
 }
 
 export function Recovery() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const session = useSession()
   const controls = usePageControls()
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
@@ -193,12 +198,12 @@ export function Recovery() {
   // already made for the same reason, rather than a second, unreachable literal per metric.
   const card = (
     metric: string, labelKey: string, basisKey: string, chartLabelKey: string,
-    unitKey: string, shortUnitKey: string, precision: number, polarity: Polarity,
+    unitKey: string, shortUnitKey: string, polarity: Polarity,
     baselineQuery: UseQueryResult<{ baseline: Baseline | null }>, band: { low: number, high: number } | undefined,
   ) => {
     const points = metricGroups.pointsOf(metric)
     const headline = mean(values(points))
-    const note = baselineNote(t, headline, baselineQuery, precision, controls.to)
+    const note = baselineNote(t, headline, baselineQuery, metric, i18n.language, controls.to)
     const spark = sparklines.get(metric)!
     const { excluded } = annotationsFor(overridesByMetricMap, metric)
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
@@ -206,7 +211,7 @@ export function Recovery() {
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, note }}>
         {(basis) => (
-          <StatTile label={t(labelKey)} value={headline.toFixed(precision)} unit={t(shortUnitKey)}
+          <StatTile label={t(labelKey)} value={formatMetricValue(headline, metric, i18n.language, '')} unit={t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
             <Sparkline values={spark.values} labels={spark.labels} metric={metric}
               label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
@@ -225,13 +230,13 @@ export function Recovery() {
       <div className="grid">
         {card('resting_heart_rate', 'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
           'recovery.restingHeartRate.chartLabel', 'recovery.units.beatsPerMinute', 'recovery.units.bpm',
-          0, 'lower-is-better', restingHrBaseline, restingHrBand)}
+          'lower-is-better', restingHrBaseline, restingHrBand)}
         {card('daily_hrv', 'recovery.dailyHrv.label', 'recovery.dailyHrv.basis',
           'recovery.dailyHrv.chartLabel', 'recovery.units.milliseconds', 'recovery.units.ms',
-          0, 'higher-is-better', hrvBaseline, hrvBand)}
+          'higher-is-better', hrvBaseline, hrvBand)}
         {card('respiratory_rate', 'recovery.respiratoryRate.label', 'recovery.respiratoryRate.basis',
           'recovery.respiratoryRate.chartLabel', 'recovery.units.breathsPerMinute', 'recovery.units.breathsPerMinuteShort',
-          1, 'neutral', respiratoryBaseline, respiratoryBand)}
+          'neutral', respiratoryBaseline, respiratoryBand)}
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

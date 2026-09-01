@@ -116,6 +116,34 @@ function stubSteps(points: readonly { localDate: string, value: number, coverage
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Same routes as stubActivity, but every metric named in `overrides` answers that value instead
+ * of the uniform 60, and every other metric still gets 60 (steps' own coverage/source shape,
+ * since none of the tests below read the heatmap). Used by the precision/grouping tests below,
+ * which need distance and floors to carry values a shared "60 everywhere" stub cannot tell apart:
+ * a millimeter total that does not divide evenly into kilometers, and a four figure floors total
+ * (thousands grouping).
+ */
+function stubActivityValues(overrides: Record<string, number>): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', overrides[metric] ?? 60)], reduction: null }
+      }
+      return json(body)
+    }
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Activity page', () => {
   // The two provider only metrics are the reason Task 1 of this milestone exists. If the request
   // carried a source parameter at all, both would come back empty here (see stubActivity's own
@@ -241,6 +269,44 @@ describe('the Activity page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.textContent).toContain('0 to 60 steps')
     expect(container!.textContent).toContain('stronger colour is more steps')
+    restore()
+  })
+
+  // Finding #9 of the precision audit: distance is stored in millimeters (METRICS.distance,
+  // precision 0) and this card displays kilometers with one decimal, a precision the catalogue's
+  // own field cannot answer because it names a different unit than the one on screen. The card
+  // used to hardcode `(total / 1_000_000).toFixed(1)`; it now goes through formatNumber directly
+  // with an explicit precision of 1, never through formatMetricValue (which would read millimeters'
+  // own precision 0 and drop the decimal). 5,234,567 mm is chosen so millimeters-to-kilometers does
+  // not divide evenly, which a broken conversion or a wrong precision would show up in immediately.
+  // Confirmed by reverting the distance card back to `formatMetricValue(total, 'distance', ...)`
+  // (the accidental path this design exists to close, which never divides by a million at all):
+  // that failed with "Received: 5,234,567 km" where it expects "5.2".
+  it('converts distance from stored millimeters to displayed kilometers at its own precision', async () => {
+    const restore = stubActivityValues({ distance: 5_234_567 })
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Distance')
+    expect(card?.querySelector('.value')?.textContent).toContain('5.2')
+    restore()
+  })
+
+  // The refactor this task is for on the other nine cards: Activity's own local groupNumber (a
+  // byte-identical copy of Dashboard.tsx's) is gone, replaced by formatMetricValue reading
+  // METRICS[metric].precision through card()'s own default formatter. A four figure floors total
+  // is what tells the old ungrouped code and the new grouped code apart. Confirmed by reverting
+  // card()'s default formatter to `String(total)`: that failed with "Received: 12345" where it
+  // expects "12,345".
+  it('groups a four figure floors total per language, through the shared formatter', async () => {
+    const restore = stubActivityValues({ floors: 12345 })
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Floors climbed')
+    expect(card?.querySelector('.value')?.textContent).toContain('12,345')
     restore()
   })
 

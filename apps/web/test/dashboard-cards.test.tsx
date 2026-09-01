@@ -109,6 +109,35 @@ function stubFailingReads(seen: string[]): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Same routes as stubFetch, but every metric named in `overrides` answers that value instead of
+ * the uniform 60, and every other metric still gets 60. Used by the precision/grouping test
+ * below, which needs steps and heart_rate to carry values a shared "60 everywhere" stub cannot
+ * tell apart: a four figure steps total (thousands grouping) and a heart rate mean with a
+ * fraction (rounding).
+ */
+function stubFetchValues(overrides: Record<string, number>): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', overrides[metric] ?? 60)], reduction: null }
+      }
+      return json(body)
+    }
+    if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('a card whose request failed', () => {
   // The rule the whole branch is about, applied to the one case nothing on the page handled: a
   // 500 is not a statement about somebody's health record, and "Nothing has been recorded for
@@ -341,6 +370,45 @@ describe('the remaining Dashboard cards', () => {
     const text = container!.textContent!
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
+    restore()
+  })
+
+  // The refactor this task is for: Dashboard's own local groupNumber (a byte-identical copy of
+  // Activity.tsx's) and the two String(Math.round(...)) heart rate headlines are gone, replaced by
+  // formatMetricValue reading METRICS[metric].precision. A single reading cannot tell the old code
+  // and the new code apart when it is already a whole thousand-free integer, so this asks for a
+  // steps total large enough to group (four figures) and a heart rate mean with a fraction: both
+  // render the same today as they did before this task in the case that was already correct, but
+  // a wrong precision or a dropped grouping call would now show up here. Confirmed two ways: the
+  // resting_heart_rate tile reverted to `String(mean(values(p)))` (no rounding at all) failed with
+  // "Received: ...61.7 bpm..." where it expects "62"; the steps tile reverted to
+  // `String(values(p).reduce((a, b) => a + b, 0))` (no grouping at all) failed with
+  // "Received: 12345" where it expects "12,345", and the same revert failed the Dutch test below
+  // with "Received: 11999" where it expects "11.999".
+  it('groups a four figure steps total per language and rounds heart rate to its own precision', async () => {
+    const restore = stubFetchValues({ steps: 12345, resting_heart_rate: 61.7, heart_rate: 88.4 })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const cardFor = (label: string) => [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === label)
+    expect(cardFor('Steps')?.querySelector('.value')?.textContent).toContain('12,345')
+    expect(cardFor('Resting heart rate')?.querySelector('.value')?.textContent).toContain('62')
+    expect(cardFor('Mean heart rate')?.querySelector('.value')?.textContent).toContain('88')
+    restore()
+  })
+
+  // The Dutch half of the same grouping call: 11.999 groups with a period in Dutch, 11,999 in
+  // English, the exact distinction i18n-parity style tests exist to hold onto for a shared
+  // formatter rather than a copied-in `.toLocaleString(i18n.language)`.
+  it('groups the same steps total with a Dutch thousands separator under a Dutch locale', async () => {
+    const restore = stubFetchValues({ steps: 11999 })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const stepsCard = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Stappen')
+    expect(stepsCard?.querySelector('.value')?.textContent).toContain('11.999')
     restore()
   })
 

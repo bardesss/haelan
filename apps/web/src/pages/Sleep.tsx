@@ -32,7 +32,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatDuration, formatClock, deltaFor } from '../format.js'
+import { formatDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
@@ -155,7 +155,7 @@ function baselineNote(
 }
 
 export function Sleep() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const session = useSession()
   const controls = usePageControls()
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
@@ -387,8 +387,8 @@ export function Sleep() {
           'sleep.asleepMinutes.chartLabel', formatDuration(asleepMean), 'sleep.units.minutes', undefined,
           'higher-is-better', { note: asleepNote }, asleepBand)}
         {tile('sleep_efficiency', 4, t('sleep.efficiency.label'), 'sleep.efficiency.basis',
-          'sleep.efficiency.chartLabel', efficiencyMean.toFixed(0), 'sleep.units.percent', t('sleep.units.percentShort'),
-          'higher-is-better')}
+          'sleep.efficiency.chartLabel', formatMetricValue(efficiencyMean, 'sleep_efficiency', i18n.language, ''),
+          'sleep.units.percent', t('sleep.units.percentShort'), 'higher-is-better')}
         {tile('sleep_in_bed_minutes', 4, t('sleep.inBedMinutes.label'), 'sleep.inBedMinutes.basis',
           'sleep.inBedMinutes.chartLabel', formatDuration(mean(values(metricGroups.pointsOf('sleep_in_bed_minutes')))),
           'sleep.units.minutes', undefined, 'neutral')}
@@ -414,8 +414,8 @@ export function Sleep() {
           'neutral')}
 
         {tile('sleep_nap_count', 6, t('sleep.napCount.label'), 'sleep.napCount.basis',
-          'sleep.napCount.chartLabel', String(napCountTotal), 'sleep.units.naps', t('sleep.units.napsShort'),
-          'neutral', { count: napCountTotal })}
+          'sleep.napCount.chartLabel', formatMetricValue(napCountTotal, 'sleep_nap_count', i18n.language, ''),
+          'sleep.units.naps', t('sleep.units.napsShort'), 'neutral', { count: napCountTotal })}
         {tile('sleep_nap_minutes', 6, t('sleep.napMinutes.label'), 'sleep.napMinutes.basis',
           'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal), 'sleep.units.minutes', undefined,
           'neutral')}
