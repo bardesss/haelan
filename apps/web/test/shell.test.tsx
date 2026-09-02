@@ -8,6 +8,7 @@ import { Sleep } from '../src/pages/Sleep.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
+import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
 
 describe('the navigation rail', () => {
@@ -54,11 +55,12 @@ describe('the route table', () => {
   // own `.type` is the `Weight` function reference, the exact value Shell.tsx's `active.element`
   // carries at runtime, so comparing it here is the same check Shell.tsx's own render makes.
   //
-  // Every path, not just `/weight`: the placeholder paths (`/nutrition`, `/notes`) are pinned to
-  // Dashboard on purpose (routes.tsx's own comment), so leaving them out would have made this
-  // test silently correct about six of nine paths and asserted nothing about the other three,
-  // which is the same "wrote a map that looks complete but resolves nothing" wound the M3e
-  // review found the last time a map like this stayed partial.
+  // Every path, not just `/weight`: the one remaining placeholder path (`/nutrition`) is pinned to
+  // Dashboard on purpose (routes.tsx's own comment), so leaving it out would have made this test
+  // silently correct about eight of nine paths and asserted nothing about the ninth, which is the
+  // same "wrote a map that looks complete but resolves nothing" wound the M3e review found the
+  // last time a map like this stayed partial. `/notes` joined the resolved side this task, the
+  // same way `/weight` and `/health` did in the tasks before it.
   it('resolves every path to the page component it names, not one that merely renders', () => {
     const byPath: Record<string, unknown> = {
       '/': Dashboard,
@@ -68,7 +70,7 @@ describe('the route table', () => {
       '/health': Health,
       '/weight': Weight,
       '/nutrition': Dashboard,
-      '/notes': Dashboard,
+      '/notes': Notes,
       '/settings': Settings,
     }
     for (const route of ROUTES) {

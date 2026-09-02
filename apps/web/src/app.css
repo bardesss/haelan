@@ -246,3 +246,12 @@ body {
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .override-table tbody tr:last-child td { border-bottom: 0; }
+
+/* The notes and events list (Notes.tsx): the same row rhythm as .override-table above, kept as
+   its own class rather than shared because a value cell here needs its own alignment
+   (.notes-value below) that an override row never carries. */
+.notes-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
+.notes-table th, .notes-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
+.notes-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.notes-table tbody tr:last-child td { border-bottom: 0; }
+.notes-value { text-align: right; font-variant-numeric: tabular-nums; }

@@ -558,6 +558,27 @@
       }
     }
   },
+  "notes": {
+    "title": "Notities",
+    "list": {
+      "title": "Notities en gebeurtenissen"
+    },
+    "empty": {
+      "title": "Nog geen notities of gebeurtenissen",
+      "detail": "Voor deze periode is niets geschreven."
+    },
+    "columns": {
+      "date": "Datum",
+      "kind": "Soort",
+      "text": "Tekst",
+      "value": "Waarde",
+      "remove": "Verwijderen"
+    },
+    "remove": "Verwijderen",
+    "removing": "Bezig met verwijderen",
+    "removeAria": "Verwijder {{kind}}, {{date}}",
+    "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw."
+  },
   "settings": {
     "title": "Instellingen",
     "overrides": {

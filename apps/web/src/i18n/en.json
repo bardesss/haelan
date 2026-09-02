@@ -558,6 +558,27 @@
       }
     }
   },
+  "notes": {
+    "title": "Notes",
+    "list": {
+      "title": "Notes and events"
+    },
+    "empty": {
+      "title": "No notes or events yet",
+      "detail": "Nothing has been written for this period."
+    },
+    "columns": {
+      "date": "Date",
+      "kind": "Kind",
+      "text": "Text",
+      "value": "Value",
+      "remove": "Remove"
+    },
+    "remove": "Remove",
+    "removing": "Removing",
+    "removeAria": "Remove {{kind}}, {{date}}",
+    "removeFailed": "That did not remove. Try again."
+  },
   "settings": {
     "title": "Settings",
     "overrides": {
