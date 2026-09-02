@@ -104,9 +104,18 @@ describe('formatMetricValue', () => {
 describe('formatLocalDate', () => {
   // Restored after every test in this block, not just the one that sets it: a thrown assertion
   // would otherwise leave America/Los_Angeles active for every test vitest runs after this file,
-  // which is a much stranger bug report than the one this suite exists to catch.
+  // which is a much stranger bug report than the one this suite exists to catch. process.env.TZ
+  // is unset on this machine, so a plain `process.env.TZ = originalTZ` restore assigns
+  // `undefined`, and Node coerces an env var assigned `undefined` to the literal string
+  // "undefined" rather than clearing it (confirmed directly: `process.env.TZ = undefined` then
+  // reading it back gives the string "undefined", not the value undefined). delete is what
+  // actually gets back to "unset" when it started that way, rather than trusting this runtime's
+  // own env handling not to share that footgun.
   const originalTZ = process.env.TZ
-  afterEach(() => { process.env.TZ = originalTZ })
+  afterEach(() => {
+    if (originalTZ === undefined) delete process.env.TZ
+    else process.env.TZ = originalTZ
+  })
 
   it('reads the reader\'s own locale, not one hardcoded form', () => {
     expect(formatLocalDate('2026-08-03', 'en')).toBe('Aug 3, 2026')
