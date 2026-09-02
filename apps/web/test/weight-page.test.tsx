@@ -208,12 +208,30 @@ describe('the Weight page', () => {
   // failed this test with "Received: 81,200.0 kg on average ..." where it expects to contain
   // "81.2 kg", then reverted.
   it('shows the weight insight in kilograms, not the stored grams', async () => {
-    await mount(<Weight />, {}, undefined, [], [], { current: 81_200, previous: 81_900, delta: -700 })
+    await mount(<Weight />, {}, undefined, [], [], { current: 81_234.5, previous: 81_469.0, delta: -234.5 })
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
     const summary = card?.querySelector('.insight-summary')?.textContent
     expect(summary).toContain('81.2 kg')
+    expect(summary).toContain('81.5 kg')
     expect(summary).not.toContain('81,200')
+  })
+
+  // The whole-branch review's own blocker: the server's guarantee that a reader's own subtraction
+  // of the two numbers shown agrees with the delta beside them is computed at gram precision
+  // (series.ts), and this card displays kilograms. current and previous round to 81.2 kg and
+  // 81.5 kg, a difference of -0.3, but the fixture's own delta (-234.5 g, the server's own correct
+  // answer at gram precision) divides naively into -0.2 kg, a number that disagrees with the two
+  // figures right beside it. delta is deliberately not current minus previous either (81234.5
+  // minus 81469.0 is exactly -234.5, matching the server's own shape at gram precision), so this
+  // only catches a broken conversion, not a fixture that disagrees with itself.
+  it('derives the weight insight delta from the two displayed kilogram figures, not the stored gram delta', async () => {
+    await mount(<Weight />, {}, undefined, [], [], { current: 81_234.5, previous: 81_469.0, delta: -234.5 })
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
+    const summary = card?.querySelector('.insight-summary')?.textContent
+    expect(summary).toContain('-0.3 kg')
+    expect(summary).not.toContain('-0.2 kg')
   })
 
   // The other half of the brief's own note: weight will suppress often, and correctly, because a

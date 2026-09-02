@@ -15,7 +15,11 @@ import { sourceParam } from '../controls/source.js'
  * apps/server/src/routes/v1/series.ts rounds current and previous to the metric's catalogue
  * precision and computes delta from those two already rounded ends, not from comparePeriods's raw
  * arithmetic, so a reader's own subtraction of the two numbers shown agrees with the delta printed
- * beside them.
+ * beside them, provided the numbers are shown in the metric's own stored unit. A page that
+ * converts to a different display unit (weight's grams to kilograms, Weight.tsx) breaks that
+ * guarantee by dividing an already-settled gram delta into kilograms afterwards, and has to
+ * rederive delta itself at the display precision instead, through InsightCard's own `formatDelta`
+ * prop.
  */
 export interface Insight {
   current: number | null

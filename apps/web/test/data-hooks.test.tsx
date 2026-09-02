@@ -126,7 +126,7 @@ describe('useSeries', () => {
     // Inside act, because the thing being waited for is a render: the session settling notifies
     // react-query, which re-renders Probe through useSyncExternalStore. Outside act that render is
     // not flushed before the assertion below, so a series request enabled by the freshly arrived
-    // person could still be queued when calls is read — the test would pass by reading too early
+    // person could still be queued when calls is read, and the test would pass by reading too early
     // rather than because the guard held. act also makes React warn if a future edit reintroduces
     // an unflushed update here.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })

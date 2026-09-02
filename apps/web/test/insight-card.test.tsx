@@ -135,4 +135,28 @@ describe('InsightCard', () => {
     expect(html).toContain('70.0 on average (')
     expect(html).not.toContain('70,000')
   })
+
+  // The whole-branch review's own blocker: `insight.delta` is derived by the route at the
+  // metric's STORED precision (grams, series.ts's own comment), and dividing that into a
+  // different display unit afterwards can disagree with the two already-converted, already-
+  // rounded figures beside it. 70345.6 g and 71169.0 g convert to 70.3 kg and 71.2 kg, a
+  // difference of -0.9, while the stored delta (-823.4 g) divides naively into -0.8 kg.
+  // `formatDelta` recomputes the delta from the converted, rounded ends instead of trusting
+  // `insight.delta`, the same technique the route itself uses, run again at the display
+  // precision.
+  it('recomputes delta through formatDelta rather than dividing the stored delta into the display unit', () => {
+    const toKg = (value: number | null, absent: string) =>
+      formatNumber(value === null ? null : value / 1000, 1, 'en', absent)
+    const roundToKg = (grams: number): number => Number((grams / 1000).toFixed(1))
+    const formatDeltaInKg = (current: number, previous: number): string =>
+      `${formatNumber(Number((roundToKg(current) - roundToKg(previous)).toFixed(1)), 1, 'en', '')} kg`
+    const html = renderToStaticMarkup(
+      <I18nProvider lng="en"><InsightCard query={OK} metric="weight" span={6}
+        formatValue={toKg} formatDelta={formatDeltaInKg} insight={{
+          ...base, current: 70345.6, previous: 71169.0, delta: -823.4,
+        }} /></I18nProvider>,
+    )
+    expect(html).toContain('-0.9 kg')
+    expect(html).not.toContain('-0.8 kg')
+  })
 })

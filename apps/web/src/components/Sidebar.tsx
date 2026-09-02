@@ -94,9 +94,10 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
             </a>
           ))}
         </div>
-        {/* Not a Link: the account page it would point to returns in M3e. A dead link here would
-            be a tenth way to reach a blank screen, now that the rail carries nine (M3c-12 added
-            the ninth, Settings). */}
+        {/* Not a Link: the account page it would point to has no home yet. M3e closes with this
+            milestone without one, and the README's own M5 row puts the person switcher and
+            member management there instead. A dead link here would be a tenth way to reach a
+            blank screen, now that the rail carries nine (M3c-12 added the ninth, Settings). */}
         <div className="rail-person">
           <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
         </div>

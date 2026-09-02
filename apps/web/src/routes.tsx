@@ -16,9 +16,10 @@ export interface Route { path: string, element: ReactNode }
 // M3c-12 gave it one; `/nutrition` was the last remaining placeholder, rendering Dashboard's own
 // component the same way `/notes` used to, until this task gave it Nutrition.tsx's honest empty
 // page instead. The rail in Sidebar.tsx lists its own paths rather than being generated from this
-// table (M3e revisits how the two relate); a test enforces that the two path sets match, so an
-// edit to either cannot silently leave the other with a route nothing links to or a rail item
-// pointing nowhere.
+// table, and stays that way: M3e closes with this milestone, and Sidebar.tsx's own comment on
+// RAIL_PATHS says the collapsible rail leaves that derivation untouched. A test enforces that the
+// two path sets match, so an edit to either cannot silently leave the other with a route nothing
+// links to or a rail item pointing nowhere.
 export const ROUTES: readonly Route[] = [
   { path: '/', element: <Dashboard /> },
   { path: '/activity', element: <Activity /> },

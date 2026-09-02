@@ -39,7 +39,7 @@ import type { Insight } from '../data/useInsight.js'
  * built by ORing several together can carry both `isError` and `isPending` at once, and a failed
  * request is never the same statement as an empty or thin period.
  */
-export function InsightCard({ insight, query, metric, span, label, formatValue }: {
+export function InsightCard({ insight, query, metric, span, label, formatValue, formatDelta }: {
   insight: Insight | undefined
   query: { isError: boolean, isPending: boolean, refetch: () => unknown }
   metric: string
@@ -51,6 +51,16 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
   // converted to a different display unit (weight's grams shown as kilograms) has to carry its own
   // formatter rather than pass through the catalogue lookup and pick up the wrong precision.
   formatValue?: (value: number | null, absent: string) => string
+  // The override for the one card whose `formatValue` above converts to a different display
+  // unit: without this, `delta` below falls back to `insight.delta`, which the route derives from
+  // the two rounded ends at the metric's STORED precision (series.ts's own comment on why), not
+  // the displayed one. Dividing that stored-precision delta into the display unit afterwards
+  // crosses a rounding boundary the two already-converted, already-rounded ends do not, the exact
+  // shape the route's own comment exists to rule out one level up. `formatDelta`, when given,
+  // receives the same raw `current`/`previous` this component already reads off `insight` and
+  // returns the finished, unit-suffixed string, so the caller can run the route's own technique
+  // again at the display precision rather than trust a delta computed at a different one.
+  formatDelta?: (current: number, previous: number) => string
 }): ReactNode {
   const { t, i18n } = useTranslation()
 
@@ -108,12 +118,16 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
     )
   }
 
-  // `delta` is taken straight off `insight`, never recomputed from `current` and `previous` here:
-  // the route (apps/server/src/routes/v1/series.ts) already derives it from the two rounded ends
-  // rather than from the comparison's raw arithmetic, specifically so a reader's own subtraction of
-  // the two values this sentence prints agrees with the delta printed alongside them. Formatting it
-  // through the same `format` as `current` and `previous` below reapplies that same, already
-  // settled precision rather than a second, independent one.
+  // `delta` is taken straight off `insight` by default, never recomputed from `current` and
+  // `previous` here: the route (apps/server/src/routes/v1/series.ts) already derives it from the
+  // two rounded ends rather than from the comparison's raw arithmetic, specifically so a reader's
+  // own subtraction of the two values this sentence prints agrees with the delta printed alongside
+  // them. Formatting it through the same `format` as `current` and `previous` below reapplies that
+  // same, already settled precision rather than a second, independent one. That default is correct
+  // only when `current` and `previous` are shown in the metric's own stored unit, which is why the
+  // one card that is not (`formatValue` given, a converted display unit) passes `formatDelta`
+  // instead of relying on it; see that prop's own comment for the failure it would otherwise
+  // reintroduce.
   const format = (value: number | null): string =>
     formatValue ? formatValue(value, '') : formatMetricValue(value, metric, i18n.language, '')
 
@@ -122,7 +136,7 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
       <p className="insight-summary">{t('insightCard.summary', {
         current: format(insight.current),
         previous: format(insight.previous),
-        delta: format(insight.delta),
+        delta: formatDelta ? formatDelta(insight.current, insight.previous) : format(insight.delta),
         currentFrom: formatLocalDate(insight.currentRange.from, i18n.language),
         currentTo: formatLocalDate(insight.currentRange.to, i18n.language),
         previousFrom: formatLocalDate(insight.previousRange.from, i18n.language),

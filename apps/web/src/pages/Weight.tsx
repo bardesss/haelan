@@ -126,6 +126,22 @@ export function Weight() {
   const weightInsightFormat = (value: number | null, absent: string): string =>
     formatWithUnit(value, absent, (v) => formatNumber(v / 1000, 1, i18n.language, ''), t('weight.units.kg'))
 
+  // The same trap, one level deeper: InsightCard's default delta is `insight.delta`, which
+  // apps/server/src/routes/v1/series.ts derives from `current` and `previous` after rounding both
+  // to precision 1 in GRAMS, the stored unit. Dividing that gram delta by 1000 and rounding again
+  // to kilograms crosses a rounding boundary the two already-converted kilogram figures above do
+  // not, the identical failure the route's own comment on `delta` exists to rule out one level up
+  // (a real case: 81234.5 g and 81469.0 g display as 81.2 kg and 81.5 kg, a difference of -0.3, while
+  // the stored delta of -234.5 g divides to -0.2 kg). Rounding `current` and `previous` to
+  // kilograms first, the same way the route rounds them to grams, and subtracting those two rounded
+  // kilogram figures instead reproduces the route's own guarantee at the unit this card actually
+  // shows, so the three numbers a reader sees always agree again.
+  const weightInsightFormatDelta = (current: number, previous: number): string => {
+    const toKg = (grams: number): number => Number((grams / 1000).toFixed(1))
+    const delta = Number((toKg(current) - toKg(previous)).toFixed(1))
+    return formatWithUnit(delta, '', (v) => formatNumber(v, 1, i18n.language, ''), t('weight.units.kg'))
+  }
+
   // Both cards on this page are `episodic`: a weight (or a body fat reading) is taken by hand, not
   // sampled continuously, so a day nobody weighed in is not a data quality problem the way a gap
   // in a wearable's own record would be (see Sparkline's own `episodic` prop comment for the full
@@ -205,7 +221,7 @@ export function Weight() {
             sharing "Weight" would make a label lookup by exact text ambiguous, the same collision
             Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
-          label={t('weight.insights.weight')} formatValue={weightInsightFormat} />
+          label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
