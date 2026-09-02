@@ -168,11 +168,13 @@ describe('the Health page', () => {
 
   // MetricCard's wear branch fires for spo2 because it is an intraday metric
   // (packages/core/src/api/catalogue.ts: tier 'intraday'), which is the fact
-  // coverageIsWearSignal reads. A coverage of zero hours (the lowest a real row can carry is
-  // 1/24; see emptyState.ts's own NOT_WORN_MAX_COVERAGE) reads as the device never having been
-  // worn that day, and the empty state says so rather than drawing an empty chart.
+  // coverageIsWearSignal reads. 1/24 is the lowest coverage a real row can carry (coverage.ts
+  // computes hours.size / 24, and a row is only emitted for at least one sample, so zero is not a
+  // value the wire ever sends), and it sits at NOT_WORN_MAX_COVERAGE's own ceiling
+  // (emptyState.ts), which reads as the device never having been worn that day and the empty
+  // state says so rather than drawing an empty chart.
   it('says the device was not worn when every spo2 reading has the lowest possible coverage', async () => {
-    const point = seriesPoint('spo2', '2026-08-14', 96, { coverage: 1 / 48 })
+    const point = seriesPoint('spo2', '2026-08-14', 96, { coverage: 1 / 24 })
     const restore = stubHealth([], [{ mean: point, min: point, max: point, count: point }], [])
     const { client, tree } = withQuery(<Health />)
     mount(tree)

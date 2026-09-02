@@ -328,8 +328,15 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // this list with Settings (M3c-12): AnnotatePanel's own keys never reach this file's settled,
   // no-click renders, but a page with settings.* copy now does, and a namespace absent here is a
   // namespace this test cannot see break. health joined with Health, the same reason.
+  //
+  // [a-zA-Z0-9], not [a-zA-Z]: a key path segment can carry a digit (health.spo2Range,
+  // health.dailySpo2, charts.spo2Tooltip all do), and the letters-only class could not see past
+  // one. Renaming health.spo2Range.label to a raw key used to render
+  // `<span class="label">health.spo2Range.label</span>` straight into the settled HTML with this
+  // test still green, because "spo2Range" broke the match at the digit and the regex never
+  // resumed past it.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|health|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z][a-zA-Z.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|health|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
   })
 
   // Both of these ran against Dashboard alone until the review that spotted three more pages had

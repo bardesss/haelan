@@ -16,7 +16,7 @@ import type { SeriesPoint } from '../src/data/useSeries.js'
  * is a stub that hides a real defect, which is how a card claiming "device not worn" over a full
  * month of sleep survived thirteen reviews.
  */
-const ONCE_DAILY = new Set(['resting_heart_rate', 'daily_hrv', 'respiratory_rate'])
+const ONCE_DAILY = new Set(['resting_heart_rate', 'daily_hrv', 'respiratory_rate', 'daily_spo2'])
 
 export function coverageFor(metric: string): number | null {
   if (metric.startsWith('sleep_')) return null
