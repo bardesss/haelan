@@ -275,6 +275,7 @@
       "minimum": "Minimum",
       "mean": "Mean",
       "maximum": "Maximum",
+      "count": "Count",
       "note": "Note",
       "from": "From",
       "to": "To",
@@ -303,6 +304,11 @@
     "hrTooltip": {
       "mean": "mean {{value}} bpm",
       "range": "range {{min}} to {{max}} bpm"
+    },
+    "spo2Tooltip": {
+      "mean": "mean {{value}}%",
+      "range": "range {{min}} to {{max}}%",
+      "count": "{{count}} readings"
     },
     "event": {
       "withNote": "{{kind}}: {{note}}",

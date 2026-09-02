@@ -275,6 +275,7 @@
       "minimum": "Minimum",
       "mean": "Gemiddelde",
       "maximum": "Maximum",
+      "count": "Aantal",
       "note": "Notitie",
       "from": "Van",
       "to": "Tot",
@@ -303,6 +304,11 @@
     "hrTooltip": {
       "mean": "gemiddeld {{value}} bpm",
       "range": "bereik {{min}} tot {{max}} bpm"
+    },
+    "spo2Tooltip": {
+      "mean": "gemiddeld {{value}}%",
+      "range": "bereik {{min}} tot {{max}}%",
+      "count": "{{count}} metingen"
     },
     "event": {
       "withNote": "{{kind}}: {{note}}",
