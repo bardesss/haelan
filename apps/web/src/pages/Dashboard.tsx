@@ -319,10 +319,13 @@ export function Dashboard() {
   // unit. steps carries neither below: its tile prints a plain, unitless number the same way
   // formatMetricValue already would, so it takes InsightCard's default.
   //
-  // Both formatWithUnit and formatSignedDuration (format.ts) are shared with Sleep.tsx, Recovery.tsx,
-  // Health.tsx and Weight.tsx's own copies of these same two closures: see their own doc comments in
-  // format.ts for why a duplicated sign fix and a duplicated unit-suffix closure were the wrong home
-  // for either.
+  // formatWithUnit and formatSignedDuration (format.ts) are this page's own copy of two closures
+  // each shared with one sibling page: formatWithUnit with Recovery.tsx's, Health.tsx's and
+  // Weight.tsx's own resting-heart-rate-shaped cards, formatSignedDuration with Sleep.tsx's own
+  // duration card. This is the only page carrying both a duration card and a unit-suffix card, so
+  // it is the only call site that reaches for both; see each function's own doc comment in
+  // format.ts for why a duplicated sign fix and a duplicated unit-suffix closure were the wrong
+  // home for either.
   const restingHrFormat = (value: number | null, absent: string): string =>
     formatWithUnit(value, absent, (v) => formatMetricValue(v, 'resting_heart_rate', i18n.language, ''), t('dashboard.units.bpm'))
 

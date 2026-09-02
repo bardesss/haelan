@@ -349,7 +349,6 @@ export function Sleep() {
   const napCountTotal = sum(values(metricGroups.pointsOf('sleep_nap_count')))
   const napMinutesTotal = sum(values(metricGroups.pointsOf('sleep_nap_minutes')))
 
-
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>

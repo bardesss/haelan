@@ -443,11 +443,12 @@ describe('the Sleep page', () => {
     restore()
   })
 
-  // Task 4's own insight card. asleepInsightFormat routes insight.current/previous/delta through
-  // formatDuration, the same call the time asleep tile's own headline makes a few cards up, so the
-  // card reads "1h 10m" beside it rather than a bare, unitless "70". range=month&on=2026-08-15
-  // gives clean, hand-computable calendar-month windows, the same fixed date dashboard-cards.test.tsx
-  // uses for its own copy of this assertion.
+  // Task 4's own insight card. formatSignedDuration (format.ts), passed straight as this card's
+  // formatValue, routes insight.current/previous/delta through formatDuration, the same call the
+  // time asleep tile's own headline makes a few cards up, so the card reads "1h 10m" beside it
+  // rather than a bare, unitless "70". range=month&on=2026-08-15 gives clean, hand-computable
+  // calendar-month windows, the same fixed date dashboard-cards.test.tsx uses for its own copy of
+  // this assertion.
   it('formats the sleep insight as a duration rather than raw minutes', async () => {
     window.history.replaceState(null, '', '/sleep?range=month&on=2026-08-15')
     const restore = stubSleep([])

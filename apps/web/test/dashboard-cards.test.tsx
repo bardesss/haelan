@@ -608,8 +608,9 @@ describe('the three insight cards', () => {
 
   // The other half of Important 1: the sleep tile beside this card formats its own mean through
   // formatDuration ("7h 01m"), never the raw minutes formatMetricValue alone would print, and
-  // without sleepFormat this card printed "70" where its own tile a few cards over prints "1h
-  // 10m" for the identical quantity.
+  // without a duration formatValue this card printed "70" where its own tile a few cards over
+  // prints "1h 10m" for the identical quantity. formatSignedDuration (format.ts) is what this
+  // card's own formatValue is now, passed directly rather than through a local wrapper.
   it('formats the sleep insight as a duration rather than raw minutes', async () => {
     window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
     const restore = stubFetch({ baseline: null })

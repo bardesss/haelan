@@ -93,12 +93,11 @@ export function formatDuration(minutes: number): string {
 /**
  * formatDuration for a value that can be negative, which formatDuration itself was never written
  * to take: every other caller in this app (a tile's own headline, a chart's baseline note) hands
- * it a summed or averaged span of real time, which cannot go negative. An insight's delta can — a
- * period where the mean fell hands this a negative number — and formatDuration's own
- * Math.floor(total / 60) paired with a sign-carrying total % 60 (JavaScript's % keeps the
- * dividend's sign) puts the minus on both halves independently: -7 comes out "-1h -7m", not the
- * single leading minus a duration reads as. Negating before the call and reapplying the sign after
- * prints "-0h 07m" for the same -7 instead.
+ * it a summed or averaged span of real time, which cannot go negative. An insight's delta can, on
+ * a period where the mean fell, and formatDuration's own Math.floor(total / 60) paired with a
+ * sign-carrying total % 60 (JavaScript's % keeps the dividend's sign) puts the minus on both
+ * halves independently: -7 comes out "-1h -7m", not the single leading minus a duration reads as.
+ * Negating before the call and reapplying the sign after prints "-0h 07m" for the same -7 instead.
  *
  * Takes `absent` directly, the exact `(value, absent) => string` shape `InsightCard`'s own
  * `formatValue` prop expects, so a caller with nothing more to add can pass this function itself
