@@ -341,6 +341,20 @@ describe('the Activity page', () => {
     restore()
   })
 
+  // 290 rows spanning 2026-05-08 to 2026-09-02 in the live database, and no page drew a single one
+  // of them before this task. active_energy rides the same sum request steps and total_calories
+  // already make, so the only new thing to prove is that a card exists and reads its own metric.
+  it('shows active energy, which no page claimed before', async () => {
+    const restore = stubActivityValues({ active_energy: 512 })
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Active energy')
+    expect(card?.querySelector('.value')?.textContent).toBe('512 kcal')
+    restore()
+  })
+
   // The other half of pages.test.tsx's own language parity check that the heatmap's move left
   // uncovered: ActivityHeatmap is the only chart anywhere in this app that renders a weekday
   // column, so with it gone from Dashboard, translating that column into Dutch was exercised

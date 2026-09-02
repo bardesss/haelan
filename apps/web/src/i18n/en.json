@@ -264,6 +264,13 @@
       "basis": "sum, {{reported}} of {{total}} days",
       "chartLabel": "Daily total calories through {{period}}"
     },
+    "activeEnergy": {
+      "label": "Active energy",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "basisWorn_one": "sum, {{reported}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "sum, {{reported}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily active energy through {{period}}"
+    },
     "activeMinutesLight": {
       "label": "Light activity",
       "basis": "sum, {{reported}} of {{total}} days",

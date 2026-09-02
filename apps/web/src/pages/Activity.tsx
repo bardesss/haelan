@@ -29,9 +29,10 @@ import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
-// taken on faith from the brief that named them: steps, distance, floors, total_calories and the
-// six active-minute/active-zone-minute sub-dimension metrics are all TOTAL (aggs: ['sum']), as is
-// workout_minutes; workout_count is the one metric on this page whose only aggregate is `count`.
+// taken on faith from the brief that named them: steps, distance, floors, total_calories,
+// active_energy and the six active-minute/active-zone-minute sub-dimension metrics are all TOTAL
+// (aggs: ['sum']), as is workout_minutes; workout_count is the one metric on this page whose only
+// aggregate is `count`.
 // Two aggs, two requests, the same REQUESTS/under('agg') shape Dashboard.tsx and Recovery.tsx
 // already use, so a pairing the catalogue cannot answer drops out of the wire list rather than
 // 500ing every card riding along with it (see under()'s own comment on Dashboard.tsx for why).
@@ -45,7 +46,7 @@ import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
 // otherwise) here would ask for rows that were never written, exactly the defect Task 1 closed.
 export const REQUESTS = {
   sum: [
-    'steps', 'distance', 'floors', 'total_calories',
+    'steps', 'distance', 'floors', 'total_calories', 'active_energy',
     'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
     'active_zone_minutes_fat_burn', 'active_zone_minutes_cardio', 'active_zone_minutes_peak',
     'workout_minutes',
@@ -206,11 +207,11 @@ export function Activity() {
   // basis line stating how many of the range's calendar days answered. Parameterised on
   // basisWornKey rather than always deriving it from basisKey, the same choice Recovery.tsx's own
   // card() makes, because MetricCard picks between the two by the metric's own coverage signal
-  // (coverageIsWearSignal) and not every metric here carries one: steps and distance are
-  // continuously sampled (packages/core/src/api/catalogue.ts tier 'intraday') and do, while floors
-  // and total_calories are daily-tier provider rollups and do not, and the six sub-dimension
-  // metrics and the two workout metrics reach false the same way (see coverageSignal.ts's own
-  // comment). A metric with no wear signal never reaches basisWornKey, so passing it the same
+  // (coverageIsWearSignal) and not every metric here carries one: steps, distance and
+  // active_energy are continuously sampled (packages/core/src/api/catalogue.ts tier 'intraday')
+  // and do, while floors and total_calories are daily-tier provider rollups and do not, and the
+  // six sub-dimension metrics and the two workout metrics reach false the same way (see
+  // coverageSignal.ts's own comment). A metric with no wear signal never reaches basisWornKey, so passing it the same
   // string as basisKey (rather than inventing an unreachable second template) is what
   // Dashboard.tsx's sleep schedule card already does for the same reason.
   const card = (
@@ -291,6 +292,8 @@ export function Activity() {
           'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort', 'higher-is-better')}
         {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',
           'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
+        {card('active_energy', 4, 'activity.activeEnergy.label', 'activity.activeEnergy.basis', 'activity.activeEnergy.basisWorn',
+          'activity.activeEnergy.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
 
         {card('active_minutes_light', 4, 'activity.activeMinutesLight.label', 'activity.activeMinutesLight.basis', 'activity.activeMinutesLight.basis',
           'activity.activeMinutesLight.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}

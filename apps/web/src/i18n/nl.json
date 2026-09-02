@@ -264,6 +264,13 @@
       "basis": "som, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse totale calorieën in {{period}}"
     },
+    "activeEnergy": {
+      "label": "Actieve energie",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse actieve energie in {{period}}"
+    },
     "activeMinutesLight": {
       "label": "Lichte activiteit",
       "basis": "som, {{reported}} van {{total}} dagen",
