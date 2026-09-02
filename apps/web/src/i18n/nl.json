@@ -187,6 +187,46 @@
       "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
     }
   },
+  "health": {
+    "title": "Gezondheid",
+    "units": {
+      "percent": "Percentage",
+      "percentShort": "%"
+    },
+    "spo2Range": {
+      "label": "Zuurstofsaturatie, bereik",
+      "basis": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{readings}}",
+      "basisWorn_one": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen, {{readings}}",
+      "basisWorn_other": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen, {{readings}}",
+      "readings_one": "{{count}} meting",
+      "readings_other": "{{count}} metingen",
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de zuurstofsaturatie in {{period}}"
+    },
+    "dailySpo2": {
+      "label": "Dagelijkse zuurstofsaturatie",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse samenvatting van de zuurstofsaturatie in {{period}}"
+    }
+  },
+  "weight": {
+    "title": "Gewicht",
+    "units": {
+      "kilograms": "Gewicht in kilogram",
+      "kg": "kg",
+      "percent": "Percentage",
+      "percentShort": "%"
+    },
+    "weight": {
+      "label": "Gewicht",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Gewicht in {{period}}"
+    },
+    "bodyFat": {
+      "label": "Vetpercentage",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Vetpercentage in {{period}}"
+    }
+  },
   "activity": {
     "title": "Activiteit",
     "units": {
@@ -225,6 +265,13 @@
       "label": "Totale calorieën",
       "basis": "som, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse totale calorieën in {{period}}"
+    },
+    "activeEnergy": {
+      "label": "Actieve energie",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijkse actieve energie in {{period}}"
     },
     "activeMinutesLight": {
       "label": "Lichte activiteit",
@@ -275,6 +322,7 @@
       "minimum": "Minimum",
       "mean": "Gemiddelde",
       "maximum": "Maximum",
+      "count": "Aantal",
       "note": "Notitie",
       "from": "Van",
       "to": "Tot",
@@ -303,6 +351,12 @@
     "hrTooltip": {
       "mean": "gemiddeld {{value}} bpm",
       "range": "bereik {{min}} tot {{max}} bpm"
+    },
+    "spo2Tooltip": {
+      "mean": "gemiddeld {{value}}%",
+      "range": "bereik {{min}} tot {{max}}%",
+      "count_one": "{{count}} meting",
+      "count_other": "{{count}} metingen"
     },
     "event": {
       "withNote": "{{kind}}: {{note}}",
@@ -513,6 +567,28 @@
         "caffeine": "Cafeïne"
       }
     }
+  },
+  "notes": {
+    "title": "Notities",
+    "list": {
+      "title": "Notities en gebeurtenissen"
+    },
+    "empty": {
+      "title": "Nog geen notities of gebeurtenissen",
+      "detail": "Voor deze periode is niets geschreven."
+    },
+    "columns": {
+      "date": "Datum",
+      "kind": "Soort",
+      "text": "Tekst",
+      "value": "Waarde",
+      "remove": "Verwijderen"
+    },
+    "remove": "Verwijderen",
+    "removing": "Bezig met verwijderen",
+    "removeAria": "Verwijder {{kind}}, {{date}}",
+    "removeNoteAria": "Verwijder notitie, {{date}}",
+    "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw."
   },
   "settings": {
     "title": "Instellingen",

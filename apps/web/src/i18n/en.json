@@ -187,6 +187,46 @@
       "chartLabel": "Daily respiratory rate through {{period}}"
     }
   },
+  "health": {
+    "title": "Health",
+    "units": {
+      "percent": "Percent",
+      "percentShort": "%"
+    },
+    "spo2Range": {
+      "label": "Oxygen saturation range",
+      "basis": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{readings}}",
+      "basisWorn_one": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} day not worn, {{readings}}",
+      "basisWorn_other": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} days not worn, {{readings}}",
+      "readings_one": "{{count}} reading",
+      "readings_other": "{{count}} readings",
+      "chartLabel": "Daily oxygen saturation minimum, mean and maximum through {{period}}"
+    },
+    "dailySpo2": {
+      "label": "Daily oxygen saturation",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Daily oxygen saturation summary through {{period}}"
+    }
+  },
+  "weight": {
+    "title": "Weight",
+    "units": {
+      "kilograms": "Weight in kilograms",
+      "kg": "kg",
+      "percent": "Percent",
+      "percentShort": "%"
+    },
+    "weight": {
+      "label": "Weight",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Weight through {{period}}"
+    },
+    "bodyFat": {
+      "label": "Body fat",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Body fat through {{period}}"
+    }
+  },
   "activity": {
     "title": "Activity",
     "units": {
@@ -225,6 +265,13 @@
       "label": "Total calories",
       "basis": "sum, {{reported}} of {{total}} days",
       "chartLabel": "Daily total calories through {{period}}"
+    },
+    "activeEnergy": {
+      "label": "Active energy",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "basisWorn_one": "sum, {{reported}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "sum, {{reported}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily active energy through {{period}}"
     },
     "activeMinutesLight": {
       "label": "Light activity",
@@ -275,6 +322,7 @@
       "minimum": "Minimum",
       "mean": "Mean",
       "maximum": "Maximum",
+      "count": "Count",
       "note": "Note",
       "from": "From",
       "to": "To",
@@ -303,6 +351,12 @@
     "hrTooltip": {
       "mean": "mean {{value}} bpm",
       "range": "range {{min}} to {{max}} bpm"
+    },
+    "spo2Tooltip": {
+      "mean": "mean {{value}}%",
+      "range": "range {{min}} to {{max}}%",
+      "count_one": "{{count}} reading",
+      "count_other": "{{count}} readings"
     },
     "event": {
       "withNote": "{{kind}}: {{note}}",
@@ -513,6 +567,28 @@
         "caffeine": "Caffeine"
       }
     }
+  },
+  "notes": {
+    "title": "Notes",
+    "list": {
+      "title": "Notes and events"
+    },
+    "empty": {
+      "title": "No notes or events yet",
+      "detail": "Nothing has been written for this period."
+    },
+    "columns": {
+      "date": "Date",
+      "kind": "Kind",
+      "text": "Text",
+      "value": "Value",
+      "remove": "Remove"
+    },
+    "remove": "Remove",
+    "removing": "Removing",
+    "removeAria": "Remove {{kind}}, {{date}}",
+    "removeNoteAria": "Remove note, {{date}}",
+    "removeFailed": "That did not remove. Try again."
   },
   "settings": {
     "title": "Settings",

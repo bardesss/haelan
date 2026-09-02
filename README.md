@@ -98,6 +98,8 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M3d-1** Page spine and Dashboard | The shared control row and its URL backed state, the data hooks the pages read through, and the Dashboard converted off fixtures as their first consumer | Done, [#68](https://github.com/bardesss/haelan/pull/68) |
 | **M3d-2** Activity, Sleep and Recovery | The three remaining M3d pages, off the same control row and data hooks M3d-1 built | Done, [#71](https://github.com/bardesss/haelan/pull/71) |
 | **M3c** Annotations and corrections | Store CRUD, write routes with transactional re-derive enqueueing, the chart-click panel, excluded rendering, the management list, note and event entry, chart annotations | Done, [#76](https://github.com/bardesss/haelan/pull/76) |
+| **M3e-1** Health, Weight and Notes | SpO2 with its interval and reading count, weight and body fat as the first episodic metric to get a page, and the Notes page that reads M3c's annotations and is the first surface that can delete one. Nutrition deferred: it has no rows to draw | In review |
+| **M3e-2** Insight cards and the shell | Period-over-period insight cards, the third empty state, the collapsible rail, the resources section and the Dutch completeness sweep | Not started |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5** Packaging | Docker image, compose file, backup, upgrade path, documentation, wizard polish, the person switcher and member management | Not started |
 

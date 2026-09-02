@@ -109,6 +109,10 @@ export interface RemoveEventInput {
   eventId: string
 }
 
+export interface RemoveNoteInput {
+  localDate: string
+}
+
 /** Every write here answers at least its own id; the override writes answer more, above. */
 export interface IdResult {
   id: string
@@ -287,6 +291,21 @@ export function useWriteNote(): UseMutationResult<IdResult, ApiError, WriteNoteI
     mutationFn: (input: WriteNoteInput) => {
       const id = requirePersonId(personId)
       return apiSend<IdResult>('PUT', `/api/v1/p/${id}/notes/${input.localDate}`, { body: input.body })
+    },
+    onSuccess: () => {
+      if (personId !== undefined) invalidateResource(queryClient, personId, 'notes')
+    },
+  })
+}
+
+export function useRemoveNote(): UseMutationResult<IdResult, ApiError, RemoveNoteInput> {
+  const session = useSession()
+  const personId = session.data?.personId
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: RemoveNoteInput) => {
+      const id = requirePersonId(personId)
+      return apiSend<IdResult>('DELETE', `/api/v1/p/${id}/notes/${input.localDate}`)
     },
     onSuccess: () => {
       if (personId !== undefined) invalidateResource(queryClient, personId, 'notes')

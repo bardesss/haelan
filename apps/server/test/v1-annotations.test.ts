@@ -107,12 +107,46 @@ describe('the note and event routes', () => {
     expect(harness.app.haelan.instance.events.listFor('p1', 1_769_000_000_000, 1_771_000_000_000)).toHaveLength(0)
   })
 
+  it('removes a note by local date', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-08-15', 'flew to Tokyo')
+    const removed = await harness.app.inject({
+      method: 'DELETE', url: '/api/v1/p/p1/notes/2026-08-15',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    })
+    expect(removed.statusCode).toBe(200)
+    expect(removed.json()).toMatchObject({ id: '2026-08-15' })
+    expect(harness.app.haelan.instance.notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(0)
+  })
+
+  it('answers 200 removing a date that was never noted, and leaves other days alone', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-08-16', 'stays')
+    const removed = await harness.app.inject({
+      method: 'DELETE', url: '/api/v1/p/p1/notes/2026-08-15',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    })
+    expect(removed.statusCode).toBe(200)
+    expect(harness.app.haelan.instance.notes.listFor('p1', '2026-08-01', '2026-08-31')).toHaveLength(1)
+  })
+
   // A note write must not enqueue a re-derive: it changes no number, and marking days dirty would
   // make every note cost a derivation.
   it('marks nothing dirty when a note is written', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const before = pendingDeriveCount(harness)
     await putNote(harness, token, '2026-08-15', 'flew to Tokyo')
+    expect(pendingDeriveCount(harness)).toBe(before)
+  })
+
+  it('marks nothing dirty when a note is removed', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    await putNote(harness, token, '2026-08-15', 'flew to Tokyo')
+    const before = pendingDeriveCount(harness)
+    await harness.app.inject({
+      method: 'DELETE', url: '/api/v1/p/p1/notes/2026-08-15',
+      headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    })
     expect(pendingDeriveCount(harness)).toBe(before)
   })
 })
