@@ -584,8 +584,8 @@
     "remove": "Verwijderen",
     "removing": "Bezig met verwijderen",
     "removeAria": "Verwijder {{kind}}, {{date}}",
-    "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
-    "removeUnavailable": "Nog niet te verwijderen"
+    "removeNoteAria": "Verwijder notitie, {{date}}",
+    "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw."
   },
   "settings": {
     "title": "Instellingen",

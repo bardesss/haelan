@@ -142,7 +142,7 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     return reply.send({ id: overrideId, ...applyOverride(app, personId, localDate) })
   })
 
-  // The three routes below take no drain, no loop, no budget and no `applied` field, which is not
+  // The four routes below take no drain, no loop, no budget and no `applied` field, which is not
   // an omission next to the two above it. An override changes what a derivation computes, so
   // writing one leaves a day for runDerive to recompute and the response has to say whether that
   // recomputation actually ran. A note or an event changes no derived number at all: it is
@@ -161,6 +161,21 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
       personId, localDate, body: noteBody, nowMs: app.haelan.now(),
     })
     return reply.send({ id })
+  })
+
+  app.delete<{ Params: NoteParams }>('/p/:personId/notes/:localDate', async (request, reply) => {
+    const personId = personIdOf(request)
+    const localDate = request.params.localDate
+    requireDate('localDate', localDate)
+    // No existence check first, matching events' DELETE below rather than overrides' own: a note
+    // is keyed by (personId, localDate), unique on that pair (notes.ts's own schema comment), so
+    // there is no separate id in the path for a check to be scoped by the way overrides' own is.
+    // remove is already scoped by personId as well as localDate, so a day this person never wrote
+    // does nothing rather than something. The response echoes localDate back under `id`, the same
+    // shape events' own delete answers with, since this route never fetched the row and so never
+    // learned the note's own id.
+    app.haelan.instance.notes.remove({ personId, localDate })
+    return reply.send({ id: localDate })
   })
 
   app.post<{ Params: PersonParams, Body: EventBody }>('/p/:personId/events', async (request, reply) => {

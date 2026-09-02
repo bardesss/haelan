@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import type { Translate } from '../../format.js'
-import { useAnnotations, useRemoveEvent } from '../../data/useAnnotations.js'
+import { useAnnotations, useRemoveEvent, useRemoveNote } from '../../data/useAnnotations.js'
 import type { AnnotationRange, StoredEvent, StoredNote } from '../../data/useAnnotations.js'
 import { SEED_KINDS } from '../../data/eventKinds.js'
 import { ErrorState } from '../../components/ErrorState.js'
@@ -11,8 +11,8 @@ import { EmptyState } from '../../components/EmptyState.js'
 /**
  * One row of the list, a note or an event flattened to the same shape. `kind` and `eventId` are
  * both null for a note row, for the same reason: a note carries neither on the wire. `eventId` is
- * what the remove cell below tests to decide whether a row gets a button at all (see the
- * `NotesList` docblock for why a note row never does).
+ * what the remove cell below tests to decide which mutation a row's button calls, useRemoveEvent
+ * for a non null one and useRemoveNote, keyed by `localDate` instead, for a null one.
  */
 interface Row {
   id: string
@@ -69,13 +69,9 @@ function formatEventValue(value: number, language: string): string {
  * pages/settings/OverrideList.tsx already uses for the identical reason (Settings.tsx stays a thin
  * shell around it).
  *
- * A remove button only ever appears on an event row. useRemoveEvent has a real route behind it
- * (DELETE /events/:eventId) and this is its first caller; NoteStore.remove exists in core with the
- * same gap this page closes for events, but no HTTP route calls it anywhere in this build, so a
- * note row has nothing this page could send a removal request to. Rendering a button that only
- * ever hid a row locally would be exactly the failure this task exists to rule out, so a note row
- * gets `notes.removeUnavailable` instead: said on the row, not left for a reader to guess at from
- * a table where some rows can be removed and others silently cannot.
+ * Both row kinds get a real remove button: useRemoveEvent sends DELETE /events/:eventId and
+ * useRemoveNote sends DELETE /notes/:localDate, each a real route this page's click actually
+ * reaches, never a row hidden from local state alone.
  *
  * Neither removal reports `applied`: a note or an event changes no derived number the way an
  * override does (useAnnotations.ts's own comment on invalidateResource), so there is no drain to
@@ -85,6 +81,7 @@ export function NotesList({ range }: { range: AnnotationRange }) {
   const { t, i18n } = useTranslation()
   const { notes: notesQuery, events: eventsQuery } = useAnnotations(range)
   const removeEvent = useRemoveEvent()
+  const removeNote = useRemoveNote()
 
   const isPending = notesQuery.isPending || eventsQuery.isPending
   const isError = notesQuery.isError || eventsQuery.isError
@@ -118,7 +115,10 @@ export function NotesList({ range }: { range: AnnotationRange }) {
             </thead>
             <tbody>
               {rows.map((row) => {
-                const removing = removeEvent.isPending && removeEvent.variables?.eventId === row.eventId
+                const isEvent = row.eventId !== null
+                const removing = isEvent
+                  ? removeEvent.isPending && removeEvent.variables?.eventId === row.eventId
+                  : removeNote.isPending && removeNote.variables?.localDate === row.localDate
                 return (
                   <tr key={row.id}>
                     <td>{row.localDate}</td>
@@ -128,17 +128,16 @@ export function NotesList({ range }: { range: AnnotationRange }) {
                       {row.value === null ? '' : formatEventValue(row.value, i18n.language)}
                     </td>
                     <td>
-                      {row.eventId !== null ? (
-                        <button type="button" className="button"
-                          aria-label={t('notes.removeAria', { kind: row.kind, date: row.localDate })}
-                          disabled={removing}
-                          onClick={() => removeEvent.mutate({ eventId: row.eventId! })}>
-                          {removing ? t('notes.removing') : t('notes.remove')}
-                        </button>
-                      ) : (
-                        // A note row: see the docblock above for why it gets this instead of a button.
-                        <span className="notes-remove-unavailable">{t('notes.removeUnavailable')}</span>
-                      )}
+                      <button type="button" className="button"
+                        aria-label={isEvent
+                          ? t('notes.removeAria', { kind: row.kind, date: row.localDate })
+                          : t('notes.removeNoteAria', { date: row.localDate })}
+                        disabled={removing}
+                        onClick={() => (isEvent
+                          ? removeEvent.mutate({ eventId: row.eventId! })
+                          : removeNote.mutate({ localDate: row.localDate }))}>
+                        {removing ? t('notes.removing') : t('notes.remove')}
+                      </button>
                     </td>
                   </tr>
                 )
@@ -146,7 +145,9 @@ export function NotesList({ range }: { range: AnnotationRange }) {
             </tbody>
           </table>
         )}
-      {removeEvent.isError && <p className="form-error" role="alert">{t('notes.removeFailed')}</p>}
+      {(removeEvent.isError || removeNote.isError) && (
+        <p className="form-error" role="alert">{t('notes.removeFailed')}</p>
+      )}
     </>
   )
 }

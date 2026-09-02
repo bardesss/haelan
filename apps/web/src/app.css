@@ -250,5 +250,3 @@ body {
 
 /* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
 .notes-value { text-align: right; font-variant-numeric: tabular-nums; }
-/* NotesList.tsx only: an override row always has a remove button, so it never renders this. */
-.notes-remove-unavailable { color: var(--text-faint); font-size: var(--font-size-xs); }

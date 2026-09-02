@@ -68,13 +68,14 @@ function cells(row: HTMLTableRowElement): string[] {
  * the same discipline for overrides); an always-empty overrides list, since useAnnotations fetches
  * it unconditionally and this page has no use for it; and a quiet sync status, since ControlRow
  * reads one on every mount regardless of what this file is testing. `removeStatus` lets a test
- * drive a DELETE that fails, the same way stubFetch's own `removalApplied` flag does for overrides.
+ * drive a DELETE that fails, the same way stubFetch's own `removalApplied` flag does for overrides,
+ * and applies to both DELETE branches below, since no test in this file drives the two at once.
  */
 function mockFetch(
   initialNotes: readonly StoredNote[], initialEvents: readonly StoredEvent[],
   removeStatus = 200, removeDelayMs = 0,
 ): void {
-  const noteItems = [...initialNotes]
+  let noteItems = [...initialNotes]
   let eventItems = [...initialEvents]
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -90,6 +91,16 @@ function mockFetch(
       const id = url.split('/events/')[1]
       eventItems = eventItems.filter((item) => item.id !== id)
       return respond(200, { id })
+    }
+    if (method === 'DELETE' && url.includes('/notes/')) {
+      // Checked ahead of the plain '/notes' read below, and on '/notes/' rather than '/notes': the
+      // GET this page issues carries a query string ('/notes?from=...'), never a path segment, so
+      // only a DELETE's own localDate suffix ever matches this branch.
+      if (removeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, removeDelayMs))
+      if (removeStatus !== 200) return respond(removeStatus, { error: { message: 'boom' } })
+      const localDate = url.split('/notes/')[1]
+      noteItems = noteItems.filter((item) => item.localDate !== localDate)
+      return respond(200, { id: localDate })
     }
     if (url.includes('/notes')) return respond(200, { items: noteItems })
     if (url.includes('/events')) return respond(200, { items: eventItems })
@@ -152,7 +163,7 @@ describe('interleaving notes and events', () => {
     expect(markup.indexOf('2026-08-16')).toBeLessThan(markup.indexOf('2026-08-14'))
   })
 
-  it('shows a note\'s day and body, with no kind and no remove button, only the unavailable label', async () => {
+  it('shows a note\'s day and body, with no kind, and a remove button of its own', async () => {
     const c = mount({ notes: [SLEPT_BADLY_NOTE] })
     await settle(c)
 
@@ -161,8 +172,15 @@ describe('interleaving notes and events', () => {
     expect(date).toBe('2026-08-14')
     expect(kind).toBe('')
     expect(text).toBe('Slept badly')
-    expect(row.querySelector('button')).toBeNull()
-    expect(row.querySelector('.notes-remove-unavailable')?.textContent).toBe('Not removable yet')
+    expect(row.querySelector('button')?.textContent).toBe('Remove')
+  })
+
+  it('gives a note\'s remove button an aria-label naming the day, with no kind in it', async () => {
+    const c = mount({ notes: [SLEPT_BADLY_NOTE] })
+    await settle(c)
+
+    const button = rows()[0]!.querySelector('button')!
+    expect(button.getAttribute('aria-label')).toBe('Remove note, 2026-08-14')
   })
 
   it('shows an event\'s translated kind, its own note and its value', async () => {
@@ -254,6 +272,49 @@ describe('removing an event', () => {
 
     act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await pollFor(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
+    await pollFor(() => html().includes('That did not remove. Try again.'), 'the removal failed message to render')
+
+    expect(rows()).toHaveLength(1)
+    expect(html()).toContain('That did not remove. Try again.')
+  })
+})
+
+describe('removing a note', () => {
+  it('removes a note through the mutation rather than only hiding the row', async () => {
+    const c = mount({ notes: [SLEPT_BADLY_NOTE] })
+    await settle(c)
+    expect(rows()).toHaveLength(1)
+
+    act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    // Not flush(): see the comment on the same call in "removing an event" above. This asserts the
+    // DELETE itself before waiting on its effect, so a click that only hides the row locally fails
+    // here rather than on the row count below.
+    await pollFor(() => sent.some((r) => r.method === 'DELETE'), 'the note DELETE request to go out')
+    expect(sent.map((r) => r.method)).toContain('DELETE')
+    await pollFor(() => rows().length === 0, 'the removed row to leave the table')
+
+    expect(rows()).toHaveLength(0)
+  })
+
+  it('shows the removing label while the request is in flight, then removes the row', async () => {
+    // A real delay, the same margin "removing an event" uses above, for the same reason: the
+    // pending state below has no window to be observed at all against a stub that resolves inside
+    // one microtask.
+    const c = mount({ notes: [SLEPT_BADLY_NOTE] }, 200, 150)
+    await settle(c)
+
+    act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await pollFor(() => rows()[0]?.querySelector('button')?.textContent === 'Removing', 'the pending removing label')
+    expect(rows()[0]!.querySelector('button')!.disabled).toBe(true)
+    await pollFor(() => rows().length === 0, 'the removed row to leave the table')
+  })
+
+  it('leaves the row in place and says removal failed, rather than dropping it on a failed request', async () => {
+    const c = mount({ notes: [SLEPT_BADLY_NOTE] }, 500)
+    await settle(c)
+
+    act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await pollFor(() => sent.some((r) => r.method === 'DELETE'), 'the note DELETE request to go out')
     await pollFor(() => html().includes('That did not remove. Try again.'), 'the removal failed message to render')
 
     expect(rows()).toHaveLength(1)

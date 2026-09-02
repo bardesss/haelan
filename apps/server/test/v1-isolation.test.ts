@@ -394,6 +394,7 @@ describe('the versioned surface, beyond the per-route table', () => {
     'POST /api/v1/p/:personId/overrides',
     'DELETE /api/v1/p/:personId/overrides/:overrideId',
     'PUT /api/v1/p/:personId/notes/:localDate',
+    'DELETE /api/v1/p/:personId/notes/:localDate',
     'POST /api/v1/p/:personId/events',
     'DELETE /api/v1/p/:personId/events/:eventId',
   ]
@@ -559,16 +560,23 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(401)
       expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
-      // p1, not p2: the request names p1 in the path, so a guard that failed open would write
-      // p1's note, never p2's. p2's note is read too, for the symmetry, but it was never at risk.
+
+      const removed = await harness.app.inject({ method: 'DELETE', url: `/api/v1/p/p1/notes/${dateOf(1)}` })
+      expect(removed.statusCode).toBe(401)
+      expect(removed.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+      // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
+      // write or remove p1's note, never p2's. p2's note is read too, for the symmetry, but it
+      // was never at risk.
       expect(notes.listFor('p1', dateOf(1), dateOf(1))).toEqual([])
       expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
     })
 
-    // The interim case this task inherited, kept as written: the surviving row is the assertion
-    // that matters, since a 403 alone is also the answer a route that acted first and refused
-    // after would give.
-    it('refuses a write against another person, and leaves their note unchanged', async () => {
+    // Both directions of the note write routes, the same pairing the override and event cases
+    // above use: writing into somebody else's day, and deleting out of it. Writing to another
+    // person's day is worse than reading it, so the surviving row after the DELETE attempt is the
+    // assertion that matters, since a 403 alone is also the answer a route that acted first and
+    // refused after would give.
+    it('refuses both writes against another person, and leaves their note unchanged', async () => {
       harness = await withServer()
       const token = await harness.signIn()
       await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
@@ -584,10 +592,17 @@ describe('the versioned surface, beyond the per-route table', () => {
       // The envelope, not only the status: see the comment on the override 403 case above for why
       // a status-only assertion here can pass for the wrong reason.
       expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: `/api/v1/p/p2/notes/${dateOf(1)}`,
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(403)
+      expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
       expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
     })
 
-    it("writes a note for the session's own person", async () => {
+    it("writes and removes a note for the session's own person", async () => {
       harness = await withServer()
       const token = await harness.signIn()
       const notes = harness.app.haelan.instance.notes
@@ -599,6 +614,13 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(200)
       expect(notes.listFor('p1', dateOf(1), dateOf(1))).toMatchObject([{ body: 'own write' }])
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: `/api/v1/p/p1/notes/${dateOf(1)}`,
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(200)
+      expect(notes.listFor('p1', dateOf(1), dateOf(1))).toEqual([])
     })
 
     // No route in this file supplies a note id: notes carry no id-bearing write route the way
