@@ -648,7 +648,7 @@
         "remove": "Verwijderen"
       },
       "scope": {
-        "day_metric": "Dag en metriek",
+        "day_metric": "Dag en meetgrootheid",
         "sample": "Meting",
         "session": "Sessie"
       },
