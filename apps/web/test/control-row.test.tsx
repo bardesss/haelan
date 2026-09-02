@@ -165,7 +165,7 @@ describe('ControlRow', () => {
   it('joins the two dates with the catalogue word, not an English one', () => {
     mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />), 'nl')
     const label = container!.querySelector('.stepper-label')!
-    expect(label.textContent).toBe('2026-08-01 tot 2026-08-31')
+    expect(label.textContent).toBe('2026-08-01 tot en met 2026-08-31')
   })
 
   // Before this branch the whole row was inert everywhere, so a placeholder was obviously a mock.

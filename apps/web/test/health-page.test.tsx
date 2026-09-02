@@ -202,7 +202,7 @@ describe('the Health page', () => {
     mount(<I18nProvider lng="nl">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
     const text = container!.textContent!
-    expect(text).toContain('Zuurstofsaturatie, bereik')
+    expect(text).toContain('Zuurstofsaturatiebereik')
     expect(text).toContain('Dagelijkse zuurstofsaturatie')
     expect(text).not.toMatch(/\bhealth\.[a-zA-Z][a-zA-Z.]*\b/)
     restore()

@@ -69,7 +69,7 @@
   "common": {
     "bedLabel": "Naar bed {{time}}",
     "bedTimeNotRecorded": "Bedtijd niet geregistreerd",
-    "to": "tot",
+    "to": "tot en met",
     "loading": "Laden",
     "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
     "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
@@ -216,7 +216,7 @@
       "percentShort": "%"
     },
     "spo2Range": {
-      "label": "Zuurstofsaturatie, bereik",
+      "label": "Zuurstofsaturatiebereik",
       "basis": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{readings}}",
       "basisWorn_one": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen, {{readings}}",
       "basisWorn_other": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen, {{readings}}",
@@ -406,7 +406,7 @@
       "pending": "de baseline wordt nog geladen",
       "unknown": "de baseline kon niet worden gelezen, dus er wordt geen vergelijking getoond",
       "none": "nog geen baseline om mee te vergelijken",
-      "thin": "de baseline van de 60 nachten voor {{on}} is te dun om mee te vergelijken",
+      "thin": "de baseline uit de 60 nachten vóór {{on}} is te dun om mee te vergelijken",
       "below": "↓ onder de baseline van {{low}} tot {{high}}",
       "above": "↑ boven de baseline van {{low}} tot {{high}}",
       "within": "→ binnen de baseline van {{low}} tot {{high}}"
@@ -424,43 +424,43 @@
     },
     "asleepMinutes": {
       "label": "Tijd geslapen",
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten; {{note}}",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten; {{note}}",
       "chartLabel": "Tijd geslapen per nacht in {{period}}"
     },
     "deepMinutes": {
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Diepe slaap per nacht in {{period}}"
     },
     "lightMinutes": {
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Lichte slaap per nacht in {{period}}"
     },
     "remMinutes": {
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "REM-slaap per nacht in {{period}}"
     },
     "awakeMinutes": {
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Tijd wakker per nacht in {{period}}"
     },
     "inBedMinutes": {
       "label": "Tijd in bed",
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Tijd in bed per nacht in {{period}}"
     },
     "efficiency": {
       "label": "Slaapefficiëntie",
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Slaapefficiëntie per nacht in {{period}}"
     },
     "bedtimeMinutes": {
       "label": "Bedtijd",
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Bedtijd per nacht in {{period}}"
     },
     "waketimeMinutes": {
       "label": "Wektijd",
-      "basis": "gemiddeld, {{reported}} van {{total}} nachten",
+      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
       "chartLabel": "Wektijd per nacht in {{period}}"
     },
     "napCount": {
@@ -648,7 +648,7 @@
         "remove": "Verwijderen"
       },
       "scope": {
-        "day_metric": "Dag en meetwaarde",
+        "day_metric": "Dag en metriek",
         "sample": "Meting",
         "session": "Sessie"
       },
