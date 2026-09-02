@@ -95,10 +95,12 @@ export function Sparkline({
   // False everywhere but Weight: default false is what keeps every chart already on a page reading
   // exactly as it did before this prop existed. A metric taken by hand (weight: 130 readings across
   // 236 days) has no data quality problem on a day nobody weighed in, unlike Activity, Sleep or
-  // Recovery, so this mode connects the line across the gap instead of breaking it and drops those
-  // same gap days from the accessible table rather than rowing them as "no reading". It leaves the
-  // exclusion and annotation marks alone: those still name something the reader did, not a day the
-  // device stayed quiet on.
+  // Recovery, so this mode connects the line across the gap instead of breaking it and drops a
+  // silent day (no value, not excluded, not annotated) from the accessible table rather than
+  // rowing it as "no reading". A day the reader excluded or annotated keeps its row regardless: the
+  // canvas still draws a markLine for it (the `marks.atDate` block below is untouched by this
+  // prop), and a row-less table beside a mark that keeps asserting something would deny the one day
+  // the reader actually acted on, table-only readers included.
   episodic?: boolean
 }) {
   const { t, i18n } = useTranslation()
@@ -151,15 +153,22 @@ export function Sparkline({
       <ChartFigure label={label} host={host} style={style}
         table={{
           columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
-          // Filtered before the map, not after: under episodic a day with nothing taken is not a
-          // row this table states anything about, so it is dropped rather than rowed with a "no
-          // reading" cell the spec says would train a reader to ignore what that phrase means on
-          // every other chart. An excluded day still has its own note to carry, but it too has no
-          // value left once the exclusion applies, so it drops out on the same rule; nothing about
-          // this filter special-cases it back in.
+          // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
+          // reader did to it either) is not a row this table states anything about, so it is
+          // dropped rather than rowed with a "no reading" cell the spec says would train a reader
+          // to ignore what that phrase means on every other chart. An excluded or annotated day
+          // keeps its row even with no value left: `marks.atDate` below still draws a markLine for
+          // it regardless of `episodic`, and a table gone quiet beside a canvas mark that keeps
+          // asserting something would deny the one day the reader actually acted on to a
+          // table-only reader. `!episodic` short-circuits the other two clauses for every existing
+          // caller, so the added checks never run outside episodic mode.
           rows: values
             .map((v, i) => [v, i] as const)
-            .filter(([v]) => !episodic || v !== null)
+            .filter(([v, i]) => {
+              if (!episodic || v !== null) return true
+              const date = labels[i] ?? String(i)
+              return excluded.includes(date) || annotations.some((a) => a.date === date)
+            })
             .map(([v, i]) => {
               const date = labels[i] ?? String(i)
               const isExcluded = excluded.includes(date)

@@ -225,6 +225,63 @@ describe('Sparkline', () => {
       expect(rows).not.toContain('2026-08-15')
     })
 
+    // Review's own Critical: a day the reader excluded still draws a markLine on the canvas
+    // (`marks.atDate`, untouched by `episodic`), and once the exclusion has applied there is no
+    // value left under it, the exact shape the first test above drops from the table. Filtering on
+    // `v !== null` alone would have dropped this row too, leaving a solid excluded markLine
+    // asserting something on an `aria-hidden` canvas while the `sr-only` table denies the day
+    // exists, worse than M3c's own defect (that one lost the mark and the row together; this would
+    // lose only the row while the mark kept asserting). `appliedValues`/`EXCLUDED_REASON` reuse the
+    // fixtures the non-episodic exclusion tests above already use for the identical scenario.
+    it('keeps the row for an excluded day even once its own value is gone, unlike a silent day', () => {
+      const html = render(
+        <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
+          episodic annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
+      )
+      const rows = table(html)
+      expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
+      const day2Row = rows.slice(rows.indexOf('2026-08-02'), rows.indexOf('2026-08-03'))
+      expect(day2Row).toContain('charts.absence.excluded')
+      expect(day2Row).toContain(EXCLUDED_REASON)
+      expect(day2Row).not.toContain('charts.absence.noReading')
+    })
+
+    // The other half of the same finding: an annotation with no exclusion at all (a note or an
+    // event on a day nobody weighed) keeps its row too, not only an excluded one. The value cell
+    // still honestly reads "no reading" (there genuinely was none), but the note carries why the
+    // day is worth a row regardless.
+    it('keeps the row for a day carrying only an annotation, with no exclusion and no reading', () => {
+      const html = render(
+        <Sparkline values={[81.2, null]} labels={['2026-08-14', '2026-08-15']}
+          label="Weight" unit="kg" metric="weight" episodic
+          annotations={[{ date: '2026-08-15', text: 'felt unwell, skipped the scale' }]} excluded={[]} />,
+      )
+      const rows = table(html)
+      expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(2)
+      const day2Row = rows.slice(rows.indexOf('2026-08-15'))
+      expect(day2Row).toContain('felt unwell, skipped the scale')
+      expect(day2Row).toContain('charts.absence.noReading')
+      expect(day2Row).not.toContain('charts.absence.excluded')
+    })
+
+    // The precision audit's own rule (chart-marks.test.tsx:217 above), now inside episodic: the
+    // filter change touches only which rows are built, never the per-row formatter, so an episodic
+    // table's own value cell still owes its reader the metric's real catalogue precision rather
+    // than a raw float. toLocaleString(undefined), not a hardcoded literal, for the same reason the
+    // file's own no-I18nProvider convention states at the top: with no provider mounted,
+    // i18n.language is undefined and formatMetricValue's own toLocaleString falls back to whatever
+    // this runtime's own ICU data defaults to.
+    it('rounds a value cell to its own metric\'s catalogue precision when episodic', () => {
+      const html = render(
+        <Sparkline values={[81.166666666666]} labels={['2026-08-14']}
+          label="Weight" unit="kg" metric="weight" episodic annotations={[]} excluded={[]} />,
+      )
+      const rows = table(html)
+      const expected = (81.166666666666).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+      expect(rows).toContain(`<td>${expected}</td>`)
+      expect(rows).not.toContain('81.166666666666')
+    })
+
     // The one that matters: this pins that the default (no `episodic` prop, every existing caller)
     // has not moved. Every chart on Activity, Sleep and Recovery renders through this same
     // component, so a default that quietly started dropping "no reading" rows would silently
@@ -274,6 +331,39 @@ describe('Sparkline', () => {
         })
         expect(seriesOf().connectNulls).toBe(false)
       })
+    })
+
+    // Review's own Important: the canvas mark and the table row it sits beside were asserted in
+    // two separate renders (the table test above, the connectNulls test above that), which proves
+    // neither wrong on its own but proves nothing about whether they agree. Same idiom as
+    // "says the same thing on the canvas as its own accessible table row states for that date"
+    // higher up this file (the non-episodic version of this exact check), extended to episodic: one
+    // render, the markLine's own `name` read off the real setOption argument, compared against the
+    // note cell noteCellFor reads from the same render's table, plus the row itself still being
+    // there at all, which is the property the Critical above was about.
+    it('agrees with the canvas: the row an applied exclusion keeps states the same text the markLine draws', () => {
+      act(() => {
+        root!.render(
+          <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
+            episodic annotations={[{ date: '2026-08-02', text: EXCLUDED_REASON }]} excluded={['2026-08-02']} />,
+        )
+      })
+      const stub = chartStubs.at(-1)!
+      const option = stub.setOption.mock.calls[0]![0] as {
+        series: { connectNulls: boolean, data: unknown[], markLine?: { data: Record<string, unknown>[] } }[]
+      }
+      const series = option.series[0]!
+      expect(series.connectNulls).toBe(true)
+      expect(series.data).toHaveLength(3)
+      const markLineEntry = series.markLine?.data[0]
+      const rows = table(container!.innerHTML)
+      // All three days keep a row here: 2026-08-01 and 2026-08-03 both carry a real reading
+      // (appliedValues[0] and [2]), and 2026-08-02 keeps its row despite carrying none, which is
+      // the Critical this test guards.
+      expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(3)
+      const noteCell = noteCellFor(container!.innerHTML, '2026-08-02')
+      expect(noteCell).toBe(`charts.absence.excluded, ${EXCLUDED_REASON}`)
+      expect(markLineEntry?.['name']).toBe(noteCell)
     })
 
     // useChart (useChart.ts) disposes and reinitialises its echarts instance whenever `build`'s own
