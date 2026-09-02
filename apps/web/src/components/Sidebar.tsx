@@ -60,8 +60,9 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
 
   // Text stays in the DOM either way, inside a span the "sr-only" class clips rather than
   // removes, so a screen reader keeps every rail item's name even when the rail is narrow enough
-  // that only the icon column is visible. Whether that class is present is the one thing this
-  // component decides about collapsing; app.css decides what happens to the pixels.
+  // that only the icon column is visible. This is what keeps names working under collapse; the
+  // nav's own "rail-collapsed" class below, the toggle's chevron direction and its aria-label are
+  // the rest of what this component decides about collapsing, each handled where it is used.
   const label = (text: string) => <span className={collapsed ? 'sr-only' : undefined}>{text}</span>
 
   return (

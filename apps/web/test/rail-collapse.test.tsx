@@ -12,17 +12,21 @@ import { readCollapsed, writeCollapsed } from '../src/ui/railState.js'
 const STORAGE_KEY = 'haelan.rail.collapsed'
 
 // happy-dom's own window has a working localStorage, but vitest's happy-dom environment forwards
-// a window property to the test's global scope only when it finds that property among the
-// window instance's *own* enumerable keys (see populateGlobal/getWindowKeys in vitest's runtime
-// chunk). happy-dom exposes localStorage through a getter on its Window prototype rather than as
-// an own property, so it is never forwarded, and the bare `localStorage` this file (and
-// railState.ts) reads falls through to Node's own built-in global instead, which is inert without
-// a --localstorage-file flag. Storage itself IS forwarded (happy-dom assigns it as an instance
-// field), so this builds a real Storage the class already provides and installs it where the
-// ambient `localStorage` reference actually resolves at runtime. A fresh instance every test,
-// not one shared across the file: happy-dom's Storage lazily binds each method the first time it
-// is read and then reuses that bound copy, so spying on Storage.prototype after some earlier test
-// already touched the same instance would silently spy on nothing.
+// a window property to the test's global scope only through getWindowKeys/populateGlobal in
+// vitest's runtime chunk, and that function's second filter skips any key that already exists on
+// the test's global unless the key is explicitly listed in vitest's own KEYS array (or the
+// environment's additionalKeys). Node ships its own inert `localStorage` global (the
+// "ExperimentalWarning: localStorage is not available" you will see in this file's test output),
+// so `localStorage` already exists on `global` before happy-dom's setup runs, `localStorage` is
+// in neither list, and the filter leaves Node's inert version in place instead of forwarding
+// happy-dom's working one. The bare `localStorage` this file (and railState.ts) reads therefore
+// resolves to that inert global rather than to happy-dom's window's own. `Storage` the
+// constructor IS forwarded (it is in vitest's KEYS array), so this builds a real Storage with the
+// same class happy-dom itself uses and installs it where the ambient `localStorage` reference
+// actually resolves at runtime. A fresh instance every test, not one shared across the file:
+// happy-dom's Storage lazily binds each method the first time it is read and then reuses that
+// bound copy, so spying on Storage.prototype after some earlier test already touched the same
+// instance would silently spy on nothing.
 beforeEach(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true, writable: true })
 })
@@ -36,32 +40,90 @@ function renderCollapsed(): string {
   return renderRail()
 }
 
-// Each test already gets a fresh Storage from the beforeEach above, so this is not what keeps
-// tests from seeing each other's writes; it exists so a change to that setup, or to this file's
-// STORAGE_KEY, cannot quietly stop covering the one property clear() actually promises. The
-// assertion after clear() confirms the clear actually took effect rather than merely returning.
+// Restoring spies here rather than at the end of each test that installs one: a spy restored
+// inline is skipped whenever an assertion above it throws first, and a mocked Storage.prototype
+// method left in place then leaks into every test that runs after it. restoreAllMocks runs
+// whether or not the test that installed the spy passed.
+//
+// A fresh Storage after that, rather than clearing the one the test just used: happy-dom's
+// Storage caches each method the first time it is read, on the instance rather than the
+// prototype, so a test that spied on Storage.prototype leaves its own instance permanently bound
+// to the mock even once restoreAllMocks puts the real method back on the prototype. Checking
+// clear() against that same instance would still throw here. This file's own beforeEach is not
+// what keeps tests from seeing each other's writes, so this is not covering that; it exists so a
+// change to either setup, or to this file's STORAGE_KEY, cannot quietly stop covering the one
+// property clear() actually promises, on an instance nothing else touched.
 afterEach(() => {
+  vi.restoreAllMocks()
+  Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true, writable: true })
+  localStorage.setItem(STORAGE_KEY, 'true')
   localStorage.clear()
   expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
 })
 
+// English names, matching en.json's sidebar.items values: the two markup tests below wrap the
+// render in a real I18nProvider so the assertions check the actual name a reader (or a screen
+// reader) gets, not the raw catalogue key renderToStaticMarkup falls back to without a provider.
+const EXPECTED_NAMES: Record<string, string> = {
+  '/': 'Dashboard',
+  '/activity': 'Activity',
+  '/sleep': 'Sleep',
+  '/recovery': 'Recovery',
+  '/health': 'Health',
+  '/weight': 'Weight',
+  '/nutrition': 'Nutrition',
+  '/notes': 'Notes',
+  '/settings': 'Settings',
+}
+
+function renderRailNamed(): string {
+  return renderToStaticMarkup(
+    <I18nProvider lng="en"><Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} /></I18nProvider>,
+  )
+}
+
+function renderCollapsedNamed(): string {
+  writeCollapsed(true)
+  return renderRailNamed()
+}
+
 describe('the rail collapses to an icon strip', () => {
+  // Collapsing that never touches a class name is invisible to every other test in this file: the
+  // toggle's own aria-label still flips, the hrefs are all still there, and every name is still in
+  // the DOM regardless of whether the rail actually shrank. rail-collapsed and sr-only are the two
+  // class names app.css keys its collapsed layout off, so asserting them here is the one place a
+  // class assertion is the substance of the test rather than a proxy standing in for it.
+  it('marks the nav collapsed and clips a label, rather than leaving the markup untouched', () => {
+    const expandedHtml = renderRail()
+    const collapsedHtml = renderCollapsed()
+    expect(expandedHtml).not.toContain('rail-collapsed')
+    expect(collapsedHtml).toContain('class="rail rail-collapsed"')
+    expect(expandedHtml).not.toContain('class="sr-only"')
+    expect(collapsedHtml).toContain('class="sr-only"')
+  })
+
   it('keeps every rail item nameable when collapsed', () => {
-    const html = renderCollapsed()
-    for (const path of RAIL_PATHS) expect(html).toContain(`href="${path}"`)
+    const html = renderCollapsedNamed()
+    for (const path of RAIL_PATHS) {
+      const name = EXPECTED_NAMES[path]
+      expect(name, `no expected name recorded for ${path}`).toBeDefined()
+      // Each path's own anchor, not the document as a whole: a name present anywhere in the page
+      // does not prove the item at this path carries it, only that the word appears somewhere.
+      const anchor = html.match(new RegExp(`<a href="${path}"[^>]*>.*?</a>`))?.[0]
+      expect(anchor, `no anchor found for ${path}`).toBeDefined()
+      expect(anchor, path).toContain(name)
+    }
     expect(html).not.toContain('aria-label=""')
   })
 
   it('falls back to expanded when localStorage throws', () => {
-    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
     expect(() => renderRail()).not.toThrow()
-    spy.mockRestore()
   })
 
   it('does not throw when a write is denied either, the same guard on the other side', () => {
-    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied') })
     expect(() => writeCollapsed(true)).not.toThrow()
-    spy.mockRestore()
   })
 
   it('reads back exactly what it wrote, both ways', () => {
