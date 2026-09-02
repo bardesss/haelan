@@ -10,8 +10,9 @@ import type { Session } from '../src/auth/session.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import type { Insight } from '../src/data/useInsight.js'
 import { flush, pumpUntil } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
 // this, the same reason activity.test.tsx and recovery.test.tsx need it.
@@ -107,6 +108,14 @@ function hypnogramNightsResponse(): unknown {
  * null for every sleep row on purpose (a night has no samples underneath it), and a stub that could
  * not express that shape is the exact gap that let a null coverage render as "device not worn"
  * over a fully populated month through thirteen task reviews.
+ *
+ * `insightOverrides` feeds metricCoverage.ts's own insightBody, unset by default: a caller that
+ * does not care what the insight card shows gets a real, unsuppressed period back rather than an
+ * empty `{}` (which InsightCard's own `== null` guard reads as "not enough data"), the same
+ * default insightBody itself takes. Folded into this one general purpose stub, not a second
+ * function, because leaving /insights unanswered here is what turned the asleep insight card into
+ * an empty state under every test already written against this stub, including the one below that
+ * asserts no card renders one at all.
  */
 function stubSleep(
   urls: string[], schedule: { bedtimeMinutes: number, waketimeMinutes: number } = { bedtimeMinutes: -40, waketimeMinutes: 425 },
@@ -114,6 +123,7 @@ function stubSleep(
   // asleep card's basis while that request has not settled. A never resolving promise makes that a
   // resting state instead of a moment in a sequence, so nothing here has to race a delay.
   hangBaselines = false,
+  insightOverrides: Partial<Insight> = {},
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -140,6 +150,7 @@ function stubSleep(
     if (url.includes('/baselines')) {
       return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline: null })
     }
+    if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -429,6 +440,61 @@ describe('the Sleep page', () => {
     const text = container!.textContent!
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
+    restore()
+  })
+
+  // Task 4's own insight card. asleepInsightFormat routes insight.current/previous/delta through
+  // formatDuration, the same call the time asleep tile's own headline makes a few cards up, so the
+  // card reads "1h 10m" beside it rather than a bare, unitless "70". range=month&on=2026-08-15
+  // gives clean, hand-computable calendar-month windows, the same fixed date dashboard-cards.test.tsx
+  // uses for its own copy of this assertion.
+  it('formats the sleep insight as a duration rather than raw minutes', async () => {
+    window.history.replaceState(null, '', '/sleep?range=month&on=2026-08-15')
+    const restore = stubSleep([])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '1h 10m on average (Aug 1, 2026 to Aug 31, 2026) against 1h 00m on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 0h 10m.',
+    )
+    restore()
+  })
+
+  // The sign bug Task 3's own review round found on Dashboard's identically shaped card:
+  // formatDuration was only ever fed a non-negative duration before insight cards existed, and its
+  // own Math.floor(total / 60) paired with a sign-carrying total % 60 prints a negative input as
+  // two minus signs ("-1h -7m") rather than one on the whole duration. -7 alone (a seven minute
+  // drop, not a large or hour-crossing one) is enough to show it.
+  it('formats a negative sleep insight delta with one leading minus rather than two', async () => {
+    window.history.replaceState(null, '', '/sleep?range=month&on=2026-08-15')
+    const restore = stubSleep([], undefined, false, { current: 401, previous: 408, delta: -7 })
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '6h 41m on average (Aug 1, 2026 to Aug 31, 2026) against 6h 48m on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of -0h 07m.',
+    )
+    restore()
+  })
+
+  // Suppression, exercised with a null current rather than the suppressed flag alone: this pins
+  // the hazard note's own "vary your fixtures" example (a null field), and confirms the card falls
+  // back to the safe empty state rather than reaching formatDuration with a null it cannot handle.
+  it('falls back to the insufficient message when the server suppresses the sleep insight', async () => {
+    const restore = stubSleep([], undefined, false, { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
+    expect(card?.textContent).toContain('too few days')
+    expect(card?.querySelector('.insight-summary')).toBeNull()
     restore()
   })
 })

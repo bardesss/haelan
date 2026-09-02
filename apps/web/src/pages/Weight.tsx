@@ -4,6 +4,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
@@ -13,6 +14,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
@@ -105,6 +107,22 @@ export function Weight() {
     return out
   }, [rangeDates, lastSeries.data])
 
+  // The one insight card the brief's own table gives this page: weight at the last agg both
+  // cards above already request (REQUESTS.last). /insights is its own, unbatched request, so this
+  // is one call added on top of the single group above. Suppresses often, correctly: 130 readings
+  // across 236 days in the household this page was built against means a seven day window
+  // frequently holds too few, and InsightCard's own suppressed branch is what that renders as, not
+  // a bug this card routes around.
+  const weightInsight = useInsight('weight', 'last', { from: controls.from, to: controls.to }, source)
+  // The trap this whole page exists to get right, restated for the insight card: METRICS.weight
+  // declares precision 1 in grams, the stored unit, and the headline above converts to kilograms
+  // through formatNumber directly rather than formatMetricValue (see card()'s own comment and
+  // format.ts's own comment on formatNumber for why a converted value can never reach it). The
+  // insight card needs the identical conversion, plus the "kg" suffix the headline carries through
+  // StatTile's own `unit` prop, which InsightCard's default has no way to add on its own.
+  const weightInsightFormat = (value: number | null, absent: string): string =>
+    value === null ? absent : `${formatNumber(value / 1000, 1, i18n.language, absent)} ${t('weight.units.kg')}`
+
   // Both cards on this page are `episodic`: a weight (or a body fat reading) is taken by hand, not
   // sampled continuously, so a day nobody weighed in is not a data quality problem the way a gap
   // in a wearable's own record would be (see Sparkline's own `episodic` prop comment for the full
@@ -179,6 +197,12 @@ export function Weight() {
           (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent))}
         {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.chartLabel',
           'weight.units.percent', 'weight.units.percentShort')}
+
+        {/* label is its own catalogue string, not weight.weight.label reused: a second card
+            sharing "Weight" would make a label lookup by exact text ambiguous, the same collision
+            Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
+        <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
+          label={t('weight.insights.weight')} formatValue={weightInsightFormat} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

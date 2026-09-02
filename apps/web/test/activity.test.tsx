@@ -10,8 +10,9 @@ import type { Session } from '../src/auth/session.js'
 import { Activity } from '../src/pages/Activity.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import type { Insight } from '../src/data/useInsight.js'
 import { flush } from './flush.js'
-import { seriesPoint, PROVIDER_METRICS } from './metricCoverage.js'
+import { seriesPoint, PROVIDER_METRICS, insightBody } from './metricCoverage.js'
 
 // Sparkline and ActivityHeatmap draw for real here, and echarts.init's effect throws "missing
 // chart token" without this, the same reason every other page test file needs it.
@@ -59,7 +60,7 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
  * omits the parameter" apart from "the parameter happens not to matter here", which is the whole
  * point of the first test below.
  */
-function stubActivity(urls: string[]): () => void {
+function stubActivity(urls: string[], insightOverrides: Partial<Insight> = {}): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -82,6 +83,7 @@ function stubActivity(urls: string[]): () => void {
       }
       return json(body)
     }
+    if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -111,6 +113,7 @@ function stubSteps(points: readonly { localDate: string, value: number, coverage
         reduction: null,
       }])))
     }
+    if (url.includes('/insights')) return json(insightBody(url))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -139,6 +142,7 @@ function stubActivityValues(overrides: Record<string, number>): () => void {
       }
       return json(body)
     }
+    if (url.includes('/insights')) return json(insightBody(url))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -366,6 +370,59 @@ describe('the Activity page', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.innerHTML).toContain('Weekdag')
     expect(container!.innerHTML).not.toContain('>Weekday<')
+    restore()
+  })
+
+  // Task 4's own insight card. No formatValue on this one, unlike its siblings on Sleep, Recovery,
+  // Health and Weight: the daily steps heatmap's own basis line already prints a plain, unitless
+  // steps total through formatMetricValue, exactly what InsightCard's own default does without a
+  // formatValue override, so there is no unit or duration gap for a formatter to close here.
+  it('states the steps insight as a plain number, with no unit suffix', async () => {
+    window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
+    const restore = stubActivity([], { current: 8342, previous: 7910, delta: 432 })
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '8,342 on average (Aug 1, 2026 to Aug 31, 2026) against 7,910 on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 432.',
+    )
+    restore()
+  })
+
+  // Vary the fixture rather than reusing the same complete body every test in this file: a
+  // suppressed response (current/previous/delta all null) is a null field this card has to fall
+  // back on rather than reach formatMetricValue with, which a fixture carrying only complete
+  // bodies could never catch.
+  it('falls back to the insufficient message when the server suppresses the steps insight', async () => {
+    const restore = stubActivity([], { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
+    expect(card?.textContent).toContain('too few days')
+    expect(card?.querySelector('.insight-summary')).toBeNull()
+    restore()
+  })
+
+  // The one wiring claim this file's own tests do not otherwise pin: /insights takes one metric
+  // and one agg per call, distinct from the two /series requests (sum, count) this page already
+  // issues, so the steps insight is a third request rather than a card riding along on the sum
+  // group's own response.
+  it('asks for the steps insight at agg sum, separately from the sum series request', async () => {
+    const urls: string[] = []
+    const restore = stubActivity(urls)
+    const { client, tree } = withQuery(<Activity />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const insightCalls = urls.filter((u) => u.includes('/insights'))
+    expect(insightCalls).toHaveLength(1)
+    const params = new URL(insightCalls[0]!, 'http://x').searchParams
+    expect(params.get('metric')).toBe('steps')
+    expect(params.get('agg')).toBe('sum')
     restore()
   })
 })

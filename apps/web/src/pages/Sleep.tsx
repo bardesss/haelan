@@ -5,6 +5,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
@@ -23,6 +24,7 @@ import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
@@ -199,6 +201,11 @@ export function Sleep() {
   const asleepBaseline = useBaseline('sleep_asleep_minutes', controls.to, source, 'sum')
   const asleepBand = useMemo(() => bandFrom(asleepBaseline.data?.baseline ?? null), [asleepBaseline.data])
 
+  // The one insight card the brief's own table gives this page: sleep_asleep_minutes at the sum
+  // agg the time asleep tile above already requests (REQUESTS.sum). /insights is its own,
+  // unbatched request, so this is one call added on top of the three agg groups above.
+  const asleepInsight = useInsight('sleep_asleep_minutes', 'sum', { from: controls.from, to: controls.to }, source)
+
   // Hypnogram: /sleep/nights through useNights, not the eleven cards' own /series groups above.
   // Stays outside MetricCard: its emptiness is "lastNight === null" off useNights, not a metric and
   // a points array MetricCard's own emptyStateFor could read. Follows Dashboard's own hand rolled
@@ -342,6 +349,17 @@ export function Sleep() {
   const napCountTotal = sum(values(metricGroups.pointsOf('sleep_nap_count')))
   const napMinutesTotal = sum(values(metricGroups.pointsOf('sleep_nap_minutes')))
 
+  // formatDuration was only ever fed a non-negative duration before this task: every other caller
+  // on this page hands it a summed or averaged span of real time, which cannot go negative. An
+  // insight's delta can: a week where mean sleep fell hands this a negative number, and
+  // formatDuration's own Math.floor(total / 60) paired with a sign-carrying total % 60 would print
+  // that as two minus signs ("-1h -7m") rather than one on the whole duration. Negating before the
+  // call and reapplying the sign after prints one leading minus instead, the same fix
+  // Dashboard.tsx's own sleepFormat makes for its own sleep insight card, at the one caller here
+  // that can receive a negative value.
+  const asleepInsightFormat = (value: number | null, absent: string): string =>
+    value === null ? absent : value < 0 ? `-${formatDuration(-value)}` : formatDuration(value)
+
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
@@ -419,6 +437,15 @@ export function Sleep() {
         {tile('sleep_nap_minutes', 6, t('sleep.napMinutes.label'), 'sleep.napMinutes.basis',
           'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal), 'sleep.units.minutes', undefined,
           'neutral')}
+
+        {/* label is its own catalogue string, not sleep.asleepMinutes.label ("Time asleep")
+            reused: a second card sharing that exact text would make a label lookup by exact text
+            ambiguous, the same collision Dashboard.tsx's own comment on INSIGHTS explains at more
+            length. formatValue is asleepInsightFormat, not the bare default: the time asleep tile
+            above already reads through formatDuration, and without this the card would print raw
+            minutes beside a tile that reads "7h 00m". */}
+        <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
+          label={t('sleep.insights.asleepMinutes')} formatValue={asleepInsightFormat} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

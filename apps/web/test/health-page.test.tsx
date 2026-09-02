@@ -11,8 +11,9 @@ import { Health } from '../src/pages/Health.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { SeriesPoint } from '../src/data/useSeries.js'
+import type { Insight } from '../src/data/useInsight.js'
 import { flush } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // Sparkline and Spo2Range both draw for real here, and echarts.init's effect throws "missing
 // chart token" without this, the same reason recovery.test.tsx and chart-lifecycle.test.tsx need
@@ -92,6 +93,7 @@ function spo2Fixture(
  */
 function stubHealth(
   urls: string[], spo2: ReturnType<typeof spo2Fixture>[], dailySpo2: SeriesPoint[],
+  insightOverrides: Partial<Insight> = {},
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -120,6 +122,7 @@ function stubHealth(
       return json(body)
     }
     if (url.includes('/baselines')) return json({ baseline: null })
+    if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -202,6 +205,52 @@ describe('the Health page', () => {
     expect(text).toContain('Zuurstofsaturatie, bereik')
     expect(text).toContain('Dagelijkse zuurstofsaturatie')
     expect(text).not.toMatch(/\bhealth\.[a-zA-Z][a-zA-Z.]*\b/)
+    restore()
+  })
+
+  // Task 4's own insight card. The daily summary card above carries a "%" suffix through
+  // StatTile's own unit prop; dailySpo2InsightFormat is what closes the gap InsightCard's default
+  // formatMetricValue call leaves (no unit at all), the same gap Recovery.tsx's own
+  // restingHrInsightFormat closes for its identically shaped card.
+  it('carries the daily summary tile\'s own percent suffix into its insight sentence', async () => {
+    window.history.replaceState(null, '', '/health?range=month&on=2026-08-15')
+    const restore = stubHealth(
+      [],
+      [spo2Fixture('2026-08-14', 96, { min: 94, max: 98, count: 300 })],
+      [seriesPoint('daily_spo2', '2026-08-14', 96)],
+      { current: 96.4, previous: 95.8, delta: 0.6 },
+    )
+    const { client, tree } = withQuery(<Health />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Daily oxygen saturation, this period against the last')
+    // "96.4 %" with a space, not "96.4%": StatTile's own unit prop always renders a space before
+    // the unit (StatTile.tsx's `<span> {unit}</span>`), the same convention this card's own
+    // dailySpo2InsightFormat follows so it reads the same as the tile beside it.
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '96.4 % on average (Aug 1, 2026 to Aug 31, 2026) against 95.8 % on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 0.6 %.',
+    )
+    restore()
+  })
+
+  // Vary the fixture rather than reusing the same complete body every test in this file: a
+  // suppressed response (current/previous/delta all null) is a null field this card has to fall
+  // back on rather than reach formatMetricValue with, which a fixture carrying only complete
+  // bodies could never catch.
+  it('falls back to the insufficient message when the server suppresses the daily summary insight', async () => {
+    const restore = stubHealth(
+      [], [], [],
+      { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null },
+    )
+    const { client, tree } = withQuery(<Health />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Daily oxygen saturation, this period against the last')
+    expect(card?.textContent).toContain('too few days')
+    expect(card?.querySelector('.insight-summary')).toBeNull()
     restore()
   })
 })

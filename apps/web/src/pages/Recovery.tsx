@@ -5,6 +5,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
@@ -16,6 +17,7 @@ import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
@@ -150,6 +152,11 @@ export function Recovery() {
   const hrvBaseline = useBaseline('daily_hrv', controls.to, source, 'last')
   const respiratoryBaseline = useBaseline('respiratory_rate', controls.to, source, 'last')
 
+  // The one insight card the brief's own table gives this page: resting_heart_rate at the last
+  // agg the card above already requests (REQUESTS.last). /insights is its own, unbatched request,
+  // so this is one call added on top of the group above, not multiplied against any card.
+  const restingHrInsight = useInsight('resting_heart_rate', 'last', { from: controls.from, to: controls.to }, source)
+
   const syncStatus = useSyncStatus()
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
     ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
@@ -223,6 +230,13 @@ export function Recovery() {
     )
   }
 
+  // The resting heart rate card above carries a "bpm" suffix through StatTile's own `unit` prop,
+  // which InsightCard's default formatMetricValue call does not add on its own: without this, the
+  // insight card would read unitless beside a tile that carries one, the same gap Dashboard.tsx's
+  // own restingHrFormat closes for its copy of this card.
+  const restingHrInsightFormat = (value: number | null, absent: string): string =>
+    value === null ? absent : `${formatMetricValue(value, 'resting_heart_rate', i18n.language, absent)} ${t('recovery.units.bpm')}`
+
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('recovery.title')}</h1>
@@ -237,6 +251,13 @@ export function Recovery() {
         {card('respiratory_rate', 'recovery.respiratoryRate.label', 'recovery.respiratoryRate.basis',
           'recovery.respiratoryRate.chartLabel', 'recovery.units.breathsPerMinute', 'recovery.units.breathsPerMinuteShort',
           'neutral', respiratoryBaseline, respiratoryBand)}
+
+        {/* label is its own catalogue string, not recovery.restingHeartRate.label reused: a
+            second card sharing "Resting heart rate" would make a label lookup by exact text
+            ambiguous, the same collision Dashboard.tsx's own comment on INSIGHTS explains at more
+            length. */}
+        <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
+          label={t('recovery.insights.restingHeartRate')} formatValue={restingHrInsightFormat} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

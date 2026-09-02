@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -18,6 +19,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
@@ -119,6 +121,12 @@ export function Activity() {
 
   const metricGroups = useMetricGroups(GROUPS, range)
   const sumSeries = metricGroups.queryForAgg('sum')
+
+  // The one insight card the brief's own table gives this page: steps at the sum agg the heatmap
+  // above already requests (REQUESTS.sum). /insights is its own, unbatched request, unlike
+  // /series, so this is one call added on top of the two agg groups above, not multiplied against
+  // any card on the page.
+  const stepsInsight = useInsight('steps', 'sum', { from: controls.from, to: controls.to }, source)
 
   const syncStatus = useSyncStatus()
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
@@ -313,6 +321,15 @@ export function Activity() {
           'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort', 'neutral')}
         {card('workout_minutes', 4, 'activity.workoutMinutes.label', 'activity.workoutMinutes.basis', 'activity.workoutMinutes.basis',
           'activity.workoutMinutes.chartLabel', 'activity.units.minutes', 'activity.units.min', 'neutral')}
+
+        {/* label is its own catalogue string, not activity.dailySteps.label reused: a second card
+            sharing "Daily steps" would make a label lookup by exact text ambiguous, the same
+            collision Dashboard.tsx's own comment on INSIGHTS explains at more length. No
+            formatValue: the heatmap's own basis line already prints a plain, unitless steps total
+            through formatMetricValue, which is exactly what InsightCard's own default does without
+            one. */}
+        <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
+          label={t('activity.insights.steps')} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
