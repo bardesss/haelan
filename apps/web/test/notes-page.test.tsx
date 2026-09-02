@@ -9,7 +9,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Notes } from '../src/pages/Notes.js'
 import type { StoredEvent, StoredNote } from '../src/data/useAnnotations.js'
-import { flush, pumpUntil } from './flush.js'
+import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -70,7 +70,10 @@ function cells(row: HTMLTableRowElement): string[] {
  * reads one on every mount regardless of what this file is testing. `removeStatus` lets a test
  * drive a DELETE that fails, the same way stubFetch's own `removalApplied` flag does for overrides.
  */
-function mockFetch(initialNotes: readonly StoredNote[], initialEvents: readonly StoredEvent[], removeStatus = 200): void {
+function mockFetch(
+  initialNotes: readonly StoredNote[], initialEvents: readonly StoredEvent[],
+  removeStatus = 200, removeDelayMs = 0,
+): void {
   const noteItems = [...initialNotes]
   let eventItems = [...initialEvents]
   const original = globalThis.fetch
@@ -80,6 +83,9 @@ function mockFetch(initialNotes: readonly StoredNote[], initialEvents: readonly 
     sent.push({ url, method })
     if (url.includes('/api/sync/status')) return respond(200, { running: false, lastFinishedAtMs: null })
     if (method === 'DELETE' && url.includes('/events/')) {
+      // A real delay, not zero, is what gives the pending removing test below a window to observe:
+      // this stub otherwise resolves inside one microtask, too fast for any poll to ever catch.
+      if (removeDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, removeDelayMs))
       if (removeStatus !== 200) return respond(removeStatus, { error: { message: 'boom' } })
       const id = url.split('/events/')[1]
       eventItems = eventItems.filter((item) => item.id !== id)
@@ -98,9 +104,9 @@ function mockFetch(initialNotes: readonly StoredNote[], initialEvents: readonly 
  * queries and mutations only exists once the tree is mounted for real. Returns the QueryClient so
  * a test can wait on it with flush(). */
 function mount(
-  fixtures: { notes?: readonly StoredNote[], events?: readonly StoredEvent[] }, removeStatus = 200,
+  fixtures: { notes?: readonly StoredNote[], events?: readonly StoredEvent[] }, removeStatus = 200, removeDelayMs = 0,
 ): QueryClient {
-  mockFetch(fixtures.notes ?? [], fixtures.events ?? [], removeStatus)
+  mockFetch(fixtures.notes ?? [], fixtures.events ?? [], removeStatus, removeDelayMs)
   const c = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
   })
@@ -111,6 +117,22 @@ function mount(
 
 function settle(c: QueryClient): Promise<void> {
   return flush(c, html)
+}
+
+/**
+ * flush.ts's own pumpUntil/flush can take longer to reach their documented timeout than vitest's
+ * budget allows on this machine (confirmed separately, filed as its own follow-up, not this
+ * file's to fix), which turns a genuinely unsatisfied wait into a generic vitest kill instead of
+ * this poll's own message. Bounded low on purpose so the removal tests below stay inside budget
+ * either way: the real DELETE this file drives resolves in a tick or two, and a broken one now
+ * fails on the line below within about a second, not twenty.
+ */
+async function pollFor(ready: () => boolean, what: string): Promise<void> {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (ready()) return
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)) })
+  }
+  throw new Error(`timed out waiting for ${what}`)
 }
 
 const FEVER_EVENT: StoredEvent = {
@@ -181,10 +203,9 @@ describe('interleaving notes and events', () => {
     expect(kind).toBe('root canal')
   })
 
-  // The brief names this case directly and the comparator's own stability is what answers it:
-  // localeCompare on two ISO dates never returns 0 for two different ids sharing a day, so this
-  // pins the order Array#sort's own stability guarantees for a tie, not the comparator's ordering
-  // of distinct days (already covered above).
+  // The comparator reads localDate alone, so two rows sharing a day are a tie (returns 0), and
+  // Array#sort's own stability is what keeps the note ahead in that case, since noteRows is
+  // spread first in rowsFrom.
   it('keeps a note ahead of an event on the same day', async () => {
     const sameDayNote: StoredNote = { id: 'n2', localDate: '2026-08-16', body: 'Rough one', updatedAtMs: 0 }
     const c = mount({ notes: [sameDayNote], events: [FEVER_EVENT] })
@@ -202,19 +223,27 @@ describe('removing an event', () => {
     expect(rows()).toHaveLength(1)
 
     act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    // Two targeted waits, not flush(): flush() reads "nothing in flight" as settled only after it
-    // has itself observed something in flight first, which by the time a second flush() call
-    // starts here has usually already come and gone (the DELETE and the refetch it invalidates
-    // both resolve inside pumpUntil's own polling below), so a second flush() call spins to its
-    // own ceiling reading a page that looks like it never started. pumpUntil has no such state to
-    // lose: it just asks its own condition on every tick, so it is safe to call twice in a row and
-    // each call fails on the one thing it was actually waiting for, DELETE first and then the row
-    // leaving, rather than both collapsing into one generic "did not settle".
-    await pumpUntil(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
+    // Not flush(): a second flush() call after everything has already settled cannot tell that
+    // apart from a page that never started, and hangs (see pollFor's own comment). This asserts
+    // the DELETE itself before waiting on its effect, so a click that only hides the row locally
+    // fails here rather than on the row count below.
+    await pollFor(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
     expect(sent.map((r) => r.method)).toContain('DELETE')
-    await pumpUntil(() => rows().length === 0, 'the removed row to leave the table')
+    await pollFor(() => rows().length === 0, 'the removed row to leave the table')
 
     expect(rows()).toHaveLength(0)
+  })
+
+  it('shows the removing label while the request is in flight, then removes the row', async () => {
+    // A real delay on the DELETE response, or the pending state below has no window to be
+    // observed at all: the stub otherwise resolves inside one microtask.
+    const c = mount({ events: [FEVER_EVENT] }, 200, 50)
+    await settle(c)
+
+    act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await pollFor(() => rows()[0]?.querySelector('button')?.textContent === 'Removing', 'the pending removing label')
+    expect(rows()[0]!.querySelector('button')!.disabled).toBe(true)
+    await pollFor(() => rows().length === 0, 'the removed row to leave the table')
   })
 
   it('leaves the row in place and says removal failed, rather than dropping it on a failed request', async () => {
@@ -222,8 +251,8 @@ describe('removing an event', () => {
     await settle(c)
 
     act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await pumpUntil(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
-    await pumpUntil(() => html().includes('That did not remove. Try again.'), 'the removal failed message to render')
+    await pollFor(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
+    await pollFor(() => html().includes('That did not remove. Try again.'), 'the removal failed message to render')
 
     expect(rows()).toHaveLength(1)
     expect(html()).toContain('That did not remove. Try again.')

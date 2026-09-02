@@ -32,14 +32,12 @@ function kindLabel(t: Translate, kind: string): string {
 
 /**
  * Notes and events for the range, one row per item, newest day first. Two lists rather than one
- * merged query (useAnnotations issues them separately already), flattened and sorted once here
- * and memoised by the caller on the two query results, so a render that changed neither does not
- * redo the flatten-and-sort work below on every keystroke elsewhere on the page (the range picker,
- * a pending remove).
+ * merged query, since useAnnotations already issues them separately. Memoised by the caller on
+ * the two query results, so a render triggered by something else (the range picker, a pending
+ * remove) does not redo the flatten and sort below.
  *
- * `localeCompare` on two ISO dates sorts lexically, which is chronological for this format, and
- * `Array#sort` is stable per spec, so two rows sharing a day keep their relative order: a note
- * always precedes an event on the same day, since `noteRows` is spread first below.
+ * The comparator reads `localDate` alone, so two rows sharing a day tie (`localeCompare` returns
+ * 0), and `Array#sort`'s own stability then keeps `noteRows`, spread first, ahead of the events.
  */
 function rowsFrom(t: Translate, notes: readonly StoredNote[], events: readonly StoredEvent[]): Row[] {
   const noteRows: Row[] = notes.map((n) => (
@@ -52,13 +50,13 @@ function rowsFrom(t: Translate, notes: readonly StoredNote[], events: readonly S
 }
 
 /**
- * An event's value carries no metric to consult (StoredEvent.value is whatever number the reader
- * typed into the chart panel's own field, a dose or a count, never a catalogue reading), so it
- * cannot go through formatMetricValue or formatNumber the way a metric card's own value does:
- * both take their precision from METRICS, and this has no entry there to take it from. Bounding
- * the decimals is still worth doing, the same reasoning OverrideList.tsx's own
- * UNREADABLE_METRIC_PRECISION states for the same gap, just without padding a whole number with
- * fake trailing zeros the way a fixed precision would.
+ * An event's value has no metric to look a precision up under (StoredEvent.value is whatever
+ * number the reader typed into the chart panel, never a catalogue reading), so formatMetricValue
+ * cannot be used. formatNumber could, with a fixed precision the way OverrideList.tsx's own
+ * UNREADABLE_METRIC_PRECISION does for an unplaceable correction, but that pads a whole number
+ * with fake trailing zeros ("2.00" for a plain count of 2); toLocaleString's own
+ * maximumFractionDigits rounds without padding, closer to a value nothing here claims a fixed
+ * precision for.
  */
 function formatEventValue(value: number, language: string): string {
   return value.toLocaleString(language, { maximumFractionDigits: 2 })

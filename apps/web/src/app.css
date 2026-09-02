@@ -248,7 +248,7 @@ body {
 .override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .override-table tbody tr:last-child td { border-bottom: 0; }
 
-/* NotesList.tsx only: an override row carries no numeric value cell, so neither of these has an
-   override counterpart to share with. */
+/* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
 .notes-value { text-align: right; font-variant-numeric: tabular-nums; }
+/* NotesList.tsx only: an override row always has a remove button, so it never renders this. */
 .notes-remove-unavailable { color: var(--text-faint); font-size: var(--font-size-xs); }
