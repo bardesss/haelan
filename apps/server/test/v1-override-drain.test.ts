@@ -263,7 +263,21 @@ describe('POST /overrides', () => {
     seedBacklog(harness, backlog)
     const claims = countClaims(harness)
 
-    const write = await postOverride(harness, token, 'steps', '2026-08-15')
+    // Frozen rather than real, so the budget cannot fire. This test is about how many batches the
+    // drain takes, and with a real clock it also asserted that 71 derivations finish inside
+    // DRAIN_BUDGET_MS on a machine sharing its cores with the rest of the suite. That is a race,
+    // not a guarantee: it passed when this file ran alone and failed under the full suite, and
+    // what tipped it was a wrapper element added to a chart component, which cannot touch the
+    // drain and only ever changed how much work ran beside it. Restored in a finally for the same
+    // reason the test above gives.
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+    let write
+    try {
+      write = await postOverride(harness, token, 'steps', '2026-08-15')
+    } finally {
+      clock.mockRestore()
+    }
+
     expect(write.json().applied).toBe(true)
     // The backlog plus the day this write marked, in batches of DRAIN_BATCH_DAYS, plus the empty
     // claim that ends the loop. At the default batch size this would be three.
