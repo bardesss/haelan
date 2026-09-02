@@ -95,6 +95,40 @@ it('names the day, the interval and the reading count in its accessible table', 
   expect(table).toContain('2026-08-15')
 })
 
+describe('tooltip reading count', () => {
+  // Fix 2 of the whole branch review: `count` is the one option name i18next reads to choose
+  // between charts.spo2Tooltip.count_one and _other, and it only makes that choice when the value
+  // handed to t() is a genuine number. Before this fix the call site ran day.count through
+  // formatNumber first, which returns a string; i18next never resolves a plural on a string, so it
+  // always fell through to _other and read "1 readings" for a single reading. The formatter itself
+  // is a pure function captured off the mocked echarts instance's own setOption call (the same
+  // device the month boundary tests below use), since echarts only ever invokes it on a real hover,
+  // which happy-dom cannot simulate.
+  function tooltipTextFor(count: number): string {
+    act(() => {
+      root!.render(
+        <I18nProvider lng="en">
+          <Spo2Range days={[{ date: '2026-08-14', min: 94, mean: 96, max: 99, count }]}
+            label="SpO2" annotations={[]} excluded={[]} />
+        </I18nProvider>,
+      )
+    })
+    const stub = chartStubs.at(-1)!
+    const option = stub.setOption.mock.calls[0]![0] as { tooltip: { formatter: (p: unknown) => string } }
+    return option.tooltip.formatter([{ componentType: 'series', dataIndex: 0 }])
+  }
+
+  it('reads the singular for a genuine count of one', () => {
+    const text = tooltipTextFor(1)
+    expect(text).toContain('1 reading')
+    expect(text).not.toContain('1 readings')
+  })
+
+  it('reads the plural for a count other than one', () => {
+    expect(tooltipTextFor(412)).toContain('412 readings')
+  })
+})
+
 describe('mark positioning across a month boundary', () => {
   // Six days crossing August into September, an excluded day early in the range (still carrying
   // its value, the window before the derive catches up, so it draws as a markPoint) and an

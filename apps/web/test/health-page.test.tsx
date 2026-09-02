@@ -141,6 +141,12 @@ describe('the Health page', () => {
     // The rendered cell, not a substring of it: formatNumber at precision 0 renders 412 as "412",
     // and toContain('412') would stay green even if a precision regression rendered "412.0".
     expect(tables[0]![0]).toContain('<td>412</td>')
+    // The count column and the tooltip both had this reading count already; this test's own title
+    // ("names the reading count") was true of neither until the visible basis line got it too
+    // (spec section 4, "SpO2 with interval and count"). One day in range, one day of spo2 data,
+    // so `reported` and `total` both read 1 and the sentence around the count is the singular
+    // MetricCard's wear branch resolves to when nothing was unworn.
+    expect(html).toContain('412 readings')
     expect(html).not.toContain('NaN')
     restore()
   })

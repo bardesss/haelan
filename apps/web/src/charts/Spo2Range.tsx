@@ -97,10 +97,18 @@ export function Spo2Range({ days, annotations, excluded, label, onPointClick }: 
           const mean = formatMetricValue(day.mean, 'spo2', i18n.language, '')
           const min = formatMetricValue(day.min, 'spo2', i18n.language, '')
           const max = formatMetricValue(day.max, 'spo2', i18n.language, '')
-          const count = formatNumber(day.count, 0, i18n.language, '')
+          // The one exception to the rule two lines up: `count` is the name i18next reads to pick
+          // between charts.spo2Tooltip.count_one and _other, and it only looks at that name when
+          // the option is a genuine number. formatNumber's own return type is a string, which is
+          // right for every value above (each is inert text by the time t() sees it) and wrong
+          // here specifically, since a preformatted "1" would make i18next skip plural selection
+          // and always fall through to _other ("1 readings"). day.count is already a whole number
+          // (packages/core/src/derive/metrics.ts's own `count` agg), so nothing here needs
+          // rounding or locale grouping; ?? 0 only guards the type (min/max/mean gate null above,
+          // but count is not itself part of that guard) and is never expected to fire in practice.
           return `${day.date}<br/>${t('charts.spo2Tooltip.mean', { value: mean })}`
             + `<br/>${t('charts.spo2Tooltip.range', { min, max })}`
-            + `<br/>${t('charts.spo2Tooltip.count', { count })}`
+            + `<br/>${t('charts.spo2Tooltip.count', { count: day.count ?? 0 })}`
         },
       },
       xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },

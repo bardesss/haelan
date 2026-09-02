@@ -195,9 +195,11 @@
     },
     "spo2Range": {
       "label": "Zuurstofsaturatie, bereik",
-      "basis": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "basis": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{readings}}",
+      "basisWorn_one": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen, {{readings}}",
+      "basisWorn_other": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen, {{readings}}",
+      "readings_one": "{{count}} meting",
+      "readings_other": "{{count}} metingen",
       "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de zuurstofsaturatie in {{period}}"
     },
     "dailySpo2": {
@@ -353,7 +355,8 @@
     "spo2Tooltip": {
       "mean": "gemiddeld {{value}}%",
       "range": "bereik {{min}} tot {{max}}%",
-      "count": "{{count}} metingen"
+      "count_one": "{{count}} meting",
+      "count_other": "{{count}} metingen"
     },
     "event": {
       "withNote": "{{kind}}: {{note}}",

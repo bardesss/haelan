@@ -5,9 +5,11 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { dayMetricTarget } from '@haelan/core/target-key'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import type { SeriesPoint } from '../src/data/useSeries.js'
+import type { StoredOverride } from '../src/data/useAnnotations.js'
 import { Weight } from '../src/pages/Weight.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
@@ -40,11 +42,16 @@ const PERSON: Session = {
 
 /**
  * Answers the session, /series for whichever metrics land in Weight's one 'last' request (from
- * `series`, keyed by metric name), /api/sync/status generically, and empty overrides/notes/events:
+ * `series`, keyed by metric name), /api/sync/status generically, and notes/events empty:
  * Weight issues the same three annotation requests every other page does through useAnnotations,
- * and none of this file's tests need a real row on any of them.
+ * and none of this file's tests need a real row on notes or events. /overrides defaults to empty
+ * too, and `overrides` is the one seam a caller can fill: what deriveDay actually leaves behind
+ * once an exclusion has applied is an override row that outlives the /series row it excluded (see
+ * the episodic exclusion test below), so a fixed empty list here would make that shape unreachable.
  */
-function stubWeight(series: Record<string, SeriesPoint[]>, urls: string[] = []): () => void {
+function stubWeight(
+  series: Record<string, SeriesPoint[]>, urls: string[] = [], overrides: readonly StoredOverride[] = [],
+): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -58,7 +65,7 @@ function stubWeight(series: Record<string, SeriesPoint[]>, urls: string[] = []):
       for (const metric of metrics) body[metric] = { points: series[metric] ?? [], reduction: null }
       return json(body)
     }
-    if (url.includes('/overrides')) return json({ items: [] })
+    if (url.includes('/overrides')) return json({ items: overrides })
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/events')) return json({ items: [] })
     return json({})
@@ -74,9 +81,9 @@ function stubWeight(series: Record<string, SeriesPoint[]>, urls: string[] = []):
  */
 async function mount(
   node: ReactNode, series: Record<string, SeriesPoint[]>,
-  route = '/weight?range=week&on=2026-08-14', urls: string[] = [],
+  route = '/weight?range=week&on=2026-08-14', urls: string[] = [], overrides: readonly StoredOverride[] = [],
 ): Promise<void> {
-  const restore = stubWeight(series, urls)
+  const restore = stubWeight(series, urls, overrides)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   window.history.replaceState(null, '', route)
@@ -124,6 +131,38 @@ describe('the Weight page', () => {
     if (!table) throw new Error('no accessible table rendered')
     expect(table).toContain('2026-08-14')
     expect(table).not.toContain('2026-08-15')
+  })
+
+  // The whole-branch review's own finding: the test above pins the episodic filter with an empty
+  // /overrides every time, so it only ever exercises the SILENT half of Sparkline's own filter (a
+  // day nothing answered). The other half, an EXCLUDED day, runs through a different chain on this
+  // page: overridesByMetric groups the /overrides row, annotationsFor reads it back out for
+  // 'weight', and the sparkFormat closure in Weight.tsx's own `card()` turns the day's null value
+  // into the word "excluded" rather than a fabricated number. chart-marks.test.tsx already pins
+  // Sparkline's own half of this with hand-built props; nothing before this test exercised the
+  // page's own wiring into it, which is exactly the shape M3c's blocker survived in (an applied
+  // exclusion vanishing from the accessible table while the canvas still drew its mark).
+  //
+  // What deriveDay actually leaves behind once an exclusion has applied: the excluded metric's own
+  // day row is gone from /series (dashboard-cards.test.tsx's own stubAppliedExclusion carries the
+  // identical shape for Dashboard's steps card), and only GET /overrides still names the day, so
+  // that is what this fixture reproduces rather than a shape this page would never actually see.
+  it('keeps an excluded weight day in the table with its reason, once the exclusion has applied', async () => {
+    const overrides: StoredOverride[] = [{
+      id: 'o1', scope: 'day_metric',
+      targetKey: dayMetricTarget({ localDate: '2026-08-15', metric: 'weight' }),
+      action: 'exclude', correctedValue: null, reason: 'scale was wrong',
+    }]
+    await mount(<Weight />, { weight: [seriesPoint('weight', '2026-08-14', 81_200)] }, undefined, [], overrides)
+    const table = container!.innerHTML.match(/<table class="sr-only">[\s\S]*?<\/table>/)?.[0]
+    if (!table) throw new Error('no accessible table rendered')
+    expect(table).toContain('2026-08-14')
+    const row = table.slice(table.indexOf('2026-08-15'), table.indexOf('2026-08-15') + 200)
+    // The value cell reads the absence word outright, `<td>excluded</td>`, never a fabricated
+    // number: /series is silent for this day (deriveDay deleted its row), so any number here would
+    // be this test's own fixture leaking through rather than what the page actually renders.
+    expect(row).toContain('<td>excluded</td>')
+    expect(row).toContain('excluded, scale was wrong')
   })
 
   // body_fat is a percent and is never converted: it takes the default path (formatMetricValue),

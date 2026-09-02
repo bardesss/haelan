@@ -63,6 +63,8 @@ const values = (points: SeriesPoint[]): number[] =>
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
 
+const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0)
+
 function datesBetween(from: string, to: string): string[] {
   const dates: string[] = []
   const end = Date.parse(`${to}T00:00:00Z`)
@@ -166,6 +168,23 @@ export function Health() {
   )
   const dailySpo2Headline = mean(values(dailySpo2Points))
 
+  // The milestone's own deliverable ("SpO2 with interval and count", spec section 4): the day's
+  // reading count belongs in the basis line, not only in the tooltip and the accessible table it
+  // already reached. Summed across the displayed range, the same "total across days" shape
+  // Sleep.tsx's own napCountTotal takes for its per-period count.
+  //
+  // Resolved to its own pluralised phrase here, before it ever reaches MetricCard, rather than
+  // handed over as a bare number under the name `count`: MetricCard's wear branch always fires for
+  // spo2 (coverageIsWearSignal reads its 'intraday' tier as a wear signal), and that branch
+  // unconditionally overwrites a `count` entry in basisValues with its own "days not worn" figure
+  // (MetricCard.tsx's own comment says why). i18next pluralises whichever option is actually named
+  // `count`, not whichever placeholder token a template happens to embed it under, so a reading
+  // count riding in under that name would silently lose to the wear count rather than surviving
+  // beside it. `readings` is a plain, already-resolved string by the time basisWorn interpolates
+  // it, the same shape `period` already is for chartLabel below.
+  const spo2ReadingCount = sum(values(countSpo2Points))
+  const spo2Readings = t('health.spo2Range.readings', { count: spo2ReadingCount })
+
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('health.title')}</h1>
@@ -182,7 +201,7 @@ export function Health() {
           query={{ isError: spo2Failed, isPending: spo2Pending, refetch: retrySpo2 }}
           points={meanSpo2Points}
           basisKey="health.spo2Range.basis" basisWornKey="health.spo2Range.basisWorn"
-          basisValues={{ total: rangeDates.length }}>
+          basisValues={{ total: rangeDates.length, readings: spo2Readings }}>
           {() => (
             <Spo2Range days={spo2Days} annotations={spo2Annotations} excluded={spo2Overrides.excluded}
               label={t('health.spo2Range.chartLabel', { period })}

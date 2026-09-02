@@ -195,9 +195,11 @@
     },
     "spo2Range": {
       "label": "Oxygen saturation range",
-      "basis": "daily minimum, mean and maximum, {{reported}} of {{total}} days",
-      "basisWorn_one": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} day not worn",
-      "basisWorn_other": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} days not worn",
+      "basis": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{readings}}",
+      "basisWorn_one": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} day not worn, {{readings}}",
+      "basisWorn_other": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} days not worn, {{readings}}",
+      "readings_one": "{{count}} reading",
+      "readings_other": "{{count}} readings",
       "chartLabel": "Daily oxygen saturation minimum, mean and maximum through {{period}}"
     },
     "dailySpo2": {
@@ -353,7 +355,8 @@
     "spo2Tooltip": {
       "mean": "mean {{value}}%",
       "range": "range {{min}} to {{max}}%",
-      "count": "{{count}} readings"
+      "count_one": "{{count}} reading",
+      "count_other": "{{count}} readings"
     },
     "event": {
       "withNote": "{{kind}}: {{note}}",
