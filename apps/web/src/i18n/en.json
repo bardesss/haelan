@@ -42,6 +42,8 @@
   },
   "sidebar": {
     "sectionsLabel": "Sections",
+    "collapse": "Collapse navigation",
+    "expand": "Expand navigation",
     "groups": {
       "overview": "Overview",
       "tracking": "Tracking",
@@ -57,6 +59,11 @@
       "nutrition": "Nutrition",
       "notes": "Notes",
       "settings": "Settings"
+    },
+    "resources": {
+      "documentation": "Documentation",
+      "changelog": "Changelog",
+      "issues": "Issues"
     }
   },
   "common": {

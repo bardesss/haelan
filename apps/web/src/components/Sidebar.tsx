@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
+import { readCollapsed, writeCollapsed } from '../ui/railState.js'
 
 const GROUPS = [
   { labelKey: 'sidebar.groups.overview', items: [{ path: '/', nameKey: 'sidebar.items.dashboard' }] },
@@ -24,8 +26,18 @@ const GROUPS = [
 
 // A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and
 // nothing but the shell test comparing this against ROUTES keeps them that way. Exported so that
-// test can see what the rail actually links to.
+// test can see what the rail actually links to. Collapsing the rail hides label text, never a
+// path, so this derivation stays untouched by that feature.
 export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
+
+// Three external links, not app routes: a self hosted tool has no in app feedback channel of its
+// own, so these point straight at the project's home on GitHub rather than at a page this app
+// serves.
+const RESOURCES = [
+  { href: 'https://github.com/bardesss/haelan#readme', nameKey: 'sidebar.resources.documentation', icon: 'docs' },
+  { href: 'https://github.com/bardesss/haelan/releases', nameKey: 'sidebar.resources.changelog', icon: 'changelog' },
+  { href: 'https://github.com/bardesss/haelan/issues', nameKey: 'sidebar.resources.issues', icon: 'issues' },
+] as const
 
 export function Sidebar({ active, person, onSignOut, signOutError }: {
   active: string
@@ -34,31 +46,62 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
   signOutError?: string | null
 }) {
   const { t } = useTranslation()
+  // Read once at mount rather than on every render: the value only ever changes through the
+  // toggle below, which already knows the next value without asking storage for it back.
+  const [collapsed, setCollapsed] = useState(() => readCollapsed())
+
+  function toggle() {
+    setCollapsed((current) => {
+      const next = !current
+      writeCollapsed(next)
+      return next
+    })
+  }
+
+  // Text stays in the DOM either way, inside a span the "sr-only" class clips rather than
+  // removes, so a screen reader keeps every rail item's name even when the rail is narrow enough
+  // that only the icon column is visible. Whether that class is present is the one thing this
+  // component decides about collapsing; app.css decides what happens to the pixels.
+  const label = (text: string) => <span className={collapsed ? 'sr-only' : undefined}>{text}</span>
+
   return (
-    <nav className="rail" aria-label={t('sidebar.sectionsLabel')}>
-      {/* Brand name, not copy: it stays "haelan" in every language. */}
-      <div className="brand">haelan</div>
+    <nav className={collapsed ? 'rail rail-collapsed' : 'rail'} aria-label={t('sidebar.sectionsLabel')}>
+      <div className="brand-row">
+        {/* Brand name, not copy: it stays "haelan" in every language. */}
+        <div className="brand">{label('haelan')}</div>
+        <button type="button" className="icon-button rail-toggle" onClick={toggle}
+          aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
+          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} />
+        </button>
+      </div>
       {GROUPS.map((g) => (
         <div key={g.labelKey}>
-          <div className="rail-group">{t(g.labelKey)}</div>
+          <div className="rail-group">{label(t(g.labelKey))}</div>
           {g.items.map((item) => (
             <Link key={item.path} to={item.path} className="rail-item"
                   aria-current={active === item.path ? 'page' : undefined}>
-              <Icon name={item.path === '/' ? 'dashboard' : item.path.slice(1)} />{t(item.nameKey)}
+              <Icon name={item.path === '/' ? 'dashboard' : item.path.slice(1)} />{label(t(item.nameKey))}
             </Link>
           ))}
         </div>
       ))}
       <div className="rail-foot">
+        <div className="rail-resources">
+          {RESOURCES.map((resource) => (
+            <a key={resource.href} href={resource.href} className="rail-item" target="_blank" rel="noreferrer">
+              <Icon name={resource.icon} />{label(t(resource.nameKey))}
+            </a>
+          ))}
+        </div>
         {/* Not a Link: the account page it would point to returns in M3e. A dead link here would
             be a tenth way to reach a blank screen, now that the rail carries nine (M3c-12 added
             the ninth, Settings). */}
         <div className="rail-person">
-          <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{person}
+          <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
         </div>
         {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
         <button type="button" className="button" onClick={onSignOut}>
-          <Icon name="signOut" />{t('shell.signOut')}
+          <Icon name="signOut" />{label(t('shell.signOut'))}
         </button>
       </div>
     </nav>
