@@ -602,6 +602,13 @@
       }
     }
   },
+  "nutrition": {
+    "title": "Nutrition",
+    "empty": {
+      "title": "No food logged yet",
+      "detail": "This would show calories and water once meals are logged through Google Health. Nobody in this household has logged any yet, so there is nothing here to draw."
+    }
+  },
   "notes": {
     "title": "Notes",
     "list": {

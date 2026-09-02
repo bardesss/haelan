@@ -602,6 +602,13 @@
       }
     }
   },
+  "nutrition": {
+    "title": "Voeding",
+    "empty": {
+      "title": "Nog geen voeding gelogd",
+      "detail": "Dit zou calorieën en water tonen zodra maaltijden via Google Health worden gelogd. Niemand in dit huishouden heeft dat nog gedaan, dus is er hier niets te tekenen."
+    }
+  },
   "notes": {
     "title": "Notities",
     "list": {

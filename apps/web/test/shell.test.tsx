@@ -8,6 +8,7 @@ import { Sleep } from '../src/pages/Sleep.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
+import { Nutrition } from '../src/pages/Nutrition.js'
 import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
 
@@ -55,12 +56,13 @@ describe('the route table', () => {
   // own `.type` is the `Weight` function reference, the exact value Shell.tsx's `active.element`
   // carries at runtime, so comparing it here is the same check Shell.tsx's own render makes.
   //
-  // Every path, not just `/weight`: the one remaining placeholder path (`/nutrition`) is pinned to
-  // Dashboard on purpose (routes.tsx's own comment), so leaving it out would have made this test
-  // silently correct about eight of nine paths and asserted nothing about the ninth, which is the
-  // same "wrote a map that looks complete but resolves nothing" wound the M3e review found the
-  // last time a map like this stayed partial. `/notes` joined the resolved side this task, the
-  // same way `/weight` and `/health` did in the tasks before it.
+  // Every path, not just `/weight`: `/nutrition` used to be pinned to Dashboard on purpose
+  // (routes.tsx's own old comment said so, since it had no page of its own yet), so leaving it
+  // out would have made this test silently correct about eight of nine paths and asserted nothing
+  // about the ninth, which is the same "wrote a map that looks complete but resolves nothing"
+  // wound the M3e review found the last time a map like this stayed partial. `/nutrition` and
+  // `/notes` both joined the resolved side across these two tasks, the same way `/weight` and
+  // `/health` did in the tasks before them.
   it('resolves every path to the page component it names, not one that merely renders', () => {
     const byPath: Record<string, unknown> = {
       '/': Dashboard,
@@ -69,7 +71,7 @@ describe('the route table', () => {
       '/recovery': Recovery,
       '/health': Health,
       '/weight': Weight,
-      '/nutrition': Dashboard,
+      '/nutrition': Nutrition,
       '/notes': Notes,
       '/settings': Settings,
     }

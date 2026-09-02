@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
@@ -11,6 +12,7 @@ import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { Health } from '../src/pages/Health.js'
 import { Weight } from '../src/pages/Weight.js'
+import { Nutrition } from '../src/pages/Nutrition.js'
 import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -203,12 +205,20 @@ const restore = stubFetch()
 // Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
 // found that Activity and Recovery, converted off fixtures in the two tasks before Sleep, had
 // never been added here either, so three new pages and twenty odd new cards sat outside every
-// assertion below. All eight settle for real now through the same stubFetch week, rather than
-// excluding a whole page because one of its charts cannot answer every assertion (see
+// assertion below. Eight of these nine settle for real now through the same stubFetch week,
+// rather than excluding a whole page because one of its charts cannot answer every assertion (see
 // HAS_ABSENCE_CHART and IS_CHART_PAGE below for the assertions that genuinely do not apply to
-// every page). Settings and Notes are the two pages here with no chart and no delta at all, not a
-// page whose chart happens not to draw absences, which is why both get their own named carve-out
-// rather than reusing HAS_ABSENCE_CHART's.
+// every page). Settings and Notes are the two of those eight with no chart and no delta at all,
+// not a page whose chart happens not to draw absences, which is why both get their own named
+// carve-out rather than reusing HAS_ABSENCE_CHART's.
+//
+// Nutrition is the ninth and is not settled through settledPage: it issues no query at all
+// (Nutrition.tsx's own doc comment: there is no catalogue entry to fetch), so flush() would sit
+// out its whole HANG_BUDGET_MS waiting for a fetch that is never coming and then throw, rather
+// than the "sawFetch never armed" case flush.ts's own comment already names for a click that
+// resolves inside the act() that fired it. renderToStaticMarkup needs nothing settled, since
+// there is nothing for this page to load in the first place, only a translation table, and
+// I18nProvider is the only context Nutrition.tsx actually reads.
 const pages = {
   Dashboard: await settledDashboard('en'),
   Activity: await settledActivity('en'),
@@ -216,6 +226,7 @@ const pages = {
   Sleep: await settledSleep('en'),
   Health: await settledHealth('en'),
   Weight: await settledWeight('en'),
+  Nutrition: renderToStaticMarkup(<I18nProvider lng="en"><Nutrition /></I18nProvider>),
   Notes: await settledNotes('en'),
   Settings: await settledSettings('en'),
 }
@@ -261,10 +272,12 @@ restore()
 //
 // Notes is false for the same structural reason Settings is: it draws no `role="img"` chart host
 // at all (its own table is an ordinary list, not a chart's `sr-only` accessible table), so there
-// is no dense by-position calendar for an absence mark to land on.
+// is no dense by-position calendar for an absence mark to land on. Nutrition joins them for the
+// same reason again, one level plainer still: its one Card holds a single static EmptyState
+// paragraph, no table of any kind.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: false, Sleep: false, Health: true, Weight: false,
-  Notes: false, Settings: false,
+  Nutrition: false, Notes: false, Settings: false,
 }
 
 // Whether a page carries any chart (and, riding on the same StatTile/MetricCard machinery, any
@@ -273,12 +286,14 @@ const HAS_ABSENCE_CHART: Record<string, boolean> = {
 // name rather than by leaving Settings out of `pages` entirely, the same instinct HAS_ABSENCE_CHART
 // above already states for a narrower case (a page with charts that just do not draw absences).
 // Notes joins Settings here for the same reason: a list of notes and events is not a metric card,
-// so it draws no StatTile and no delta either. Read as `=== false` at each call site, not
-// `!value`, for the same reason HAS_ABSENCE_CHART is: an unlisted page must run the assertion, not
-// skip it by omission.
+// so it draws no StatTile and no delta either. Nutrition joins both: its single EmptyState is not
+// a metric card either, and unlike Notes and Settings it draws no query of any kind (its own doc
+// comment says why), so there is nothing here for it to summarise a change against. Read as
+// `=== false` at each call site, not `!value`, for the same reason HAS_ABSENCE_CHART is: an
+// unlisted page must run the assertion, not skip it by omission.
 const IS_CHART_PAGE: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: true, Sleep: true, Health: true, Weight: true,
-  Notes: false, Settings: false,
+  Nutrition: false, Notes: false, Settings: false,
 }
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
@@ -346,7 +361,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(tables(html)).toMatch(/not worn|no reading/)
   })
 
-  // These eight pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // These nine pages carry most of the catalogue, so a mistyped key would otherwise render as
   // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
   // them look for the shape a missing translation actually takes. settings and annotate joined
   // this list with Settings (M3c-12): AnnotatePanel's own keys never reach this file's settled,
@@ -357,7 +372,9 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // sees notes.title, notes.list.title and notes.empty.*: a typo in notes.columns.*, notes.remove,
   // notes.removing or notes.removeAria ships green through this file regardless. Those render only
   // once rows exist, so notes-page.test.tsx is where they are actually pinned, the same way this
-  // file leaves AnnotatePanel's own click-triggered keys to annotate-panel.test.tsx.
+  // file leaves AnnotatePanel's own click-triggered keys to annotate-panel.test.tsx. nutrition
+  // joined with Nutrition: its whole render is nutrition.title and nutrition.empty.*, nothing
+  // conditional on a query answering, so this one alternation sees every key it has.
   //
   // [a-zA-Z0-9], not [a-zA-Z]: a key path segment can carry a digit (health.spo2Range,
   // health.dailySpo2, charts.spo2Tooltip all do), and the letters-only class could not see past
@@ -366,7 +383,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // test still green, because "spo2Range" broke the match at the digit and the regex never
   // resumed past it.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|health|weight|notes|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|health|weight|nutrition|notes|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
   })
 
   // Both of these ran against Dashboard alone until the review that spotted three more pages had
