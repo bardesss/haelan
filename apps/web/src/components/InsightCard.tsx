@@ -62,15 +62,18 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
   // `emptyStateFor`'s own `insufficient` branch (gated on a thin baseline) reachable, since this
   // card never calls `emptyStateFor` and never consults a baseline at all.
   //
-  // The second half of this condition is never true against the real server: `comparePeriods`
-  // nulls `current`/`previous`/`delta`/both ranges only in the same branch that sets `suppressed`
-  // and `reason` together (packages/core/src/query/insights.ts's own `refuse`), and fills all five
-  // in whenever it does not. But `Insight` types every one of them independently nullable, so
-  // nothing stops a caller (a hand built fixture, a future wire change) from handing this component
-  // `suppressed: false` alongside a null value, and the sentence below has no honest way to fill a
-  // gap that wide. Guarded here, cheaply, rather than trusted: an insight this incomplete reads as
-  // the plain "not enough data" case, since nothing about a missing field alone points at the
-  // device the way `thin-coverage` does.
+  // The second half of this condition guards a shape narrower than "the real server never sends
+  // this": `current`/`previous`/`delta` do go null together with `suppressed`/`reason`
+  // (`insights.ts`'s own `refuse`), so a live suppressed insight is already caught by the check
+  // before this one. The ranges are different: `personQuery.comparePeriods`
+  // (`packages/core/src/query/personQuery.ts:220-224`) fills `currentRange`/`previousRange`
+  // unconditionally, suppressed or not, so a live response never actually carries a null range.
+  // The three checks past `suppressed` above exist for what `Insight`'s own type allows, not for
+  // anything this server can produce: nothing rules out a caller (a hand built fixture, a future
+  // wire change) handing this component `suppressed: false` beside a null value, and the sentence
+  // below has no honest way to fill a gap that wide. Guarded here, cheaply, rather than trusted:
+  // a missing field alone points at no particular device the way `thin-coverage` does, so this
+  // falls back to the plain "not enough data" case.
   if (insight.suppressed || insight.current === null || insight.previous === null || insight.delta === null
     || insight.currentRange === null || insight.previousRange === null) {
     const thinCoverage = insight.suppressed && insight.reason === 'thin-coverage'

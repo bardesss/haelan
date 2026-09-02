@@ -99,10 +99,10 @@ describe('InsightCard', () => {
     expect(html).toContain('-20')
   })
 
-  // The type permits suppressed: false alongside a null value or range even though the real
-  // server never sends that combination (comparePeriods nulls all five together, only when it
-  // also sets suppressed and reason). Without a guard the sentence renders with gaps where the
-  // missing pieces should be; this pins the safer fallback instead.
+  // Insight types current, previous, delta and both ranges independently nullable, and nothing
+  // in this component's own contract rules out a caller handing it suppressed: false beside a
+  // null value. Without a guard the sentence renders with a gap where the missing piece should
+  // be; this pins the safer fallback instead.
   it('falls back to the insufficient message rather than a sentence with holes in it', () => {
     const html = render({ ...base, suppressed: false, reason: null, current: null })
     expect(html).toContain('Not enough data to summarise')
@@ -110,7 +110,8 @@ describe('InsightCard', () => {
   })
 
   // 'tot' alone is the exclusive Dutch preposition; these windows are inclusive
-  // (packages/core/src/query/insights.ts:26), so the Dutch sentence has to read 'tot en met'.
+  // ("An inclusive range of local dates.", DateRange's own doc comment, packages/core/src/query/
+  // insights.ts:24), so the Dutch sentence has to read 'tot en met'.
   it('states the Dutch window as inclusive rather than with a bare, exclusive tot', () => {
     const html = renderToStaticMarkup(
       <I18nProvider lng="nl"><InsightCard {...props} insight={base} /></I18nProvider>,
@@ -130,8 +131,8 @@ describe('InsightCard', () => {
       }} /></I18nProvider>,
     )
     // Anchored on the character right after the number, not a bare toContain('70.0'): a precision
-    // slip to 70.00 still contains "70.0" as a substring but not "70.0 over".
-    expect(html).toContain('70.0 over')
+    // slip to 70.00 still contains "70.0" as a substring but not "70.0 (".
+    expect(html).toContain('70.0 (')
     expect(html).not.toContain('70,000')
   })
 })
