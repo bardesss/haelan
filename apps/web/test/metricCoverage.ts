@@ -1,4 +1,5 @@
 import type { SeriesPoint } from '../src/data/useSeries.js'
+import type { Insight } from '../src/data/useInsight.js'
 
 /**
  * The coverage a stubbed /series row would really carry for a metric.
@@ -64,6 +65,45 @@ export function seriesPoint(
     source: 'merged',
     sourceMix: null,
     updatedAtMs: 1_755_000_000_000,
+    ...overrides,
+  }
+}
+
+const DAY_MS = 86_400_000
+
+function daysBetweenInclusive(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1
+}
+
+function shiftDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10)
+}
+
+/**
+ * One /insights response in the shape the server really sends, for a stub to hand back.
+ * `currentRange` echoes the request's own `from`/`to` rather than a value fixed regardless of
+ * them, and `previousRange` is computed the same length immediately before it: a stub that always
+ * answered the same window, whatever the page actually asked for, could never catch Dashboard
+ * sending the wrong `from`/`to` into `useInsight`, since the rendered sentence would look exactly
+ * as correct either way. `current`/`previous`/`delta` and the day/coverage counts stay overridable
+ * through `overrides`, but default to a real, unsuppressed period (every day reporting, full
+ * coverage), the shape `comparePeriods`'s own success branch
+ * (`packages/core/src/query/insights.ts`) returns.
+ */
+export function insightBody(url: string, overrides: Partial<Insight> = {}): Insight {
+  const params = new URLSearchParams(url.split('?')[1] ?? '')
+  const from = params.get('from') ?? '2026-08-09'
+  const to = params.get('to') ?? '2026-08-15'
+  const periodDays = daysBetweenInclusive(from, to)
+  const previousTo = shiftDays(from, -1)
+  const previousFrom = shiftDays(previousTo, -(periodDays - 1))
+  return {
+    current: 70, previous: 60, delta: 10,
+    currentDays: periodDays, previousDays: periodDays, periodDays,
+    currentCoverage: 1, previousCoverage: 1,
+    currentRange: { from, to },
+    previousRange: { from: previousFrom, to: previousTo },
+    suppressed: false, reason: null,
     ...overrides,
   }
 }

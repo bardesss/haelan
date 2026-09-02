@@ -78,7 +78,7 @@
     "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
   },
   "insightCard": {
-    "summary": "{{current}} ({{currentFrom}} to {{currentTo}}) against {{previous}} in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
+    "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
     "thinCoverage": {
       "title": "Not enough device coverage to summarise",
       "detail": "This device did not record enough of these days to compare them. Wearing it more consistently closes this gap; waiting longer will not."

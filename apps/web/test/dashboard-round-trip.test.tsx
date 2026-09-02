@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
@@ -60,23 +60,6 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
 }
 
-/**
- * A valid /insights body, the same shape dashboard-cards.test.tsx's own insightBody() answers with
- * and for the same reason: apiGet casts the response to Insight without validating it, and a body
- * shaped nothing like the real one throws inside formatNumber the moment a card tries to render
- * past its own loading state.
- */
-function insightBody(): unknown {
-  return {
-    current: 70, previous: 60, delta: 10,
-    currentDays: 7, previousDays: 7, periodDays: 7,
-    currentCoverage: 1, previousCoverage: 1,
-    currentRange: { from: '2026-08-09', to: '2026-08-15' },
-    previousRange: { from: '2026-08-02', to: '2026-08-08' },
-    suppressed: false, reason: null,
-  }
-}
-
 /** Answers the session and the series, so the page can mount without a server. */
 function stubFetch(seen: string[]): () => void {
   const original = globalThis.fetch
@@ -98,7 +81,7 @@ function stubFetch(seen: string[]): () => void {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -138,7 +121,7 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -184,7 +167,7 @@ function stubFetchBySource(seen: string[]): () => void {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch

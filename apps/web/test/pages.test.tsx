@@ -17,7 +17,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
@@ -144,19 +144,7 @@ function stubFetch(
         cursor: null,
       })
     }
-    if (url.includes('/insights')) {
-      // A valid Insight body: apiGet casts the response without validating it, and a shape this
-      // far from the real one (an absent current/previous/delta) throws inside formatNumber the
-      // moment Dashboard's three insight cards try to render past their own loading state.
-      return json({
-        current: 70, previous: 60, delta: 10,
-        currentDays: 7, previousDays: 7, periodDays: 7,
-        currentCoverage: 1, previousCoverage: 1,
-        currentRange: { from: '2026-08-09', to: '2026-08-15' },
-        previousRange: { from: '2026-08-02', to: '2026-08-08' },
-        suppressed: false, reason: null,
-      })
-    }
+    if (url.includes('/insights')) return json(insightBody(url))
     return json({ baseline: { center: 62, spread: 4, n: 40, thin: false } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }

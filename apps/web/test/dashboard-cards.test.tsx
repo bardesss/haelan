@@ -12,7 +12,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { dayMetricTarget } from '@haelan/core/target-key'
 import { flush, pumpUntil } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
 // charts draw for real here, and echarts.init's effect throws "missing chart token" without it.
@@ -52,25 +52,6 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
 type Baseline = { center: number, spread: number, n: number, thin: boolean } | null
 
 /**
- * A valid /insights body for stubs that do not otherwise care what the three insight cards say.
- * current !== previous so a render reaches the real summary sentence rather than the guard's
- * fallback branch (InsightCard.tsx's own null checks), which is what every stub below needs just
- * to render past the cards' loading state without throwing: apiGet casts the response to Insight
- * without validating it, and formatNumber's `value.toLocaleString` throws on a body shaped nothing
- * like the real one.
- */
-function insightBody(): unknown {
-  return {
-    current: 70, previous: 60, delta: 10,
-    currentDays: 7, previousDays: 7, periodDays: 7,
-    currentCoverage: 1, previousCoverage: 1,
-    currentRange: { from: '2026-08-09', to: '2026-08-15' },
-    previousRange: { from: '2026-08-02', to: '2026-08-08' },
-    suppressed: false, reason: null,
-  }
-}
-
-/**
  * Answers every route the Dashboard now calls: the session (seeded above, but a real render still
  * asks it once), /series for every requested metric, /sleep/nights, and /baselines with whichever
  * baseline the test wants. One canned point per metric, the same way
@@ -105,7 +86,7 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () =>
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -155,7 +136,7 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
     }
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/baselines')) return json({ baseline: null })
-    if (url.includes('/insights')) return json(insightBody())
+    if (url.includes('/insights')) return json(insightBody(url))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -225,7 +206,7 @@ function stubOneNight(): () => void {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -269,7 +250,7 @@ function stubAppliedExclusion(): () => void {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -304,7 +285,7 @@ function stubFetchTracking(sent: { url: string }[]): () => void {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -538,20 +519,69 @@ describe('the three insight cards', () => {
     restore()
   })
 
+  // A fixed month, not the file's default (unrouted) mount: insightBody echoes the request's own
+  // from/to back as currentRange (see metricCoverage.ts's own comment on why), so a test that left
+  // the route unset would be asserting against today's real date and would need re-deriving every
+  // time it ran. range=month&on=2026-08-15 gives clean, hand-computable full-calendar-month
+  // windows: current August 1 to 31, previous July 1 to 31.
+  //
   // The wiring end to end, not just the request: this is the exact sentence InsightCard.tsx
   // renders once the query settles, read off the one card whose label names it rather than off
   // page-wide text (all three cards share the same stub body and so would render the identical
-  // sentence, which is exactly why a page-wide toContain would not tell a caller apart from a
-  // typo in a different card's props).
+  // sentence but for their own formatValue, which is exactly why a page-wide toContain would not
+  // tell a caller apart from a typo in a different card's props).
   it('renders the summary sentence for the steps card once the request resolves', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
     const restore = stubFetch({ baseline: null })
     const { client, tree } = withQuery(<Dashboard />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
+    // No unit suffix: the steps tile above prints a plain, unitless number, and steps carries no
+    // formatValue override in Dashboard.tsx for exactly that reason.
     expect(card?.querySelector('.insight-summary')?.textContent).toBe(
-      '70 (Aug 9, 2026 to Aug 15, 2026) against 60 in the previous period (Aug 2, 2026 to Aug 8, 2026), a change of 10.',
+      '70 on average (Aug 1, 2026 to Aug 31, 2026) against 60 on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 10.',
+    )
+    restore()
+  })
+
+  // Important 1 from the review round: insight.current/previous/delta are a mean in whatever unit
+  // the metric is stored in, and the resting heart rate tile beside this card carries a "bpm"
+  // suffix (StatTile's own `unit` prop) that InsightCard's default formatMetricValue call does
+  // not add on its own. restingHrFormat in Dashboard.tsx is what closes that gap; this pins the
+  // suffix actually reaching the rendered sentence rather than only existing in the wiring.
+  it('carries the resting heart rate tile\'s own bpm suffix into its insight sentence', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Resting heart rate, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '70 bpm on average (Aug 1, 2026 to Aug 31, 2026) against 60 bpm on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 10 bpm.',
+    )
+    restore()
+  })
+
+  // The other half of Important 1: the sleep tile beside this card formats its own mean through
+  // formatDuration ("7h 01m"), never the raw minutes formatMetricValue alone would print, and
+  // without sleepFormat this card printed "70" where its own tile a few cards over prints "1h
+  // 10m" for the identical quantity.
+  it('formats the sleep insight as a duration rather than raw minutes', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '1h 10m on average (Aug 1, 2026 to Aug 31, 2026) against 1h 00m on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 0h 10m.',
     )
     restore()
   })

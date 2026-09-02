@@ -130,9 +130,9 @@ describe('InsightCard', () => {
         ...base, current: 70000, previous: 71200, delta: -1200,
       }} /></I18nProvider>,
     )
-    // Anchored on the character right after the number, not a bare toContain('70.0'): a precision
-    // slip to 70.00 still contains "70.0" as a substring but not "70.0 (".
-    expect(html).toContain('70.0 (')
+    // Anchored on the text right after the number, not a bare toContain('70.0'): a precision
+    // slip to 70.00 still contains "70.0" as a substring but not "70.0 on average (".
+    expect(html).toContain('70.0 on average (')
     expect(html).not.toContain('70,000')
   })
 })

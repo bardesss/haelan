@@ -10,9 +10,23 @@ import type { Insight } from '../data/useInsight.js'
 /**
  * A period against the one before it, read as a sentence rather than as the `.delta` chip a
  * metric card already carries beside it. The chip states the size of a change; this states what
- * the two numbers behind it actually were, "455 ... against 473 ...", which a chip's "down 4%"
- * cannot. Dropping the previous value here would leave nothing this card says that the chip does
- * not already say, so `previous` and both windows are never optional in the rendered sentence.
+ * the two numbers behind it actually were, "455 on average ... against 473 on average ...",
+ * which a chip's "down 4%" cannot. Dropping the previous value here would leave nothing this card
+ * says that the chip does not already say, so `previous` and both windows are never optional in
+ * the rendered sentence.
+ *
+ * `current`/`previous` are each a mean over the days in their window, never a period total, and
+ * that is true regardless of which `agg` the caller passed to `useInsight`: `comparePeriods`
+ * (`packages/core/src/query/insights.ts`, `meanOf`) always averages the daily points it was
+ * handed, so a caller asking for `sum` gets the mean of each day's own sum, not the sum of the
+ * whole period. `insightCard.summary` says "on average" for exactly this reason, and a caller
+ * whose tile above prints a period total (a `sum` agg tile summed client side, the way `steps`'s
+ * tile does) is describing a different quantity from this card even when both read the same
+ * `metric`; that is expected, not a bug in either.
+ *
+ * `formatValue`, where the metric's own tile carries a unit or a non-default format the plain
+ * `formatMetricValue` call below does not (a "bpm" suffix, a duration string), is not optional
+ * for that metric: without it, this card's number reads unitless beside a tile that carries one.
  *
  * Presentational, on purpose: the page that mounts this owns the `useInsight` call and hands the
  * result down, the way `MetricCard` takes a query and points rather than fetching for itself. A
@@ -62,20 +76,27 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
   // `emptyStateFor`'s own `insufficient` branch (gated on a thin baseline) reachable, since this
   // card never calls `emptyStateFor` and never consults a baseline at all.
   //
-  // The second half of this condition guards a shape narrower than "the real server never sends
-  // this": `current`/`previous`/`delta` do go null together with `suppressed`/`reason`
-  // (`insights.ts`'s own `refuse`), so a live suppressed insight is already caught by the check
-  // before this one. The ranges are different: `personQuery.comparePeriods`
-  // (`packages/core/src/query/personQuery.ts:220-224`) fills `currentRange`/`previousRange`
-  // unconditionally, suppressed or not, so a live response never actually carries a null range.
-  // The three checks past `suppressed` above exist for what `Insight`'s own type allows, not for
-  // anything this server can produce: nothing rules out a caller (a hand built fixture, a future
-  // wire change) handing this component `suppressed: false` beside a null value, and the sentence
-  // below has no honest way to fill a gap that wide. Guarded here, cheaply, rather than trusted:
-  // a missing field alone points at no particular device the way `thin-coverage` does, so this
-  // falls back to the plain "not enough data" case.
-  if (insight.suppressed || insight.current === null || insight.previous === null || insight.delta === null
-    || insight.currentRange === null || insight.previousRange === null) {
+  // The second half of this condition guards two different gaps, not one. `current`/`previous`/
+  // `delta` do go null together with `suppressed`/`reason` (`insights.ts`'s own `refuse`), so a
+  // live suppressed insight is already caught by the check before this one. The ranges are
+  // different: `personQuery.comparePeriods` (`packages/core/src/query/personQuery.ts:220-224`)
+  // fills `currentRange`/`previousRange` unconditionally, suppressed or not, so a live,
+  // well-formed response never actually carries a null range. Both of those describe what a
+  // correctly shaped `Insight` can hand this component, which `== null` alone would already cover.
+  //
+  // `== null`, not `=== null`, because a real, reachable response is not always correctly shaped:
+  // `apiSend` turns an empty body into `{}` for a 204 or a body-less error alike
+  // (`apps/web/src/api/client.ts`, the `text === '' ? {} : JSON.parse(text)` line), and `apiGet`
+  // casts that (or any other JSON) straight to `Insight` with no runtime check that the fields
+  // named here are actually present. `{}` cast to `Insight` reads `current`/`previous`/`delta`/
+  // both ranges as `undefined`, not `null`, and `undefined === null` is `false`, which is exactly
+  // the gap that used to let `formatMetricValue` reach `undefined.toLocaleString()` below and take
+  // the whole page down with it, not only this card: nothing in apps/web catches a render error.
+  // `== null` treats `undefined` the same as the typed `null` case already handled above, so an
+  // incomplete or version-skewed response falls back to the same "not enough data" empty state a
+  // deliberately null field already does, rather than reaching the format calls at all.
+  if (insight.suppressed || insight.current == null || insight.previous == null || insight.delta == null
+    || insight.currentRange == null || insight.previousRange == null) {
     const thinCoverage = insight.suppressed && insight.reason === 'thin-coverage'
     return (
       <Card span={span} label={label}>
