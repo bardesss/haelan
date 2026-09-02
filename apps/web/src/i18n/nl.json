@@ -124,6 +124,11 @@
       "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
       "viewAll": "Bekijk herstel"
     },
+    "insights": {
+      "steps": "Stappen, deze periode tegenover de vorige",
+      "restingHr": "Rusthartslag, deze periode tegenover de vorige",
+      "sleep": "Slaap, deze periode tegenover de vorige"
+    },
     "heartRateRange": {
       "label": "Hartslagbereik",
       "basis": "dagelijks minimum, gemiddelde en maximum, gearceerde band is de baseline uit de 60 dagen vóór {{on}}",

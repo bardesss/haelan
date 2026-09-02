@@ -124,6 +124,11 @@
       "chartLabel": "Daily mean heart rate through {{period}}",
       "viewAll": "View recovery"
     },
+    "insights": {
+      "steps": "Steps, this period against the last",
+      "restingHr": "Resting heart rate, this period against the last",
+      "sleep": "Sleep, this period against the last"
+    },
     "heartRateRange": {
       "label": "Heart rate range",
       "basis": "daily minimum, mean and maximum, shaded band is the baseline from the 60 days before {{on}}",

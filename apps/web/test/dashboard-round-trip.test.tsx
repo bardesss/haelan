@@ -60,6 +60,23 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   return { client, tree: <QueryClientProvider client={client}>{node}</QueryClientProvider> }
 }
 
+/**
+ * A valid /insights body, the same shape dashboard-cards.test.tsx's own insightBody() answers with
+ * and for the same reason: apiGet casts the response to Insight without validating it, and a body
+ * shaped nothing like the real one throws inside formatNumber the moment a card tries to render
+ * past its own loading state.
+ */
+function insightBody(): unknown {
+  return {
+    current: 70, previous: 60, delta: 10,
+    currentDays: 7, previousDays: 7, periodDays: 7,
+    currentCoverage: 1, previousCoverage: 1,
+    currentRange: { from: '2026-08-09', to: '2026-08-15' },
+    previousRange: { from: '2026-08-02', to: '2026-08-08' },
+    suppressed: false, reason: null,
+  }
+}
+
 /** Answers the session and the series, so the page can mount without a server. */
 function stubFetch(seen: string[]): () => void {
   const original = globalThis.fetch
@@ -79,6 +96,9 @@ function stubFetch(seen: string[]): () => void {
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -116,6 +136,9 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -159,6 +182,9 @@ function stubFetchBySource(seen: string[]): () => void {
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -258,10 +284,11 @@ describe('the Dashboard round trip', () => {
     await flush(client, () => container!.innerHTML)
 
     // 4 stat tiles plus the six remaining cards task 10 restored (heart rate range, flagged days,
-    // sleep stages, sleep schedule, recovery, anomalies), not 4: this test predates their return
-    // and only ever meant "every card on the page", not "exactly the tiles". Daily steps (the
-    // heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
-    expect(container!.querySelectorAll('.card')).toHaveLength(10)
+    // sleep stages, sleep schedule, recovery, anomalies), plus the three insight cards this task
+    // added (steps, resting_heart_rate, sleep_asleep_minutes), 13 not 4 or 10: this test predates
+    // all of their returns and only ever meant "every card on the page", not "exactly the tiles".
+    // Daily steps (the heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
+    expect(container!.querySelectorAll('.card')).toHaveLength(13)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

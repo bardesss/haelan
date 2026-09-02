@@ -52,6 +52,25 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
 type Baseline = { center: number, spread: number, n: number, thin: boolean } | null
 
 /**
+ * A valid /insights body for stubs that do not otherwise care what the three insight cards say.
+ * current !== previous so a render reaches the real summary sentence rather than the guard's
+ * fallback branch (InsightCard.tsx's own null checks), which is what every stub below needs just
+ * to render past the cards' loading state without throwing: apiGet casts the response to Insight
+ * without validating it, and formatNumber's `value.toLocaleString` throws on a body shaped nothing
+ * like the real one.
+ */
+function insightBody(): unknown {
+  return {
+    current: 70, previous: 60, delta: 10,
+    currentDays: 7, previousDays: 7, periodDays: 7,
+    currentCoverage: 1, previousCoverage: 1,
+    currentRange: { from: '2026-08-09', to: '2026-08-15' },
+    previousRange: { from: '2026-08-02', to: '2026-08-08' },
+    suppressed: false, reason: null,
+  }
+}
+
+/**
  * Answers every route the Dashboard now calls: the session (seeded above, but a real render still
  * asks it once), /series for every requested metric, /sleep/nights, and /baselines with whichever
  * baseline the test wants. One canned point per metric, the same way
@@ -84,6 +103,9 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () =>
       // and not a moment a test has to catch it passing through.
       if (opts.hangBaselines === true) return new Promise<Response>(() => {})
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -133,6 +155,7 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
     }
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/baselines')) return json({ baseline: null })
+    if (url.includes('/insights')) return json(insightBody())
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -201,6 +224,9 @@ function stubOneNight(): () => void {
     if (url.includes('/baselines')) {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -242,7 +268,45 @@ function stubAppliedExclusion(): () => void {
     if (url.includes('/baselines')) {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
+ * Same routes and responses as stubFetch({ baseline: null }), plus a record of every request URL:
+ * the insight card tests below are about what the page put on the wire, which stubFetch's own
+ * signature has no way to report back.
+ */
+function stubFetchTracking(sent: { url: string }[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    sent.push({ url })
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody()), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
 }
@@ -419,5 +483,76 @@ describe('the remaining Dashboard cards', () => {
     const fs = await import('node:fs/promises')
     const source = await fs.readFile('apps/web/src/pages/Dashboard.tsx', 'utf8')
     expect(source).not.toContain('fixtures/july')
+  })
+})
+
+describe('the three insight cards', () => {
+  // The brief's own test, verbatim: /insights takes one metric and one agg per call and does not
+  // batch the way /series does, so three curated cards are three separate requests, not one shared
+  // one.
+  it('draws three insight cards and asks for each separately', async () => {
+    const sent: { url: string }[] = []
+    const restore = stubFetchTracking(sent)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const insightCalls = sent.filter((r) => r.url.includes('/insights'))
+    expect(insightCalls).toHaveLength(3)
+    expect(insightCalls.map((r) => new URL(r.url, 'http://x').searchParams.get('metric')).sort())
+      .toEqual(['resting_heart_rate', 'sleep_asleep_minutes', 'steps'])
+    restore()
+  })
+
+  // The curated three carry a curated agg each, not whichever one a shared default would pick:
+  // steps and sleep_asleep_minutes ride 'sum', the same agg REQUESTS.sum already asks /series for
+  // them; resting_heart_rate rides 'last', the once a day reading REQUESTS.last already carries for
+  // it, not the 'mean' its own tile derives client side from those points.
+  it('asks each metric for the agg its own tile already uses', async () => {
+    const sent: { url: string }[] = []
+    const restore = stubFetchTracking(sent)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const byMetric = new Map(sent.filter((r) => r.url.includes('/insights')).map((r) => {
+      const params = new URL(r.url, 'http://x').searchParams
+      return [params.get('metric'), params.get('agg')]
+    }))
+    expect(byMetric.get('steps')).toBe('sum')
+    expect(byMetric.get('sleep_asleep_minutes')).toBe('sum')
+    expect(byMetric.get('resting_heart_rate')).toBe('last')
+    restore()
+  })
+
+  // The collision this page's own comment beside the cards warns about: a second card sharing a
+  // metric tile's exact label text would make this file's own cardFor() (and a reader glancing at
+  // the page) unable to tell the tile and the insight card apart by name.
+  it('labels each insight card distinctly from its metric tile', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const labels = [...container!.querySelectorAll('.card .label')].map((el) => el.textContent)
+    expect(labels.filter((l) => l === 'Steps')).toHaveLength(1)
+    expect(labels.filter((l) => l === 'Resting heart rate')).toHaveLength(1)
+    expect(labels).toContain('Steps, this period against the last')
+    restore()
+  })
+
+  // The wiring end to end, not just the request: this is the exact sentence InsightCard.tsx
+  // renders once the query settles, read off the one card whose label names it rather than off
+  // page-wide text (all three cards share the same stub body and so would render the identical
+  // sentence, which is exactly why a page-wide toContain would not tell a caller apart from a
+  // typo in a different card's props).
+  it('renders the summary sentence for the steps card once the request resolves', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '70 (Aug 9, 2026 to Aug 15, 2026) against 60 in the previous period (Aug 2, 2026 to Aug 8, 2026), a change of 10.',
+    )
+    restore()
   })
 })

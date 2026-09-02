@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -25,6 +26,7 @@ import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
+import { useInsight } from '../data/useInsight.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
@@ -275,6 +277,24 @@ export function Dashboard() {
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
 
+  // Three insight cards, curated rather than derived from REQUESTS/GROUPS above: sleep_asleep_minutes,
+  // resting_heart_rate and steps are the three metrics this page already leads with, and the three
+  // where a period over period change is something a person acts on. That is an editorial choice
+  // stated here rather than a rule this file derives from the catalogue the way under() does above,
+  // and it is why these three and not a fourth or fifth.
+  //
+  // /insights takes exactly one metric and one agg per call and, unlike /series, does not batch, so
+  // each of the three below is its own request rather than a shared one: three requests added on
+  // top of whatever GROUPS above already issues, not multiplied against the cards. agg matches what
+  // each metric's own tile above already asks /series for: 'sum' for steps and
+  // sleep_asleep_minutes (SUM_METRICS, REQUESTS.sum), 'last' for resting_heart_rate (LAST_METRICS,
+  // REQUESTS.last), the once a day reading rather than the mean the tile itself derives client side
+  // from those same points.
+  const insightRange = { from: controls.from, to: controls.to }
+  const stepsInsight = useInsight('steps', 'sum', insightRange, source)
+  const restingHrInsight = useInsight('resting_heart_rate', 'last', insightRange, source)
+  const sleepInsight = useInsight('sleep_asleep_minutes', 'sum', insightRange, source)
+
   // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago". Null
   // rather than zero when no run has ever finished: the row has its own copy for that now, and
   // for the moment before the status query has answered.
@@ -523,6 +543,19 @@ export function Dashboard() {
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.meanHr.viewAll')}
           </Link>, t('dashboard.units.bpm'))}
+
+        {/* The three insight cards: see the comment beside stepsInsight/restingHrInsight/sleepInsight
+            above for why these three and why one request each. label is its own catalogue string
+            rather than the plain metric label (dashboard.steps.label etc.) reused: the precision
+            test below looks up a card by its exact label text
+            (dashboard-cards.test.tsx's cardFor), and a second card sharing "Steps" would make that
+            lookup ambiguous between the tile and this card. */}
+        <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
+          label={t('dashboard.insights.steps')} />
+        <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
+          label={t('dashboard.insights.restingHr')} />
+        <InsightCard insight={sleepInsight.data} query={sleepInsight} metric="sleep_asleep_minutes" span={4}
+          label={t('dashboard.insights.sleep')} />
 
         {/* basisKey and basisWornKey are the same string here on purpose: this card's basis is a
             four way choice driven by the baseline's own validity (unknown, absent, thin, real),

@@ -144,6 +144,19 @@ function stubFetch(
         cursor: null,
       })
     }
+    if (url.includes('/insights')) {
+      // A valid Insight body: apiGet casts the response without validating it, and a shape this
+      // far from the real one (an absent current/previous/delta) throws inside formatNumber the
+      // moment Dashboard's three insight cards try to render past their own loading state.
+      return json({
+        current: 70, previous: 60, delta: 10,
+        currentDays: 7, previousDays: 7, periodDays: 7,
+        currentCoverage: 1, previousCoverage: 1,
+        currentRange: { from: '2026-08-09', to: '2026-08-15' },
+        previousRange: { from: '2026-08-02', to: '2026-08-08' },
+        suppressed: false, reason: null,
+      })
+    }
     return json({ baseline: { center: 62, spread: 4, n: 40, thin: false } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
