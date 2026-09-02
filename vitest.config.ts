@@ -17,5 +17,27 @@ export default defineConfig({
     // roughly one fork per core: how much CPU any one test gets depends on what else is running,
     // which is why a test with less than a 2x margin here eventually flakes.
     testTimeout: 20_000,
+    // Sets globalThis.IS_REACT_ACT_ENVIRONMENT, which is React's switch for "this is a test".
+    // Nothing set it before, and both halves of that were costing us something.
+    //
+    // The loud half: with the flag unset, every React update made inside act() trips
+    // isConcurrentActEnvironment() and logs "The current testing environment is not configured to
+    // support act(...)" — three times over a plain render/setState/unmount cycle. Green runs hide
+    // it, because vitest only prints a file's stderr when that file fails, so the noise surfaced
+    // only next to a real failure and read as a symptom of it. It sent a flush.ts investigation
+    // down a blind alley once already.
+    //
+    // The quiet half, and the reason this is a setup file rather than a line in one test:
+    // warnIfUpdatesNotWrappedWithActDEV checks the same flag, so with it unset React never emits
+    // "An update to X inside a test was not wrapped in act(...)" at all. That is the warning that
+    // catches a state update escaping act() — a real race between a test's assertions and a render
+    // it did not wait for — and the ~15 happy-dom files under apps/web/test that mount components
+    // were all running without it.
+    //
+    // Global rather than per file because the flag is inert where React is not: the node-environment
+    // tests never load react-dom, so setting it there costs one assignment and nothing else, while a
+    // per file opt-in is one more thing a new component test can forget, which is exactly how the
+    // suite ended up here.
+    setupFiles: ['./vitest.setup.ts'],
   },
 })

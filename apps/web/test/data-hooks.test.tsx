@@ -122,7 +122,14 @@ describe('useSeries', () => {
     // return), so a synchronous check right after mount would pass even with the enabled guard
     // removed: a disabled series query's queryFn simply never runs, synchronously or not, and the
     // only way to see that has to include the trip through microtasks a real fetch takes.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    //
+    // Inside act, because the thing being waited for is a render: the session settling notifies
+    // react-query, which re-renders Probe through useSyncExternalStore. Outside act that render is
+    // not flushed before the assertion below, so a series request enabled by the freshly arrived
+    // person could still be queued when calls is read — the test would pass by reading too early
+    // rather than because the guard held. act also makes React warn if a future edit reintroduces
+    // an unflushed update here.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     globalThis.fetch = originalFetch
     // The session query itself fires exactly once (no data cached to short circuit it). What must
