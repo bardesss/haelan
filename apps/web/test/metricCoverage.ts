@@ -1,5 +1,6 @@
 import type { SeriesPoint } from '../src/data/useSeries.js'
 import type { Insight } from '../src/data/useInsight.js'
+import { coverageIsMeaningful } from '@haelan/core/coverage-signal'
 
 /**
  * The coverage a stubbed /series row would really carry for a metric.
@@ -85,22 +86,32 @@ function shiftDays(date: string, days: number): string {
  * them, and `previousRange` is computed the same length immediately before it: a stub that always
  * answered the same window, whatever the page actually asked for, could never catch Dashboard
  * sending the wrong `from`/`to` into `useInsight`, since the rendered sentence would look exactly
- * as correct either way. `current`/`previous`/`delta` and the day/coverage counts stay overridable
- * through `overrides`, but default to a real, unsuppressed period (every day reporting, full
- * coverage), the shape `comparePeriods`'s own success branch
- * (`packages/core/src/query/insights.ts`) returns.
+ * as correct either way. `current`/`previous`/`delta` and the day counts stay overridable through
+ * `overrides`, but default to a real, unsuppressed period (every day reporting), the shape
+ * `comparePeriods`'s own success branch (`packages/core/src/query/insights.ts`) returns.
+ *
+ * `currentCoverage`/`previousCoverage` are not a flat `1`: `personQuery.ts`'s own `comparePeriods`
+ * (`coverage: judgeCoverage ? point.coverage : null`) forces every point's coverage to `null`
+ * whenever `coverageIsMeaningful(metric)` is false, which `meanCoverageOf`
+ * (`packages/core/src/query/insights.ts`) then reads as nothing measured, so a real response for
+ * `resting_heart_rate` or any `sleep_` metric carries `null` here, never a number. A stub that
+ * always answered `1` regardless of `metric` is the exact unrepresentative-field shape this file's
+ * own header comment on `coverageFor` exists to keep out, so this reads the request's own `metric`
+ * param the same way it already reads `from`/`to`, rather than a value fixed regardless of it.
  */
 export function insightBody(url: string, overrides: Partial<Insight> = {}): Insight {
   const params = new URLSearchParams(url.split('?')[1] ?? '')
   const from = params.get('from') ?? '2026-08-09'
   const to = params.get('to') ?? '2026-08-15'
+  const metric = params.get('metric') ?? ''
   const periodDays = daysBetweenInclusive(from, to)
   const previousTo = shiftDays(from, -1)
   const previousFrom = shiftDays(previousTo, -(periodDays - 1))
+  const coverage = coverageIsMeaningful(metric) ? 1 : null
   return {
     current: 70, previous: 60, delta: 10,
     currentDays: periodDays, previousDays: periodDays, periodDays,
-    currentCoverage: 1, previousCoverage: 1,
+    currentCoverage: coverage, previousCoverage: coverage,
     currentRange: { from, to },
     previousRange: { from: previousFrom, to: previousTo },
     suppressed: false, reason: null,

@@ -292,6 +292,45 @@ function stubFetchTracking(sent: { url: string }[]): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * stubFetch with one difference: the sleep insight carries a negative delta (a week where mean
+ * sleep fell), current 401 against previous 408. Every fixture elsewhere in this file uses
+ * insightBody's own default delta of 10, which is positive and so could never have caught the
+ * sign bug this stub exists to reproduce: formatDuration was written for a duration, which cannot
+ * be negative, and sleepFormat handed it insight.delta unguarded, so a negative delta printed
+ * with two minus signs ("-1h -7m") rather than one.
+ */
+function stubFetchWithNegativeSleepDelta(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      const isSleep = new URLSearchParams(url.split('?')[1] ?? '').get('metric') === 'sleep_asleep_minutes'
+      const overrides = isSleep ? { current: 401, previous: 408, delta: -7 } : {}
+      return new Response(JSON.stringify(insightBody(url, overrides)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 const EXCLUDED_DATE = '2026-08-15'
 const EXCLUDED_REASON = 'phone left at home'
 
@@ -582,6 +621,27 @@ describe('the three insight cards', () => {
     expect(card?.querySelector('.insight-summary')?.textContent).toBe(
       '1h 10m on average (Aug 1, 2026 to Aug 31, 2026) against 1h 00m on average in the previous period '
       + '(Jul 1, 2026 to Jul 31, 2026), a change of 0h 10m.',
+    )
+    restore()
+  })
+
+  // The sign bug the review round found: sleepFormat handed insight.delta straight to
+  // formatDuration, which was only ever fed a non-negative duration before this task.
+  // formatDuration's own Math.floor(total / 60) paired with a sign-carrying `total % 60` prints a
+  // negative input as two minus signs, one on each half, rather than one on the whole duration.
+  // -7 alone (a seven minute drop, not a large or hour-crossing one) is enough to show it: -1
+  // (floor(-7/60)) and -7 (-7 % 60 in JS keeps the dividend's sign) render as "-1h -7m".
+  it('formats a negative sleep delta with one leading minus rather than two', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetchWithNegativeSleepDelta()
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '6h 41m on average (Aug 1, 2026 to Aug 31, 2026) against 6h 48m on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of -0h 07m.',
     )
     restore()
   })
