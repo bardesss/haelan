@@ -128,8 +128,10 @@ describe('useAnnotations', () => {
     // The session query's own fetch resolves asynchronously, so a synchronous check right after
     // mount would pass even with every `enabled` guard removed: a disabled query's queryFn simply
     // never runs, and the only way to see that has to include the trip through microtasks a real
-    // fetch takes, the same reasoning useSeries' own version of this test gives.
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    // fetch takes, the same reasoning useSeries' own version of this test gives. Inside act for
+    // that test's reason too: the session settling re-renders Probe, and an unflushed render means
+    // the count below could be read before a request the arriving person enabled ever fired.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     globalThis.fetch = original
     // Exactly one fetch, the session's own. Three more (notes, events, overrides) firing for an
