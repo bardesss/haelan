@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset,
-  formatNumber, formatMetricValue,
+  formatNumber, formatMetricValue, formatLocalDate,
 } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
@@ -98,6 +98,21 @@ describe('formatMetricValue', () => {
   it('throws rather than silently defaulting to precision 0 for an id the catalogue does not carry', () => {
     expect(() => formatMetricValue(14.7, 'respiratory_rat', 'en', 'absent')).toThrow(/respiratory_rat/)
     expect(() => formatMetricValue(14.7, 'not_a_metric', 'en', 'absent')).toThrow()
+  })
+})
+
+describe('formatLocalDate', () => {
+  it('reads the reader\'s own locale, not one hardcoded form', () => {
+    expect(formatLocalDate('2026-08-03', 'en')).toBe('Aug 3, 2026')
+    expect(formatLocalDate('2026-08-03', 'nl')).toBe('3 aug 2026')
+  })
+
+  // Anchored at UTC midnight and read back in UTC (InsightCard.tsx's own comment on the call
+  // site explains why): a date this far west of UTC is the case that would otherwise slip to the
+  // day before if toLocaleString were left to the test runner's own time zone.
+  it('does not lose a day to the local runner\'s own time zone', () => {
+    expect(formatLocalDate('2026-01-01', 'en')).toBe('Jan 1, 2026')
+    expect(formatLocalDate('2026-12-31', 'en')).toBe('Dec 31, 2026')
   })
 })
 

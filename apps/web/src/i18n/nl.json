@@ -78,7 +78,7 @@
     "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
   },
   "insightCard": {
-    "summary": "{{current}} over {{currentFrom}} tot {{currentTo}}, tegenover {{previous}} in de vorige periode, {{previousFrom}} tot {{previousTo}}, een verandering van {{delta}}",
+    "summary": "{{current}} van {{currentFrom}} tot en met {{currentTo}}, tegenover {{previous}} in de vorige periode, van {{previousFrom}} tot en met {{previousTo}}, een verandering van {{delta}}.",
     "thinCoverage": {
       "title": "Onvoldoende dekking van het apparaat om samen te vatten",
       "detail": "Dit apparaat heeft niet genoeg van deze dagen geregistreerd om ze te vergelijken. Vaker dragen dicht dit gat, langer wachten niet."

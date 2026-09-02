@@ -45,6 +45,22 @@ export function formatMetricValue(value: number | null, metric: string, language
   return formatNumber(value, spec.precision, language, absent)
 }
 
+/**
+ * A local calendar date (`YYYY-MM-DD`, no time component) as the reader's own locale would write
+ * it, e.g. "Aug 10, 2026" in English. `OverrideList.tsx`'s own date column is this app's one other
+ * user facing date and takes the same `dateStyle: 'medium'` shape; this is the plain-date form of
+ * it, with no `timeStyle` to carry since `date` names a day, not a moment.
+ *
+ * Anchored at UTC midnight and read back in UTC, not the browser's own zone: `date` is a "local
+ * date" in the sense every date of this shape in this codebase already uses it (a calendar day in
+ * the account's configured time zone, not the browser's), and letting `toLocaleString` interpret a
+ * UTC-midnight instant in whatever zone the browser happens to sit in would print the day before
+ * for a reader west of it.
+ */
+export function formatLocalDate(date: string, language: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleString(language, { dateStyle: 'medium', timeZone: 'UTC' })
+}
+
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").
 export function formatDuration(minutes: number): string {
   const total = Math.round(minutes)

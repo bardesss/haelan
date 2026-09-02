@@ -37,7 +37,12 @@ describe('InsightCard', () => {
     )
     expect(html).toContain('455')
     expect(html).toContain('473')
-    expect(html).toContain('2026-08-03')
+    // Dates render through formatLocalDate (format.ts), the reader's own locale's medium form,
+    // not the raw '2026-08-03' the brief's own draft of this test checked for: a review of this
+    // task (task-2-report.md) found the raw ISO string reaching the page, with no precedent for it
+    // anywhere else in the app, and pointed at OverrideList.tsx's own date column as the one that
+    // already formats. 'Aug 3, 2026' is what 'en' prints for previousRange.from below.
+    expect(html).toContain('Aug 3, 2026')
   })
 
   it('says too few days when the server suppressed on thin-days', () => {
@@ -92,6 +97,25 @@ describe('InsightCard', () => {
     // fail this assertion instead of matching it.
     const html = render({ ...base, current: 455, previous: 473, delta: -20 })
     expect(html).toContain('-20')
+  })
+
+  // The type permits suppressed: false alongside a null value or range even though the real
+  // server never sends that combination (comparePeriods nulls all five together, only when it
+  // also sets suppressed and reason). Without a guard the sentence renders with gaps where the
+  // missing pieces should be; this pins the safer fallback instead.
+  it('falls back to the insufficient message rather than a sentence with holes in it', () => {
+    const html = render({ ...base, suppressed: false, reason: null, current: null })
+    expect(html).toContain('Not enough data to summarise')
+    expect(html).not.toContain('insight-summary')
+  })
+
+  // 'tot' alone is the exclusive Dutch preposition; these windows are inclusive
+  // (packages/core/src/query/insights.ts:26), so the Dutch sentence has to read 'tot en met'.
+  it('states the Dutch window as inclusive rather than with a bare, exclusive tot', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider lng="nl"><InsightCard {...props} insight={base} /></I18nProvider>,
+    )
+    expect(html).toContain('tot en met')
   })
 
   it('converts weight through its own formatValue rather than the catalogue precision', () => {

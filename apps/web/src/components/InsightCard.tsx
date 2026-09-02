@@ -4,7 +4,7 @@ import { Card } from './Card.js'
 import { ErrorState } from './ErrorState.js'
 import { Loading } from './Loading.js'
 import { EmptyState } from './EmptyState.js'
-import { formatMetricValue } from '../format.js'
+import { formatMetricValue, formatLocalDate } from '../format.js'
 import type { Insight } from '../data/useInsight.js'
 
 /**
@@ -19,12 +19,11 @@ import type { Insight } from '../data/useInsight.js'
  * component that fetches internally cannot be handed a fixture, which is what makes both
  * suppressed branches below testable without stubbing a network call.
  *
- * `insight` is `undefined` until the query resolves, mirroring `MetricCard`'s `points` gate; a
- * defined `insight` with `query.isPending` still true or `query.isError` still true does not
- * happen in practice (a resolved query is exactly what makes `insight` defined), but the error
- * check runs first regardless, for the same reason `MetricCard`'s own comment gives: a composite
- * query built by ORing several together can carry both flags at once, and a failed request is
- * never the same statement as an empty or thin period.
+ * `insight` stays `undefined` until the query resolves, and the pending check below reads that
+ * directly rather than assuming a defined `insight` implies a settled query. The error check still
+ * runs first regardless, for the same reason `MetricCard`'s own comment gives: a composite query
+ * built by ORing several together can carry both `isError` and `isPending` at once, and a failed
+ * request is never the same statement as an empty or thin period.
  */
 export function InsightCard({ insight, query, metric, span, label, formatValue }: {
   insight: Insight | undefined
@@ -62,8 +61,19 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
   // ("There are too few days here to say anything useful yet"); reusing it does not make
   // `emptyStateFor`'s own `insufficient` branch (gated on a thin baseline) reachable, since this
   // card never calls `emptyStateFor` and never consults a baseline at all.
-  if (insight.suppressed) {
-    const thinCoverage = insight.reason === 'thin-coverage'
+  //
+  // The second half of this condition is never true against the real server: `comparePeriods`
+  // nulls `current`/`previous`/`delta`/both ranges only in the same branch that sets `suppressed`
+  // and `reason` together (packages/core/src/query/insights.ts's own `refuse`), and fills all five
+  // in whenever it does not. But `Insight` types every one of them independently nullable, so
+  // nothing stops a caller (a hand built fixture, a future wire change) from handing this component
+  // `suppressed: false` alongside a null value, and the sentence below has no honest way to fill a
+  // gap that wide. Guarded here, cheaply, rather than trusted: an insight this incomplete reads as
+  // the plain "not enough data" case, since nothing about a missing field alone points at the
+  // device the way `thin-coverage` does.
+  if (insight.suppressed || insight.current === null || insight.previous === null || insight.delta === null
+    || insight.currentRange === null || insight.previousRange === null) {
+    const thinCoverage = insight.suppressed && insight.reason === 'thin-coverage'
     return (
       <Card span={span} label={label}>
         <EmptyState
@@ -89,10 +99,10 @@ export function InsightCard({ insight, query, metric, span, label, formatValue }
         current: format(insight.current),
         previous: format(insight.previous),
         delta: format(insight.delta),
-        currentFrom: insight.currentRange?.from ?? '',
-        currentTo: insight.currentRange?.to ?? '',
-        previousFrom: insight.previousRange?.from ?? '',
-        previousTo: insight.previousRange?.to ?? '',
+        currentFrom: formatLocalDate(insight.currentRange.from, i18n.language),
+        currentTo: formatLocalDate(insight.currentRange.to, i18n.language),
+        previousFrom: formatLocalDate(insight.previousRange.from, i18n.language),
+        previousTo: formatLocalDate(insight.previousRange.to, i18n.language),
       })}</p>
     </Card>
   )
