@@ -14,13 +14,10 @@ import { formatMetricValue, formatNumber } from '../format.js'
  * and it is the chart a Critical was fixed in during M3c: a mark positioned with `date.slice(8)`,
  * a day-of-month label that repeats the moment a range spans two months, landed on the wrong day
  * at another day's height while the accessible table correctly disagreed. This file avoids that
- * by resolving every mark through `days.findIndex` (via `dayMarks`, the same helper
- * HeartRateRange uses), never through a label.
+ * by resolving every mark's index through `dayMarks` (base.ts), never through a label.
  *
  * Two copies of one shape is what this project's own rule allows, cheap at two and a refactor at
  * four; two range charts (this one and HeartRateRange) are still on the cheap side of that line.
- * A third range chart forces the refactor into one shared component, and whoever writes that
- * third chart inherits this comment along with the duplication.
  */
 export type Spo2Day = {
   date: string

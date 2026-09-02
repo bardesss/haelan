@@ -85,7 +85,13 @@ it('names the day, the interval and the reading count in its accessible table', 
   const table = html.match(/<table class="sr-only">[\s\S]*?<\/table>/)![0]
   expect(table).toContain('2026-08-14')
   expect(table).toContain('96.4')
-  expect(table).toContain('412')
+  // The exact cell, not `toContain('412')`: formatNumber(412, 0, ...) and formatMetricValue(412,
+  // 'spo2', ...) (precision 1) both render a string that CONTAINS "412" ("412" and "412.0"), so a
+  // substring check alone cannot tell the count's own precision-0 formatter apart from spo2's
+  // precision-1 one and stays green under either mistake. The count column is a genuine integer
+  // agg (packages/core/src/derive/metrics.ts, spo2's own `count`), never spo2's precision, and this
+  // is the one place a precision mix-up between the two would actually go red.
+  expect(table).toContain('<td>412</td>')
   expect(table).toContain('2026-08-15')
 })
 
