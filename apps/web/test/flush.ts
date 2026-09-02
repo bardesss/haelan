@@ -2,6 +2,13 @@ import { act } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 
 /**
+ * How long either helper below keeps pumping before calling it a hang. See flush()'s last two
+ * paragraphs for why this is a duration rather than the count of attempts it used to be, and
+ * why ten seconds.
+ */
+export const HANG_BUDGET_MS = 10_000
+
+/**
  * Waits until a mounted tree has nothing in flight and has stopped changing, rather than a fixed
  * number of ticks or a wall clock budget. A page can fire several independent queries, each its
  * own fetch-then-parse chain, and a budget tuned against how long that happens to take on one
@@ -33,7 +40,7 @@ import type { QueryClient } from '@tanstack/react-query'
  * sample, taken after the first "nothing in flight" reading, to match it before calling the page
  * settled. Either check alone can lie about "settled"; both together is what the word means.
  *
- * Throws on running out of attempts rather than returning: a page that started and then got stuck
+ * Throws on running out of budget rather than returning: a page that started and then got stuck
  * (a real bug, in flight forever or still changing after the fetch count returns to zero) exits
  * the loop the same way a page that settled normally does, on the last comparison finding no
  * further progress, and a silent return there means a test reading this helper's result cannot
@@ -41,18 +48,39 @@ import type { QueryClient } from '@tanstack/react-query'
  * shape of failure seven times over; a helper that fails loudly here is worth more than one that
  * fails quietly does.
  *
- * 2000 attempts (up to ten seconds), not the 200 (one second) a wall clock version needed: the
- * ceiling is no longer the settle mechanism, only a hang detector, so it can afford to be generous
- * without weakening anything. The common case still returns as soon as the combined count reaches
- * zero and one more sample confirms the tree agrees, which does not need anywhere near ten
- * seconds; the ceiling only matters for a page that is genuinely stuck.
+ * The budget is a duration, not the 2000 attempts it used to be, because what the ceiling has to
+ * stay inside is the runner's own testTimeout and that is measured in wall clock. 2000 attempts
+ * of a 5ms sleep is the ten seconds the comment here used to claim only on a platform where a 5ms
+ * sleep costs 5ms, and Windows is not one: its timer granularity makes setTimeout(5) cost about
+ * 14ms, so the real ceiling sat near 29 seconds, past vitest's 20 000ms. The runner killed the
+ * test before either helper reached its own throw, which cost the message twice over - the
+ * generic "Test timed out in 20000ms" that arrived instead named nothing about what had been
+ * missing, and being killed mid-`await act(...)` left React mid-act, so the next tests in the
+ * same file failed on "overlapping act() calls" having done nothing wrong. Throwing between
+ * pumps, from outside act(), is what keeps a timeout the failure of one test.
+ *
+ * Note that the interval is not the thing to shrink: setTimeout(0) measured about 10ms here
+ * against setTimeout(5)'s 14ms, so the per-pump floor is the platform's rather than this
+ * number's, and 2000 pumps could not fit inside testTimeout at any interval. act() is not the
+ * expense either - 200 calls cost 1.3ms, against 2.8 seconds for the 200 sleeps. Measuring the
+ * budget also makes the ceiling mean the same thing on every machine, which is the argument the
+ * top of this comment already makes about the settle mechanism, one layer down: a count of
+ * attempts is a wall clock budget written in a unit whose length varies by platform. Ten seconds
+ * keeps the number this comment always claimed and leaves the 2x margin under testTimeout that
+ * vitest.config.ts argues for; a caller testing the timeout itself passes a small budget of its
+ * own rather than waiting out this one.
  */
-export async function flush(queryClient: QueryClient, getHtml: () => string): Promise<void> {
+export async function flush(
+  queryClient: QueryClient,
+  getHtml: () => string,
+  budgetMs = HANG_BUDGET_MS,
+): Promise<void> {
   const inFlight = () => queryClient.isFetching() + queryClient.isMutating() > 0
   let sawFetch = inFlight()
   let previous = getHtml()
   let idleOnce = false
-  for (let attempt = 0; attempt < 2000; attempt += 1) {
+  const deadline = performance.now() + budgetMs
+  do {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
     if (inFlight()) {
       sawFetch = true
@@ -68,7 +96,7 @@ export async function flush(queryClient: QueryClient, getHtml: () => string): Pr
     if (idleOnce && current === previous) return
     idleOnce = true
     previous = current
-  }
+  } while (performance.now() < deadline)
   throw new Error('flush() timed out: the page never settled (or never started changing at all)')
 }
 
@@ -82,11 +110,19 @@ export async function flush(queryClient: QueryClient, getHtml: () => string): Pr
  * queries rather than milliseconds: a budget tuned on one machine is a race on a slower one. The
  * state being sampled has to be a resting state, not a moment in a sequence, or this is just a
  * race with extra steps; a request stubbed to never resolve gives exactly that.
+ *
+ * `budgetMs` is the hang detector, on the same terms as flush()'s - and a `ready` that genuinely
+ * never holds has to surface here, naming `what`, rather than as the runner's own timeout.
  */
-export async function pumpUntil(ready: () => boolean, what: string): Promise<void> {
-  for (let attempt = 0; attempt < 2000; attempt += 1) {
+export async function pumpUntil(
+  ready: () => boolean,
+  what: string,
+  budgetMs = HANG_BUDGET_MS,
+): Promise<void> {
+  const deadline = performance.now() + budgetMs
+  do {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
     if (ready()) return
-  }
+  } while (performance.now() < deadline)
   throw new Error(`pumpUntil() timed out waiting for ${what}`)
 }
