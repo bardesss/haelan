@@ -206,6 +206,25 @@
       "chartLabel": "Daily oxygen saturation summary through {{period}}"
     }
   },
+  "weight": {
+    "title": "Weight",
+    "units": {
+      "kilograms": "Weight in kilograms",
+      "kg": "kg",
+      "percent": "Percent",
+      "percentShort": "%"
+    },
+    "weight": {
+      "label": "Weight",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Weight through {{period}}"
+    },
+    "bodyFat": {
+      "label": "Body fat",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Body fat through {{period}}"
+    }
+  },
   "activity": {
     "title": "Activity",
     "units": {

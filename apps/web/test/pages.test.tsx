@@ -10,6 +10,7 @@ import { Activity } from '../src/pages/Activity.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { Health } from '../src/pages/Health.js'
+import { Weight } from '../src/pages/Weight.js'
 import { Settings } from '../src/pages/Settings.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
@@ -155,6 +156,7 @@ const ACTIVITY_ROUTE = '/activity?range=week&on=2026-08-12'
 const RECOVERY_ROUTE = '/recovery?range=week&on=2026-08-12'
 const SLEEP_ROUTE = '/sleep?range=week&on=2026-08-12'
 const HEALTH_ROUTE = '/health?range=week&on=2026-08-12'
+const WEIGHT_ROUTE = '/weight?range=week&on=2026-08-12'
 // No range or anchor query params: Settings never calls usePageControls, so this is just a real
 // path for window.history.replaceState to carry; nothing in the page reads it back.
 const SETTINGS_ROUTE = '/settings'
@@ -190,13 +192,14 @@ const settledActivity = (lng: string) => settledPage(Activity, ACTIVITY_ROUTE, l
 const settledRecovery = (lng: string) => settledPage(Recovery, RECOVERY_ROUTE, lng)
 const settledSleep = (lng: string) => settledPage(Sleep, SLEEP_ROUTE, lng)
 const settledHealth = (lng: string) => settledPage(Health, HEALTH_ROUTE, lng)
+const settledWeight = (lng: string) => settledPage(Weight, WEIGHT_ROUTE, lng)
 const settledSettings = (lng: string) => settledPage(Settings, SETTINGS_ROUTE, lng)
 
 const restore = stubFetch()
 // Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
 // found that Activity and Recovery, converted off fixtures in the two tasks before Sleep, had
 // never been added here either, so three new pages and twenty odd new cards sat outside every
-// assertion below. All six settle for real now through the same stubFetch week, rather than
+// assertion below. All seven settle for real now through the same stubFetch week, rather than
 // excluding a whole page because one of its charts cannot answer every assertion (see
 // HAS_ABSENCE_CHART and IS_CHART_PAGE below for the assertions that genuinely do not apply to
 // every page). Settings is the one page here with no chart and no delta at all, not a page whose
@@ -208,6 +211,7 @@ const pages = {
   Recovery: await settledRecovery('en'),
   Sleep: await settledSleep('en'),
   Health: await settledHealth('en'),
+  Weight: await settledWeight('en'),
   Settings: await settledSettings('en'),
 }
 const dashboardNl = await settledDashboard('nl')
@@ -238,12 +242,19 @@ restore()
 // an intraday metric (packages/core/src/api/catalogue.ts: tier 'intraday'), so it carries a real
 // wear signal too, giving the range card two independent ways to state an absence rather than none.
 //
+// Weight is false for the same reason Recovery and Sleep are: both its cards are plain Sparklines,
+// built `episodic` (Weight.tsx's own card() comment), which drops a silent day from the accessible
+// table entirely rather than rowing it with an absence word (Sparkline.tsx's own `episodic` prop
+// comment). Neither weight nor body_fat carries a wear signal either (packages/core/src/api/
+// catalogue.ts gives both no tier override, so they default to 'daily'), so there is no second way
+// for this page to state an absence the way Health's spo2Range card can.
+//
 // Every gate built on a map like this one is read as `=== false`, never as `!value`: `!undefined`
 // is true, so a page missing from the map would silently skip rather than run, and a page added to
 // `pages` without a matching entry here would inherit an exemption nobody wrote down. `=== false`
 // requires the exemption to be spelled out; anything absent runs the assertion instead.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
-  Dashboard: true, Activity: true, Recovery: false, Sleep: false, Health: true, Settings: false,
+  Dashboard: true, Activity: true, Recovery: false, Sleep: false, Health: true, Weight: false, Settings: false,
 }
 
 // Whether a page carries any chart (and, riding on the same StatTile/MetricCard machinery, any
@@ -254,7 +265,7 @@ const HAS_ABSENCE_CHART: Record<string, boolean> = {
 // Read as `=== false` at each call site, not `!value`, for the same reason HAS_ABSENCE_CHART is:
 // an unlisted page must run the assertion, not skip it by omission.
 const IS_CHART_PAGE: Record<string, boolean> = {
-  Dashboard: true, Activity: true, Recovery: true, Sleep: true, Health: true, Settings: false,
+  Dashboard: true, Activity: true, Recovery: true, Sleep: true, Health: true, Weight: true, Settings: false,
 }
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words
@@ -322,12 +333,13 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
     expect(tables(html)).toMatch(/not worn|no reading/)
   })
 
-  // These six pages carry most of the catalogue, so a mistyped key would otherwise render as
+  // These seven pages carry most of the catalogue, so a mistyped key would otherwise render as
   // literal text like "dashboard.foo.bar" and every assertion above would still pass: none of
   // them look for the shape a missing translation actually takes. settings and annotate joined
   // this list with Settings (M3c-12): AnnotatePanel's own keys never reach this file's settled,
   // no-click renders, but a page with settings.* copy now does, and a namespace absent here is a
-  // namespace this test cannot see break. health joined with Health, the same reason.
+  // namespace this test cannot see break. health joined with Health, weight joined with Weight,
+  // the same reason both times.
   //
   // [a-zA-Z0-9], not [a-zA-Z]: a key path segment can carry a digit (health.spo2Range,
   // health.dailySpo2, charts.spo2Tooltip all do), and the letters-only class could not see past
@@ -336,7 +348,7 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // test still green, because "spo2Range" broke the match at the digit and the regex never
   // resumed past it.
   it('renders no raw message key', () => {
-    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|health|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
+    expect(html).not.toMatch(/\b(dashboard|sleep|common|charts|activity|recovery|health|weight|controlRow|emptyState|errorState|settings|annotate)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
   })
 
   // Both of these ran against Dashboard alone until the review that spotted three more pages had

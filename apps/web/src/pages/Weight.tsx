@@ -1,0 +1,181 @@
+import { useMemo, useState } from 'react'
+import { METRICS } from '@haelan/core/metrics'
+import type { DailyAgg } from '@haelan/core/metrics'
+import { useTranslation } from '../i18n/index.js'
+import { StatTile } from '../components/StatTile.js'
+import { MetricCard } from '../components/MetricCard.js'
+import { ControlRow } from '../components/ControlRow.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../components/AnnotatePanel.js'
+import { Sparkline } from '../charts/Sparkline.js'
+import { usePageControls } from '../controls/usePageControls.js'
+import { ALL_SOURCES, resolveSource } from '../controls/source.js'
+import { useSession } from '../auth/session.js'
+import { denseSeries, useSeries } from '../data/useSeries.js'
+import type { SeriesPoint } from '../data/useSeries.js'
+import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useAnnotations } from '../data/useAnnotations.js'
+import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
+import { useMetricGroups } from '../data/useMetricGroups.js'
+import type { MetricGroup } from '../data/useMetricGroups.js'
+import { distinctSources, exportPathFor } from '../data/pageShell.js'
+import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
+
+// weight and body_fat both carry `aggs: ['last', 'mean']` in packages/core/src/derive/metrics.ts;
+// this page only ever asks for 'last', the same REQUESTS/under('agg') shape every sibling page
+// uses so a pairing the catalogue cannot answer drops off the wire rather than 500ing the group
+// (see under()'s own comment on Dashboard.tsx for why).
+export const REQUESTS = {
+  last: ['weight', 'body_fat'],
+} as const satisfies Partial<Record<DailyAgg, readonly string[]>>
+
+function under(agg: keyof typeof REQUESTS): string[] {
+  return REQUESTS[agg].filter((metric) => METRICS[metric]?.aggs.includes(agg) ?? false)
+}
+
+const LAST_METRICS = under('last')
+
+const GROUPS: readonly MetricGroup[] = [
+  { agg: 'last', metrics: LAST_METRICS, covers: REQUESTS.last },
+]
+
+const values = (points: SeriesPoint[]): number[] =>
+  points.map((p) => p.value).filter((v): v is number => v !== null)
+
+const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
+
+function datesBetween(from: string, to: string): string[] {
+  const dates: string[] = []
+  const end = Date.parse(`${to}T00:00:00Z`)
+  for (let cursor = Date.parse(`${from}T00:00:00Z`); cursor <= end; cursor += 86_400_000) {
+    dates.push(new Date(cursor).toISOString().slice(0, 10))
+  }
+  return dates
+}
+
+export function Weight() {
+  const { t, i18n } = useTranslation()
+  const session = useSession()
+  const controls = usePageControls()
+  const period = `${controls.from} ${t('common.to')} ${controls.to}`
+
+  // Same reasoning as every sibling page's own sourceEnumeration: pinned to the all sources
+  // sentinel so picking a real device does not blank the selector that offers switching back.
+  const sourceEnumeration = useSeries([...LAST_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'last')
+  const sources = distinctSources([sourceEnumeration])
+  const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
+  const range = { from: controls.from, to: controls.to, source }
+  const resolved = { ...controls, source }
+
+  // The day and metric a chart's own click named, or null when no panel is open. Same single slot
+  // every other page's copy of this state uses, and the same reason: only one panel is ever open.
+  const [annotateTarget, setAnnotateTarget] = useState<AnnotateTarget | null>(null)
+  const overridesQuery = useAnnotations(range)
+  const overridesByMetricMap = useMemo(
+    () => overridesByMetric(overridesQuery.overrides.data?.items ?? []),
+    [overridesQuery.overrides.data],
+  )
+  const { dayAnnotations, dayAnnotationsByMetric } =
+    useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
+
+  const metricGroups = useMetricGroups(GROUPS, range)
+  const lastSeries = metricGroups.queryForAgg('last')
+
+  const syncStatus = useSyncStatus()
+  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
+    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
+    : null
+  const personId = session.data?.personId
+  const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
+
+  // Every calendar day in the range, the axis the sparklines below are built along as well as the
+  // denominator every basis line counts against.
+  const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
+
+  // Stable array identities for the reason every sibling page's own copy of this memo states:
+  // useChart keys its rebuild on `build`, itself a useCallback over `values`, so a freshly
+  // constructed array on every render disposes and reinitialises the chart.
+  const sparklines = useMemo(() => {
+    const out = new Map<string, { values: (number | null)[], labels: string[] }>()
+    for (const metric of LAST_METRICS) {
+      const points = metricGroups.pointsOf(metric)
+      out.set(metric, denseSeries(rangeDates, points))
+    }
+    return out
+  }, [rangeDates, lastSeries.data])
+
+  // Both cards on this page are `episodic`: a weight (or a body fat reading) is taken by hand, not
+  // sampled continuously, so a day nobody weighed in is not a data quality problem the way a gap
+  // in a wearable's own record would be (see Sparkline's own `episodic` prop comment for the full
+  // reasoning, which lives there once rather than being restated here).
+  //
+  // basisWornKey is handed the same string as basisKey, not a distinct wear-clause template:
+  // neither metric carries a tier override in packages/core/src/api/catalogue.ts, so both default
+  // to 'daily' rather than 'intraday' and coverageIsWearSignal reads neither as a wear signal.
+  // MetricCard's wear branch can therefore never fire for either, the same choice Recovery.tsx's
+  // own card() and Dashboard.tsx's sleep schedule card already make for the identical reason.
+  const card = (
+    metric: string, labelKey: string, basisKey: string, chartLabelKey: string,
+    unitKey: string, shortUnitKey: string,
+    // Defaults to the catalogue's own precision for `metric`, read through formatMetricValue: the
+    // right path for body_fat, which is a percent and needs no conversion. weight is the one call
+    // site that overrides this, the same shape Activity.tsx's distance card takes for the same
+    // reason (format.ts's own comment on formatNumber says why a converted value can never go
+    // through formatMetricValue).
+    format: (value: number) => string = (value) => formatMetricValue(value, metric, i18n.language, ''),
+    // Sparkline's own accessible table cell, separate from `format` above: `format` runs once on
+    // the period's own headline, `sparkFormat` runs once per day on `spark.values`, which stay in
+    // grams regardless of what `format` displays (Sparkline's own `formatValue` prop comment says
+    // why the chart itself never converts). Undefined for body_fat, which falls back to
+    // Sparkline's own default (`formatMetricValue(v, metric, ...)`).
+    sparkFormat?: (value: number | null, absent: string) => string,
+  ) => {
+    const points = metricGroups.pointsOf(metric)
+    const headline = mean(values(points))
+    const spark = sparklines.get(metric)!
+    const { excluded } = annotationsFor(overridesByMetricMap, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
+    return (
+      <MetricCard metric={metric} span={6} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
+        basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length }}>
+        {(basis) => (
+          <StatTile label={t(labelKey)} value={format(headline)} unit={t(shortUnitKey)}
+            basis={basis} delta={deltaFor(t, metric, values(points), 'neutral')}>
+            <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat} episodic
+              label={t(chartLabelKey, { period })} unit={t(unitKey)}
+              annotations={annotations} excluded={excluded}
+              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+          </StatTile>
+        )}
+      </MetricCard>
+    )
+  }
+
+  return (
+    <>
+      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('weight.title')}</h1>
+      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
+      <div className="grid">
+        {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.chartLabel',
+          'weight.units.kilograms', 'weight.units.kg',
+          // weight is stored in grams with precision 1 (METRICS.weight, declared in grams, the
+          // stored unit); this card displays kilograms, a precision the catalogue's own field
+          // cannot answer for a converted unit (the trap this page exists to get right, and the
+          // exact defect an M3e review caught on Activity's distance card). Converted here and
+          // handed to formatNumber directly with its own precision, never to formatMetricValue,
+          // which would apply grams' precision to a kilograms value.
+          (headline) => formatNumber(headline / 1000, 1, i18n.language, ''),
+          // Same conversion applied per day to the chart's own accessible table: the chart's y
+          // axis is hidden and a linear rescale draws an identical shape regardless of unit, so
+          // `spark.values` stays in grams (Sparkline's own `metric` prop comment says why) and
+          // only this formatter converts. `v === null` first, so a day with no reading stays a
+          // day with no reading rather than becoming a real zero-kilogram day.
+          (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent))}
+        {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.chartLabel',
+          'weight.units.percent', 'weight.units.percentShort')}
+      </div>
+      {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
+    </>
+  )
+}

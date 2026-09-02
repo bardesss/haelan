@@ -206,6 +206,25 @@
       "chartLabel": "Dagelijkse samenvatting van de zuurstofsaturatie in {{period}}"
     }
   },
+  "weight": {
+    "title": "Gewicht",
+    "units": {
+      "kilograms": "Gewicht in kilogram",
+      "kg": "kg",
+      "percent": "Percentage",
+      "percentShort": "%"
+    },
+    "weight": {
+      "label": "Gewicht",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Gewicht in {{period}}"
+    },
+    "bodyFat": {
+      "label": "Vetpercentage",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Vetpercentage in {{period}}"
+    }
+  },
   "activity": {
     "title": "Activiteit",
     "units": {

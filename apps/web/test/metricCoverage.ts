@@ -15,8 +15,16 @@ import type { SeriesPoint } from '../src/data/useSeries.js'
  * 0.9. Stating the true shape here is not tidiness: a stub that cannot express a real response
  * is a stub that hides a real defect, which is how a card claiming "device not worn" over a full
  * month of sleep survived thirteen reviews.
+ *
+ * weight and body_fat belong here too, even more so than the four provider summaries above: those
+ * are still continuous devices condensed to one daily figure, while a weight or body fat reading
+ * is entered by hand, at most a touch or two against the scale's own hour. coverageOf (derive/
+ * coverage.ts) counts distinct hours under the day's samples, so neither can reach anywhere near
+ * 0.9 in a real response either.
  */
-const ONCE_DAILY = new Set(['resting_heart_rate', 'daily_hrv', 'respiratory_rate', 'daily_spo2'])
+const ONCE_DAILY = new Set([
+  'resting_heart_rate', 'daily_hrv', 'respiratory_rate', 'daily_spo2', 'weight', 'body_fat',
+])
 
 export function coverageFor(metric: string): number | null {
   if (metric.startsWith('sleep_')) return null
