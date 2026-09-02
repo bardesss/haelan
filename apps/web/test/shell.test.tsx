@@ -2,6 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Sidebar, RAIL_PATHS } from '../src/components/Sidebar.js'
 import { ROUTES } from '../src/routes.js'
+import { Dashboard } from '../src/pages/Dashboard.js'
+import { Activity } from '../src/pages/Activity.js'
+import { Sleep } from '../src/pages/Sleep.js'
+import { Recovery } from '../src/pages/Recovery.js'
+import { Health } from '../src/pages/Health.js'
+import { Weight } from '../src/pages/Weight.js'
+import { Settings } from '../src/pages/Settings.js'
 
 describe('the navigation rail', () => {
   it('links to a real path rather than to a fragment, so a link can be opened in a new tab', () => {
@@ -32,5 +39,41 @@ describe('the route table', () => {
   // the other, leaving a route nothing links to or a rail item pointing nowhere.
   it('agrees with the rail on exactly which paths exist', () => {
     expect(new Set(RAIL_PATHS)).toEqual(new Set(ROUTES.map((r) => r.path)))
+  })
+
+  // The gap the two tests above cannot see: both compare path sets, and Shell.tsx renders
+  // whichever `.element` a matched path carries (`active.element`) rather than looking a
+  // component up by name, so a path pointing at the wrong component passes both of them and the
+  // whole rest of this suite, which mounts each page directly by importing it rather than by
+  // walking the route table. That is exactly how the rail linked to nowhere for as long as it
+  // did: nothing here pinned path to component, only path to path.
+  //
+  // `.type`, not a render: every one of these pages needs a session, a query client and often a
+  // route to render at all, and this test is only asking which component a path resolves to, not
+  // whether that component itself works (its own page test already covers that). `<Weight />`'s
+  // own `.type` is the `Weight` function reference, the exact value Shell.tsx's `active.element`
+  // carries at runtime, so comparing it here is the same check Shell.tsx's own render makes.
+  //
+  // Every path, not just `/weight`: the placeholder paths (`/nutrition`, `/notes`) are pinned to
+  // Dashboard on purpose (routes.tsx's own comment), so leaving them out would have made this
+  // test silently correct about six of nine paths and asserted nothing about the other three,
+  // which is the same "wrote a map that looks complete but resolves nothing" wound the M3e
+  // review found the last time a map like this stayed partial.
+  it('resolves every path to the page component it names, not one that merely renders', () => {
+    const byPath: Record<string, unknown> = {
+      '/': Dashboard,
+      '/activity': Activity,
+      '/sleep': Sleep,
+      '/recovery': Recovery,
+      '/health': Health,
+      '/weight': Weight,
+      '/nutrition': Dashboard,
+      '/notes': Dashboard,
+      '/settings': Settings,
+    }
+    for (const route of ROUTES) {
+      const element = route.element as { type: unknown }
+      expect(element.type, route.path).toBe(byPath[route.path])
+    }
   })
 })

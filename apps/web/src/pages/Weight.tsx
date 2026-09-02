@@ -169,8 +169,13 @@ export function Weight() {
           // Same conversion applied per day to the chart's own accessible table: the chart's y
           // axis is hidden and a linear rescale draws an identical shape regardless of unit, so
           // `spark.values` stays in grams (Sparkline's own `metric` prop comment says why) and
-          // only this formatter converts. `v === null` first, so a day with no reading stays a
-          // day with no reading rather than becoming a real zero-kilogram day.
+          // only this formatter converts. `v === null` first, and it is load-bearing even though
+          // episodic drops a genuinely silent day before this ever runs: an excluded day still
+          // reaches it (deriveDay deletes the excluded metric's own row) and so does an unweighed
+          // day carrying a day-level note or event (those reach every chart on the page regardless
+          // of metric, dayAnnotations.ts's own comment). Without the guard, `null / 1000` coerces
+          // to 0 and prints a real "0.0" on either of those rows instead of the absence word
+          // ("excluded" or "no reading") the row is meant to carry.
           (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent))}
         {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.chartLabel',
           'weight.units.percent', 'weight.units.percentShort')}
