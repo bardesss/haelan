@@ -168,8 +168,9 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     const localDate = request.params.localDate
     requireDate('localDate', localDate)
     // No existence check first, matching events' DELETE below rather than overrides' own: a note
-    // is keyed by (personId, localDate), unique on that pair (notes.ts's own schema comment), so
-    // there is no separate id in the path for a check to be scoped by the way overrides' own is.
+    // is keyed by (personId, localDate), unique on that pair (put's own comment in notes.ts names
+    // the constraint), so there is no separate id in the path for a check to be scoped by the way
+    // overrides' own is.
     // remove is already scoped by personId as well as localDate, so a day this person never wrote
     // does nothing rather than something. The response echoes localDate back under `id`, the same
     // shape events' own delete answers with, since this route never fetched the row and so never

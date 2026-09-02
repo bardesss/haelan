@@ -572,10 +572,9 @@ describe('the versioned surface, beyond the per-route table', () => {
     })
 
     // Both directions of the note write routes, the same pairing the override and event cases
-    // above use: writing into somebody else's day, and deleting out of it. Writing to another
-    // person's day is worse than reading it, so the surviving row after the DELETE attempt is the
-    // assertion that matters, since a 403 alone is also the answer a route that acted first and
-    // refused after would give.
+    // above use: writing into somebody else's day, and deleting out of it. The surviving row
+    // after the DELETE attempt is the assertion that matters, since a 403 alone is also the
+    // answer a route that acted first and refused after would give.
     it('refuses both writes against another person, and leaves their note unchanged', async () => {
       harness = await withServer()
       const token = await harness.signIn()
@@ -625,13 +624,15 @@ describe('the versioned surface, beyond the per-route table', () => {
 
     // No route in this file supplies a note id: notes carry no id-bearing write route the way
     // overrides and events do, so the note family has no equivalent of the two "own path, foreign
-    // id" cases above. But it has a different collision: NoteStore.put upserts on
-    // onConflictDoUpdate({ target: [notes.personId, notes.localDate] }) (see notes.ts), so a p1
-    // write for a date p2 also has a note for is only safe because personId is part of that
-    // conflict target. Dropping personId from it would make p1's write for a shared date update
-    // p2's row instead of inserting p1's own, and this is the only case in the file that would
-    // notice: p1's write would still answer 200 and even read back correctly through p1's own
-    // listFor if p2's row now carried p1's body, so p2's row is what has to be checked directly.
+    // id" cases above. It has two date-shaped collisions instead, one for each write route below.
+    //
+    // NoteStore.put upserts on onConflictDoUpdate({ target: [notes.personId, notes.localDate] })
+    // (see notes.ts), so a p1 write for a date p2 also has a note for is only safe because
+    // personId is part of that conflict target. Dropping personId from it would make p1's write
+    // for a shared date update p2's row instead of inserting p1's own, and the case right below
+    // is the only one in the file that would notice: p1's write would still answer 200 and even
+    // read back correctly through p1's own listFor if p2's row now carried p1's body, so p2's row
+    // is what has to be checked directly.
     it("a write for a date another person also has a note for leaves their note alone", async () => {
       harness = await withServer()
       const token = await harness.signIn()
@@ -646,6 +647,31 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(200)
       expect(notes.listFor('p1', dateOf(1), dateOf(1))).toMatchObject([{ body: 'own write on a shared date' }])
+      expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
+    })
+
+    // The DELETE half's own version of the same collision, and the load bearing one: unlike the
+    // write above, nothing here is a route guard's job to catch. requirePerson already refused a
+    // DELETE aimed at p2's own path in the case above; this one is aimed at p1's own path, fully
+    // authorised, and the only thing standing between it and every person's note for this date is
+    // eq(notes.personId, ...) inside NoteStore.remove's own WHERE (see notes.ts). Drop that clause
+    // and this case is the only one in the file that would notice: p1's own listFor would still
+    // read back empty either way, so p2's row is what has to be checked directly, the same reason
+    // the write case above reads p2's row rather than p1's.
+    it("a delete for a date another person also has a note for leaves their note alone", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const notes = harness.app.haelan.instance.notes
+      notes.put({ personId: 'p1', localDate: dateOf(1), body: 'mine', nowMs: harness.clock.nowMs })
+      notes.put({ personId: 'p2', localDate: dateOf(1), body: 'theirs', nowMs: harness.clock.nowMs })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: `/api/v1/p/p1/notes/${dateOf(1)}`,
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(200)
+      expect(notes.listFor('p1', dateOf(1), dateOf(1))).toEqual([])
       expect(notes.listFor('p2', dateOf(1), dateOf(1))).toMatchObject([{ body: 'theirs' }])
     })
   })

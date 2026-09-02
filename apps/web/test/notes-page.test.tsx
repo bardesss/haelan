@@ -320,6 +320,28 @@ describe('removing a note', () => {
     expect(rows()).toHaveLength(1)
     expect(html()).toContain('That did not remove. Try again.')
   })
+
+  // The isEvent guard on NotesList.tsx's own `removing` check, pinned directly: without it,
+  // removeNote's pending `variables.localDate` would also match an event row sharing that date,
+  // since nothing there tests which row is which. sameDayNote reuses FEVER_EVENT's own date, the
+  // same collision "keeps a note ahead of an event on the same day" above sets up.
+  it('does not mark a same day event as removing while a note delete is in flight', async () => {
+    const sameDayNote: StoredNote = { id: 'n3', localDate: FEVER_EVENT.localDate, body: 'Rough one', updatedAtMs: 0 }
+    const c = mount({ notes: [sameDayNote], events: [FEVER_EVENT] }, 200, 150)
+    await settle(c)
+    expect(rows()).toHaveLength(2)
+
+    // rows()[0] is the note: the comparator ties on localDate and Array#sort's own stability
+    // keeps noteRows, spread first in rowsFrom, ahead of the event.
+    act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await pollFor(() => rows()[0]?.querySelector('button')?.textContent === 'Removing', 'the pending note removing label')
+
+    const eventButton = rows()[1]!.querySelector('button')!
+    expect(eventButton.textContent).toBe('Remove')
+    expect(eventButton.disabled).toBe(false)
+
+    await pollFor(() => rows().length === 1, 'the removed note row to leave the table')
+  })
 })
 
 describe('the query states', () => {
