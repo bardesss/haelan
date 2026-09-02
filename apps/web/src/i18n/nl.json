@@ -187,6 +187,25 @@
       "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
     }
   },
+  "health": {
+    "title": "Gezondheid",
+    "units": {
+      "percent": "Percentage",
+      "percentShort": "%"
+    },
+    "spo2Range": {
+      "label": "Zuurstofsaturatie, bereik",
+      "basis": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen",
+      "basisWorn_one": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
+      "basisWorn_other": "dagelijks minimum, gemiddelde en maximum, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de zuurstofsaturatie in {{period}}"
+    },
+    "dailySpo2": {
+      "label": "Dagelijkse zuurstofsaturatie",
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse samenvatting van de zuurstofsaturatie in {{period}}"
+    }
+  },
   "activity": {
     "title": "Activiteit",
     "units": {

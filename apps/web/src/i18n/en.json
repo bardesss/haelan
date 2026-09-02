@@ -187,6 +187,25 @@
       "chartLabel": "Daily respiratory rate through {{period}}"
     }
   },
+  "health": {
+    "title": "Health",
+    "units": {
+      "percent": "Percent",
+      "percentShort": "%"
+    },
+    "spo2Range": {
+      "label": "Oxygen saturation range",
+      "basis": "daily minimum, mean and maximum, {{reported}} of {{total}} days",
+      "basisWorn_one": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} day not worn",
+      "basisWorn_other": "daily minimum, mean and maximum, {{reported}} of {{total}} days, {{count}} days not worn",
+      "chartLabel": "Daily oxygen saturation minimum, mean and maximum through {{period}}"
+    },
+    "dailySpo2": {
+      "label": "Daily oxygen saturation",
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Daily oxygen saturation summary through {{period}}"
+    }
+  },
   "activity": {
     "title": "Activity",
     "units": {
