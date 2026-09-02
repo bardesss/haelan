@@ -325,9 +325,13 @@ export function Activity() {
         {/* label is its own catalogue string, not activity.dailySteps.label reused: a second card
             sharing "Daily steps" would make a label lookup by exact text ambiguous, the same
             collision Dashboard.tsx's own comment on INSIGHTS explains at more length. No
-            formatValue: the heatmap's own basis line already prints a plain, unitless steps total
-            through formatMetricValue, which is exactly what InsightCard's own default does without
-            one. */}
+            formatValue: this page prints no steps total anywhere, on a tile or otherwise (the
+            daily steps card is a heatmap in a hand rolled Card, not a StatTile with its own `unit`
+            prop), so there is no sibling display carrying a unit for this card to match, unlike
+            the other four detail pages' insight cards. The one steps figure this page does format,
+            the heatmap basis line's own maxSteps (stepsBasis above), already calls
+            formatMetricValue(v, 'steps', i18n.language, '') with no unit appended either, the
+            exact call InsightCard's own default makes without a formatValue override. */}
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
           label={t('activity.insights.steps')} />
       </div>

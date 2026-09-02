@@ -37,7 +37,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatClock, formatDuration, deltaFor, formatMetricValue } from '../format.js'
+import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, deltaFor, formatMetricValue } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
 // (requireMetricAndAgg in packages/core/src/query/personQuery.ts checks every metric against
@@ -318,19 +318,13 @@ export function Dashboard() {
   // rate tile's value) rather than a unitless or wrongly-shaped number beside one that carries a
   // unit. steps carries neither below: its tile prints a plain, unitless number the same way
   // formatMetricValue already would, so it takes InsightCard's default.
+  //
+  // Both formatWithUnit and formatSignedDuration (format.ts) are shared with Sleep.tsx, Recovery.tsx,
+  // Health.tsx and Weight.tsx's own copies of these same two closures: see their own doc comments in
+  // format.ts for why a duplicated sign fix and a duplicated unit-suffix closure were the wrong home
+  // for either.
   const restingHrFormat = (value: number | null, absent: string): string =>
-    value === null ? absent : `${formatMetricValue(value, 'resting_heart_rate', i18n.language, absent)} ${t('dashboard.units.bpm')}`
-  // formatDuration was only ever fed a non-negative duration before this task: every other
-  // caller (the sleep tile's own headline value, and every call in Sleep.tsx) hands it a summed
-  // or averaged span of real time, which cannot go negative. delta can: a week where mean sleep
-  // fell by 7 minutes hands this -7, and formatDuration's own Math.floor(total / 60) paired with
-  // a sign-carrying total % 60 (both go negative independently for a negative input) printed that
-  // as "-1h -7m", not the single leading minus a duration reads as. Negating before the call and
-  // reapplying the sign after (`-${formatDuration(-value)}`) prints "-0h 07m" for the same -7
-  // instead. Fixed here, at the one caller that can receive a negative value, rather than inside
-  // formatDuration itself, which stays correct for every other caller exactly as it already was.
-  const sleepFormat = (value: number | null, absent: string): string =>
-    value === null ? absent : value < 0 ? `-${formatDuration(-value)}` : formatDuration(value)
+    formatWithUnit(value, absent, (v) => formatMetricValue(v, 'resting_heart_rate', i18n.language, ''), t('dashboard.units.bpm'))
 
   // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago". Null
   // rather than zero when no run has ever finished: the row has its own copy for that now, and
@@ -592,7 +586,7 @@ export function Dashboard() {
         <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
           label={t('dashboard.insights.restingHr')} formatValue={restingHrFormat} />
         <InsightCard insight={sleepInsight.data} query={sleepInsight} metric="sleep_asleep_minutes" span={4}
-          label={t('dashboard.insights.sleep')} formatValue={sleepFormat} />
+          label={t('dashboard.insights.sleep')} formatValue={formatSignedDuration} />
 
         {/* basisKey and basisWornKey are the same string here on purpose: this card's basis is a
             four way choice driven by the baseline's own validity (unknown, absent, thin, real),

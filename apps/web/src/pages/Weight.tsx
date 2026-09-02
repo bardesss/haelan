@@ -22,7 +22,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
+import { deltaFor, formatMetricValue, formatNumber, formatWithUnit } from '../format.js'
 
 // weight and body_fat both carry `aggs: ['last', 'mean']` in packages/core/src/derive/metrics.ts;
 // this page only ever asks for 'last', the same REQUESTS/under('agg') shape every sibling page
@@ -117,11 +117,14 @@ export function Weight() {
   // The trap this whole page exists to get right, restated for the insight card: METRICS.weight
   // declares precision 1 in grams, the stored unit, and the headline above converts to kilograms
   // through formatNumber directly rather than formatMetricValue (see card()'s own comment and
-  // format.ts's own comment on formatNumber for why a converted value can never reach it). The
-  // insight card needs the identical conversion, plus the "kg" suffix the headline carries through
-  // StatTile's own `unit` prop, which InsightCard's default has no way to add on its own.
+  // format.ts's own comment on formatNumber for why a converted value can never reach it).
+  // formatWithUnit (format.ts) supplies the "kg" suffix the headline carries through StatTile's
+  // own `unit` prop, which InsightCard's default has no way to add on its own, the same shared
+  // closure Dashboard.tsx, Recovery.tsx and Health.tsx's own copies of this card use; only the
+  // `format` callback here differs from theirs, since this is the one call site that converts a
+  // unit rather than reading the catalogue's stored one.
   const weightInsightFormat = (value: number | null, absent: string): string =>
-    value === null ? absent : `${formatNumber(value / 1000, 1, i18n.language, absent)} ${t('weight.units.kg')}`
+    formatWithUnit(value, absent, (v) => formatNumber(v / 1000, 1, i18n.language, ''), t('weight.units.kg'))
 
   // Both cards on this page are `episodic`: a weight (or a body fat reading) is taken by hand, not
   // sampled continuously, so a day nobody weighed in is not a data quality problem the way a gap

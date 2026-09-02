@@ -374,9 +374,11 @@ describe('the Activity page', () => {
   })
 
   // Task 4's own insight card. No formatValue on this one, unlike its siblings on Sleep, Recovery,
-  // Health and Weight: the daily steps heatmap's own basis line already prints a plain, unitless
-  // steps total through formatMetricValue, exactly what InsightCard's own default does without a
-  // formatValue override, so there is no unit or duration gap for a formatter to close here.
+  // Health and Weight: this page prints no steps total anywhere on a tile carrying a unit (the
+  // daily steps card is a heatmap in a hand rolled Card, not a StatTile), so there is no unit or
+  // duration gap for a formatter to close the way there is on the other four pages. Asserted here
+  // as a plain, ungrouped-by-thousands-only number: formatMetricValue('steps') groups by locale
+  // ("8,342"), which is InsightCard's own default without a formatValue override.
   it('states the steps insight as a plain number, with no unit suffix', async () => {
     window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
     const restore = stubActivity([], { current: 8342, previous: 7910, delta: 432 })

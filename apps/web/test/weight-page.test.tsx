@@ -197,29 +197,24 @@ describe('the Weight page', () => {
   // Task 4's own trap, restated for the insight card: METRICS.weight.precision is 1, declared in
   // grams, and this card displays kilograms, so it must never reach formatMetricValue (which
   // would read the stored unit's precision against an already converted number and print
-  // "81,200.0"). The card's own formatValue converts and formats through formatNumber with its
+  // "81,200.0 kg"). The card's own formatValue converts and formats through formatNumber with its
   // own precision instead, the same conversion the headline above already makes.
   //
-  // toContain('81.2 kg'), not a bare '81.2': the tile beside this card carries a "kg" suffix
-  // through StatTile's own unit prop, and without weightInsightFormat's own appended unit this
-  // card would read unitless beside it.
+  // not.toContain('81,200'), not a bare '81200': the wrong path's own output groups thousands
+  // ("81,200.0 kg", toLocaleString's own comma), so a check for the ungrouped digit string would
+  // never actually appear in either path's output and would pass whether the conversion was right
+  // or wrong -- exactly the kind of assertion that never fires. Confirmed by hand: swapping
+  // weightInsightFormat in Weight.tsx for `(v, absent) => formatMetricValue(v, 'weight', ...)`
+  // failed this test with "Received: 81,200.0 kg on average ..." where it expects to contain
+  // "81.2 kg", then reverted.
   it('shows the weight insight in kilograms, not the stored grams', async () => {
     await mount(<Weight />, {}, undefined, [], [], { current: 81_200, previous: 81_900, delta: -700 })
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
     const summary = card?.querySelector('.insight-summary')?.textContent
     expect(summary).toContain('81.2 kg')
-    expect(summary).not.toContain('81200')
     expect(summary).not.toContain('81,200')
   })
-
-  // Confirms the trap actually bites: routing the same fixture through formatMetricValue (weight's
-  // stored-unit precision, 1 decimal in grams) rather than the page's own conversion prints
-  // "81,200.0 kg", which still contains "81.2" as a bare substring and so would have passed a
-  // looser assertion. Verified by hand rather than left as a standing test: swapping
-  // weightInsightFormat in Weight.tsx for `(v, absent) => formatMetricValue(v, 'weight', ...)`
-  // failed this file's own test above with "Received: 81,200.0 kg on average ..." where it
-  // expects to contain "81.2 kg", confirmed and reverted.
 
   // The other half of the brief's own note: weight will suppress often, and correctly, because a
   // seven day window frequently holds too few of the household's 130 readings across 236 days.

@@ -34,7 +34,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
+import { formatDuration, formatSignedDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
@@ -349,16 +349,6 @@ export function Sleep() {
   const napCountTotal = sum(values(metricGroups.pointsOf('sleep_nap_count')))
   const napMinutesTotal = sum(values(metricGroups.pointsOf('sleep_nap_minutes')))
 
-  // formatDuration was only ever fed a non-negative duration before this task: every other caller
-  // on this page hands it a summed or averaged span of real time, which cannot go negative. An
-  // insight's delta can: a week where mean sleep fell hands this a negative number, and
-  // formatDuration's own Math.floor(total / 60) paired with a sign-carrying total % 60 would print
-  // that as two minus signs ("-1h -7m") rather than one on the whole duration. Negating before the
-  // call and reapplying the sign after prints one leading minus instead, the same fix
-  // Dashboard.tsx's own sleepFormat makes for its own sleep insight card, at the one caller here
-  // that can receive a negative value.
-  const asleepInsightFormat = (value: number | null, absent: string): string =>
-    value === null ? absent : value < 0 ? `-${formatDuration(-value)}` : formatDuration(value)
 
   return (
     <>
@@ -441,11 +431,13 @@ export function Sleep() {
         {/* label is its own catalogue string, not sleep.asleepMinutes.label ("Time asleep")
             reused: a second card sharing that exact text would make a label lookup by exact text
             ambiguous, the same collision Dashboard.tsx's own comment on INSIGHTS explains at more
-            length. formatValue is asleepInsightFormat, not the bare default: the time asleep tile
-            above already reads through formatDuration, and without this the card would print raw
-            minutes beside a tile that reads "7h 00m". */}
+            length. formatValue is formatSignedDuration (format.ts), not the bare default: the time
+            asleep tile above already reads through formatDuration, and without this the card would
+            print raw minutes beside a tile that reads "7h 00m"; formatSignedDuration is also what
+            keeps a negative delta (a period where mean sleep fell) from printing two minus signs,
+            shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
-          label={t('sleep.insights.asleepMinutes')} formatValue={asleepInsightFormat} />
+          label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

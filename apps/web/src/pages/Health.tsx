@@ -24,7 +24,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor, formatMetricValue } from '../format.js'
+import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
 
 // Two cards is a slight page, and the reason is not that there is little here worth measuring:
 // electrocardiogram, core-body-temperature, blood-glucose and irregular-rhythm-notification are
@@ -174,12 +174,11 @@ export function Health() {
   // card above already requests (REQUESTS.last). /insights is its own, unbatched request, so this
   // is one call added on top of the five requests above (LAST_METRICS plus spo2's own four).
   const dailySpo2Insight = useInsight('daily_spo2', 'last', { from: controls.from, to: controls.to }, source)
-  // The daily summary card above carries a "%" suffix through StatTile's own `unit` prop, which
-  // InsightCard's default formatMetricValue call does not add on its own: without this, the
-  // insight card would read unitless beside a tile that carries one, the same gap Dashboard.tsx's
-  // own restingHrFormat closes for resting heart rate's identically shaped card.
+  // The daily summary card above carries a "%" suffix through StatTile's own `unit` prop;
+  // formatWithUnit (format.ts) is the shared closure that appends it, the same one Dashboard.tsx,
+  // Recovery.tsx and Weight.tsx's own copies of this card use.
   const dailySpo2InsightFormat = (value: number | null, absent: string): string =>
-    value === null ? absent : `${formatMetricValue(value, 'daily_spo2', i18n.language, absent)} ${t('health.units.percentShort')}`
+    formatWithUnit(value, absent, (v) => formatMetricValue(v, 'daily_spo2', i18n.language, ''), t('health.units.percentShort'))
 
   // The milestone's own deliverable ("SpO2 with interval and count", spec section 4): the day's
   // reading count belongs in the basis line, not only in the tooltip and the accessible table it

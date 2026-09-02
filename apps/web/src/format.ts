@@ -46,6 +46,29 @@ export function formatMetricValue(value: number | null, metric: string, language
 }
 
 /**
+ * `(value, absent) => string`, `InsightCard`'s own `formatValue` shape, for an insight card whose
+ * tile carries a unit through `StatTile`'s own `unit` prop. That prop's rendering
+ * (`StatTile.tsx`'s `<span> {unit}</span>`) puts a space before the unit, which this matches, so
+ * an insight sentence built from the returned string reads the same as the tile beside it rather
+ * than unitless.
+ *
+ * `format` is the caller's own non-null formatter, not a metric id: some callers read the
+ * catalogue's stored-unit precision through `formatMetricValue` (resting heart rate, daily SpO2),
+ * and one converts to a displayed unit first through `formatNumber` (weight's grams to kilograms,
+ * `formatMetricValue`'s own comment says why that path can never go through it), so this stays
+ * agnostic between the two rather than picking one.
+ *
+ * First extracted here after the identical `value === null ? absent : \`${...} ${unit}\`` closure
+ * appeared at four separate call sites (Dashboard's resting heart rate card, and Recovery's,
+ * Health's and Weight's own copies of it) with no shared owner.
+ */
+export function formatWithUnit(
+  value: number | null, absent: string, format: (value: number) => string, unit: string,
+): string {
+  return value === null ? absent : `${format(value)} ${unit}`
+}
+
+/**
  * A local calendar date (`YYYY-MM-DD`, no time component) as the reader's own locale would write
  * it, e.g. "Aug 10, 2026" in English. `OverrideList.tsx`'s own date column is this app's one other
  * user facing date and takes the same `dateStyle: 'medium'` shape; this is the plain-date form of
@@ -65,6 +88,28 @@ export function formatLocalDate(date: string, language: string): string {
 export function formatDuration(minutes: number): string {
   const total = Math.round(minutes)
   return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}m`
+}
+
+/**
+ * formatDuration for a value that can be negative, which formatDuration itself was never written
+ * to take: every other caller in this app (a tile's own headline, a chart's baseline note) hands
+ * it a summed or averaged span of real time, which cannot go negative. An insight's delta can — a
+ * period where the mean fell hands this a negative number — and formatDuration's own
+ * Math.floor(total / 60) paired with a sign-carrying total % 60 (JavaScript's % keeps the
+ * dividend's sign) puts the minus on both halves independently: -7 comes out "-1h -7m", not the
+ * single leading minus a duration reads as. Negating before the call and reapplying the sign after
+ * prints "-0h 07m" for the same -7 instead.
+ *
+ * Takes `absent` directly, the exact `(value, absent) => string` shape `InsightCard`'s own
+ * `formatValue` prop expects, so a caller with nothing more to add can pass this function itself
+ * rather than writing a one-line wrapper around it. First extracted here after the identical
+ * closure, each carrying its own copy of this comment, drifted onto two pages (Dashboard's own
+ * sleep card and Sleep's own asleep card) with no shared owner: a future fix to one was not a fix
+ * to the other.
+ */
+export function formatSignedDuration(value: number | null, absent: string): string {
+  if (value === null) return absent
+  return value < 0 ? `-${formatDuration(-value)}` : formatDuration(value)
 }
 
 // Wrapped into the day before splitting, and wrapped in the direction that survives a negative.

@@ -25,7 +25,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor, formatMetricValue } from '../format.js'
+import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
 // Recovery is one request: resting_heart_rate, daily_hrv and respiratory_rate are all `aggs:
@@ -231,11 +231,12 @@ export function Recovery() {
   }
 
   // The resting heart rate card above carries a "bpm" suffix through StatTile's own `unit` prop,
-  // which InsightCard's default formatMetricValue call does not add on its own: without this, the
-  // insight card would read unitless beside a tile that carries one, the same gap Dashboard.tsx's
-  // own restingHrFormat closes for its copy of this card.
+  // which InsightCard's default formatMetricValue call does not add on its own; formatWithUnit
+  // (format.ts) is the shared closure that appends it, the same one Dashboard.tsx, Health.tsx and
+  // Weight.tsx's own copies of this card use, rather than a fourth local closure identical but for
+  // the metric and the unit key.
   const restingHrInsightFormat = (value: number | null, absent: string): string =>
-    value === null ? absent : `${formatMetricValue(value, 'resting_heart_rate', i18n.language, absent)} ${t('recovery.units.bpm')}`
+    formatWithUnit(value, absent, (v) => formatMetricValue(v, 'resting_heart_rate', i18n.language, ''), t('recovery.units.bpm'))
 
   return (
     <>
