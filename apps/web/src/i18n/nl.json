@@ -77,6 +77,13 @@
     "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
     "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
   },
+  "insightCard": {
+    "summary": "{{current}} over {{currentFrom}} tot {{currentTo}}, tegenover {{previous}} in de vorige periode, {{previousFrom}} tot {{previousTo}}, een verandering van {{delta}}",
+    "thinCoverage": {
+      "title": "Onvoldoende dekking van het apparaat om samen te vatten",
+      "detail": "Dit apparaat heeft niet genoeg van deze dagen geregistreerd om ze te vergelijken. Vaker dragen dicht dit gat, langer wachten niet."
+    }
+  },
   "dashboard": {
     "title": "Dashboard",
     "units": {
