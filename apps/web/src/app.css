@@ -239,19 +239,16 @@ body {
    OverrideList.tsx for the same report after a removal, not copied under a second name. */
 .annotate-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
 
-/* The overrides management list (OverrideList.tsx): every correction and exclusion the person has
-   written, across all three scopes, the only surface a sample or session scoped override is ever
-   visible from. Row rhythm borrowed from .setup-progress's own list rather than invented fresh. */
+/* The overrides management list (OverrideList.tsx) and the notes and events list
+   (pages/notes/NotesList.tsx): both a table with a row per record and a remove control, so both
+   render this same class rather than each keeping its own copy of one row rhythm. Row rhythm
+   borrowed from .setup-progress's own list rather than invented fresh. */
 .override-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
 .override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .override-table tbody tr:last-child td { border-bottom: 0; }
 
-/* The notes and events list (Notes.tsx): the same row rhythm as .override-table above, kept as
-   its own class rather than shared because a value cell here needs its own alignment
-   (.notes-value below) that an override row never carries. */
-.notes-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
-.notes-table th, .notes-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
-.notes-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
-.notes-table tbody tr:last-child td { border-bottom: 0; }
+/* NotesList.tsx only: an override row carries no numeric value cell, so neither of these has an
+   override counterpart to share with. */
 .notes-value { text-align: right; font-variant-numeric: tabular-nums; }
+.notes-remove-unavailable { color: var(--text-faint); font-size: var(--font-size-xs); }

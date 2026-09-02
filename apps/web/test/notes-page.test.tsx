@@ -9,7 +9,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Notes } from '../src/pages/Notes.js'
 import type { StoredEvent, StoredNote } from '../src/data/useAnnotations.js'
-import { flush } from './flush.js'
+import { flush, pumpUntil } from './flush.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -130,7 +130,7 @@ describe('interleaving notes and events', () => {
     expect(markup.indexOf('2026-08-16')).toBeLessThan(markup.indexOf('2026-08-14'))
   })
 
-  it('shows a note\'s day and body, with no kind and no remove control', async () => {
+  it('shows a note\'s day and body, with no kind and no remove button, only the unavailable label', async () => {
     const c = mount({ notes: [SLEPT_BADLY_NOTE] })
     await settle(c)
 
@@ -140,6 +140,7 @@ describe('interleaving notes and events', () => {
     expect(kind).toBe('')
     expect(text).toBe('Slept badly')
     expect(row.querySelector('button')).toBeNull()
+    expect(row.querySelector('.notes-remove-unavailable')?.textContent).toBe('Not removable yet')
   })
 
   it('shows an event\'s translated kind, its own note and its value', async () => {
@@ -154,6 +155,23 @@ describe('interleaving notes and events', () => {
     expect(value).toBe('38.5')
   })
 
+  it('names every column header, including the visually hidden remove column', async () => {
+    const c = mount({ events: [FEVER_EVENT] })
+    await settle(c)
+
+    const headers = [...container!.querySelectorAll('thead th')] as HTMLTableCellElement[]
+    expect(headers.map((h) => h.textContent)).toEqual(['Date', 'Kind', 'Text', 'Value', 'Remove'])
+  })
+
+  it('gives an event\'s remove button its own text and an aria-label naming the row', async () => {
+    const c = mount({ events: [FEVER_EVENT] })
+    await settle(c)
+
+    const button = rows()[0]!.querySelector('button')!
+    expect(button.textContent).toBe('Remove')
+    expect(button.getAttribute('aria-label')).toBe('Remove Illness, 2026-08-16')
+  })
+
   it('prints an event kind past the seed set exactly as typed, not translated', async () => {
     const c = mount({ events: [{ ...FEVER_EVENT, kind: 'root canal' }] })
     await settle(c)
@@ -161,6 +179,19 @@ describe('interleaving notes and events', () => {
     const row = rows()[0]!
     const [, kind] = cells(row)
     expect(kind).toBe('root canal')
+  })
+
+  // The brief names this case directly and the comparator's own stability is what answers it:
+  // localeCompare on two ISO dates never returns 0 for two different ids sharing a day, so this
+  // pins the order Array#sort's own stability guarantees for a tie, not the comparator's ordering
+  // of distinct days (already covered above).
+  it('keeps a note ahead of an event on the same day', async () => {
+    const sameDayNote: StoredNote = { id: 'n2', localDate: '2026-08-16', body: 'Rough one', updatedAtMs: 0 }
+    const c = mount({ notes: [sameDayNote], events: [FEVER_EVENT] })
+    await settle(c)
+
+    const bodies = rows().map((row) => cells(row)[2])
+    expect(bodies).toEqual(['Rough one', 'Fever'])
   })
 })
 
@@ -171,9 +202,18 @@ describe('removing an event', () => {
     expect(rows()).toHaveLength(1)
 
     act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await flush(c, html)
-
+    // Two targeted waits, not flush(): flush() reads "nothing in flight" as settled only after it
+    // has itself observed something in flight first, which by the time a second flush() call
+    // starts here has usually already come and gone (the DELETE and the refetch it invalidates
+    // both resolve inside pumpUntil's own polling below), so a second flush() call spins to its
+    // own ceiling reading a page that looks like it never started. pumpUntil has no such state to
+    // lose: it just asks its own condition on every tick, so it is safe to call twice in a row and
+    // each call fails on the one thing it was actually waiting for, DELETE first and then the row
+    // leaving, rather than both collapsing into one generic "did not settle".
+    await pumpUntil(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
     expect(sent.map((r) => r.method)).toContain('DELETE')
+    await pumpUntil(() => rows().length === 0, 'the removed row to leave the table')
+
     expect(rows()).toHaveLength(0)
   })
 
@@ -182,7 +222,8 @@ describe('removing an event', () => {
     await settle(c)
 
     act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await flush(c, html)
+    await pumpUntil(() => sent.some((r) => r.method === 'DELETE'), 'the event DELETE request to go out')
+    await pumpUntil(() => html().includes('That did not remove. Try again.'), 'the removal failed message to render')
 
     expect(rows()).toHaveLength(1)
     expect(html()).toContain('That did not remove. Try again.')

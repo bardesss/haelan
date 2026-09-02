@@ -9,10 +9,10 @@ import { Loading } from '../../components/Loading.js'
 import { EmptyState } from '../../components/EmptyState.js'
 
 /**
- * One row of the list, a note or an event flattened to the same shape. `kind` is null for a note,
- * which carries none; `eventId` is null for the same reason in reverse, and is what the remove
- * column below tests to decide whether a row gets a button at all (see its own comment on the
- * remove cell for why a note row never does).
+ * One row of the list, a note or an event flattened to the same shape. `kind` and `eventId` are
+ * both null for a note row, for the same reason: a note carries neither on the wire. `eventId` is
+ * what the remove cell below tests to decide whether a row gets a button at all (see the
+ * `NotesList` docblock for why a note row never does).
  */
 interface Row {
   id: string
@@ -32,9 +32,14 @@ function kindLabel(t: Translate, kind: string): string {
 
 /**
  * Notes and events for the range, one row per item, newest day first. Two lists rather than one
- * merged query (useAnnotations issues them separately already), flattened once here rather than
- * inside the render so a re-render that changed neither list does not rebuild the array identity
- * for nothing.
+ * merged query (useAnnotations issues them separately already), flattened and sorted once here
+ * and memoised by the caller on the two query results, so a render that changed neither does not
+ * redo the flatten-and-sort work below on every keystroke elsewhere on the page (the range picker,
+ * a pending remove).
+ *
+ * `localeCompare` on two ISO dates sorts lexically, which is chronological for this format, and
+ * `Array#sort` is stable per spec, so two rows sharing a day keep their relative order: a note
+ * always precedes an event on the same day, since `noteRows` is spread first below.
  */
 function rowsFrom(t: Translate, notes: readonly StoredNote[], events: readonly StoredEvent[]): Row[] {
   const noteRows: Row[] = notes.map((n) => (
@@ -66,12 +71,13 @@ function formatEventValue(value: number, language: string): string {
  * pages/settings/OverrideList.tsx already uses for the identical reason (Settings.tsx stays a thin
  * shell around it).
  *
- * The remove control only ever appears on an event row. useRemoveEvent has a real route behind it
+ * A remove button only ever appears on an event row. useRemoveEvent has a real route behind it
  * (DELETE /events/:eventId) and this is its first caller; NoteStore.remove exists in core with the
  * same gap this page closes for events, but no HTTP route calls it anywhere in this build, so a
  * note row has nothing this page could send a removal request to. Rendering a button that only
  * ever hid a row locally would be exactly the failure this task exists to rule out, so a note row
- * gets none.
+ * gets `notes.removeUnavailable` instead: said on the row, not left for a reader to guess at from
+ * a table where some rows can be removed and others silently cannot.
  *
  * Neither removal reports `applied`: a note or an event changes no derived number the way an
  * override does (useAnnotations.ts's own comment on invalidateResource), so there is no drain to
@@ -101,7 +107,7 @@ export function NotesList({ range }: { range: AnnotationRange }) {
         : rows.length === 0 ? (
           <EmptyState title={t('notes.empty.title')} detail={t('notes.empty.detail')} />
         ) : (
-          <table className="notes-table">
+          <table className="override-table">
             <caption className="sr-only">{t('notes.list.title')}</caption>
             <thead>
               <tr>
@@ -124,13 +130,16 @@ export function NotesList({ range }: { range: AnnotationRange }) {
                       {row.value === null ? '' : formatEventValue(row.value, i18n.language)}
                     </td>
                     <td>
-                      {row.eventId !== null && (
+                      {row.eventId !== null ? (
                         <button type="button" className="button"
                           aria-label={t('notes.removeAria', { kind: row.kind, date: row.localDate })}
                           disabled={removing}
                           onClick={() => removeEvent.mutate({ eventId: row.eventId! })}>
                           {removing ? t('notes.removing') : t('notes.remove')}
                         </button>
+                      ) : (
+                        // A note row: see the docblock above for why it gets this instead of a button.
+                        <span className="notes-remove-unavailable">{t('notes.removeUnavailable')}</span>
                       )}
                     </td>
                   </tr>

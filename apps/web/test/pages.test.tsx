@@ -351,7 +351,12 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   // this list with Settings (M3c-12): AnnotatePanel's own keys never reach this file's settled,
   // no-click renders, but a page with settings.* copy now does, and a namespace absent here is a
   // namespace this test cannot see break. health joined with Health, weight joined with Weight,
-  // notes joined with Notes, the same reason every time.
+  // the same reason both times. notes joined with Notes too, but this stub answers notes and
+  // events empty, so Notes settles into its own empty state here and this alternation only ever
+  // sees notes.title, notes.list.title and notes.empty.*: a typo in notes.columns.*, notes.remove,
+  // notes.removing or notes.removeAria ships green through this file regardless. Those render only
+  // once rows exist, so notes-page.test.tsx is where they are actually pinned, the same way this
+  // file leaves AnnotatePanel's own click-triggered keys to annotate-panel.test.tsx.
   //
   // [a-zA-Z0-9], not [a-zA-Z]: a key path segment can carry a digit (health.spo2Range,
   // health.dailySpo2, charts.spo2Tooltip all do), and the letters-only class could not see past

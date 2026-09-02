@@ -577,7 +577,8 @@
     "remove": "Remove",
     "removing": "Removing",
     "removeAria": "Remove {{kind}}, {{date}}",
-    "removeFailed": "That did not remove. Try again."
+    "removeFailed": "That did not remove. Try again.",
+    "removeUnavailable": "Not removable yet"
   },
   "settings": {
     "title": "Settings",

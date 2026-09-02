@@ -577,7 +577,8 @@
     "remove": "Verwijderen",
     "removing": "Bezig met verwijderen",
     "removeAria": "Verwijder {{kind}}, {{date}}",
-    "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw."
+    "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
+    "removeUnavailable": "Nog niet te verwijderen"
   },
   "settings": {
     "title": "Instellingen",
