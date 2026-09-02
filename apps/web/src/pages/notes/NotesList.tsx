@@ -32,9 +32,9 @@ function kindLabel(t: Translate, kind: string): string {
 
 /**
  * Notes and events for the range, one row per item, newest day first. Two lists rather than one
- * merged query, since useAnnotations already issues them separately. Memoised by the caller on
- * the two query results, so a render triggered by something else (the range picker, a pending
- * remove) does not redo the flatten and sort below.
+ * merged query, since useAnnotations already issues them separately. Memoised on its inputs, so
+ * a render triggered by something else (a pending remove) does not redo the flatten and sort
+ * below.
  *
  * The comparator reads `localDate` alone, so two rows sharing a day tie (`localeCompare` returns
  * 0), and `Array#sort`'s own stability then keeps `noteRows`, spread first, ahead of the events.

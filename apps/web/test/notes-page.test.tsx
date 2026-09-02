@@ -236,8 +236,10 @@ describe('removing an event', () => {
 
   it('shows the removing label while the request is in flight, then removes the row', async () => {
     // A real delay on the DELETE response, or the pending state below has no window to be
-    // observed at all: the stub otherwise resolves inside one microtask.
-    const c = mount({ events: [FEVER_EVENT] }, 200, 50)
+    // observed at all: the stub otherwise resolves inside one microtask. 150ms rather than a
+    // thinner margin, since pollFor samples at roughly 16ms of real cost on this machine and a
+    // hosted CI runner is not guaranteed to be as fast.
+    const c = mount({ events: [FEVER_EVENT] }, 200, 150)
     await settle(c)
 
     act(() => { rows()[0]!.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
