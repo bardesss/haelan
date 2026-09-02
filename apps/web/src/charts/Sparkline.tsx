@@ -38,7 +38,7 @@ const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
-  values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick,
+  values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick, episodic = false,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -92,6 +92,14 @@ export function Sparkline({
   annotations?: { date: string; text: string }[]
   excluded?: string[]
   onPointClick?: (localDate: string) => void
+  // False everywhere but Weight: default false is what keeps every chart already on a page reading
+  // exactly as it did before this prop existed. A metric taken by hand (weight: 130 readings across
+  // 236 days) has no data quality problem on a day nobody weighed in, unlike Activity, Sleep or
+  // Recovery, so this mode connects the line across the gap instead of breaking it and drops those
+  // same gap days from the accessible table rather than rowing them as "no reading". It leaves the
+  // exclusion and annotation marks alone: those still name something the reader did, not a day the
+  // device stayed quiet on.
+  episodic?: boolean
 }) {
   const { t, i18n } = useTranslation()
 
@@ -107,7 +115,7 @@ export function Sparkline({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
     yAxis: { type: 'value' as const, show: false, scale: true },
-    series: [{ type: 'line' as const, data: values, showSymbol: false, connectNulls: false,
+    series: [{ type: 'line' as const, data: values, showSymbol: false, connectNulls: episodic,
       lineStyle: { width: STROKE.sparkline, color: tokens.series },
       // Same markArea shape HeartRateRange draws its band with: a rectangle between two y values,
       // unbounded on x, so it sits behind the line regardless of how many points there are.
@@ -130,7 +138,7 @@ export function Sparkline({
         // beside it and in the panel a click on this mark reopens.
         data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
           ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } }],
-  }), [values, baseline, marks])
+  }), [values, baseline, marks, episodic])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = sparklinePointDate(labels, marks, event)
@@ -143,25 +151,34 @@ export function Sparkline({
       <ChartFigure label={label} host={host} style={style}
         table={{
           columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
-          rows: values.map((v, i) => {
-            const date = labels[i] ?? String(i)
-            const isExcluded = excluded.includes(date)
-            // "excluded", not "no reading", for a day the reader threw out: there was a reading,
-            // and the day is blank because of something they did rather than because the device
-            // never reported. "no reading" is the honest cell only for the second of those.
-            const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-            const cell = formatValue ? formatValue(v, absent) : formatMetricValue(v, metric, i18n.language, absent)
-            return [date, cell,
-              [isExcluded ? t('charts.absence.excluded') : '',
-                // filter, not find: several annotations (an override reason, a note, an event) can
-                // land on the same date now that day level marks join the per-metric ones, and a
-                // single find() here would silently show only the first and drop the rest.
-                // ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate (base.ts) reads the
-                // same constant, so a table cell and a canvas label built from the same annotations
-                // array cannot drift apart on separator alone.
-                annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
-                .filter(Boolean).join(ANNOTATION_JOIN)]
-          }),
+          // Filtered before the map, not after: under episodic a day with nothing taken is not a
+          // row this table states anything about, so it is dropped rather than rowed with a "no
+          // reading" cell the spec says would train a reader to ignore what that phrase means on
+          // every other chart. An excluded day still has its own note to carry, but it too has no
+          // value left once the exclusion applies, so it drops out on the same rule; nothing about
+          // this filter special-cases it back in.
+          rows: values
+            .map((v, i) => [v, i] as const)
+            .filter(([v]) => !episodic || v !== null)
+            .map(([v, i]) => {
+              const date = labels[i] ?? String(i)
+              const isExcluded = excluded.includes(date)
+              // "excluded", not "no reading", for a day the reader threw out: there was a reading,
+              // and the day is blank because of something they did rather than because the device
+              // never reported. "no reading" is the honest cell only for the second of those.
+              const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
+              const cell = formatValue ? formatValue(v, absent) : formatMetricValue(v, metric, i18n.language, absent)
+              return [date, cell,
+                [isExcluded ? t('charts.absence.excluded') : '',
+                  // filter, not find: several annotations (an override reason, a note, an event) can
+                  // land on the same date now that day level marks join the per-metric ones, and a
+                  // single find() here would silently show only the first and drop the rest.
+                  // ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate (base.ts) reads the
+                  // same constant, so a table cell and a canvas label built from the same annotations
+                  // array cannot drift apart on separator alone.
+                  annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
+                  .filter(Boolean).join(ANNOTATION_JOIN)]
+            }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can

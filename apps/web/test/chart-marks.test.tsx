@@ -207,6 +207,100 @@ describe('Sparkline', () => {
     expect(rows).not.toContain('charts.absence.excluded')
   })
 
+  // Weight's own reason (spec section 5): 130 readings across 236 days, and not weighing on a
+  // Tuesday is not a data quality problem the way a missing Activity or Sleep day is. `episodic`
+  // is the opt in that says so; every other caller leaves it unset and must see the chart it has
+  // always seen, which is what the second test below pins.
+  describe('episodic', () => {
+    it('connects across empty days and lists only real readings when episodic', () => {
+      const html = render(
+        <Sparkline values={[81.2, null, 80.9]} labels={['2026-08-14', '2026-08-15', '2026-08-16']}
+          label="Weight" unit="kg" metric="weight" episodic annotations={[]} excluded={[]} />,
+      )
+      const rows = table(html)
+      // Two rows, not three: the day with no reading is not a row this table states anything about.
+      expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(2)
+      expect(rows).toContain('<th scope="row">2026-08-14</th>')
+      expect(rows).toContain('<th scope="row">2026-08-16</th>')
+      expect(rows).not.toContain('2026-08-15')
+    })
+
+    // The one that matters: this pins that the default (no `episodic` prop, every existing caller)
+    // has not moved. Every chart on Activity, Sleep and Recovery renders through this same
+    // component, so a default that quietly started dropping "no reading" rows would silently
+    // thin every one of their accessible tables too.
+    it('still lists every day and marks absence when not episodic', () => {
+      const html = render(
+        <Sparkline values={[81.2, null]} labels={['2026-08-14', '2026-08-15']}
+          label="Weight" unit="kg" metric="weight" annotations={[]} excluded={[]} />,
+      )
+      const rows = table(html)
+      expect([...rows.matchAll(/<th scope="row">/g)]).toHaveLength(2)
+      expect(rows).toContain('<th scope="row">2026-08-15</th>')
+      expect(rows).toContain('charts.absence.noReading')
+    })
+
+    // The canvas and the table asserted against each other, not each against its own literal: the
+    // series still spans the dense axis (episodic drops table rows, never plotted positions) and
+    // `connectNulls` flips with the prop rather than always being on or always being off.
+    describe('the option object the canvas actually draws', () => {
+      function seriesOf(): { data: unknown[], connectNulls: boolean } {
+        const stub = chartStubs.at(-1)!
+        const option = stub.setOption.mock.calls[0]![0] as { series: { data: unknown[], connectNulls: boolean }[] }
+        return option.series[0]!
+      }
+
+      it('sets connectNulls true and keeps every day\'s own position when episodic', () => {
+        act(() => {
+          root!.render(
+            <Sparkline values={[81.2, null, 80.9]} labels={['2026-08-14', '2026-08-15', '2026-08-16']}
+              label="Weight" unit="kg" metric="weight" episodic annotations={[]} excluded={[]} />,
+          )
+        })
+        const series = seriesOf()
+        expect(series.connectNulls).toBe(true)
+        // Dense, not thinned to the two real readings: the table above drops the empty row, the
+        // plotted series does not, which is the split the spec calls "the table lists only days
+        // carrying an actual reading" against "a continuous line ... on a dense date axis".
+        expect(series.data).toHaveLength(3)
+      })
+
+      it('leaves connectNulls false when episodic is not set, the default this task must not move', () => {
+        act(() => {
+          root!.render(
+            <Sparkline values={[81.2, null, 80.9]} labels={['2026-08-14', '2026-08-15', '2026-08-16']}
+              label="Weight" unit="kg" metric="weight" annotations={[]} excluded={[]} />,
+          )
+        })
+        expect(seriesOf().connectNulls).toBe(false)
+      })
+    })
+
+    // useChart (useChart.ts) disposes and reinitialises its echarts instance whenever `build`'s own
+    // identity changes, keyed on nothing else, so a prop `build` reads but omits from its own
+    // useCallback dependency array would leave a stale option in place instead of a redraw: exactly
+    // the failure mode chart-lifecycle.test.tsx guards against for every other dependency. `episodic`
+    // has no page wired to it yet (Weight lands in a later task), so this is the one place that
+    // proves it is threaded through, by mounting the same chart twice and toggling only that prop.
+    it('disposes and reinitialises the chart when episodic changes, and leaves it alone when it does not', () => {
+      const props = { values: [81.2, null, 80.9], labels: ['2026-08-14', '2026-08-15', '2026-08-16'],
+        label: 'Weight', unit: 'kg', metric: 'weight', annotations: [], excluded: [] }
+      act(() => { root!.render(<Sparkline {...props} />) })
+      expect(chartStubs).toHaveLength(1)
+
+      // Same props, episodic newly true: a real chart tear-down and rebuild, not the same instance
+      // redrawn in place.
+      act(() => { root!.render(<Sparkline {...props} episodic />) })
+      expect(chartStubs).toHaveLength(2)
+      expect(chartStubs[1]!.dispose).not.toHaveBeenCalled()
+      expect(chartStubs[0]!.dispose).toHaveBeenCalled()
+
+      // Same props again, episodic still true: nothing `build` reads has changed, so no new instance.
+      act(() => { root!.render(<Sparkline {...props} episodic />) })
+      expect(chartStubs).toHaveLength(2)
+    })
+  })
+
   // The precision audit's finding #3: this table's value cell used to render `v` (a raw
   // number|null straight off /series) directly, and Recovery.tsx's own resting_heart_rate,
   // daily_hrv and respiratory_rate cards all drive this exact component with metrics the audit
