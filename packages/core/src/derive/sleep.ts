@@ -115,13 +115,18 @@ export interface SleepSegmentLike {
   endMs: number
 }
 
-/**
- * The measured values of `sleep.stages[].type`, in probe/findings/field-map.md. A value outside
- * this set counts toward neither asleep nor awake: calling it asleep would inflate the night and
- * calling it awake would deflate it, and inventing either is worse than reporting what we know.
- */
-export const ASLEEP_STAGES: readonly string[] = ['DEEP', 'LIGHT', 'REM']
-export const AWAKE_STAGE = 'AWAKE'
+// The API's discovery document declares the sleep stage enum as AWAKE, DEEP, LIGHT, REM, ASLEEP,
+// RESTLESS. ASLEEP and RESTLESS are the classic, non-staged model, carried by sessions whose
+// attrs.type is CLASSIC rather than STAGES. Which side each falls on is the provider's own
+// arithmetic and not a judgement: a classic payload reporting stagesSummary [ASLEEP 116,
+// RESTLESS 10] also reports minutesAsleep 116 and minutesAwake 10.
+//
+// The M0 probe recorded four of the six, because four is what its sample happened to contain, and
+// the two it missed were silently discarded from every night that had them. A value outside all
+// six still counts toward neither asleep nor awake: calling it asleep would inflate the night and
+// calling it awake would deflate it, and inventing either is worse than reporting what we know.
+export const ASLEEP_STAGES: readonly string[] = ['DEEP', 'LIGHT', 'REM', 'ASLEEP']
+export const AWAKE_STAGES: readonly string[] = ['AWAKE', 'RESTLESS']
 
 /**
  * A day's sleep sessions and their segments to `daily` rows, for one source.
@@ -177,7 +182,7 @@ export function deriveSleepDay(input: {
     // measurement behind any of them. No segments is not zero segments either, since the staging
     // can fail, which attrs.stagesStatus reports, and a zero would claim the person lay awake
     // all night.
-    const recognised = staged.filter((s) => ASLEEP_STAGES.includes(s.stage) || s.stage === AWAKE_STAGE)
+    const recognised = staged.filter((s) => ASLEEP_STAGES.includes(s.stage) || AWAKE_STAGES.includes(s.stage))
     if (recognised.length > 0) {
       const msByStage = (stage: string) => staged
         .filter((seg) => seg.stage === stage)
@@ -193,8 +198,11 @@ export function deriveSleepDay(input: {
       // reader sees add up to the asleep figure printed beside them.
       const asleep = ASLEEP_STAGES.reduce((total, stage) => total + minutesOfStage(stage), 0)
       // The time between two pieces is time out of bed, and it counts against the night exactly
-      // as an AWAKE stage inside one session does. One rounding across both.
-      const awake = asMinutes(msByStage(AWAKE_STAGE) + gapMsWithin(night))
+      // as an AWAKE or RESTLESS stage inside one session does. Summed from the constant for the
+      // same reason the asleep total is. One rounding across both.
+      const awake = asMinutes(
+        AWAKE_STAGES.reduce((total, stage) => total + msByStage(stage), 0) + gapMsWithin(night),
+      )
 
       push('sleep_deep_minutes', 'sum', deep)
       push('sleep_light_minutes', 'sum', light)

@@ -338,6 +338,46 @@ describe('deriveSleepDay', () => {
     expect(rows.every((r) => r.coverage === null)).toBe(true)
   })
 
+  // The discovery document declares six stage values, not four. The two extra are the classic,
+  // non-staged model, and two real nights recorded time in bed with no sleep measurement at all
+  // because every segment they had was one of these.
+  it('counts an ASLEEP segment as asleep and a RESTLESS segment as awake', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 126 * MIN })], [
+      seg('n', 'ASLEEP', BEDTIME, BEDTIME + 116 * MIN),
+      seg('n', 'RESTLESS', BEDTIME + 116 * MIN, BEDTIME + 126 * MIN),
+    ])
+    // The provider's own arithmetic on this exact night: minutesAsleep 116, minutesAwake 10.
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(116)
+    expect(valueOf(rows, 'sleep_awake_minutes')).toBe(10)
+  })
+
+  // A classic night is measurable and must stop being treated as unmeasurable. Before this it
+  // wrote sleep_in_bed_minutes and nothing else at all.
+  it('writes a full measurement for a night made only of classic stages', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 60 * MIN })], [
+      seg('n', 'ASLEEP', BEDTIME, BEDTIME + 60 * MIN),
+    ])
+    // Proves the session reached the night branch (and was not filed as a nap) before trusting
+    // the asleep and efficiency figures that follow: a single session on the day is always the
+    // only group assembleNights has to choose from, so it lands as the night regardless of its
+    // length, but the figures below would only tell us "no measurement" either way if it hadn't.
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(60)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(60)
+    expect(valueOf(rows, 'sleep_efficiency')).toBe(100)
+  })
+
+  // The guard that predates this stays exactly as it was. A stage outside all six is still
+  // outside the vocabulary, and a night made only of those still writes no measurement rather
+  // than six zeros, because a zero would claim the person lay awake all night.
+  it('still writes no measurement for a night whose stages are outside the vocabulary', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 60 * MIN })], [
+      seg('n', 'SOMETHING_NEW', BEDTIME, BEDTIME + 60 * MIN),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(60)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_efficiency')).toBeUndefined()
+  })
+
   it('does not depend on the order the rows arrived in', () => {
     const sessions = [
       session({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 5 * H }),

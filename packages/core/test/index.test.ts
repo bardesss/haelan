@@ -217,7 +217,7 @@ describe('package barrel', () => {
       expect(typeof core.deriveSleepDay).toBe('function')
       expect(typeof core.DEFAULT_NIGHT_GAP_MINUTES).toBe('number')
       expect(Array.isArray(core.ASLEEP_STAGES)).toBe(true)
-      expect(typeof core.AWAKE_STAGE).toBe('string')
+      expect(Array.isArray(core.AWAKE_STAGES)).toBe(true)
     })
 
     it('exports the merge across sources and the sleep metric family', () => {
