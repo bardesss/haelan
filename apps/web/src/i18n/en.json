@@ -412,6 +412,9 @@
       "thinned": "{{from}} readings thinned to {{to}} points",
       "full": "these {{count}} points are the readings"
     },
+    "hypnogram": {
+      "awakeNote": "Awake counts the awake stages drawn above and nothing else. The night's own awake minutes also count restless time and the gaps between the night's separate pieces, so that figure reads higher."
+    },
     "singleDayNote": "A single day has no trend to plot.",
     "bandToggle": {
       "hide": "Hide daily range",

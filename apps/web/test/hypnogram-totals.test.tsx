@@ -69,6 +69,40 @@ describe('Hypnogram', () => {
     expect(totalsRowText(html)).toBe('sleep.stage.deep 0h 20m, sleep.stage.light 0h 40m')
   })
 
+  // The Awake tile and this row describe one night and can legitimately disagree:
+  // sleep_awake_minutes is AWAKE plus RESTLESS plus gapMsWithin (packages/core/src/derive/
+  // sleep.ts), while this row sums the AWAKE segments the chart above actually drew, so the tile
+  // is the larger figure on any multi-piece night. Two numbers for one night with nothing saying
+  // which is which is the defect; naming what this one counts is the fix, and it is stated only on
+  // a night that has an awake total to be read the wrong way.
+  it('says what its own awake total counts, on a night that has one', () => {
+    const html = renderToStaticMarkup(
+      <Hypnogram
+        segments={[
+          { stage: 'light', startMs: 0, endMs: 30 * 60_000 },
+          { stage: 'awake', startMs: 30 * 60_000, endMs: 45 * 60_000 },
+        ]}
+        startLabel="Bed 23:20" label="Sleep stages through the night of 2026-08-15"
+      />,
+    )
+    expect(totalsRowText(html)).toBe(
+      'sleep.stage.light 0h 30m, sleep.stage.awake 0h 15m charts.hypnogram.awakeNote',
+    )
+  })
+
+  // The other half, and the reason the clause is conditional rather than always printed: a night
+  // with no awake segment has nothing here for a tile to disagree with, and a standing caveat
+  // about a figure that is not on the row would be noise on every such night.
+  it('leaves the clause off a night with no awake total at all', () => {
+    const html = renderToStaticMarkup(
+      <Hypnogram
+        segments={[{ stage: 'light', startMs: 0, endMs: 30 * 60_000 }]}
+        startLabel="Bed 23:20" label="Sleep stages through the night of 2026-08-15"
+      />,
+    )
+    expect(totalsRowText(html)).toBe('sleep.stage.light 0h 30m')
+  })
+
   // Review round 1's own Critical: Sleep.tsx and Dashboard.tsx used to round each segment
   // boundary to a whole minute before Hypnogram ever saw it, so a stage's total was built from
   // rounded boundaries rather than from the real spans they measured. That is no longer possible

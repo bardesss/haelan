@@ -32,6 +32,15 @@ const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
  * function's own single rounding is the only rounding a stage's total goes through, so it agrees
  * with derive/sleep.ts's minutesOfStage exactly: both sum the same raw segments the same way.
  *
+ * That agreement is with minutesOfStage, which is not the same thing as agreement with every
+ * sleep_*_minutes metric derived from it. It holds outright for deep, light and REM, whose metrics
+ * are minutesOfStage and nothing more. It does not hold for awake: sleep_awake_minutes is AWAKE
+ * plus RESTLESS plus gapMsWithin (derive/sleep.ts), the time between a night's separate pieces, so
+ * on any multi-piece night, or any night carrying a RESTLESS segment, that metric is legitimately
+ * larger than the awake total this function returns. Neither figure is wrong; they count different
+ * things, and the totals row below says which one it is showing rather than leaving a reader to
+ * find a card beside it disagreeing.
+ *
  * Exported so a test can drive it directly against the exact shape it sums, independent of
  * whatever unit Hypnogram's own `segments` prop happens to carry its boundaries in.
  */
@@ -111,6 +120,17 @@ export function Hypnogram({ segments, startLabel, label }: {
     .filter((stage) => minutesByStage.has(stage))
     .map((stage) => `${t(STAGE_LABEL_KEY[stage])} ${formatDuration(minutesByStage.get(stage)!)}`)
     .join(ANNOTATION_JOIN)
+  // Said out loud, only on a night that actually has an awake total to be read the wrong way.
+  //
+  // The awake entry above is the one figure in this row that a metric card on the same page can
+  // legitimately disagree with: sleep_awake_minutes counts RESTLESS segments and the gaps between
+  // a night's separate pieces on top of the AWAKE segments this chart draws (derive/sleep.ts, and
+  // stageTotals' own comment above), so the tile is the larger number on any multi-piece night.
+  // The alternative was to drop awake from this row entirely, which was rejected: the awake lane
+  // is drawn directly above, and a drawn lane with no total is its own inconsistency. Naming what
+  // this total counts keeps both figures and makes the difference between them readable instead of
+  // leaving a reader to find two numbers for one night and no way to tell which is which.
+  const awakeNote = minutesByStage.has('awake') ? ` ${t('charts.hypnogram.awakeNote')}` : ''
 
   return (
     <>
@@ -132,7 +152,7 @@ export function Hypnogram({ segments, startLabel, label }: {
           invented zeros would claim a measurement that was never taken, so this states the
           absence instead. */}
       <p className="hypnogram-totals">
-        {totals.length === 0 ? t('charts.absence.notStaged') : totalsRow}
+        {totals.length === 0 ? t('charts.absence.notStaged') : `${totalsRow}${awakeNote}`}
       </p>
     </>
   )
