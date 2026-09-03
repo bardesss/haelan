@@ -4,6 +4,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
@@ -215,12 +216,18 @@ export function Health() {
           query={{ isError: spo2Failed, isPending: spo2Pending, refetch: retrySpo2 }}
           points={meanSpo2Points}
           basisKey="health.spo2Range.basis" basisWornKey="health.spo2Range.basisWorn"
-          basisValues={{ total: rangeDates.length, readings: spo2Readings }}>
-          {() => (
+          basisValues={{ total: rangeDates.length, readings: spo2Readings }}
+          oneDayRange={controls.tab === 'day'}>
+          {/* The whole of `children` is the chart here, the same shape Dashboard's own sleep
+              schedule card takes, so the swap happens at the top level rather than inside a
+              StatTile. With from === to this card's daily series holds at most one row, and what
+              Spo2Range drew for it was a single dot standing in for the "daily minimum, mean and
+              maximum" its own label promises across a period. */}
+          {(_basis, oneDayRange) => (oneDayRange ? <ChartNote /> : (
             <Spo2Range days={spo2Days} annotations={spo2Annotations} excluded={spo2Overrides.excluded}
               label={t('health.spo2Range.chartLabel', { period })}
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'spo2' })} />
-          )}
+          ))}
         </MetricCard>
 
         {/* basisWornKey is handed the same string as basisKey, not a distinct wear-clause template:
@@ -232,16 +239,22 @@ export function Health() {
         <MetricCard metric="daily_spo2" span={4} basisPlacement="body"
           query={metricGroups.queryFor('daily_spo2')} points={dailySpo2Points}
           basisKey="health.dailySpo2.basis" basisWornKey="health.dailySpo2.basis"
-          basisValues={{ total: rangeDates.length }}>
-          {(basis) => (
+          basisValues={{ total: rangeDates.length }}
+          oneDayRange={controls.tab === 'day'}>
+          {/* Inside the StatTile, not around it, the same shape every sibling page's own card()
+              takes: the value, its delta and the basis line are all still right on a one day
+              range, and only the sparkline that would draw a single dot is swapped out. */}
+          {(basis, oneDayRange) => (
             <StatTile label={t('health.dailySpo2.label')}
               value={formatMetricValue(dailySpo2Headline, 'daily_spo2', i18n.language, '')}
               unit={t('health.units.percentShort')} basis={basis}
               delta={deltaFor(t, 'daily_spo2', values(dailySpo2Points), 'higher-is-better')}>
-              <Sparkline values={dailySpo2Spark.values} labels={dailySpo2Spark.labels} metric="daily_spo2"
-                label={t('health.dailySpo2.chartLabel', { period })} unit={t('health.units.percent')}
-                annotations={dailySpo2Annotations} excluded={dailySpo2Overrides.excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'daily_spo2' })} />
+              {oneDayRange ? <ChartNote /> : (
+                <Sparkline values={dailySpo2Spark.values} labels={dailySpo2Spark.labels} metric="daily_spo2"
+                  label={t('health.dailySpo2.chartLabel', { period })} unit={t('health.units.percent')}
+                  annotations={dailySpo2Annotations} excluded={dailySpo2Overrides.excluded}
+                  onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'daily_spo2' })} />
+              )}
             </StatTile>
           )}
         </MetricCard>

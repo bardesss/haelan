@@ -145,7 +145,8 @@
       "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
       "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
       "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
-      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
+      "intradayChartLabel": "Hartslag tijdens de dag van {{date}}"
     },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
@@ -372,7 +373,10 @@
       "night": "Nacht",
       "toBed": "Naar bed",
       "woke": "Ontwaakt",
-      "naps": "Dutjes"
+      "naps": "Dutjes",
+      "time": "Tijd",
+      "source": "Bron",
+      "trend": "Trend"
     },
     "weekday": {
       "mon": "Ma",
@@ -387,7 +391,8 @@
       "notWorn": "niet gedragen",
       "noReading": "geen meting",
       "excluded": "uitgesloten",
-      "none": "geen"
+      "none": "geen",
+      "notStaged": "Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen."
     },
     "hrTooltip": {
       "mean": "gemiddeld {{value}} bpm",
@@ -402,6 +407,18 @@
     "event": {
       "withNote": "{{kind}}: {{note}}",
       "multiDay": "{{kind}}, gestart"
+    },
+    "intradayBasis": {
+      "thinned": "{{from}} metingen teruggebracht tot {{to}} punten",
+      "full": "deze {{count}} punten zijn de metingen"
+    },
+    "hypnogram": {
+      "awakeNote": "Wakker telt alleen de wakkere fasen die hierboven getekend zijn. De wakkere minuten van de nacht tellen daarnaast onrustige tijd en de gaten tussen de losse delen van de nacht mee, dus dat getal ligt hoger."
+    },
+    "singleDayNote": "Eén dag laat geen trend zien.",
+    "bandToggle": {
+      "hide": "Dagbereik verbergen",
+      "show": "Dagbereik tonen"
     }
   },
   "sleep": {

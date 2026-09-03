@@ -5,6 +5,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
 import { EmptyState } from '../components/EmptyState.js'
@@ -16,7 +17,7 @@ import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
-import { localMinutesOf, inWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
+import { localMinutesOf, inWindow, napInWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
@@ -218,24 +219,63 @@ export function Sleep() {
   const nightItems = nights.data?.items ?? EMPTY_NIGHTS
   const lastNight = useMemo(() => oneNightPerDate(nightItems).at(-1) ?? null, [nightItems])
 
+  // startMs/endMs stay raw milliseconds from the night's own start, not rounded to a minute here:
+  // Hypnogram's own stageTotals sums these to build the totals row beneath the chart, and rounding
+  // each boundary to a minute before that sum ran let the two roundings (a boundary, then a total)
+  // compound into several minutes of drift against derive/sleep.ts's own single-rounded figure.
+  // See Hypnogram.tsx's own comment on its `segments` prop for the mechanism.
   const hypnogramSegments = useMemo(() => (lastNight === null ? [] : lastNight.segments
     .map((s) => ({
       stage: stageOf(s.stage),
-      from: Math.round((s.startMs - lastNight.startMs) / 60_000),
-      to: Math.round((s.endMs - lastNight.startMs) / 60_000),
+      startMs: s.startMs - lastNight.startMs,
+      endMs: s.endMs - lastNight.startMs,
     }))
-    .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)), [lastNight])
-  // Inherits the same nap contamination Dashboard.tsx's own startLabel comment documents:
-  // lastNight.startMs is the earliest instant across every session sharing this night's date and
-  // source, so a 13:00 nap sharing the date still becomes this label's "Bed 13:00" rather than the
-  // real bedtime. Known, not fixed here, the same reason Dashboard leaves it: a clean label needs
-  // this on the same sleep_bedtime_minutes derived value the schedule chart below now uses, which
-  // is more than a single clock reading beside a hypnogram needs.
+    .filter((s): s is { stage: Stage, startMs: number, endMs: number } => s.stage !== null)), [lastNight])
+  // The night's own start, which is the bedtime: readSleepNights splits each date through
+  // assembleNights, so lastNight.startMs is where the night began and not merely the earliest
+  // instant sharing its date, and an afternoon nap on that date sits in `naps` instead. This
+  // label used to read "Bed 13:00" for exactly that nap, which is why it is worth saying what
+  // feeds it now. Still computed from the night's instants rather than deferred to
+  // sleep_bedtime_minutes, the way the schedule card below reads its bed times: the hypnogram
+  // beside this label is drawn from those same instants, and a label sourced from anywhere else
+  // could disagree with the bar it labels.
   const lastNightBedMinutes = lastNight === null
     ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes), WIDE_WINDOW)
   const hypnogramStartLabel = lastNightBedMinutes !== null
     ? t('common.bedLabel', { time: formatClock(lastNightBedMinutes) })
     : t('common.bedTimeNotRecorded')
+
+  // Nap clock times, the one thing this card cannot get from a metric: sleep_nap_count and
+  // sleep_nap_minutes carry a count and a duration, never a time of day, so the markers come off
+  // /sleep/nights (already fetched above for the hypnogram) while bed and wake stay on the two
+  // derived metrics below. The two agree on one condition, not by construction: readSleepNights
+  // splits each date through the same assembleNights that sleep_bedtime_minutes and
+  // sleep_waketime_minutes are pushed from, so a night's span there and the pair here are the same
+  // group and the naps are exactly what that group excluded, but only while nightGapMinutes is the
+  // same on both sides of that split. readSleepNights reads the instance's own setting at query
+  // time and says why in its own words ("a night assembled at one gap and read back at another is
+  // two different nights", packages/core/src/query/sleepNights.ts); the metrics were pushed at
+  // whatever gap was in force when the derivation last ran. Change that setting without a rebuild
+  // and this card's bed, wake and naps stop describing one grouping, which is a stale derivation
+  // rather than a defect here, and not something this page can detect.
+  //
+  // endOffsetMinutes, not startOffsetMinutes: a night starts the evening before the date it
+  // belongs to, and a nap falls on the date itself, the same side of midnight as the wake, so the
+  // wake end's offset is the one in force when the nap started.
+  //
+  // Raw minutes from that date's own midnight, not yet placed on any axis: which axis position a
+  // nap takes depends on the shift the night on its row was drawn with, which lives in
+  // scheduleNights below (napInWindow, and its own comment in schedule.ts for why inWindow is the
+  // wrong function here and was off by a full day for every afternoon nap).
+  const napsByDate = useMemo(() => {
+    const out = new Map<string, number[]>()
+    for (const night of oneNightPerDate(nightItems)) {
+      out.set(night.localDate, night.naps.map(
+        (ms) => localMinutesOf(night.localDate, ms, night.endOffsetMinutes),
+      ))
+    }
+    return out
+  }, [nightItems])
 
   // Sleep schedule: sleep_bedtime_minutes and sleep_waketime_minutes (already fetched above, as
   // part of LAST_METRICS), not /sleep/nights. Dashboard.tsx's own schedule card comment explains
@@ -246,7 +286,11 @@ export function Sleep() {
   // directly here, the way an earlier version of this card did, widened the axis enough to draw a
   // nap-contaminated span with confidence instead of suppressing it as no data: a real 23:20 to
   // 07:05 night sharing its local date with an unrelated 13:00-17:00 nap drew as a single, wrong,
-  // 17h40 "night" spanning bed to the nap's own end. Stays outside MetricCard even so: two metrics
+  // 17h40 "night" spanning bed to the nap's own end. That span is the night alone now, so the
+  // choice is no longer forced; the pair stays because it is the same value the eleven cards
+  // around this one already read, one request rather than two answering for one chart.
+  //
+  // Stays outside MetricCard even so: two metrics
   // zipped by date is not one metric's own points array, the same reasoning Dashboard's own
   // schedule card states for why it hands MetricCard a concatenation rather than one metric name
   // (its basisPlacement differs from this page's hand rolled Card only in which component owns the
@@ -266,12 +310,24 @@ export function Sleep() {
       // inside the wide window's 2880 one, see withinSchedule and schedule.test.ts for the general
       // case). That is a defensible corner on Dashboard's compact card and the wrong trade on the
       // page whose entire subject is sleep.
-      const { bed, wake } = withinSchedule(
-        bedPoint ? bedPoint.value : null, wakePoint ? wakePoint.value : null, WIDE_WINDOW,
-      )
-      return { date, bed, wake, naps: EMPTY_NAPS }
+      const bedRaw = bedPoint ? bedPoint.value : null
+      const wakeRaw = wakePoint ? wakePoint.value : null
+      const { bed, wake } = withinSchedule(bedRaw, wakeRaw, WIDE_WINDOW)
+      // EMPTY_NAPS for a date /sleep/nights reported no night for at all, which is a date this
+      // list can only reach through a bedtime metric whose own sessions would have produced one.
+      // Every other date's naps are shifted into the frame this row's own night was drawn in, off
+      // the raw bedtime (or the raw wake time, when only that one answered) rather than off the
+      // placed pair: withinSchedule nulls both out for a night this window cannot hold, and the
+      // naps on such a row are still real times of day that belong beside its absence mark.
+      const napsRaw = napsByDate.get(date)
+      return {
+        date, bed, wake,
+        naps: napsRaw === undefined
+          ? EMPTY_NAPS
+          : napsRaw.map((raw) => napInWindow(raw, bedRaw ?? wakeRaw, WIDE_WINDOW)),
+      }
     })
-  }, [bedtimePoints, waketimePoints])
+  }, [bedtimePoints, waketimePoints, napsByDate])
   // Nights actually drawn, not nights fetched: withinSchedule nulls out any night this window
   // cannot place honestly and SleepSchedule draws those as its own absence mark, so counting dates
   // would claim a bed and wake time for a row that shows neither. Same reasoning as Dashboard's own
@@ -329,14 +385,17 @@ export function Sleep() {
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
+        oneDayRange={controls.tab === 'day'}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
-        {(basis) => (
+        {(basis, oneDayRange) => (
           <StatTile label={label} value={value} unit={shortUnit} basis={basis}
             delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels} metric={metric}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
-              annotations={annotations} excluded={excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            {oneDayRange ? <ChartNote /> : (
+              <Sparkline values={spark.values} labels={spark.labels} metric={metric}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            )}
           </StatTile>
         )}
       </MetricCard>
@@ -378,11 +437,12 @@ export function Sleep() {
           )}
         </Card>
         {/* Gated on lastSeries, the 'last' agg group sleep_bedtime_minutes/sleep_waketime_minutes
-            ride in, not on the nights query the hypnogram card above uses: this card no longer
-            reads /sleep/nights at all (see scheduleNights' own comment for why). showNaps=false
-            because neither of those two metrics nor any other metric this page reads gives a nap
-            its own clock time, only a duration (sleep_nap_minutes, already its own card below), so
-            a naps column here could not be filled with anything this data actually knows.
+            ride in, not on the nights query: bed and wake come from that pair, and a card that
+            can draw them should not sit behind a second request that only adds the nap markers.
+            showNaps follows that second request rather than being fixed either way, because the
+            naps column states that a check was made: with the nights query still in flight or
+            failed there are no nap times to have checked, and a column of "none" would claim
+            otherwise for every night in the range.
             axisWindow is the wide one: see scheduleNights' own comment for why. */}
         <Card span={5} label={t('sleep.sleepSchedule.label')}
           basis={lastSeries.isError || scheduleNights.length === 0
@@ -392,7 +452,7 @@ export function Sleep() {
             : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
-            <SleepSchedule nights={scheduleNights} showNaps={false} axisWindow={WIDE_WINDOW}
+            <SleepSchedule nights={scheduleNights} showNaps={nights.isSuccess} axisWindow={WIDE_WINDOW}
               label={t('common.bedWakeChartLabel', { period })} />
           )}
         </Card>

@@ -4,6 +4,9 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+// The same entry point useChart.ts initialises charts through, so getInstanceByDom below finds the
+// instance that file created rather than looking in a second, unrelated registry.
+import * as echarts from 'echarts/core'
 import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -73,14 +76,17 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
 // sleep_waketime_minutes, not /sleep/nights, see Sleep.tsx's own scheduleNights comment for why),
 // and the hypnogram has no reason to change shape from test to test.
 const HYPNOGRAM_NIGHT_DATE = '2026-08-15'
-function hypnogramNightsResponse(): unknown {
-  const wakeMidnight = Date.parse(`${HYPNOGRAM_NIGHT_DATE}T00:00:00Z`)
-  const startMs = wakeMidnight - 40 * 60_000 // 23:20 the day before
-  const endMs = wakeMidnight + 425 * 60_000 // 07:05
+const NIGHT_MIDNIGHT = Date.parse(`${HYPNOGRAM_NIGHT_DATE}T00:00:00Z`)
+// The route's own `naps` field: nap start instants, outside startMs..endMs by construction, since
+// readSleepNights puts in the span only what assembleNights kept as the night. Empty by default,
+// which is the shape every test here but the naps column one wants.
+function hypnogramNightsResponse(naps: number[] = []): unknown {
+  const startMs = NIGHT_MIDNIGHT - 40 * 60_000 // 23:20 the day before
+  const endMs = NIGHT_MIDNIGHT + 425 * 60_000 // 07:05
   return {
     items: [{
       localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
-      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0,
+      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps,
       segments: [{ stage: 'LIGHT', startMs, endMs }],
     }],
     cursor: null,
@@ -133,6 +139,10 @@ function stubSleep(
   // call sites already pass insightOverrides positionally, and a param inserted ahead of it would
   // have silently reinterpreted every one of those as this one instead.
   baseline: BaselineStub = null,
+  // The nights row's own naps, for the schedule card's naps column. Appended at the end for the
+  // same reason `baseline` above was: several call sites already pass the earlier parameters
+  // positionally.
+  naps: number[] = [],
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -155,7 +165,7 @@ function stubSleep(
       }
       return json(body)
     }
-    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse())
+    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse(naps))
     if (url.includes('/baselines')) {
       return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline })
     }
@@ -261,6 +271,44 @@ function stubSleepEfficiency(efficiency: number): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * `/sleep/nights` with a single night carrying exactly the `segments` handed in, at real
+ * millisecond instants (not `hypnogramNightsResponse`'s own fixed one-segment night), for the
+ * review round 1 regression test below: that test needs boundaries on the provider's actual 30
+ * second grid, which `hypnogramNightsResponse` has no parameter for. Every other route answers
+ * the same way `stubSleep`'s own default does (420 per metric, no baseline).
+ */
+function stubSleepHalfMinuteBoundaries(segments: { sessionId: string, stage: string, startMs: number, endMs: number }[]): () => void {
+  const original = globalThis.fetch
+  const nightStartMs = NIGHT_MIDNIGHT - 40 * 60_000
+  const nightEndMs = segments.at(-1)?.endMs ?? nightStartMs
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      return json(Object.fromEntries(
+        metrics.map((metric) => [metric, { points: [seriesPoint(metric, '2026-08-15', 420)], reduction: null }]),
+      ))
+    }
+    if (url.includes('/sleep/nights')) {
+      return json({
+        items: [{
+          localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
+          startMs: nightStartMs, endMs: nightEndMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps: [],
+          segments,
+        }],
+        cursor: null,
+      })
+    }
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Sleep page', () => {
   // The shape that produced M3d-1's Critical: sleep rows carry a null coverage because a night
   // has no samples underneath it, and reading that as zero rendered "device not worn" over a
@@ -337,6 +385,89 @@ describe('the Sleep page', () => {
     const scheduleTable = tables.find((table) => table.textContent?.includes('22:00'))
     expect(scheduleTable, tables.map((t) => t.textContent).join('\n---\n')).toBeDefined()
     expect(scheduleTable!.textContent).not.toContain('charts.absence.noReading')
+    restore()
+  })
+
+  // A new column rather than a changed value: SleepSchedule has drawn naps as a scatter series
+  // with its own table column since it was written, and this card passed showNaps=false because
+  // none of the metrics it reads knows when a nap started (sleep_nap_count and sleep_nap_minutes
+  // are a count and a duration). /sleep/nights knows, now that readSleepNights splits each date
+  // into the night and what did not join it, so the column appears and carries the nap's own
+  // clock time.
+  it('fills the schedule naps column from /sleep/nights, rather than claiming none', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [NIGHT_MIDNIGHT + 870 * 60_000])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const tables = [...container!.querySelectorAll('table.sr-only')]
+    const scheduleTable = tables.find((table) => table.textContent?.includes('charts.columns.naps'))
+    expect(scheduleTable, tables.map((t) => t.textContent).join(' | ')).toBeDefined()
+    expect(scheduleTable!.textContent).toContain('14:30')
+    expect(scheduleTable!.textContent).not.toContain('charts.absence.none')
+    restore()
+  })
+
+  // The plotted number, read off the chart's own echarts option, because the table above cannot
+  // tell the defect apart from the fix: formatClock is mod 1440 (format.ts), so a nap drawn at 870
+  // and the same nap drawn at 2310 both print "14:30" in that cell, and the naps-column test above
+  // passed unchanged against a marker sitting a full day left of the bar it belongs to.
+  //
+  // 2310 is the assertion: this row's night is bed -40, wake 425, which withinSchedule places at
+  // 1400 and 1865 by moving the pair one whole day forward into the axis frame, so the 14:30 nap
+  // that followed that morning's wake belongs at 870 + 1440 in the same frame, to the right of the
+  // bar. The pre-fix code passed the nap through inWindow, which adds a day only below the
+  // window's own noon and so left 870 alone (see napInWindow's own comment in schedule.ts).
+  //
+  // getOption(), not the SVG: echarts draws to an SVG host happy-dom applies no stylesheet to, so
+  // there is no geometry here to measure, and the option is the last place the number appears
+  // before it becomes a coordinate.
+  it('plots an afternoon nap in its own night\'s frame, not a day to the left of it', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [NIGHT_MIDNIGHT + 870 * 60_000])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const host = container!.querySelector<HTMLDivElement>('div[role="img"][aria-label="common.bedWakeChartLabel"]')
+    expect(host, container!.innerHTML).not.toBeNull()
+    const option = echarts.getInstanceByDom(host!)?.getOption() as
+      { series?: { type?: string, data?: unknown }[] } | undefined
+    const scatter = (option?.series ?? []).find((series) => series.type === 'scatter')
+    expect(scatter, JSON.stringify(option?.series?.map((s) => s.type))).toBeDefined()
+    expect(scatter!.data).toEqual([[0, 2310]])
+    restore()
+  })
+
+  // Review round 1's own Critical: hypnogramSegments used to round each boundary
+  // (Math.round((s.startMs - lastNight.startMs) / 60_000)) to a whole minute before handing it to
+  // Hypnogram, which then summed those already-rounded boundaries for the totals row. The
+  // provider reports sleep on a 30 second grid, so every boundary offset here is an exact multiple
+  // of half a minute, and JS's Math.round never rounds a positive .5 down, so the old rounding was
+  // a deterministic bias rather than noise that could cancel across a night.
+  //
+  // Ten 90 second segments, alternating LIGHT/DEEP: true total per stage is 5 * 1.5 = 7.5 minutes,
+  // which a single rounding takes to 8. The old boundary-rounding read LIGHT as 10m and DEEP as 5m
+  // instead, worked by hand from the rounded boundaries 0,2,3,5,6,8,9,11,12,14,15 (minutes from
+  // night start): LIGHT's five segments 0-2, 3-5, 6-8, 9-11, 12-14 sum to 10; DEEP's five 2-3,
+  // 5-6, 8-9, 11-12, 14-15 sum to 5. Run against the pre-fix Sleep.tsx and Hypnogram.tsx (the
+  // version committed in 71cc06a), this test fails: the totals row read "Light 0h 10m, Deep 0h
+  // 05m" rather than "Deep 0h 08m, Light 0h 08m". See task-5-report.md's fix section for that
+  // output.
+  it('totals a night built from half minute segment boundaries to its true duration, not one inflated by rounding each boundary first', async () => {
+    const nightStartMs = NIGHT_MIDNIGHT - 40 * 60_000
+    const boundaries = Array.from({ length: 11 }, (_, i) => nightStartMs + i * 90_000)
+    const segments = boundaries.slice(0, -1).map((startMs, i) => ({
+      sessionId: 's1', stage: i % 2 === 0 ? 'LIGHT' : 'DEEP', startMs, endMs: boundaries[i + 1]!,
+    }))
+    const restore = stubSleepHalfMinuteBoundaries(segments)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    // Scoped to the totals row itself, not the whole page: the accessible table right above it
+    // legitimately prints "0h 05m" and "0h 10m" as segment boundary times (a "to" cell reads the
+    // clock offset a segment ended at, not a summed duration), so asserting against the page's
+    // whole text would flag those true, unrelated cells as if they were the totals row's own bug.
+    const totalsRow = container!.querySelector('.hypnogram-totals')
+    expect(totalsRow, container!.innerHTML).not.toBeNull()
+    expect(totalsRow!.textContent).toBe('Deep 0h 08m, Light 0h 08m')
     restore()
   })
 

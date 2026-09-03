@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import type { EChartsOption } from 'echarts'
 import { dayMetricTarget } from '@haelan/core/target-key'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
@@ -42,12 +43,21 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * one test that needs it (`annotate wiring`, below) capture the click handler without asking
  * zrender to resolve a coordinate against a rendered SVG, which chart-marks.test.tsx already
  * established does not work under happy-dom no matter how the click is simulated.
+ *
+ * `lastOption` rides along the same tap, for the same reason and the same constraint: the weight
+ * trend test below (`Weight specifics`) needs to see the real `series` array a chart was actually
+ * given, not only that something painted, and re-deriving that from the rendered SVG's own path
+ * data would be asserting against echarts' internal drawing rather than against what this
+ * component built. `chart.setOption` still runs for real underneath the tap, so the SVG every
+ * other assertion in this file depends on is unaffected.
  */
-type CapturedChart = { onClick?: (event: unknown) => void }
+type CapturedChart = { onClick?: (event: unknown) => void, lastOption?: EChartsOption }
 const capturedCharts: CapturedChart[] = []
 
 vi.mock('echarts/core', async (importOriginal) => {
-  const actual = (await importOriginal()) as { init: (...args: unknown[]) => { on: (...a: unknown[]) => unknown } } & Record<string, unknown>
+  const actual = (await importOriginal()) as {
+    init: (...args: unknown[]) => { on: (...a: unknown[]) => unknown, setOption: (...a: unknown[]) => unknown }
+  } & Record<string, unknown>
   return {
     ...actual,
     init: (...args: unknown[]) => {
@@ -58,6 +68,11 @@ vi.mock('echarts/core', async (importOriginal) => {
       chart.on = (eventName: unknown, handler: unknown) => {
         if (eventName === 'click') entry.onClick = handler as (event: unknown) => void
         return originalOn(eventName, handler)
+      }
+      const originalSetOption = chart.setOption.bind(chart)
+      chart.setOption = (option: unknown, ...rest: unknown[]) => {
+        entry.lastOption = option as EChartsOption
+        return originalSetOption(option, ...rest)
       }
       return chart
     },
@@ -81,6 +96,16 @@ const RANGE = '/dashboard?range=week&on=2026-08-12'
 // None of that existed in the render this file used to assert against, which resolved nothing.
 const DAYS = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']
 const UNWORN_DAY = '2026-08-11'
+// The Day tab, anchored on the last of DAYS' own four dates so the stub's /series (filtered to
+// the requested from/to, see stubFetch's own comment) answers with real data for it rather than
+// an empty range that would leave every assertion below indistinguishable from a genuinely quiet
+// day.
+const DAY_ROUTE = '/dashboard?range=day&on=2026-08-13'
+// Health's own Day tab, on the same anchor and for the same reason. Dashboard alone was mounted
+// here while five other pages carried the same flag, which is how Health.tsx shipped without it:
+// a second page settled on this range is what makes the Day tab tests below a claim about the
+// app rather than about one file.
+const HEALTH_DAY_ROUTE = '/health?range=day&on=2026-08-13'
 
 /**
  * A week of real answers. The page used to be asserted against a render that never resolved a
@@ -96,6 +121,7 @@ const UNWORN_DAY = '2026-08-11'
  */
 function stubFetch(
   overrides: readonly unknown[] = [], notes: readonly unknown[] = [], events: readonly unknown[] = [],
+  trend: 'real' | 'none' = 'real',
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -110,25 +136,50 @@ function stubFetch(
     if (url.includes('/events')) return json({ items: events })
     if (url.includes('/series')) {
       const params = new URLSearchParams(url.split('?')[1] ?? '')
+      // Real /series scopes every row to the requested from/to (personQuery's own requireRange),
+      // and the Day tab tests below depend on that: a one day request has to come back with the
+      // one DAYS entry inside it, not all four regardless of range, or a one day range could never
+      // be told apart from a week from the response shape alone. Index (`i`) is kept off DAYS'
+      // own position rather than the filtered array's, so a day's stubbed value stays the same
+      // number whichever range it is requested under.
+      const from = params.get('from') ?? ''
+      const to = params.get('to') ?? ''
       const body: Record<string, unknown> = {}
       for (const metric of params.getAll('metric')) {
         body[metric] = {
-          points: DAYS.map((date, i) => seriesPoint(
-            metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
-            {
-              // The one day heart rate is at the derivation's coverage floor, which is what gives
-              // the wear clause a singular to render (see the unworn day assertions below).
-              ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
-              sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
-              // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
-              // M3b added the column), and this is the one stub that exercises that half.
-              updatedAtMs: null,
-            },
-          )),
+          points: DAYS
+            .map((date, i) => ({ date, i }))
+            .filter(({ date }) => date >= from && date <= to)
+            .map(({ date, i }) => seriesPoint(
+              metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
+              {
+                // The one day heart rate is at the derivation's coverage floor, which is what gives
+                // the wear clause a singular to render (see the unworn day assertions below).
+                ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
+                sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
+                // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
+                // M3b added the column), and this is the one stub that exercises that half.
+                updatedAtMs: null,
+              },
+            )),
           reduction: null,
         }
       }
       return json(body)
+    }
+    if (url.includes('/intraday')) {
+      // Two samples spread across the requested day, real enough that IntradayHeartRate draws a
+      // trace rather than folding into its own no-data branch: the day tab tests need a chart to
+      // find absent, not a fresh empty state standing in for it.
+      const params = new URLSearchParams(url.split('?')[1] ?? '')
+      const date = params.get('date') ?? '2026-08-13'
+      return json({
+        points: [
+          { sourceId: 'watch', utcMs: Date.parse(`${date}T08:00:00Z`), min: 58, mean: 62, max: 70 },
+          { sourceId: 'watch', utcMs: Date.parse(`${date}T20:00:00Z`), min: 60, mean: 65, max: 74 },
+        ],
+        reduction: null,
+      })
     }
     if (url.includes('/sleep/nights')) {
       const start = Date.parse('2026-08-12T23:00:00Z')
@@ -136,7 +187,7 @@ function stubFetch(
         items: [{
           localDate: '2026-08-13', sourceId: 'watch', sessionIds: ['s1'],
           startMs: start, endMs: start + 7 * 3_600_000,
-          startOffsetMinutes: 120, endOffsetMinutes: 120,
+          startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [],
           segments: [
             { stage: 'LIGHT', startMs: start, endMs: start + 3_600_000 },
             { stage: 'DEEP', startMs: start + 3_600_000, endMs: start + 3 * 3_600_000 },
@@ -147,6 +198,31 @@ function stubFetch(
       })
     }
     if (url.includes('/insights')) return json(insightBody(url))
+    // Weight's own trend line only (Weight.tsx wires useTrend to the weight metric alone), same
+    // DAYS-filtered-by-from/to shape as the /series branch above, so the two stay coherent: a day
+    // /series answers for is a day /trend can smooth too. Values an order of magnitude away from
+    // /series' own 60 + i*7, so a settled render cannot pass the "draws a second series" check
+    // below by coincidentally reusing the readings' own numbers, and so the trend column's own
+    // cells in the accessible table are legible apart from the reading cells beside them: these
+    // are grams, and 50000 + i*3000 formats to a distinct 50.0, 53.0, 56.0, 59.0 in the kilograms
+    // the weight card displays, where the readings all round to the same 0.1.
+    //
+    // `trend: 'none'` answers the same route with no points at all, which is what trendOf really
+    // sends for a range holding fewer than TREND_MIN_POINTS readings (packages/core/src/query/
+    // trend.ts) and the same dense-but-all-null array the page builds while the request is in
+    // flight or after it failed. Weight.tsx hands that array over regardless, so it is the shape
+    // the "no trend to draw" tests below need and the one nothing here could produce before.
+    if (url.includes('/trend')) {
+      if (trend === 'none') return json({ points: [] })
+      const params = new URLSearchParams(url.split('?')[1] ?? '')
+      const from = params.get('from') ?? ''
+      const to = params.get('to') ?? ''
+      const points = DAYS
+        .map((date, i) => ({ date, i }))
+        .filter(({ date }) => date >= from && date <= to)
+        .map(({ date, i }) => ({ localDate: date, value: 50_000 + i * 3_000 }))
+      return json({ points })
+    }
     return json({ baseline: { center: 62, spread: 4, n: 40, thin: false } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -231,6 +307,12 @@ const pages = {
   Settings: await settledSettings('en'),
 }
 const dashboardNl = await settledDashboard('nl')
+// Settled inside the same stub window as `pages`/`dashboardNl` above, rather than inside an `it`
+// after `restore()` runs below: every other settledPage call in this file happens while stubFetch
+// is installed, and the Day tab tests want the same real, resolved render those already get, not
+// a fresh mount racing the unstubbed global fetch.
+const dashboardDay = await settledPage(Dashboard, DAY_ROUTE, 'en')
+const healthDay = await settledPage(Health, HEALTH_DAY_ROUTE, 'en')
 restore()
 
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
@@ -481,6 +563,81 @@ describe('Dashboard specifics', () => {
 
 })
 
+// With from === to the daily series holds one point, and emptyState's only guard is length === 0,
+// so before this every metric card on all six pages drew a single dot on the Day tab. The daily
+// chart's own accessible name is the discriminator: it is an existing catalogue string, so this
+// assertion cannot be satisfied by whatever copy the new chart happens to get.
+describe('Day tab', () => {
+  it('replaces the daily range chart on a one day range', () => {
+    expect(dashboardDay).not.toContain('Daily heart rate minimum, mean and maximum through')
+  })
+
+  // Every other MetricCard on this range (the four stat tiles, the sleep schedule chart) still
+  // renders its StatTile, delta and basis line exactly as any other range does (see the next test);
+  // only the chart each would otherwise draw is swapped for ChartNote's own short line. Heart rate
+  // alone keeps an actual chart, because it alone has an intraday view to swap in instead. The
+  // figure count is the assertion because it is what a reader actually sees change: this page draws
+  // several fewer chart figures on the Day tab than it does on a week, the state this replaces.
+  it('draws fewer chart figures on a one day range than on a week', () => {
+    const dayFigures = (dashboardDay.match(/<figure/g) ?? []).length
+    const weekFigures = (pages.Dashboard.match(/<figure/g) ?? []).length
+    expect(dayFigures).toBeLessThan(weekFigures)
+  })
+
+  // The defect a figure count alone cannot see: an early implementation dropped `single_day` into
+  // emptyStateFor's own gate, which meant MetricCard's existing early return fired for it exactly
+  // as it does for no_data and not_worn, discarding the StatTile (the number, the delta and the
+  // basis line) along with the chart on a range where none of the three were wrong. A reader on the
+  // Day tab lost every figure on the page, not only the meaningless one-point charts. Steps is the
+  // card under test because DAYS's own stubbed value for it is real and non-zero on 2026-08-13.
+  it('keeps a plain metric card\'s own number on a one day range, only its chart goes', () => {
+    const cards = [...dashboardDay.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
+    const steps = cards.find((c) => c.includes('>Steps<'))
+    if (!steps) throw new Error('no Steps card in the Day tab render')
+    expect(steps).toContain('<div class="value">')
+    expect(steps).not.toContain('<figure')
+  })
+
+  // The distinction that matters and the one most likely to be got wrong: a one day range with a
+  // value is not missing data. Rendering the no-data copy would state something false, which is why
+  // this needs its own reason rather than reusing no_data.
+  it('does not claim a day with data has no data', () => {
+    expect(dashboardDay).not.toContain('No data yet')
+  })
+
+  // Health was the sixth page and the one this branch missed: both its cards passed no oneDayRange
+  // at all, so on ?range=day the spo2 card still drew a one point Spo2Range under a label promising
+  // a range "through {period}", and daily_spo2 still drew a one point Sparkline. Each chart's own
+  // accessible name is the discriminator, the same one the Dashboard assertion above uses: they are
+  // existing catalogue strings, so neither assertion can be satisfied by whatever copy replaces the
+  // chart.
+  it('replaces the spo2 range chart on a one day range', () => {
+    expect(healthDay).not.toContain('Daily oxygen saturation minimum, mean and maximum through')
+  })
+
+  it('replaces the daily spo2 sparkline on a one day range', () => {
+    expect(healthDay).not.toContain('Daily oxygen saturation summary through')
+  })
+
+  // Both cards, not one: a page that swapped the range chart and left the sparkline (or the other
+  // way round) still passes each single assertion above on its own, and a figure count is what
+  // catches the half done case. Health draws exactly two figures on a week and neither survives the
+  // Day tab, so this is zero rather than merely fewer.
+  it('draws no chart figures at all on a one day range, both cards swapped', () => {
+    expect((healthDay.match(/<figure/g) ?? []).length).toBe(0)
+    expect((pages.Health.match(/<figure/g) ?? []).length).toBeGreaterThan(1)
+  })
+
+  // The same distinction the Dashboard assertions above draw, restated for the page whose cards
+  // are new to this: the number, its delta and the basis line all stay, only the chart goes, and a
+  // day carrying real data is never described as empty.
+  it('keeps the Health cards\' own numbers on a one day range', () => {
+    expect(healthDay).toContain('<div class="value">')
+    expect(healthDay).not.toContain('No data yet')
+    expect(healthDay).toContain('A single day has no trend to plot.')
+  })
+})
+
 // Task 11's own coverage: until this task every chart on every page was handed an empty
 // annotations/excluded pair (Dashboard's own EMPTY, by name, with a comment calling it a
 // milestone boundary) and no chart's onPointClick went anywhere, since no page held a target to
@@ -650,6 +807,157 @@ describe('notes and events reach the charts', () => {
       const row = firstTable.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
       if (!row) throw new Error(`no row for ${DATE}`)
       expect(row).toContain(`${NOTE_BODY}, Illness`)
+    } finally {
+      cleanup()
+    }
+  })
+})
+
+// Task 6's own point, restated: task-6-brief.md's tests assert trendPath alone and nothing checks
+// that the weight card actually draws the trend it builds, exactly the shape PersonQuery.trend
+// shipped in already (specced and built, M3e-1 drew raw readings around it without a consumer).
+// Mounted fresh, not read off the module level `pages.Weight` above: a dedicated mount keeps
+// `chartsBefore` unambiguous (capturedCharts already carries one entry per chart from every page
+// settled above by the time this describe runs) and lets "the weight card's own chart" below mean
+// the first chart this specific mount captures, not however many charts every other page in this
+// file happens to draw before it.
+describe('Weight specifics', () => {
+  async function mountWeightWithTrend(
+    trend: 'real' | 'none' = 'real',
+  ): Promise<{ html: string, series: EChartsOption['series'], cleanup: () => void }> {
+    const restore = stubFetch([], [], [], trend)
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', WEIGHT_ROUTE)
+    const chartsBefore = capturedCharts.length
+
+    act(() => {
+      root.render(<I18nProvider lng="en"><QueryClientProvider client={client}><Weight /></QueryClientProvider></I18nProvider>)
+    })
+    await flush(client, () => container.innerHTML)
+
+    // The weight card is Weight.tsx's own first card() call, ahead of body_fat, so the first chart
+    // entry captured by this mount is unambiguously its Sparkline, the same ordinal reasoning
+    // mountRecoveryWithOverride above states for Recovery's own first card.
+    const entry = capturedCharts.slice(chartsBefore)[0]
+    if (!entry) throw new Error('no chart mounted')
+
+    return {
+      html: container.innerHTML,
+      series: entry.lastOption?.series,
+      cleanup: () => {
+        act(() => { root.unmount() })
+        container.remove()
+        restore()
+      },
+    }
+  }
+
+  it('draws the trend line as a second series, not instead of the readings', async () => {
+    const { series, cleanup } = await mountWeightWithTrend()
+    try {
+      const list = Array.isArray(series) ? series as Record<string, unknown>[] : []
+      // One series (the readings) before this task, on every other Sparkline caller still today;
+      // two once the weight card's own trend query has data to draw, the readings kept rather than
+      // replaced (see Sparkline.tsx's own `trend` prop comment for why the trend series is drawn
+      // first, under the readings, rather than the readings dropped in its favour).
+      expect(list).toHaveLength(2)
+      expect(list[0]?.['smooth']).toBe(true)
+    } finally {
+      cleanup()
+    }
+  })
+
+  // The two halves of the brief's own point 2 and point 3, checked from one render rather than
+  // two: a fix that satisfies "draws a second series" (the test above) by swapping the readings
+  // series for the trend line instead of adding to it would fail here on the missing series[1]
+  // alone, and the basis assertion rides along on the same render as a regression guard, since
+  // both readings.length and points.length come off the identical `metricGroups.pointsOf('weight')`
+  // call in Weight.tsx's own card().
+  it('keeps the readings drawn as points, and the basis still counting them, once the trend line is on the chart', async () => {
+    const { series, html, cleanup } = await mountWeightWithTrend()
+    try {
+      const list = Array.isArray(series) ? series as Record<string, unknown>[] : []
+      const readingsSeries = list[1]
+      // showSymbol true is what actually draws a marker at every reading; a fix that painted only
+      // the smooth trend line, the exact defect this task exists to rule out, would leave this
+      // false (Sparkline's own default) or drop the readings series altogether.
+      expect(readingsSeries?.['showSymbol']).toBe(true)
+      // Dense over the whole week (WEIGHT_ROUTE spans 2026-08-10 through 2026-08-16, the same seven
+      // day window RANGE gives Dashboard), not thinned down to the four days DAYS actually answers:
+      // a reading series that dropped to four entries would be showing only the days with data,
+      // which is what the accessible table does, not what the dense by-position canvas series does.
+      expect(readingsSeries?.['data']).toHaveLength(7)
+
+      const basis = [...html.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)]
+        .map((m) => m[0])
+        .find((card) => card.includes('>Weight<'))
+        ?.match(/<p class="basis"[^>]*>([\s\S]*?)<\/p>/)?.[1]
+      if (!basis) throw new Error('no basis line rendered for the Weight card')
+      // Four of DAYS' own dates fall inside the week WEIGHT_ROUTE requests, the same count the
+      // /series stub already answers for every other assertion against this fixture. M3e-1's own
+      // decision (basis counts readings, not calendar days) has to survive the trend line landing
+      // on the same card, not get displaced by it.
+      expect(basis).toContain('4 readings this period')
+      expect(basis).not.toMatch(/of \d+ days/)
+    } finally {
+      cleanup()
+    }
+  })
+
+  // Weight.tsx passes `trend` unconditionally and weightTrend is always a defined dense array, so
+  // "the prop is present" and "there is a line to draw" were never the same question. All-null is
+  // the ordinary shape three ways: the query still in flight, the query failed, and a range holding
+  // fewer than TREND_MIN_POINTS readings, which trendOf answers with nothing at all. Branching on
+  // `trend !== undefined` still hid the readings' own line and switched them to bare symbols in all
+  // three, so the card drew disconnected dots and no line, permanently, with nothing saying why.
+  it('leaves the readings as an ordinary connected line when the trend has no points to draw', async () => {
+    const { series, cleanup } = await mountWeightWithTrend('none')
+    try {
+      const list = Array.isArray(series) ? series as Record<string, unknown>[] : []
+      // One series, not two: no smooth line was added, which is the same chart every other
+      // Sparkline caller draws.
+      expect(list).toHaveLength(1)
+      const readingsSeries = list[0]
+      // The two halves of the degradation, asserted separately because either alone would leave a
+      // readable chart: bare symbols with a line still under them, or a hidden line with the
+      // symbols off, is not what shipped. Both together is.
+      expect(readingsSeries?.['showSymbol']).toBe(false)
+      expect((readingsSeries?.['lineStyle'] as Record<string, unknown> | undefined)?.['opacity'])
+        .toBeUndefined()
+    } finally {
+      cleanup()
+    }
+  })
+
+  // The other half: the trend line had no representation in the accessible table at all, which
+  // still carried date, value and note only. A table-only reader got the raw readings and nothing
+  // of the line drawn through them, the same canvas-and-table split the band toggle one card away
+  // exists to close.
+  it('gives the trend line a column in the accessible table, in the reading\'s own unit', async () => {
+    const { html, cleanup } = await mountWeightWithTrend()
+    try {
+      const table = [...html.matchAll(/<table class="sr-only">[\s\S]*?<\/table>/g)]
+        .map((m) => m[0])
+        .find((t) => t.includes('Weight in kilograms'))
+      if (!table) throw new Error(`no weight chart table in:\n${html}`)
+      expect(table).toContain('<th scope="col">Trend</th>')
+      // Kilograms, through the card's own formatValue, not the raw grams the series carries: the
+      // /trend stub answers 50000 grams for the first of DAYS' four dates, so that cell has to
+      // read "50.0" and never "50000". A trend column formatted by anything but the reading cell's
+      // own formatter would print grams beside kilograms under a header naming one of them, the
+      // exact defect an M3e review already caught on Activity's distance card.
+      expect(table).toContain('<td>50.0</td>')
+      expect(table).not.toContain('<td>50000</td>')
+      // Four cells per row now (date, reading, trend, note), not three: a column header added
+      // without the cells beneath it would leave the header row and the body rows disagreeing.
+      const bodyRows = [...table.matchAll(/<tr>(?:(?!<\/tr>)[\s\S])*<\/tr>/g)].map((m) => m[0])
+      const dataRows = bodyRows.filter((row) => row.includes('<td>'))
+      expect(dataRows.length).toBeGreaterThan(0)
+      for (const row of dataRows) expect((row.match(/<td>/g) ?? []).length).toBe(3)
     } finally {
       cleanup()
     }

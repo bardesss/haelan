@@ -26,6 +26,25 @@ export interface SleepSessionLike {
   mainSleep: boolean | null
 }
 
+/**
+ * `metadata.mainSleep`, off the attrs blob mapSessions wrote. Null rather than false when the
+ * source did not say: assembleNights treats absent and false differently, since absent means
+ * nobody claimed a night and false means somebody claimed this is not one.
+ *
+ * Here rather than beside its first caller in deriveDay.ts, now that query/sleepNights.ts calls
+ * assembleNights too and has to fill the same field from the same column: one reading of that
+ * blob, so a reader's night and the derivation's night cannot disagree about which group the
+ * source called the main sleep.
+ */
+export function mainSleepOf(attrs: string): boolean | null {
+  try {
+    const parsed = JSON.parse(attrs) as { mainSleep?: unknown }
+    return typeof parsed.mainSleep === 'boolean' ? parsed.mainSleep : null
+  } catch {
+    return null
+  }
+}
+
 export interface NightAssembly {
   /** The night's pieces, ordered by start. Empty when the day had no sleep at all. */
   night: SleepSessionLike[]

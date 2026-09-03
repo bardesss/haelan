@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 import {
-  withinSchedule, localMinutesOf, inWindow, noDataYFor, AXIS_MIN, AXIS_MAX, DEFAULT_WINDOW, WIDE_WINDOW,
+  withinSchedule, localMinutesOf, inWindow, napInWindow, noDataYFor,
+  AXIS_MIN, AXIS_MAX, DEFAULT_WINDOW, WIDE_WINDOW,
 } from '../src/charts/schedule.js'
 
 // The pure home for the bed/wake window arithmetic both SleepSchedule callers (Dashboard.tsx via
@@ -144,6 +145,61 @@ describe('inWindow', () => {
 
   it('adds a day to a reading before the window\'s own noon', () => {
     expect(inWindow(-40, DEFAULT_WINDOW)).toBe(1400) // 23:20
+  })
+})
+
+// The function inWindow used to stand in for on the nap side, where it was wrong by a whole day
+// for every afternoon nap: a nap is measured from the same midnight a bed/wake pair is, but falls
+// after it rather than around it (sessions.localDate is the date a session ENDED), so "before this
+// window's noon" is the wrong question to ask of it. Every case below is stated against the same
+// night the withinSchedule tests above use, bed -40 and wake 425 placed at 1400 and 1865.
+describe('napInWindow', () => {
+  it('shifts an afternoon nap into its own night\'s frame, a day right of where inWindow leaves it', () => {
+    // 14:30 the same day the night ended: after the 1865 wake, not 24 hours before the 1400 bed.
+    expect(napInWindow(870, -40, WIDE_WINDOW)).toBe(2310)
+    expect(inWindow(870, WIDE_WINDOW)).toBe(870) // what it used to draw, and why this is not a rewrite of inWindow
+  })
+
+  it('keeps the wall clock gap between the wake and the nap exactly what it was', () => {
+    const { wake } = withinSchedule(-40, 425, WIDE_WINDOW)
+    // 07:05 to 14:30 is 7h25m, and the nap has to land that far right of the wake, not 16h35m
+    // left of it, which is what an unshifted 870 against an 1865 wake reads as.
+    expect(napInWindow(870, -40, WIDE_WINDOW) - wake!).toBe(870 - 425)
+  })
+
+  // A morning nap is the case the old code happened to get right, which is why the naps column
+  // test could not see the defect: it needs the same day added, and gets it here too.
+  it('places a morning nap the same way, rather than only fixing the afternoon', () => {
+    expect(napInWindow(600, -40, WIDE_WINDOW)).toBe(2040) // 10:00
+  })
+
+  it('takes the shift from the wake time when no bedtime answered for the row', () => {
+    expect(napInWindow(870, 425, WIDE_WINDOW)).toBe(2310)
+  })
+
+  // The shift is the night's, not a constant: a row whose whole span sat on the wake date itself
+  // (20:00 to 22:00, which withinSchedule leaves unshifted at 1200 and 1320) needs its nap left
+  // unshifted too, or the marker lands a day right of the bar instead of a day left of it.
+  it('leaves a nap unshifted on a row whose own night was never shifted', () => {
+    const { bed } = withinSchedule(20 * 60, 22 * 60, WIDE_WINDOW)
+    expect(bed).toBe(1200)
+    expect(napInWindow(870, 20 * 60, WIDE_WINDOW)).toBe(870)
+  })
+
+  // The ordinary shift, taken by every row with no placeable night of its own: those rows draw an
+  // absence dot rather than a span, and their naps are still real times of day.
+  it('falls back to a day for a row with neither a bedtime nor a wake time', () => {
+    expect(napInWindow(870, null, WIDE_WINDOW)).toBe(2310)
+  })
+
+  // Under that ordinary shift the wide window is wide enough for any nap the clock can produce,
+  // which is the claim napInWindow's own comment makes about not clamping.
+  it('keeps every shifted nap inside the wide window a nap-drawing caller passes', () => {
+    for (const raw of [0, 1, 720, 1200, 1439]) {
+      const placed = napInWindow(raw, -40, WIDE_WINDOW)
+      expect(placed).toBeGreaterThanOrEqual(WIDE_WINDOW.min)
+      expect(placed).toBeLessThanOrEqual(WIDE_WINDOW.max)
+    }
   })
 })
 

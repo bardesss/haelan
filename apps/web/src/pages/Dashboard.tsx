@@ -8,6 +8,7 @@ import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { EmptyState } from '../components/EmptyState.js'
+import { ChartNote } from '../components/ChartNote.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -15,6 +16,7 @@ import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { HeartRateRange } from '../charts/HeartRateRange.js'
+import { IntradayHeartRate, intradayBasis } from '../charts/IntradayHeartRate.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
 import { localMinutesOf, inWindow, withinSchedule, DEFAULT_WINDOW } from '../charts/schedule.js'
@@ -30,6 +32,7 @@ import { useInsight } from '../data/useInsight.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
+import { useIntraday } from '../data/useIntraday.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
@@ -417,18 +420,20 @@ export function Dashboard() {
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
-        after={after}>
-        {(basis) => (
+        oneDayRange={controls.tab === 'day'} after={after}>
+        {(basis, oneDayRange) => (
           // trend() itself answers "no delta" (undefined) for a window with too few points to
           // compare, which is the day range (exactly one point), so there is nothing left for
           // this call site to guard against.
           <StatTile label={t(labelKey)} value={format(points)} unit={unit}
             basis={basis}
             delta={deltaFor(t, metric, values(points), direction)}>
-            <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)}
-              annotations={annotations} excluded={excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            {oneDayRange ? <ChartNote /> : (
+              <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            )}
           </StatTile>
         )}
       </MetricCard>
@@ -501,23 +506,42 @@ export function Dashboard() {
   }
   const heartRatePending = meanSeries.isPending || minHrSeries.isPending || maxHrSeries.isPending
 
+  // The Day tab's own query, unrelated to the three above: those read the daily aggregate series
+  // (one row per calendar day), which on a one day range holds at most one row and cannot draw a
+  // trend; this reads the day's own minute by minute samples instead. Called unconditionally
+  // (React's own rule, not a choice) and gated by `enabled` rather than by an `if`, so it never
+  // fires outside the Day tab it exists for. `source`, not `controls.source`: this page already
+  // resolves a stale or foreign source name to the all sources sentinel for every other request
+  // (see `source` above), and reading the raw control here would let this one card query a device
+  // the reader does not have while every other card on the page fell back.
+  const intraday = useIntraday(
+    { metric: 'heart_rate', date: controls.from, source }, { enabled: controls.tab === 'day' },
+  )
+
   // Sleep stages (hypnogram): the most recent night in range, one per source collapsed to one per
   // date. Pending-tolerant the same way tile() is, rather than flashing "no data" the instant
   // between mount and the request resolving.
   const nightItems = nights.data?.items ?? EMPTY
   const lastNight = useMemo(() => oneNightPerDate(nightItems).at(-1) ?? null, [nightItems])
+  // startMs/endMs stay raw milliseconds from the night's own start, not rounded to a minute here:
+  // Hypnogram's own stageTotals sums these to build the totals row beneath the chart, and rounding
+  // each boundary to a minute before that sum ran let the two roundings (a boundary, then a total)
+  // compound into several minutes of drift against derive/sleep.ts's own single-rounded figure.
+  // See Hypnogram.tsx's own comment on its `segments` prop for the mechanism.
   const hypnogramSegments = useMemo(() => (lastNight === null ? EMPTY : lastNight.segments
     .map((s) => ({
       stage: stageOf(s.stage),
-      from: Math.round((s.startMs - lastNight.startMs) / 60_000),
-      to: Math.round((s.endMs - lastNight.startMs) / 60_000),
+      startMs: s.startMs - lastNight.startMs,
+      endMs: s.endMs - lastNight.startMs,
     }))
-    .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)), [lastNight])
-  // Inherits the same nap contamination the comment below documents for /sleep/nights: startMs is
-  // the earliest instant across every session sharing this night's date and source, so a 13:00
-  // nap sharing the date still becomes this label's "Bed 13:00" rather than the real bedtime.
-  // Known, not fixed here: fixing it means the hypnogram card gaining the same /series-based
-  // bedtime this schedule card already switched to, which is more than this label alone needs.
+    .filter((s): s is { stage: Stage, startMs: number, endMs: number } => s.stage !== null)), [lastNight])
+  // The night's own start, which is the bedtime: readSleepNights splits each date through
+  // assembleNights, so startMs is where the night began and not merely the earliest instant
+  // sharing its date, and an afternoon nap on that date sits in the row's `naps` instead. This
+  // label used to read "Bed 13:00" for exactly that nap, which is why it is worth saying what
+  // feeds it now. Computed from the night's instants rather than from the /series bedtime the
+  // schedule card below uses: the hypnogram beside this label is drawn from those same instants,
+  // and a label sourced from anywhere else could disagree with the bar it labels.
   const lastNightBedMinutes = lastNight === null
     ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes), DEFAULT_WINDOW)
   const startLabel = lastNightBedMinutes !== null
@@ -529,11 +553,13 @@ export function Dashboard() {
   // merge (personQuery.series's preferMerged) gives one row per date regardless of how many
   // sources reported, where /sleep/nights gives one row per (localDate, sourceId) and has no
   // merge of its own (the hypnogram above still needs it for segments, which is not something
-  // /series carries, so it collapses devices itself instead). Second, /sleep/nights groups every
-  // sleep session sharing a date and source into one entry, so a startMs/endMs span drawn from it
-  // includes any nap that landed in the same local date; sleep_bedtime_minutes and
-  // sleep_waketime_minutes are pushed in packages/core/src/derive/sleep.ts from the `night` group
-  // assembleNights already separated from `naps`, so they do not carry that contamination.
+  // /series carries, so it collapses devices itself instead). Second, and historically the reason
+  // this card moved: /sleep/nights used to span every sleep session sharing a date and source, so
+  // a startMs/endMs drawn from it ran from bedtime to the end of any nap on the same date, where
+  // sleep_bedtime_minutes and sleep_waketime_minutes have always been pushed in
+  // packages/core/src/derive/sleep.ts from the `night` group assembleNights separated from `naps`.
+  // That route now makes the same split, so the second reason is no longer a difference between
+  // the two; the first still holds, and it is what keeps this card on the pair.
   const bedtimePoints = metricGroups.pointsOf('sleep_bedtime_minutes')
   const waketimePoints = metricGroups.pointsOf('sleep_waketime_minutes')
   const scheduleNights = useMemo(() => {
@@ -553,8 +579,11 @@ export function Dashboard() {
         date,
         bed,
         wake,
-        // Neither metric carries naps (see above), and there is no other route this call site can
-        // read a nap's clock time from, so this stays empty rather than a guess.
+        // Neither metric carries a nap's clock time, only a count and a duration. /sleep/nights
+        // does carry it now, and this card already calls that route for the hypnogram above, so
+        // the data is within reach; drawing it is a change to what this card shows and is not
+        // made here. Empty paired with showNaps={false} below, which drops the column rather than
+        // filling it with a "none" nothing here checked.
         naps: EMPTY as number[],
       }
     })
@@ -622,21 +651,44 @@ export function Dashboard() {
             the same omission the card made by hand before: a thin baseline should blank only the
             band this chart draws around its lines, not the lines themselves, and passing baseline
             through would hand that decision to emptyStateFor's own insufficient state instead. */}
-        <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
-          query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
-          points={meanHrPoints}
-          basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.historicalTo }}>
-          {() => (
-            // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
-            // same lookup tile() uses for every other card, read here under the metric this chart
-            // itself plots.
-            <HeartRateRange days={heartRateDays} baseline={heartRateBand}
-              annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
-              excluded={heartRateOverrides.excluded}
-              label={t('dashboard.heartRateRange.chartLabel', { period })}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
-          )}
-        </MetricCard>
+        {controls.tab === 'day' ? (
+          // With from === to the daily series this card used to read holds at most one row (see
+          // emptyStateFor's own opening comment in emptyState.ts for why a one day range is
+          // deliberately not one of its states), so what it drew was one dot standing in for
+          // the "daily minimum, mean and maximum" its own label claimed. The Day tab draws the
+          // day's own trace instead. Not a MetricCard: useIntraday answers a different question
+          // than meanHrPoints (minute by minute samples through one day, not one row per day in a
+          // range) and emptyStateFor's gate was built to read the latter, so this hand rolls the
+          // same error/pending/empty order MetricCard enforces elsewhere, the same shape the sleep
+          // stages and flagged days cards already use for a query MetricCard cannot gate on.
+          <Card span={8} label={t('dashboard.heartRateRange.label')}
+            basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
+            {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} />
+              : intraday.isPending ? <Loading />
+              : intraday.data.points.length === 0 ? (
+                <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
+              ) : (
+                <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
+                  label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })} />
+              )}
+          </Card>
+        ) : (
+          <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
+            query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
+            points={meanHrPoints}
+            basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.historicalTo }}>
+            {() => (
+              // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
+              // same lookup tile() uses for every other card, read here under the metric this chart
+              // itself plots.
+              <HeartRateRange days={heartRateDays} baseline={heartRateBand}
+                annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
+                excluded={heartRateOverrides.excluded}
+                label={t('dashboard.heartRateRange.chartLabel', { period })}
+                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
+            )}
+          </MetricCard>
+        )}
         {/* Real since M3c: the reader is the source of events (AnnotatePanel's chart-click flow),
             so this reads overridesQuery.events, already fetched above for the chart annotations,
             rather than the hardcoded EmptyState that predated the write path and never came back
@@ -693,8 +745,10 @@ export function Dashboard() {
         <MetricCard metric="sleep_bedtime_minutes" span={5} label={t('dashboard.sleepSchedule.label')} basisPlacement="header"
           query={lastSeries} points={[...bedtimePoints, ...waketimePoints]}
           basisKey="dashboard.sleepSchedule.basis" basisWornKey="dashboard.sleepSchedule.basis"
-          basisValues={{ count: drawnNights }}>
-          {() => <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />}
+          basisValues={{ count: drawnNights }} oneDayRange={controls.tab === 'day'}>
+          {(_basis, oneDayRange) => (oneDayRange
+            ? <ChartNote />
+            : <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />)}
         </MetricCard>
 
         {/* The heatmap that used to sit here moved to Activity.tsx in M3d2: the Dashboard keeps

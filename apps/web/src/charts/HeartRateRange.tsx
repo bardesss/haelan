@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
 import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, OPACITY, STROKE, SYMBOL } from './base.js'
@@ -49,6 +49,14 @@ export function heartRateRangePointDate(
 export function HeartRateRange({ days, baseline, annotations, excluded, label, onPointClick }: Props) {
   const { t, i18n } = useTranslation()
 
+  // Section 11's own named example of a card level control: the min/max band is shown by default,
+  // today's behaviour, and this is the one piece of state that decides both what the canvas draws
+  // and what the accessible table lists, so the two cannot disagree about what is currently shown.
+  // Component state, not localStorage: like the rail's own collapsed flag, this is a fact about
+  // this view rather than about the reader, but unlike the rail nothing here asks it to survive a
+  // navigation, so there is nothing to persist.
+  const [showBand, setShowBand] = useState(true)
+
   // Memoised, and read by both `build` and `onClick`, for the reason DayMarks' own doc comment
   // gives: the echarts entries and the click lookup have to come off the one list or they can
   // disagree about which mark a dataIndex names.
@@ -90,11 +98,16 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
       xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },
       yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
       series: [
-        { name: 'min', type: 'line' as const, data: days.map((d) => d.hrMin), showSymbol: false, connectNulls: false,
-          lineStyle: { opacity: 0 }, stack: 'range', areaStyle: { opacity: 0 } },
-        { name: 'range', type: 'line' as const, data: days.map((d) => (d.hrMax !== null && d.hrMin !== null ? d.hrMax - d.hrMin : null)),
-          showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 }, stack: 'range',
-          areaStyle: { color: tokens.stageLight, opacity: OPACITY.rangeBand } },
+        // 'min' carries no visible pixel of its own; its only job is to hold the stack's
+        // invisible base so 'range' draws its area at the right height. Dropped together with
+        // 'range' when the band is off, so no invisible series is left stacking under nothing.
+        ...(showBand ? [
+          { name: 'min', type: 'line' as const, data: days.map((d) => d.hrMin), showSymbol: false, connectNulls: false,
+            lineStyle: { opacity: 0 }, stack: 'range', areaStyle: { opacity: 0 } },
+          { name: 'range', type: 'line' as const, data: days.map((d) => (d.hrMax !== null && d.hrMin !== null ? d.hrMax - d.hrMin : null)),
+            showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 }, stack: 'range',
+            areaStyle: { color: tokens.stageLight, opacity: OPACITY.rangeBand } },
+        ] : []),
         { name: 'mean', type: 'line' as const, data: days.map((d) => d.hrMean), showSymbol: false, connectNulls: false,
           lineStyle: { width: STROKE.series, color: tokens.series },
           ...(baseline && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
@@ -138,7 +151,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
               ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
       ],
     }
-  }, [days, baseline, marks, t, i18n.language])
+  }, [days, baseline, marks, t, i18n.language, showBand])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = heartRateRangePointDate(days, marks, event)
@@ -148,9 +161,27 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
   const { host, style } = useChart(build, 170, onClick)
   return (
     <>
+      {/* Section 11's own named example of a card level control. aria-pressed carries the state
+          for a screen reader the same way the visible label does for a sighted one; the label
+          itself already says what a click does next, so it needs no separate aria-label. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--space-1)' }}>
+        <button type="button" className="button" onClick={() => setShowBand((current) => !current)}
+          aria-pressed={showBand}>
+          {t(showBand ? 'charts.bandToggle.hide' : 'charts.bandToggle.show')}
+        </button>
+      </div>
       <ChartFigure label={label} host={host} style={style}
         table={{
-          columns: [t('charts.columns.date'), t('charts.columns.minimum'), t('charts.columns.mean'), t('charts.columns.maximum'), t('charts.columns.note')],
+          // The minimum and maximum columns leave together with the band's series, from the same
+          // showBand flag: a screen reader user toggling this gets the same change a sighted one
+          // does, rather than a table that still lists numbers the canvas no longer draws.
+          columns: [
+            t('charts.columns.date'),
+            ...(showBand ? [t('charts.columns.minimum')] : []),
+            t('charts.columns.mean'),
+            ...(showBand ? [t('charts.columns.maximum')] : []),
+            t('charts.columns.note'),
+          ],
           rows: days.map((d) => {
             const isExcluded = excluded.includes(d.date)
             // "excluded", not "no reading", in all three value cells of a day the reader threw out:
@@ -160,9 +191,9 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
             return [
               d.date,
-              formatMetricValue(d.hrMin, 'heart_rate', i18n.language, absent),
+              ...(showBand ? [formatMetricValue(d.hrMin, 'heart_rate', i18n.language, absent)] : []),
               formatMetricValue(d.hrMean, 'heart_rate', i18n.language, absent),
-              formatMetricValue(d.hrMax, 'heart_rate', i18n.language, absent),
+              ...(showBand ? [formatMetricValue(d.hrMax, 'heart_rate', i18n.language, absent)] : []),
               [!d.worn ? t('charts.absence.notWorn') : '', isExcluded ? t('charts.absence.excluded') : '',
                 // filter, not find: several annotations (an override reason, a note, an event) can
                 // land on the same date now that day level marks join the per-metric ones, and a
@@ -174,10 +205,11 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
             ]
           }),
         }} />
-      {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
-          query. This is a deliberate, invisible seam so a test can assert the band's presence
-          without depending on echarts' internal structure or on D1's token classes, which are
-          free to change. */}
+      {/* The baseline band (markArea above, gated on the `baseline` prop) is a different overlay
+          from the min/max band this toggle controls: it is drawn on the chart's canvas, which a
+          test cannot query. This is a deliberate, invisible seam so a test can assert the
+          baseline band's presence without depending on echarts' internal structure or on D1's
+          token classes, which are free to change. */}
       {baseline && <span data-baseline-band aria-hidden="true" style={{ display: 'none' }} />}
     </>
   )

@@ -20,11 +20,18 @@ beforeEach(() => {
 })
 afterEach(() => test.cleanup())
 
-const insertSession = (o: { id: string, startMs: number, endMs: number, localDate: string, sourceId?: string }) =>
+// mainSleep defaults to true, the shape every case here but the naps only day below wants:
+// assembleNights reads metadata.mainSleep off attrs and treats true, false and absent as three
+// different claims, so a helper that could only write one of them cannot reach pickNight's
+// "the source says this day had no night" path at all.
+const insertSession = (o: {
+  id: string, startMs: number, endMs: number, localDate: string, sourceId?: string, mainSleep?: boolean,
+}) =>
   test.db.insert(sessions).values({
     id: o.id, personId: 'p1', sourceId: o.sourceId ?? 'watch', kind: 'sleep', externalId: o.id,
     startMs: o.startMs, startOffsetMinutes: 120, endMs: o.endMs, endOffsetMinutes: 120,
-    localDate: o.localDate, attrs: JSON.stringify({ mainSleep: true }), rawPayloadId: null,
+    localDate: o.localDate, rawPayloadId: null,
+    attrs: JSON.stringify({ mainSleep: o.mainSleep ?? true }),
   }).run()
 
 const insertSegment = (o: { id: string, sessionId: string, stage: string, startMs: number, endMs: number }) =>
@@ -105,5 +112,71 @@ describe('readSleepNights', () => {
     expect(nights).toHaveLength(1)
     expect(nights[0]?.sourceId).toBe('watch')
     expect(nights[0]?.sessionIds).toEqual(['n1'])
+  })
+
+  // readSleepNights groups every sleep session sharing a local date into one Night and takes the
+  // span from the earliest start to the latest end, deliberately not redoing the derivation's gap
+  // based split. The consequence was not deliberate: eight dates in one real database report a
+  // night of 12 to 17 hours because an afternoon nap sits inside the span.
+  it('ends the night at the night, not at the end of an afternoon nap', () => {
+    insertSession({ id: 'night', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'nap', startMs: BEDTIME + 20 * H, endMs: BEDTIME + 21 * H, localDate: '2026-08-22' })
+
+    const [night] = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
+    expect(night!.endMs).toBe(BEDTIME + 8 * H)
+    expect(night!.endMs - night!.startMs).toBe(8 * H)
+  })
+
+  it('reports each nap start time separately, in order', () => {
+    insertSession({ id: 'night', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'nap1', startMs: BEDTIME + 20 * H, endMs: BEDTIME + 21 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'nap2', startMs: BEDTIME + 22 * H, endMs: BEDTIME + 23 * H, localDate: '2026-08-22' })
+
+    const [night] = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
+    expect(night!.naps).toEqual([BEDTIME + 20 * H, BEDTIME + 22 * H])
+  })
+
+  // Zero naps is a measurement rather than a gap: we looked and there were none. An empty array and
+  // a missing field are different claims, and SleepSchedule renders them differently, which is what
+  // its showNaps flag exists for.
+  it('reports an empty array for a night with no naps, not a missing field', () => {
+    insertSession({ id: 'night', startMs: BEDTIME, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
+
+    const [night] = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
+    expect(night!.naps).toEqual([])
+  })
+
+  // The behaviour that must survive, and the one this fix could most easily break: three
+  // consecutive pieces of one night are still one night, because the gaps between them are small.
+  // This passes before the change and after it. Without it, a fix that splits on any gap at all
+  // would turn every interrupted night into a night plus two naps and still look green.
+  it('still joins three consecutive pieces of one night into one, with no naps', () => {
+    insertSession({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 3 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'b', startMs: BEDTIME + 3 * H, endMs: BEDTIME + 6 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'c', startMs: BEDTIME + 6 * H, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
+
+    const [night] = readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })
+    expect(night!.sessionIds).toEqual(['a', 'b', 'c'])
+    expect(night!.naps).toEqual([])
+  })
+
+  // A day whose every session the source marked as not the main sleep has no night, and reports no
+  // entry at all rather than a night manufactured from the naps' own instants. The property being
+  // pinned is that this reader and the derivation say the same thing about such a day: deriveSleepDay
+  // writes it sleep_nap_count and sleep_nap_minutes and no sleep_bedtime_minutes, because promoting
+  // the longest nap would report an afternoon sleep as a bedtime and a baseline built over such days
+  // is a band around nothing. Two groups rather than one, three hours apart, so this is pickNight
+  // answering -1 with a choice in front of it and not merely a single group falling through.
+  it('reports no night for a day the source flagged as naps only', () => {
+    insertSession({
+      id: 'nap1', startMs: BEDTIME + 14 * H, endMs: BEDTIME + 16 * H,
+      localDate: '2026-08-22', mainSleep: false,
+    })
+    insertSession({
+      id: 'nap2', startMs: BEDTIME + 19 * H, endMs: BEDTIME + 20 * H,
+      localDate: '2026-08-22', mainSleep: false,
+    })
+
+    expect(readSleepNights(test.db, { personId: 'p1', from: '2026-08-22', to: '2026-08-22' })).toEqual([])
   })
 })

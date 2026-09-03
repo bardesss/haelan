@@ -38,7 +38,8 @@ const EMPTY = Object.freeze([]) as never[]
 
 // No grid or ticks: a sparkline is a shape, not a chart to consult; the table carries the numbers it stands in for.
 export function Sparkline({
-  values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY, onPointClick, episodic = false,
+  values, labels, label, unit, metric, formatValue, baseline, height = 34, annotations = EMPTY, excluded = EMPTY,
+  onPointClick, episodic = false, trend,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
   // was reported: denseSeries (useSeries.ts) is what every caller builds them with, and its own
@@ -92,6 +93,18 @@ export function Sparkline({
   annotations?: { date: string; text: string }[]
   excluded?: string[]
   onPointClick?: (localDate: string) => void
+  // Dense over the same `labels` axis as `values`, one entry per calendar day with null where the
+  // trend has nothing to draw (packages/core/src/query/trend.ts's trendOf only emits a point for a
+  // day carrying a real reading, so a day between two sparse readings is null here exactly as it is
+  // in `values`). Undefined for every caller but Weight's weight card: PersonQuery.trend was
+  // specced and built for that one card and had no consumer until this prop.
+  //
+  // Drawn as a second series rather than folded into `values`, and drawn UNDER it (first in the
+  // `series` array below, so echarts paints it before the reading series and the readings land on
+  // top): the smoothed line is a reading of the series, not the series itself, and Weight's own 130
+  // readings across 236 days is exactly the sparse history a smooth line over would look identical
+  // for a dense month and a sparse one if it replaced the readings instead of sitting under them.
+  trend?: (number | null)[]
   // False everywhere but Weight: default false is what keeps every chart already on a page reading
   // exactly as it did before this prop existed. A metric taken by hand (weight: 130 readings across
   // 236 days) has no data quality problem on a day nobody weighed in, unlike Activity, Sleep or
@@ -113,34 +126,62 @@ export function Sparkline({
     dates: labels, values, excluded, annotations, excludedText: t('charts.absence.excluded'),
   }), [labels, values, excluded, annotations, t])
 
+  // Whether there is a trend to draw, not merely whether a caller passed the prop. `trend` is a
+  // dense array built from a query, so it is defined and all-null in three ordinary states: while
+  // /trend is still in flight, after it failed, and when trendOf legitimately emitted nothing
+  // because the range holds fewer than TREND_MIN_POINTS readings (packages/core/src/query/trend.ts).
+  // Branching on `trend !== undefined` treated all three as "a trend line is on the chart" and
+  // switched the readings to bare symbols with their own line hidden, so a two reading range, or a
+  // /trend that 500ed, drew two disconnected dots under a smooth line that was never painted, with
+  // nothing on the card saying why. With nothing to draw, this chart is exactly the chart every
+  // other Sparkline caller gets.
+  const hasTrend = trend !== undefined && trend.some((v) => v !== null)
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
     yAxis: { type: 'value' as const, show: false, scale: true },
-    series: [{ type: 'line' as const, data: values, showSymbol: false, connectNulls: episodic,
-      lineStyle: { width: STROKE.sparkline, color: tokens.series },
-      // Same markArea shape HeartRateRange draws its band with: a rectangle between two y values,
-      // unbounded on x, so it sits behind the line regardless of how many points there are.
-      ...(baseline && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
-        data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] } }),
-      markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
-        // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands
-        // off the fitted range; anchor at the day's own value instead, same as HeartRateRange.
-        // dayMarks has already dropped a date this sparkline is not drawing and moved an excluded
-        // day with no value left to `atDate`, where it is drawn by position instead of being
-        // silently lost, so everything left here is a day whose number is still on the chart with
-        // the mark sitting on top of it.
-        data: marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })) },
-      markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
-        label: { show: false },
-        // An excluded day with no value left overrides the dashed annotation styling with the
-        // excluded colour and a solid line, so a gap the reader made reads apart from a day that
-        // merely carries a note, in shape as well as in colour. No label either way: this chart is
-        // 34 pixels tall and draws no text at all, so the reason lives in the accessible table
-        // beside it and in the panel a click on this mark reopens.
-        data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
-          ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } }],
-  }), [values, baseline, marks, episodic])
+    series: [
+      // Under the reading series below (drawn first, so echarts paints it first and the readings
+      // land on top of it): trend's own dense array is null everywhere trendOf had no reading to
+      // smooth, and connectNulls is unconditionally true here regardless of `episodic`, since a
+      // smooth line spanning the gaps between sparse readings is the entire reason this series
+      // exists, not a fact about whether the metric is taken by hand.
+      ...(hasTrend ? [{ type: 'line' as const, data: trend, showSymbol: false, smooth: true,
+        connectNulls: true, lineStyle: { width: STROKE.sparkline, color: tokens.seriesAlt } }] : []),
+      { type: 'line' as const, data: values,
+        // A trend line already supplies the connecting line once one is drawn, so the reading
+        // series switches from a line to bare points: showSymbol true draws a marker at every
+        // reading, and lineStyle opacity 0 (the same idiom IntradayHeartRate uses to hide a
+        // stacking helper series) keeps its own jagged line from also being drawn under the smooth
+        // one. Unchanged (a plain connected line, no symbols) when there is no trend line to draw,
+        // which is every caller but Weight's weight card and, on that card, every range whose own
+        // trend query has not answered with a real point (see hasTrend above).
+        showSymbol: hasTrend, connectNulls: episodic,
+        lineStyle: { width: STROKE.sparkline, color: tokens.series, ...(hasTrend && { opacity: 0 }) },
+        // Same markArea shape HeartRateRange draws its band with: a rectangle between two y values,
+        // unbounded on x, so it sits behind the line regardless of how many points there are.
+        ...(baseline && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
+          data: [[{ yAxis: baseline.low }, { yAxis: baseline.high }]] } }),
+        markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
+          // markPoint's explicit coordinates skip axis extent calculation, so a placeholder y lands
+          // off the fitted range; anchor at the day's own value instead, same as HeartRateRange.
+          // dayMarks has already dropped a date this sparkline is not drawing and moved an excluded
+          // day with no value left to `atDate`, where it is drawn by position instead of being
+          // silently lost, so everything left here is a day whose number is still on the chart with
+          // the mark sitting on top of it.
+          data: marks.atValue.map((mark) => ({ name: 'excluded', xAxis: mark.index, yAxis: mark.value })) },
+        markLine: { symbol: 'circle', lineStyle: { color: tokens.stageAwake, type: 'dashed' as const },
+          label: { show: false },
+          // An excluded day with no value left overrides the dashed annotation styling with the
+          // excluded colour and a solid line, so a gap the reader made reads apart from a day that
+          // merely carries a note, in shape as well as in colour. No label either way: this chart is
+          // 34 pixels tall and draws no text at all, so the reason lives in the accessible table
+          // beside it and in the panel a click on this mark reopens.
+          data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
+            ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
+    ],
+  }), [values, baseline, marks, episodic, trend, hasTrend])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = sparklinePointDate(labels, marks, event)
@@ -152,7 +193,15 @@ export function Sparkline({
     <>
       <ChartFigure label={label} host={host} style={style}
         table={{
-          columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
+          // The trend gets a column of its own whenever it is drawn, between the reading and the
+          // note. Without one, the smooth line existed only on the canvas: a table-only reader was
+          // handed the raw readings and nothing at all of the line drawn through them, which is the
+          // same canvas-and-table split the band toggle one card away was built to close. Absent
+          // (and only then) the columns are exactly what every other caller has always had, so no
+          // chart without a trend grows an empty column.
+          columns: hasTrend
+            ? [t('charts.columns.date'), unit, t('charts.columns.trend'), t('charts.columns.note')]
+            : [t('charts.columns.date'), unit, t('charts.columns.note')],
           // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
           // reader did to it either) is not a row this table states anything about, so it is
           // dropped rather than rowed with a "no reading" cell the spec says would train a reader
@@ -176,8 +225,16 @@ export function Sparkline({
               // and the day is blank because of something they did rather than because the device
               // never reported. "no reading" is the honest cell only for the second of those.
               const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              const cell = formatValue ? formatValue(v, absent) : formatMetricValue(v, metric, i18n.language, absent)
-              return [date, cell,
+              const format = (value: number | null): string =>
+                formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
+              const cell = format(v)
+              // The same formatter the reading cell goes through, since the trend is a smoothed
+              // reading and carries the identical unit: Weight's own kilogram conversion (its
+              // `formatValue`) has to reach this cell too, or a table would print grams beside
+              // kilograms under a header naming one of them. Null where trendOf had nothing to
+              // smooth for that day, which reads as the same absence word the reading cell already
+              // carries rather than as a number the line never had.
+              return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null)] : []),
                 [isExcluded ? t('charts.absence.excluded') : '',
                   // filter, not find: several annotations (an override reason, a note, an event) can
                   // land on the same date now that day level marks join the per-metric ones, and a

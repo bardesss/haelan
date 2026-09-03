@@ -7,7 +7,10 @@ import { sourceParam } from '../controls/source.js'
 
 // Mirrors packages/core/src/query/sleepNights.ts's Night, as sent by
 // apps/server/src/routes/v1/tier2.ts's GET /p/:personId/sleep/nights: one row per night per
-// source, carrying the session ids and stage segments that made it up. This is not the shape a
+// source, carrying the session ids and stage segments that made it up, plus the start of every
+// session on that date that was not part of the night. The night is the gap based group
+// assembleNights picks, not every session sharing the date, so startMs and endMs are bedtime and
+// wake and an afternoon nap is in `naps` rather than inside the span. This is not the shape a
 // hypnogram or a bed/wake chart wants directly (bedMs, wakeMs); it is what the route actually
 // answers, and the two charts that read it convert it themselves. startOffsetMinutes and
 // endOffsetMinutes are the timezone offset in force at each end (see
@@ -27,6 +30,8 @@ export interface Night {
   endMs: number
   startOffsetMinutes: number
   endOffsetMinutes: number
+  /** Nap start times, in order. Empty means the route looked and found none, never "not asked". */
+  naps: number[]
   segments: NightSegment[]
 }
 

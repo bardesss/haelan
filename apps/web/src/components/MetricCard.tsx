@@ -39,13 +39,24 @@ import type { Baseline } from '../data/useBaseline.js'
  * right for a caller that says nothing, the same reasoning `worn` and `reported` are typed `never`
  * on `basisValues` rather than merely documented as reserved.
  */
-export function MetricCard({ metric, query, points, baseline, span, label, basisPlacement, basisKey, basisWornKey, basisValues, after, children }: {
+export function MetricCard({ metric, query, points, baseline, span, label, basisPlacement, basisKey, basisWornKey, basisValues, oneDayRange, after, children }: {
   metric: string
   query: { isError: boolean, isPending: boolean, refetch: () => unknown }
   points: SeriesPoint[]
   baseline?: Baseline | null
   span: number
   label?: string
+  // Whether the page this card sits on is showing a single calendar day (controls.tab === 'day'),
+  // not whether points happens to hold one row (a sparse week can hold exactly one row too, and
+  // that is real data, not a one day range). Handed straight to `children` rather than folded into
+  // `emptyStateFor`'s own gate: a one day range with a value is not "nothing to show", it is a
+  // number with no chart worth drawing beside it, and the early return below discards everything
+  // (the StatTile, its delta, the basis line) a caller still needs on this range. `children` is
+  // where the chart itself lives, so it is the only place that can swap it out and leave the rest
+  // of the card alone. Optional and left undefined by most callers, which `children` below reads
+  // as false; a caller with no Day tab of its own (Settings, or a card gated on something other
+  // than a metric range) has nothing to pass here and nothing changes for it.
+  oneDayRange?: boolean
   // 'header' hands the basis to Card, which renders it above children the way the heart rate range
   // and sleep schedule cards want it. 'body' withholds it from Card and leaves it to `children`,
   // which is what a tile card needs: StatTile renders its own basis paragraph directly beneath the
@@ -72,7 +83,12 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   // state before this component owned the shell, so folding the shell in must not make it vanish
   // the moment a request fails or a period comes back empty.
   after?: ReactNode
-  children: (basis: string) => ReactNode
+  // The second argument is `oneDayRange` as-is: a caller whose content is a chart uses it to swap
+  // that chart for a short note instead (ChartNote.tsx); a caller with no chart of its own (the
+  // heart rate range and sleep schedule cards, whose `children` is entirely a chart) uses it the
+  // same way at the top level. Every existing single-argument callback keeps compiling and keeps
+  // its old behaviour, since a function that ignores its second parameter is still assignable here.
+  children: (basis: string, oneDayRange: boolean) => ReactNode
 }): ReactNode {
   const { t } = useTranslation()
 
@@ -142,7 +158,7 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   // still needs it to hand to its own StatTile; only Card's own copy is conditional.
   return (
     <Card span={span} label={label} basis={basisPlacement === 'header' ? basis : undefined}>
-      {children(basis)}{after}
+      {children(basis, oneDayRange ?? false)}{after}
     </Card>
   )
 }

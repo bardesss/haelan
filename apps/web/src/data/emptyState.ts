@@ -62,6 +62,15 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
 export function emptyStateFor(
   metric: string, points: SeriesPoint[] | undefined, baseline?: Baseline | null,
 ): EmptyStateKind | null {
+  // A one day range with a value is deliberately not read here at all, even though MetricCard
+  // knows it (its own `oneDayRange` prop): this function answers "is there nothing to show", and
+  // a one day range with a value has something to show, a number with no chart worth drawing
+  // beside it. That is not the same question, and folding it in here once meant the early return
+  // below MetricCard takes for every kind in this union discarded the StatTile, its delta and the
+  // basis line along with the chart, on a range where none of the three had anything wrong with
+  // them. MetricCard reads `oneDayRange` itself and hands it to `children`, which is the one place
+  // that can swap out the chart alone and leave the rest of the card standing.
+  //
   // Ordered strongest first. Nothing at all outranks a thin baseline: telling a reader their
   // baseline is thin implies there is a series it was thin against.
   if (points === undefined || points.length === 0) return 'no_data'

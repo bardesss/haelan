@@ -145,7 +145,8 @@
       "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
       "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
       "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
-      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
+      "intradayChartLabel": "Heart rate through the day of {{date}}"
     },
     "flaggedDays": {
       "label": "Flagged days",
@@ -372,7 +373,10 @@
       "night": "Night",
       "toBed": "To bed",
       "woke": "Woke",
-      "naps": "Naps"
+      "naps": "Naps",
+      "time": "Time",
+      "source": "Source",
+      "trend": "Trend"
     },
     "weekday": {
       "mon": "Mon",
@@ -387,7 +391,8 @@
       "notWorn": "not worn",
       "noReading": "no reading",
       "excluded": "excluded",
-      "none": "none"
+      "none": "none",
+      "notStaged": "This night was not staged, so there is nothing to total."
     },
     "hrTooltip": {
       "mean": "mean {{value}} bpm",
@@ -402,6 +407,18 @@
     "event": {
       "withNote": "{{kind}}: {{note}}",
       "multiDay": "{{kind}}, started"
+    },
+    "intradayBasis": {
+      "thinned": "{{from}} readings thinned to {{to}} points",
+      "full": "these {{count}} points are the readings"
+    },
+    "hypnogram": {
+      "awakeNote": "Awake counts the awake stages drawn above and nothing else. The night's own awake minutes also count restless time and the gaps between the night's separate pieces, so that figure reads higher."
+    },
+    "singleDayNote": "A single day has no trend to plot.",
+    "bandToggle": {
+      "hide": "Hide daily range",
+      "show": "Show daily range"
     }
   },
   "sleep": {
