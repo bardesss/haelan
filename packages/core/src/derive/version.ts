@@ -12,9 +12,10 @@
  *    day derived under 3 has no count rows, no workout rows, and a null stamp.
  * 5: M3f-E corrects two sleep derivation defects, so every sleep_*_minutes value derived under 4
  *    is wrong. Durations were summed as per segment roundings against a 30 second grid, inflating
- *    every total by about 7 minutes a night, and the stage vocabulary was missing ASLEEP and
- *    RESTLESS, so classic nights derived no measurement at all. A classic night derived under 4
- *    also writes sleep_deep_minutes, sleep_light_minutes and sleep_rem_minutes as zero, claiming a
- *    staging measurement that never happened; under 5 it omits the three instead.
+ *    every total by about 7 minutes a night. And the vocabulary held four of the schema's six
+ *    stage values, missing ASLEEP and RESTLESS, so a night recorded in the provider's classic
+ *    non-staged model derived no stage, asleep, awake or efficiency figure at all. Under 5 such a
+ *    night derives all of those except the three staged minutes, which it omits rather than
+ *    writing as zero, because a night nobody staged has no deep, light or REM measurement.
  */
 export const DERIVATION_VERSION = 5
