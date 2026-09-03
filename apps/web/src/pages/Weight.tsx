@@ -112,8 +112,10 @@ export function Weight() {
   // is one call added on top of the single group above. Suppresses often, correctly: 130 readings
   // across 236 days in the household this page was built against means a seven day window
   // frequently holds too few, and InsightCard's own suppressed branch is what that renders as, not
-  // a bug this card routes around.
-  const weightInsight = useInsight('weight', 'last', { from: controls.from, to: controls.to }, source)
+  // a bug this card routes around. `to` is historicalTo, not controls.to: see Dashboard.tsx's own
+  // insightRange comment for why a period whose calendar end has not happened yet must not be
+  // counted into periodDays.
+  const weightInsight = useInsight('weight', 'last', { from: controls.from, to: controls.historicalTo }, source)
   // The trap this whole page exists to get right, restated for the insight card: METRICS.weight
   // declares precision 1 in grams, the stored unit, and the headline above converts to kilograms
   // through formatNumber directly rather than formatMetricValue (see card()'s own comment and

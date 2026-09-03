@@ -172,8 +172,10 @@ export function Health() {
 
   // The one insight card the brief's own table gives this page: daily_spo2 at the last agg the
   // card above already requests (REQUESTS.last). /insights is its own, unbatched request, so this
-  // is one call added on top of the five requests above (LAST_METRICS plus spo2's own four).
-  const dailySpo2Insight = useInsight('daily_spo2', 'last', { from: controls.from, to: controls.to }, source)
+  // is one call added on top of the five requests above (LAST_METRICS plus spo2's own four). `to`
+  // is historicalTo, not controls.to: see Dashboard.tsx's own insightRange comment for why a
+  // period whose calendar end has not happened yet must not be counted into periodDays.
+  const dailySpo2Insight = useInsight('daily_spo2', 'last', { from: controls.from, to: controls.historicalTo }, source)
   // The daily summary card above carries a "%" suffix through StatTile's own `unit` prop;
   // formatWithUnit (format.ts) is the shared closure that appends it, the same one Dashboard.tsx,
   // Recovery.tsx and Weight.tsx's own copies of this card use.

@@ -159,4 +159,38 @@ describe('usePageControls', () => {
 
     vi.useRealTimers()
   })
+
+  // M3 phase review B2: a Month or Year view's `to` is the period's calendar end, which is in the
+  // future for all but the last day of the period. A baseline or an insight window anchored on it
+  // read the tomorrows of a period still in progress as though they had already happened.
+  describe('historicalTo', () => {
+    it('is today, not the calendar end, when the range reaches into the future', () => {
+      vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+      // No 'on': the default anchor is the person's today, so the default month tab resolves to
+      // the whole of September while only the 5th has actually happened.
+      window.history.replaceState(null, '', '/dashboard?range=month')
+      mountProbe()
+      expect(seen!.to).toBe('2026-09-30')
+      expect(seen!.historicalTo).toBe('2026-09-05')
+      vi.useRealTimers()
+    })
+
+    it('is the range\'s own end when the whole range has already happened', () => {
+      vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+      window.history.replaceState(null, '', '/dashboard?range=month&on=2026-07-15')
+      mountProbe()
+      expect(seen!.to).toBe('2026-07-31')
+      expect(seen!.historicalTo).toBe('2026-07-31')
+      vi.useRealTimers()
+    })
+
+    it('is today itself on the one day of the month it agrees with the calendar end', () => {
+      vi.setSystemTime(new Date('2026-09-30T10:00:00Z'))
+      window.history.replaceState(null, '', '/dashboard?range=month')
+      mountProbe()
+      expect(seen!.to).toBe('2026-09-30')
+      expect(seen!.historicalTo).toBe('2026-09-30')
+      vi.useRealTimers()
+    })
+  })
 })

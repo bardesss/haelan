@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -33,6 +33,9 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  // A safety net rather than the primary reset: the clock test below restores real timers itself,
+  // but an assertion failure there would otherwise leak a mocked clock into whatever test runs next.
+  vi.useRealTimers()
 })
 
 function mount(node: ReactNode): void {
@@ -128,6 +131,37 @@ describe('the Recovery page', () => {
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(3)
     restore()
+  })
+
+  // M3 phase review B2: the default Month view's `to` is the calendar month's last day, in the
+  // future for all but that one day. Anchoring the baseline and the insight window on it read the
+  // month's own unfinished days as though they had already happened, and on the 5th read the
+  // baseline as sixty days ending twenty five days from now. historicalTo, not controls.to, is what
+  // this test pins.
+  it('anchors the baseline and the insight window on today, not the month\'s own future end', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    window.history.replaceState(null, '', '/recovery?range=month')
+    const urls: string[] = []
+    const restore = stubRecovery(urls)
+    const { client, tree } = withQuery(<Recovery />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    const baselineUrls = urls.filter((u) => u.includes('/baselines'))
+    const insightUrls = urls.filter((u) => u.includes('/insights'))
+    // Three baselines (resting_heart_rate, daily_hrv, respiratory_rate) and one insight
+    // (resting_heart_rate): if either list came back empty the loop below would pass on nothing.
+    expect(baselineUrls).toHaveLength(3)
+    expect(insightUrls).toHaveLength(1)
+    for (const url of baselineUrls) {
+      expect(new URL(url, 'http://example').searchParams.get('on')).toBe('2026-09-05')
+    }
+    for (const url of insightUrls) {
+      expect(new URL(url, 'http://example').searchParams.get('to')).toBe('2026-09-05')
+    }
+
+    restore()
+    vi.useRealTimers()
   })
 
   // The refactor this task is for: card()'s headline used to thread a literal precision

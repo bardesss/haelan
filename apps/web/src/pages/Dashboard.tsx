@@ -295,15 +295,21 @@ export function Dashboard() {
   // than controls.anchor is what lets the basis line state when the window actually ends: a Year
   // view's anchor can sit months away from the range the chart draws, and the basis line used to
   // report that anchor date instead of the one the drawn band was really computed against.
-  const hrBaseline = useBaseline('heart_rate', controls.to, source, 'mean')
+  // historicalTo, not to itself: on the default Month view `to` is the calendar month's last day,
+  // which has not happened yet for all but that one day, and a sixty day window ending there asked
+  // for history that does not exist rather than the sixty real days behind today.
+  const hrBaseline = useBaseline('heart_rate', controls.historicalTo, source, 'mean')
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
 
   // /insights takes exactly one metric and one agg per call and, unlike /series, does not batch, so
   // each of the three below is its own request rather than a shared one: three requests added on
   // top of whatever GROUPS above already issues, not multiplied against the cards. See INSIGHTS'
-  // own comment above for the three metrics themselves and their aggs.
-  const insightRange = { from: controls.from, to: controls.to }
+  // own comment above for the three metrics themselves and their aggs. `to` is historicalTo, the
+  // same reason hrBaseline reads it above: a period whose calendar end has not happened yet counts
+  // its own unfinished days into periodDays, which is what suppressed every insight card on this
+  // page until the 21st of every month.
+  const insightRange = { from: controls.from, to: controls.historicalTo }
   const stepsInsight = useInsight(INSIGHTS.steps.metric, INSIGHTS.steps.agg, insightRange, source)
   const restingHrInsight = useInsight(INSIGHTS.restingHr.metric, INSIGHTS.restingHr.agg, insightRange, source)
   const sleepInsight = useInsight(INSIGHTS.sleep.metric, INSIGHTS.sleep.agg, insightRange, source)

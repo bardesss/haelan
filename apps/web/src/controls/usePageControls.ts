@@ -10,6 +10,14 @@ export interface PageControlsState {
   source: string
   from: string
   to: string
+  // `to`, unless the range reaches past today, in which case this is today instead. A baseline
+  // anchored on `to` used to read the tomorrows of a Month or Year view still in progress: `to` is
+  // the period's calendar end, not the last day anything could have happened, and a window or a
+  // baseline anchor sitting past today has no history behind the part of itself that has not
+  // happened yet. `from` is never adjusted the same way: the series window is allowed to reach
+  // into the future (it just draws no points there), and narrowing it would change what every
+  // chart on the range actually shows.
+  historicalTo: string
   setTab: (tab: RangeKey) => void
   setAnchor: (anchor: string) => void
   step: (direction: -1 | 1) => void
@@ -46,6 +54,9 @@ export function usePageControls(): PageControlsState {
     ...controls,
     from,
     to,
+    // Lexicographic comparison is exact here: both sides are YYYY-MM-DD, the one shape every local
+    // date in this system has, so string order and calendar order agree.
+    historicalTo: to < today ? to : today,
     // A tab change is a place the reader can go back from, so it pushes. A stepper click is not.
     setTab: (tab) => { go({ range: tab }, false) },
     setAnchor: (anchor) => { go({ on: anchor }, true) },

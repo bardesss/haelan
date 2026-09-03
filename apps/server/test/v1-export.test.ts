@@ -284,4 +284,24 @@ describe('GET /export', () => {
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain('hart_rate')
   })
+
+  // apps/web's four other range builders (baselinePath, seriesPath, nightsPath, insightPath) all
+  // route `source` through sourceParam, which omits the web app's own all sources sentinel rather
+  // than sending it literally. exportPathFor did not: it set `source=all` unconditionally, and
+  // requireSource in packages/core/src/query/personQuery.ts knows no source called 'all', only
+  // registered device ids plus 'merged' and 'provider'. The result was every data page's download
+  // link 400ing on the default view while every chart above it, built through one of the other
+  // four functions, rendered fine. Omitting `source` entirely, the way a fixed link now does,
+  // still answers 200 (the case just above this one).
+  it('answers 400 for the web app\'s own all sources sentinel rather than treating it as a real source', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', value: 900 })
+    const response = await get(
+      harness, token,
+      '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01&source=all',
+    )
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+    expect(response.json().error.message).toContain('all')
+  })
 })

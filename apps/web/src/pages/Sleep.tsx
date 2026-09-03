@@ -198,13 +198,17 @@ export function Sleep() {
   // and nap unbaselined. 'sum' explicitly, the same reason Recovery.tsx passes 'last' rather than
   // the default: this metric's only agg is sum, and a caller that could not vary it would be one
   // catalogue change away from asking for an agg the metric does not have.
-  const asleepBaseline = useBaseline('sleep_asleep_minutes', controls.to, source, 'sum')
+  // historicalTo, not controls.to: see Dashboard.tsx's own hrBaseline comment for why a Month or
+  // Year view's calendar end is not the same date as the last day that has actually happened.
+  const asleepBaseline = useBaseline('sleep_asleep_minutes', controls.historicalTo, source, 'sum')
   const asleepBand = useMemo(() => bandFrom(asleepBaseline.data?.baseline ?? null), [asleepBaseline.data])
 
   // The one insight card the brief's own table gives this page: sleep_asleep_minutes at the sum
   // agg the time asleep tile above already requests (REQUESTS.sum). /insights is its own,
-  // unbatched request, so this is one call added on top of the three agg groups above.
-  const asleepInsight = useInsight('sleep_asleep_minutes', 'sum', { from: controls.from, to: controls.to }, source)
+  // unbatched request, so this is one call added on top of the three agg groups above. `to` is
+  // historicalTo for the same reason asleepBaseline above reads it: see Dashboard.tsx's own
+  // insightRange comment.
+  const asleepInsight = useInsight('sleep_asleep_minutes', 'sum', { from: controls.from, to: controls.historicalTo }, source)
 
   // Hypnogram: /sleep/nights through useNights, not the eleven cards' own /series groups above.
   // Stays outside MetricCard: its emptiness is "lastNight === null" off useNights, not a metric and
