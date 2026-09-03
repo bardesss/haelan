@@ -197,6 +197,7 @@ export function deriveSleepDay(input: {
       // rounded per stage figures rather than from their milliseconds, so the stage numbers a
       // reader sees add up to the asleep figure printed beside them.
       const asleep = ASLEEP_STAGES.reduce((total, stage) => total + minutesOfStage(stage), 0)
+      const asleepMs = ASLEEP_STAGES.reduce((total, stage) => total + msByStage(stage), 0)
       // The time between two pieces is time out of bed, and it counts against the night exactly
       // as an AWAKE or RESTLESS stage inside one session does. Summed from the constant for the
       // same reason the asleep total is. One rounding across both.
@@ -219,7 +220,21 @@ export function deriveSleepDay(input: {
       }
       push('sleep_asleep_minutes', 'sum', asleep)
       push('sleep_awake_minutes', 'sum', awake)
-      push('sleep_efficiency', 'last', inBed > 0 ? Math.round((asleep / inBed) * 100) : null)
+      // Efficiency is computed from milliseconds, not from the two rounded figures above, because
+      // the two displayed numbers and this ratio do different jobs. sleep_asleep_minutes exists so
+      // a reader can add DEEP, LIGHT and REM together and see the total in front of them, which is
+      // why it sums the already-rounded per-stage minutes. A ratio has no such reader-facing parts
+      // to agree with, and summing four roundings before dividing can push it over 100: each stage
+      // gains up to +0.5 minutes from Math.round while inBed gains at most +0.5 once, so a short
+      // enough session (a few minutes, four stages each near a half-minute boundary) makes the
+      // numerator's rounding error exceed the denominator's. Dividing asleepMs by inBedMs instead
+      // cannot do that for non-overlapping segments: the numerator is a subset of the denominator's
+      // span before any rounding touches either. The deliberate consequence is that a reader who
+      // divides the two displayed minute figures themselves may compute a percentage a point or two
+      // off from what this row says, which is acceptable; a displayed efficiency above 100 is not a
+      // rounding difference, it is a false statement, and this trade always favours the true one.
+      const inBedMs = end - start
+      push('sleep_efficiency', 'last', inBedMs > 0 ? Math.round((asleepMs / inBedMs) * 100) : null)
     }
   }
 

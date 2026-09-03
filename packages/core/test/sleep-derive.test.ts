@@ -48,6 +48,22 @@ describe('deriveSleepDay', () => {
       seg('n', 'LIGHT', BEDTIME + i * half, BEDTIME + (i + 1) * half))
     const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 15 * MIN })], segments)
     expect(valueOf(rows, 'sleep_efficiency')).toBe(100)
+
+    // The case the name actually promises: a session short enough (7.5 minutes) that the four
+    // rounded stage figures gain up to +0.5 minutes each while inBed is rounded only once, so the
+    // rounded-figure ratio would clear 100. DEEP, LIGHT and REM each exactly 150 seconds (2.5
+    // minutes, Math.round's half-up boundary) round to 3, summing to sleep_asleep_minutes 9 against
+    // sleep_in_bed_minutes 8: 9/8 rounds to 113 if efficiency is computed from the rounded minutes
+    // instead of from milliseconds.
+    const stage = 150 * 1000
+    const shortRows = derive([session({ id: 's', startMs: BEDTIME, endMs: BEDTIME + 3 * stage })], [
+      seg('s', 'DEEP', BEDTIME, BEDTIME + stage),
+      seg('s', 'LIGHT', BEDTIME + stage, BEDTIME + 2 * stage),
+      seg('s', 'REM', BEDTIME + 2 * stage, BEDTIME + 3 * stage),
+    ])
+    expect(valueOf(shortRows, 'sleep_in_bed_minutes')).toBe(8)
+    expect(valueOf(shortRows, 'sleep_asleep_minutes')).toBe(9)
+    expect(valueOf(shortRows, 'sleep_efficiency')).toBeLessThanOrEqual(100)
   })
 
   // The stage figures a reader sees must add up to the asleep figure printed beside them, which is
