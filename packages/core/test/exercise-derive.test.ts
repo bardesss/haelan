@@ -54,6 +54,22 @@ describe('deriveExerciseDay', () => {
     expect(derive([])).toEqual([])
   })
 
+  // The same shape as sleep's rounding defect (M3f Finding 1): summing per group roundings rather
+  // than rounding once at the end. Two 90 second (1.5 minute) sessions each round up alone (2 + 2
+  // = 4), overstating the true 3 minute total by a third. Measured across 192 real exercise
+  // sessions this direction is not systematic (90 rounded up, 101 rounded down, net 1.8 minutes),
+  // because workout timings are not grid aligned the way the sleep provider's 30 second reporting
+  // grid was, so this is ordinary rounding error rather than the one directional inflation sleep
+  // had. The design spec still calls for the same treatment "alongside for the pattern rather than
+  // for a defect": sum in milliseconds, round once.
+  it('rounds the total minutes once rather than rounding every session into it', () => {
+    const rows = derive([
+      session({ id: 'a', startHour: 7, endHour: 7 + 90 / 3600 }),
+      session({ id: 'b', startHour: 18, endHour: 18 + 90 / 3600 }),
+    ])
+    expect(rows.find((r) => r.metric === 'workout_minutes')?.value).toBe(3)
+  })
+
   it('sums the minutes of every workout in the day', () => {
     const rows = derive([
       session({ id: 'a', startHour: 7, endHour: 8 }),
