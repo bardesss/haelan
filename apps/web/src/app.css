@@ -28,7 +28,23 @@ body {
    announces. */
 .rail-collapsed { width: 60px; }
 .rail-collapsed .rail-item, .rail-collapsed .rail-person { justify-content: center; padding-left: 0; padding-right: 0; }
-.rail-collapsed .brand-row { justify-content: center; }
+/* padding-left as well as the centring: .brand-row carries a 12px left indent so its wordmark
+   lines up with the item labels below, and centring inside a box that is still indented put the
+   toggle 6px right of the strip's centre and 1px past its edge. The .button reset is the same
+   shape one row down: 11px of horizontal padding either side of a 15px icon needs 39px inside a
+   36px content box, which is what the collapsed rail used to overflow by. */
+.rail-collapsed .brand-row { justify-content: center; padding-left: 0; }
+.rail-collapsed .rail-foot .button { padding-left: 0; padding-right: 0; }
+/* Group headings become dividers rather than keeping their box. Their text is sr-only under
+   collapse, which left three 16px gaps of nothing between the icons: the grouping was still
+   costing vertical space while communicating none of it. A short rule says the same thing at this
+   width, and the sr-only span inside is absolutely positioned, so the name keeps being announced
+   without contributing height back. */
+.rail-collapsed .rail-group { height: 1px; width: 20px; padding: 0; margin: var(--space-2) auto; background: var(--border-subtle); }
+/* At 17px with no label beside it the icon is the whole of what a sighted reader gets, so it is
+   not also dimmed. The current page stays distinguishable by its chip and accent colour, which is
+   what carried that distinction at full width too. */
+.rail-collapsed .rail-item svg { opacity: 1; }
 .rail-group { font-size: var(--font-size-micro); letter-spacing: .15em; text-transform: uppercase; color: var(--text-faint); padding: var(--space-3) var(--space-3) var(--space-1); }
 .rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px var(--space-3); border-radius: 7px; font-size: var(--font-size-sm); color: var(--text-secondary); text-decoration: none; }
 .rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: 600; }
@@ -86,10 +102,27 @@ body {
 .button svg, .icon-button svg { width: 15px; height: 15px; }
 /* The source selector is a bare <select> wrapped in a .button label, so it inherits the button's
    box and contributes only its own text; without this it draws a second border inside the first. */
+/* background-color rather than the "background: none" this used to carry, and it is the same colour
+   .button already paints, so the closed control looks exactly as it did. What changes is the popup:
+   a select with no background-color of its own gets the platform's, which is white, while its
+   options keep inheriting this rule's light text colour. That put pale grey on white every time the
+   source list opened. color-scheme: dark on :root is not enough to prevent it, because an explicit
+   "none" is still an author background and wins over the scheme's default.
+
+   max-width because a select sizes itself to its widest option, and the widest option here is a
+   32-character device id. That is 229px of select inside a 275px control for a twelve character
+   label, and it set the width of a row that then had nowhere to put its actions. Naming those
+   sources is M5's job; until then the layout does not get to be decided by a string no reader can
+   use. */
 .button select {
   appearance: none; font: inherit; font-size: var(--font-size-xs); color: inherit;
-  background: none; border: 0; padding: 0; cursor: pointer;
+  background-color: var(--surface-card); border: 0; padding: 0; cursor: pointer;
+  max-width: 15ch; overflow: hidden; text-overflow: ellipsis;
 }
+/* Stated on the options too, not left to inheritance: Firefox and Chromium both paint popup rows
+   from the option's own computed colours on Windows, and an option with none falls back to the
+   platform's light pair rather than to the select's. */
+.button select option { background-color: var(--surface-card); color: var(--text-primary); }
 .button-primary { color: var(--accent-soft); background: var(--surface-accent); border-color: var(--border-accent); }
 .button-primary:hover { color: var(--text-primary); background: var(--surface-accent-hover); }
 .button-primary:disabled, .button-primary[aria-disabled='true'] {
