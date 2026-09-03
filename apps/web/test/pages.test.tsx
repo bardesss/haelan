@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import type { EChartsOption } from 'echarts'
 import { dayMetricTarget } from '@haelan/core/target-key'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
@@ -42,12 +43,21 @@ for (const variable of CHART_VARS) document.documentElement.style.setProperty(va
  * one test that needs it (`annotate wiring`, below) capture the click handler without asking
  * zrender to resolve a coordinate against a rendered SVG, which chart-marks.test.tsx already
  * established does not work under happy-dom no matter how the click is simulated.
+ *
+ * `lastOption` rides along the same tap, for the same reason and the same constraint: the weight
+ * trend test below (`Weight specifics`) needs to see the real `series` array a chart was actually
+ * given, not only that something painted, and re-deriving that from the rendered SVG's own path
+ * data would be asserting against echarts' internal drawing rather than against what this
+ * component built. `chart.setOption` still runs for real underneath the tap, so the SVG every
+ * other assertion in this file depends on is unaffected.
  */
-type CapturedChart = { onClick?: (event: unknown) => void }
+type CapturedChart = { onClick?: (event: unknown) => void, lastOption?: EChartsOption }
 const capturedCharts: CapturedChart[] = []
 
 vi.mock('echarts/core', async (importOriginal) => {
-  const actual = (await importOriginal()) as { init: (...args: unknown[]) => { on: (...a: unknown[]) => unknown } } & Record<string, unknown>
+  const actual = (await importOriginal()) as {
+    init: (...args: unknown[]) => { on: (...a: unknown[]) => unknown, setOption: (...a: unknown[]) => unknown }
+  } & Record<string, unknown>
   return {
     ...actual,
     init: (...args: unknown[]) => {
@@ -58,6 +68,11 @@ vi.mock('echarts/core', async (importOriginal) => {
       chart.on = (eventName: unknown, handler: unknown) => {
         if (eventName === 'click') entry.onClick = handler as (event: unknown) => void
         return originalOn(eventName, handler)
+      }
+      const originalSetOption = chart.setOption.bind(chart)
+      chart.setOption = (option: unknown, ...rest: unknown[]) => {
+        entry.lastOption = option as EChartsOption
+        return originalSetOption(option, ...rest)
       }
       return chart
     },
@@ -177,6 +192,21 @@ function stubFetch(
       })
     }
     if (url.includes('/insights')) return json(insightBody(url))
+    // Weight's own trend line only (Weight.tsx wires useTrend to the weight metric alone), same
+    // DAYS-filtered-by-from/to shape as the /series branch above, so the two stay coherent: a day
+    // /series answers for is a day /trend can smooth too. Real, distinct values from /series' own
+    // 60 + i*7 (not the same formula), so a settled render cannot pass the "draws a second series"
+    // check below by coincidentally reusing the readings' own numbers.
+    if (url.includes('/trend')) {
+      const params = new URLSearchParams(url.split('?')[1] ?? '')
+      const from = params.get('from') ?? ''
+      const to = params.get('to') ?? ''
+      const points = DAYS
+        .map((date, i) => ({ date, i }))
+        .filter(({ date }) => date >= from && date <= to)
+        .map(({ date, i }) => ({ localDate: date, value: 50 + i * 3 }))
+      return json({ points })
+    }
     return json({ baseline: { center: 62, spread: 4, n: 40, thin: false } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -728,6 +758,100 @@ describe('notes and events reach the charts', () => {
       const row = firstTable.match(new RegExp(`<tr><th scope="row">${DATE}</th>[\\s\\S]*?</tr>`))?.[0]
       if (!row) throw new Error(`no row for ${DATE}`)
       expect(row).toContain(`${NOTE_BODY}, Illness`)
+    } finally {
+      cleanup()
+    }
+  })
+})
+
+// Task 6's own point, restated: task-6-brief.md's tests assert trendPath alone and nothing checks
+// that the weight card actually draws the trend it builds, exactly the shape PersonQuery.trend
+// shipped in already (specced and built, M3e-1 drew raw readings around it without a consumer).
+// Mounted fresh, not read off the module level `pages.Weight` above: a dedicated mount keeps
+// `chartsBefore` unambiguous (capturedCharts already carries one entry per chart from every page
+// settled above by the time this describe runs) and lets "the weight card's own chart" below mean
+// the first chart this specific mount captures, not however many charts every other page in this
+// file happens to draw before it.
+describe('Weight specifics', () => {
+  async function mountWeightWithTrend(): Promise<{ html: string, series: EChartsOption['series'], cleanup: () => void }> {
+    const restore = stubFetch()
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', WEIGHT_ROUTE)
+    const chartsBefore = capturedCharts.length
+
+    act(() => {
+      root.render(<I18nProvider lng="en"><QueryClientProvider client={client}><Weight /></QueryClientProvider></I18nProvider>)
+    })
+    await flush(client, () => container.innerHTML)
+
+    // The weight card is Weight.tsx's own first card() call, ahead of body_fat, so the first chart
+    // entry captured by this mount is unambiguously its Sparkline, the same ordinal reasoning
+    // mountRecoveryWithOverride above states for Recovery's own first card.
+    const entry = capturedCharts.slice(chartsBefore)[0]
+    if (!entry) throw new Error('no chart mounted')
+
+    return {
+      html: container.innerHTML,
+      series: entry.lastOption?.series,
+      cleanup: () => {
+        act(() => { root.unmount() })
+        container.remove()
+        restore()
+      },
+    }
+  }
+
+  it('draws the trend line as a second series, not instead of the readings', async () => {
+    const { series, cleanup } = await mountWeightWithTrend()
+    try {
+      const list = Array.isArray(series) ? series as Record<string, unknown>[] : []
+      // One series (the readings) before this task, on every other Sparkline caller still today;
+      // two once the weight card's own trend query has data to draw, the readings kept rather than
+      // replaced (see Sparkline.tsx's own `trend` prop comment for why the trend series is drawn
+      // first, under the readings, rather than the readings dropped in its favour).
+      expect(list).toHaveLength(2)
+      expect(list[0]?.['smooth']).toBe(true)
+    } finally {
+      cleanup()
+    }
+  })
+
+  // The two halves of the brief's own point 2 and point 3, checked from one render rather than
+  // two: a fix that satisfies "draws a second series" (the test above) by swapping the readings
+  // series for the trend line instead of adding to it would fail here on the missing series[1]
+  // alone, and the basis assertion rides along on the same render as a regression guard, since
+  // both readings.length and points.length come off the identical `metricGroups.pointsOf('weight')`
+  // call in Weight.tsx's own card().
+  it('keeps the readings drawn as points, and the basis still counting them, once the trend line is on the chart', async () => {
+    const { series, html, cleanup } = await mountWeightWithTrend()
+    try {
+      const list = Array.isArray(series) ? series as Record<string, unknown>[] : []
+      const readingsSeries = list[1]
+      // showSymbol true is what actually draws a marker at every reading; a fix that painted only
+      // the smooth trend line, the exact defect this task exists to rule out, would leave this
+      // false (Sparkline's own default) or drop the readings series altogether.
+      expect(readingsSeries?.['showSymbol']).toBe(true)
+      // Dense over the whole week (WEIGHT_ROUTE spans 2026-08-10 through 2026-08-16, the same seven
+      // day window RANGE gives Dashboard), not thinned down to the four days DAYS actually answers:
+      // a reading series that dropped to four entries would be showing only the days with data,
+      // which is what the accessible table does, not what the dense by-position canvas series does.
+      expect(readingsSeries?.['data']).toHaveLength(7)
+
+      const basis = [...html.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)]
+        .map((m) => m[0])
+        .find((card) => card.includes('>Weight<'))
+        ?.match(/<p class="basis"[^>]*>([\s\S]*?)<\/p>/)?.[1]
+      if (!basis) throw new Error('no basis line rendered for the Weight card')
+      // Four of DAYS' own dates fall inside the week WEIGHT_ROUTE requests, the same count the
+      // /series stub already answers for every other assertion against this fixture. M3e-1's own
+      // decision (basis counts readings, not calendar days) has to survive the trend line landing
+      // on the same card, not get displaced by it.
+      expect(basis).toContain('4 readings this period')
+      expect(basis).not.toMatch(/of \d+ days/)
     } finally {
       cleanup()
     }

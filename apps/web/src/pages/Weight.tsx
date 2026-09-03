@@ -15,6 +15,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useTrend } from '../data/useTrend.js'
 import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
@@ -111,6 +112,21 @@ export function Weight() {
     return out
   }, [rangeDates, lastSeries.data])
 
+  // PersonQuery.trend was specced and built for this card and M3e-1 drew the raw readings above
+  // instead, without a consumer for it. `source`, not `controls.source`: the same resolveSource
+  // correction `range` above reads through, so a link naming a source this person does not have
+  // (or one removed since the link was made) cannot query the trend line under it either.
+  const weightTrendQuery = useTrend({ metric: 'weight', agg: 'last', from: controls.from, to: controls.to, source })
+  // Dense over the same rangeDates axis the readings sparkline above is built along, so Sparkline
+  // can zip trend and values by position (Sparkline's own `trend` prop comment says why): the route
+  // answers only the days trendOf actually smoothed, sparse exactly like a /series response, and a
+  // caller reading it straight would be zipping a sparse array against a dense one by index rather
+  // than by date, the same defect denseSeries above exists to rule out for the readings.
+  const weightTrend = useMemo(() => {
+    const byDate = new Map((weightTrendQuery.data?.points ?? []).map((p) => [p.localDate, p.value]))
+    return rangeDates.map((date) => byDate.get(date) ?? null)
+  }, [rangeDates, weightTrendQuery.data])
+
   // The one insight card the brief's own table gives this page: weight at the last agg both
   // cards above already request (REQUESTS.last). /insights is its own, unbatched request, so this
   // is one call added on top of the single group above. Suppresses often, correctly: 130 readings
@@ -173,6 +189,10 @@ export function Weight() {
     // why the chart itself never converts). Undefined for body_fat, which falls back to
     // Sparkline's own default (`formatMetricValue(v, metric, ...)`).
     sparkFormat?: (value: number | null, absent: string) => string,
+    // Undefined for body_fat, the same as `sparkFormat` above: PersonQuery.trend was specced and
+    // built against the weight metric this card requests (weightTrendQuery above), and no sibling
+    // card on this page has a trend line to draw.
+    trend?: (number | null)[],
   ) => {
     const points = metricGroups.pointsOf(metric)
     const headline = mean(values(points))
@@ -200,7 +220,7 @@ export function Weight() {
             basis={basis} delta={deltaFor(t, metric, values(points), 'neutral')}>
             {oneDayRange ? <ChartNote /> : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat} episodic
-                label={t(chartLabelKey, { period })} unit={t(unitKey)}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)} trend={trend}
                 annotations={annotations} excluded={excluded}
                 onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
             )}
@@ -234,7 +254,8 @@ export function Weight() {
           // of metric, dayAnnotations.ts's own comment). Without the guard, `null / 1000` coerces
           // to 0 and prints a real "0.0" on either of those rows instead of the absence word
           // ("excluded" or "no reading") the row is meant to carry.
-          (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent))}
+          (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent),
+          weightTrend)}
         {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.readings',
           'weight.bodyFat.chartLabel', 'weight.units.percent', 'weight.units.percentShort')}
 
