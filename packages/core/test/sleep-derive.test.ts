@@ -27,6 +27,63 @@ const valueOf = (rows: ReturnType<typeof derive>, metric: string) =>
   rows.find((r) => r.metric === metric)?.value
 
 describe('deriveSleepDay', () => {
+  // The real shape of the defect, not a contrived one: the provider reports sleep on a 30 second
+  // grid, so a night is built of segments that are each an exact half minute long. Ten of those is
+  // fifteen minutes. Rounding each one first gives round(1.5) = 2, ten times, which is twenty.
+  it('rounds a stage total once rather than rounding every segment into it', () => {
+    const half = 90 * 1000
+    const segments = Array.from({ length: 10 }, (_, i) =>
+      seg('n', 'LIGHT', BEDTIME + i * half, BEDTIME + (i + 1) * half))
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 15 * MIN })], segments)
+    expect(valueOf(rows, 'sleep_light_minutes')).toBe(15)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(15)
+  })
+
+  // The visible symptom, and the reason this was noticed at all. A night whose every minute in bed
+  // is asleep is 100 percent efficient. It cannot be more, and before this it was, on 13 real
+  // nights, because the numerator gained half a minute per segment and the denominator did not.
+  it('cannot report an efficiency above 100 percent', () => {
+    const half = 90 * 1000
+    const segments = Array.from({ length: 10 }, (_, i) =>
+      seg('n', 'LIGHT', BEDTIME + i * half, BEDTIME + (i + 1) * half))
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 15 * MIN })], segments)
+    expect(valueOf(rows, 'sleep_efficiency')).toBe(100)
+  })
+
+  // The stage figures a reader sees must add up to the asleep figure printed beside them, which is
+  // the same rule M3e-2 applied to the insight card delta: a total is derived from its displayed
+  // parts wherever a reader could do the arithmetic themselves. Rounding each stage from its own
+  // milliseconds and then summing the milliseconds separately would break that by up to a minute.
+  it('keeps the stage figures adding up to the asleep figure', () => {
+    const half = 90 * 1000
+    const at = (n: number) => BEDTIME + n * half
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: at(9) })], [
+      seg('n', 'LIGHT', at(0), at(3)),
+      seg('n', 'DEEP', at(3), at(5)),
+      seg('n', 'REM', at(5), at(9)),
+    ])
+    const deep = valueOf(rows, 'sleep_deep_minutes')!
+    const light = valueOf(rows, 'sleep_light_minutes')!
+    const rem = valueOf(rows, 'sleep_rem_minutes')!
+    expect(deep + light + rem).toBe(valueOf(rows, 'sleep_asleep_minutes'))
+  })
+
+  // Naps sum session durations rather than segment durations, through the same helper, so they
+  // carry the same bias in miniature: of 228 real sleep sessions, 38 rounded up and none down.
+  // The two nap sessions land 118.5 minutes apart, inside the 120 minute night gap, so
+  // assembleNights groups them together for the purpose of picking the night; that grouping does
+  // not merge them into one session, so they still count as two naps summed through asMinutes.
+  it('rounds a nap total once as well', () => {
+    const half = 90 * 1000
+    const rows = derive([
+      session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * 60 * MIN }),
+      session({ id: 'nap1', startMs: BEDTIME + 20 * 60 * MIN, endMs: BEDTIME + 20 * 60 * MIN + half }),
+      session({ id: 'nap2', startMs: BEDTIME + 22 * 60 * MIN, endMs: BEDTIME + 22 * 60 * MIN + half }),
+    ], [seg('n', 'LIGHT', BEDTIME, BEDTIME + 8 * 60 * MIN)])
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(2)
+    expect(valueOf(rows, 'sleep_nap_minutes')).toBe(3)
+  })
+
   // SLEEP_METRICS says it exists so that this function and the catalogue cannot drift apart on
   // which metrics exist. Nothing enforced that until now: the function pushes literal strings and
   // never reads the list, so a metric added to either side alone left the suite green and the

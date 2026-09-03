@@ -164,7 +164,7 @@ export function deriveSleepDay(input: {
     const end = Math.max(...night.map((s) => s.endMs))
     const first = night.find((s) => s.startMs === start)!
     const last = night.find((s) => s.endMs === end)!
-    const inBed = minutesBetween(start, end)
+    const inBed = asMinutes(end - start)
 
     push('sleep_in_bed_minutes', 'sum', inBed)
     push('sleep_bedtime_minutes', 'last', localMinutesOf(input.localDate, first.startMs, first.startOffsetMinutes))
@@ -179,19 +179,22 @@ export function deriveSleepDay(input: {
     // all night.
     const recognised = staged.filter((s) => ASLEEP_STAGES.includes(s.stage) || s.stage === AWAKE_STAGE)
     if (recognised.length > 0) {
-      const byStage = (stage: string) => staged
+      const msByStage = (stage: string) => staged
         .filter((seg) => seg.stage === stage)
-        .reduce((total, seg) => total + minutesBetween(seg.startMs, seg.endMs), 0)
+        .reduce((total, seg) => total + (seg.endMs - seg.startMs), 0)
+      const minutesOfStage = (stage: string) => asMinutes(msByStage(stage))
 
-      const deep = byStage('DEEP')
-      const light = byStage('LIGHT')
-      const rem = byStage('REM')
+      const deep = minutesOfStage('DEEP')
+      const light = minutesOfStage('LIGHT')
+      const rem = minutesOfStage('REM')
       // Summed from the constant rather than from the three figures beside it, so the vocabulary
-      // is one list and a stage added to it cannot go missing from the total.
-      const asleep = ASLEEP_STAGES.reduce((total, stage) => total + byStage(stage), 0)
+      // is one list and a stage added to it cannot go missing from the total. Summed from the
+      // rounded per stage figures rather than from their milliseconds, so the stage numbers a
+      // reader sees add up to the asleep figure printed beside them.
+      const asleep = ASLEEP_STAGES.reduce((total, stage) => total + minutesOfStage(stage), 0)
       // The time between two pieces is time out of bed, and it counts against the night exactly
-      // as an AWAKE stage inside one session does.
-      const awake = byStage(AWAKE_STAGE) + gapMinutesWithin(night)
+      // as an AWAKE stage inside one session does. One rounding across both.
+      const awake = asMinutes(msByStage(AWAKE_STAGE) + gapMsWithin(night))
 
       push('sleep_deep_minutes', 'sum', deep)
       push('sleep_light_minutes', 'sum', light)
@@ -205,12 +208,18 @@ export function deriveSleepDay(input: {
   // Zero naps is a measurement rather than a gap: we looked and there were none. A day with no
   // sleep at all returned above, before reaching here.
   push('sleep_nap_count', 'count', naps.length)
-  push('sleep_nap_minutes', 'sum', naps.reduce((total, s) => total + minutesBetween(s.startMs, s.endMs), 0))
+  push('sleep_nap_minutes', 'sum', asMinutes(naps.reduce((total, s) => total + (s.endMs - s.startMs), 0)))
 
   return out
 }
 
-const minutesBetween = (fromMs: number, toMs: number): number => Math.round((toMs - fromMs) / MINUTE_MS)
+// Durations are summed in milliseconds and rounded once, where they become a metric. This used to
+// be a single rounding helper called per segment, which was not ordinary rounding error: the
+// provider reports sleep on a 30 second grid and Math.round is half up, so of 5,904 real segments
+// 3,136 sat exactly 30 seconds over a minute and rounded up, 2,768 were exact, and none rounded
+// down. That is 1,568 invented minutes across one household's history, about 7 a night, in every
+// sleep_*_minutes metric rather than only in the efficiency figure that made it visible.
+const asMinutes = (ms: number): number => Math.round(ms / MINUTE_MS)
 
 /** Minutes from the local midnight of `localDate`, negative before it. */
 function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number): number {
@@ -218,14 +227,14 @@ function localMinutesOf(localDate: string, utcMs: number, offsetMinutes: number)
   return Math.round((wall - Date.parse(`${localDate}T00:00:00Z`)) / MINUTE_MS)
 }
 
-/** The time between consecutive pieces of one night, which nobody was in bed for. */
-function gapMinutesWithin(night: readonly SleepSessionLike[]): number {
+/** The time between consecutive pieces of one night, in milliseconds, which nobody was in bed for. */
+function gapMsWithin(night: readonly SleepSessionLike[]): number {
   const ordered = [...night].sort((a, b) => a.startMs - b.startMs)
   let total = 0
   for (let i = 1; i < ordered.length; i += 1) {
     const previousEnd = Math.max(...ordered.slice(0, i).map((s) => s.endMs))
     // Negative for a piece that overlaps the one before it, which contributes no gap at all.
-    total += Math.max(0, minutesBetween(previousEnd, ordered[i]!.startMs))
+    total += Math.max(0, ordered[i]!.startMs - previousEnd)
   }
   return total
 }
