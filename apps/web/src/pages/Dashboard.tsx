@@ -271,10 +271,12 @@ export function Dashboard() {
   const { dayAnnotations, dayAnnotationsByMetric } =
     useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
 
-  // The flagged days card below reads events, not notes: "flagged" is the word AnnotatePanel's own
-  // chart-click flow uses for an event, and a plain note carries no kind or value to flag anything
-  // with. Distinct dates, not a count of events, since two events on one day (illness logged from
-  // two different chart clicks) are one flagged day to a reader scanning a calendar, not two.
+  // The flagged days card below reads events, not notes: "flagged" is this card's own label for a
+  // day carrying one, not a word AnnotatePanel itself uses (its own control there is "Add an
+  // event", annotate.actions.event); a plain note carries no kind or value to flag anything with,
+  // which is the actual distinction this card is drawing. Distinct dates, not a count of events,
+  // since two events on one day (illness logged from two different chart clicks) are one flagged
+  // day to a reader scanning a calendar, not two.
   const flaggedDates = useMemo(
     () => [...new Set((overridesQuery.events.data?.items ?? []).map((e) => e.localDate))],
     [overridesQuery.events.data],
@@ -699,7 +701,12 @@ export function Dashboard() {
             link now lands somewhere that adds something instead of returning to this same page.
             This card used to be a hardcoded EmptyState claiming no source provides HRV; daily_hrv
             has real rows and rides the same 'last' request resting_heart_rate above already
-            issues (REQUESTS.last), so tile() below draws it the same way, at no extra request. */}
+            issues (REQUESTS.last), so tile() below draws it the same way, at no extra request.
+            basisWornKey is handed the same string as basisKey, not a distinct wear-clause
+            template: daily_hrv carries no tier override in packages/core/src/api/catalogue.ts, so
+            it defaults to 'daily' rather than 'intraday' and coverageIsWearSignal reads it as no
+            wear signal, the same choice Weight.tsx's own card() and Recovery.tsx's card() already
+            make for the identical reason, so MetricCard's wear branch can never fire here. */}
         {tile('daily_hrv', 4, 'dashboard.recovery.label', 'dashboard.recovery.basis', 'dashboard.recovery.basis',
           'dashboard.recovery.chartLabel', 'dashboard.units.milliseconds',
           (p) => formatMetricValue(mean(values(p)), 'daily_hrv', i18n.language, ''), 'higher-is-better',

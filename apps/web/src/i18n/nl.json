@@ -150,7 +150,7 @@
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
       "emptyTitle": "Geen gemarkeerde dagen in deze periode.",
-      "emptyDetail": "Er zijn geen gebeurtenissen vastgelegd voor deze periode. Klik op een grafiek om er een te markeren.",
+      "emptyDetail": "Er zijn geen gebeurtenissen vastgelegd voor deze periode. Klik op een grafiek om er een toe te voegen.",
       "basis_one": "{{count}} dag gemarkeerd in deze periode",
       "basis_other": "{{count}} dagen gemarkeerd in deze periode",
       "viewAll": "Bekijk notities"

@@ -146,10 +146,11 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
 }
 
 /**
- * Same routes as stubFetch, but /events answers `items` instead of the fallback `{}` every other
- * unmatched route here still gets: the flagged days card is the one card on this page reading
- * events rather than a metric's own points, so it is the one test file needs a stub that can hand
- * it real rows.
+ * The same session/series/nights/baselines/insights routes stubFetch answers, plus explicit
+ * /events, /notes and /overrides handlers stubFetch itself leaves to its own `{}` fallback: the
+ * flagged days card is the one card on this page reading events rather than a metric's own
+ * points, so this is the one stub the test file needs that can hand it real rows, with notes and
+ * overrides answered in the real `{ items: [] }` shape rather than the fallback's bare `{}`.
  */
 function stubFetchWithEvents(items: unknown[]): () => void {
   const original = globalThis.fetch
@@ -742,7 +743,11 @@ describe('the flagged days card', () => {
   // this card now reads overridesQuery.events, the same query the chart annotations already fetch.
   it('reports no events for the period rather than claiming nothing is connected', async () => {
     window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
-    const restore = stubFetch({ baseline: null })
+    // stubFetchWithEvents([]), not stubFetch's own `{}` fallback: the real /events route answers
+    // `{ items: [] }` for an eventless period, and a test resting on `{}` only passes because
+    // `overridesQuery.events.data?.items ?? []` happens to read a missing `items` the same as an
+    // empty one, which would stay green even if that optional chaining were ever tightened.
+    const restore = stubFetchWithEvents([])
     const { client, tree } = withQuery(<Dashboard />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
