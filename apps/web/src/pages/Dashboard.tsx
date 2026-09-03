@@ -186,8 +186,8 @@ function datesBetween(from: string, to: string): string[] {
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
 // packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six stage values
-// (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS), the derive layer refusing to count anything outside
-// that vocabulary toward either asleep or awake (sleep.ts:185) rather than guessing. This page
+// (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS), the derive layer's `recognised` guard refusing to
+// count anything outside that vocabulary toward either asleep or awake rather than guessing. This page
 // draws only the four staged ones. A segment carrying ASLEEP or RESTLESS, the classic non-staged
 // pair, is dropped here for the same not-guessing reason, leaving a visible gap in the hypnogram,
 // rather than drawn, coloured and tabulated as LIGHT: a device reporting a value nobody staged is

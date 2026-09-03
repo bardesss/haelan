@@ -211,8 +211,8 @@ export function deriveSleepDay(input: {
 
       // Staged, not merely recognised: a classic night (ASLEEP/RESTLESS only) has no DEEP, LIGHT
       // or REM segment at all, so writing 0 for each would claim a staging measurement came back
-      // empty when there was no staging to begin with, the same mistake sleep.ts:180's guard
-      // exists to avoid one level up. A staged night that genuinely recorded no REM still writes
+      // empty when there was no staging to begin with, the same mistake the `recognised` guard
+      // above exists to avoid one level up. A staged night that genuinely recorded no REM still writes
       // sleep_rem_minutes 0, because that zero is a measurement: the test is whether staging
       // happened at all, not whether every stage it looked for was present.
       const wasStaged = staged.some((s) => s.stage === 'DEEP' || s.stage === 'LIGHT' || s.stage === 'REM')
