@@ -97,10 +97,14 @@ describe('the min/max band toggle', () => {
   // no-hardcoded-strings.test.ts reads text between tags, not an attribute, so an English label on
   // this control would sit on a Dutch page unseen. That is the defect the Dutch sweep found in the
   // stepper, and this is the same shape.
+  //
+  // The actual Dutch string, not a /band/i mismatch. I18nProvider sets fallbackLng: 'en', so a
+  // label left in English renders "Hide daily range", which does not match that pattern either:
+  // the old assertion could only fail for a key missing from both catalogues, which i18n-parity
+  // already covers, and its own comment claimed it guarded the case it was blindest to.
   it('names the control in the page language rather than in English', () => {
     const { toggle } = mountChart('nl')
     const name = toggle().getAttribute('aria-label') ?? toggle().textContent ?? ''
-    expect(name).not.toBe('')
-    expect(name, 'the Dutch label is missing or left in English').not.toMatch(/band/i)
+    expect(name, 'the Dutch label is missing or left in English').toBe('Dagbereik verbergen')
   })
 })
