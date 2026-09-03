@@ -292,7 +292,8 @@ describe('GET /export', () => {
   // registered device ids plus 'merged' and 'provider'. The result was every data page's download
   // link 400ing on the default view while every chart above it, built through one of the other
   // four functions, rendered fine. Omitting `source` entirely, the way a fixed link now does,
-  // still answers 200 (the case just above this one).
+  // still answers 200 (the case two above this one, 'writes each row once when the same metric is
+  // asked for twice': its own query string carries no source param at all).
   it('answers 400 for the web app\'s own all sources sentinel rather than treating it as a real source', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedDaily(harness, { localDate: '2026-08-01', value: 900 })

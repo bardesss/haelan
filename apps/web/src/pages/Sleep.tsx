@@ -345,7 +345,10 @@ export function Sleep() {
 
   const asleepPoints = metricGroups.pointsOf('sleep_asleep_minutes')
   const asleepMean = mean(values(asleepPoints))
-  const asleepNote = baselineNote(t, asleepMean, asleepBaseline, controls.to)
+  // historicalTo, not controls.to: this is the date asleepBaseline was actually anchored on above,
+  // and the note has to name the date the band was really computed against, the same invariant
+  // Dashboard.tsx's own hrBaseline comment states.
+  const asleepNote = baselineNote(t, asleepMean, asleepBaseline, controls.historicalTo)
 
   const efficiencyMean = mean(values(metricGroups.pointsOf('sleep_efficiency')))
   const bedtimeMean = mean(values(metricGroups.pointsOf('sleep_bedtime_minutes')))

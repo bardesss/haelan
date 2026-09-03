@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -33,6 +33,9 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  // A safety net rather than the primary reset: the clock test below restores real timers itself,
+  // but an assertion failure there would otherwise leak a mocked clock into whatever test runs next.
+  vi.useRealTimers()
 })
 
 function mount(node: ReactNode): void {
@@ -455,6 +458,26 @@ describe('the remaining Dashboard cards', () => {
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
     restore()
+  })
+
+  // M3 phase review B2: hrBaseline itself moved to historicalTo (the date the band is really
+  // computed against), but the basis line's own {{on}} kept reading controls.to, the month's own
+  // calendar end. Dashboard.tsx's own hrBaseline comment states the invariant this reopened:
+  // "the basis line used to report that anchor date instead of the one the drawn band was really
+  // computed against." dashboard.heartRateRange.basis interpolates {{on}} unconditionally (not
+  // only on a thin baseline), so a real, non-thin baseline is enough to catch this.
+  it('names the baseline\'s own anchor date in its basis line, not the month\'s own future end', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    window.history.replaceState(null, '', '/')
+    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false } })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const text = container!.textContent!
+    expect(text).toContain('60 days before 2026-09-05')
+    expect(text).not.toContain('60 days before 2026-09-30')
+    restore()
+    vi.useRealTimers()
   })
 
   // The refactor this task is for: Dashboard's own local groupNumber (a byte-identical copy of

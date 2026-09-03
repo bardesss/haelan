@@ -612,7 +612,7 @@ export function Dashboard() {
         <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
           query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
           points={meanHrPoints}
-          basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.to }}>
+          basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.historicalTo }}>
           {() => (
             // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
             // same lookup tile() uses for every other card, read here under the metric this chart

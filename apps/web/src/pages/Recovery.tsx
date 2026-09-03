@@ -214,7 +214,11 @@ export function Recovery() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     const headline = mean(values(points))
-    const note = baselineNote(t, headline, baselineQuery, metric, i18n.language, controls.to)
+    // historicalTo, not controls.to: this is the date restingHrBaseline/hrvBaseline/
+    // respiratoryBaseline were actually anchored on above, and the note has to name the date the
+    // band was really computed against, the same invariant Dashboard.tsx's own hrBaseline comment
+    // states.
+    const note = baselineNote(t, headline, baselineQuery, metric, i18n.language, controls.historicalTo)
     const spark = sparklines.get(metric)!
     const { excluded } = annotationsFor(overridesByMetricMap, metric)
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
