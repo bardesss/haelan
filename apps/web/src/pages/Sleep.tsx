@@ -248,10 +248,16 @@ export function Sleep() {
   // Nap clock times, the one thing this card cannot get from a metric: sleep_nap_count and
   // sleep_nap_minutes carry a count and a duration, never a time of day, so the markers come off
   // /sleep/nights (already fetched above for the hypnogram) while bed and wake stay on the two
-  // derived metrics below. The two agree by construction rather than by luck: readSleepNights
+  // derived metrics below. The two agree on one condition, not by construction: readSleepNights
   // splits each date through the same assembleNights that sleep_bedtime_minutes and
-  // sleep_waketime_minutes are pushed from, so a night's span there and the pair here are the
-  // same group, and the naps are exactly what that group excluded.
+  // sleep_waketime_minutes are pushed from, so a night's span there and the pair here are the same
+  // group and the naps are exactly what that group excluded, but only while nightGapMinutes is the
+  // same on both sides of that split. readSleepNights reads the instance's own setting at query
+  // time and says why in its own words ("a night assembled at one gap and read back at another is
+  // two different nights", packages/core/src/query/sleepNights.ts); the metrics were pushed at
+  // whatever gap was in force when the derivation last ran. Change that setting without a rebuild
+  // and this card's bed, wake and naps stop describing one grouping, which is a stale derivation
+  // rather than a defect here, and not something this page can detect.
   //
   // endOffsetMinutes, not startOffsetMinutes: a night starts the evening before the date it
   // belongs to, and a nap falls on the date itself, the same side of midnight as the wake, so the
