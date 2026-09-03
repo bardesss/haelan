@@ -375,7 +375,8 @@
       "woke": "Ontwaakt",
       "naps": "Dutjes",
       "time": "Tijd",
-      "source": "Bron"
+      "source": "Bron",
+      "trend": "Trend"
     },
     "weekday": {
       "mon": "Ma",

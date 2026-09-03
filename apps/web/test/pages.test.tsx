@@ -121,6 +121,7 @@ const HEALTH_DAY_ROUTE = '/health?range=day&on=2026-08-13'
  */
 function stubFetch(
   overrides: readonly unknown[] = [], notes: readonly unknown[] = [], events: readonly unknown[] = [],
+  trend: 'real' | 'none' = 'real',
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -199,17 +200,27 @@ function stubFetch(
     if (url.includes('/insights')) return json(insightBody(url))
     // Weight's own trend line only (Weight.tsx wires useTrend to the weight metric alone), same
     // DAYS-filtered-by-from/to shape as the /series branch above, so the two stay coherent: a day
-    // /series answers for is a day /trend can smooth too. Real, distinct values from /series' own
-    // 60 + i*7 (not the same formula), so a settled render cannot pass the "draws a second series"
-    // check below by coincidentally reusing the readings' own numbers.
+    // /series answers for is a day /trend can smooth too. Values an order of magnitude away from
+    // /series' own 60 + i*7, so a settled render cannot pass the "draws a second series" check
+    // below by coincidentally reusing the readings' own numbers, and so the trend column's own
+    // cells in the accessible table are legible apart from the reading cells beside them: these
+    // are grams, and 50000 + i*3000 formats to a distinct 50.0, 53.0, 56.0, 59.0 in the kilograms
+    // the weight card displays, where the readings all round to the same 0.1.
+    //
+    // `trend: 'none'` answers the same route with no points at all, which is what trendOf really
+    // sends for a range holding fewer than TREND_MIN_POINTS readings (packages/core/src/query/
+    // trend.ts) and the same dense-but-all-null array the page builds while the request is in
+    // flight or after it failed. Weight.tsx hands that array over regardless, so it is the shape
+    // the "no trend to draw" tests below need and the one nothing here could produce before.
     if (url.includes('/trend')) {
+      if (trend === 'none') return json({ points: [] })
       const params = new URLSearchParams(url.split('?')[1] ?? '')
       const from = params.get('from') ?? ''
       const to = params.get('to') ?? ''
       const points = DAYS
         .map((date, i) => ({ date, i }))
         .filter(({ date }) => date >= from && date <= to)
-        .map(({ date, i }) => ({ localDate: date, value: 50 + i * 3 }))
+        .map(({ date, i }) => ({ localDate: date, value: 50_000 + i * 3_000 }))
       return json({ points })
     }
     return json({ baseline: { center: 62, spread: 4, n: 40, thin: false } })
@@ -811,8 +822,10 @@ describe('notes and events reach the charts', () => {
 // the first chart this specific mount captures, not however many charts every other page in this
 // file happens to draw before it.
 describe('Weight specifics', () => {
-  async function mountWeightWithTrend(): Promise<{ html: string, series: EChartsOption['series'], cleanup: () => void }> {
-    const restore = stubFetch()
+  async function mountWeightWithTrend(
+    trend: 'real' | 'none' = 'real',
+  ): Promise<{ html: string, series: EChartsOption['series'], cleanup: () => void }> {
+    const restore = stubFetch([], [], [], trend)
     const container = document.createElement('div')
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -890,6 +903,61 @@ describe('Weight specifics', () => {
       // on the same card, not get displaced by it.
       expect(basis).toContain('4 readings this period')
       expect(basis).not.toMatch(/of \d+ days/)
+    } finally {
+      cleanup()
+    }
+  })
+
+  // Weight.tsx passes `trend` unconditionally and weightTrend is always a defined dense array, so
+  // "the prop is present" and "there is a line to draw" were never the same question. All-null is
+  // the ordinary shape three ways: the query still in flight, the query failed, and a range holding
+  // fewer than TREND_MIN_POINTS readings, which trendOf answers with nothing at all. Branching on
+  // `trend !== undefined` still hid the readings' own line and switched them to bare symbols in all
+  // three, so the card drew disconnected dots and no line, permanently, with nothing saying why.
+  it('leaves the readings as an ordinary connected line when the trend has no points to draw', async () => {
+    const { series, cleanup } = await mountWeightWithTrend('none')
+    try {
+      const list = Array.isArray(series) ? series as Record<string, unknown>[] : []
+      // One series, not two: no smooth line was added, which is the same chart every other
+      // Sparkline caller draws.
+      expect(list).toHaveLength(1)
+      const readingsSeries = list[0]
+      // The two halves of the degradation, asserted separately because either alone would leave a
+      // readable chart: bare symbols with a line still under them, or a hidden line with the
+      // symbols off, is not what shipped. Both together is.
+      expect(readingsSeries?.['showSymbol']).toBe(false)
+      expect((readingsSeries?.['lineStyle'] as Record<string, unknown> | undefined)?.['opacity'])
+        .toBeUndefined()
+    } finally {
+      cleanup()
+    }
+  })
+
+  // The other half: the trend line had no representation in the accessible table at all, which
+  // still carried date, value and note only. A table-only reader got the raw readings and nothing
+  // of the line drawn through them, the same canvas-and-table split the band toggle one card away
+  // exists to close.
+  it('gives the trend line a column in the accessible table, in the reading\'s own unit', async () => {
+    const { html, cleanup } = await mountWeightWithTrend()
+    try {
+      const table = [...html.matchAll(/<table class="sr-only">[\s\S]*?<\/table>/g)]
+        .map((m) => m[0])
+        .find((t) => t.includes('Weight in kilograms'))
+      if (!table) throw new Error(`no weight chart table in:\n${html}`)
+      expect(table).toContain('<th scope="col">Trend</th>')
+      // Kilograms, through the card's own formatValue, not the raw grams the series carries: the
+      // /trend stub answers 50000 grams for the first of DAYS' four dates, so that cell has to
+      // read "50.0" and never "50000". A trend column formatted by anything but the reading cell's
+      // own formatter would print grams beside kilograms under a header naming one of them, the
+      // exact defect an M3e review already caught on Activity's distance card.
+      expect(table).toContain('<td>50.0</td>')
+      expect(table).not.toContain('<td>50000</td>')
+      // Four cells per row now (date, reading, trend, note), not three: a column header added
+      // without the cells beneath it would leave the header row and the body rows disagreeing.
+      const bodyRows = [...table.matchAll(/<tr>(?:(?!<\/tr>)[\s\S])*<\/tr>/g)].map((m) => m[0])
+      const dataRows = bodyRows.filter((row) => row.includes('<td>'))
+      expect(dataRows.length).toBeGreaterThan(0)
+      for (const row of dataRows) expect((row.match(/<td>/g) ?? []).length).toBe(3)
     } finally {
       cleanup()
     }

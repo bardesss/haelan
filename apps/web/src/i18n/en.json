@@ -375,7 +375,8 @@
       "woke": "Woke",
       "naps": "Naps",
       "time": "Time",
-      "source": "Source"
+      "source": "Source",
+      "trend": "Trend"
     },
     "weekday": {
       "mon": "Mon",

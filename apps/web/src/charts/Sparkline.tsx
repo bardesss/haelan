@@ -126,6 +126,17 @@ export function Sparkline({
     dates: labels, values, excluded, annotations, excludedText: t('charts.absence.excluded'),
   }), [labels, values, excluded, annotations, t])
 
+  // Whether there is a trend to draw, not merely whether a caller passed the prop. `trend` is a
+  // dense array built from a query, so it is defined and all-null in three ordinary states: while
+  // /trend is still in flight, after it failed, and when trendOf legitimately emitted nothing
+  // because the range holds fewer than TREND_MIN_POINTS readings (packages/core/src/query/trend.ts).
+  // Branching on `trend !== undefined` treated all three as "a trend line is on the chart" and
+  // switched the readings to bare symbols with their own line hidden, so a two reading range, or a
+  // /trend that 500ed, drew two disconnected dots under a smooth line that was never painted, with
+  // nothing on the card saying why. With nothing to draw, this chart is exactly the chart every
+  // other Sparkline caller gets.
+  const hasTrend = trend !== undefined && trend.some((v) => v !== null)
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
@@ -136,17 +147,18 @@ export function Sparkline({
       // smooth, and connectNulls is unconditionally true here regardless of `episodic`, since a
       // smooth line spanning the gaps between sparse readings is the entire reason this series
       // exists, not a fact about whether the metric is taken by hand.
-      ...(trend !== undefined ? [{ type: 'line' as const, data: trend, showSymbol: false, smooth: true,
+      ...(hasTrend ? [{ type: 'line' as const, data: trend, showSymbol: false, smooth: true,
         connectNulls: true, lineStyle: { width: STROKE.sparkline, color: tokens.seriesAlt } }] : []),
       { type: 'line' as const, data: values,
         // A trend line already supplies the connecting line once one is drawn, so the reading
         // series switches from a line to bare points: showSymbol true draws a marker at every
         // reading, and lineStyle opacity 0 (the same idiom IntradayHeartRate uses to hide a
         // stacking helper series) keeps its own jagged line from also being drawn under the smooth
-        // one. Unchanged (a plain connected line, no symbols) when `trend` is undefined, which is
-        // every caller but Weight's weight card.
-        showSymbol: trend !== undefined, connectNulls: episodic,
-        lineStyle: { width: STROKE.sparkline, color: tokens.series, ...(trend !== undefined && { opacity: 0 }) },
+        // one. Unchanged (a plain connected line, no symbols) when there is no trend line to draw,
+        // which is every caller but Weight's weight card and, on that card, every range whose own
+        // trend query has not answered with a real point (see hasTrend above).
+        showSymbol: hasTrend, connectNulls: episodic,
+        lineStyle: { width: STROKE.sparkline, color: tokens.series, ...(hasTrend && { opacity: 0 }) },
         // Same markArea shape HeartRateRange draws its band with: a rectangle between two y values,
         // unbounded on x, so it sits behind the line regardless of how many points there are.
         ...(baseline && { markArea: { silent: true, itemStyle: { color: tokens.band, opacity: OPACITY.baselineBand },
@@ -169,7 +181,7 @@ export function Sparkline({
           data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
             ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
     ],
-  }), [values, baseline, marks, episodic, trend])
+  }), [values, baseline, marks, episodic, trend, hasTrend])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = sparklinePointDate(labels, marks, event)
@@ -181,7 +193,15 @@ export function Sparkline({
     <>
       <ChartFigure label={label} host={host} style={style}
         table={{
-          columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
+          // The trend gets a column of its own whenever it is drawn, between the reading and the
+          // note. Without one, the smooth line existed only on the canvas: a table-only reader was
+          // handed the raw readings and nothing at all of the line drawn through them, which is the
+          // same canvas-and-table split the band toggle one card away was built to close. Absent
+          // (and only then) the columns are exactly what every other caller has always had, so no
+          // chart without a trend grows an empty column.
+          columns: hasTrend
+            ? [t('charts.columns.date'), unit, t('charts.columns.trend'), t('charts.columns.note')]
+            : [t('charts.columns.date'), unit, t('charts.columns.note')],
           // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
           // reader did to it either) is not a row this table states anything about, so it is
           // dropped rather than rowed with a "no reading" cell the spec says would train a reader
@@ -205,8 +225,16 @@ export function Sparkline({
               // and the day is blank because of something they did rather than because the device
               // never reported. "no reading" is the honest cell only for the second of those.
               const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              const cell = formatValue ? formatValue(v, absent) : formatMetricValue(v, metric, i18n.language, absent)
-              return [date, cell,
+              const format = (value: number | null): string =>
+                formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
+              const cell = format(v)
+              // The same formatter the reading cell goes through, since the trend is a smoothed
+              // reading and carries the identical unit: Weight's own kilogram conversion (its
+              // `formatValue`) has to reach this cell too, or a table would print grams beside
+              // kilograms under a header naming one of them. Null where trendOf had nothing to
+              // smooth for that day, which reads as the same absence word the reading cell already
+              // carries rather than as a number the line never had.
+              return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null)] : []),
                 [isExcluded ? t('charts.absence.excluded') : '',
                   // filter, not find: several annotations (an override reason, a note, an event) can
                   // land on the same date now that day level marks join the per-metric ones, and a
