@@ -17,7 +17,7 @@ import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { Hypnogram } from '../charts/Hypnogram.js'
 import { SleepSchedule } from '../charts/SleepSchedule.js'
-import { localMinutesOf, inWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
+import { localMinutesOf, inWindow, napInWindow, withinSchedule, WIDE_WINDOW } from '../charts/schedule.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
@@ -256,12 +256,17 @@ export function Sleep() {
   // endOffsetMinutes, not startOffsetMinutes: a night starts the evening before the date it
   // belongs to, and a nap falls on the date itself, the same side of midnight as the wake, so the
   // wake end's offset is the one in force when the nap started.
+  //
+  // Raw minutes from that date's own midnight, not yet placed on any axis: which axis position a
+  // nap takes depends on the shift the night on its row was drawn with, which lives in
+  // scheduleNights below (napInWindow, and its own comment in schedule.ts for why inWindow is the
+  // wrong function here and was off by a full day for every afternoon nap).
   const napsByDate = useMemo(() => {
     const out = new Map<string, number[]>()
     for (const night of oneNightPerDate(nightItems)) {
-      out.set(night.localDate, night.naps.map((ms) => inWindow(
-        localMinutesOf(night.localDate, ms, night.endOffsetMinutes), WIDE_WINDOW,
-      )))
+      out.set(night.localDate, night.naps.map(
+        (ms) => localMinutesOf(night.localDate, ms, night.endOffsetMinutes),
+      ))
     }
     return out
   }, [nightItems])
@@ -299,12 +304,22 @@ export function Sleep() {
       // inside the wide window's 2880 one, see withinSchedule and schedule.test.ts for the general
       // case). That is a defensible corner on Dashboard's compact card and the wrong trade on the
       // page whose entire subject is sleep.
-      const { bed, wake } = withinSchedule(
-        bedPoint ? bedPoint.value : null, wakePoint ? wakePoint.value : null, WIDE_WINDOW,
-      )
+      const bedRaw = bedPoint ? bedPoint.value : null
+      const wakeRaw = wakePoint ? wakePoint.value : null
+      const { bed, wake } = withinSchedule(bedRaw, wakeRaw, WIDE_WINDOW)
       // EMPTY_NAPS for a date /sleep/nights reported no night for at all, which is a date this
       // list can only reach through a bedtime metric whose own sessions would have produced one.
-      return { date, bed, wake, naps: napsByDate.get(date) ?? EMPTY_NAPS }
+      // Every other date's naps are shifted into the frame this row's own night was drawn in, off
+      // the raw bedtime (or the raw wake time, when only that one answered) rather than off the
+      // placed pair: withinSchedule nulls both out for a night this window cannot hold, and the
+      // naps on such a row are still real times of day that belong beside its absence mark.
+      const napsRaw = napsByDate.get(date)
+      return {
+        date, bed, wake,
+        naps: napsRaw === undefined
+          ? EMPTY_NAPS
+          : napsRaw.map((raw) => napInWindow(raw, bedRaw ?? wakeRaw, WIDE_WINDOW)),
+      }
     })
   }, [bedtimePoints, waketimePoints, napsByDate])
   // Nights actually drawn, not nights fetched: withinSchedule nulls out any night this window

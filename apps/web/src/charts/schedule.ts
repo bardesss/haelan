@@ -59,6 +59,39 @@ export function inWindow(minutes: number, window: { min: number, max: number }):
   return minutes < window.min ? minutes + 1440 : minutes
 }
 
+/**
+ * Where a nap taken on a row's own local date lands on that row's axis.
+ *
+ * inWindow is the wrong tool for it, and the difference is a whole day. A bed or wake reading is
+ * measured from the midnight the night is named after and sits in [-720, 720), so inWindow's own
+ * rule ("earlier than this window's noon means the small hours of the wake day") is true of it. A
+ * nap is measured from that same midnight but falls on the far side of it: sessions.localDate is
+ * the date a session ENDED (localDateOfEnd, packages/core/src/api/mapSessions.ts), so a nap shares
+ * its date with the night's wake and happens after it, and its minutes run 0 to 1440 rather than
+ * -720 to 720. Handed to inWindow, an afternoon nap is left exactly where it is while the night
+ * beside it was moved a day forward, so it draws 24 hours to the left of the bar it belongs to and
+ * reads as a nap taken the afternoon before that bedtime.
+ *
+ * The nap keeps the row it shares a date with. That row is the one the accessible table already
+ * files it under (SleepSchedule's own naps column, keyed on the same n.date), and it is the row
+ * whose night ended that morning, so "the night, then the nap that followed it later the same day"
+ * is what a reader sees left to right. What changes is the frame: the shift applied is the
+ * night's, whatever whole day withinSchedule moved this row's bed by, so the wall clock distance
+ * between the wake and the nap is drawn as exactly what it really was. `anchorRaw` is that row's
+ * own raw bedtime, or its raw wake time when no bedtime answered; 1440 stands in when the row has
+ * neither, which is the shift every night that ended this morning takes anyway.
+ *
+ * The result is not clamped to the window. Under the ordinary 1440 shift a nap cannot leave
+ * WIDE_WINDOW (0 to 1440 becomes 1440 to 2880, its exact top), which is the one window a caller
+ * drawing naps passes today; a row whose night was itself an unshifted same-date span can place a
+ * nap outside a narrower window, and echarts clips it rather than drawing it somewhere false.
+ */
+export function napInWindow(
+  napRaw: number, anchorRaw: number | null, window: { min: number, max: number },
+): number {
+  return napRaw + (anchorRaw === null ? 1440 : inWindow(anchorRaw, window) - anchorRaw)
+}
+
 // Places a bed/wake pair on the window's axis, or nulls both out if this window cannot show them
 // honestly.
 //

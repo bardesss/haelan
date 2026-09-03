@@ -4,6 +4,9 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+// The same entry point useChart.ts initialises charts through, so getInstanceByDom below finds the
+// instance that file created rather than looking in a second, unrelated registry.
+import * as echarts from 'echarts/core'
 import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -390,8 +393,7 @@ describe('the Sleep page', () => {
   // none of the metrics it reads knows when a nap started (sleep_nap_count and sleep_nap_minutes
   // are a count and a duration). /sleep/nights knows, now that readSleepNights splits each date
   // into the night and what did not join it, so the column appears and carries the nap's own
-  // clock time. 14:30 is 870 minutes past the wake day's midnight, which the wide window (noon to
-  // noon two days on) places unshifted.
+  // clock time.
   it('fills the schedule naps column from /sleep/nights, rather than claiming none', async () => {
     const restore = stubSleep([], undefined, false, {}, null, [NIGHT_MIDNIGHT + 870 * 60_000])
     const { client, tree } = withQuery(<Sleep />)
@@ -402,6 +404,35 @@ describe('the Sleep page', () => {
     expect(scheduleTable, tables.map((t) => t.textContent).join(' | ')).toBeDefined()
     expect(scheduleTable!.textContent).toContain('14:30')
     expect(scheduleTable!.textContent).not.toContain('charts.absence.none')
+    restore()
+  })
+
+  // The plotted number, read off the chart's own echarts option, because the table above cannot
+  // tell the defect apart from the fix: formatClock is mod 1440 (format.ts), so a nap drawn at 870
+  // and the same nap drawn at 2310 both print "14:30" in that cell, and the naps-column test above
+  // passed unchanged against a marker sitting a full day left of the bar it belongs to.
+  //
+  // 2310 is the assertion: this row's night is bed -40, wake 425, which withinSchedule places at
+  // 1400 and 1865 by moving the pair one whole day forward into the axis frame, so the 14:30 nap
+  // that followed that morning's wake belongs at 870 + 1440 in the same frame, to the right of the
+  // bar. The pre-fix code passed the nap through inWindow, which adds a day only below the
+  // window's own noon and so left 870 alone (see napInWindow's own comment in schedule.ts).
+  //
+  // getOption(), not the SVG: echarts draws to an SVG host happy-dom applies no stylesheet to, so
+  // there is no geometry here to measure, and the option is the last place the number appears
+  // before it becomes a coordinate.
+  it('plots an afternoon nap in its own night\'s frame, not a day to the left of it', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [NIGHT_MIDNIGHT + 870 * 60_000])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const host = container!.querySelector<HTMLDivElement>('div[role="img"][aria-label="common.bedWakeChartLabel"]')
+    expect(host, container!.innerHTML).not.toBeNull()
+    const option = echarts.getInstanceByDom(host!)?.getOption() as
+      { series?: { type?: string, data?: unknown }[] } | undefined
+    const scatter = (option?.series ?? []).find((series) => series.type === 'scatter')
+    expect(scatter, JSON.stringify(option?.series?.map((s) => s.type))).toBeDefined()
+    expect(scatter!.data).toEqual([[0, 2310]])
     restore()
   })
 
