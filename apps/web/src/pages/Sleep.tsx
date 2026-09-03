@@ -5,6 +5,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
 import { EmptyState } from '../components/EmptyState.js'
@@ -331,13 +332,15 @@ export function Sleep() {
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         oneDayRange={controls.tab === 'day'}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
-        {(basis) => (
+        {(basis, oneDayRange) => (
           <StatTile label={label} value={value} unit={shortUnit} basis={basis}
             delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels} metric={metric}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
-              annotations={annotations} excluded={excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            {oneDayRange ? <ChartNote /> : (
+              <Sparkline values={spark.values} labels={spark.labels} metric={metric}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            )}
           </StatTile>
         )}
       </MetricCard>

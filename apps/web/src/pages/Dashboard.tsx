@@ -8,6 +8,7 @@ import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { EmptyState } from '../components/EmptyState.js'
+import { ChartNote } from '../components/ChartNote.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -420,17 +421,19 @@ export function Dashboard() {
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
         oneDayRange={controls.tab === 'day'} after={after}>
-        {(basis) => (
+        {(basis, oneDayRange) => (
           // trend() itself answers "no delta" (undefined) for a window with too few points to
           // compare, which is the day range (exactly one point), so there is nothing left for
           // this call site to guard against.
           <StatTile label={t(labelKey)} value={format(points)} unit={unit}
             basis={basis}
             delta={deltaFor(t, metric, values(points), direction)}>
-            <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)}
-              annotations={annotations} excluded={excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            {oneDayRange ? <ChartNote /> : (
+              <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            )}
           </StatTile>
         )}
       </MetricCard>
@@ -730,7 +733,9 @@ export function Dashboard() {
           query={lastSeries} points={[...bedtimePoints, ...waketimePoints]}
           basisKey="dashboard.sleepSchedule.basis" basisWornKey="dashboard.sleepSchedule.basis"
           basisValues={{ count: drawnNights }} oneDayRange={controls.tab === 'day'}>
-          {() => <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />}
+          {(_basis, oneDayRange) => (oneDayRange
+            ? <ChartNote />
+            : <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />)}
         </MetricCard>
 
         {/* The heatmap that used to sit here moved to Activity.tsx in M3d2: the Dashboard keeps

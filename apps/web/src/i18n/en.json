@@ -82,8 +82,7 @@
   "emptyState": {
     "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
     "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
-    "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." },
-    "single_day": { "title": "No trend for one day", "detail": "A single day has no trend to plot. The number above is this day's own reading." }
+    "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
   },
   "insightCard": {
     "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
@@ -410,7 +409,8 @@
     "intradayBasis": {
       "thinned": "{{from}} readings thinned to {{to}} points",
       "full": "these {{count}} points are the readings"
-    }
+    },
+    "singleDayNote": "A single day has no trend to plot."
   },
   "sleep": {
     "title": "Sleep",

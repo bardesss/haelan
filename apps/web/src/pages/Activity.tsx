@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -254,13 +255,15 @@ export function Activity() {
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         oneDayRange={controls.tab === 'day'}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}>
-        {(basis) => (
+        {(basis, oneDayRange) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
-              label={t(chartLabelKey, { period })} unit={t(unitKey)}
-              annotations={annotations} excluded={excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            {oneDayRange ? <ChartNote /> : (
+              <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+            )}
           </StatTile>
         )}
       </MetricCard>

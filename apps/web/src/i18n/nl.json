@@ -82,8 +82,7 @@
   "emptyState": {
     "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
     "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
-    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." },
-    "single_day": { "title": "Geen trend voor één dag", "detail": "Eén dag laat geen trend zien. Het getal hierboven is de waarde van deze dag." }
+    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
   },
   "insightCard": {
     "summary": "{{current}} gemiddeld ({{currentFrom}} tot en met {{currentTo}}) tegenover {{previous}} gemiddeld in de vorige periode ({{previousFrom}} tot en met {{previousTo}}), een verandering van {{delta}}.",
@@ -410,7 +409,8 @@
     "intradayBasis": {
       "thinned": "{{from}} metingen teruggebracht tot {{to}} punten",
       "full": "deze {{count}} punten zijn de metingen"
-    }
+    },
+    "singleDayNote": "Eén dag laat geen trend zien."
   },
   "sleep": {
     "title": "Slaap",

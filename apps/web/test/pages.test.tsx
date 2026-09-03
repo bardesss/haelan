@@ -525,16 +525,30 @@ describe('Day tab', () => {
     expect(dashboardDay).not.toContain('Daily heart rate minimum, mean and maximum through')
   })
 
-  // Every other MetricCard on this range (the four stat tiles, the sleep schedule chart) reads
-  // emptyStateFor's own new single_day branch the same way it already reads no_data and not_worn,
-  // so each whole card, number included, is replaced by that one explanatory line; heart rate
-  // alone keeps a chart, because it alone has an intraday view to swap in instead. The figure
-  // count is the assertion because it is what a reader actually sees change: this page draws
+  // Every other MetricCard on this range (the four stat tiles, the sleep schedule chart) still
+  // renders its StatTile, delta and basis line exactly as any other range does (see the next test);
+  // only the chart each would otherwise draw is swapped for ChartNote's own short line. Heart rate
+  // alone keeps an actual chart, because it alone has an intraday view to swap in instead. The
+  // figure count is the assertion because it is what a reader actually sees change: this page draws
   // several fewer chart figures on the Day tab than it does on a week, the state this replaces.
   it('draws fewer chart figures on a one day range than on a week', () => {
     const dayFigures = (dashboardDay.match(/<figure/g) ?? []).length
     const weekFigures = (pages.Dashboard.match(/<figure/g) ?? []).length
     expect(dayFigures).toBeLessThan(weekFigures)
+  })
+
+  // The defect a figure count alone cannot see: an early implementation dropped `single_day` into
+  // emptyStateFor's own gate, which meant MetricCard's existing early return fired for it exactly
+  // as it does for no_data and not_worn, discarding the StatTile (the number, the delta and the
+  // basis line) along with the chart on a range where none of the three were wrong. A reader on the
+  // Day tab lost every figure on the page, not only the meaningless one-point charts. Steps is the
+  // card under test because DAYS's own stubbed value for it is real and non-zero on 2026-08-13.
+  it('keeps a plain metric card\'s own number on a one day range, only its chart goes', () => {
+    const cards = [...dashboardDay.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
+    const steps = cards.find((c) => c.includes('>Steps<'))
+    if (!steps) throw new Error('no Steps card in the Day tab render')
+    expect(steps).toContain('<div class="value">')
+    expect(steps).not.toContain('<figure')
   })
 
   // The distinction that matters and the one most likely to be got wrong: a one day range with a

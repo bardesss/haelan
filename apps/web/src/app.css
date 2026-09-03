@@ -149,6 +149,11 @@ body {
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
+/* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
+   way .empty is: the value, delta and basis around it still render, so this reads as a small,
+   muted caption like .basis rather than as the padded, body sized block .empty is. */
+.chart-note { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+
 /* The sentence an insight card exists to print, not a caption beside a value: unlike .basis
    (muted, font-size-xs) this is the whole content of the card, so it reads at body size in the
    primary text colour rather than as a subordinate line under something else. */

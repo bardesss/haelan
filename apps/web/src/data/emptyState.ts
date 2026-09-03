@@ -2,7 +2,7 @@ import { coverageIsMeaningful } from '@haelan/core/coverage-signal'
 import type { SeriesPoint } from './useSeries.js'
 import type { Baseline } from './useBaseline.js'
 
-export type EmptyStateKind = 'no_data' | 'not_worn' | 'insufficient' | 'single_day'
+export type EmptyStateKind = 'no_data' | 'not_worn' | 'insufficient'
 
 /**
  * Whether a metric's coverage is a statement about whether a device was worn.
@@ -60,21 +60,17 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
  * three different statements and only one of them is a number.
  */
 export function emptyStateFor(
-  metric: string, points: SeriesPoint[] | undefined, baseline?: Baseline | null, oneDayRange?: boolean,
+  metric: string, points: SeriesPoint[] | undefined, baseline?: Baseline | null,
 ): EmptyStateKind | null {
-  // A one day range's series holds at most one point (datesFor gives `from === to` exactly one
-  // calendar day, and /series omits a day with no row rather than sending a null one, see
-  // useSeries.ts), so the chart a card would draw from it is a single dot standing in for a whole
-  // trend line, stating nothing its own StatTile does not already say. Checked ahead of every
-  // other branch, on `oneDayRange` rather than on `points.length === 1` alone: a sparse week with
-  // one reporting day also has exactly one point, and reading that as "single day" would be a
-  // second false statement about the range, the same shape this whole function exists to refuse.
+  // A one day range with a value is deliberately not read here at all, even though MetricCard
+  // knows it (its own `oneDayRange` prop): this function answers "is there nothing to show", and
+  // a one day range with a value has something to show, a number with no chart worth drawing
+  // beside it. That is not the same question, and folding it in here once meant the early return
+  // below MetricCard takes for every kind in this union discarded the StatTile, its delta and the
+  // basis line along with the chart, on a range where none of the three had anything wrong with
+  // them. MetricCard reads `oneDayRange` itself and hands it to `children`, which is the one place
+  // that can swap out the chart alone and leave the rest of the card standing.
   //
-  // Not a change to no_data: the day has a value here, so claiming no data would be false, and
-  // the two states point a reader at different remedies (no_data: nothing was recorded yet;
-  // single_day: the number above is the day's reading, and a wider range draws its own trend).
-  if (oneDayRange === true && points !== undefined && points.length > 0) return 'single_day'
-
   // Ordered strongest first. Nothing at all outranks a thin baseline: telling a reader their
   // baseline is thin implies there is a series it was thin against.
   if (points === undefined || points.length === 0) return 'no_data'
