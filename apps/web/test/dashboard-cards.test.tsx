@@ -12,7 +12,7 @@ import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { dayMetricTarget } from '@haelan/core/target-key'
 import { flush, pumpUntil } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // Same reason dashboard-round-trip.test.tsx needs this: HeartRateRange and the other restored
 // charts draw for real here, and echarts.init's effect throws "missing chart token" without it.
@@ -85,6 +85,9 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () =>
       if (opts.hangBaselines === true) return new Promise<Response>(() => {})
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -133,6 +136,7 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
     }
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/baselines')) return json({ baseline: null })
+    if (url.includes('/insights')) return json(insightBody(url))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -201,6 +205,9 @@ function stubOneNight(): () => void {
     if (url.includes('/baselines')) {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -242,7 +249,84 @@ function stubAppliedExclusion(): () => void {
     if (url.includes('/baselines')) {
       return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
+ * Same routes and responses as stubFetch({ baseline: null }), plus a record of every request URL:
+ * the insight card tests below are about what the page put on the wire, which stubFetch's own
+ * signature has no way to report back.
+ */
+function stubFetchTracking(sent: { url: string }[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    sent.push({ url })
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
+ * stubFetch with one difference: the sleep insight carries a negative delta (a week where mean
+ * sleep fell), current 401 against previous 408. Every fixture elsewhere in this file uses
+ * insightBody's own default delta of 10, which is positive and so could never have caught the
+ * sign bug this stub exists to reproduce: formatDuration was written for a duration, which cannot
+ * be negative, and sleepFormat handed it insight.delta unguarded, so a negative delta printed
+ * with two minus signs ("-1h -7m") rather than one.
+ */
+function stubFetchWithNegativeSleepDelta(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      const isSleep = new URLSearchParams(url.split('?')[1] ?? '').get('metric') === 'sleep_asleep_minutes'
+      const overrides = isSleep ? { current: 401, previous: 408, delta: -7 } : {}
+      return new Response(JSON.stringify(insightBody(url, overrides)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
 }
@@ -419,5 +503,147 @@ describe('the remaining Dashboard cards', () => {
     const fs = await import('node:fs/promises')
     const source = await fs.readFile('apps/web/src/pages/Dashboard.tsx', 'utf8')
     expect(source).not.toContain('fixtures/july')
+  })
+})
+
+describe('the three insight cards', () => {
+  // The brief's own test, verbatim: /insights takes one metric and one agg per call and does not
+  // batch the way /series does, so three curated cards are three separate requests, not one shared
+  // one.
+  it('draws three insight cards and asks for each separately', async () => {
+    const sent: { url: string }[] = []
+    const restore = stubFetchTracking(sent)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const insightCalls = sent.filter((r) => r.url.includes('/insights'))
+    expect(insightCalls).toHaveLength(3)
+    expect(insightCalls.map((r) => new URL(r.url, 'http://x').searchParams.get('metric')).sort())
+      .toEqual(['resting_heart_rate', 'sleep_asleep_minutes', 'steps'])
+    restore()
+  })
+
+  // The curated three carry a curated agg each, not whichever one a shared default would pick:
+  // steps and sleep_asleep_minutes ride 'sum', the same agg REQUESTS.sum already asks /series for
+  // them; resting_heart_rate rides 'last', the once a day reading REQUESTS.last already carries for
+  // it, not the 'mean' its own tile derives client side from those points.
+  it('asks each metric for the agg its own tile already uses', async () => {
+    const sent: { url: string }[] = []
+    const restore = stubFetchTracking(sent)
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const byMetric = new Map(sent.filter((r) => r.url.includes('/insights')).map((r) => {
+      const params = new URL(r.url, 'http://x').searchParams
+      return [params.get('metric'), params.get('agg')]
+    }))
+    expect(byMetric.get('steps')).toBe('sum')
+    expect(byMetric.get('sleep_asleep_minutes')).toBe('sum')
+    expect(byMetric.get('resting_heart_rate')).toBe('last')
+    restore()
+  })
+
+  // The collision this page's own comment beside the cards warns about: a second card sharing a
+  // metric tile's exact label text would make this file's own cardFor() (and a reader glancing at
+  // the page) unable to tell the tile and the insight card apart by name.
+  it('labels each insight card distinctly from its metric tile', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const labels = [...container!.querySelectorAll('.card .label')].map((el) => el.textContent)
+    expect(labels.filter((l) => l === 'Steps')).toHaveLength(1)
+    expect(labels.filter((l) => l === 'Resting heart rate')).toHaveLength(1)
+    expect(labels).toContain('Steps, this period against the last')
+    restore()
+  })
+
+  // A fixed month, not the file's default (unrouted) mount: insightBody echoes the request's own
+  // from/to back as currentRange (see metricCoverage.ts's own comment on why), so a test that left
+  // the route unset would be asserting against today's real date and would need re-deriving every
+  // time it ran. range=month&on=2026-08-15 gives clean, hand-computable full-calendar-month
+  // windows: current August 1 to 31, previous July 1 to 31.
+  //
+  // The wiring end to end, not just the request: this is the exact sentence InsightCard.tsx
+  // renders once the query settles, read off the one card whose label names it rather than off
+  // page-wide text (all three cards share the same stub body and so would render the identical
+  // sentence but for their own formatValue, which is exactly why a page-wide toContain would not
+  // tell a caller apart from a typo in a different card's props).
+  it('renders the summary sentence for the steps card once the request resolves', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Steps, this period against the last')
+    // No unit suffix: the steps tile above prints a plain, unitless number, and steps carries no
+    // formatValue override in Dashboard.tsx for exactly that reason.
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '70 on average (Aug 1, 2026 to Aug 31, 2026) against 60 on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 10.',
+    )
+    restore()
+  })
+
+  // Important 1 from the review round: insight.current/previous/delta are a mean in whatever unit
+  // the metric is stored in, and the resting heart rate tile beside this card carries a "bpm"
+  // suffix (StatTile's own `unit` prop) that InsightCard's default formatMetricValue call does
+  // not add on its own. restingHrFormat in Dashboard.tsx is what closes that gap; this pins the
+  // suffix actually reaching the rendered sentence rather than only existing in the wiring.
+  it('carries the resting heart rate tile\'s own bpm suffix into its insight sentence', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Resting heart rate, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '70 bpm on average (Aug 1, 2026 to Aug 31, 2026) against 60 bpm on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 10 bpm.',
+    )
+    restore()
+  })
+
+  // The other half of Important 1: the sleep tile beside this card formats its own mean through
+  // formatDuration ("7h 01m"), never the raw minutes formatMetricValue alone would print, and
+  // without a duration formatValue this card printed "70" where its own tile a few cards over
+  // prints "1h 10m" for the identical quantity. formatSignedDuration (format.ts) is what this
+  // card's own formatValue is now, passed directly rather than through a local wrapper.
+  it('formats the sleep insight as a duration rather than raw minutes', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '1h 10m on average (Aug 1, 2026 to Aug 31, 2026) against 1h 00m on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 0h 10m.',
+    )
+    restore()
+  })
+
+  // The sign bug the review round found: sleepFormat handed insight.delta straight to
+  // formatDuration, which was only ever fed a non-negative duration before this task.
+  // formatDuration's own Math.floor(total / 60) paired with a sign-carrying `total % 60` prints a
+  // negative input as two minus signs, one on each half, rather than one on the whole duration.
+  // -7 alone (a seven minute drop, not a large or hour-crossing one) is enough to show it: -1
+  // (floor(-7/60)) and -7 (-7 % 60 in JS keeps the dividend's sign) render as "-1h -7m".
+  it('formats a negative sleep delta with one leading minus rather than two', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetchWithNegativeSleepDelta()
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep, this period against the last')
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '6h 41m on average (Aug 1, 2026 to Aug 31, 2026) against 6h 48m on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of -0h 07m.',
+    )
+    restore()
   })
 })

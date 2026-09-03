@@ -4,6 +4,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
@@ -15,6 +16,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
@@ -22,7 +24,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor, formatMetricValue } from '../format.js'
+import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
 
 // Two cards is a slight page, and the reason is not that there is little here worth measuring:
 // electrocardiogram, core-body-temperature, blood-glucose and irregular-rhythm-notification are
@@ -168,6 +170,16 @@ export function Health() {
   )
   const dailySpo2Headline = mean(values(dailySpo2Points))
 
+  // The one insight card the brief's own table gives this page: daily_spo2 at the last agg the
+  // card above already requests (REQUESTS.last). /insights is its own, unbatched request, so this
+  // is one call added on top of the five requests above (LAST_METRICS plus spo2's own four).
+  const dailySpo2Insight = useInsight('daily_spo2', 'last', { from: controls.from, to: controls.to }, source)
+  // The daily summary card above carries a "%" suffix through StatTile's own `unit` prop;
+  // formatWithUnit (format.ts) is the shared closure that appends it, the same one Dashboard.tsx,
+  // Recovery.tsx and Weight.tsx's own copies of this card use.
+  const dailySpo2InsightFormat = (value: number | null, absent: string): string =>
+    formatWithUnit(value, absent, (v) => formatMetricValue(v, 'daily_spo2', i18n.language, ''), t('health.units.percentShort'))
+
   // The milestone's own deliverable ("SpO2 with interval and count", spec section 4): the day's
   // reading count belongs in the basis line, not only in the tooltip and the accessible table it
   // already reached. Summed across the displayed range, the same "total across days" shape
@@ -231,6 +243,12 @@ export function Health() {
             </StatTile>
           )}
         </MetricCard>
+
+        {/* label is its own catalogue string, not health.dailySpo2.label reused: a second card
+            sharing "Daily oxygen saturation" would make a label lookup by exact text ambiguous,
+            the same collision Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
+        <InsightCard insight={dailySpo2Insight.data} query={dailySpo2Insight} metric="daily_spo2" span={4}
+          label={t('health.insights.dailySpo2')} formatValue={dailySpo2InsightFormat} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

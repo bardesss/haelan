@@ -5,6 +5,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
@@ -23,6 +24,7 @@ import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
@@ -32,7 +34,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
+import { formatDuration, formatSignedDuration, formatClock, deltaFor, formatMetricValue } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
 // Every metric this page draws, checked against packages/core/src/derive/metrics.ts rather than
@@ -198,6 +200,11 @@ export function Sleep() {
   // catalogue change away from asking for an agg the metric does not have.
   const asleepBaseline = useBaseline('sleep_asleep_minutes', controls.to, source, 'sum')
   const asleepBand = useMemo(() => bandFrom(asleepBaseline.data?.baseline ?? null), [asleepBaseline.data])
+
+  // The one insight card the brief's own table gives this page: sleep_asleep_minutes at the sum
+  // agg the time asleep tile above already requests (REQUESTS.sum). /insights is its own,
+  // unbatched request, so this is one call added on top of the three agg groups above.
+  const asleepInsight = useInsight('sleep_asleep_minutes', 'sum', { from: controls.from, to: controls.to }, source)
 
   // Hypnogram: /sleep/nights through useNights, not the eleven cards' own /series groups above.
   // Stays outside MetricCard: its emptiness is "lastNight === null" off useNights, not a metric and
@@ -419,6 +426,17 @@ export function Sleep() {
         {tile('sleep_nap_minutes', 6, t('sleep.napMinutes.label'), 'sleep.napMinutes.basis',
           'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal), 'sleep.units.minutes', undefined,
           'neutral')}
+
+        {/* label is its own catalogue string, not sleep.asleepMinutes.label ("Time asleep")
+            reused: a second card sharing that exact text would make a label lookup by exact text
+            ambiguous, the same collision Dashboard.tsx's own comment on INSIGHTS explains at more
+            length. formatValue is formatSignedDuration (format.ts), not the bare default: the time
+            asleep tile above already reads through formatDuration, and without this the card would
+            print raw minutes beside a tile that reads "7h 00m"; formatSignedDuration is also what
+            keeps a negative delta (a period where mean sleep fell) from printing two minus signs,
+            shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
+        <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
+          label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

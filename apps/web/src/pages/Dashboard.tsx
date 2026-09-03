@@ -6,6 +6,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -25,6 +26,7 @@ import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
+import { useInsight } from '../data/useInsight.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
@@ -35,7 +37,7 @@ import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { formatClock, formatDuration, deltaFor, formatMetricValue } from '../format.js'
+import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, deltaFor, formatMetricValue } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
 // (requireMetricAndAgg in packages/core/src/query/personQuery.ts checks every metric against
@@ -95,6 +97,28 @@ export const REQUESTS = {
 function under(agg: keyof typeof REQUESTS): string[] {
   return REQUESTS[agg].filter((metric) => METRICS[metric]?.aggs.includes(agg) ?? false)
 }
+
+// The three insight cards' (metric, agg) pairs, curated rather than derived from REQUESTS/GROUPS
+// above: sleep_asleep_minutes, resting_heart_rate and steps are the three metrics this page
+// already leads with, and the three where a period over period change is something a person acts
+// on. That is an editorial choice stated here rather than a rule this file derives from the
+// catalogue the way under() does above, and it is why these three and not a fourth or fifth.
+//
+// Exported, and read from below rather than re-typed into each useInsight call, so
+// dashboard-metrics.test.ts can hold these three to the catalogue the same way it already holds
+// REQUESTS: unlike REQUESTS, these three never pass through under()'s own filter, so nothing
+// caught a metric/agg pairing the catalogue stopped answering until this table gave that test
+// something to quantify over.
+//
+// agg matches what each metric's own tile below already asks /series for: 'sum' for steps and
+// sleep_asleep_minutes (SUM_METRICS, REQUESTS.sum), 'last' for resting_heart_rate (LAST_METRICS,
+// REQUESTS.last), the once a day reading rather than the mean the tile itself derives client side
+// from those same points.
+export const INSIGHTS = {
+  steps: { metric: 'steps', agg: 'sum' },
+  restingHr: { metric: 'resting_heart_rate', agg: 'last' },
+  sleep: { metric: 'sleep_asleep_minutes', agg: 'sum' },
+} as const satisfies Record<string, { metric: string, agg: DailyAgg }>
 
 const SUM_METRICS = under('sum')
 const LAST_METRICS = under('last')
@@ -274,6 +298,36 @@ export function Dashboard() {
   const hrBaseline = useBaseline('heart_rate', controls.to, source, 'mean')
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
+
+  // /insights takes exactly one metric and one agg per call and, unlike /series, does not batch, so
+  // each of the three below is its own request rather than a shared one: three requests added on
+  // top of whatever GROUPS above already issues, not multiplied against the cards. See INSIGHTS'
+  // own comment above for the three metrics themselves and their aggs.
+  const insightRange = { from: controls.from, to: controls.to }
+  const stepsInsight = useInsight(INSIGHTS.steps.metric, INSIGHTS.steps.agg, insightRange, source)
+  const restingHrInsight = useInsight(INSIGHTS.restingHr.metric, INSIGHTS.restingHr.agg, insightRange, source)
+  const sleepInsight = useInsight(INSIGHTS.sleep.metric, INSIGHTS.sleep.agg, insightRange, source)
+
+  // Both cards below whose tile carries something InsightCard's own default (formatMetricValue at
+  // the catalogue's stored-unit precision) does not. `insight.current`/`.previous`/`.delta` are
+  // each a mean over the days in the period regardless of agg (see InsightCard.tsx's own comment,
+  // comparePeriods's meanOf), which is a duration in raw minutes for sleep_asleep_minutes and a
+  // plain number with no unit suffix for resting_heart_rate; formatValue is what lets this card
+  // read the same as the tile above it (formatDuration, the same call the sleep tile's own
+  // headline value makes; the bpm suffix StatTile's own `unit` prop adds beside the resting heart
+  // rate tile's value) rather than a unitless or wrongly-shaped number beside one that carries a
+  // unit. steps carries neither below: its tile prints a plain, unitless number the same way
+  // formatMetricValue already would, so it takes InsightCard's default.
+  //
+  // formatWithUnit and formatSignedDuration (format.ts) are this page's own copy of two closures
+  // each shared with one sibling page: formatWithUnit with Recovery.tsx's, Health.tsx's and
+  // Weight.tsx's own resting-heart-rate-shaped cards, formatSignedDuration with Sleep.tsx's own
+  // duration card. This is the only page carrying both a duration card and a unit-suffix card, so
+  // it is the only call site that reaches for both; see each function's own doc comment in
+  // format.ts for why a duplicated sign fix and a duplicated unit-suffix closure were the wrong
+  // home for either.
+  const restingHrFormat = (value: number | null, absent: string): string =>
+    formatWithUnit(value, absent, (v) => formatMetricValue(v, 'resting_heart_rate', i18n.language, ''), t('dashboard.units.bpm'))
 
   // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago". Null
   // rather than zero when no run has ever finished: the row has its own copy for that now, and
@@ -523,6 +577,19 @@ export function Dashboard() {
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.meanHr.viewAll')}
           </Link>, t('dashboard.units.bpm'))}
+
+        {/* The three insight cards: see INSIGHTS' own comment above for why these three and why
+            one request each. label is its own catalogue string rather than the plain metric label
+            (dashboard.steps.label etc.) reused: dashboard-cards.test.tsx's own cardFor() looks up
+            a card by its exact label text, in a test that predates this task, and a second card
+            sharing "Steps" made that lookup ambiguous between the tile and this card (caught by
+            dashboard-cards.test.tsx's own "labels each insight card distinctly" test). */}
+        <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
+          label={t('dashboard.insights.steps')} />
+        <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
+          label={t('dashboard.insights.restingHr')} formatValue={restingHrFormat} />
+        <InsightCard insight={sleepInsight.data} query={sleepInsight} metric="sleep_asleep_minutes" span={4}
+          label={t('dashboard.insights.sleep')} formatValue={formatSignedDuration} />
 
         {/* basisKey and basisWornKey are the same string here on purpose: this card's basis is a
             four way choice driven by the baseline's own validity (unknown, absent, thin, real),

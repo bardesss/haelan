@@ -72,6 +72,13 @@ export function emptyStateFor(
   const answers = points.map((point) => wornOn(metric, point)).filter((w): w is boolean => w !== null)
   if (answers.length > 0 && !answers.includes(true)) return 'not_worn'
 
+  // Dead code: no caller in apps/web ever passes a baseline here. Dashboard.tsx withholds one on
+  // purpose, because a thin baseline should blank the band a chart draws rather than the lines
+  // themselves, so a chart card should never reach `insufficient` through this function at all.
+  // The copy this branch would have shown now lives on a suppressed insight card's own
+  // `thin-days` reason (InsightCard.tsx), which reuses `emptyState.insufficient` verbatim without
+  // ever calling this function or consulting a baseline. Recorded here rather than deleted yet:
+  // M3e-2's own spec (section 2) calls this the branch's real home and marks it for removal.
   if (baseline != null && baseline.thin) return 'insufficient'
 
   return null

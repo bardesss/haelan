@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { METRICS } from '@haelan/core/metrics'
-import { REQUESTS } from '../src/pages/Dashboard.js'
+import { REQUESTS, INSIGHTS } from '../src/pages/Dashboard.js'
 
 // The Dashboard picks which agg each of its cards shows, and /series takes one agg for a whole
 // call and rejects the call outright if any metric in it has no rows under that agg. So a pairing
@@ -38,5 +38,34 @@ describe("the Dashboard's requested metrics", () => {
   it('cover every group the page requests', () => {
     expect(Object.keys(REQUESTS).sort()).toEqual(['last', 'max', 'mean', 'min', 'sum'])
     expect(pairs.length).toBe(8)
+  })
+})
+
+// INSIGHTS never passes through `under`'s own filter the way REQUESTS does (Dashboard.tsx's own
+// comment on INSIGHTS states why: the three insight cards are curated literals, not derived from
+// the catalogue), so nothing else here would catch a metric/agg pairing the catalogue stopped
+// answering. /insights takes the same requireMetricAndAgg-shaped pairing /series does, so an
+// unanswerable pairing here 400s the one card that asked for it, silently, the same defect this
+// file already guards REQUESTS against.
+describe("the Dashboard's insight cards", () => {
+  const pairs = Object.values(INSIGHTS)
+
+  it('name metrics the catalogue defines', () => {
+    for (const { metric } of pairs) {
+      expect(METRICS[metric], `${metric} is not a metric the catalogue defines`).toBeDefined()
+    }
+  })
+
+  it('ask for aggs those metrics have rows under', () => {
+    for (const { metric, agg } of pairs) {
+      expect(METRICS[metric]?.aggs, `${metric} has no rows under '${agg}'`).toContain(agg)
+    }
+  })
+
+  // States the shape the two tests above are quantified over, the same reason REQUESTS' own
+  // "cover every group" test exists: three entries emptied by a bad edit would make both pass
+  // vacuously otherwise.
+  it('curates exactly three cards', () => {
+    expect(pairs.length).toBe(3)
   })
 })

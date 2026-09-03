@@ -42,6 +42,8 @@
   },
   "sidebar": {
     "sectionsLabel": "Sections",
+    "collapse": "Collapse navigation",
+    "expand": "Expand navigation",
     "groups": {
       "overview": "Overview",
       "tracking": "Tracking",
@@ -57,6 +59,11 @@
       "nutrition": "Nutrition",
       "notes": "Notes",
       "settings": "Settings"
+    },
+    "resources": {
+      "documentation": "Documentation",
+      "changelog": "Changelog",
+      "issues": "Issues"
     }
   },
   "common": {
@@ -76,6 +83,13 @@
     "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
     "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
     "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
+  },
+  "insightCard": {
+    "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
+    "thinCoverage": {
+      "title": "Not enough device coverage to summarise",
+      "detail": "This device did not record enough of these days to compare them. Wearing it more consistently closes this gap; waiting longer will not."
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -116,6 +130,11 @@
       "basisWorn_other": "mean, {{reported}} of {{total}} days, {{count}} days not worn",
       "chartLabel": "Daily mean heart rate through {{period}}",
       "viewAll": "View recovery"
+    },
+    "insights": {
+      "steps": "Steps, this period against the last",
+      "restingHr": "Resting heart rate, this period against the last",
+      "sleep": "Sleep, this period against the last"
     },
     "heartRateRange": {
       "label": "Heart rate range",
@@ -162,6 +181,9 @@
       "breathsPerMinute": "Breaths per minute",
       "breathsPerMinuteShort": "breaths/min"
     },
+    "insights": {
+      "restingHeartRate": "Resting heart rate, this period against the last"
+    },
     "baselineNote": {
       "pending": "the baseline is still loading",
       "unknown": "the baseline could not be read, so no comparison is shown",
@@ -206,6 +228,9 @@
       "label": "Daily oxygen saturation",
       "basis": "mean, {{reported}} of {{total}} days",
       "chartLabel": "Daily oxygen saturation summary through {{period}}"
+    },
+    "insights": {
+      "dailySpo2": "Daily oxygen saturation, this period against the last"
     }
   },
   "weight": {
@@ -215,6 +240,9 @@
       "kg": "kg",
       "percent": "Percent",
       "percentShort": "%"
+    },
+    "insights": {
+      "weight": "Weight, this period against the last"
     },
     "weight": {
       "label": "Weight",
@@ -240,6 +268,9 @@
       "min": "min",
       "workouts": "Workouts",
       "workoutsShort": "workouts"
+    },
+    "insights": {
+      "steps": "Steps, this period against the last"
     },
     "dailySteps": {
       "label": "Daily steps",
@@ -387,6 +418,9 @@
       "minutesFromMidnight": "Minutes from midnight",
       "naps": "Naps",
       "napsShort": "naps"
+    },
+    "insights": {
+      "asleepMinutes": "Time asleep, this period against the last"
     },
     "asleepMinutes": {
       "label": "Time asleep",
@@ -566,6 +600,13 @@
         "injury": "Injury",
         "caffeine": "Caffeine"
       }
+    }
+  },
+  "nutrition": {
+    "title": "Nutrition",
+    "empty": {
+      "title": "No food logged yet",
+      "detail": "This would show calories and water once meals are logged through Google Health. Nobody in this household has logged any yet, so there is nothing here to draw."
     }
   },
   "notes": {

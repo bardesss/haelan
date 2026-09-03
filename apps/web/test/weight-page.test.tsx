@@ -13,8 +13,9 @@ import type { StoredOverride } from '../src/data/useAnnotations.js'
 import { Weight } from '../src/pages/Weight.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import type { Insight } from '../src/data/useInsight.js'
 import { flush } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
 // this, the same reason recovery.test.tsx and health-page.test.tsx need it.
@@ -49,8 +50,14 @@ const PERSON: Session = {
  * once an exclusion has applied is an override row that outlives the /series row it excluded (see
  * the episodic exclusion test below), so a fixed empty list here would make that shape unreachable.
  */
+/**
+ * insightOverrides feeds metricCoverage.ts's own insightBody, unset by default: a caller that
+ * does not care what the insight card shows gets a real, unsuppressed period back rather than a
+ * fixed shape of its own, the same default insightBody itself takes.
+ */
 function stubWeight(
   series: Record<string, SeriesPoint[]>, urls: string[] = [], overrides: readonly StoredOverride[] = [],
+  insightOverrides: Partial<Insight> = {},
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -68,6 +75,7 @@ function stubWeight(
     if (url.includes('/overrides')) return json({ items: overrides })
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/events')) return json({ items: [] })
+    if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -82,8 +90,9 @@ function stubWeight(
 async function mount(
   node: ReactNode, series: Record<string, SeriesPoint[]>,
   route = '/weight?range=week&on=2026-08-14', urls: string[] = [], overrides: readonly StoredOverride[] = [],
+  insightOverrides: Partial<Insight> = {},
 ): Promise<void> {
-  const restore = stubWeight(series, urls, overrides)
+  const restore = stubWeight(series, urls, overrides, insightOverrides)
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   window.history.replaceState(null, '', route)
@@ -183,5 +192,57 @@ describe('the Weight page', () => {
     const series = urls.filter((u) => u.includes('/series') && u.includes('agg=last'))
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(2)
+  })
+
+  // Task 4's own trap, restated for the insight card: METRICS.weight.precision is 1, declared in
+  // grams, and this card displays kilograms, so it must never reach formatMetricValue (which
+  // would read the stored unit's precision against an already converted number and print
+  // "81,200.0 kg"). The card's own formatValue converts and formats through formatNumber with its
+  // own precision instead, the same conversion the headline above already makes.
+  //
+  // not.toContain('81,200'), not a bare '81200': the wrong path's own output groups thousands
+  // ("81,200.0 kg", toLocaleString's own comma), so a check for the ungrouped digit string would
+  // never actually appear in either path's output and would pass whether the conversion was right
+  // or wrong -- exactly the kind of assertion that never fires. Confirmed by hand: swapping
+  // weightInsightFormat in Weight.tsx for `(v, absent) => formatMetricValue(v, 'weight', ...)`
+  // failed this test with "Received: 81,200.0 kg on average ..." where it expects to contain
+  // "81.2 kg", then reverted.
+  it('shows the weight insight in kilograms, not the stored grams', async () => {
+    await mount(<Weight />, {}, undefined, [], [], { current: 81_234.5, previous: 81_469.0, delta: -234.5 })
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
+    const summary = card?.querySelector('.insight-summary')?.textContent
+    expect(summary).toContain('81.2 kg')
+    expect(summary).toContain('81.5 kg')
+    expect(summary).not.toContain('81,200')
+  })
+
+  // The whole-branch review's own blocker: the server's guarantee that a reader's own subtraction
+  // of the two numbers shown agrees with the delta beside them is computed at gram precision
+  // (series.ts), and this card displays kilograms. current and previous round to 81.2 kg and
+  // 81.5 kg, a difference of -0.3, but the fixture's own delta (-234.5 g, the server's own correct
+  // answer at gram precision) divides naively into -0.2 kg, a number that disagrees with the two
+  // figures right beside it. delta is deliberately not current minus previous either (81234.5
+  // minus 81469.0 is exactly -234.5, matching the server's own shape at gram precision), so this
+  // only catches a broken conversion, not a fixture that disagrees with itself.
+  it('derives the weight insight delta from the two displayed kilogram figures, not the stored gram delta', async () => {
+    await mount(<Weight />, {}, undefined, [], [], { current: 81_234.5, previous: 81_469.0, delta: -234.5 })
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
+    const summary = card?.querySelector('.insight-summary')?.textContent
+    expect(summary).toContain('-0.3 kg')
+    expect(summary).not.toContain('-0.2 kg')
+  })
+
+  // The other half of the brief's own note: weight will suppress often, and correctly, because a
+  // seven day window frequently holds too few of the household's 130 readings across 236 days.
+  // Suppressed rather than a guessed number is the feature working, the same emptyState.insufficient
+  // copy insight-card.test.tsx already pins for the generic component.
+  it('suppresses the weight insight rather than guessing across a thin window', async () => {
+    await mount(<Weight />, {}, undefined, [], [], { suppressed: true, reason: 'thin-days' })
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
+    expect(card?.textContent).toContain('too few days')
+    expect(card?.querySelector('.insight-summary')).toBeNull()
   })
 })

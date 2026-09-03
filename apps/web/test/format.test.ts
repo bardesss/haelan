@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   formatDuration, formatClock, toneFor, toneOf, trend, deltaFor, metricIsClockOffset,
-  formatNumber, formatMetricValue,
+  formatNumber, formatMetricValue, formatLocalDate,
 } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
@@ -98,6 +98,41 @@ describe('formatMetricValue', () => {
   it('throws rather than silently defaulting to precision 0 for an id the catalogue does not carry', () => {
     expect(() => formatMetricValue(14.7, 'respiratory_rat', 'en', 'absent')).toThrow(/respiratory_rat/)
     expect(() => formatMetricValue(14.7, 'not_a_metric', 'en', 'absent')).toThrow()
+  })
+})
+
+describe('formatLocalDate', () => {
+  // Restored after every test in this block, not just the one that sets it: a thrown assertion
+  // would otherwise leave America/Los_Angeles active for every test vitest runs after this file,
+  // which is a much stranger bug report than the one this suite exists to catch. process.env.TZ
+  // is unset on this machine, so a plain `process.env.TZ = originalTZ` restore assigns
+  // `undefined`, and Node coerces an env var assigned `undefined` to the literal string
+  // "undefined" rather than clearing it (confirmed directly: `process.env.TZ = undefined` then
+  // reading it back gives the string "undefined", not the value undefined). delete is what
+  // actually gets back to "unset" when it started that way, rather than trusting this runtime's
+  // own env handling not to share that footgun.
+  const originalTZ = process.env.TZ
+  afterEach(() => {
+    if (originalTZ === undefined) delete process.env.TZ
+    else process.env.TZ = originalTZ
+  })
+
+  it('reads the reader\'s own locale, not one hardcoded form', () => {
+    expect(formatLocalDate('2026-08-03', 'en')).toBe('Aug 3, 2026')
+    expect(formatLocalDate('2026-08-03', 'nl')).toBe('3 aug 2026')
+  })
+
+  // The previous version of this test asserted against dates that read identically with and
+  // without the UTC anchor from both this machine (Europe/Amsterdam, ahead of UTC) and CI (a UTC
+  // Linux runner), so it passed whether or not `formatLocalDate` actually pinned the time zone:
+  // Amsterdam and UTC only disagree with a zone that sits BEHIND UTC. Forcing one here is what
+  // makes the assertion mean anything. An externally set TZ environment variable does not reach
+  // Intl on this Node build (confirmed by hand: `TZ=America/Los_Angeles node ...` still resolved
+  // Europe/Amsterdam), but a runtime assignment to `process.env.TZ` does, immediately, which is
+  // why this sets it inside the test rather than around the whole process.
+  it('does not lose a day to a reader west of UTC', () => {
+    process.env.TZ = 'America/Los_Angeles'
+    expect(formatLocalDate('2026-01-01', 'en')).toBe('Jan 1, 2026')
   })
 })
 

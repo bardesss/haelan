@@ -62,6 +62,26 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 3.5v2.4M12 18.1v2.4M20.5 12h-2.4M5.9 12H3.5M18 6l-1.7 1.7M7.7 16.3 6 18M18 18l-1.7-1.7M7.7 7.7 6 6" />
     </>
   ),
+  docs: (
+    <>
+      <path d="M6 4h9.5L19 7.5V19a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
+      <path d="M14.5 4v3.5H19M8.5 12h7M8.5 15.5h7" />
+    </>
+  ),
+  changelog: (
+    <>
+      <circle cx="12" cy="13" r="7.5" />
+      <path d="M12 9v4l3 2" />
+      <path d="M8.5 3.5 5 6M15.5 3.5 19 6" />
+    </>
+  ),
+  issues: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5v5.5" />
+      <path d="M12 16.3h.01" strokeWidth="2.6" />
+    </>
+  ),
 }
 
 export function Icon({ name }: { name: string }) {

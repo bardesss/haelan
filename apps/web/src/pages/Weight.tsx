@@ -4,6 +4,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
+import { InsightCard } from '../components/InsightCard.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
@@ -13,6 +14,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
@@ -20,7 +22,7 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
-import { deltaFor, formatMetricValue, formatNumber } from '../format.js'
+import { deltaFor, formatMetricValue, formatNumber, formatWithUnit } from '../format.js'
 
 // weight and body_fat both carry `aggs: ['last', 'mean']` in packages/core/src/derive/metrics.ts;
 // this page only ever asks for 'last', the same REQUESTS/under('agg') shape every sibling page
@@ -105,6 +107,41 @@ export function Weight() {
     return out
   }, [rangeDates, lastSeries.data])
 
+  // The one insight card the brief's own table gives this page: weight at the last agg both
+  // cards above already request (REQUESTS.last). /insights is its own, unbatched request, so this
+  // is one call added on top of the single group above. Suppresses often, correctly: 130 readings
+  // across 236 days in the household this page was built against means a seven day window
+  // frequently holds too few, and InsightCard's own suppressed branch is what that renders as, not
+  // a bug this card routes around.
+  const weightInsight = useInsight('weight', 'last', { from: controls.from, to: controls.to }, source)
+  // The trap this whole page exists to get right, restated for the insight card: METRICS.weight
+  // declares precision 1 in grams, the stored unit, and the headline above converts to kilograms
+  // through formatNumber directly rather than formatMetricValue (see card()'s own comment and
+  // format.ts's own comment on formatNumber for why a converted value can never reach it).
+  // formatWithUnit (format.ts) supplies the "kg" suffix the headline carries through StatTile's
+  // own `unit` prop, which InsightCard's default has no way to add on its own, the same shared
+  // closure Dashboard.tsx, Recovery.tsx and Health.tsx's own copies of this card use; only the
+  // `format` callback here differs from theirs, since this is the one call site that converts a
+  // unit rather than reading the catalogue's stored one.
+  const weightInsightFormat = (value: number | null, absent: string): string =>
+    formatWithUnit(value, absent, (v) => formatNumber(v / 1000, 1, i18n.language, ''), t('weight.units.kg'))
+
+  // The same trap, one level deeper: InsightCard's default delta is `insight.delta`, which
+  // apps/server/src/routes/v1/series.ts derives from `current` and `previous` after rounding both
+  // to precision 1 in GRAMS, the stored unit. Dividing that gram delta by 1000 and rounding again
+  // to kilograms crosses a rounding boundary the two already-converted kilogram figures above do
+  // not, the identical failure the route's own comment on `delta` exists to rule out one level up
+  // (a real case: 81234.5 g and 81469.0 g display as 81.2 kg and 81.5 kg, a difference of -0.3, while
+  // the stored delta of -234.5 g divides to -0.2 kg). Rounding `current` and `previous` to
+  // kilograms first, the same way the route rounds them to grams, and subtracting those two rounded
+  // kilogram figures instead reproduces the route's own guarantee at the unit this card actually
+  // shows, so the three numbers a reader sees always agree again.
+  const weightInsightFormatDelta = (current: number, previous: number): string => {
+    const toKg = (grams: number): number => Number((grams / 1000).toFixed(1))
+    const delta = Number((toKg(current) - toKg(previous)).toFixed(1))
+    return formatWithUnit(delta, '', (v) => formatNumber(v, 1, i18n.language, ''), t('weight.units.kg'))
+  }
+
   // Both cards on this page are `episodic`: a weight (or a body fat reading) is taken by hand, not
   // sampled continuously, so a day nobody weighed in is not a data quality problem the way a gap
   // in a wearable's own record would be (see Sparkline's own `episodic` prop comment for the full
@@ -179,6 +216,12 @@ export function Weight() {
           (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent))}
         {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.chartLabel',
           'weight.units.percent', 'weight.units.percentShort')}
+
+        {/* label is its own catalogue string, not weight.weight.label reused: a second card
+            sharing "Weight" would make a label lookup by exact text ambiguous, the same collision
+            Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
+        <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
+          label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

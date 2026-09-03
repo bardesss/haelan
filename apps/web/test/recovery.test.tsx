@@ -10,8 +10,9 @@ import type { Session } from '../src/auth/session.js'
 import { Recovery } from '../src/pages/Recovery.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import type { Insight } from '../src/data/useInsight.js'
 import { flush, pumpUntil } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // Sparkline draws for real here, and echarts.init's effect throws "missing chart token" without
 // this, the same reason dashboard-cards.test.tsx and chart-lifecycle.test.tsx need it.
@@ -53,11 +54,14 @@ type BaselineStub = { center: number, spread: number, n: number, thin: boolean }
 /**
  * Answers every route Recovery calls: the session (seeded above, but a real render still asks it
  * once), /series for whichever metrics land in the one 'last' request, /api/sync/status (the
- * control row's own query, answered generically by the fallback below), and /baselines with
- * whichever baseline `baseline` names. One baseline for all three cards, since none of these tests
- * need them to differ.
+ * control row's own query, answered generically by the fallback below), /baselines with whichever
+ * baseline `baseline` names, and /insights with metricCoverage.ts's own insightBody plus
+ * `insightOverrides` folded in. One baseline for all three cards, since none of these tests need
+ * them to differ.
  */
-function stubRecovery(urls: string[], baseline: BaselineStub = null): () => void {
+function stubRecovery(
+  urls: string[], baseline: BaselineStub = null, insightOverrides: Partial<Insight> = {},
+): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -77,6 +81,7 @@ function stubRecovery(urls: string[], baseline: BaselineStub = null): () => void
       return json(body)
     }
     if (url.includes('/baselines')) return json({ baseline })
+    if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -104,6 +109,7 @@ function stubRecoveryPerMetric(values: Record<string, number>): () => void {
       return json(body)
     }
     if (url.includes('/baselines')) return json({ baseline: null })
+    if (url.includes('/insights')) return json(insightBody(url))
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -229,5 +235,43 @@ describe('the Recovery page', () => {
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
     globalThis.fetch = original
+  })
+
+  // Task 4's own insight card. The resting heart rate card above carries a "bpm" suffix through
+  // StatTile's own unit prop; restingHrInsightFormat is what closes the gap InsightCard's default
+  // formatMetricValue call leaves (no unit at all), the same gap Dashboard.tsx's own restingHrFormat
+  // closes for its copy of this card.
+  it('carries the resting heart rate tile\'s own bpm suffix into its insight sentence', async () => {
+    window.history.replaceState(null, '', '/recovery?range=month&on=2026-08-15')
+    const restore = stubRecovery([], null, { current: 61.7, previous: 58.2, delta: 3 })
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Resting heart rate, this period against the last')
+    // 62, not 61.7: resting_heart_rate's own catalogue precision is 0, and formatMetricValue
+    // inside restingHrInsightFormat is what rounds to it, the same rounding the card's own
+    // headline above already applies.
+    expect(card?.querySelector('.insight-summary')?.textContent).toBe(
+      '62 bpm on average (Aug 1, 2026 to Aug 31, 2026) against 58 bpm on average in the previous period '
+      + '(Jul 1, 2026 to Jul 31, 2026), a change of 3 bpm.',
+    )
+    restore()
+  })
+
+  // Vary the fixture rather than reusing the same positive delta every test in this file: a
+  // suppressed response (current/previous/delta all null, the shape comparePeriods's own refuse
+  // branch sends) is a null field this card has to fall back on rather than reach
+  // formatMetricValue with, which a fixture carrying only complete bodies could never catch.
+  it('falls back to the insufficient message when the server suppresses the resting heart rate insight', async () => {
+    const restore = stubRecovery([], null, { suppressed: true, reason: 'thin-coverage', current: null, previous: null, delta: null })
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Resting heart rate, this period against the last')
+    expect(card?.textContent).toContain('device')
+    expect(card?.querySelector('.insight-summary')).toBeNull()
+    restore()
   })
 })

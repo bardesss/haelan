@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
-import { seriesPoint } from './metricCoverage.js'
+import { seriesPoint, insightBody } from './metricCoverage.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 
 // happy-dom applies no stylesheet, so document.documentElement carries none of app.css's chart
@@ -80,6 +80,9 @@ function stubFetch(seen: string[]): () => void {
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -116,6 +119,9 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -159,6 +165,9 @@ function stubFetchBySource(seen: string[]): () => void {
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -258,10 +267,11 @@ describe('the Dashboard round trip', () => {
     await flush(client, () => container!.innerHTML)
 
     // 4 stat tiles plus the six remaining cards task 10 restored (heart rate range, flagged days,
-    // sleep stages, sleep schedule, recovery, anomalies), not 4: this test predates their return
-    // and only ever meant "every card on the page", not "exactly the tiles". Daily steps (the
-    // heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
-    expect(container!.querySelectorAll('.card')).toHaveLength(10)
+    // sleep stages, sleep schedule, recovery, anomalies), plus the three insight cards this task
+    // added (steps, resting_heart_rate, sleep_asleep_minutes), 13 not 4 or 10: this test predates
+    // all of their returns and only ever meant "every card on the page", not "exactly the tiles".
+    // Daily steps (the heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
+    expect(container!.querySelectorAll('.card')).toHaveLength(13)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

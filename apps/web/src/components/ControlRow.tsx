@@ -28,6 +28,11 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
   // list in the state layer (controls/source.ts), so the label here and the source the page is
   // querying under cannot drift apart: they are one value.
   const options = [ALL_SOURCES, ...sources]
+  // Notes hands this component `sources={[]}` on purpose (Notes.tsx's own doc comment: a note or
+  // an event is not read off a device the way a metric sample is), which used to still draw a
+  // select holding one option, "All sources", choosing between nothing. A picker of one choice is
+  // not a picker.
+  const hasSourcePicker = sources.length > 0
 
   const session = useSession()
   const personId = session.data?.personId
@@ -83,17 +88,19 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
       </div>
 
       <div className="controls-end">
-        <label className="button">
-          <Icon name="sources" />
-          <span className="sr-only">{t('controlRow.sources')}</span>
-          <select value={controls.source} onChange={(e) => controls.setSource(e.currentTarget.value)}>
-            {options.map((source) => (
-              <option key={source} value={source}>
-                {source === ALL_SOURCES ? t('controlRow.sourceAll') : source}
-              </option>
-            ))}
-          </select>
-        </label>
+        {hasSourcePicker && (
+          <label className="button">
+            <Icon name="sources" />
+            <span className="sr-only">{t('controlRow.sources')}</span>
+            <select value={controls.source} onChange={(e) => controls.setSource(e.currentTarget.value)}>
+              {options.map((source) => (
+                <option key={source} value={source}>
+                  {source === ALL_SOURCES ? t('controlRow.sourceAll') : source}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {/* A link, not a fetch: the export route answers a file and the browser already knows how
             to save one, so there is no blob and no object URL for this component to manage. Left
             out entirely without a path, rather than rendered as an anchor that goes nowhere. */}

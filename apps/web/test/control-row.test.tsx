@@ -128,6 +128,14 @@ describe('ControlRow', () => {
     expect(select.value).toBe('watch')
   })
 
+  // Notes hands this component `sources={[]}` (Notes.tsx: a note or an event has no source
+  // dimension), and the unconditional select used to draw anyway, holding one option, "All
+  // sources", choosing between nothing. A picker of one choice is not a picker.
+  it('draws no source picker when there are no sources', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />))
+    expect(container!.querySelector('select')).toBeNull()
+  })
+
   // "Synced 0 min ago" reads as "synced seconds ago", and it was what a fresh instance and a
   // page still loading both printed. A missing copy string is not a reason to print a false one.
   it('says never synced rather than zero minutes ago when no run has finished', () => {
@@ -157,7 +165,7 @@ describe('ControlRow', () => {
   it('joins the two dates with the catalogue word, not an English one', () => {
     mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />), 'nl')
     const label = container!.querySelector('.stepper-label')!
-    expect(label.textContent).toBe('2026-08-01 tot 2026-08-31')
+    expect(label.textContent).toBe('2026-08-01 tot en met 2026-08-31')
   })
 
   // Before this branch the whole row was inert everywhere, so a placeholder was obviously a mock.
