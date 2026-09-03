@@ -101,6 +101,11 @@ const UNWORN_DAY = '2026-08-11'
 // an empty range that would leave every assertion below indistinguishable from a genuinely quiet
 // day.
 const DAY_ROUTE = '/dashboard?range=day&on=2026-08-13'
+// Health's own Day tab, on the same anchor and for the same reason. Dashboard alone was mounted
+// here while five other pages carried the same flag, which is how Health.tsx shipped without it:
+// a second page settled on this range is what makes the Day tab tests below a claim about the
+// app rather than about one file.
+const HEALTH_DAY_ROUTE = '/health?range=day&on=2026-08-13'
 
 /**
  * A week of real answers. The page used to be asserted against a render that never resolved a
@@ -296,6 +301,7 @@ const dashboardNl = await settledDashboard('nl')
 // is installed, and the Day tab tests want the same real, resolved render those already get, not
 // a fresh mount racing the unstubbed global fetch.
 const dashboardDay = await settledPage(Dashboard, DAY_ROUTE, 'en')
+const healthDay = await settledPage(Health, HEALTH_DAY_ROUTE, 'en')
 restore()
 
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
@@ -586,6 +592,38 @@ describe('Day tab', () => {
   // this needs its own reason rather than reusing no_data.
   it('does not claim a day with data has no data', () => {
     expect(dashboardDay).not.toContain('No data yet')
+  })
+
+  // Health was the sixth page and the one this branch missed: both its cards passed no oneDayRange
+  // at all, so on ?range=day the spo2 card still drew a one point Spo2Range under a label promising
+  // a range "through {period}", and daily_spo2 still drew a one point Sparkline. Each chart's own
+  // accessible name is the discriminator, the same one the Dashboard assertion above uses: they are
+  // existing catalogue strings, so neither assertion can be satisfied by whatever copy replaces the
+  // chart.
+  it('replaces the spo2 range chart on a one day range', () => {
+    expect(healthDay).not.toContain('Daily oxygen saturation minimum, mean and maximum through')
+  })
+
+  it('replaces the daily spo2 sparkline on a one day range', () => {
+    expect(healthDay).not.toContain('Daily oxygen saturation summary through')
+  })
+
+  // Both cards, not one: a page that swapped the range chart and left the sparkline (or the other
+  // way round) still passes each single assertion above on its own, and a figure count is what
+  // catches the half done case. Health draws exactly two figures on a week and neither survives the
+  // Day tab, so this is zero rather than merely fewer.
+  it('draws no chart figures at all on a one day range, both cards swapped', () => {
+    expect((healthDay.match(/<figure/g) ?? []).length).toBe(0)
+    expect((pages.Health.match(/<figure/g) ?? []).length).toBeGreaterThan(1)
+  })
+
+  // The same distinction the Dashboard assertions above draw, restated for the page whose cards
+  // are new to this: the number, its delta and the basis line all stay, only the chart goes, and a
+  // day carrying real data is never described as empty.
+  it('keeps the Health cards\' own numbers on a one day range', () => {
+    expect(healthDay).toContain('<div class="value">')
+    expect(healthDay).not.toContain('No data yet')
+    expect(healthDay).toContain('A single day has no trend to plot.')
   })
 })
 

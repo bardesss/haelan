@@ -129,7 +129,13 @@ function stubHealth(
 }
 
 describe('the Health page', () => {
+  // A week, not this file's own default day route: both cards take oneDayRange now, so on a one
+  // day range each draws ChartNote in place of its chart and there are no chart tables to read a
+  // cell out of at all (pages.test.tsx's Day tab describe pins that behaviour). The fixture still
+  // writes one day, 2026-08-14, which sits inside this week, so the numbers below are unchanged;
+  // only the basis line's denominator moves from one day to seven.
   it('draws the SpO2 interval and the daily summary, and names the reading count', async () => {
+    window.history.replaceState(null, '', '/health?range=week&on=2026-08-14')
     const restore = stubHealth(
       [],
       [spo2Fixture('2026-08-14', 96.4, { min: 94, max: 99, count: 412 })],
@@ -146,9 +152,9 @@ describe('the Health page', () => {
     expect(tables[0]![0]).toContain('<td>412</td>')
     // The count column and the tooltip both had this reading count already; this test's own title
     // ("names the reading count") was true of neither until the visible basis line got it too
-    // (spec section 4, "SpO2 with interval and count"). One day in range, one day of spo2 data,
-    // so `reported` and `total` both read 1 and the sentence around the count is the singular
-    // MetricCard's wear branch resolves to when nothing was unworn.
+    // (spec section 4, "SpO2 with interval and count"). The clause is pluralised on the readings
+    // themselves (412, so the plural form), which Health.tsx resolves before MetricCard ever sees
+    // it precisely so the wear branch's own `count` cannot win the plural from it.
     expect(html).toContain('412 readings')
     expect(html).not.toContain('NaN')
     restore()
