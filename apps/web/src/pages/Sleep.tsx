@@ -226,12 +226,14 @@ export function Sleep() {
       to: Math.round((s.endMs - lastNight.startMs) / 60_000),
     }))
     .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)), [lastNight])
-  // Inherits the same nap contamination Dashboard.tsx's own startLabel comment documents:
-  // lastNight.startMs is the earliest instant across every session sharing this night's date and
-  // source, so a 13:00 nap sharing the date still becomes this label's "Bed 13:00" rather than the
-  // real bedtime. Known, not fixed here, the same reason Dashboard leaves it: a clean label needs
-  // this on the same sleep_bedtime_minutes derived value the schedule chart below now uses, which
-  // is more than a single clock reading beside a hypnogram needs.
+  // The night's own start, which is the bedtime: readSleepNights splits each date through
+  // assembleNights, so lastNight.startMs is where the night began and not merely the earliest
+  // instant sharing its date, and an afternoon nap on that date sits in `naps` instead. This
+  // label used to read "Bed 13:00" for exactly that nap, which is why it is worth saying what
+  // feeds it now. Still computed from the night's instants rather than deferred to
+  // sleep_bedtime_minutes, the way the schedule card below reads its bed times: the hypnogram
+  // beside this label is drawn from those same instants, and a label sourced from anywhere else
+  // could disagree with the bar it labels.
   const lastNightBedMinutes = lastNight === null
     ? null : inWindow(localMinutesOf(lastNight.localDate, lastNight.startMs, lastNight.startOffsetMinutes), WIDE_WINDOW)
   const hypnogramStartLabel = lastNightBedMinutes !== null
