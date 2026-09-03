@@ -18,7 +18,12 @@ export interface IntradayPoint {
 
 export interface IntradayResult {
   points: IntradayPoint[]
-  reduction: { kept: number, total: number }
+  // Null when nothing was thinned and the response holds the full series for this day. An object
+  // with method, from (pre-thin count), and to (post-thin count) when the series exceeded the
+  // request's points budget. A consumer can distinguish a complete 400 point series from a
+  // thinned one standing in for 130,000; this distinction drives whether a basis line anchors on
+  // the visible points (full series) or the original count (thinned).
+  reduction: { method: 'lttb' | 'minmax', from: number, to: number } | null
 }
 
 /**
