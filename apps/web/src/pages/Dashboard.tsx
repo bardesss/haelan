@@ -523,13 +523,18 @@ export function Dashboard() {
   // between mount and the request resolving.
   const nightItems = nights.data?.items ?? EMPTY
   const lastNight = useMemo(() => oneNightPerDate(nightItems).at(-1) ?? null, [nightItems])
+  // startMs/endMs stay raw milliseconds from the night's own start, not rounded to a minute here:
+  // Hypnogram's own stageTotals sums these to build the totals row beneath the chart, and rounding
+  // each boundary to a minute before that sum ran let the two roundings (a boundary, then a total)
+  // compound into several minutes of drift against derive/sleep.ts's own single-rounded figure.
+  // See Hypnogram.tsx's own comment on its `segments` prop for the mechanism.
   const hypnogramSegments = useMemo(() => (lastNight === null ? EMPTY : lastNight.segments
     .map((s) => ({
       stage: stageOf(s.stage),
-      from: Math.round((s.startMs - lastNight.startMs) / 60_000),
-      to: Math.round((s.endMs - lastNight.startMs) / 60_000),
+      startMs: s.startMs - lastNight.startMs,
+      endMs: s.endMs - lastNight.startMs,
     }))
-    .filter((s): s is { stage: Stage, from: number, to: number } => s.stage !== null)), [lastNight])
+    .filter((s): s is { stage: Stage, startMs: number, endMs: number } => s.stage !== null)), [lastNight])
   // The night's own start, which is the bedtime: readSleepNights splits each date through
   // assembleNights, so startMs is where the night began and not merely the earliest instant
   // sharing its date, and an afternoon nap on that date sits in the row's `naps` instead. This

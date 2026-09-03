@@ -23,8 +23,14 @@ const STAGE_ORDER: Stage[] = ['deep', 'light', 'rem', 'awake']
  * rather than rounded per segment and then summed. packages/core/src/derive/sleep.ts's own
  * asMinutes comment states why the latter inflates a total against the provider's 30 second grid:
  * of 5,904 real segments, 3,136 sat exactly 30 seconds over a minute and rounded up, none rounded
- * down, 1,568 invented minutes across one household's history before #85 fixed it there. This is
- * the same rule, kept for the chart that draws the segments the derivation totals from.
+ * down, 1,568 invented minutes across one household's history before #85 fixed it there.
+ *
+ * Hypnogram's own `segments` prop now carries raw millisecond instants rather than pre-rounded
+ * minutes (see the review round that reopened this: rounding each boundary to a minute before it
+ * reached here, then summing the rounded boundaries, reintroduced the identical class of error
+ * one level up, boundary by boundary rather than segment by segment). With that removed, this
+ * function's own single rounding is the only rounding a stage's total goes through, so it agrees
+ * with derive/sleep.ts's minutesOfStage exactly: both sum the same raw segments the same way.
  *
  * Exported so a test can drive it directly against the exact shape it sums, independent of
  * whatever unit Hypnogram's own `segments` prop happens to carry its boundaries in.
@@ -40,7 +46,14 @@ export function stageTotals(
 }
 
 export function Hypnogram({ segments, startLabel, label }: {
-  segments: { stage: Stage; from: number; to: number }[]
+  // startMs/endMs: raw milliseconds from the night's own start, not pre-rounded minutes. Sleep.tsx
+  // and Dashboard.tsx used to round each boundary to a whole minute before building this prop; that
+  // rounding now happens only here, per displayed value (the axis, a table cell), never before a
+  // sum. Two boundaries that round the same way individually can still each carry their own +0 or
+  // +0.5 minute of error, and summing rounded boundaries instead of summing the raw span they
+  // measured let those per-boundary errors show up as several minutes of drift in a stage's total,
+  // against no error at all in stageTotals summing the real durations once.
+  segments: { stage: Stage; startMs: number; endMs: number }[]
   startLabel: string
   label: string
 }) {
@@ -50,7 +63,7 @@ export function Hypnogram({ segments, startLabel, label }: {
     const base = chartBase(tokens)
     return {
       grid: base.grid({ left: 46, top: 10 }),
-      xAxis: { type: 'value' as const, min: 0, max: segments.at(-1)?.to ?? 480,
+      xAxis: { type: 'value' as const, min: 0, max: (segments.at(-1)?.endMs ?? 480 * MINUTE_MS) / MINUTE_MS,
         axisLabel: { ...base.axisLabel, formatter: (v: number) => `${Math.floor(v / 60)}h` },
         splitLine: base.splitLine },
       yAxis: { type: 'category' as const, data: [...LANES].reverse(),
@@ -74,7 +87,11 @@ export function Hypnogram({ segments, startLabel, label }: {
           }
         },
         encode: { x: [0, 1], y: 2 },
-        data: segments.map((s) => [s.from, s.to, LANES.length - 1 - LANES.indexOf(s.stage)]),
+        // Minutes only here, for the axis this chart plots on: a fractional x position (a segment
+        // starting at 1.5 minutes lands between the 1 and 2 minute gridlines) draws exactly as
+        // accurately as a rounded one and does not get summed, so there is no rounding rule to
+        // protect here the way there is in stageTotals below.
+        data: segments.map((s) => [s.startMs / MINUTE_MS, s.endMs / MINUTE_MS, LANES.length - 1 - LANES.indexOf(s.stage)]),
       }],
       graphic: [{ type: 'text' as const, left: 46, top: 0,
         style: { text: startLabel, fill: tokens.muted, fontSize: base.axisLabel.fontSize } }],
@@ -83,12 +100,12 @@ export function Hypnogram({ segments, startLabel, label }: {
 
   const { host, style } = useChart(build, 130)
 
-  // Same segments the chart above draws, from/to in minutes as Sleep.tsx builds this prop,
-  // multiplied out to milliseconds only so stageTotals can do its own single rounding rather than
-  // round twice. Never the daily sleep_*_minutes metrics: those are period aggregates while this
-  // chart shows one night, and reading them here could print a total the bars above disagree with,
-  // an invariant this project has had to repair three times already.
-  const totals = stageTotals(segments.map((s) => ({ stage: s.stage, startMs: s.from * MINUTE_MS, endMs: s.to * MINUTE_MS })))
+  // The same segments the chart above draws, in the same raw milliseconds they already carry: no
+  // conversion needed here, since stageTotals sums milliseconds itself. Never the daily
+  // sleep_*_minutes metrics: those are period aggregates while this chart shows one night, and
+  // reading them here could print a total the bars above disagree with, an invariant this project
+  // has had to repair three times already.
+  const totals = stageTotals(segments)
   const minutesByStage = new Map(totals.map((total) => [total.stage, total.minutes]))
   const totalsRow = STAGE_ORDER
     .filter((stage) => minutesByStage.has(stage))
@@ -100,8 +117,12 @@ export function Hypnogram({ segments, startLabel, label }: {
       <ChartFigure label={label} host={host} style={style}
         table={{
           columns: [t('charts.columns.from'), t('charts.columns.to'), t('charts.columns.stage'), t('charts.columns.duration')],
+          // formatDuration rounds its own argument (Math.round(minutes) internally), so each cell
+          // here rounds independently for display, the same as the axis above; it is never summed,
+          // so it carries none of the accumulation risk stageTotals' own comment describes.
           rows: segments.map((s) => [
-            formatDuration(s.from), formatDuration(s.to), t(STAGE_LABEL_KEY[s.stage]), formatDuration(s.to - s.from),
+            formatDuration(s.startMs / MINUTE_MS), formatDuration(s.endMs / MINUTE_MS),
+            t(STAGE_LABEL_KEY[s.stage]), formatDuration((s.endMs - s.startMs) / MINUTE_MS),
           ]),
         }} />
       {/* Empty totals is a classic (ASLEEP/RESTLESS-only) night, which carries no DEEP/LIGHT/REM

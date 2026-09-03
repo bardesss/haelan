@@ -268,6 +268,44 @@ function stubSleepEfficiency(efficiency: number): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * `/sleep/nights` with a single night carrying exactly the `segments` handed in, at real
+ * millisecond instants (not `hypnogramNightsResponse`'s own fixed one-segment night), for the
+ * review round 1 regression test below: that test needs boundaries on the provider's actual 30
+ * second grid, which `hypnogramNightsResponse` has no parameter for. Every other route answers
+ * the same way `stubSleep`'s own default does (420 per metric, no baseline).
+ */
+function stubSleepHalfMinuteBoundaries(segments: { sessionId: string, stage: string, startMs: number, endMs: number }[]): () => void {
+  const original = globalThis.fetch
+  const nightStartMs = NIGHT_MIDNIGHT - 40 * 60_000
+  const nightEndMs = segments.at(-1)?.endMs ?? nightStartMs
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      return json(Object.fromEntries(
+        metrics.map((metric) => [metric, { points: [seriesPoint(metric, '2026-08-15', 420)], reduction: null }]),
+      ))
+    }
+    if (url.includes('/sleep/nights')) {
+      return json({
+        items: [{
+          localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
+          startMs: nightStartMs, endMs: nightEndMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps: [],
+          segments,
+        }],
+        cursor: null,
+      })
+    }
+    if (url.includes('/baselines')) return json({ baseline: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Sleep page', () => {
   // The shape that produced M3d-1's Critical: sleep rows carry a null coverage because a night
   // has no samples underneath it, and reading that as zero rendered "device not worn" over a
@@ -364,6 +402,41 @@ describe('the Sleep page', () => {
     expect(scheduleTable, tables.map((t) => t.textContent).join(' | ')).toBeDefined()
     expect(scheduleTable!.textContent).toContain('14:30')
     expect(scheduleTable!.textContent).not.toContain('charts.absence.none')
+    restore()
+  })
+
+  // Review round 1's own Critical: hypnogramSegments used to round each boundary
+  // (Math.round((s.startMs - lastNight.startMs) / 60_000)) to a whole minute before handing it to
+  // Hypnogram, which then summed those already-rounded boundaries for the totals row. The
+  // provider reports sleep on a 30 second grid, so every boundary offset here is an exact multiple
+  // of half a minute, and JS's Math.round never rounds a positive .5 down, so the old rounding was
+  // a deterministic bias rather than noise that could cancel across a night.
+  //
+  // Ten 90 second segments, alternating LIGHT/DEEP: true total per stage is 5 * 1.5 = 7.5 minutes,
+  // which a single rounding takes to 8. The old boundary-rounding read LIGHT as 10m and DEEP as 5m
+  // instead, worked by hand from the rounded boundaries 0,2,3,5,6,8,9,11,12,14,15 (minutes from
+  // night start): LIGHT's five segments 0-2, 3-5, 6-8, 9-11, 12-14 sum to 10; DEEP's five 2-3,
+  // 5-6, 8-9, 11-12, 14-15 sum to 5. Run against the pre-fix Sleep.tsx and Hypnogram.tsx (the
+  // version committed in 71cc06a), this test fails: the totals row read "Light 0h 10m, Deep 0h
+  // 05m" rather than "Deep 0h 08m, Light 0h 08m". See task-5-report.md's fix section for that
+  // output.
+  it('totals a night built from half minute segment boundaries to its true duration, not one inflated by rounding each boundary first', async () => {
+    const nightStartMs = NIGHT_MIDNIGHT - 40 * 60_000
+    const boundaries = Array.from({ length: 11 }, (_, i) => nightStartMs + i * 90_000)
+    const segments = boundaries.slice(0, -1).map((startMs, i) => ({
+      sessionId: 's1', stage: i % 2 === 0 ? 'LIGHT' : 'DEEP', startMs, endMs: boundaries[i + 1]!,
+    }))
+    const restore = stubSleepHalfMinuteBoundaries(segments)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    // Scoped to the totals row itself, not the whole page: the accessible table right above it
+    // legitimately prints "0h 05m" and "0h 10m" as segment boundary times (a "to" cell reads the
+    // clock offset a segment ended at, not a summed duration), so asserting against the page's
+    // whole text would flag those true, unrelated cells as if they were the totals row's own bug.
+    const totalsRow = container!.querySelector('.hypnogram-totals')
+    expect(totalsRow, container!.innerHTML).not.toBeNull()
+    expect(totalsRow!.textContent).toBe('Deep 0h 08m, Light 0h 08m')
     restore()
   })
 
