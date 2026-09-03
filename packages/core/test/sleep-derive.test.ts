@@ -364,6 +364,26 @@ describe('deriveSleepDay', () => {
     expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(60)
     expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(60)
     expect(valueOf(rows, 'sleep_efficiency')).toBe(100)
+    // The night was never staged: it has no DEEP, LIGHT or REM segment at all, so a 0 for any of
+    // them would claim a staging measurement came back empty when there was no staging to begin
+    // with. Distinct from the case below, where staging happened and genuinely found no REM.
+    expect(valueOf(rows, 'sleep_deep_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_light_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_rem_minutes')).toBeUndefined()
+  })
+
+  // The other direction: a night that was staged, and genuinely recorded no REM. That 0 is a
+  // measurement, not an absence, and must stay a 0 rather than becoming undefined along with the
+  // classic case above. What distinguishes the two is not "is every stage present" but "did
+  // staging happen at all", i.e. is there at least one DEEP, LIGHT or REM segment.
+  it('writes a real zero for a staged stage the night genuinely had none of', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 60 * MIN })], [
+      seg('n', 'DEEP', BEDTIME, BEDTIME + 30 * MIN),
+      seg('n', 'LIGHT', BEDTIME + 30 * MIN, BEDTIME + 60 * MIN),
+    ])
+    expect(valueOf(rows, 'sleep_deep_minutes')).toBe(30)
+    expect(valueOf(rows, 'sleep_light_minutes')).toBe(30)
+    expect(valueOf(rows, 'sleep_rem_minutes')).toBe(0)
   })
 
   // The guard that predates this stays exactly as it was. A stage outside all six is still

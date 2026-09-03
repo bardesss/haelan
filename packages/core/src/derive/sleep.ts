@@ -204,9 +204,19 @@ export function deriveSleepDay(input: {
         AWAKE_STAGES.reduce((total, stage) => total + msByStage(stage), 0) + gapMsWithin(night),
       )
 
-      push('sleep_deep_minutes', 'sum', deep)
-      push('sleep_light_minutes', 'sum', light)
-      push('sleep_rem_minutes', 'sum', rem)
+      // Staged, not merely recognised: a classic night (ASLEEP/RESTLESS only) has no DEEP, LIGHT
+      // or REM segment at all, so writing 0 for each would claim a staging measurement came back
+      // empty when there was no staging to begin with, the same mistake sleep.ts:180's guard
+      // exists to avoid one level up. A staged night that genuinely recorded no REM still writes
+      // sleep_rem_minutes 0, because that zero is a measurement: the test is whether staging
+      // happened at all, not whether every stage it looked for was present.
+      const wasStaged = staged.some((s) => s.stage === 'DEEP' || s.stage === 'LIGHT' || s.stage === 'REM')
+
+      if (wasStaged) {
+        push('sleep_deep_minutes', 'sum', deep)
+        push('sleep_light_minutes', 'sum', light)
+        push('sleep_rem_minutes', 'sum', rem)
+      }
       push('sleep_asleep_minutes', 'sum', asleep)
       push('sleep_awake_minutes', 'sum', awake)
       push('sleep_efficiency', 'last', inBed > 0 ? Math.round((asleep / inBed) * 100) : null)

@@ -185,13 +185,14 @@ function datesBetween(from: string, to: string): string[] {
 // that import for the one type this file needs from it.
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
-// packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGE are the only recognised
-// values a segment's stage carries ('DEEP', 'LIGHT', 'REM', 'AWAKE'); the derive layer itself
-// refuses to count anything outside that vocabulary toward either asleep or awake (sleep.ts:180)
-// rather than guessing. A segment whose stage this app does not recognise is dropped for the same
-// reason, leaving a visible gap in the hypnogram, rather than drawn, coloured and tabulated as
-// LIGHT: a device reporting a value nobody staged is not the same case as an internal lane index
-// falling out of range, which is the only place Hypnogram itself still falls back.
+// packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six stage values
+// (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS), the derive layer refusing to count anything outside
+// that vocabulary toward either asleep or awake (sleep.ts:185) rather than guessing. This page
+// draws only the four staged ones. A segment carrying ASLEEP or RESTLESS, the classic non-staged
+// pair, is dropped here for the same not-guessing reason, leaving a visible gap in the hypnogram,
+// rather than drawn, coloured and tabulated as LIGHT: a device reporting a value nobody staged is
+// not the same case as an internal lane index falling out of range, which is the only place
+// Hypnogram itself still falls back.
 function stageOf(raw: string): Stage | null {
   const known: Record<string, Stage> = { DEEP: 'deep', LIGHT: 'light', REM: 'rem', AWAKE: 'awake' }
   return known[raw] ?? null
