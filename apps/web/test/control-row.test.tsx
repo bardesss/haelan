@@ -162,10 +162,15 @@ describe('ControlRow', () => {
   // no-hardcoded-strings.test.ts cannot see this one: its regex reads text between tags, not
   // inside an expression, so an English "to" sat in the stepper label of a Dutch page while every
   // card underneath it read Dutch.
-  it('joins the two dates with the catalogue word, not an English one', () => {
+  it('names the period in the page language, and keeps the catalogue word on the exact bounds', () => {
     mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />), 'nl')
     const label = container!.querySelector('.stepper-label')!
-    expect(label.textContent).toBe('2026-08-01 tot en met 2026-08-31')
+    // The visible label is no longer a join of two dates at all: it names the period, in the
+    // page's own language, through Intl rather than the catalogue. Both halves are asserted here
+    // because either one alone passes while the other is broken: an English month name beside a
+    // correct Dutch title, or a Dutch name beside bounds joined by an English "to".
+    expect(label.textContent).toBe('augustus 2026')
+    expect(label.getAttribute('title')).toBe('2026-08-01 tot en met 2026-08-31')
   })
 
   // Before this branch the whole row was inert everywhere, so a placeholder was obviously a mock.

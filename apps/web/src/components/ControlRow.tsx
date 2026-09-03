@@ -7,6 +7,7 @@ import { apiSend, ApiError } from '../api/client.js'
 import { useSession } from '../auth/session.js'
 import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
 import { ALL_SOURCES } from '../controls/source.js'
+import { periodLabel } from '../controls/periodLabel.js'
 
 export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, canSync = true }: {
   controls: PageControlsState
@@ -23,7 +24,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
   // claims a time, so offering either from a page pinned to fixtures is a control that lies.
   canSync?: boolean
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Shown exactly as handed over. controls.source has already been resolved against this same
   // list in the state layer (controls/source.ts), so the label here and the source the page is
   // querying under cannot drift apart: they are one value.
@@ -78,8 +79,12 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
       <div className="stepper">
         <button type="button" className="icon-button" aria-label={t('controlRow.previousPeriod')}
           onClick={() => controls.step(-1)}><Icon name="chevronLeft" /></button>
-        <span className="stepper-label">
-          {controls.from === controls.to ? controls.from : `${controls.from} ${t('common.to')} ${controls.to}`}
+        {/* The exact bounds move to the title rather than being dropped: the label now names the
+            period ("september 2026") and a reader who wants to know which days that covers can
+            hover for them. The pretty name is what a screen reader gets, which is an improvement
+            on two ISO dates rather than a loss, so nothing here is sr-only. */}
+        <span className="stepper-label" title={`${controls.from} ${t('common.to')} ${controls.to}`}>
+          {periodLabel(controls.tab, controls.from, controls.to, i18n.language)}
         </span>
         <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}
           onClick={() => controls.step(1)}><Icon name="chevronRight" /></button>

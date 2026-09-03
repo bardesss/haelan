@@ -65,6 +65,13 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
   // the rest of what this component decides about collapsing, each handled where it is used.
   const label = (text: string) => <span className={collapsed ? 'sr-only' : undefined}>{text}</span>
 
+  // The hover name for the icon a collapsed rail leaves behind. "label" above keeps the accessible
+  // name in the DOM either way, so a screen reader never lost anything to collapsing; a sighted
+  // reader was left with nine unlabelled glyphs and no way to learn what any of them meant, which
+  // is what this restores. Undefined when expanded, where the label is already on screen and a
+  // tooltip repeating it would only sit in the way of it.
+  const hoverName = (text: string) => (collapsed ? text : undefined)
+
   return (
     <nav className={collapsed ? 'rail rail-collapsed' : 'rail'} aria-label={t('sidebar.sectionsLabel')}>
       <div className="brand-row">
@@ -80,6 +87,7 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
           <div className="rail-group">{label(t(g.labelKey))}</div>
           {g.items.map((item) => (
             <Link key={item.path} to={item.path} className="rail-item"
+                  title={hoverName(t(item.nameKey))}
                   aria-current={active === item.path ? 'page' : undefined}>
               <Icon name={item.path === '/' ? 'dashboard' : item.path.slice(1)} />{label(t(item.nameKey))}
             </Link>
@@ -89,7 +97,8 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
       <div className="rail-foot">
         <div className="rail-resources">
           {RESOURCES.map((resource) => (
-            <a key={resource.href} href={resource.href} className="rail-item" target="_blank" rel="noreferrer">
+            <a key={resource.href} href={resource.href} className="rail-item" target="_blank"
+               rel="noreferrer" title={hoverName(t(resource.nameKey))}>
               <Icon name={resource.icon} />{label(t(resource.nameKey))}
             </a>
           ))}
@@ -98,11 +107,11 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
             milestone without one, and the README's own M5 row puts the person switcher and
             member management there instead. A dead link here would be a tenth way to reach a
             blank screen, now that the rail carries nine (M3c-12 added the ninth, Settings). */}
-        <div className="rail-person">
+        <div className="rail-person" title={hoverName(person)}>
           <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
         </div>
         {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
-        <button type="button" className="button" onClick={onSignOut}>
+        <button type="button" className="button" onClick={onSignOut} title={hoverName(t('shell.signOut'))}>
           <Icon name="signOut" />{label(t('shell.signOut'))}
         </button>
       </div>

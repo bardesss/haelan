@@ -116,6 +116,34 @@ describe('the rail collapses to an icon strip', () => {
     expect(html).not.toContain('aria-label=""')
   })
 
+  // The test above proves the accessible name survives collapse, which was always the stated point
+  // of the feature. A sighted reader gets neither that clipped span nor a visible label, so before
+  // this the collapsed rail was nine unlabelled glyphs with nothing anywhere naming them. Asserted
+  // per anchor and in both directions: a title somewhere in the page does not prove this item has
+  // one, and a title surviving on the expanded rail would pop a tooltip over the label it repeats.
+  // Expanded is rendered first because renderCollapsedNamed writes the flag to storage, which the
+  // next render would then read back.
+  it('names each icon on hover when collapsed, and leaves the expanded rail alone', () => {
+    const expanded = renderRailNamed()
+    const collapsed = renderCollapsedNamed()
+    for (const path of RAIL_PATHS) {
+      const name = EXPECTED_NAMES[path]
+      expect(name, `no expected name recorded for ${path}`).toBeDefined()
+      const openTag = (html: string) => html.match(new RegExp(`<a href="${path}"[^>]*>`))?.[0]
+      expect(openTag(collapsed), path).toContain(`title="${name}"`)
+      expect(openTag(expanded), path).not.toContain('title=')
+    }
+  })
+
+  it('names the sign out button, the account and the resources links too, which lose their labels with the rest', () => {
+    const expanded = renderRailNamed()
+    const collapsed = renderCollapsedNamed()
+    for (const name of ['Sign out', 'Documentation', 'Changelog', 'Issues', 'Bartus']) {
+      expect(collapsed, name).toContain(`title="${name}"`)
+    }
+    expect(expanded).not.toContain('title=')
+  })
+
   it('falls back to expanded when localStorage throws', () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied') })
     expect(() => renderRail()).not.toThrow()
