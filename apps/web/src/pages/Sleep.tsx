@@ -329,6 +329,7 @@ export function Sleep() {
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
+        oneDayRange={controls.tab === 'day'}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length, ...extra }}>
         {(basis) => (
           <StatTile label={label} value={value} unit={shortUnit} basis={basis}

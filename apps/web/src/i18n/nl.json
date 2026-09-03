@@ -82,7 +82,8 @@
   "emptyState": {
     "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
     "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
-    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
+    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." },
+    "single_day": { "title": "Geen trend voor één dag", "detail": "Eén dag laat geen trend zien. Het getal hierboven is de waarde van deze dag." }
   },
   "insightCard": {
     "summary": "{{current}} gemiddeld ({{currentFrom}} tot en met {{currentTo}}) tegenover {{previous}} gemiddeld in de vorige periode ({{previousFrom}} tot en met {{previousTo}}), een verandering van {{delta}}.",
@@ -145,7 +146,8 @@
       "basisNoBaseline": "dagelijks minimum, gemiddelde en maximum; nog geen baseline om mee te vergelijken",
       "basisBaselinePending": "dagelijks minimum, gemiddelde en maximum; de baseline wordt nog geladen",
       "basisBaselineUnknown": "dagelijks minimum, gemiddelde en maximum; de baseline kon niet worden gelezen, dus er is geen band getekend",
-      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}"
+      "chartLabel": "Dagelijks minimum, gemiddelde en maximum van de hartslag in {{period}}",
+      "intradayChartLabel": "Hartslag tijdens de dag van {{date}}"
     },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",

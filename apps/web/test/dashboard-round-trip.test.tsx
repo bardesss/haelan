@@ -77,6 +77,12 @@ function stubFetch(seen: string[]): () => void {
         steps: { points: [seriesPoint('steps', '2026-08-01', 900)], reduction: null },
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/intraday')) {
+      // Empty rather than a real point: none of this file's tests read the intraday chart itself,
+      // only that mounting the Day tab does not crash or print a NaN, which an empty series answers
+      // as well as a populated one and without inventing a shape this file otherwise never checks.
+      return new Response(JSON.stringify({ points: [], reduction: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
@@ -116,6 +122,12 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
         }
       }
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/intraday')) {
+      // Empty rather than a real point: none of this file's tests read the intraday chart itself,
+      // only that mounting the Day tab does not crash or print a NaN, which an empty series answers
+      // as well as a populated one and without inventing a shape this file otherwise never checks.
+      return new Response(JSON.stringify({ points: [], reduction: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
@@ -162,6 +174,12 @@ function stubFetchBySource(seen: string[]): () => void {
         }
       }
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/intraday')) {
+      // Empty rather than a real point: none of this file's tests read the intraday chart itself,
+      // only that mounting the Day tab does not crash or print a NaN, which an empty series answers
+      // as well as a populated one and without inventing a shape this file otherwise never checks.
+      return new Response(JSON.stringify({ points: [], reduction: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })

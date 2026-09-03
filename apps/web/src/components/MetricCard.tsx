@@ -39,13 +39,19 @@ import type { Baseline } from '../data/useBaseline.js'
  * right for a caller that says nothing, the same reasoning `worn` and `reported` are typed `never`
  * on `basisValues` rather than merely documented as reserved.
  */
-export function MetricCard({ metric, query, points, baseline, span, label, basisPlacement, basisKey, basisWornKey, basisValues, after, children }: {
+export function MetricCard({ metric, query, points, baseline, span, label, basisPlacement, basisKey, basisWornKey, basisValues, oneDayRange, after, children }: {
   metric: string
   query: { isError: boolean, isPending: boolean, refetch: () => unknown }
   points: SeriesPoint[]
   baseline?: Baseline | null
   span: number
   label?: string
+  // Forwarded to emptyStateFor unchanged: whether the page this card sits on is showing a single
+  // calendar day (controls.tab === 'day'), not whether points happens to hold one row. Optional
+  // and left undefined by most callers, which emptyStateFor reads the same as false; a caller with
+  // no Day tab of its own (Settings, or a card gated on something other than a metric range) has
+  // nothing to pass here and nothing changes for it.
+  oneDayRange?: boolean
   // 'header' hands the basis to Card, which renders it above children the way the heart rate range
   // and sleep schedule cards want it. 'body' withholds it from Card and leaves it to `children`,
   // which is what a tile card needs: StatTile renders its own basis paragraph directly beneath the
@@ -89,7 +95,7 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
   if (query.isPending) return <Card span={span} label={label}><Loading />{after}</Card>
 
-  const empty = emptyStateFor(metric, points, baseline)
+  const empty = emptyStateFor(metric, points, baseline, oneDayRange)
   if (empty !== null) {
     return (
       <Card span={span} label={label}>

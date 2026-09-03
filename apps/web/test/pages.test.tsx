@@ -81,6 +81,11 @@ const RANGE = '/dashboard?range=week&on=2026-08-12'
 // None of that existed in the render this file used to assert against, which resolved nothing.
 const DAYS = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']
 const UNWORN_DAY = '2026-08-11'
+// The Day tab, anchored on the last of DAYS' own four dates so the stub's /series (filtered to
+// the requested from/to, see stubFetch's own comment) answers with real data for it rather than
+// an empty range that would leave every assertion below indistinguishable from a genuinely quiet
+// day.
+const DAY_ROUTE = '/dashboard?range=day&on=2026-08-13'
 
 /**
  * A week of real answers. The page used to be asserted against a render that never resolved a
@@ -110,25 +115,50 @@ function stubFetch(
     if (url.includes('/events')) return json({ items: events })
     if (url.includes('/series')) {
       const params = new URLSearchParams(url.split('?')[1] ?? '')
+      // Real /series scopes every row to the requested from/to (personQuery's own requireRange),
+      // and the Day tab tests below depend on that: a one day request has to come back with the
+      // one DAYS entry inside it, not all four regardless of range, or a one day range could never
+      // be told apart from a week from the response shape alone. Index (`i`) is kept off DAYS'
+      // own position rather than the filtered array's, so a day's stubbed value stays the same
+      // number whichever range it is requested under.
+      const from = params.get('from') ?? ''
+      const to = params.get('to') ?? ''
       const body: Record<string, unknown> = {}
       for (const metric of params.getAll('metric')) {
         body[metric] = {
-          points: DAYS.map((date, i) => seriesPoint(
-            metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
-            {
-              // The one day heart rate is at the derivation's coverage floor, which is what gives
-              // the wear clause a singular to render (see the unworn day assertions below).
-              ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
-              sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
-              // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
-              // M3b added the column), and this is the one stub that exercises that half.
-              updatedAtMs: null,
-            },
-          )),
+          points: DAYS
+            .map((date, i) => ({ date, i }))
+            .filter(({ date }) => date >= from && date <= to)
+            .map(({ date, i }) => seriesPoint(
+              metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
+              {
+                // The one day heart rate is at the derivation's coverage floor, which is what gives
+                // the wear clause a singular to render (see the unworn day assertions below).
+                ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
+                sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
+                // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
+                // M3b added the column), and this is the one stub that exercises that half.
+                updatedAtMs: null,
+              },
+            )),
           reduction: null,
         }
       }
       return json(body)
+    }
+    if (url.includes('/intraday')) {
+      // Two samples spread across the requested day, real enough that IntradayHeartRate draws a
+      // trace rather than folding into its own no-data branch: the day tab tests need a chart to
+      // find absent, not a fresh empty state standing in for it.
+      const params = new URLSearchParams(url.split('?')[1] ?? '')
+      const date = params.get('date') ?? '2026-08-13'
+      return json({
+        points: [
+          { sourceId: 'watch', utcMs: Date.parse(`${date}T08:00:00Z`), min: 58, mean: 62, max: 70 },
+          { sourceId: 'watch', utcMs: Date.parse(`${date}T20:00:00Z`), min: 60, mean: 65, max: 74 },
+        ],
+        reduction: null,
+      })
     }
     if (url.includes('/sleep/nights')) {
       const start = Date.parse('2026-08-12T23:00:00Z')
@@ -231,6 +261,11 @@ const pages = {
   Settings: await settledSettings('en'),
 }
 const dashboardNl = await settledDashboard('nl')
+// Settled inside the same stub window as `pages`/`dashboardNl` above, rather than inside an `it`
+// after `restore()` runs below: every other settledPage call in this file happens while stubFetch
+// is installed, and the Day tab tests want the same real, resolved render those already get, not
+// a fresh mount racing the unstubbed global fetch.
+const dashboardDay = await settledPage(Dashboard, DAY_ROUTE, 'en')
 restore()
 
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
@@ -479,6 +514,35 @@ describe('Dashboard specifics', () => {
     expect(dashboardNl).toContain('0 dagen niet gedragen')
   })
 
+})
+
+// With from === to the daily series holds one point, and emptyState's only guard is length === 0,
+// so before this every metric card on all six pages drew a single dot on the Day tab. The daily
+// chart's own accessible name is the discriminator: it is an existing catalogue string, so this
+// assertion cannot be satisfied by whatever copy the new chart happens to get.
+describe('Day tab', () => {
+  it('replaces the daily range chart on a one day range', () => {
+    expect(dashboardDay).not.toContain('Daily heart rate minimum, mean and maximum through')
+  })
+
+  // Every other MetricCard on this range (the four stat tiles, the sleep schedule chart) reads
+  // emptyStateFor's own new single_day branch the same way it already reads no_data and not_worn,
+  // so each whole card, number included, is replaced by that one explanatory line; heart rate
+  // alone keeps a chart, because it alone has an intraday view to swap in instead. The figure
+  // count is the assertion because it is what a reader actually sees change: this page draws
+  // several fewer chart figures on the Day tab than it does on a week, the state this replaces.
+  it('draws fewer chart figures on a one day range than on a week', () => {
+    const dayFigures = (dashboardDay.match(/<figure/g) ?? []).length
+    const weekFigures = (pages.Dashboard.match(/<figure/g) ?? []).length
+    expect(dayFigures).toBeLessThan(weekFigures)
+  })
+
+  // The distinction that matters and the one most likely to be got wrong: a one day range with a
+  // value is not missing data. Rendering the no-data copy would state something false, which is why
+  // this needs its own reason rather than reusing no_data.
+  it('does not claim a day with data has no data', () => {
+    expect(dashboardDay).not.toContain('No data yet')
+  })
 })
 
 // Task 11's own coverage: until this task every chart on every page was handed an empty

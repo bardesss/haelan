@@ -82,7 +82,8 @@
   "emptyState": {
     "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
     "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
-    "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
+    "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." },
+    "single_day": { "title": "No trend for one day", "detail": "A single day has no trend to plot. The number above is this day's own reading." }
   },
   "insightCard": {
     "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
@@ -145,7 +146,8 @@
       "basisNoBaseline": "daily minimum, mean and maximum; no baseline yet to compare against",
       "basisBaselinePending": "daily minimum, mean and maximum; the baseline is still loading",
       "basisBaselineUnknown": "daily minimum, mean and maximum; the baseline could not be read, so no band is drawn",
-      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}"
+      "chartLabel": "Daily heart rate minimum, mean and maximum through {{period}}",
+      "intradayChartLabel": "Heart rate through the day of {{date}}"
     },
     "flaggedDays": {
       "label": "Flagged days",

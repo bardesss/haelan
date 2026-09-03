@@ -192,6 +192,7 @@ export function Weight() {
     const readings = t(readingsKey, { count: points.length })
     return (
       <MetricCard metric={metric} span={6} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
+        oneDayRange={controls.tab === 'day'}
         basisKey={basisKey} basisWornKey={basisKey} basisValues={{ readings }}>
         {(basis) => (
           <StatTile label={t(labelKey)} value={format(headline)} unit={t(shortUnitKey)}

@@ -55,14 +55,21 @@ export function intradayPath(
 
 export function useIntraday(
   query: { metric: string, date: string, source: string },
+  // Separate from `query` rather than a fourth field on it: `enabled` is a fact about whether the
+  // caller wants this request at all (Dashboard.tsx's heart rate card only wants it on the Day
+  // tab), not a fact about which day's intraday points to fetch, and folding it into `query` would
+  // put it in the query key too, cycling the cache entry on every tab flip for no reason.
+  // Defaults to true so every existing single-argument call keeps requesting unconditionally.
+  options?: { enabled?: boolean },
 ): UseQueryResult<IntradayResult> {
   const session = useSession()
   const personId = session.data?.personId
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'intraday', query),
-    // Without this the hook requests /api/v1/p/undefined/intraday on first render, which the
-    // server answers 404 for and which then sits in the cache under a key naming no person.
-    enabled: personId !== undefined,
+    // Without the personId half, this hook requests /api/v1/p/undefined/intraday on first render,
+    // which the server answers 404 for and which then sits in the cache under a key naming no
+    // person.
+    enabled: personId !== undefined && (options?.enabled ?? true),
     queryFn: () => apiGet<IntradayResult>(intradayPath(personId!, query)),
   })
 }
