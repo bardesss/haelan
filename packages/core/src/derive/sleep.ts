@@ -115,16 +115,20 @@ export interface SleepSegmentLike {
   endMs: number
 }
 
-// The API's discovery document declares the sleep stage enum as AWAKE, DEEP, LIGHT, REM, ASLEEP,
-// RESTLESS. ASLEEP and RESTLESS are the classic, non-staged model, carried by sessions whose
-// attrs.type is CLASSIC rather than STAGES. Which side each falls on is the provider's own
-// arithmetic and not a judgement: a classic payload reporting stagesSummary [ASLEEP 116,
-// RESTLESS 10] also reports minutesAsleep 116 and minutesAwake 10.
+// The API's discovery document declares seven sleep stage values (packages/core/src/api/enums.ts's
+// SLEEP_STAGE_TYPES, kept from drifting by check-enum-drift.mjs): AWAKE, DEEP, LIGHT, REM, ASLEEP,
+// RESTLESS, and SLEEP_STAGE_TYPE_UNSPECIFIED. That seventh is a protobuf sentinel meaning the field
+// was not set, not a stage a person can be in, so the derivation recognises only the other six.
+// ASLEEP and RESTLESS are the classic, non-staged model, carried by sessions whose attrs.type is
+// CLASSIC rather than STAGES. Which side each falls on is the provider's own arithmetic and not a
+// judgement: a classic payload reporting stagesSummary [ASLEEP 116, RESTLESS 10] also reports
+// minutesAsleep 116 and minutesAwake 10.
 //
-// The M0 probe recorded four of the six, because four is what its sample happened to contain, and
-// the two it missed were silently discarded from every night that had them. A value outside all
-// six still counts toward neither asleep nor awake: calling it asleep would inflate the night and
-// calling it awake would deflate it, and inventing either is worse than reporting what we know.
+// The M0 probe recorded four of the six real stages, because four is what its sample happened to
+// contain, and the two it missed were silently discarded from every night that had them. A value
+// outside the six real stages still counts toward neither asleep nor awake: calling it asleep would
+// inflate the night and calling it awake would deflate it, and inventing either is worse than
+// reporting what we know.
 export const ASLEEP_STAGES: readonly string[] = ['DEEP', 'LIGHT', 'REM', 'ASLEEP']
 export const AWAKE_STAGES: readonly string[] = ['AWAKE', 'RESTLESS']
 
