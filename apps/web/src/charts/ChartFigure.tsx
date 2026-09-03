@@ -38,8 +38,20 @@ export function ChartFigure({ label, table, host, style }: {
           <tr>{table.columns.map((c) => <th key={c} scope="col">{c}</th>)}</tr>
         </thead>
         <tbody>
-          {table.rows.map((row) => (
-            <tr key={String(row[0])}>
+          {/*
+            Keyed by index, not by row[0]: every chart before IntradayHeartRate keyed on a date,
+            unique per row by construction, so an index key would have been indistinguishable from
+            one. IntradayHeartRate draws one row per point per source, and two sources reporting
+            the same minute (readIntraday's own reason to keep sources separate at all) print the
+            same time in row[0], so a row[0] key collided across sources: a real duplicate-key case,
+            not a hypothetical one. An index key is the right tool specifically because this table
+            is never reordered and never filtered (`rows` is rebuilt fresh from `points`/`days` on
+            every render, in the same order, with no row ever inserted, removed or resorted in
+            place), which is the one condition under which an index key is not the smell it usually
+            is.
+          */}
+          {table.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
               {row.map((cell, i) => (
                 i === 0 ? <th key={i} scope="row">{cell}</th> : <td key={i}>{cell}</td>
               ))}

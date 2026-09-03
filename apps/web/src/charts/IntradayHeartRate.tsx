@@ -9,6 +9,7 @@ import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
 import type { Translate } from '../format.js'
 import type { IntradayPoint, IntradayResult } from '../data/useIntraday.js'
+import { useSession } from '../auth/session.js'
 
 type Props = {
   points: IntradayPoint[]
@@ -64,23 +65,36 @@ export function intradayBasis(t: Translate, reduction: IntradayResult['reduction
 }
 
 /**
- * A point's time of day, rendered in UTC rather than the reader's own browser zone.
+ * A point's time of day, rendered in `timeZone` rather than wherever this code happens to run.
  *
- * IntradayPoint carries no tzOffsetMinutes: readIntraday (packages/core/src/query/intraday.ts)
- * reads each row's own offset server side, to decide which local day a reading belongs to, but does
- * not return it, so there is no way to recover the offset a reading was actually taken under from
- * utcMs alone once it reaches this file. The browser's own zone is not that offset either;
- * readIntraday's own comment states a reading keeps the offset it was recorded under even if the
- * person has since moved. UTC is not the true clock time the reading was taken at, but unlike the
- * reader's own machine zone it is at least the same answer on every machine, so the axis, the
- * tooltip and the table below cannot disagree with each other about what time a point was.
+ * This answers a different question than the one IntradayPoint's own missing tzOffsetMinutes
+ * would: readIntraday (packages/core/src/query/intraday.ts) reads each row's own recording offset
+ * server side only to decide which local day a reading belongs to, and does not return it, so there
+ * is no way to recover the offset a reading was actually taken under once a point reaches this
+ * file. That is not what a reader wants displayed anyway; a reader wants their OWN configured zone
+ * (`session.timezone`, `IntradayHeartRate` below), the same zone usePageControls already reads off
+ * the session to compute "the person's today, not the browser's" (usePageControls.ts). `timeZone`
+ * is always passed in explicitly, never defaulted here, so this function cannot quietly fall back
+ * to the runtime's own machine zone the way `Intl.DateTimeFormat` does when the option is omitted:
+ * the same reason periodLabel.ts pins `timeZone: 'UTC'` on every one of its own formatters rather
+ * than leaving it implicit. `hourCycle: 'h23'` for the same reason: 'en' has no region attached
+ * here to imply a clock convention, and Node's ICU data defaults a bare 'en' to a 12 hour clock
+ * (confirmed by this file's own now-fixed test, which read "08:00 PM" before this was added), which
+ * every other clock rendered by this app (formatClock, OverrideList's own timeStyle) already avoids.
  */
-function timeOfDay(utcMs: number, language: string): string {
-  return new Date(utcMs).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+function timeOfDay(utcMs: number, timeZone: string, language: string): string {
+  return new Date(utcMs).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone })
 }
 
 export function IntradayHeartRate({ points, label }: Props) {
   const { t, i18n } = useTranslation()
+  const session = useSession()
+  // UTC while /api/auth/me is still pending (this component's first render, always, since the
+  // session query starts unresolved) or has failed, rather than throwing: every point already has
+  // a real instant regardless of whether the reader's own zone is known yet, and UTC is a real,
+  // statable zone to show it in meanwhile, not a guess the way the runtime's own machine zone would
+  // be (timeOfDay's own comment on why that guess is never used here, loaded or not).
+  const timezone = session.data?.timezone ?? 'UTC'
 
   const series = useMemo(() => seriesBySource(points), [points])
 
@@ -117,7 +131,7 @@ export function IntradayHeartRate({ points, label }: Props) {
               const mean = formatMetricValue(point.mean, 'heart_rate', i18n.language, '')
               const min = formatMetricValue(point.min, 'heart_rate', i18n.language, '')
               const max = formatMetricValue(point.max, 'heart_rate', i18n.language, '')
-              return `${timeOfDay(point.utcMs, i18n.language)} ${point.sourceId}`
+              return `${timeOfDay(point.utcMs, timezone, i18n.language)} ${point.sourceId}`
                 + `<br/>${t('charts.hrTooltip.mean', { value: mean })}`
                 + `<br/>${t('charts.hrTooltip.range', { min, max })}`
             })
@@ -127,7 +141,7 @@ export function IntradayHeartRate({ points, label }: Props) {
       },
       xAxis: {
         type: 'time' as const,
-        axisLabel: { ...base.axisLabel, formatter: (value: number) => timeOfDay(value, i18n.language) },
+        axisLabel: { ...base.axisLabel, formatter: (value: number) => timeOfDay(value, timezone, i18n.language) },
         axisLine: base.labelledAxis.axisLine,
       },
       yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
@@ -152,7 +166,7 @@ export function IntradayHeartRate({ points, label }: Props) {
         ]
       }),
     }
-  }, [series, pointsBySource, t, i18n.language])
+  }, [series, pointsBySource, timezone, t, i18n.language])
 
   const { host, style } = useChart(build, 170)
   return (
@@ -165,7 +179,7 @@ export function IntradayHeartRate({ points, label }: Props) {
         rows: points.map((p) => {
           const absent = t('charts.absence.noReading')
           return [
-            timeOfDay(p.utcMs, i18n.language),
+            timeOfDay(p.utcMs, timezone, i18n.language),
             p.sourceId,
             formatMetricValue(p.min, 'heart_rate', i18n.language, absent),
             formatMetricValue(p.mean, 'heart_rate', i18n.language, absent),

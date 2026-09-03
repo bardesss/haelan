@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { intradayBasis, seriesBySource } from '../src/charts/IntradayHeartRate.js'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { IntradayHeartRate, intradayBasis, seriesBySource } from '../src/charts/IntradayHeartRate.js'
 import type { IntradayPoint } from '../src/data/useIntraday.js'
 import type { Translate } from '../src/format.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
+import { I18nProvider } from '../src/i18n/index.js'
 
 const at = (utcMs: number, sourceId: string, mean: number): IntradayPoint =>
   ({ sourceId, utcMs, min: mean - 5, mean, max: mean + 5 })
@@ -75,5 +80,52 @@ describe('intradayBasis', () => {
     const { t, calls } = stubT()
     intradayBasis(t, null, 42)
     expect(calls).toEqual([['charts.intradayBasis.full', { count: 42 }]])
+  })
+})
+
+describe('IntradayHeartRate time of day', () => {
+  const SESSION: Session = {
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam',
+  }
+  // 20:00 UTC on an August day is 22:00 in Europe/Amsterdam (CEST, UTC+2). Picked to match the
+  // exact case a UTC axis gets wrong: a two hour shift on a chart whose whole purpose is showing
+  // when in the day something happened.
+  const POINT: IntradayPoint = { sourceId: 'watch', utcMs: Date.UTC(2026, 7, 14, 20, 0, 0), min: 70, mean: 72, max: 75 }
+
+  function renderTable(session: Session | undefined): string {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    // Mirrors page-controls.test.tsx's own withQuery: setQueryData seeds the cache synchronously,
+    // so useSession() resolves without a real fetch or an effect ever running, which is what
+    // renderToStaticMarkup needs (it runs no effects at all).
+    if (session !== undefined) client.setQueryData(queryKeys.session(), session)
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en">
+          <IntradayHeartRate points={[POINT]} reduction={null} label="Heart rate" />
+        </I18nProvider>
+      </QueryClientProvider>,
+    )
+    return html.match(/<table class="sr-only">[\s\S]*?<\/table>/)![0]
+  }
+
+  // The point of this task's fix: IntradayPoint carries no recording offset (readIntraday.ts's own
+  // reason not to try to recover one), but the reader's own configured zone is a different, known
+  // quantity, the same one usePageControls already reads off the session to compute "the person's
+  // today, not the browser's". A chart that ignored it and rendered UTC unconditionally would be
+  // wrong by the reader's own offset, all day, on the one axis and table this chart exists to draw.
+  it("renders a point's time of day in the session's own timezone, not UTC", () => {
+    const table = renderTable(SESSION)
+    expect(table).toContain('22:00')
+    expect(table).not.toContain('20:00')
+  })
+
+  // The other half of the same fix: a reader has an instant to show regardless of whether
+  // /api/auth/me has answered yet, and UTC is a real, statable zone to fall back to rather than a
+  // guess (unlike the runtime's own machine zone, which is what usePageControls itself falls back
+  // to for a different question - "the person's today" - and is not this chart's own choice to
+  // repeat here on purpose: see timeOfDay's own comment).
+  it('falls back to UTC rather than throwing while the session has not loaded yet', () => {
+    const table = renderTable(undefined)
+    expect(table).toContain('20:00')
   })
 })
