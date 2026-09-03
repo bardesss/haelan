@@ -653,7 +653,8 @@ export function Dashboard() {
             through would hand that decision to emptyStateFor's own insufficient state instead. */}
         {controls.tab === 'day' ? (
           // With from === to the daily series this card used to read holds at most one row (see
-          // emptyState.ts's own single_day comment), so what it drew was one dot standing in for
+          // emptyStateFor's own opening comment in emptyState.ts for why a one day range is
+          // deliberately not one of its states), so what it drew was one dot standing in for
           // the "daily minimum, mean and maximum" its own label claimed. The Day tab draws the
           // day's own trace instead. Not a MetricCard: useIntraday answers a different question
           // than meanHrPoints (minute by minute samples through one day, not one row per day in a
