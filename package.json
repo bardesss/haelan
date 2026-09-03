@@ -13,7 +13,8 @@
     "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit && tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/server/tsconfig.json --noEmit",
     "dev": "pnpm --filter @haelan/web dev",
     "dev:server": "pnpm --filter @haelan/server dev",
-    "start": "node --experimental-strip-types apps/server/src/index.ts"
+    "start": "node --experimental-strip-types apps/server/src/index.ts",
+    "check:enums": "node --experimental-strip-types scripts/check-enum-drift.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -96,10 +96,10 @@ function datesBetween(from: string, to: string): string[] {
 // for the same reason.
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
-// packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGE are the only recognised
-// segment stages ('DEEP', 'LIGHT', 'REM', 'AWAKE'); a segment carrying anything else is dropped
-// (leaving a visible gap) rather than guessed at, the same reasoning Dashboard.tsx's own stageOf
-// states.
+// packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six segment
+// stages (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS); this page draws only the four staged ones.
+// A segment carrying ASLEEP, RESTLESS, or anything outside the six, is dropped (leaving a visible
+// gap) rather than guessed at, the same reasoning Dashboard.tsx's own stageOf states.
 function stageOf(raw: string): Stage | null {
   const known: Record<string, Stage> = { DEEP: 'deep', LIGHT: 'light', REM: 'rem', AWAKE: 'awake' }
   return known[raw] ?? null

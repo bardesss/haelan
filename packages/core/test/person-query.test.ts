@@ -5,6 +5,7 @@ import { PersonQuery } from '../src/query/personQuery.ts'
 import { ConfigError } from '../src/errors.ts'
 import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
 import type { SessionKind } from '../src/db/schema/index.ts'
+import { DERIVATION_VERSION } from '../src/derive/version.ts'
 
 let test: TestDatabase
 let query: PersonQuery
@@ -29,7 +30,7 @@ const insertDaily = (o: {
     value: o.value,
     coverage: o.coverage === undefined ? 0.9 : o.coverage,
     sourceMix: null,
-    derivationVersion: 4,
+    derivationVersion: DERIVATION_VERSION,
     updatedAtMs: o.updatedAtMs === undefined ? null : o.updatedAtMs,
   }).run()
 }

@@ -57,10 +57,16 @@ export function deriveExerciseDay(input: {
   // Each group's own primary, not the group's members summed: an alternate is the same event
   // recorded by another source, and summing it in would double the very minutes grouping exists
   // to keep from being doubled.
-  const minutes = groups.reduce((total, group) => {
+  //
+  // Summed in milliseconds and rounded once at the end, not rounded per group first: the same
+  // shape as the sleep rounding fix (derive/sleep.ts), applied here for the pattern rather than
+  // for a defect, since workout timings are not grid aligned and this error is unbiased rather
+  // than systematic.
+  const minutesMs = groups.reduce((total, group) => {
     const primary = byId.get(group.primary.id)!
-    return total + minutesBetween(primary.startMs, primary.endMs)
+    return total + (primary.endMs - primary.startMs)
   }, 0)
+  const minutes = Math.round(minutesMs / MINUTE_MS)
 
   // Only a merged row has a mix to report: a per source row is that source's own sessions and
   // never drew on another one. Schema comment on daily.source_mix, and sleepMerge.ts's mixOf is
@@ -86,8 +92,6 @@ export function deriveExerciseDay(input: {
     push('workout_minutes', 'sum', minutes),
   ]
 }
-
-const minutesBetween = (fromMs: number, toMs: number): number => Math.round((toMs - fromMs) / MINUTE_MS)
 
 /**
  * The `daily.source_mix` column means "how many of the day's hours this source won" everywhere

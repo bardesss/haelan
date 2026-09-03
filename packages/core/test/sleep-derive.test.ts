@@ -27,6 +27,111 @@ const valueOf = (rows: ReturnType<typeof derive>, metric: string) =>
   rows.find((r) => r.metric === metric)?.value
 
 describe('deriveSleepDay', () => {
+  // The real shape of the defect, not a contrived one: the provider reports sleep on a 30 second
+  // grid, so a night is built of segments that are each an exact half minute long. Ten of those is
+  // fifteen minutes. Rounding each one first gives round(1.5) = 2, ten times, which is twenty.
+  it('rounds a stage total once rather than rounding every segment into it', () => {
+    const half = 90 * 1000
+    const segments = Array.from({ length: 10 }, (_, i) =>
+      seg('n', 'LIGHT', BEDTIME + i * half, BEDTIME + (i + 1) * half))
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 15 * MIN })], segments)
+    expect(valueOf(rows, 'sleep_light_minutes')).toBe(15)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(15)
+  })
+
+  // The visible symptom, and the reason this was noticed at all. Before this, rounding four stage
+  // figures before dividing could push efficiency over 100 on a short staged session, on 13 real
+  // nights, because the numerator gained half a minute per segment and the denominator did not.
+  // This test pins that one cause fixed. It is not a universal: overlapping sessions within a
+  // night remain a separate, unfixed route to the same over-100 symptom, pinned on its own below
+  // ("KNOWN GAP: overlapping sessions within a night double count").
+  it('rounding no longer pushes efficiency above 100 on a short staged session', () => {
+    const half = 90 * 1000
+    const segments = Array.from({ length: 10 }, (_, i) =>
+      seg('n', 'LIGHT', BEDTIME + i * half, BEDTIME + (i + 1) * half))
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 15 * MIN })], segments)
+    expect(valueOf(rows, 'sleep_efficiency')).toBe(100)
+
+    // The case the name actually promises: a session short enough (7.5 minutes) that the four
+    // rounded stage figures gain up to +0.5 minutes each while inBed is rounded only once, so the
+    // rounded-figure ratio would clear 100. DEEP, LIGHT and REM each exactly 150 seconds (2.5
+    // minutes, Math.round's half-up boundary) round to 3, summing to sleep_asleep_minutes 9 against
+    // sleep_in_bed_minutes 8: 9/8 rounds to 113 if efficiency is computed from the rounded minutes
+    // instead of from milliseconds.
+    const stage = 150 * 1000
+    const shortRows = derive([session({ id: 's', startMs: BEDTIME, endMs: BEDTIME + 3 * stage })], [
+      seg('s', 'DEEP', BEDTIME, BEDTIME + stage),
+      seg('s', 'LIGHT', BEDTIME + stage, BEDTIME + 2 * stage),
+      seg('s', 'REM', BEDTIME + 2 * stage, BEDTIME + 3 * stage),
+    ])
+    expect(valueOf(shortRows, 'sleep_in_bed_minutes')).toBe(8)
+    expect(valueOf(shortRows, 'sleep_asleep_minutes')).toBe(9)
+    expect(valueOf(shortRows, 'sleep_efficiency')).toBeLessThanOrEqual(100)
+  })
+
+  // KNOWN GAP, pinned rather than endorsed, exactly as the mixed-recognition gap above is: a
+  // separate route to the same over-100 symptom that the rounding fix above does not touch and
+  // this branch does not fix. msByStage sums every segment across the night's sessions without
+  // regard for whether their time ranges overlap, so a session nested inside another counts its
+  // overlapping span twice. Session 'a' carries LIGHT for the full 8 hours in bed; session 'b',
+  // nested inside it, carries DEEP for hour 2 to hour 3. That hour is real time asleep once, but
+  // msByStage adds it into both the LIGHT total and the DEEP total, so asleepMs comes out to 9
+  // hours (540 minutes) against an 8 hour (480 minute) night, an efficiency of 113. This is not
+  // the rounding defect this branch fixed (there is no rounding boundary here at all, the inputs
+  // are whole hours), and it was not present in any of the 13 nights audited for this milestone,
+  // which is why it is recorded rather than corrected here: deciding whether overlapping in-bed
+  // time should count once or twice is a design question about what a night means, not an
+  // arithmetic correction, and it is not in scope for this fix wave.
+  it('KNOWN GAP: overlapping sessions within a night double count toward asleep and efficiency', () => {
+    const rows = derive([
+      session({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'b', startMs: BEDTIME + 2 * H, endMs: BEDTIME + 3 * H }),
+    ], [
+      seg('a', 'LIGHT', BEDTIME, BEDTIME + 8 * H),
+      seg('b', 'DEEP', BEDTIME + 2 * H, BEDTIME + 3 * H),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(540)
+    expect(valueOf(rows, 'sleep_efficiency')).toBe(113)
+  })
+
+  // The stage figures a reader sees must add up to the asleep figure printed beside them, which is
+  // the same rule M3e-2 applied to the insight card delta: a total is derived from its displayed
+  // parts, not by re-rounding their sum. Two 2.5 minute segments make the trade-off that buys this
+  // visible rather than incidental: the true total is 5 minutes, but summing the already-rounded
+  // parts (round(2.5) + round(2.5) = 3 + 3) reports 6, deliberately one minute over. Rounding the
+  // summed milliseconds instead (round(5.0) = 5) is the plausible refactor this test exists to
+  // catch, and the two disagree here because 2.5 minutes sits exactly on Math.round's half-up
+  // boundary. What this trade-off buys is an error bounded by half a minute per stage rather than
+  // one that grows with segment count, which is what summing already-rounded segments did.
+  it('keeps the stage figures adding up to the asleep figure', () => {
+    const stage = 150 * 1000 // 2.5 minutes, exactly on Math.round's rounding boundary
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 2 * stage })], [
+      seg('n', 'DEEP', BEDTIME, BEDTIME + stage),
+      seg('n', 'LIGHT', BEDTIME + stage, BEDTIME + 2 * stage),
+    ])
+    const deep = valueOf(rows, 'sleep_deep_minutes')!
+    const light = valueOf(rows, 'sleep_light_minutes')!
+    expect(deep + light).toBe(valueOf(rows, 'sleep_asleep_minutes'))
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(6)
+  })
+
+  // Naps sum session durations rather than segment durations, through the same helper, so they
+  // carry the same bias in miniature: of 228 real sleep sessions, 38 rounded up and none down.
+  // The two nap sessions land 118.5 minutes apart, inside the 120 minute night gap, so
+  // assembleNights groups them together for the purpose of picking the night; that grouping does
+  // not merge them into one session, so they still count as two naps summed through asMinutes.
+  it('rounds a nap total once as well', () => {
+    const half = 90 * 1000
+    const rows = derive([
+      session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * 60 * MIN }),
+      session({ id: 'nap1', startMs: BEDTIME + 20 * 60 * MIN, endMs: BEDTIME + 20 * 60 * MIN + half }),
+      session({ id: 'nap2', startMs: BEDTIME + 22 * 60 * MIN, endMs: BEDTIME + 22 * 60 * MIN + half }),
+    ], [seg('n', 'LIGHT', BEDTIME, BEDTIME + 8 * 60 * MIN)])
+    expect(valueOf(rows, 'sleep_nap_count')).toBe(2)
+    expect(valueOf(rows, 'sleep_nap_minutes')).toBe(3)
+  })
+
   // SLEEP_METRICS says it exists so that this function and the catalogue cannot drift apart on
   // which metrics exist. Nothing enforced that until now: the function pushes literal strings and
   // never reads the list, so a metric added to either side alone left the suite green and the
@@ -276,6 +381,87 @@ describe('deriveSleepDay', () => {
     // underneath it, so any number here would be invented. M2d decides what null means.
     const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H })])
     expect(rows.every((r) => r.coverage === null)).toBe(true)
+  })
+
+  // The discovery document declares six stage values, not four. The two extra are the classic,
+  // non-staged model, and two real nights recorded time in bed with no sleep measurement at all
+  // because every segment they had was one of these.
+  it('counts an ASLEEP segment as asleep and a RESTLESS segment as awake', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 126 * MIN })], [
+      seg('n', 'ASLEEP', BEDTIME, BEDTIME + 116 * MIN),
+      seg('n', 'RESTLESS', BEDTIME + 116 * MIN, BEDTIME + 126 * MIN),
+    ])
+    // The provider's own arithmetic on this exact night: minutesAsleep 116, minutesAwake 10.
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(116)
+    expect(valueOf(rows, 'sleep_awake_minutes')).toBe(10)
+  })
+
+  // A classic night is measurable and must stop being treated as unmeasurable. Before this it
+  // wrote sleep_in_bed_minutes and nothing else at all.
+  it('writes a full measurement for a night made only of classic stages', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 60 * MIN })], [
+      seg('n', 'ASLEEP', BEDTIME, BEDTIME + 60 * MIN),
+    ])
+    // Proves the session reached the night branch (and was not filed as a nap) before trusting
+    // the asleep and efficiency figures that follow: a single session on the day is always the
+    // only group assembleNights has to choose from, so it lands as the night regardless of its
+    // length, but the figures below would only tell us "no measurement" either way if it hadn't.
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(60)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(60)
+    expect(valueOf(rows, 'sleep_efficiency')).toBe(100)
+    // The night was never staged: it has no DEEP, LIGHT or REM segment at all, so a 0 for any of
+    // them would claim a staging measurement came back empty when there was no staging to begin
+    // with. Distinct from the case below, where staging happened and genuinely found no REM.
+    expect(valueOf(rows, 'sleep_deep_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_light_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_rem_minutes')).toBeUndefined()
+  })
+
+  // The other direction: a night that was staged, and genuinely recorded no REM. That 0 is a
+  // measurement, not an absence, and must stay a 0 rather than becoming undefined along with the
+  // classic case above. What distinguishes the two is not "is every stage present" but "did
+  // staging happen at all", i.e. is there at least one DEEP, LIGHT or REM segment.
+  it('writes a real zero for a staged stage the night genuinely had none of', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 60 * MIN })], [
+      seg('n', 'DEEP', BEDTIME, BEDTIME + 30 * MIN),
+      seg('n', 'LIGHT', BEDTIME + 30 * MIN, BEDTIME + 60 * MIN),
+    ])
+    expect(valueOf(rows, 'sleep_deep_minutes')).toBe(30)
+    expect(valueOf(rows, 'sleep_light_minutes')).toBe(30)
+    expect(valueOf(rows, 'sleep_rem_minutes')).toBe(0)
+  })
+
+  // The guard that predates this stays exactly as it was. A stage outside all six is still
+  // outside the vocabulary, and a night made only of those still writes no measurement rather
+  // than six zeros, because a zero would claim the person lay awake all night.
+  it('still writes no measurement for a night whose stages are outside the vocabulary', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 60 * MIN })], [
+      seg('n', 'SOMETHING_NEW', BEDTIME, BEDTIME + 60 * MIN),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(60)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBeUndefined()
+    expect(valueOf(rows, 'sleep_efficiency')).toBeUndefined()
+  })
+
+  // KNOWN GAP, pinned rather than endorsed: the recognised.length > 0 gate only asks whether the
+  // night has ANY recognised segment, not whether every segment is recognised, so an unrecognised
+  // stage mixed into an otherwise-staged night is silently dropped from both totals rather than
+  // triggering the all-unknown guard above. 7 hours LIGHT plus 1 hour of a future stage value
+  // derives in_bed 480, asleep 420, awake 0: that awake 0 is not a measurement of the unclassified
+  // hour, it is what is left over when nobody counted it toward either side, and the three figures
+  // do not reconcile (420 asleep + 0 awake != 480 in bed). Whether an unaccounted hour in bed
+  // should count as awake, as unmeasured, or as something else is a real design question that this
+  // fix wave is not deciding; this test only records today's behaviour so a change to it is a
+  // deliberate decision rather than an accident.
+  it('KNOWN GAP: an unrecognised stage mixed into a staged night vanishes rather than reconciling', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H })], [
+      seg('n', 'LIGHT', BEDTIME, BEDTIME + 7 * H),
+      seg('n', 'SOMETHING_NEW', BEDTIME + 7 * H, BEDTIME + 8 * H),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(420)
+    expect(valueOf(rows, 'sleep_awake_minutes')).toBe(0)
+    // 420 + 0 does not equal 480: the unclassified hour is unaccounted for in both totals.
   })
 
   it('does not depend on the order the rows arrived in', () => {

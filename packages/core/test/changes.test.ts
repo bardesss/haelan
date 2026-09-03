@@ -4,6 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readChanges } from '../src/query/changes.ts'
 import { daily } from '../src/db/schema/index.ts'
 import { ConfigError } from '../src/errors.ts'
+import { DERIVATION_VERSION } from '../src/derive/version.ts'
 
 let test: TestDatabase
 beforeEach(() => {
@@ -24,7 +25,7 @@ const insertDaily = (o: {
   test.db.insert(daily).values({
     personId: 'p1', localDate: o.localDate, metric: o.metric ?? 'steps', agg: o.agg ?? 'sum',
     source: o.source ?? 'merged', value: o.value, coverage: o.coverage === undefined ? null : o.coverage,
-    sourceMix: null, derivationVersion: 4, updatedAtMs: o.updatedAtMs,
+    sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: o.updatedAtMs,
   }).run()
 
 describe('readChanges', () => {

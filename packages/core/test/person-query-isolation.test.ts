@@ -4,6 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
 import type { SessionKind } from '../src/db/schema/index.ts'
+import { DERIVATION_VERSION } from '../src/derive/version.ts'
 
 let test: TestDatabase
 let alice: PersonQuery
@@ -23,7 +24,7 @@ beforeEach(() => {
     for (const [personId, value] of [['alice', 1000], ['bart', 9000]] as const) {
       test.db.insert(daily).values({
         personId, localDate, metric: 'steps', agg: 'sum', source: 'merged',
-        value, coverage: 0.9, sourceMix: null, derivationVersion: 4,
+        value, coverage: 0.9, sourceMix: null, derivationVersion: DERIVATION_VERSION,
       }).run()
     }
   }
@@ -133,11 +134,11 @@ describe('PersonQuery isolation, the readers bound to samples and sessions', () 
     test.db.insert(daily).values([
       {
         personId: 'alice', localDate: '2026-08-01', metric: 'weight', agg: 'mean', source: 'merged',
-        value: 70, coverage: null, sourceMix: null, derivationVersion: 4, updatedAtMs: 5_000,
+        value: 70, coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 5_000,
       },
       {
         personId: 'bart', localDate: '2026-08-01', metric: 'body_fat', agg: 'mean', source: 'merged',
-        value: 20, coverage: null, sourceMix: null, derivationVersion: 4, updatedAtMs: 5_000,
+        value: 20, coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION, updatedAtMs: 5_000,
       },
     ]).run()
 
