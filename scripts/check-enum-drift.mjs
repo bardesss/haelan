@@ -39,28 +39,64 @@ function enumsByProperty(node, into = new Map()) {
 
 const live = enumsByProperty(doc)
 
+/** True when two enum value lists contain exactly the same values, ignoring order. */
+function sameValues(a, b) {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort()
+  const sortedB = [...b].sort()
+  return sortedA.every((v, i) => v === sortedB[i])
+}
+
 /**
- * Resolves `property` to the one live enum meant to be compared against `checkedIn`. When the name
- * is ambiguous, picks the candidate whose values are a superset of what is already checked in,
- * rather than the first or last one found, since traversal order is an accident of the document's
- * key ordering and not something to depend on.
+ * Resolves `property` to the live enum meant to be compared against `checkedIn`, or explains why
+ * it could not. `type` is not unique in this schema: `Sleep.type`, `SleepStage.type` and
+ * `StageSummary.type` all use it, and picking the first candidate whose values are a superset of
+ * `checkedIn` (as an earlier version of this function did) works only because the latter two
+ * happen to be identical today. If they ever diverged, the one that lost a value would fail the
+ * superset test and be silently skipped while the other still passed, and this script would print
+ * "unchanged" while comparing something other than what it looks like it is comparing, which is
+ * the exact failure this narrowing exists to prevent. So every candidate is checked, and when more
+ * than one is a superset and they disagree with each other, that disagreement is returned as its
+ * own outcome rather than resolved by picking one.
  */
 function resolve(property, checkedIn) {
   const candidates = live.get(property)
-  if (candidates === undefined) return undefined
-  if (candidates.length === 1) return candidates[0]
-  return candidates.find((values) => checkedIn.every((v) => values.includes(v)))
+  if (candidates === undefined) return { status: 'not-found' }
+  const supersets = candidates.filter((values) => checkedIn.every((v) => values.includes(v)))
+  if (supersets.length === 0) return { status: 'no-superset', candidateCount: candidates.length }
+  const [first, ...rest] = supersets
+  if (rest.some((values) => !sameValues(values, first))) return { status: 'ambiguous', supersets }
+  return { status: 'ok', values: first }
 }
 
 let drifted = false
 
 for (const [property, checkedIn] of [['exerciseType', EXERCISE_TYPES], ['type', SLEEP_STAGE_TYPES]]) {
-  const found = resolve(property, checkedIn)
-  if (found === undefined) {
-    console.error(`${property}: no matching enum found in the document. The schema may have moved it.`)
+  const result = resolve(property, checkedIn)
+
+  if (result.status === 'not-found') {
+    console.error(`${property}: no enum declared under that property name anywhere in the document. The schema may have moved it.`)
     drifted = true
     continue
   }
+  if (result.status === 'no-superset') {
+    console.error(`${property}: found ${result.candidateCount} enum(s) under that name, but none contains every checked in value. The schema may have removed one.`)
+    drifted = true
+    continue
+  }
+  if (result.status === 'ambiguous') {
+    console.error(`${property}: ${result.supersets.length} candidate enums under that name each contain every checked in value, but they disagree with each other, so which one this should be compared against is not decidable from the property name alone:`)
+    result.supersets.forEach((values, i) => {
+      const extra = values.filter((v) => !result.supersets[0].includes(v))
+      const missing = result.supersets[0].filter((v) => !values.includes(v))
+      const diff = i === 0 ? '' : ` (vs candidate 1: +${extra.length}/-${missing.length})`
+      console.error(`${property}: candidate ${i + 1}: ${values.length} values${diff}`)
+    })
+    drifted = true
+    continue
+  }
+
+  const found = result.values
   const added = found.filter((v) => !checkedIn.includes(v))
   const removed = checkedIn.filter((v) => !found.includes(v))
   if (added.length === 0 && removed.length === 0) {
