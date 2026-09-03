@@ -411,7 +411,11 @@
       "thinned": "{{from}} metingen teruggebracht tot {{to}} punten",
       "full": "deze {{count}} punten zijn de metingen"
     },
-    "singleDayNote": "Eén dag laat geen trend zien."
+    "singleDayNote": "Eén dag laat geen trend zien.",
+    "bandToggle": {
+      "hide": "Dagbereik verbergen",
+      "show": "Dagbereik tonen"
+    }
   },
   "sleep": {
     "title": "Slaap",

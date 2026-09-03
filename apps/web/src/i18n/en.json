@@ -411,7 +411,11 @@
       "thinned": "{{from}} readings thinned to {{to}} points",
       "full": "these {{count}} points are the readings"
     },
-    "singleDayNote": "A single day has no trend to plot."
+    "singleDayNote": "A single day has no trend to plot.",
+    "bandToggle": {
+      "hide": "Hide daily range",
+      "show": "Show daily range"
+    }
   },
   "sleep": {
     "title": "Sleep",
