@@ -414,6 +414,27 @@ describe('deriveSleepDay', () => {
     expect(valueOf(rows, 'sleep_efficiency')).toBeUndefined()
   })
 
+  // KNOWN GAP, pinned rather than endorsed: the recognised.length > 0 gate only asks whether the
+  // night has ANY recognised segment, not whether every segment is recognised, so an unrecognised
+  // stage mixed into an otherwise-staged night is silently dropped from both totals rather than
+  // triggering the all-unknown guard above. 7 hours LIGHT plus 1 hour of a future stage value
+  // derives in_bed 480, asleep 420, awake 0: that awake 0 is not a measurement of the unclassified
+  // hour, it is what is left over when nobody counted it toward either side, and the three figures
+  // do not reconcile (420 asleep + 0 awake != 480 in bed). Whether an unaccounted hour in bed
+  // should count as awake, as unmeasured, or as something else is a real design question that this
+  // fix wave is not deciding; this test only records today's behaviour so a change to it is a
+  // deliberate decision rather than an accident.
+  it('KNOWN GAP: an unrecognised stage mixed into a staged night vanishes rather than reconciling', () => {
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 8 * H })], [
+      seg('n', 'LIGHT', BEDTIME, BEDTIME + 7 * H),
+      seg('n', 'SOMETHING_NEW', BEDTIME + 7 * H, BEDTIME + 8 * H),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(420)
+    expect(valueOf(rows, 'sleep_awake_minutes')).toBe(0)
+    // 420 + 0 does not equal 480: the unclassified hour is unaccounted for in both totals.
+  })
+
   it('does not depend on the order the rows arrived in', () => {
     const sessions = [
       session({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 5 * H }),
