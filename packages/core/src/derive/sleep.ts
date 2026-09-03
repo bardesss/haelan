@@ -232,11 +232,22 @@ export function deriveSleepDay(input: {
       // gains up to +0.5 minutes from Math.round while inBed gains at most +0.5 once, so a short
       // enough session (a few minutes, four stages each near a half-minute boundary) makes the
       // numerator's rounding error exceed the denominator's. Dividing asleepMs by inBedMs instead
-      // cannot do that for non-overlapping segments: the numerator is a subset of the denominator's
-      // span before any rounding touches either. The deliberate consequence is that a reader who
-      // divides the two displayed minute figures themselves may compute a percentage a point or two
-      // off from what this row says, which is acceptable; a displayed efficiency above 100 is not a
-      // rounding difference, it is a false statement, and this trade always favours the true one.
+      // cannot exceed 100 from THAT cause: the numerator is a subset of the denominator's span
+      // before any rounding touches either. The deliberate consequence is that a reader who divides
+      // the two displayed minute figures themselves may compute a percentage a point or two off
+      // from what this row says, which is acceptable; a displayed efficiency above 100 from
+      // rounding is not a rounding difference, it is a false statement, and this trade always
+      // favours the true one.
+      //
+      // KNOWN GAP, not fixed here: efficiency CAN still exceed 100 for a different reason, when a
+      // night's sessions overlap. msByStage sums every recognised segment across the night without
+      // regard for whether their time ranges overlap, so a session nested inside another (session B
+      // carrying DEEP for an hour that falls entirely inside session A's LIGHT) has that hour
+      // counted once toward LIGHT and again toward DEEP, inflating asleepMs past inBedMs. This
+      // predates this branch, was not present in any of the 13 nights audited for this milestone,
+      // and deciding whether overlapping in-bed time should count once or twice is a design
+      // question about what a night means, not an arithmetic correction; it is pinned by the
+      // "KNOWN GAP: overlapping sessions" test in sleep-derive.test.ts rather than fixed here.
       const inBedMs = end - start
       push('sleep_efficiency', 'last', inBedMs > 0 ? Math.round((asleepMs / inBedMs) * 100) : null)
     }

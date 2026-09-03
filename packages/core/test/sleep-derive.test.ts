@@ -39,10 +39,13 @@ describe('deriveSleepDay', () => {
     expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(15)
   })
 
-  // The visible symptom, and the reason this was noticed at all. A night whose every minute in bed
-  // is asleep is 100 percent efficient. It cannot be more, and before this it was, on 13 real
+  // The visible symptom, and the reason this was noticed at all. Before this, rounding four stage
+  // figures before dividing could push efficiency over 100 on a short staged session, on 13 real
   // nights, because the numerator gained half a minute per segment and the denominator did not.
-  it('cannot report an efficiency above 100 percent', () => {
+  // This test pins that one cause fixed. It is not a universal: overlapping sessions within a
+  // night remain a separate, unfixed route to the same over-100 symptom, pinned on its own below
+  // ("KNOWN GAP: overlapping sessions within a night double count").
+  it('rounding no longer pushes efficiency above 100 on a short staged session', () => {
     const half = 90 * 1000
     const segments = Array.from({ length: 10 }, (_, i) =>
       seg('n', 'LIGHT', BEDTIME + i * half, BEDTIME + (i + 1) * half))
@@ -64,6 +67,32 @@ describe('deriveSleepDay', () => {
     expect(valueOf(shortRows, 'sleep_in_bed_minutes')).toBe(8)
     expect(valueOf(shortRows, 'sleep_asleep_minutes')).toBe(9)
     expect(valueOf(shortRows, 'sleep_efficiency')).toBeLessThanOrEqual(100)
+  })
+
+  // KNOWN GAP, pinned rather than endorsed, exactly as the mixed-recognition gap above is: a
+  // separate route to the same over-100 symptom that the rounding fix above does not touch and
+  // this branch does not fix. msByStage sums every segment across the night's sessions without
+  // regard for whether their time ranges overlap, so a session nested inside another counts its
+  // overlapping span twice. Session 'a' carries LIGHT for the full 8 hours in bed; session 'b',
+  // nested inside it, carries DEEP for hour 2 to hour 3. That hour is real time asleep once, but
+  // msByStage adds it into both the LIGHT total and the DEEP total, so asleepMs comes out to 9
+  // hours (540 minutes) against an 8 hour (480 minute) night, an efficiency of 113. This is not
+  // the rounding defect this branch fixed (there is no rounding boundary here at all, the inputs
+  // are whole hours), and it was not present in any of the 13 nights audited for this milestone,
+  // which is why it is recorded rather than corrected here: deciding whether overlapping in-bed
+  // time should count once or twice is a design question about what a night means, not an
+  // arithmetic correction, and it is not in scope for this fix wave.
+  it('KNOWN GAP: overlapping sessions within a night double count toward asleep and efficiency', () => {
+    const rows = derive([
+      session({ id: 'a', startMs: BEDTIME, endMs: BEDTIME + 8 * H }),
+      session({ id: 'b', startMs: BEDTIME + 2 * H, endMs: BEDTIME + 3 * H }),
+    ], [
+      seg('a', 'LIGHT', BEDTIME, BEDTIME + 8 * H),
+      seg('b', 'DEEP', BEDTIME + 2 * H, BEDTIME + 3 * H),
+    ])
+    expect(valueOf(rows, 'sleep_in_bed_minutes')).toBe(480)
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(540)
+    expect(valueOf(rows, 'sleep_efficiency')).toBe(113)
   })
 
   // The stage figures a reader sees must add up to the asleep figure printed beside them, which is
