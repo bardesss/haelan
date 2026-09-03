@@ -46,9 +46,10 @@ export const EXERCISE_TYPES: readonly string[] = [
 ]
 
 /**
- * The sleep stage vocabulary. ASLEEP and RESTLESS are the classic, non-staged model; the M0 probe
- * recorded only the other four and the derivation discarded these two until M3f-E.
+ * The sleep stage vocabulary, including the protobuf unset sentinel the schema declares. ASLEEP
+ * and RESTLESS are the classic, non-staged model; the M0 probe recorded only the other four and
+ * the derivation discarded these two until M3f-E.
  */
 export const SLEEP_STAGE_TYPES: readonly string[] = [
-  'AWAKE', 'DEEP', 'LIGHT', 'REM', 'ASLEEP', 'RESTLESS',
+  'SLEEP_STAGE_TYPE_UNSPECIFIED', 'AWAKE', 'DEEP', 'LIGHT', 'REM', 'ASLEEP', 'RESTLESS',
 ]

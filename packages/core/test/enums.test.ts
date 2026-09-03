@@ -20,9 +20,22 @@ describe('the API enum catalogue', () => {
     }
   })
 
-  // The derivation's own vocabulary and the schema's must be the same set. This is the assertion
-  // that would have caught the discarded ASLEEP and RESTLESS segments four milestones earlier.
+  // Seven values: the six real stages plus the protobuf unset sentinel, SLEEP_STAGE_TYPE_UNSPECIFIED,
+  // which the schema declares but which the API never emits as a recorded stage.
+  it('holds the 7 sleep stage types the discovery document declares', () => {
+    expect(SLEEP_STAGE_TYPES).toHaveLength(7)
+  })
+
+  // The derivation's own vocabulary and the schema's must be the same set of actual stages. The
+  // sentinel is excluded here on purpose: SLEEP_STAGE_TYPE_UNSPECIFIED means the field was not set,
+  // not that the segment was in some third state, so the derivation correctly never recognises it
+  // as a stage, while the catalogue correctly records that the schema declares it. Comparing the
+  // full seven against the derivation's six would fail on that basis alone, which would not be
+  // testing what this test exists to test. This is still the assertion that would have caught the
+  // discarded ASLEEP and RESTLESS segments four milestones earlier: it is an equality, not a subset
+  // check, so a missing or extra non-sentinel value on either side still fails it.
   it('agrees with the stage vocabulary the sleep derivation recognises', () => {
-    expect([...SLEEP_STAGE_TYPES].sort()).toEqual([...ASLEEP_STAGES, ...AWAKE_STAGES].sort())
+    const stagesOnly = SLEEP_STAGE_TYPES.filter((s) => s !== 'SLEEP_STAGE_TYPE_UNSPECIFIED')
+    expect([...stagesOnly].sort()).toEqual([...ASLEEP_STAGES, ...AWAKE_STAGES].sort())
   })
 })
