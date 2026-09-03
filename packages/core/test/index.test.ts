@@ -314,7 +314,7 @@ describe('package barrel', () => {
         core.seedPerson(test.db, 'p1')
         test.db.insert(core.schema.daily).values({
           personId: 'p1', localDate: '2026-08-01', metric: 'steps', agg: 'sum', source: 'merged',
-          value: 900, coverage: null, sourceMix: null, derivationVersion: 4, updatedAtMs: 5_000,
+          value: 900, coverage: null, sourceMix: null, derivationVersion: core.DERIVATION_VERSION, updatedAtMs: 5_000,
         }).run()
 
         const query = new core.PersonQuery(test.db, 'p1')
