@@ -1,13 +1,17 @@
 import type { SampleAgg } from '../db/schema/derived.ts'
 
-// The filterable member differs per type across five shapes and none of it is documented.
-// Every value here was measured against the live API in M0; see probe/findings/field-map.md.
+// The filterable member differs per type across five shapes. The discovery document documents the
+// patterns ({interval_data_type}.interval.start_time, {sample_data_type}.sample_time.physical_time,
+// {daily_summary_data_type}.date, and sleep.interval.end_time as a sleep specific case), which an
+// earlier version of this comment said it did not; four of the five values below match one of those
+// patterns. The fifth has no documented counterpart and is noted where it appears. Every value here
+// was measured against the live API in M0; see probe/findings/field-map.md.
 export const FILTER_MEMBERS = [
   'interval.start_time',
   'sample_time.physical_time',
   'date',
   'interval.end_time',
-  'interval.civil_start_time',
+  'interval.civil_start_time', // no documented counterpart; measured against the live API, not published
 ] as const
 export type FilterMember = (typeof FILTER_MEMBERS)[number]
 
