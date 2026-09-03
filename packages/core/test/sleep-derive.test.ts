@@ -52,20 +52,23 @@ describe('deriveSleepDay', () => {
 
   // The stage figures a reader sees must add up to the asleep figure printed beside them, which is
   // the same rule M3e-2 applied to the insight card delta: a total is derived from its displayed
-  // parts wherever a reader could do the arithmetic themselves. Rounding each stage from its own
-  // milliseconds and then summing the milliseconds separately would break that by up to a minute.
+  // parts, not by re-rounding their sum. Two 2.5 minute segments make the trade-off that buys this
+  // visible rather than incidental: the true total is 5 minutes, but summing the already-rounded
+  // parts (round(2.5) + round(2.5) = 3 + 3) reports 6, deliberately one minute over. Rounding the
+  // summed milliseconds instead (round(5.0) = 5) is the plausible refactor this test exists to
+  // catch, and the two disagree here because 2.5 minutes sits exactly on Math.round's half-up
+  // boundary. What this trade-off buys is an error bounded by half a minute per stage rather than
+  // one that grows with segment count, which is what summing already-rounded segments did.
   it('keeps the stage figures adding up to the asleep figure', () => {
-    const half = 90 * 1000
-    const at = (n: number) => BEDTIME + n * half
-    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: at(9) })], [
-      seg('n', 'LIGHT', at(0), at(3)),
-      seg('n', 'DEEP', at(3), at(5)),
-      seg('n', 'REM', at(5), at(9)),
+    const stage = 150 * 1000 // 2.5 minutes, exactly on Math.round's rounding boundary
+    const rows = derive([session({ id: 'n', startMs: BEDTIME, endMs: BEDTIME + 2 * stage })], [
+      seg('n', 'DEEP', BEDTIME, BEDTIME + stage),
+      seg('n', 'LIGHT', BEDTIME + stage, BEDTIME + 2 * stage),
     ])
     const deep = valueOf(rows, 'sleep_deep_minutes')!
     const light = valueOf(rows, 'sleep_light_minutes')!
-    const rem = valueOf(rows, 'sleep_rem_minutes')!
-    expect(deep + light + rem).toBe(valueOf(rows, 'sleep_asleep_minutes'))
+    expect(deep + light).toBe(valueOf(rows, 'sleep_asleep_minutes'))
+    expect(valueOf(rows, 'sleep_asleep_minutes')).toBe(6)
   })
 
   // Naps sum session durations rather than segment durations, through the same helper, so they
