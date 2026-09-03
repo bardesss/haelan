@@ -50,19 +50,20 @@ import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, delt
 // Checked against packages/core/src/derive/metrics.ts rather than against the card labels:
 // 'sleep_minutes' is not a metric the catalogue defines, so this uses 'sleep_asleep_minutes', the
 // real id for the summed minutes a night's sleep segments cover. 'steps', 'resting_heart_rate',
-// 'heart_rate', 'sleep_bedtime_minutes' and 'sleep_waketime_minutes' are real ids as written. Per
-// the catalogue: steps and sleep_asleep_minutes are TOTAL metrics (aggs: ['sum']);
-// resting_heart_rate, sleep_bedtime_minutes and sleep_waketime_minutes are once-a-day readings
-// (aggs: ['last'] only, no 'mean' to average since there is only ever one row a day to begin
-// with); heart_rate is intraday (aggs: ['min', 'mean', 'max', 'p50', 'count']). The mean-HR tile
-// asks for 'mean', which is what its own label ("Mean heart rate") and basis line ("mean, ...
+// 'heart_rate', 'sleep_bedtime_minutes', 'sleep_waketime_minutes' and 'daily_hrv' are real ids as
+// written. Per the catalogue: steps and sleep_asleep_minutes are TOTAL metrics (aggs: ['sum']);
+// resting_heart_rate, sleep_bedtime_minutes, sleep_waketime_minutes and daily_hrv are once-a-day
+// readings (aggs: ['last'] only, no 'mean' to average since there is only ever one row a day to
+// begin with); heart_rate is intraday (aggs: ['min', 'mean', 'max', 'p50', 'count']). The mean-HR
+// tile asks for 'mean', which is what its own label ("Mean heart rate") and basis line ("mean, ...
 // days") claim to show. The heart rate range card draws all three of min, mean and max, which its
 // own basis line has always claimed ("daily minimum, mean and maximum"): a chart naming three
 // series while drawing one would be the same kind of untrue basis line this project refuses to
 // draw for an empty state, so 'min' and 'max' are two further requests rather than two blank
-// channels. sleep_bedtime_minutes and sleep_waketime_minutes ride the same 'last' request as
-// resting_heart_rate; see the comment where they are read for why the sleep schedule card uses
-// these instead of /sleep/nights.
+// channels. sleep_bedtime_minutes, sleep_waketime_minutes and daily_hrv ride the same 'last'
+// request as resting_heart_rate; see the comment where they are read for why the sleep schedule
+// card uses the first two instead of /sleep/nights, and the recovery card's own comment for why
+// daily_hrv rides here rather than opening a request of its own.
 //
 // Which agg a card shows is this page's decision, so REQUESTS is declared here: the catalogue
 // says which aggs a metric HAS rows under, never which of them a given card is SHOWING, and
@@ -70,7 +71,7 @@ import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, delt
 // settle is whether a pairing is answerable at all, and `under` below is where that is asked.
 export const REQUESTS = {
   sum: ['steps', 'sleep_asleep_minutes'],
-  last: ['resting_heart_rate', 'sleep_bedtime_minutes', 'sleep_waketime_minutes'],
+  last: ['resting_heart_rate', 'sleep_bedtime_minutes', 'sleep_waketime_minutes', 'daily_hrv'],
   mean: ['heart_rate'],
   min: ['heart_rate'],
   max: ['heart_rate'],
@@ -270,6 +271,17 @@ export function Dashboard() {
   const { dayAnnotations, dayAnnotationsByMetric } =
     useDayAnnotations(overridesQuery.notes, overridesQuery.events, overridesByMetricMap)
 
+  // The flagged days card below reads events, not notes: "flagged" is this card's own label for a
+  // day carrying one, not a word AnnotatePanel itself uses (its own control there is "Add an
+  // event", annotate.actions.event); a plain note carries no kind or value to flag anything with,
+  // which is the actual distinction this card is drawing. Distinct dates, not a count of events,
+  // since two events on one day (illness logged from two different chart clicks) are one flagged
+  // day to a reader scanning a calendar, not two.
+  const flaggedDates = useMemo(
+    () => [...new Set((overridesQuery.events.data?.items ?? []).map((e) => e.localDate))],
+    [overridesQuery.events.data],
+  )
+
   // Fixed groups, not derived from a response: useMetricGroups runs one useSeries call per entry
   // in GROUPS, in the same order, on every render regardless of what any of them returns. min and
   // max stay their own calls beside it; see GROUPS' own comment for why heart_rate cannot share a
@@ -295,15 +307,21 @@ export function Dashboard() {
   // than controls.anchor is what lets the basis line state when the window actually ends: a Year
   // view's anchor can sit months away from the range the chart draws, and the basis line used to
   // report that anchor date instead of the one the drawn band was really computed against.
-  const hrBaseline = useBaseline('heart_rate', controls.to, source, 'mean')
+  // historicalTo, not to itself: on the default Month view `to` is the calendar month's last day,
+  // which has not happened yet for all but that one day, and a sixty day window ending there asked
+  // for history that does not exist rather than the sixty real days behind today.
+  const hrBaseline = useBaseline('heart_rate', controls.historicalTo, source, 'mean')
   const nights = useNights(range)
   const syncStatus = useSyncStatus()
 
   // /insights takes exactly one metric and one agg per call and, unlike /series, does not batch, so
   // each of the three below is its own request rather than a shared one: three requests added on
   // top of whatever GROUPS above already issues, not multiplied against the cards. See INSIGHTS'
-  // own comment above for the three metrics themselves and their aggs.
-  const insightRange = { from: controls.from, to: controls.to }
+  // own comment above for the three metrics themselves and their aggs. `to` is historicalTo, the
+  // same reason hrBaseline reads it above: a period whose calendar end has not happened yet counts
+  // its own unfinished days into periodDays, which is what suppressed every insight card on this
+  // page until the 21st of every month.
+  const insightRange = { from: controls.from, to: controls.historicalTo }
   const stepsInsight = useInsight(INSIGHTS.steps.metric, INSIGHTS.steps.agg, insightRange, source)
   const restingHrInsight = useInsight(INSIGHTS.restingHr.metric, INSIGHTS.restingHr.agg, insightRange, source)
   const sleepInsight = useInsight(INSIGHTS.sleep.metric, INSIGHTS.sleep.agg, insightRange, source)
@@ -606,7 +624,7 @@ export function Dashboard() {
         <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
           query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
           points={meanHrPoints}
-          basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.to }}>
+          basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.historicalTo }}>
           {() => (
             // HeartRateRange has taken annotations/excluded since D1; heartRateOverrides is the
             // same lookup tile() uses for every other card, read here under the metric this chart
@@ -618,8 +636,31 @@ export function Dashboard() {
               onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
           )}
         </MetricCard>
+        {/* Real since M3c: the reader is the source of events (AnnotatePanel's chart-click flow),
+            so this reads overridesQuery.events, already fetched above for the chart annotations,
+            rather than the hardcoded EmptyState that predated the write path and never came back
+            for it. Not a MetricCard: an event carries a localDate, not a metric and a series of
+            points, so there is no `points` array or catalogue entry for emptyStateFor to gate on;
+            the three query states are handled by hand instead, the same shape the sleep stages
+            card below already uses for the same reason (gated on useNights, not a metric). Zero
+            flagged days in the period renders the empty state honestly rather than falsely: it
+            says nothing is flagged, not that nothing could be. */}
         <Card span={4} label={t('dashboard.flaggedDays.label')}>
-          <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
+          {overridesQuery.events.isError ? <ErrorState onRetry={() => void overridesQuery.events.refetch()} />
+            : overridesQuery.events.isPending ? <Loading />
+            : flaggedDates.length === 0 ? (
+              <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
+            ) : (
+              <>
+                <div className="value">{flaggedDates.length}</div>
+                <p className="basis">
+                  {t('dashboard.flaggedDays.basis', { count: flaggedDates.length })}
+                </p>
+              </>
+            )}
+          <Link to={deepLink('/notes', resolved)} className="card-link">
+            {t('dashboard.flaggedDays.viewAll')}
+          </Link>
         </Card>
 
         {/* The date comes off the night being drawn, never off the range end: this card used to
@@ -657,12 +698,28 @@ export function Dashboard() {
 
         {/* The heatmap that used to sit here moved to Activity.tsx in M3d2: the Dashboard keeps
             its own steps tile above and loses the calendar drill-down, whose "View activity" deep
-            link now lands somewhere that adds something instead of returning to this same page. */}
-        <Card span={4} label={t('dashboard.recovery.label')}>
-          <EmptyState title={t('dashboard.recovery.emptyTitle')}
-            detail={t('dashboard.recovery.emptyDetail')} />
-        </Card>
+            link now lands somewhere that adds something instead of returning to this same page.
+            This card used to be a hardcoded EmptyState claiming no source provides HRV; daily_hrv
+            has real rows and rides the same 'last' request resting_heart_rate above already
+            issues (REQUESTS.last), so tile() below draws it the same way, at no extra request.
+            basisWornKey is handed the same string as basisKey, not a distinct wear-clause
+            template: daily_hrv carries no tier override in packages/core/src/api/catalogue.ts, so
+            it defaults to 'daily' rather than 'intraday' and coverageIsWearSignal reads it as no
+            wear signal, the same choice Weight.tsx's own card() and Recovery.tsx's card() already
+            make for the identical reason, so MetricCard's wear branch can never fire here. */}
+        {tile('daily_hrv', 4, 'dashboard.recovery.label', 'dashboard.recovery.basis', 'dashboard.recovery.basis',
+          'dashboard.recovery.chartLabel', 'dashboard.units.milliseconds',
+          (p) => formatMetricValue(mean(values(p)), 'daily_hrv', i18n.language, ''), 'higher-is-better',
+          <Link to={deepLink('/recovery', resolved)} className="card-link">
+            {t('dashboard.recovery.viewAll')}
+          </Link>, t('dashboard.units.ms'))}
 
+        {/* Unlike the two cards above, there is no anomaly detection anywhere in this codebase to
+            wire up: no algorithm reads a baseline and a day's rows and calls one of them
+            anomalous. The false part of the old copy was "which nothing connected reports yet",
+            since events are connected now (M3c); the missing feature itself is real, so the empty
+            state still states that, honestly, without the false connectivity claim. Building
+            actual anomaly detection is new scope past what this fix covers. */}
         <Card span={12} label={t('dashboard.anomalies.label')}>
           <EmptyState title={t('dashboard.anomalies.emptyTitle')} detail={t('dashboard.anomalies.emptyDetail')} />
         </Card>

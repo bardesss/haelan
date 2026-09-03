@@ -37,7 +37,9 @@ describe("the Dashboard's requested metrics", () => {
   // bad merge cannot make them vacuously pass.
   it('cover every group the page requests', () => {
     expect(Object.keys(REQUESTS).sort()).toEqual(['last', 'max', 'mean', 'min', 'sum'])
-    expect(pairs.length).toBe(8)
+    // 9, not 8: daily_hrv joined the 'last' group when the recovery card stopped being a
+    // hardcoded EmptyState (B3), riding the same request resting_heart_rate already opens.
+    expect(pairs.length).toBe(9)
   })
 })
 

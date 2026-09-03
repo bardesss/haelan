@@ -125,8 +125,10 @@ export function Activity() {
   // The one insight card the brief's own table gives this page: steps at the sum agg the heatmap
   // above already requests (REQUESTS.sum). /insights is its own, unbatched request, unlike
   // /series, so this is one call added on top of the two agg groups above, not multiplied against
-  // any card on the page.
-  const stepsInsight = useInsight('steps', 'sum', { from: controls.from, to: controls.to }, source)
+  // any card on the page. `to` is historicalTo, not controls.to: see Dashboard.tsx's own
+  // insightRange comment for why a period whose calendar end has not happened yet must not be
+  // counted into periodDays.
+  const stepsInsight = useInsight('steps', 'sum', { from: controls.from, to: controls.historicalTo }, source)
 
   const syncStatus = useSyncStatus()
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null

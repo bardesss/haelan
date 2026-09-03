@@ -148,14 +148,18 @@ export function Recovery() {
   // metric's history is its own, so resting heart rate's 60 days says nothing about HRV's. 'last'
   // explicitly, the same reason Dashboard passes 'mean' rather than the default 'sum': these three
   // metrics carry no other agg to compute a baseline from.
-  const restingHrBaseline = useBaseline('resting_heart_rate', controls.to, source, 'last')
-  const hrvBaseline = useBaseline('daily_hrv', controls.to, source, 'last')
-  const respiratoryBaseline = useBaseline('respiratory_rate', controls.to, source, 'last')
+  // historicalTo, not controls.to: see Dashboard.tsx's own hrBaseline comment for why a Month or
+  // Year view's calendar end is not the same date as the last day that has actually happened.
+  const restingHrBaseline = useBaseline('resting_heart_rate', controls.historicalTo, source, 'last')
+  const hrvBaseline = useBaseline('daily_hrv', controls.historicalTo, source, 'last')
+  const respiratoryBaseline = useBaseline('respiratory_rate', controls.historicalTo, source, 'last')
 
   // The one insight card the brief's own table gives this page: resting_heart_rate at the last
   // agg the card above already requests (REQUESTS.last). /insights is its own, unbatched request,
-  // so this is one call added on top of the group above, not multiplied against any card.
-  const restingHrInsight = useInsight('resting_heart_rate', 'last', { from: controls.from, to: controls.to }, source)
+  // so this is one call added on top of the group above, not multiplied against any card. `to` is
+  // historicalTo for the same reason the baselines above read it: see Dashboard.tsx's own
+  // insightRange comment.
+  const restingHrInsight = useInsight('resting_heart_rate', 'last', { from: controls.from, to: controls.historicalTo }, source)
 
   const syncStatus = useSyncStatus()
   const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
@@ -210,7 +214,11 @@ export function Recovery() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     const headline = mean(values(points))
-    const note = baselineNote(t, headline, baselineQuery, metric, i18n.language, controls.to)
+    // historicalTo, not controls.to: this is the date restingHrBaseline/hrvBaseline/
+    // respiratoryBaseline were actually anchored on above, and the note has to name the date the
+    // band was really computed against, the same invariant Dashboard.tsx's own hrBaseline comment
+    // states.
+    const note = baselineNote(t, headline, baselineQuery, metric, i18n.language, controls.historicalTo)
     const spark = sparklines.get(metric)!
     const { excluded } = annotationsFor(overridesByMetricMap, metric)
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)

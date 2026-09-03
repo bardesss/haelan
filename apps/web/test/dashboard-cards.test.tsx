@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -33,6 +33,9 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  // A safety net rather than the primary reset: the clock test below restores real timers itself,
+  // but an assertion failure there would otherwise leak a mocked clock into whatever test runs next.
+  vi.useRealTimers()
 })
 
 function mount(node: ReactNode): void {
@@ -137,6 +140,37 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/baselines')) return json({ baseline: null })
     if (url.includes('/insights')) return json(insightBody(url))
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
+ * The same session/series/nights/baselines/insights routes stubFetch answers, plus explicit
+ * /events, /notes and /overrides handlers stubFetch itself leaves to its own `{}` fallback: the
+ * flagged days card is the one card on this page reading events rather than a metric's own
+ * points, so this is the one stub the test file needs that can hand it real rows, with notes and
+ * overrides answered in the real `{ items: [] }` shape rather than the fallback's bare `{}`.
+ */
+function stubFetchWithEvents(items: unknown[]): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+      return json(body)
+    }
+    if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
+    if (url.includes('/baselines')) return json({ baseline: null })
+    if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/events')) return json({ items })
+    if (url.includes('/notes')) return json({ items: [] })
+    if (url.includes('/overrides')) return json({ items: [] })
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -388,7 +422,9 @@ describe('the remaining Dashboard cards', () => {
     restore()
   })
 
-  // Not a placeholder and not a lie. No route serves typed events yet.
+  // B3: this card now reads real events (see 'the flagged days card' below for the full
+  // coverage), and stubFetch's default fallback answers no items for /events, so the honest
+  // empty state is what a real, eventless period actually renders here too.
   it('shows flagged days as empty rather than wiring it to something event shaped', async () => {
     const restore = stubFetch({ baseline: null })
     // Through a real I18nProvider rather than asserting on the raw key: initReactI18next installs
@@ -398,7 +434,7 @@ describe('the remaining Dashboard cards', () => {
     const { client, tree } = withQuery(<Dashboard />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
-    expect(container!.textContent).toContain('No flagged days yet.')
+    expect(container!.textContent).toContain('No flagged days in this period.')
     restore()
   })
 
@@ -455,6 +491,26 @@ describe('the remaining Dashboard cards', () => {
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
     restore()
+  })
+
+  // M3 phase review B2: hrBaseline itself moved to historicalTo (the date the band is really
+  // computed against), but the basis line's own {{on}} kept reading controls.to, the month's own
+  // calendar end. Dashboard.tsx's own hrBaseline comment states the invariant this reopened:
+  // "the basis line used to report that anchor date instead of the one the drawn band was really
+  // computed against." dashboard.heartRateRange.basis interpolates {{on}} unconditionally (not
+  // only on a thin baseline), so a real, non-thin baseline is enough to catch this.
+  it('names the baseline\'s own anchor date in its basis line, not the month\'s own future end', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    window.history.replaceState(null, '', '/')
+    const restore = stubFetch({ baseline: { center: 60, spread: 5, n: 60, thin: false } })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const text = container!.textContent!
+    expect(text).toContain('60 days before 2026-09-05')
+    expect(text).not.toContain('60 days before 2026-09-30')
+    restore()
+    vi.useRealTimers()
   })
 
   // The refactor this task is for: Dashboard's own local groupNumber (a byte-identical copy of
@@ -644,6 +700,97 @@ describe('the three insight cards', () => {
       '6h 41m on average (Aug 1, 2026 to Aug 31, 2026) against 6h 48m on average in the previous period '
       + '(Jul 1, 2026 to Jul 31, 2026), a change of -0h 07m.',
     )
+    restore()
+  })
+})
+
+// B3: three cards on this page used to be hardcoded EmptyState elements with no query behind them
+// at all, each one claiming a feature had no source or no connected data regardless of what the
+// store actually held. Recovery and flagged days draw real queries now; anomalies has no
+// algorithm anywhere in this codebase to wire up, so its copy was reworded to drop the one false
+// clause instead.
+describe('the recovery card', () => {
+  // daily_hrv joined the same 'last' request resting_heart_rate already opens (REQUESTS.last), so
+  // stubFetch's one-point-per-metric answer gives it a real row the same way it does every other
+  // tile on this page.
+  it('draws a real heart rate variability reading instead of the old always-empty claim', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Recovery')
+    expect(card?.querySelector('.value')?.textContent).toBe('60 ms')
+    expect(container!.textContent).not.toContain('No source is providing this data.')
+    restore()
+  })
+
+  it('links to the recovery page, the one click away this fix is named for', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Recovery')
+    expect(card?.querySelector('a.card-link')?.getAttribute('href')).toContain('/recovery')
+    restore()
+  })
+})
+
+describe('the flagged days card', () => {
+  // Zero flagged days in the period is the honest empty state ("nothing is flagged"), not the old
+  // false one ("nothing connected reports events"): M3c made the reader the source of events, and
+  // this card now reads overridesQuery.events, the same query the chart annotations already fetch.
+  it('reports no events for the period rather than claiming nothing is connected', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    // stubFetchWithEvents([]), not stubFetch's own `{}` fallback: the real /events route answers
+    // `{ items: [] }` for an eventless period, and a test resting on `{}` only passes because
+    // `overridesQuery.events.data?.items ?? []` happens to read a missing `items` the same as an
+    // empty one, which would stay green even if that optional chaining were ever tightened.
+    const restore = stubFetchWithEvents([])
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Flagged days')
+    expect(card?.querySelector('.empty')?.textContent).toContain('No flagged days in this period.')
+    expect(container!.textContent).not.toContain('nothing connected reports')
+    restore()
+  })
+
+  // Distinct dates, not a raw event count: two events landing on one day (e.g. illness logged
+  // from two different chart clicks) are one flagged day to a reader scanning this card, not two.
+  it('counts distinct flagged days, not raw events, when the period has some', async () => {
+    window.history.replaceState(null, '', '/?range=month&on=2026-08-15')
+    const restore = stubFetchWithEvents([
+      { id: 'e1', kind: 'illness', startedAtMs: 0, startedAtOffsetMinutes: 0, endedAtMs: null,
+        endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-05' },
+      { id: 'e2', kind: 'travel', startedAtMs: 0, startedAtOffsetMinutes: 0, endedAtMs: null,
+        endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-05' },
+      { id: 'e3', kind: 'caffeine', startedAtMs: 0, startedAtOffsetMinutes: 0, endedAtMs: null,
+        endedAtOffsetMinutes: null, value: null, note: null, localDate: '2026-08-12' },
+    ])
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Flagged days')
+    expect(card?.querySelector('.value')?.textContent).toBe('2')
+    expect(card?.querySelector('.basis')?.textContent).toBe('2 days flagged in this period')
+    restore()
+  })
+})
+
+describe('the anomalies card', () => {
+  // No anomaly detection algorithm exists anywhere in this codebase (grepped for "anomal" across
+  // the repo), so this card stays a static empty state; only its false clause was in scope here.
+  it('states the missing feature honestly, without the false connectivity claim', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).toContain('Automatic anomaly detection has not been built yet.')
+    expect(container!.textContent).not.toContain('nothing connected reports')
     restore()
   })
 })

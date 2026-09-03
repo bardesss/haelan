@@ -1,5 +1,6 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { MetricSeries } from './useSeries.js'
+import { sourceParam } from '../controls/source.js'
 
 /**
  * The cross-cutting pieces every page with a real range and a real control row needs, beyond its
@@ -56,6 +57,12 @@ export function distinctSources(queries: readonly UseQueryResult<Record<string, 
  * totals (sum) and Recovery's three once a day readings (last) are two different answers to "which
  * numbers is a reader downloading this page most likely to mean," not two configurations of one
  * answer.
+ *
+ * Routes `source` through sourceParam the same as baselinePath, seriesPath, nightsPath and
+ * insightPath do, so the all sources sentinel is omitted rather than sent literally. This one used
+ * to set it unconditionally: requireSource in packages/core/src/query/personQuery.ts knows no
+ * source called 'all', so the default view's download link 400ed on every page while every chart
+ * above it, built through one of those other four functions, rendered fine.
  */
 export function exportPathFor(
   personId: string, metrics: readonly string[], agg: string, range: { from: string, to: string, source: string },
@@ -66,6 +73,7 @@ export function exportPathFor(
   params.set('agg', agg)
   params.set('from', range.from)
   params.set('to', range.to)
-  params.set('source', range.source)
+  const source = sourceParam(range.source)
+  if (source !== undefined) params.set('source', source)
   return `/api/v1/p/${personId}/export?${params.toString()}`
 }

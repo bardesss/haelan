@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -33,6 +33,9 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  // A safety net rather than the primary reset: the clock test below restores real timers itself,
+  // but an assertion failure there would otherwise leak a mocked clock into whatever test runs next.
+  vi.useRealTimers()
 })
 
 function mount(node: ReactNode): void {
@@ -117,6 +120,8 @@ function hypnogramNightsResponse(): unknown {
  * an empty state under every test already written against this stub, including the one below that
  * asserts no card renders one at all.
  */
+type BaselineStub = { center: number, spread: number, n: number, thin: boolean } | null
+
 function stubSleep(
   urls: string[], schedule: { bedtimeMinutes: number, waketimeMinutes: number } = { bedtimeMinutes: -40, waketimeMinutes: 425 },
   // Leaves /baselines in flight forever rather than answering it, for the one test that reads the
@@ -124,6 +129,10 @@ function stubSleep(
   // resting state instead of a moment in a sequence, so nothing here has to race a delay.
   hangBaselines = false,
   insightOverrides: Partial<Insight> = {},
+  // Added at the end, defaulted to null, rather than inserted before insightOverrides: several
+  // call sites already pass insightOverrides positionally, and a param inserted ahead of it would
+  // have silently reinterpreted every one of those as this one instead.
+  baseline: BaselineStub = null,
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -148,7 +157,7 @@ function stubSleep(
     }
     if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse())
     if (url.includes('/baselines')) {
-      return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline: null })
+      return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline })
     }
     if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
     return json({})
@@ -441,6 +450,27 @@ describe('the Sleep page', () => {
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
     restore()
+  })
+
+  // M3 phase review B2: asleepBaseline itself moved to historicalTo, but baselineNote's own `on`
+  // argument, which only reaches the rendered text through the thin branch
+  // (sleep.baselineNote.thin interpolates {{on}}; the other branches do not), kept reading
+  // controls.to. Dashboard.tsx's own hrBaseline comment states the invariant this reopened for
+  // Sleep: the note has to name the date the band was really computed against.
+  it('names the baseline\'s own anchor date in a thin note, not the month\'s own future end', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    window.history.replaceState(null, '', '/sleep?range=month')
+    const restore = stubSleep(
+      [], { bedtimeMinutes: -40, waketimeMinutes: 425 }, false, {}, { center: 420, spread: 30, n: 10, thin: true },
+    )
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const text = container!.textContent!
+    expect(text).toContain('60 nights before 2026-09-05')
+    expect(text).not.toContain('60 nights before 2026-09-30')
+    restore()
+    vi.useRealTimers()
   })
 
   // Task 4's own insight card. formatSignedDuration (format.ts), passed straight as this card's

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -33,6 +33,9 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  // A safety net rather than the primary reset: the clock test below restores real timers itself,
+  // but an assertion failure there would otherwise leak a mocked clock into whatever test runs next.
+  vi.useRealTimers()
 })
 
 function mount(node: ReactNode): void {
@@ -128,6 +131,110 @@ describe('the Recovery page', () => {
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(3)
     restore()
+  })
+
+  // M3 phase review B2: the default Month view's `to` is the calendar month's last day, in the
+  // future for all but that one day. Anchoring the baseline and the insight window on it read the
+  // month's own unfinished days as though they had already happened, and on the 5th read the
+  // baseline as sixty days ending twenty five days from now. historicalTo, not controls.to, is what
+  // this test pins.
+  it('anchors the baseline and the insight window on today, not the month\'s own future end', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    window.history.replaceState(null, '', '/recovery?range=month')
+    const urls: string[] = []
+    const restore = stubRecovery(urls)
+    const { client, tree } = withQuery(<Recovery />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    const baselineUrls = urls.filter((u) => u.includes('/baselines'))
+    const insightUrls = urls.filter((u) => u.includes('/insights'))
+    // Three baselines (resting_heart_rate, daily_hrv, respiratory_rate) and one insight
+    // (resting_heart_rate): if either list came back empty the loop below would pass on nothing.
+    expect(baselineUrls).toHaveLength(3)
+    expect(insightUrls).toHaveLength(1)
+    for (const url of baselineUrls) {
+      expect(new URL(url, 'http://example').searchParams.get('on')).toBe('2026-09-05')
+    }
+    for (const url of insightUrls) {
+      expect(new URL(url, 'http://example').searchParams.get('to')).toBe('2026-09-05')
+    }
+
+    restore()
+    vi.useRealTimers()
+  })
+
+  // M3 phase review B2, round 2: the fix above capped historicalTo at today but did not floor it
+  // at `from`, so a period lying entirely in the future (one click of ControlRow's stepper, or one
+  // hand typed date, reaches this in a single step) sent an insight window with `from` after `to`
+  // -- `from` stayed at the future period's own start while `to` fell back to today, behind it.
+  // requireRange in packages/core/src/query/personQuery.ts refuses exactly that with a 400. The
+  // mock below reproduces that refusal itself rather than only inspecting the sent URL afterwards:
+  // a URL only assertion cannot tell "the client never sent this" apart from "the client sent it
+  // and a lenient mock let it through".
+  it('never sends an inverted insight window for a period that has not started yet', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    // range=month&on=2026-10-15 is next month relative to the mocked clock: the whole period is
+    // still in the future.
+    window.history.replaceState(null, '', '/recovery?range=month&on=2026-10-15')
+    const urls: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      urls.push(url)
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+      if (url.includes('/api/auth/me')) return json(PERSON)
+      if (url.includes('/series')) {
+        const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+        const body: Record<string, unknown> = {}
+        for (const metric of metrics) body[metric] = { points: [], reduction: null }
+        return json(body)
+      }
+      if (url.includes('/baselines')) return json({ baseline: null })
+      if (url.includes('/insights')) {
+        const params = new URL(url, 'http://example').searchParams
+        const from = params.get('from')!
+        const to = params.get('to')!
+        // requireRange's own refusal (personQuery.ts), reproduced here rather than trusted to the
+        // client: this is what turns a client regression back into a visible test failure instead
+        // of a mock that quietly answers whatever it is asked.
+        if (from > to) return json({ error: { kind: 'config', message: `from (${from}) is after to (${to})` } }, 400)
+        return json(insightBody(url))
+      }
+      return json({})
+    }) as typeof fetch
+
+    const { client, tree } = withQuery(<Recovery />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+
+    globalThis.fetch = original
+    vi.useRealTimers()
+
+    const insightUrls = urls.filter((u) => u.includes('/insights'))
+    expect(insightUrls).toHaveLength(1)
+    const params = new URL(insightUrls[0]!, 'http://example').searchParams
+    expect(params.get('from')! <= params.get('to')!).toBe(true)
+  })
+
+  // M3 phase review B2: the three baselines above moved to historicalTo, but baselineNote's own
+  // `on` argument, which only reaches the rendered text through the thin branch
+  // (recovery.baselineNote.thin interpolates {{on}}; the other branches do not), kept reading
+  // controls.to. Dashboard.tsx's own hrBaseline comment states the invariant this reopened for
+  // Recovery: the note has to name the date the band was really computed against.
+  it('names the baseline\'s own anchor date in a thin note, not the month\'s own future end', async () => {
+    vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+    window.history.replaceState(null, '', '/recovery?range=month')
+    const restore = stubRecovery([], { center: 60, spread: 5, n: 10, thin: true })
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const text = container!.textContent!
+    expect(text).toContain('60 days before 2026-09-05')
+    expect(text).not.toContain('60 days before 2026-09-30')
+    restore()
+    vi.useRealTimers()
   })
 
   // The refactor this task is for: card()'s headline used to thread a literal precision

@@ -159,4 +159,57 @@ describe('usePageControls', () => {
 
     vi.useRealTimers()
   })
+
+  // M3 phase review B2: a Month or Year view's `to` is the period's calendar end, which is in the
+  // future for all but the last day of the period. A baseline or an insight window anchored on it
+  // read the tomorrows of a period still in progress as though they had already happened.
+  describe('historicalTo', () => {
+    it('is today, not the calendar end, when the range reaches into the future', () => {
+      vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+      // No 'on': the default anchor is the person's today, so the default month tab resolves to
+      // the whole of September while only the 5th has actually happened.
+      window.history.replaceState(null, '', '/dashboard?range=month')
+      mountProbe()
+      expect(seen!.to).toBe('2026-09-30')
+      expect(seen!.historicalTo).toBe('2026-09-05')
+      vi.useRealTimers()
+    })
+
+    it('is the range\'s own end when the whole range has already happened', () => {
+      vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+      window.history.replaceState(null, '', '/dashboard?range=month&on=2026-07-15')
+      mountProbe()
+      expect(seen!.to).toBe('2026-07-31')
+      expect(seen!.historicalTo).toBe('2026-07-31')
+      vi.useRealTimers()
+    })
+
+    it('is today itself on the one day of the month it agrees with the calendar end', () => {
+      vi.setSystemTime(new Date('2026-09-30T10:00:00Z'))
+      window.history.replaceState(null, '', '/dashboard?range=month')
+      mountProbe()
+      expect(seen!.to).toBe('2026-09-30')
+      expect(seen!.historicalTo).toBe('2026-09-30')
+      vi.useRealTimers()
+    })
+
+    // Round 2 of the same defect: capping at today alone is not enough. A period that has not
+    // started yet has `from` itself after today, and a `to` capped at today with no floor would
+    // fall behind `from`, inverting the range useInsight sends. requireRange in
+    // packages/core/src/query/personQuery.ts refuses any from-after-to request with a 400, so this
+    // is not only a display glitch: it is a real 400 reachable in one stepper click.
+    it('is the range\'s own start, not today, when the whole range has not started yet', () => {
+      vi.setSystemTime(new Date('2026-09-05T10:00:00Z'))
+      window.history.replaceState(null, '', '/dashboard?range=month&on=2026-10-15')
+      mountProbe()
+      expect(seen!.from).toBe('2026-10-01')
+      expect(seen!.to).toBe('2026-10-31')
+      expect(seen!.historicalTo).toBe('2026-10-01')
+      // The invariant this whole field exists to keep: whatever the period, historicalTo never
+      // falls before `from`, or every caller that pairs it with `from` (useInsight) would be one
+      // future period away from sending a range the server refuses.
+      expect(seen!.from <= seen!.historicalTo).toBe(true)
+      vi.useRealTimers()
+    })
+  })
 })
