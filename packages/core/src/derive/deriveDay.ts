@@ -8,7 +8,7 @@ import type { Priority } from './priority.ts'
 import { localDateOf, widenedUtcWindow } from './localDay.ts'
 import { applyToDay, applyToSamples, applyToSessions, excludedMetrics } from './overrides.ts'
 import type { OverrideLike } from './overrides.ts'
-import { deriveSleepDay } from './sleep.ts'
+import { deriveSleepDay, mainSleepOf } from './sleep.ts'
 import type { SleepSessionLike } from './sleep.ts'
 import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
@@ -182,18 +182,4 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   for (const row of rows) tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).run()
 
   return rows.length
-}
-
-/**
- * `metadata.mainSleep`, off the attrs blob mapSessions wrote. Null rather than false when the
- * source did not say: assembleNights treats absent and false differently, since absent means
- * nobody claimed a night and false means somebody claimed this is not one.
- */
-function mainSleepOf(attrs: string): boolean | null {
-  try {
-    const parsed = JSON.parse(attrs) as { mainSleep?: unknown }
-    return typeof parsed.mainSleep === 'boolean' ? parsed.mainSleep : null
-  } catch {
-    return null
-  }
 }

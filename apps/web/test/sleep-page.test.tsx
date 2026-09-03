@@ -73,14 +73,17 @@ function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
 // sleep_waketime_minutes, not /sleep/nights, see Sleep.tsx's own scheduleNights comment for why),
 // and the hypnogram has no reason to change shape from test to test.
 const HYPNOGRAM_NIGHT_DATE = '2026-08-15'
-function hypnogramNightsResponse(): unknown {
-  const wakeMidnight = Date.parse(`${HYPNOGRAM_NIGHT_DATE}T00:00:00Z`)
-  const startMs = wakeMidnight - 40 * 60_000 // 23:20 the day before
-  const endMs = wakeMidnight + 425 * 60_000 // 07:05
+const NIGHT_MIDNIGHT = Date.parse(`${HYPNOGRAM_NIGHT_DATE}T00:00:00Z`)
+// The route's own `naps` field: nap start instants, outside startMs..endMs by construction, since
+// readSleepNights puts in the span only what assembleNights kept as the night. Empty by default,
+// which is the shape every test here but the naps column one wants.
+function hypnogramNightsResponse(naps: number[] = []): unknown {
+  const startMs = NIGHT_MIDNIGHT - 40 * 60_000 // 23:20 the day before
+  const endMs = NIGHT_MIDNIGHT + 425 * 60_000 // 07:05
   return {
     items: [{
       localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
-      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0,
+      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps,
       segments: [{ stage: 'LIGHT', startMs, endMs }],
     }],
     cursor: null,
@@ -133,6 +136,10 @@ function stubSleep(
   // call sites already pass insightOverrides positionally, and a param inserted ahead of it would
   // have silently reinterpreted every one of those as this one instead.
   baseline: BaselineStub = null,
+  // The nights row's own naps, for the schedule card's naps column. Appended at the end for the
+  // same reason `baseline` above was: several call sites already pass the earlier parameters
+  // positionally.
+  naps: number[] = [],
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -155,7 +162,7 @@ function stubSleep(
       }
       return json(body)
     }
-    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse())
+    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse(naps))
     if (url.includes('/baselines')) {
       return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline })
     }
@@ -337,6 +344,26 @@ describe('the Sleep page', () => {
     const scheduleTable = tables.find((table) => table.textContent?.includes('22:00'))
     expect(scheduleTable, tables.map((t) => t.textContent).join('\n---\n')).toBeDefined()
     expect(scheduleTable!.textContent).not.toContain('charts.absence.noReading')
+    restore()
+  })
+
+  // A new column rather than a changed value: SleepSchedule has drawn naps as a scatter series
+  // with its own table column since it was written, and this card passed showNaps=false because
+  // none of the metrics it reads knows when a nap started (sleep_nap_count and sleep_nap_minutes
+  // are a count and a duration). /sleep/nights knows, now that readSleepNights splits each date
+  // into the night and what did not join it, so the column appears and carries the nap's own
+  // clock time. 14:30 is 870 minutes past the wake day's midnight, which the wide window (noon to
+  // noon two days on) places unshifted.
+  it('fills the schedule naps column from /sleep/nights, rather than claiming none', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [NIGHT_MIDNIGHT + 870 * 60_000])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const tables = [...container!.querySelectorAll('table.sr-only')]
+    const scheduleTable = tables.find((table) => table.textContent?.includes('charts.columns.naps'))
+    expect(scheduleTable, tables.map((t) => t.textContent).join(' | ')).toBeDefined()
+    expect(scheduleTable!.textContent).toContain('14:30')
+    expect(scheduleTable!.textContent).not.toContain('charts.absence.none')
     restore()
   })
 

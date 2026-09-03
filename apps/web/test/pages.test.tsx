@@ -166,7 +166,7 @@ function stubFetch(
         items: [{
           localDate: '2026-08-13', sourceId: 'watch', sessionIds: ['s1'],
           startMs: start, endMs: start + 7 * 3_600_000,
-          startOffsetMinutes: 120, endOffsetMinutes: 120,
+          startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [],
           segments: [
             { stage: 'LIGHT', startMs: start, endMs: start + 3_600_000 },
             { stage: 'DEEP', startMs: start + 3_600_000, endMs: start + 3 * 3_600_000 },

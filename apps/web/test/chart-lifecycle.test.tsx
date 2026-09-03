@@ -89,7 +89,7 @@ function stubFetch(): () => void {
         items: [{
           localDate: '2026-08-12', sourceId: 'watch', sessionIds: ['s1'],
           startMs: start, endMs: start + 6 * 3_600_000,
-          startOffsetMinutes: 120, endOffsetMinutes: 120,
+          startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [],
           segments: [{ stage: 'DEEP', startMs: start, endMs: start + 6 * 3_600_000 }],
         }],
         cursor: null,

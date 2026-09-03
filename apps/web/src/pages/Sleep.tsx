@@ -238,6 +238,27 @@ export function Sleep() {
     ? t('common.bedLabel', { time: formatClock(lastNightBedMinutes) })
     : t('common.bedTimeNotRecorded')
 
+  // Nap clock times, the one thing this card cannot get from a metric: sleep_nap_count and
+  // sleep_nap_minutes carry a count and a duration, never a time of day, so the markers come off
+  // /sleep/nights (already fetched above for the hypnogram) while bed and wake stay on the two
+  // derived metrics below. The two agree by construction rather than by luck: readSleepNights
+  // splits each date through the same assembleNights that sleep_bedtime_minutes and
+  // sleep_waketime_minutes are pushed from, so a night's span there and the pair here are the
+  // same group, and the naps are exactly what that group excluded.
+  //
+  // endOffsetMinutes, not startOffsetMinutes: a night starts the evening before the date it
+  // belongs to, and a nap falls on the date itself, the same side of midnight as the wake, so the
+  // wake end's offset is the one in force when the nap started.
+  const napsByDate = useMemo(() => {
+    const out = new Map<string, number[]>()
+    for (const night of oneNightPerDate(nightItems)) {
+      out.set(night.localDate, night.naps.map((ms) => inWindow(
+        localMinutesOf(night.localDate, ms, night.endOffsetMinutes), WIDE_WINDOW,
+      )))
+    }
+    return out
+  }, [nightItems])
+
   // Sleep schedule: sleep_bedtime_minutes and sleep_waketime_minutes (already fetched above, as
   // part of LAST_METRICS), not /sleep/nights. Dashboard.tsx's own schedule card comment explains
   // why at length: /sleep/nights groups every sleep session sharing a date and source into one row,
@@ -247,7 +268,11 @@ export function Sleep() {
   // directly here, the way an earlier version of this card did, widened the axis enough to draw a
   // nap-contaminated span with confidence instead of suppressing it as no data: a real 23:20 to
   // 07:05 night sharing its local date with an unrelated 13:00-17:00 nap drew as a single, wrong,
-  // 17h40 "night" spanning bed to the nap's own end. Stays outside MetricCard even so: two metrics
+  // 17h40 "night" spanning bed to the nap's own end. That span is the night alone now, so the
+  // choice is no longer forced; the pair stays because it is the same value the eleven cards
+  // around this one already read, one request rather than two answering for one chart.
+  //
+  // Stays outside MetricCard even so: two metrics
   // zipped by date is not one metric's own points array, the same reasoning Dashboard's own
   // schedule card states for why it hands MetricCard a concatenation rather than one metric name
   // (its basisPlacement differs from this page's hand rolled Card only in which component owns the
@@ -270,9 +295,11 @@ export function Sleep() {
       const { bed, wake } = withinSchedule(
         bedPoint ? bedPoint.value : null, wakePoint ? wakePoint.value : null, WIDE_WINDOW,
       )
-      return { date, bed, wake, naps: EMPTY_NAPS }
+      // EMPTY_NAPS for a date /sleep/nights reported no night for at all, which is a date this
+      // list can only reach through a bedtime metric whose own sessions would have produced one.
+      return { date, bed, wake, naps: napsByDate.get(date) ?? EMPTY_NAPS }
     })
-  }, [bedtimePoints, waketimePoints])
+  }, [bedtimePoints, waketimePoints, napsByDate])
   // Nights actually drawn, not nights fetched: withinSchedule nulls out any night this window
   // cannot place honestly and SleepSchedule draws those as its own absence mark, so counting dates
   // would claim a bed and wake time for a row that shows neither. Same reasoning as Dashboard's own
@@ -382,11 +409,12 @@ export function Sleep() {
           )}
         </Card>
         {/* Gated on lastSeries, the 'last' agg group sleep_bedtime_minutes/sleep_waketime_minutes
-            ride in, not on the nights query the hypnogram card above uses: this card no longer
-            reads /sleep/nights at all (see scheduleNights' own comment for why). showNaps=false
-            because neither of those two metrics nor any other metric this page reads gives a nap
-            its own clock time, only a duration (sleep_nap_minutes, already its own card below), so
-            a naps column here could not be filled with anything this data actually knows.
+            ride in, not on the nights query: bed and wake come from that pair, and a card that
+            can draw them should not sit behind a second request that only adds the nap markers.
+            showNaps follows that second request rather than being fixed either way, because the
+            naps column states that a check was made: with the nights query still in flight or
+            failed there are no nap times to have checked, and a column of "none" would claim
+            otherwise for every night in the range.
             axisWindow is the wide one: see scheduleNights' own comment for why. */}
         <Card span={5} label={t('sleep.sleepSchedule.label')}
           basis={lastSeries.isError || scheduleNights.length === 0
@@ -396,7 +424,7 @@ export function Sleep() {
             : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
-            <SleepSchedule nights={scheduleNights} showNaps={false} axisWindow={WIDE_WINDOW}
+            <SleepSchedule nights={scheduleNights} showNaps={nights.isSuccess} axisWindow={WIDE_WINDOW}
               label={t('common.bedWakeChartLabel', { period })} />
           )}
         </Card>
