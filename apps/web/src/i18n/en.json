@@ -390,7 +390,8 @@
       "notWorn": "not worn",
       "noReading": "no reading",
       "excluded": "excluded",
-      "none": "none"
+      "none": "none",
+      "notStaged": "This night was not staged, so there is nothing to total."
     },
     "hrTooltip": {
       "mean": "mean {{value}} bpm",

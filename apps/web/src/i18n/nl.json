@@ -390,7 +390,8 @@
       "notWorn": "niet gedragen",
       "noReading": "geen meting",
       "excluded": "uitgesloten",
-      "none": "geen"
+      "none": "geen",
+      "notStaged": "Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen."
     },
     "hrTooltip": {
       "mean": "gemiddeld {{value}} bpm",
