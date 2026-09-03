@@ -372,7 +372,9 @@
       "night": "Nacht",
       "toBed": "Naar bed",
       "woke": "Ontwaakt",
-      "naps": "Dutjes"
+      "naps": "Dutjes",
+      "time": "Tijd",
+      "source": "Bron"
     },
     "weekday": {
       "mon": "Ma",
@@ -402,6 +404,10 @@
     "event": {
       "withNote": "{{kind}}: {{note}}",
       "multiDay": "{{kind}}, gestart"
+    },
+    "intradayBasis": {
+      "thinned": "{{from}} metingen teruggebracht tot {{to}} punten",
+      "full": "deze {{count}} punten zijn de metingen"
     }
   },
   "sleep": {

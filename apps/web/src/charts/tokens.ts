@@ -7,12 +7,13 @@ const CHART_SOURCES = {
   stageRem: 'stage-rem',
   stageAwake: 'stage-awake',
   series: 'series',
-  // No seriesAlt here. It was claimed by the corrected mark on the three by-day charts and by
-  // nothing else, and that mark is gone: OverrideStore.validate refuses a day scoped correction,
-  // so it drew for a row the server will not create. readChartTokens throws on any name in this
-  // map the stylesheet does not define and reads every one of them on every render, so a name no
-  // chart asks for is a cost with no reader. @haelan/tokens still defines series-alt on its own
-  // terms; a future chart that wants a second series colour adds the name back here.
+  // Reintroduced for IntradayHeartRate, which draws one mean line per source and needs a second
+  // colour so a two device day reads as two lines rather than one line overdrawn on itself. It was
+  // removed once before, when the corrected mark on the three by-day charts, its only reader at
+  // the time, went away with OverrideStore.validate refusing a day scoped correction.
+  // readChartTokens throws on any name in this map the stylesheet does not define and reads every
+  // one of them on every render, so a name stays out until some chart actually asks for it.
+  seriesAlt: 'series-alt',
   grid: 'grid',
   axis: 'axis',
   band: 'band-baseline',

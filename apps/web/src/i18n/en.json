@@ -372,7 +372,9 @@
       "night": "Night",
       "toBed": "To bed",
       "woke": "Woke",
-      "naps": "Naps"
+      "naps": "Naps",
+      "time": "Time",
+      "source": "Source"
     },
     "weekday": {
       "mon": "Mon",
@@ -402,6 +404,10 @@
     "event": {
       "withNote": "{{kind}}: {{note}}",
       "multiDay": "{{kind}}, started"
+    },
+    "intradayBasis": {
+      "thinned": "{{from}} readings thinned to {{to}} points",
+      "full": "these {{count}} points are the readings"
     }
   },
   "sleep": {
