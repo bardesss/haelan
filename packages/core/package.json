@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./metrics": "./src/derive/metrics.ts",
     "./coverage-signal": "./src/query/coverageSignal.ts",
-    "./target-key": "./src/derive/targetKey.ts"
+    "./target-key": "./src/derive/targetKey.ts",
+    "./baseline-window": "./src/query/baseline.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"

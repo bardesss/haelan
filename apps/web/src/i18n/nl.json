@@ -97,7 +97,9 @@
       "steps": "Stappen",
       "beatsPerMinute": "Slagen per minuut",
       "bpm": "bpm",
-      "minutesAsleep": "Minuten slaap"
+      "minutesAsleep": "Minuten slaap",
+      "milliseconds": "Milliseconden",
+      "ms": "ms"
     },
     "steps": {
       "label": "Stappen",
@@ -147,8 +149,11 @@
     },
     "flaggedDays": {
       "label": "Gemarkeerde dagen",
-      "emptyTitle": "Nog geen gemarkeerde dagen.",
-      "emptyDetail": "Gemarkeerde dagen lezen getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
+      "emptyTitle": "Geen gemarkeerde dagen in deze periode.",
+      "emptyDetail": "Er zijn geen gebeurtenissen vastgelegd voor deze periode. Klik op een grafiek om er een te markeren.",
+      "basis_one": "{{count}} dag gemarkeerd in deze periode",
+      "basis_other": "{{count}} dagen gemarkeerd in deze periode",
+      "viewAll": "Bekijk notities"
     },
     "sleepStages": {
       "label": "Slaapfasen",
@@ -162,13 +167,14 @@
     },
     "recovery": {
       "label": "Herstel",
-      "emptyTitle": "Geen bron levert deze data.",
-      "emptyDetail": "Verbind een apparaat dat hartslagvariabiliteit meet om hier herstelscores te zien."
+      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse hartslagvariabiliteit in {{period}}",
+      "viewAll": "Bekijk herstel"
     },
     "anomalies": {
       "label": "Slaapafwijkingen",
       "emptyTitle": "Nog geen afwijkingsdetectie.",
-      "emptyDetail": "Afwijkingsdetectie leest getypeerde gebeurtenissen, die nog door niets worden gerapporteerd."
+      "emptyDetail": "Automatische afwijkingsdetectie is nog niet gebouwd."
     }
   },
   "recovery": {
@@ -246,12 +252,16 @@
     },
     "weight": {
       "label": "Gewicht",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "basis": "gemiddelde, {{readings}} deze periode",
+      "readings_one": "{{count}} meting",
+      "readings_other": "{{count}} metingen",
       "chartLabel": "Gewicht in {{period}}"
     },
     "bodyFat": {
       "label": "Vetpercentage",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
+      "basis": "gemiddelde, {{readings}} deze periode",
+      "readings_one": "{{count}} meting",
+      "readings_other": "{{count}} metingen",
       "chartLabel": "Vetpercentage in {{period}}"
     }
   },

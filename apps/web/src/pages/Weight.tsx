@@ -91,8 +91,11 @@ export function Weight() {
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
 
-  // Every calendar day in the range, the axis the sparklines below are built along as well as the
-  // denominator every basis line counts against.
+  // Every calendar day in the range, the axis the sparklines below are built along. Not a basis
+  // line denominator here the way it is on every sibling page: weight and body_fat are episodic
+  // (see card()'s own comment below), and "{{reported}} of {{total}} days" would count every
+  // unweighed day as a shortfall against a metric nobody expects a row from daily, the same
+  // framing the chart itself stopped drawing when M3e-1 dropped its absence marks.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // Stable array identities for the reason every sibling page's own copy of this memo states:
@@ -155,7 +158,7 @@ export function Weight() {
   // MetricCard's wear branch can therefore never fire for either, the same choice Recovery.tsx's
   // own card() and Dashboard.tsx's sleep schedule card already make for the identical reason.
   const card = (
-    metric: string, labelKey: string, basisKey: string, chartLabelKey: string,
+    metric: string, labelKey: string, basisKey: string, readingsKey: string, chartLabelKey: string,
     unitKey: string, shortUnitKey: string,
     // Defaults to the catalogue's own precision for `metric`, read through formatMetricValue: the
     // right path for body_fat, which is a percent and needs no conversion. weight is the one call
@@ -175,9 +178,21 @@ export function Weight() {
     const spark = sparklines.get(metric)!
     const { excluded } = annotationsFor(overridesByMetricMap, metric)
     const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
+    // D10: pre-resolved before MetricCard, the same reason Health.tsx's own spo2Readings is
+    // (that file's own comment on the idiom says why in full). MetricCard's plain-key branch
+    // interpolates `reported`, not `count`, so a template counting the reading itself has to
+    // arrive already pluralised rather than lean on i18next's own count-based suffix picking,
+    // which only fires for an option literally named `count`. This is also D10's actual fix, not
+    // only its plumbing: the basis line used to read "mean, {{reported}} of {{total}} days",
+    // which stated every unweighed calendar day as a shortfall against a metric taken by hand
+    // (weight and body_fat are both `episodic`, see below), the exact framing M3e-1 already
+    // dropped from this same chart's absence marks. Counting only the readings that exist, not
+    // the calendar days that don't carry one, is what makes the basis line agree with the chart
+    // beside it again.
+    const readings = t(readingsKey, { count: points.length })
     return (
       <MetricCard metric={metric} span={6} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
-        basisKey={basisKey} basisWornKey={basisKey} basisValues={{ total: rangeDates.length }}>
+        basisKey={basisKey} basisWornKey={basisKey} basisValues={{ readings }}>
         {(basis) => (
           <StatTile label={t(labelKey)} value={format(headline)} unit={t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), 'neutral')}>
@@ -196,8 +211,8 @@ export function Weight() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('weight.title')}</h1>
       <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
-        {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.chartLabel',
-          'weight.units.kilograms', 'weight.units.kg',
+        {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.readings',
+          'weight.weight.chartLabel', 'weight.units.kilograms', 'weight.units.kg',
           // weight is stored in grams with precision 1 (METRICS.weight, declared in grams, the
           // stored unit); this card displays kilograms, a precision the catalogue's own field
           // cannot answer for a converted unit (the trap this page exists to get right, and the
@@ -216,8 +231,8 @@ export function Weight() {
           // to 0 and prints a real "0.0" on either of those rows instead of the absence word
           // ("excluded" or "no reading") the row is meant to carry.
           (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent))}
-        {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.chartLabel',
-          'weight.units.percent', 'weight.units.percentShort')}
+        {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.readings',
+          'weight.bodyFat.chartLabel', 'weight.units.percent', 'weight.units.percentShort')}
 
         {/* label is its own catalogue string, not weight.weight.label reused: a second card
             sharing "Weight" would make a label lookup by exact text ambiguous, the same collision

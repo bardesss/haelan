@@ -130,6 +130,21 @@ describe('the Weight page', () => {
     expect(value?.textContent).toBe('81.2 kg')
   })
 
+  // D10: the basis line used to read "mean, {{reported}} of {{total}} days", counting every
+  // unweighed calendar day as a shortfall in words, the exact framing M3e-1 removed from the
+  // chart itself (no absence marks) because 130 readings across 236 days is normal for a metric
+  // taken by hand. One reading in a seven day route (2026-08-10 through 2026-08-16) is what the
+  // old wording would have called "1 of 7 days"; the fix states only the count that is true, and
+  // pluralises it correctly rather than printing "1 readings".
+  it('states the reading count without counting unweighed days as a shortfall', async () => {
+    await mount(<Weight />, { weight: [seriesPoint('weight', '2026-08-14', 81_200)] })
+    const basis = [...container!.querySelectorAll('.card')]
+      .find((card) => card.querySelector('.label')?.textContent === 'Weight')
+      ?.querySelector('.basis')
+    expect(basis?.textContent).toBe('mean, 1 reading this period')
+    expect(container!.textContent).not.toContain('of 7 days')
+  })
+
   // Sparkline's own episodic filter (Sparkline.tsx): a silent day, one nothing answered and the
   // reader did nothing to, is not a row this table states anything about. The range spans
   // 2026-08-10 through 2026-08-16; only 2026-08-14 carries a reading, so every other day, 08-15

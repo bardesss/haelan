@@ -97,7 +97,9 @@
       "steps": "Steps",
       "beatsPerMinute": "Beats per minute",
       "bpm": "bpm",
-      "minutesAsleep": "Minutes asleep"
+      "minutesAsleep": "Minutes asleep",
+      "milliseconds": "Milliseconds",
+      "ms": "ms"
     },
     "steps": {
       "label": "Steps",
@@ -147,8 +149,11 @@
     },
     "flaggedDays": {
       "label": "Flagged days",
-      "emptyTitle": "No flagged days yet.",
-      "emptyDetail": "Flagged days read typed events, which nothing connected reports yet."
+      "emptyTitle": "No flagged days in this period.",
+      "emptyDetail": "No events have been logged for this period. Click any chart to flag one.",
+      "basis_one": "{{count}} day flagged in this period",
+      "basis_other": "{{count}} days flagged in this period",
+      "viewAll": "View notes"
     },
     "sleepStages": {
       "label": "Sleep stages",
@@ -162,13 +167,14 @@
     },
     "recovery": {
       "label": "Recovery",
-      "emptyTitle": "No source is providing this data.",
-      "emptyDetail": "Connect a device that reports heart rate variability to see recovery scores here."
+      "basis": "mean, {{reported}} of {{total}} days",
+      "chartLabel": "Daily heart rate variability through {{period}}",
+      "viewAll": "View recovery"
     },
     "anomalies": {
       "label": "Sleep anomalies",
       "emptyTitle": "No anomaly detection yet.",
-      "emptyDetail": "Anomaly detection reads typed events, which nothing connected reports yet."
+      "emptyDetail": "Automatic anomaly detection has not been built yet."
     }
   },
   "recovery": {
@@ -246,12 +252,16 @@
     },
     "weight": {
       "label": "Weight",
-      "basis": "mean, {{reported}} of {{total}} days",
+      "basis": "mean, {{readings}} this period",
+      "readings_one": "{{count}} reading",
+      "readings_other": "{{count}} readings",
       "chartLabel": "Weight through {{period}}"
     },
     "bodyFat": {
       "label": "Body fat",
-      "basis": "mean, {{reported}} of {{total}} days",
+      "basis": "mean, {{readings}} this period",
+      "readings_one": "{{count}} reading",
+      "readings_other": "{{count}} readings",
       "chartLabel": "Body fat through {{period}}"
     }
   },

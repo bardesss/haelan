@@ -12,6 +12,8 @@ import {
 import type { WriteOverrideInput, WriteNoteInput } from '../src/data/useAnnotations.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
+import { useBaseline } from '../src/data/useBaseline.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -82,6 +84,17 @@ function WriteNoteButton({ input }: { input: WriteNoteInput }) {
  * cache entry stale with nothing watching it. */
 function OverridesListAndWriteButton({ input }: { input: WriteOverrideInput }) {
   useAnnotations({ from: '2026-08-01', to: '2026-08-31' })
+  const mutation = useWriteOverride()
+  return <button type="button" onClick={() => mutation.mutate(input)}>write override</button>
+}
+
+/** Mounts two real useBaseline queries, anchored so only one's own sixty day window overlaps
+ * INPUT's target day (2026-08-15), alongside the write button: a real observer under useBaseline's
+ * own queryKey is what actually exercises D9's fix, rather than a key this test hand assembles to
+ * match whatever overlapsAffected already accepts. */
+function TwoBaselinesAndWriteButton({ input }: { input: WriteOverrideInput }) {
+  useBaseline('steps', '2026-08-31', ALL_SOURCES, 'sum')
+  useBaseline('steps', '2026-01-31', ALL_SOURCES, 'sum')
   const mutation = useWriteOverride()
   return <button type="button" onClick={() => mutation.mutate(input)}>write override</button>
 }
@@ -193,6 +206,55 @@ describe('useWriteOverride, applied true', () => {
 
     expect(client.getQueryState(overlapping)?.isInvalidated).toBe(true)
     expect(client.getQueryState(disjoint)?.isInvalidated).toBe(false)
+  })
+
+  // D9: useBaseline's own queryKey used to carry `on` alone, an anchor with no from/to for
+  // overlapsAffected to compare against, so an exclusion never invalidated the baseline it fed;
+  // the band and its note kept the excluded day's old centre until staleTime expired or the
+  // component remounted. The fix gives the key the same window baselineWindow(on) actually reads
+  // (packages/core/src/query/baseline.ts), sixty days ending the day before `on`, so this behaves
+  // exactly like the 'series' case above once the key carries a real range.
+  //
+  // Two real useBaseline queries, not two hand assembled keys: this is what actually exercises
+  // whatever key the hook itself builds, rather than a key this test constructs to match
+  // whatever overlapsAffected happens to accept, which would pass unchanged even if useBaseline's
+  // own key still carried nothing but `on`.
+  //
+  // Refetch counts, not isInvalidated: both probes stay mounted, so both are active queries, and
+  // an invalidated active query refetches immediately and clears its own isInvalidated the moment
+  // that refetch settles, which the 20ms in settle() is long enough for. A second request for the
+  // same anchor is what "this one got invalidated" looks like from outside once that has already
+  // happened; a disjoint anchor that was never invalidated never earns a second one.
+  it('refetches the baseline whose sixty day window overlaps affected, and leaves a disjoint one alone', async () => {
+    const calls: string[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (method === 'POST' && url.includes('/overrides')) {
+        return respond(200, { id: 'o1', affected: { from: '2026-08-15', to: '2026-08-15' }, applied: true })
+      }
+      if (url.includes('/baselines')) { calls.push(url); return respond(200, { baseline: null }) }
+      return respond(200, { items: [] })
+    }) as typeof fetch
+
+    const { tree } = withSession(<TwoBaselinesAndWriteButton input={INPUT} />)
+    mount(tree)
+    await settle()
+
+    const overlappingCalls = () => calls.filter((u) => u.includes('on=2026-08-31')).length
+    const disjointCalls = () => calls.filter((u) => u.includes('on=2026-01-31')).length
+    // Both real requests actually fired once on mount, not a hope that the hook happened to ask
+    // for them: an assertion below against a request that never went out would pass vacuously.
+    expect(overlappingCalls()).toBe(1)
+    expect(disjointCalls()).toBe(1)
+
+    click()
+    await settle()
+    globalThis.fetch = original
+
+    expect(overlappingCalls()).toBe(2)
+    expect(disjointCalls()).toBe(1)
   })
 
   // affected: null means the target names a sample or a session no backfill has reached, so the

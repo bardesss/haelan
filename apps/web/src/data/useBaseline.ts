@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
+import { baselineWindow } from '@haelan/core/baseline-window'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
@@ -38,8 +39,16 @@ export function useBaseline(
 ): UseQueryResult<{ baseline: Baseline | null }> {
   const session = useSession()
   const personId = session.data?.personId
+  // The key carries the window baselineWindow(on) actually reads (sixty days ending the day
+  // before `on`, packages/core/src/query/baseline.ts), not `on` itself: overlapsAffected
+  // (useAnnotations.ts) invalidates a cached ranged read by comparing its own from/to against the
+  // range an override just changed, and a key naming only the anchor date gives it nothing to
+  // compare, so an exclusion inside the window never invalidated the baseline it fed. Two
+  // different anchors never collide here either, since shiftLocalDate is one-to-one and `to` is
+  // always `on` shifted by exactly one day.
+  const { from, to } = baselineWindow(on)
   return useQuery({
-    queryKey: queryKeys.resource(personId ?? '', 'baselines', { metric, on, source, agg }),
+    queryKey: queryKeys.resource(personId ?? '', 'baselines', { metric, from, to, source, agg }),
     enabled: personId !== undefined,
     queryFn: () => apiGet<{ baseline: Baseline | null }>(baselinePath(personId!, metric, on, source, agg)),
   })
