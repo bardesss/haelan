@@ -278,7 +278,10 @@
       "minutes": "Minutes",
       "min": "min",
       "workouts": "Workouts",
-      "workoutsShort": "workouts"
+      "workoutsShort": "workouts",
+      "bpm": "bpm",
+      "paceSuffix": "/km",
+      "elevationGainShort": "m gained"
     },
     "insights": {
       "steps": "Steps, this period against the last"
@@ -347,13 +350,43 @@
     },
     "workoutCount": {
       "label": "Workouts",
-      "basis": "count, {{reported}} of {{total}} days",
+      "basis": "count, one per workout however many devices recorded it, {{reported}} of {{total}} days",
       "chartLabel": "Daily workout count through {{period}}"
     },
     "workoutMinutes": {
       "label": "Workout minutes",
-      "basis": "sum, {{reported}} of {{total}} days",
+      "basis": "sum, one per workout however many devices recorded it, {{reported}} of {{total}} days",
       "chartLabel": "Daily workout minutes through {{period}}"
+    },
+    "exerciseTypes": {
+      "CARDIO_WORKOUT": "Cardio workout",
+      "WALKING": "Walking",
+      "RUNNING": "Running",
+      "WORKOUT": "Workout",
+      "SPINNING": "Spinning",
+      "BIKING": "Biking",
+      "TREADMILL": "Treadmill",
+      "HIKING": "Hiking",
+      "WEIGHTLIFTING": "Weightlifting",
+      "STROLLER_WALK": "Stroller walk",
+      "SWIMMING_POOL": "Swimming pool",
+      "SPORT": "Sport",
+      "HOUSEHOLD_CHORES": "Household chores",
+      "unknown": "Unknown"
+    },
+    "sessions": {
+      "label": "Sessions",
+      "count_one": "{{count}} recorded session in this period",
+      "count_other": "{{count}} recorded sessions in this period",
+      "countFiltered": "{{shown}} of {{total}} recorded sessions in this period",
+      "basis": "One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.",
+      "scrollLabel": "Scrollable list of sessions",
+      "filterLabel": "Filter by type",
+      "allTypes": "All types",
+      "emptyPeriodTitle": "No activities recorded in this period.",
+      "emptyPeriodDetail": "Nothing has synced for these dates yet.",
+      "emptyFilteredTitle": "No {{type}} sessions in this period.",
+      "emptyFilteredDetail": "Choose another type to see the rest of this period's sessions."
     }
   },
   "charts": {

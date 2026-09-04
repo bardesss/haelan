@@ -278,7 +278,10 @@
       "minutes": "Minuten",
       "min": "min",
       "workouts": "Work-outs",
-      "workoutsShort": "work-outs"
+      "workoutsShort": "work-outs",
+      "bpm": "bpm",
+      "paceSuffix": "/km",
+      "elevationGainShort": "m omhoog"
     },
     "insights": {
       "steps": "Stappen, deze periode tegenover de vorige"
@@ -347,13 +350,43 @@
     },
     "workoutCount": {
       "label": "Work-outs",
-      "basis": "aantal, {{reported}} van {{total}} dagen",
+      "basis": "aantal, één per work-out ongeacht hoeveel apparaten die registreerden, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijks aantal work-outs in {{period}}"
     },
     "workoutMinutes": {
       "label": "Work-outminuten",
-      "basis": "som, {{reported}} van {{total}} dagen",
+      "basis": "som, één per work-out ongeacht hoeveel apparaten die registreerden, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse work-outminuten in {{period}}"
+    },
+    "exerciseTypes": {
+      "CARDIO_WORKOUT": "Cardiotraining",
+      "WALKING": "Wandelen",
+      "RUNNING": "Hardlopen",
+      "WORKOUT": "Work-out",
+      "SPINNING": "Spinning",
+      "BIKING": "Fietsen",
+      "TREADMILL": "Loopband",
+      "HIKING": "Hiken",
+      "WEIGHTLIFTING": "Krachttraining",
+      "STROLLER_WALK": "Wandelen met kinderwagen",
+      "SWIMMING_POOL": "Baanzwemmen",
+      "SPORT": "Sport",
+      "HOUSEHOLD_CHORES": "Huishoudelijke klussen",
+      "unknown": "Onbekend"
+    },
+    "sessions": {
+      "label": "Sessies",
+      "count_one": "{{count}} geregistreerde sessie in deze periode",
+      "count_other": "{{count}} geregistreerde sessies in deze periode",
+      "countFiltered": "{{shown}} van de {{total}} geregistreerde sessies in deze periode",
+      "basis": "Eén rij per geregistreerde sessie. De tegel Work-outs telt een work-out één keer, ook als twee apparaten dezelfde registreerden, dus die kan lager uitvallen.",
+      "scrollLabel": "Scrollbare lijst met sessies",
+      "filterLabel": "Filter op type",
+      "allTypes": "Alle types",
+      "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",
+      "emptyPeriodDetail": "Er is nog niets gesynchroniseerd voor deze datums.",
+      "emptyFilteredTitle": "Geen {{type}} sessies in deze periode.",
+      "emptyFilteredDetail": "Kies een ander type om de rest van de sessies in deze periode te zien."
     }
   },
   "charts": {

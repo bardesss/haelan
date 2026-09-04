@@ -84,6 +84,20 @@ function stubActivity(urls: string[], insightOverrides: Partial<Insight> = {}): 
       return json(body)
     }
     if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
+    // One real exercise session, not the catch-all's {}: SessionList reads /sessions too now
+    // (Task 5), and an unanswered {} reads as items: undefined, an empty period, and the section
+    // draws its own EmptyState -- exactly the class of failure this file's "draws provider rows
+    // rather than calling them unworn" test exists to catch, just from a different card.
+    if (url.includes('/sessions')) {
+      return json({
+        items: [{
+          id: 's1', sourceId: 'watch', startMs: Date.UTC(2026, 7, 15, 8, 0), endMs: Date.UTC(2026, 7, 15, 8, 30),
+          startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-15',
+          attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 250 } },
+        }],
+        cursor: null,
+      })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
