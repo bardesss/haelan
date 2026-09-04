@@ -651,7 +651,8 @@ export function Dashboard() {
             HeartRateRange below, never to MetricCard: a thin baseline should blank only the band
             that chart draws around its lines, not the lines themselves, and MetricCard's own
             `baseline` prop, which once fed emptyStateFor's `insufficient` branch, went with that
-            branch when M3e-2 had both removed as dead code no caller ever reached. */}
+            branch: M3e-2 marked both for removal, and this task removed them as dead code no
+            caller ever reached. */}
         {controls.tab === 'day' ? (
           // With from === to the daily series this card used to read holds at most one row (see
           // emptyStateFor's own opening comment in emptyState.ts for why a one day range is
