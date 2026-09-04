@@ -1,7 +1,8 @@
 import { and, eq, gte, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { samples } from '../db/schema/index.ts'
+import { samples, overrides as overridesTable } from '../db/schema/index.ts'
 import { localDateOf, widenedUtcWindow } from '../derive/localDay.ts'
+import { sampleTarget } from '../derive/targetKey.ts'
 import { thinBand } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 
@@ -14,6 +15,15 @@ export interface IntradayPoint {
   min: number | null
   mean: number | null
   max: number | null
+  /**
+   * How many stored rows this point combines. One for heart rate, which is stored downsampled to
+   * the minute; more for a metric stored per reading whose minute held several. A sample override
+   * names one exact instant, so a point with n above one has no single instant to correct, which
+   * is what the panel's Correct guard reads this for.
+   */
+  n: number
+  /** Whether a sample-scope exclusion names the row behind this point. */
+  excluded: boolean
 }
 
 export interface IntradayResult {
@@ -70,6 +80,18 @@ export function readIntraday(db: DbOrTx, input: {
   )).all()
     .filter((row) => localDateOf(row.utcMs, row.tzOffsetMinutes) === input.localDate)
 
+  // Read here rather than taken as a parameter, the same choice readSessions and readSleepNights
+  // made: every caller wants the same answer, and one small indexed read (few rows, scoped by
+  // person and scope) beats a caller that forgot to pass corrections and silently saw none.
+  // A sample override names one exact (source, metric, utcMs) instant, which is a raw row's own
+  // key, not a bucket's — the set is checked per row below, before rows are folded into a bucket.
+  const excludedInstants = new Set<string>()
+  for (const row of db.select().from(overridesTable)
+    .where(and(eq(overridesTable.personId, input.personId), eq(overridesTable.scope, 'sample'))).all()) {
+    if (row.action !== 'exclude') continue
+    excludedInstants.add(row.targetKey)
+  }
+
   // Keyed by source first, then minute, rather than one map keyed by a string built from both: a
   // source id is arbitrary text and this avoids ever having to reason about whether two different
   // (source, minute) pairs could print to the same key.
@@ -77,7 +99,7 @@ export function readIntraday(db: DbOrTx, input: {
   // rawValues accumulates a raw metric's readings for the minute so they can be combined once
   // every row for that minute has been seen, rather than folded in one at a time: a running
   // min/mean/max would need its own running sum and count anyway, which is exactly what an array
-  // and a single pass at the end already gives for free.
+  // and a single pass at the end already gives for free. Its length becomes n for a raw metric.
   const bySource = new Map<string, Map<number, IntradayPoint & { rawValues: number[] }>>()
   for (const row of rows) {
     if (row.value === null) continue
@@ -88,11 +110,18 @@ export function readIntraday(db: DbOrTx, input: {
     const byMinute = bySource.get(row.sourceId) ?? new Map<number, IntradayPoint & { rawValues: number[] }>()
     bySource.set(row.sourceId, byMinute)
     const point = byMinute.get(bucketMs)
-      ?? { sourceId: row.sourceId, utcMs: bucketMs, min: null, mean: null, max: null, rawValues: [] }
+      ?? { sourceId: row.sourceId, utcMs: bucketMs, min: null, mean: null, max: null, n: 1, excluded: false, rawValues: [] }
     if (row.agg === 'min') point.min = row.value
     else if (row.agg === 'mean') point.mean = row.value
     else if (row.agg === 'max') point.max = row.value
     else if (row.agg === 'raw') point.rawValues.push(row.value)
+    // Marked on any row in the bucket, not only when every row is: a bucket of one is the
+    // ordinary case, but a bucket where one of several raw readings was thrown out is still a
+    // point whose surviving value was computed with a reading the person disowned folded in, and
+    // a reader deciding whether to trust it needs to see that, not a point that looks untouched.
+    if (excludedInstants.has(sampleTarget({ source: row.sourceId, metric: input.metric, utcMs: row.utcMs }))) {
+      point.excluded = true
+    }
     byMinute.set(bucketMs, point)
   }
 
@@ -117,6 +146,9 @@ export function readIntraday(db: DbOrTx, input: {
   const perSourcePoints = sourceIds.map((sourceId) => {
     const series: IntradayPoint[] = [...bySource.get(sourceId)!.values()]
       .map(({ rawValues, ...point }) => (
+        // n starts at 1, right for a downsampled metric whose bucket is one reading no matter how
+        // many of its min/mean/max component rows are present. A raw metric's bucket instead
+        // holds one row per reading, so n becomes the count actually folded together here.
         rawValues.length === 0
           ? point
           : {
@@ -124,6 +156,7 @@ export function readIntraday(db: DbOrTx, input: {
               min: Math.min(...rawValues),
               mean: rawValues.reduce((total, v) => total + v, 0) / rawValues.length,
               max: Math.max(...rawValues),
+              n: rawValues.length,
             }
       ))
       .sort((a, b) => a.utcMs - b.utcMs)
