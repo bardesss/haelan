@@ -333,7 +333,9 @@ body {
    describes, the same header row shape .card's own .label plays elsewhere. */
 .session-list-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
 .session-list-count { font-size: var(--font-size-xs); color: var(--text-muted); }
-/* Tall enough that a Month range's ~15 rows never scroll at all, capped so a Year range's ~190
-   does not stretch the card past every other one on the page. The count in the header above is
+/* A cap, not a fit: 480px holds about ten of the two line rows a session with a detail line
+   renders as, and the reporting household's full months hold 16 to 37 sessions (median 25), so a
+   Month range scrolls and a Year range's ~190 rows scroll a long way. The cap is there so this
+   card does not stretch past every other one on the page, and the count in the header above is
    what tells a reader whether the rows inside are all of them or a scrolled-past remainder. */
 .session-list-scroll { max-height: 480px; overflow-y: auto; }
