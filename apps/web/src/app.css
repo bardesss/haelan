@@ -351,6 +351,14 @@ body {
 .session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .session-row-detail { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: var(--space-1); }
+/* An excluded session stays in the list, muted and struck through rather than removed: the same
+   "still visible, no longer counted" pairing .setup-rejected code already uses (text-faint plus
+   line-through) for a rejected event kept on screen. The decoration sits on the row itself so it
+   paints across every child's text without restating it on session-row-type, -duration, -stats
+   and -detail individually; the reason line turns it back off, since a strikethrough reads as
+   "this text is gone" and the reason is the opposite, the one line explaining why. */
+.session-row-excluded { color: var(--text-faint); text-decoration: line-through; }
+.session-row-excluded-reason { font-size: var(--font-size-xs); color: var(--text-faint); text-decoration: none; margin-top: var(--space-1); }
 
 /* SessionList.tsx's own root: min-width: 0 so a row's own flex children can actually shrink
    inside the card's grid column rather than pushing it wide, the same reason .card itself carries

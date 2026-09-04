@@ -33,6 +33,9 @@ export interface Night {
   /** Nap start times, in order. Empty means the route looked and found none, never "not asked". */
   naps: number[]
   segments: NightSegment[]
+  /** The ids of this night's own source's sleep sessions the person excluded. Always present;
+   *  empty is a measurement, never "not asked" (packages/core/src/query/sleepNights.ts). */
+  excludedSessions: string[]
 }
 
 /**

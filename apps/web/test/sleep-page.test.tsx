@@ -80,13 +80,17 @@ const NIGHT_MIDNIGHT = Date.parse(`${HYPNOGRAM_NIGHT_DATE}T00:00:00Z`)
 // The route's own `naps` field: nap start instants, outside startMs..endMs by construction, since
 // readSleepNights puts in the span only what assembleNights kept as the night. Empty by default,
 // which is the shape every test here but the naps column one wants.
-function hypnogramNightsResponse(naps: number[] = []): unknown {
+//
+// `excludedSessions` likewise defaults empty (the shape every test here but the excluded-sessions
+// one below wants): Task 2's reader always sends the field, so a fixture omitting it is a shape
+// the real route never answers, and Sleep.tsx reads its length unconditionally.
+function hypnogramNightsResponse(naps: number[] = [], excludedSessions: string[] = []): unknown {
   const startMs = NIGHT_MIDNIGHT - 40 * 60_000 // 23:20 the day before
   const endMs = NIGHT_MIDNIGHT + 425 * 60_000 // 07:05
   return {
     items: [{
       localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
-      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps,
+      startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps, excludedSessions,
       segments: [{ stage: 'LIGHT', startMs, endMs }],
     }],
     cursor: null,
@@ -143,6 +147,9 @@ function stubSleep(
   // same reason `baseline` above was: several call sites already pass the earlier parameters
   // positionally.
   naps: number[] = [],
+  // The hypnogram night's own excluded sleep sessions, for the excluded-sessions line below it.
+  // Appended last for the same reason as every other optional parameter here.
+  excludedSessions: string[] = [],
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -165,7 +172,7 @@ function stubSleep(
       }
       return json(body)
     }
-    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse(naps))
+    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse(naps, excludedSessions))
     if (url.includes('/baselines')) {
       return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline })
     }
@@ -298,6 +305,7 @@ function stubSleepHalfMinuteBoundaries(segments: { sessionId: string, stage: str
         items: [{
           localDate: HYPNOGRAM_NIGHT_DATE, sourceId: 'watch', sessionIds: ['s1'],
           startMs: nightStartMs, endMs: nightEndMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps: [],
+          excludedSessions: [],
           segments,
         }],
         cursor: null,

@@ -6,7 +6,8 @@ import type { WorkoutSession } from '../src/data/useSessions.js'
 
 const run = (attrs: unknown, over: Partial<WorkoutSession> = {}): WorkoutSession => ({
   id: 's1', sourceId: 'watch', startMs: Date.UTC(2026, 8, 3, 8, 0), endMs: Date.UTC(2026, 8, 3, 8, 54),
-  startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-09-03', attrs, ...over,
+  startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-09-03', attrs,
+  excluded: false, excludeReason: null, ...over,
 })
 
 const render = (session: WorkoutSession, lng = 'nl') =>

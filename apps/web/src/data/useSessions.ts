@@ -15,6 +15,10 @@ export interface WorkoutSession {
   endOffsetMinutes: number
   localDate: string
   attrs: unknown
+  /** Whether the person excluded this session. The route serialises the reader's row unchanged
+   *  (packages/core/src/query/sessions.ts), so this and excludeReason reach the client for free. */
+  excluded: boolean
+  excludeReason: string | null
 }
 
 /**

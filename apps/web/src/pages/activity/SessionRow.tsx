@@ -78,8 +78,14 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       : `${formatNumber(summary.elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
   ].filter((part): part is string => part !== null)
 
+  // Struck through and kept, not filtered out: the Activity count above this list already drops
+  // an excluded workout at derivation, and the two visibly disagreeing (fewer counted than listed,
+  // one struck through) is what lets a reader see what they threw out, rather than wondering why a
+  // session they remember is simply gone.
+  const rowClassName = session.excluded ? 'session-row session-row-excluded' : 'session-row'
+
   return (
-    <div className="session-row">
+    <div className={rowClassName}>
       <div className="session-row-main">
         <span className="session-row-primary">
           {/* Trailing space: this text node sits directly against session-row-type's own text
@@ -94,6 +100,16 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       {/* Omitted outright, not rendered empty: the fourth test pins a session with none of these
           fields to one line, and an empty div here would still be a second line, just a blank one. */}
       {detail.length > 0 && <div className="session-row-detail">{detail.join(' - ')}</div>}
+      {/* excludeReason can be null even when excluded is true (a person can exclude without
+          typing a reason), so this falls back to a bare "Excluded" rather than printing "Excluded:
+          " with nothing after the colon. */}
+      {session.excluded && (
+        <div className="session-row-excluded-reason">
+          {session.excludeReason !== null
+            ? t('activity.sessions.excluded', { reason: session.excludeReason })
+            : t('activity.sessions.excludedNoReason')}
+        </div>
+      )}
     </div>
   )
 }

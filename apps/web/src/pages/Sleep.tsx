@@ -432,8 +432,18 @@ export function Sleep() {
             : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
-            <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
-              label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
+            <>
+              <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
+                label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
+              {/* excludedSessions is always present (empty is a measurement, packages/core/src/
+                  query/sleepNights.ts), so a shorter night this reader threw a session out of
+                  reads as a decision here rather than a recording that just happened to be short. */}
+              {lastNight.excludedSessions.length > 0 && (
+                <p className="chart-note">
+                  {t('sleep.sleepStages.nightExcludedSessions', { count: lastNight.excludedSessions.length })}
+                </p>
+              )}
+            </>
           )}
         </Card>
         {/* Gated on lastSeries, the 'last' agg group sleep_bedtime_minutes/sleep_waketime_minutes

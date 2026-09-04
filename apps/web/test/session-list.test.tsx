@@ -50,6 +50,7 @@ const session = (id: string, type: string, over: Partial<WorkoutSession> = {}): 
   id, sourceId: 'watch', startMs: Date.UTC(2026, 7, 3, 8, 0), endMs: Date.UTC(2026, 7, 3, 8, 54),
   startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-03',
   attrs: { exerciseType: type, metricsSummary: { caloriesKcal: 300 } },
+  excluded: false, excludeReason: null,
   ...over,
 })
 

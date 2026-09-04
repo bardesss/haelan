@@ -385,7 +385,9 @@
       "emptyPeriodTitle": "No activities recorded in this period.",
       "emptyPeriodDetail": "Nothing has synced for these dates yet.",
       "emptyFilteredTitle": "No {{type}} sessions in this period.",
-      "emptyFilteredDetail": "Choose another type to see the rest of this period's sessions."
+      "emptyFilteredDetail": "Choose another type to see the rest of this period's sessions.",
+      "excluded": "Excluded: {{reason}}",
+      "excludedNoReason": "Excluded"
     }
   },
   "charts": {
@@ -536,7 +538,9 @@
     "sleepStages": {
       "label": "Sleep stages",
       "basis": "most recent night, {{date}}",
-      "chartLabel": "Sleep stages through the night of {{date}}"
+      "chartLabel": "Sleep stages through the night of {{date}}",
+      "nightExcludedSessions_one": "{{count}} sleep session excluded from this night",
+      "nightExcludedSessions_other": "{{count}} sleep sessions excluded from this night"
     },
     "sleepSchedule": {
       "label": "Sleep schedule",
