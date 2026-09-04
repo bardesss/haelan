@@ -1,6 +1,8 @@
 import { Worker } from 'node:worker_threads'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PeopleStore, peopleNeedingRebuild } from '@haelan/core'
+import type { Instance } from '@haelan/core'
 import type { RebuildFailure } from './rebuild.ts'
 
 /** What rebuildWorker.ts actually posts: failures with their error flattened to plain data, since
@@ -75,4 +77,29 @@ export function rebuildInWorker(
       else resolve(outcome)
     })
   })
+}
+
+/**
+ * The same thing, but only when somebody actually needs rebuilding.
+ *
+ * Spawning is not free and it is not safe. A thread spawn, a second type strip and a second
+ * better-sqlite3 load cost about a second of every boot, and the boot that needs none of it is
+ * the overwhelmingly common one: a rebuild is wanted after a version bump, not after a restart.
+ * The cost that matters more is the failure class. If the worker cannot start, rebuildInWorker
+ * rejects, runBootSequence catches, and sync never starts for anybody, so an ordinary boot that
+ * had no work to do would have gained a way to leave the whole household not ingesting.
+ *
+ * The check itself is the same query rebuildIfNeeded opens with, and it is cheap: one read of the
+ * people table on a connection this thread already holds. Running it twice, once here and once
+ * inside the worker, is deliberate. This one decides whether to spawn; the worker's own is what
+ * actually drives the rebuild, and it stays the authority on that.
+ *
+ * threadId is null exactly when no worker was started, which is what a test can hold this against.
+ */
+export async function rebuildInWorkerIfNeeded(
+  opts: { instance: Instance, dataDir: string, log: (line: string) => void },
+): Promise<{ failures: readonly RebuildFailure[], threadId: number | null }> {
+  const needs = peopleNeedingRebuild(new PeopleStore(opts.instance.db).list())
+  if (needs.length === 0) return { failures: [], threadId: null }
+  return rebuildInWorker({ dataDir: opts.dataDir, log: opts.log })
 }

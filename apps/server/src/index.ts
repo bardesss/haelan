@@ -5,7 +5,7 @@ import { openHaelan } from '@haelan/core'
 import { readConfig } from './config.ts'
 import { buildServer } from './app.ts'
 import { runBootSequence } from './rebuild.ts'
-import { rebuildInWorker } from './rebuildInWorker.ts'
+import { rebuildInWorkerIfNeeded } from './rebuildInWorker.ts'
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working
@@ -47,16 +47,20 @@ console.log(`haelan listening on http://${config.host}:${config.port}`)
 console.log(`data directory ${dataDir}`)
 
 // After listen, so the app is reachable before a rebuild even starts. That ordering alone used to
-// be the whole of the claim and it was false: runRebuild has no awaits, so calling it directly
-// blocked the event loop solid for its entire duration and Fastify answered nothing, not even an
-// error, for as long as fifteen minutes on real data. rebuildInWorker moves that synchronous loop
-// onto its own thread (see rebuildWorker.ts), which is what actually keeps this thread free to
-// serve while the rebuild runs; WAL lets its write transaction sit alongside this thread's reads
-// (packages/core/src/db/open.ts). The rest of the ordering (before the runner, and never
-// rejecting) lives in runBootSequence itself, in rebuild.ts, where a test can hold a mutation
-// against it; this is wiring only.
+// be the whole of the claim and it was not enough: runRebuild has no awaits, so one person's
+// rebuild ran to completion inside a single turn of the event loop and Fastify answered nothing,
+// not even an error, for as long as fifteen minutes on real data. rebuildIfNeeded's `await
+// setImmediate()` opens a gap between people, which is real but only helps a household of more
+// than one, and this instance had one person. rebuildInWorker moves the whole loop onto its own
+// thread (see rebuildWorker.ts), which is what actually keeps this thread free to serve however
+// many people there are; WAL lets its write transaction sit alongside this thread's reads
+// (packages/core/src/db/open.ts). The ...IfNeeded variant spawns that thread only when somebody
+// needs rebuilding, so an ordinary restart pays neither the spawn nor the chance of failing to
+// spawn. The rest of the ordering (before the runner, and never rejecting) lives in
+// runBootSequence itself, in rebuild.ts, where a test can hold a mutation against it; this is
+// wiring only.
 rebuilding = runBootSequence({
-  rebuild: () => rebuildInWorker({ dataDir, log: (line) => { console.log(line) } }),
+  rebuild: () => rebuildInWorkerIfNeeded({ instance, dataDir, log: (line) => { console.log(line) } }),
   startSync: () => { app.haelan.runner.start() },
   log: (line) => { console.log(line) },
   logError: (message, error) => { console.error(message, error) },

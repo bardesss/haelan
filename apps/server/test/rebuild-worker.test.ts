@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { openHaelan, seedPerson } from '@haelan/core'
-import { rebuildInWorker } from '../src/rebuildInWorker.ts'
+import { rebuildInWorker, rebuildInWorkerIfNeeded } from '../src/rebuildInWorker.ts'
 
 let dataDir: string
 beforeEach(() => { dataDir = mkdtempSync(join(tmpdir(), 'haelan-worker-')) })
@@ -74,5 +74,42 @@ describe('rebuildInWorker', () => {
 
     const after = openHaelan(dataDir, {})
     expect(() => { after.close() }).not.toThrow()
+  })
+})
+
+describe('rebuildInWorkerIfNeeded', () => {
+  // The common boot by a wide margin: a restart, not a version bump. Every boot used to pay a
+  // thread spawn, a second type strip and a second better-sqlite3 load for this case, and worse,
+  // gained a way to fail: a worker that cannot start rejects, runBootSequence catches it and sync
+  // never starts for anybody. A null threadId is the observable that says no worker ran, since
+  // every path that does start one reports the id it ran on.
+  it('starts no worker when nobody needs rebuilding', async () => {
+    const instance = openHaelan(dataDir, {})
+    try {
+      const outcome = await rebuildInWorkerIfNeeded({ instance, dataDir, log: () => {} })
+      expect(outcome.threadId).toBeNull()
+      expect(outcome.failures).toEqual([])
+    } finally {
+      instance.close()
+    }
+  })
+
+  // And the gate is a gate, not a lid. A person with no stamp is one a boot must rebuild, and
+  // this is the branch that has to reach the worker: a positive threadId is the same observable
+  // read the other way, and it can only come from a worker that actually ran.
+  it('starts one when somebody does', async () => {
+    const instance = openHaelan(dataDir, {})
+    seedPerson(instance.db, 'p1')
+    try {
+      const lines: string[] = []
+      const outcome = await rebuildInWorkerIfNeeded({
+        instance, dataDir, log: (line) => lines.push(line),
+      })
+      expect(outcome.threadId).toBeGreaterThan(0)
+      expect(outcome.failures).toEqual([])
+      expect(lines.join(' '), 'the worker reported no progress at all').toContain('rebuild')
+    } finally {
+      instance.close()
+    }
   })
 })
