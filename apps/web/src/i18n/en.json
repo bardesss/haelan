@@ -371,6 +371,7 @@
       "STROLLER_WALK": "Stroller walk",
       "SWIMMING_POOL": "Swimming pool",
       "SPORT": "Sport",
+      "HOUSEHOLD_CHORES": "Household chores",
       "unknown": "Unknown"
     },
     "sessions": {

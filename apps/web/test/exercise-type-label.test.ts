@@ -11,16 +11,20 @@ describe('exerciseTypeLabel', () => {
     expect(label).toBe('Hardlopen')
   })
 
-  // The twelve a real household produced in seven months. Every one must be seeded, because these
-  // are the labels almost every reader will actually see.
+  // The thirteen a real household produced in seven months, counted off the live database rather
+  // than remembered. Every one must be seeded, because these are the labels almost every reader
+  // will actually see, and a type left out prints its humanised English fallback on a Dutch page.
+  // HOUSEHOLD_CHORES was the one missed: a single session, exactly what SPORT has.
   it('seeds every type the reporting household produced', () => {
-    for (const type of ['CARDIO_WORKOUT', 'WALKING', 'RUNNING', 'WORKOUT', 'SPINNING', 'BIKING',
-      'TREADMILL', 'HIKING', 'WEIGHTLIFTING', 'STROLLER_WALK', 'SWIMMING_POOL', 'SPORT']) {
+    for (const type of ['WALKING', 'CARDIO_WORKOUT', 'RUNNING', 'WORKOUT', 'SPINNING', 'BIKING',
+      'TREADMILL', 'HIKING', 'WEIGHTLIFTING', 'STROLLER_WALK', 'SWIMMING_POOL', 'SPORT',
+      'HOUSEHOLD_CHORES']) {
       expect(SEEDED_EXERCISE_TYPES, type).toContain(type)
     }
+    expect(SEEDED_EXERCISE_TYPES, 'the list and the census above are the same thirteen').toHaveLength(13)
   })
 
-  // The API declares 182 types and this app seeds twelve. The other 170 must still be readable:
+  // The API declares 182 types and this app seeds thirteen. The other 169 must still be readable:
   // showing SNOWBOARDING is the same failure as the source picker showing a 32 character hex id.
   it('humanises an unseeded type rather than showing the raw constant', () => {
     const fallback = t({})
