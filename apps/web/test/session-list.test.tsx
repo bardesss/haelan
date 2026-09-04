@@ -284,4 +284,18 @@ describe('SessionList', () => {
     expect(container!.textContent, 'the remedy offered has to still be true')
       .toContain("Choose another type to see the rest of this period's sessions.")
   })
+  // app.css caps this container at 480px and scrolls it, which fits roughly ten rows; a Year
+  // range holds about 190. The rows carry no focusable element of their own, so without a tab
+  // stop of its own the container was unreachable by keyboard and everything past the first
+  // screenful was unreadable without a mouse (WCAG 2.1.1). The app's other scroll containers hold
+  // focusable children and get this for free, which is why this is the first place it bites. A
+  // focusable container also needs a role carrying an accessible name, or a screen reader
+  // announces a tab stop with nothing to say about it.
+  it('gives the scrolling list a keyboard tab stop and an accessible name', () => {
+    mountWith(Array.from({ length: 15 }, (_, i) => session(`s${i}`, 'RUNNING')), 'en')
+    const scroll = container!.querySelector('.session-list-scroll') as HTMLElement
+    expect(scroll.tabIndex).toBe(0)
+    expect(scroll.getAttribute('role')).toBe('group')
+    expect(scroll.getAttribute('aria-label')).toBe('Scrollable list of sessions')
+  })
 })

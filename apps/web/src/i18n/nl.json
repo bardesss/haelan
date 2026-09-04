@@ -379,6 +379,7 @@
       "count_other": "{{count}} geregistreerde sessies in deze periode",
       "countFiltered": "{{shown}} van de {{total}} geregistreerde sessies in deze periode",
       "basis": "Eén rij per geregistreerde sessie. De tegel Work-outs telt een work-out één keer, ook als twee apparaten dezelfde registreerden, dus die kan lager uitvallen.",
+      "scrollLabel": "Scrollbare lijst met sessies",
       "filterLabel": "Filter op type",
       "allTypes": "Alle types",
       "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",

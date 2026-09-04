@@ -379,6 +379,7 @@
       "count_other": "{{count}} recorded sessions in this period",
       "countFiltered": "{{shown}} of {{total}} recorded sessions in this period",
       "basis": "One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.",
+      "scrollLabel": "Scrollable list of sessions",
       "filterLabel": "Filter by type",
       "allTypes": "All types",
       "emptyPeriodTitle": "No activities recorded in this period.",

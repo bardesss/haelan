@@ -148,7 +148,14 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
         <EmptyState title={t('activity.sessions.emptyFilteredTitle', { type: selectedLabel })}
           detail={t('activity.sessions.emptyFilteredDetail')} />
       ) : (
-        <div className="session-list-scroll">
+        // The one scroll container in this app whose children hold nothing focusable, so it is
+        // the one that needs a tab stop of its own: without it a keyboard reader reaches roughly
+        // the first ten of a Year range's ~190 rows and cannot scroll to the rest (WCAG 2.1.1). A
+        // focusable element with no role announces as a tab stop with nothing to say, so it takes
+        // a named role too, the same role="group" plus aria-label pairing ControlRow's segmented
+        // range buttons already use.
+        <div className="session-list-scroll" tabIndex={0} role="group"
+          aria-label={t('activity.sessions.scrollLabel')}>
           {filtered.map((session) => <SessionRow key={session.id} session={session} />)}
         </div>
       )}
