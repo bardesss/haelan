@@ -312,3 +312,15 @@ body {
 
 /* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
 .notes-value { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* SessionRow.tsx: two lines rather than the .override-table row above, because a session has no
+   fixed set of columns to put in a table cell (see that component's own comment on why). The
+   first line splits into a date/type/duration group on the left and a calories/heart rate group
+   on the right; the second, when it renders at all, is a single muted line of whatever the
+   session actually recorded. */
+.session-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
+.session-row:last-child { border-bottom: 0; }
+.session-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.session-row-primary { color: var(--text-primary); }
+.session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.session-row-detail { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: var(--space-1); }
