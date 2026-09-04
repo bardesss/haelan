@@ -116,17 +116,18 @@ function dateText(t: Translate, info: TargetInfo): string {
  * something was changed and not what to.
  *
  * These two words are this list's own (`settings.overrides.action.*`), not the annotate panel's
- * (`annotate.actions.*`), which is where they used to come from. The panel offers no correct
- * action at all now, since a day_metric correction is refused by OverrideStore.validate and has
- * nothing in the derive path to apply it (AnnotatePanel.tsx's own ACTIONS comment has the full
- * reasoning), so reading a correction's label out of the panel's catalogue would leave the one
- * surface that does render corrections depending on a word the panel has no reason to keep.
+ * (`annotate.actions.*`), even though the panel offers a Correct action too now (sample scope
+ * only, off a click on an intraday chart; AnnotatePanel.tsx's own actionsFor has the guard). This
+ * list renders a row regardless of which of the two ever wrote it, and reading its label out of
+ * the panel's own catalogue would tie its wording to a component this list does not render and a
+ * key (`annotate.actions.correct`) that names a UI action, not the fact this row states.
  *
- * A correction is a real row and not a leftover, which is why this branch stays where the charts'
- * own was deleted: `POST /overrides` accepts `sample` with `correct` and a value,
- * OverrideStore.validate permits exactly that combination, and `applyToSamples` rewrites the
- * reading at derivation. Nothing in this app writes one and no chart can draw one (a sample target
- * names an instant, not a day), so this list is the only place one is ever seen.
+ * A correction is a real row, both a chart can draw and a reader who saw it can undo: `POST
+ * /overrides` accepts `sample` with `correct` and a value, OverrideStore.validate permits exactly
+ * that combination, and `applyToSamples` rewrites the reading at derivation. IntradayHeartRate is
+ * the one chart that can draw one, since a sample target names one plotted instant and every other
+ * chart in this app plots by day; this list is still where every correction, from that chart or
+ * written directly against the API, is seen in one place regardless of source.
  *
  * `metric`, threaded in from the same parse targetInfo already did (TargetInfo.metric), is what
  * lets this reach METRICS[metric].precision the way formatMetricValue expects. It is null exactly

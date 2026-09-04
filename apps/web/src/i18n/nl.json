@@ -640,11 +640,14 @@
     "actionLabel": "Wat wil je doen",
     "actions": {
       "exclude": "Uitsluiten",
+      "correct": "Corrigeren",
       "note": "Notitie toevoegen",
       "event": "Gebeurtenis toevoegen"
     },
     "reasonLabel": "Reden",
     "reasonHint": "Verplicht.",
+    "correctedValueLabel": "Gecorrigeerde waarde",
+    "correctWithheld": "Dit punt combineert {{count}} metingen, dus er is geen enkele waarde om te corrigeren.",
     "noteLabel": "Notitie",
     "kindLabel": "Soort",
     "startedAtLabel": "Begonnen",

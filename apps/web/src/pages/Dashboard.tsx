@@ -432,7 +432,7 @@ export function Dashboard() {
               <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
           </StatTile>
         )}
@@ -669,7 +669,10 @@ export function Dashboard() {
                 <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
               ) : (
                 <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
-                  label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })} />
+                  label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })}
+                  onPointClick={(point) => setAnnotateTarget({
+                    scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
+                  })} />
               )}
           </Card>
         ) : (
@@ -685,7 +688,7 @@ export function Dashboard() {
                 annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
                 excluded={heartRateOverrides.excluded}
                 label={t('dashboard.heartRateRange.chartLabel', { period })}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'heart_rate' })} />
             )}
           </MetricCard>
         )}

@@ -226,7 +226,7 @@ export function Health() {
           {(_basis, oneDayRange) => (oneDayRange ? <ChartNote /> : (
             <Spo2Range days={spo2Days} annotations={spo2Annotations} excluded={spo2Overrides.excluded}
               label={t('health.spo2Range.chartLabel', { period })}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'spo2' })} />
+              onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'spo2' })} />
           ))}
         </MetricCard>
 
@@ -253,7 +253,7 @@ export function Health() {
                 <Sparkline values={dailySpo2Spark.values} labels={dailySpo2Spark.labels} metric="daily_spo2"
                   label={t('health.dailySpo2.chartLabel', { period })} unit={t('health.units.percent')}
                   annotations={dailySpo2Annotations} excluded={dailySpo2Overrides.excluded}
-                  onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'daily_spo2' })} />
+                  onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'daily_spo2' })} />
               )}
             </StatTile>
           )}

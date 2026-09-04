@@ -298,8 +298,13 @@ body {
 .annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: 600; }
 /* The applied:false report: the write is saved, only the re-derive has not caught up, which is
    not an error state and does not borrow form-error's negative tone. Reused as-is by
-   OverrideList.tsx for the same report after a removal, not copied under a second name. */
-.annotate-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
+   OverrideList.tsx for the same report after a removal, not copied under a second name.
+   annotate-note-withheld carries the identical rule (the guard explaining an absent Correct
+   segment is the same kind of informational aside), added to the selector list rather than
+   duplicated under it, so the two can never drift in appearance; it exists as its own class only
+   so annotate-panel.test.tsx can find this one message without it colliding with notYetApplied's,
+   which can render at the same time. */
+.annotate-note, .annotate-note-withheld { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
 
 /* The overrides management list (OverrideList.tsx) and the notes and events list
    (pages/notes/NotesList.tsx): both a table with a row per record and a remove control, so both

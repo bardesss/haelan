@@ -640,11 +640,14 @@
     "actionLabel": "What do you want to do",
     "actions": {
       "exclude": "Exclude",
+      "correct": "Correct",
       "note": "Add a note",
       "event": "Add an event"
     },
     "reasonLabel": "Reason",
     "reasonHint": "Required.",
+    "correctedValueLabel": "Corrected value",
+    "correctWithheld": "This point combines {{count}} readings, so there is no single value to correct.",
     "noteLabel": "Note",
     "kindLabel": "Kind",
     "startedAtLabel": "Started",

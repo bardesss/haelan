@@ -20,8 +20,9 @@ import type { StoredOverride } from './useAnnotations.js'
  *
  * Corrections themselves are alive at `sample` scope, where the route accepts them and
  * `applyToSamples` genuinely rewrites the reading at derivation. Nothing on a by-day chart can draw
- * one: a sample target names an instant, not a day. The settings override list is the only surface
- * in this app that reads one back.
+ * one: a sample target names an instant, not a day. IntradayHeartRate is the one chart that can
+ * (readIntraday's own `excluded` field on each plotted point), and the settings override list
+ * reads every one back regardless of which chart, if any, drew it.
  */
 export interface MetricAnnotations {
   excluded: string[]

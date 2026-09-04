@@ -222,7 +222,7 @@ export function Weight() {
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat} episodic
                 label={t(chartLabelKey, { period })} unit={t(unitKey)} trend={trend}
                 annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
           </StatTile>
         )}

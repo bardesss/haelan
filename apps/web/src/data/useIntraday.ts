@@ -7,13 +7,21 @@ import { sourceParam } from '../controls/source.js'
 
 // Mirrors packages/core/src/query/intraday.ts's IntradayPoint as sent by
 // apps/server/src/routes/v1/tier2.ts's GET /p/:personId/intraday. min, mean and max are rounded at
-// the route boundary to the metric's own precision, not here and not in the reader.
+// the route boundary to the metric's own precision, not here and not in the reader. n and excluded
+// pass through that boundary untouched (tier2.ts only rounds the three value fields), so they carry
+// the same meaning core's own comment on IntradayPoint gives: n is how many stored rows this point
+// combines (always 1 for heart rate, since it is stored downsampled to the minute), and it is what
+// IntradayHeartRate's Correct guard reads to decide whether the clicked point names one instant a
+// sample override can actually point at. excluded is whether a sample-scope exclusion already names
+// the row behind this point.
 export interface IntradayPoint {
   sourceId: string
   utcMs: number
   min: number | null
   mean: number | null
   max: number | null
+  n: number
+  excluded: boolean
 }
 
 export interface IntradayResult {

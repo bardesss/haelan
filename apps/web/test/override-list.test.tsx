@@ -114,9 +114,10 @@ const DAY_METRIC_EXCLUDE: StoredOverride = {
 // A correction at sample scope, which is the only scope OverrideStore.validate accepts one at and
 // the only shape a correct row can actually arrive in. It was a day_metric correction here, which
 // no server in this project can answer with: validate refuses `correct` at day scope, and the
-// panel no longer offers the action at all (AnnotatePanel.tsx's own ACTIONS comment has why), so
-// the row this file used to render a correction from could never have been written. Sample
-// corrections come from the sync layer, and this list is the only surface they are visible on.
+// panel never offers the action there either (AnnotatePanel.tsx's own actionsFor has why), so the
+// row this file used to render a correction from could never have been written. A sample
+// correction can now come from the panel too, off a click on an intraday chart, but this list
+// still reads every row regardless of who wrote it, panel or sync layer.
 const SAMPLE_CORRECT_UTC_MS = Date.parse('2026-08-16T07:15:00Z')
 const SAMPLE_CORRECT: StoredOverride = {
   id: 'o2', scope: 'sample',

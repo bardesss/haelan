@@ -1,43 +1,52 @@
 import { useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { dayMetricTarget } from '@haelan/core/target-key'
+import { dayMetricTarget, sampleTarget } from '@haelan/core/target-key'
 import { useTranslation } from '../i18n/index.js'
 import { useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
 import { SEED_KINDS } from '../data/eventKinds.js'
 
 /**
- * What a clicked point hands the panel: a day and a metric, nothing else. The target key is
- * built from these two fields by dayMetricTarget, the same encoder the store and the route use,
- * so this component never types a key of its own. A reader never sees or edits a target key at
- * all; the click is the only place one is ever named.
+ * What a clicked point hands the panel, tagged by the chart it came from. A by-day chart names a
+ * day and a metric, nothing else, and the target key for that shape is built by dayMetricTarget.
+ * An intraday chart names one plotted (source, minute) bucket instead, carrying the `n` stored
+ * rows behind it (readIntraday's own reason `n` exists at all), and its target key is built by
+ * sampleTarget. Both keep `localDate` and `metric`: the note and event actions below write against
+ * the day whatever the click named, so they need it regardless of which builder wins.
+ *
+ * Either way the target key is built from these fields alone, by dayMetricTarget or sampleTarget,
+ * the same encoders the store and the route read back with, so this component never types a key of
+ * its own. A reader never sees or edits a target key at all; the click is the only place one is
+ * ever named.
  */
-export interface AnnotateTarget {
-  localDate: string
-  metric: string
-}
+export type AnnotateTarget =
+  | { scope: 'day_metric', localDate: string, metric: string }
+  | { scope: 'sample', localDate: string, metric: string, sourceId: string, utcMs: number, n: number }
 
-type Action = 'exclude' | 'note' | 'event'
-
-// Three, not four: there is no correct action here, and its absence is deliberate rather than an
-// oversight to restore. A click on a by-day chart can only ever name a day_metric target
-// (`targetKey` below is built with dayMetricTarget and nothing else), and OverrideStore.validate
-// refuses `correct` at every scope but `sample`, so a corrected day_metric write answered 400 on
-// every attempt. Relaxing that rule would not help either: deriveDay consults only excludedMetrics,
-// so a day scoped correction has nothing in the derive path to apply it, and it would save and then
-// silently change no number at all. Correcting a value stays reachable at sample scope, which needs
-// an intraday chart to click a single reading on; this panel has no way to name one.
-const ACTIONS: readonly Action[] = ['exclude', 'note', 'event']
+type Action = 'exclude' | 'correct' | 'note' | 'event'
 
 /**
- * The panel a reader opens by clicking a plotted point: exclude the day's reading, add a note or
- * add an event, all three scoped to the one day and metric the click named.
+ * Four actions, three, or three with a reason. `correct` is valid only at sample scope
+ * (OverrideStore.validate), and a sample override names one exact instant, so it is offered only
+ * when the clicked point stands for exactly one stored row. Heart rate is stored downsampled to
+ * the minute, so on the chart this ships from, n is always 1; the guard is what keeps a future
+ * chart over raw readings from writing a correction against an instant that stands for six.
+ */
+function actionsFor(target: AnnotateTarget): readonly Action[] {
+  if (target.scope === 'day_metric') return ['exclude', 'note', 'event']
+  return target.n === 1 ? ['exclude', 'correct', 'note', 'event'] : ['exclude', 'note', 'event']
+}
+
+/**
+ * The panel a reader opens by clicking a plotted point: exclude the reading, correct it (sample
+ * scope only, see actionsFor), add a note or add an event, every action scoped to whatever the
+ * click named.
  *
  * `applied` decides what happens after an override write, and only after one: a note or an
  * event carries no drain (useAnnotations.ts's own comment on invalidateResource says why) and
  * always closes the panel once its write lands. An override's `applied: true` means the numbers
  * behind the panel have already changed, so it closes the same way. `applied: false` means the
- * exclusion saved but the re-derive has not caught up yet, the one state where closing would
- * let a reader walk away believing a number that has not moved. The panel stays open and says so
+ * write saved but the re-derive has not caught up yet, the one state where closing would let a
+ * reader walk away believing a number that has not moved. The panel stays open and says so
  * instead of closing on a write that only half finished.
  */
 export function AnnotatePanel({ target, onClose }: {
@@ -47,8 +56,11 @@ export function AnnotatePanel({ target, onClose }: {
   const { t } = useTranslation()
   const titleId = useId()
 
+  const actions = actionsFor(target)
+
   const [action, setAction] = useState<Action>('exclude')
   const [reason, setReason] = useState('')
+  const [correctedValue, setCorrectedValue] = useState('')
   const [noteBody, setNoteBody] = useState('')
   const [kind, setKind] = useState('')
   const [startedAt, setStartedAt] = useState(() => `${target.localDate}T12:00`)
@@ -60,22 +72,25 @@ export function AnnotatePanel({ target, onClose }: {
   const writeNote = useWriteNote()
   const writeEvent = useWriteEvent()
 
-  // Built here, from exactly the two fields the click carried, and nowhere else in this
-  // component. No reason for a target key to appear as a field a reader could edit: the point
-  // they clicked already said which day and which metric this panel is about.
-  const targetKey = dayMetricTarget({ localDate: target.localDate, metric: target.metric })
+  // Built here, from exactly the fields the click carried, and nowhere else in this component. No
+  // reason for a target key to appear as a field a reader could edit: the point they clicked
+  // already said which day and metric, or which source and instant, this panel is about.
+  const targetKey = target.scope === 'day_metric'
+    ? dayMetricTarget({ localDate: target.localDate, metric: target.metric })
+    : sampleTarget({ source: target.sourceId, metric: target.metric, utcMs: target.utcMs })
 
   const canSubmit =
     action === 'exclude' ? reason.trim() !== '' :
+    action === 'correct' ? reason.trim() !== '' && correctedValue.trim() !== '' :
     action === 'note' ? noteBody.trim() !== '' :
     kind.trim() !== '' && startedAt !== ''
 
   const mutation = action === 'note' ? writeNote : action === 'event' ? writeEvent : writeOverride
   const busy = mutation.isPending
 
-  // Sticks around after a successful exclude until a later write replaces it, which is what lets
-  // the note below survive a reader switching tabs to look at the other actions without losing
-  // the one message this whole distinction exists to show.
+  // Sticks around after a successful exclude or correct until a later write replaces it, which is
+  // what lets the note below survive a reader switching tabs to look at the other actions without
+  // losing the one message this whole distinction exists to show.
   const overrideResult = writeOverride.data ?? null
   const notYetApplied = overrideResult !== null && overrideResult.applied === false
 
@@ -84,9 +99,17 @@ export function AnnotatePanel({ target, onClose }: {
     if (!canSubmit) return
 
     if (action === 'exclude') {
-      writeOverride.mutate({ scope: 'day_metric', targetKey, action: 'exclude', reason }, {
+      writeOverride.mutate({ scope: target.scope, targetKey, action: 'exclude', reason }, {
         onSuccess: (result) => { if (result.applied) onClose() },
       })
+    } else if (action === 'correct') {
+      // Reachable only when actionsFor offered this segment, which only happens at sample scope
+      // (target.n === 1), so target.scope is always 'sample' here; OverrideStore.validate would
+      // 400 a correct write at any other scope regardless.
+      writeOverride.mutate(
+        { scope: target.scope, targetKey, action: 'correct', correctedValue: Number(correctedValue), reason },
+        { onSuccess: (result) => { if (result.applied) onClose() } },
+      )
     } else if (action === 'note') {
       writeNote.mutate({ localDate: target.localDate, body: noteBody }, { onSuccess: onClose })
     } else {
@@ -124,11 +147,15 @@ export function AnnotatePanel({ target, onClose }: {
         </div>
 
         <div className="segmented" role="group" aria-label={t('annotate.actionLabel')}>
-          {ACTIONS.map((candidate) => (
+          {actions.map((candidate) => (
             <button
               key={candidate}
               type="button"
               className="segment"
+              // The action itself, not a display label: annotate-panel.test.tsx reads this to
+              // check which actions are offered without coupling that check to translated copy a
+              // locale file is free to reword.
+              data-action={candidate}
               aria-pressed={candidate === action}
               onClick={() => setAction(candidate)}
             >
@@ -137,15 +164,32 @@ export function AnnotatePanel({ target, onClose }: {
           ))}
         </div>
 
+        {/* Only reachable at sample scope: actionsFor never withholds correct at day_metric scope
+            because it never offers correct there at all, so there is nothing to explain the
+            absence of. */}
+        {target.scope === 'sample' && target.n !== 1 && (
+          <p className="annotate-note annotate-note-withheld">
+            {t('annotate.correctWithheld', { count: target.n })}
+          </p>
+        )}
+
         <form onSubmit={submit}>
-          {action === 'exclude' && (
+          {(action === 'exclude' || action === 'correct') && (
             <label className="field">
               <span className="label">{t('annotate.reasonLabel')}</span>
               <input className="input" value={reason} onChange={(event) => setReason(event.target.value)} />
               {/* Unconditional, not gated on a flag: this field only ever renders on the exclude
-                  action, and the schema makes reason notNull for it, so there is no branch here
-                  in which the hint would not apply. */}
+                  and correct actions, and the schema makes reason notNull for both, so there is no
+                  branch here in which the hint would not apply. */}
               <span className="field-hint">{t('annotate.reasonHint')}</span>
+            </label>
+          )}
+
+          {action === 'correct' && (
+            <label className="field">
+              <span className="label">{t('annotate.correctedValueLabel')}</span>
+              <input className="input" type="number" inputMode="decimal" value={correctedValue}
+                onChange={(event) => setCorrectedValue(event.target.value)} />
             </label>
           )}
 

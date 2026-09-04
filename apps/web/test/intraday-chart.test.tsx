@@ -95,7 +95,7 @@ function optionForPoints(points: IntradayPoint[], namedSources: NamedSource[]): 
 }
 
 const at = (utcMs: number, sourceId: string, mean: number): IntradayPoint =>
-  ({ sourceId, utcMs, min: mean - 5, mean, max: mean + 5 })
+  ({ sourceId, utcMs, min: mean - 5, mean, max: mean + 5, n: 1, excluded: false })
 
 describe('seriesBySource', () => {
   // readIntraday pivots on source and minute together, because two devices can report the same
@@ -176,7 +176,8 @@ describe('IntradayHeartRate time of day', () => {
   // 20:00 UTC on an August day is 22:00 in Europe/Amsterdam (CEST, UTC+2). Picked to match the
   // exact case a UTC axis gets wrong: a two hour shift on a chart whose whole purpose is showing
   // when in the day something happened.
-  const POINT: IntradayPoint = { sourceId: 'watch', utcMs: Date.UTC(2026, 7, 14, 20, 0, 0), min: 70, mean: 72, max: 75 }
+  const POINT: IntradayPoint =
+    { sourceId: 'watch', utcMs: Date.UTC(2026, 7, 14, 20, 0, 0), min: 70, mean: 72, max: 75, n: 1, excluded: false }
 
   function renderTable(session: Session | undefined): string {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -220,7 +221,7 @@ describe('source names in the intraday heart rate chart', () => {
   it('names the mean series with the name, and keeps the stack keyed by id', () => {
     // Two points from one source, rendered with an alias set for it.
     const option = optionForPoints(
-      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70 }],
+      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70, n: 1, excluded: false }],
       [{ id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 }],
     )
     const series = option.series as { name: string, stack?: string }[]
@@ -233,7 +234,7 @@ describe('source names in the intraday heart rate chart', () => {
 
   it('falls back to the id when no names are loaded', () => {
     const option = optionForPoints(
-      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70 }],
+      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70, n: 1, excluded: false }],
       [],
     )
     expect((option.series as { name: string }[]).map((s) => s.name))
@@ -242,7 +243,7 @@ describe('source names in the intraday heart rate chart', () => {
 
   it('still finds the hovered point after a rename', () => {
     const option = optionForPoints(
-      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70 }],
+      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70, n: 1, excluded: false }],
       [{ id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 }],
     )
     const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter

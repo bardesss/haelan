@@ -5,11 +5,12 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
-import { dayMetricTarget } from '@haelan/core/target-key'
+import { dayMetricTarget, sampleTarget } from '@haelan/core/target-key'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { AnnotatePanel } from '../src/components/AnnotatePanel.js'
+import type { AnnotateTarget } from '../src/components/AnnotatePanel.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -86,7 +87,35 @@ function fields(): HTMLInputElement[] {
   return [...container!.querySelectorAll('input.input')] as HTMLInputElement[]
 }
 
-const TARGET = { localDate: '2026-08-15', metric: 'steps' }
+// By label rather than by position: the exclude and correct actions now share the reason field,
+// so a test that wants to fill in one field among several reads the same way regardless of what
+// else the current action happens to render around it.
+function fieldFor(label: string): HTMLInputElement {
+  const found = [...container!.querySelectorAll('.field')].find(
+    (field) => field.querySelector('.label')?.textContent === label,
+  )
+  if (!found) throw new Error(`no field labelled '${label}'`)
+  return found.querySelector('input') as HTMLInputElement
+}
+
+function mountPanel(target: AnnotateTarget): void {
+  mount(withSession(<AnnotatePanel target={target} onClose={() => {}} />))
+}
+
+// The action itself (AnnotatePanel.tsx's own `data-action`), not the segment's translated label:
+// 'note' and 'event' render as "Add a note"/"Add an event", not "Note"/"Event", so reading
+// textContent here would tie this list to copy the segment labels test below already covers.
+function actionLabels(): string[] {
+  return [...container!.querySelectorAll('.segment')]
+    .map((b) => (b as HTMLElement).dataset.action ?? '')
+    .map((a) => a.charAt(0).toUpperCase() + a.slice(1))
+}
+
+function withheldText(): string | null {
+  return container!.querySelector('.annotate-note-withheld')?.textContent ?? null
+}
+
+const TARGET: AnnotateTarget = { scope: 'day_metric', localDate: '2026-08-15', metric: 'steps' }
 
 describe('the target key the panel writes with', () => {
   // The panel carries no field a reader could type a target key into at all: this asserts that
@@ -124,18 +153,20 @@ describe('exclude requires a reason', () => {
 describe('the actions the panel offers', () => {
   // The blocker the whole branch review found: the panel posted a day_metric correction that
   // OverrideStore.validate refuses at any scope but sample, so every correction 400d and the
-  // reader was told it did not save. Removing the tab is the fix, and this is what keeps it
-  // removed: a fourth segment reading "Correct" is not a feature returning, it is that write
-  // path returning, and nothing else in this suite would notice it come back.
+  // reader was told it did not save. Dropping the tab at day_metric scope is still the fix for
+  // that target, and this is what keeps it dropped there specifically: correct has since gained a
+  // real home at sample scope (see the describe block below), but a day_metric click still has no
+  // single instant a sample override could name, so this segment list stays three long regardless.
   it('offers exclude, note and event, and no correct', () => {
     mount(withSession(<AnnotatePanel target={TARGET} onClose={() => {}} />))
     const labels = [...container!.querySelectorAll('.segment')].map((b) => b.textContent)
     expect(labels).toEqual(['Exclude', 'Add a note', 'Add an event'])
   })
 
-  // The segment list above is the surface; this is the wire. A tab could be dropped from ACTIONS
-  // while the branch that posts `action: 'correct'` stayed reachable from somewhere else, and the
-  // only thing that actually matters is that no correction ever leaves this panel again.
+  // The segment list above is the surface; this is the wire. A tab could be dropped from
+  // actionsFor's day_metric branch while a correct-shaped write stayed reachable from this same
+  // target regardless, and the only thing that actually matters is that no day_metric target ever
+  // posts a correction, whatever the segment list currently offers.
   it('posts action exclude, the one override action a day_metric target accepts', async () => {
     let posted: Record<string, unknown> | null = null
     const original = globalThis.fetch
@@ -154,6 +185,57 @@ describe('the actions the panel offers', () => {
     expect(posted!['action']).toBe('exclude')
     expect(posted!['scope']).toBe('day_metric')
     expect(posted!['correctedValue']).toBeUndefined()
+  })
+})
+
+// Task 5's own coverage: correct gets its home at sample scope, guarded by `n` (the number of
+// stored rows a plotted point stands in for). Both branches of that guard, plus the write it
+// finally unlocks, none of which the day_metric-only suite above ever exercises.
+describe('the panel\'s actions depend on what the click named', () => {
+  it('offers three actions for a day click', () => {
+    mountPanel({ scope: 'day_metric', localDate: '2026-08-21', metric: 'heart_rate' })
+    expect(actionLabels()).toEqual(['Exclude', 'Note', 'Event'])
+  })
+
+  // One stored row behind the point means one instant to correct, which is the only thing a
+  // sample override can name.
+  it('offers correct for a sample click with one row behind it', () => {
+    mountPanel({ scope: 'sample', localDate: '2026-08-21', metric: 'heart_rate', sourceId: 'watch', utcMs: 1, n: 1 })
+    expect(actionLabels()).toEqual(['Exclude', 'Correct', 'Note', 'Event'])
+  })
+
+  it('withholds correct when the point stands for several readings, and says why', () => {
+    mountPanel({ scope: 'sample', localDate: '2026-08-21', metric: 'spo2', sourceId: 'watch', utcMs: 1, n: 6 })
+    expect(actionLabels()).toEqual(['Exclude', 'Note', 'Event'])
+    expect(withheldText()).toBe('This point combines 6 readings, so there is no single value to correct.')
+  })
+
+  it('writes a sample scoped override for a sample click', async () => {
+    let posted: Record<string, unknown> | null = null
+    const original = globalThis.fetch
+    globalThis.fetch = (async (_input, init) => {
+      posted = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null
+      return respond(200, { id: 'o1', affected: null, applied: true })
+    }) as typeof fetch
+
+    mountPanel({ scope: 'sample', localDate: '2026-08-21', metric: 'heart_rate', sourceId: 'watch', utcMs: 1, n: 1 })
+    click(segment('Correct'))
+    type(fieldFor('Reason'), 'strap glitch')
+    type(fieldFor('Corrected value'), '62')
+    click(submitButton())
+    await settle()
+    globalThis.fetch = original
+
+    // Built with sampleTarget itself, not a hand written literal: the two sides of this assertion
+    // agree by construction on what a (source, metric, utcMs) triple encodes to, rather than one
+    // of them silently drifting from targetKey.ts's own JSON shape.
+    expect(posted).toEqual({
+      scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: 1 }),
+      action: 'correct',
+      correctedValue: 62,
+      reason: 'strap glitch',
+    })
   })
 })
 
