@@ -243,4 +243,45 @@ describe('SessionList', () => {
     })
     expect(rows(), 'and clearing it brings the period back').toHaveLength(1)
   })
+  // The header count read filtered.length into a string ending "in this period", so a filter on a
+  // four session month claimed the month held one. Worse in the filtered-empty branch, where "0
+  // recorded sessions in this period" sat directly above "choose another type to see the rest of
+  // this period's sessions": two sentences on one screen, one of them saying there is nothing to
+  // come back to.
+  const count = () => container!.querySelector('.session-list-count')!.textContent
+
+  it('counts the period, and says so against the total once a filter narrows it', () => {
+    mountWith([session('a', 'RUNNING'), session('b', 'RUNNING'), session('c', 'RUNNING'),
+      session('d', 'WALKING')], 'en')
+    expect(count()).toBe('4 recorded sessions in this period')
+
+    const select = selects()[0]!
+    const walking = [...select.options].find((o) => (o.textContent ?? '').includes('Walking'))!
+    act(() => {
+      select.value = walking.value
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(count()).toBe('1 of 4 recorded sessions in this period')
+  })
+
+  it('does not tell a reader the period is empty while telling them to filter it differently', async () => {
+    const client = clientWith([session('a', 'RUNNING'), session('b', 'WALKING')])
+    mount(<QueryClientProvider client={client}><SessionList controls={CONTROLS} /></QueryClientProvider>, 'en')
+
+    const select = selects()[0]!
+    const walking = [...select.options].find((o) => (o.textContent ?? '').includes('Walking'))!
+    act(() => {
+      select.value = walking.value
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => {
+      client.setQueryData(SESSIONS_KEY, { items: [session('a', 'RUNNING')], cursor: null })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(rows()).toHaveLength(0)
+    expect(count()).toBe('0 of 1 recorded sessions in this period')
+    expect(container!.textContent, 'the remedy offered has to still be true')
+      .toContain("Choose another type to see the rest of this period's sessions.")
+  })
 })

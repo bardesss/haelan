@@ -115,10 +115,15 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
       <div className="session-list-header">
         {/* The count is stated because a scroll container hides its own length: a reader looking
             at a fixed-height list of rows has no other way to tell fifteen rows from all of
-            fifteen. Counts what is actually shown, not the period's full total, so it stays true
-            once a filter narrows the rows underneath it. */}
+            fifteen. Unfiltered it counts the period, which is what "in this period" claims. A
+            filter does not narrow that claim, it changes it: the shown figure alone would say a
+            four session month held one, and in the filtered-empty branch would read "0 recorded
+            sessions in this period" directly above a message offering to show the rest of the
+            period's sessions. Both figures, so neither sentence contradicts the other. */}
         <span className="session-list-count">
-          {t('activity.sessions.count', { count: filtered.length })}
+          {selectedType === ALL_TYPES
+            ? t('activity.sessions.count', { count: items.length })
+            : t('activity.sessions.countFiltered', { shown: filtered.length, total: items.length })}
         </span>
         {hasTypeFilter && (
           <label className="button">
