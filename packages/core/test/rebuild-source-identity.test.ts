@@ -255,20 +255,35 @@ describe('a source a rebuild drops takes its name with it', () => {
   let h: Rebuildable
   afterEach(() => { h.cleanup() })
 
-  test('deletes the alias and reports how many went', () => {
+  test('deletes the alias and reports how many went, but leaves a surviving source\'s alias alone', () => {
     // A source with an alias and no rows referencing it: exactly what a widened describe() leaves
-    // behind, and what dropUnreferencedSources exists to clean up.
+    // behind, and what dropUnreferencedSources exists to clean up. Beside it, the source
+    // seedRebuildable's own archive replays onto: its externalId and hence its id are exactly
+    // what SourceRegistry.resolve derives for the default FITBIT/PASSIVELY_MEASURED descriptor
+    // (packages/core/src/store/sources.ts), so pre-seeding this row under that id makes replay
+    // reuse it (onConflictDoNothing on [personId, externalId]) rather than mint a fresh one, and
+    // the heart-rate samples it replays reference it, so it survives. Its alias is here to catch a
+    // delete widened from `inArray(sourceId, stale)` to just `personId`: that would still delete
+    // exactly one alias overall (there is only one to find, since the widened delete does not
+    // distinguish stale from surviving) and still leave the assertions below unable to tell the
+    // widened delete from the correct one, unless what remains is checked by identity, not count.
     h = seedRebuildable()
+    const survivingId = idFor(h.personId, 'FITBIT')
     h.db.insert(sources).values([
       { id: 'stale', personId: h.personId, externalId: 'OLD:phone', displayName: 'phone', kind: 'app', createdAtMs: 0 },
+      { id: survivingId, personId: h.personId, externalId: 'FITBIT', displayName: 'FITBIT', kind: 'app', createdAtMs: 0 },
     ]).run()
-    new SourceAliasStore(h.db).put({ personId: h.personId, sourceId: 'stale', alias: 'Old phone', nowMs: 0 })
+    const aliases = new SourceAliasStore(h.db)
+    aliases.put({ personId: h.personId, sourceId: 'stale', alias: 'Old phone', nowMs: 0 })
+    aliases.put({ personId: h.personId, sourceId: survivingId, alias: 'My Fitbit', nowMs: 0 })
 
     const report = runRebuild({ ...h.deps, nowMs: 1, force: true })
 
     expect(report.people[0]!.sourcesRemoved).toBe(1)
     expect(report.people[0]!.aliasesRemoved).toBe(1)
-    expect(h.db.select().from(sourceAliases).all()).toEqual([])
+    const remaining = h.db.select().from(sourceAliases).where(eq(sourceAliases.personId, h.personId)).all()
+    expect(remaining.map((r) => ({ sourceId: r.sourceId, alias: r.alias })))
+      .toEqual([{ sourceId: survivingId, alias: 'My Fitbit' }])
   })
 
   test('reports zero when the dropped sources had no names', () => {
