@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { openHaelan, seedPerson } from '@haelan/core'
 import { rebuildInWorker } from '../src/rebuildInWorker.ts'
 
 let dataDir: string
@@ -24,5 +25,49 @@ describe('rebuildInWorker', () => {
   it('runs the rebuild off the main thread', async () => {
     const outcome = await rebuildInWorker({ dataDir, log: () => {} })
     expect(outcome.threadId).toBeGreaterThan(0)
+  })
+
+  // A dead worker must reject. A pending promise here would hang shutdown, which awaits it before
+  // closing SQLite precisely so it does not close under a write transaction.
+  //
+  // The brief's own version of this test pointed dataDir at a merely missing directory, on the
+  // assumption that a missing directory stops the worker from starting. It does not: openDatabase
+  // creates its directory with mkdirSync({ recursive: true }) (packages/core/src/db/open.ts), so
+  // that path exercised the ordinary success case instead and never failed. What actually stops a
+  // directory from being created is a file already sitting where a directory needs to go.
+  it('rejects when the worker cannot start', async () => {
+    const blocked = join(dataDir, 'blocked')
+    writeFileSync(blocked, '')
+    await expect(rebuildInWorker({ dataDir: join(blocked, 'nested'), log: () => {} }))
+      .rejects.toThrow()
+  })
+
+  // A person with no stamp is one a boot rebuilds, so this exercises the real path rather than the
+  // empty-directory shortcut the first test takes.
+  it('rebuilds a person who needs it and reports through the log channel', async () => {
+    const instance = openHaelan(dataDir, {})
+    seedPerson(instance.db, 'p1')
+    instance.close()
+
+    const lines: string[] = []
+    const outcome = await rebuildInWorker({ dataDir, log: (line) => lines.push(line) })
+
+    expect(outcome.failures).toEqual([])
+    expect(lines.join(' '), 'the worker reported no progress at all').toContain('rebuild')
+  })
+
+  // The guarantee index.ts's own comment names: closing SQLite under a write transaction is how a
+  // shutdown turns into a stack trace. shutdown() awaits `rebuilding` for exactly this reason, so
+  // what has to hold is that awaiting the worker's promise really does mean its transaction is
+  // finished and the file is safe to close.
+  it('leaves the database closable the moment its promise settles', async () => {
+    const instance = openHaelan(dataDir, {})
+    seedPerson(instance.db, 'p1')
+    instance.close()
+
+    await rebuildInWorker({ dataDir, log: () => {} })
+
+    const after = openHaelan(dataDir, {})
+    expect(() => { after.close() }).not.toThrow()
   })
 })
