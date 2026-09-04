@@ -273,6 +273,17 @@ const ROUTES: readonly RouteCase[] = [
     ownNeedle: 'own-reason-ok',
     otherNeedle: 'leaked-reason-999999',
   },
+  {
+    name: 'sources',
+    template: '/api/v1/p/:personId/sources',
+    // No date range on this route either: it lists every source a person has, so the marker rides
+    // on the source's own id/externalId/displayName rather than on a seeded day.
+    path: (p) => `/api/v1/p/${p}/sources`,
+    seedOwn: (h) => seedSource(h, 'p1', 'own-source-ok'),
+    seedOther: (h, personId) => seedSource(h, personId, 'leaked-source-999999'),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
@@ -397,6 +408,8 @@ describe('the versioned surface, beyond the per-route table', () => {
     'DELETE /api/v1/p/:personId/notes/:localDate',
     'POST /api/v1/p/:personId/events',
     'DELETE /api/v1/p/:personId/events/:eventId',
+    'PUT /api/v1/p/:personId/sources/:sourceId/alias',
+    'DELETE /api/v1/p/:personId/sources/:sourceId/alias',
   ]
 
   // A mutating request is refused by the origin hook unless these two agree, so a write test that
@@ -773,6 +786,119 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(removed.statusCode).toBe(200)
       expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
+    })
+  })
+
+  // The rename and clear routes: no needle-in-a-body case fits, same as the three write families
+  // above, so this checks the alias a store read reports afterwards rather than a response body.
+  describe('source alias writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p1', 'mine')
+      seedSource(harness, 'p2', 'theirs')
+      const aliases = harness.app.haelan.instance.sourceAliases
+      aliases.put({ personId: 'p2', sourceId: 'theirs', alias: 'Theirs', nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/sources/mine/alias',
+        payload: { alias: 'no session to write with' },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      const removed = await harness.app.inject({ method: 'DELETE', url: '/api/v1/p/p1/sources/mine/alias' })
+      expect(removed.statusCode).toBe(401)
+      expect(removed.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
+      // touch p1's own alias, never p2's. p2's alias is read too, for the symmetry, but it was
+      // never the one a broken guard here would touch.
+      expect(aliases.listNamed('p1').find((s) => s.id === 'mine')?.alias).toBeNull()
+      expect(aliases.listNamed('p2').find((s) => s.id === 'theirs')?.alias).toBe('Theirs')
+    })
+
+    // Both directions of the alias write routes, the same pairing the note and event cases above
+    // use: writing into somebody else's source, and deleting out of it.
+    it('refuses both writes against another person, and leaves their alias unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p2', 'theirs')
+      const aliases = harness.app.haelan.instance.sourceAliases
+      aliases.put({ personId: 'p2', sourceId: 'theirs', alias: 'Theirs', nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p2/sources/theirs/alias',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { alias: 'not mine to write' },
+      })
+      expect(written.statusCode).toBe(403)
+      // The envelope, not only the status: see the comment on the override 403 case above for why
+      // a status-only assertion here can pass for the wrong reason.
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p2/sources/theirs/alias',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(403)
+      expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(aliases.listNamed('p2').find((s) => s.id === 'theirs')?.alias).toBe('Theirs')
+    })
+
+    it("sets and clears a name for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      seedSource(harness, 'p1', 'mine')
+      const aliases = harness.app.haelan.instance.sourceAliases
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/sources/mine/alias',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { alias: 'own write' },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(aliases.listNamed('p1').find((s) => s.id === 'mine')).toMatchObject({ alias: 'own write' })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p1/sources/mine/alias',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(200)
+      expect(aliases.listNamed('p1').find((s) => s.id === 'mine')?.alias).toBeNull()
+    })
+
+    // Not the 403 case above: this path segment is the caller's own, which is what lets the
+    // request reach the handler at all, and the risk is the source id in the URL rather than the
+    // path. getSource scopes its existence check by person as well as id (see sources.ts's own
+    // comment), so the handler answers 404 before the store is ever called, matching the not_found
+    // case v1-sources.test.ts pins directly. Checked here too, and against the surviving row, so a
+    // scoping regression on either route is caught by store state rather than by status alone.
+    it("refuses to touch a source id that belongs to another person, and leaves its alias alone", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p2', 'theirs')
+      const aliases = harness.app.haelan.instance.sourceAliases
+      aliases.put({ personId: 'p2', sourceId: 'theirs', alias: 'Theirs', nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/sources/theirs/alias',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { alias: 'mine now' },
+      })
+      expect(written.statusCode).toBe(404)
+      expect(written.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_source' } })
+
+      const removed = await harness.app.inject({
+        method: 'DELETE', url: '/api/v1/p/p1/sources/theirs/alias',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(404)
+      expect(removed.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_source' } })
+      expect(aliases.listNamed('p2').find((s) => s.id === 'theirs')?.alias).toBe('Theirs')
     })
   })
 

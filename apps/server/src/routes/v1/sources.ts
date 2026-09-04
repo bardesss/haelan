@@ -1,0 +1,62 @@
+import type { FastifyInstance, FastifyReply } from 'fastify'
+import { getSource } from '@haelan/core'
+import { errorBody, statusFor } from '../../api/envelope.ts'
+import { sendHashed } from './shared.ts'
+
+interface PersonParams { personId: string }
+interface SourceParams extends PersonParams { sourceId: string }
+interface AliasBody { alias?: unknown }
+
+/**
+ * The listing this project has never had, and the rename it enables.
+ *
+ * A rename enqueues no re-derive and marks no day dirty: a name is not an input to any derived
+ * value, which makes these the only write routes on this surface with no invalidation to think
+ * about. Nothing here bumps DERIVATION_VERSION or MAPPING_VERSION.
+ */
+export function registerSourceRoutes(app: FastifyInstance): void {
+  const aliases = () => app.haelan.instance.sourceAliases
+
+  app.get<{ Params: PersonParams }>('/p/:personId/sources', async (request, reply) => {
+    const items = aliases().listNamed(request.params.personId)
+    return sendHashed(reply, request, { items })
+  })
+
+  app.put<{ Params: SourceParams, Body: AliasBody }>('/p/:personId/sources/:sourceId/alias', async (request, reply) => {
+    const { personId, sourceId } = request.params
+    const { alias } = request.body ?? {}
+    if (typeof alias !== 'string') {
+      return reply.code(statusFor('config')).send(errorBody('config', 'config', 'alias must be a string'))
+    }
+    // Checked here so the answer is not_found rather than the store's ConfigError, and checked
+    // against the person from the path, which the plugin's guard has already proved is the
+    // caller's own. A source belonging to somebody else reads exactly like one that is not there.
+    if (!getSource(app.haelan.instance.db, personId, sourceId)) return notThere(reply, sourceId)
+
+    // A ConfigError from the store (empty, too long, already taken) propagates to registerV1's
+    // error handler, which serialises it as a 400 with the store's own message.
+    aliases().put({ personId, sourceId, alias, nowMs: app.haelan.now() })
+    return reply.send({ name: currentName(app, personId, sourceId) })
+  })
+
+  app.delete<{ Params: SourceParams }>('/p/:personId/sources/:sourceId/alias', async (request, reply) => {
+    const { personId, sourceId } = request.params
+    if (!getSource(app.haelan.instance.db, personId, sourceId)) return notThere(reply, sourceId)
+    aliases().clear({ personId, sourceId })
+    return reply.send({ name: currentName(app, personId, sourceId) })
+  })
+}
+
+function notThere(reply: FastifyReply, sourceId: string): FastifyReply {
+  return reply.code(statusFor('not_found')).send(errorBody('not_found', 'no_such_source', `no source ${sourceId}`))
+}
+
+/**
+ * Read back rather than computed from the request, so the answer is what the next GET will say.
+ * A caller that renamed a source gets the resolved name without a second round trip, and one that
+ * cleared it gets the provider's name it fell back to.
+ */
+function currentName(app: FastifyInstance, personId: string, sourceId: string): string {
+  const found = app.haelan.instance.sourceAliases.listNamed(personId).find((s) => s.id === sourceId)
+  return found?.name ?? sourceId
+}
