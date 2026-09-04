@@ -102,13 +102,11 @@ function mountPanel(target: AnnotateTarget): void {
   mount(withSession(<AnnotatePanel target={target} onClose={() => {}} />))
 }
 
-// The action itself (AnnotatePanel.tsx's own `data-action`), not the segment's translated label:
-// 'note' and 'event' render as "Add a note"/"Add an event", not "Note"/"Event", so reading
-// textContent here would tie this list to copy the segment labels test below already covers.
-function actionLabels(): string[] {
-  return [...container!.querySelectorAll('.segment')]
-    .map((b) => (b as HTMLElement).dataset.action ?? '')
-    .map((a) => a.charAt(0).toUpperCase() + a.slice(1))
+// Real rendered copy, the same thing a reader sees and the same thing the sibling assertion in
+// 'the actions the panel offers' below reads: a test hook that title-cased the raw action id would
+// pass 'Note' when the segment actually says "Add a note", which is not a check on what renders.
+function actionLabels(): (string | null)[] {
+  return [...container!.querySelectorAll('.segment')].map((b) => b.textContent)
 }
 
 function withheldText(): string | null {
@@ -194,19 +192,19 @@ describe('the actions the panel offers', () => {
 describe('the panel\'s actions depend on what the click named', () => {
   it('offers three actions for a day click', () => {
     mountPanel({ scope: 'day_metric', localDate: '2026-08-21', metric: 'heart_rate' })
-    expect(actionLabels()).toEqual(['Exclude', 'Note', 'Event'])
+    expect(actionLabels()).toEqual(['Exclude', 'Add a note', 'Add an event'])
   })
 
   // One stored row behind the point means one instant to correct, which is the only thing a
   // sample override can name.
   it('offers correct for a sample click with one row behind it', () => {
     mountPanel({ scope: 'sample', localDate: '2026-08-21', metric: 'heart_rate', sourceId: 'watch', utcMs: 1, n: 1 })
-    expect(actionLabels()).toEqual(['Exclude', 'Correct', 'Note', 'Event'])
+    expect(actionLabels()).toEqual(['Exclude', 'Correct', 'Add a note', 'Add an event'])
   })
 
   it('withholds correct when the point stands for several readings, and says why', () => {
     mountPanel({ scope: 'sample', localDate: '2026-08-21', metric: 'spo2', sourceId: 'watch', utcMs: 1, n: 6 })
-    expect(actionLabels()).toEqual(['Exclude', 'Note', 'Event'])
+    expect(actionLabels()).toEqual(['Exclude', 'Add a note', 'Add an event'])
     expect(withheldText()).toBe('This point combines 6 readings, so there is no single value to correct.')
   })
 

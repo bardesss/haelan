@@ -4,7 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readIntraday } from '../src/query/intraday.ts'
 import { OverrideStore } from '../src/store/overrides.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
-import { samples, sources } from '../src/db/schema/index.ts'
+import { overrides as overridesTable, samples, sources } from '../src/db/schema/index.ts'
 import type { SampleAgg } from '../src/db/schema/index.ts'
 import { sampleTarget } from '../src/derive/targetKey.ts'
 
@@ -114,5 +114,64 @@ describe('readIntraday, n and exclusions', () => {
         { sourceId: 'phone', excluded: false },
         { sourceId: 'watch', excluded: true },
       ])
+  })
+})
+
+describe('readIntraday applies a sample correction the way applyToSamples does', () => {
+  // The finding this covers: readIntraday used to track only exclusions, so a correction written
+  // from this chart changed the daily rollup (derivation applies it) but left the chart it was
+  // corrected on drawing the original reading. Every aggregate the row feeds takes the corrected
+  // value, the same as applyToSamples, so min, mean and max all move.
+  it('changes min, mean and max to the corrected value', () => {
+    insert({ utcMs: MINUTE_ONE, agg: 'min', value: 58 })
+    insert({ utcMs: MINUTE_ONE, agg: 'mean', value: 62 })
+    insert({ utcMs: MINUTE_ONE, agg: 'max', value: 71 })
+    overrides.put({
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: MINUTE_ONE }),
+      action: 'correct', correctedValue: 65, reason: 'strap glitch', nowMs: 1_000,
+    })
+
+    const result = read()
+    expect(result.points).toEqual([
+      { sourceId: 'watch', utcMs: MINUTE_ONE, min: 65, mean: 65, max: 65, n: 1, excluded: false },
+    ])
+  })
+
+  // applyToSamples's own comment: a correction carrying no value is not an exclusion, and
+  // assigning the null would leave the row present with nothing in it. The reading stands.
+  it('leaves the reading standing when the correction carries a null value', () => {
+    insert({ utcMs: MINUTE_ONE, agg: 'min', value: 58 })
+    insert({ utcMs: MINUTE_ONE, agg: 'mean', value: 62 })
+    insert({ utcMs: MINUTE_ONE, agg: 'max', value: 71 })
+    // A null-valued correction can only be represented directly against the store's own row
+    // shape: OverrideStore.validate refuses `correct` without a correctedValue from `put`, the
+    // same guard the route sits behind, so this writes the row underneath the store the way a
+    // stale or already-applied-elsewhere row could still be found sitting in the table.
+    test.db.insert(overridesTable).values({
+      id: 'null-correction', personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: MINUTE_ONE }),
+      action: 'correct', correctedValue: null, reason: 'unspecified', createdAtMs: 1_000,
+    }).run()
+
+    const result = read()
+    expect(result.points).toEqual([
+      { sourceId: 'watch', utcMs: MINUTE_ONE, min: 58, mean: 62, max: 71, n: 1, excluded: false },
+    ])
+  })
+
+  it('does not apply another person\'s correction', () => {
+    insert({ utcMs: MINUTE_ONE, agg: 'mean', value: 60 })
+    seedPerson(test.db, 'p2')
+    new OverrideStore(test.db, new DeriveQueue(test.db)).put({
+      personId: 'p2', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: MINUTE_ONE }),
+      action: 'correct', correctedValue: 99, reason: 'theirs', nowMs: 1_000,
+    })
+
+    const result = read()
+    expect(result.points).toEqual([
+      { sourceId: 'watch', utcMs: MINUTE_ONE, min: null, mean: 60, max: null, n: 1, excluded: false },
+    ])
   })
 })

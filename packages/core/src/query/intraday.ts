@@ -84,12 +84,15 @@ export function readIntraday(db: DbOrTx, input: {
   // made: every caller wants the same answer, and one small indexed read (few rows, scoped by
   // person and scope) beats a caller that forgot to pass corrections and silently saw none.
   // A sample override names one exact (source, metric, utcMs) instant, which is a raw row's own
-  // key, not a bucket's — the set is checked per row below, before rows are folded into a bucket.
-  const excludedInstants = new Set<string>()
+  // key, not a bucket's — the map is checked per row below, before rows are folded into a bucket.
+  // Both actions are kept, not just exclude: a tier-2 reader applies exactly the overrides
+  // derivation applies (applyToSamples, packages/core/src/derive/overrides.ts), and a sample scope
+  // correct is one of the two, or a correction written from this chart would change the daily
+  // rollup and leave the chart it was corrected on still drawing the original value.
+  const sampleOverrides = new Map<string, { action: 'exclude' | 'correct', correctedValue: number | null }>()
   for (const row of db.select().from(overridesTable)
     .where(and(eq(overridesTable.personId, input.personId), eq(overridesTable.scope, 'sample'))).all()) {
-    if (row.action !== 'exclude') continue
-    excludedInstants.add(row.targetKey)
+    sampleOverrides.set(row.targetKey, row)
   }
 
   // Keyed by source first, then minute, rather than one map keyed by a string built from both: a
@@ -111,17 +114,24 @@ export function readIntraday(db: DbOrTx, input: {
     bySource.set(row.sourceId, byMinute)
     const point = byMinute.get(bucketMs)
       ?? { sourceId: row.sourceId, utcMs: bucketMs, min: null, mean: null, max: null, n: 1, excluded: false, rawValues: [] }
-    if (row.agg === 'min') point.min = row.value
-    else if (row.agg === 'mean') point.mean = row.value
-    else if (row.agg === 'max') point.max = row.value
-    else if (row.agg === 'raw') point.rawValues.push(row.value)
+
+    const override = sampleOverrides.get(sampleTarget({ source: row.sourceId, metric: input.metric, utcMs: row.utcMs }))
+    // Applied the same way applyToSamples applies it, and for the same reason its own comment
+    // gives: every aggregate of the minute takes the corrected reading, because the person
+    // corrected a reading, not one of its three summaries. A correction carrying no value is not
+    // an exclusion — the reading stands until somebody says what it should be instead.
+    const value = override?.action === 'correct' && override.correctedValue !== null
+      ? override.correctedValue
+      : row.value
+    if (row.agg === 'min') point.min = value
+    else if (row.agg === 'mean') point.mean = value
+    else if (row.agg === 'max') point.max = value
+    else if (row.agg === 'raw') point.rawValues.push(value)
     // Marked on any row in the bucket, not only when every row is: a bucket of one is the
     // ordinary case, but a bucket where one of several raw readings was thrown out is still a
     // point whose surviving value was computed with a reading the person disowned folded in, and
     // a reader deciding whether to trust it needs to see that, not a point that looks untouched.
-    if (excludedInstants.has(sampleTarget({ source: row.sourceId, metric: input.metric, utcMs: row.utcMs }))) {
-      point.excluded = true
-    }
+    if (override?.action === 'exclude') point.excluded = true
     byMinute.set(bucketMs, point)
   }
 

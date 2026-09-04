@@ -122,11 +122,11 @@ function dateText(t: Translate, info: TargetInfo): string {
  * the panel's own catalogue would tie its wording to a component this list does not render and a
  * key (`annotate.actions.correct`) that names a UI action, not the fact this row states.
  *
- * A correction is a real row, both a chart can draw and a reader who saw it can undo: `POST
- * /overrides` accepts `sample` with `correct` and a value, OverrideStore.validate permits exactly
- * that combination, and `applyToSamples` rewrites the reading at derivation. IntradayHeartRate is
- * the one chart that can draw one, since a sample target names one plotted instant and every other
- * chart in this app plots by day; this list is still where every correction, from that chart or
+ * A correction is a real row, and a reader who saw it can undo it: `POST /overrides` accepts
+ * `sample` with `correct` and a value, OverrideStore.validate permits exactly that combination, and
+ * `applyToSamples` rewrites the reading at derivation — and readIntraday applies the same rewrite,
+ * so IntradayHeartRate's own point moves rather than drawing a mark; a sample-scope exclusion is
+ * what that chart draws a mark for. This list is still where every correction, from that chart or
  * written directly against the API, is seen in one place regardless of source.
  *
  * `metric`, threaded in from the same parse targetInfo already did (TargetInfo.metric), is what

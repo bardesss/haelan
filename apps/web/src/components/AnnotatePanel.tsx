@@ -152,10 +152,6 @@ export function AnnotatePanel({ target, onClose }: {
               key={candidate}
               type="button"
               className="segment"
-              // The action itself, not a display label: annotate-panel.test.tsx reads this to
-              // check which actions are offered without coupling that check to translated copy a
-              // locale file is free to reword.
-              data-action={candidate}
               aria-pressed={candidate === action}
               onClick={() => setAction(candidate)}
             >
