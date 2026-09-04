@@ -168,8 +168,14 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
         // group is a run of same-day rows under one heading (built above in `groups`); SessionRow
         // itself stops printing the date now that this heading carries it.
         <div className="session-groups">
-          {groups.map((group) => (
-            <div key={group.date} className="session-date-group">
+          {groups.map((group, index) => (
+            // Composite, not group.date alone: the partition above groups CONSECUTIVE same-date
+            // rows, and consecutive is not the same guarantee as unique. Two sources can log the
+            // same calendar day with different UTC offsets, which can interleave that day's rows
+            // with a different date's under startMs order and split it into two non-adjacent runs
+            // sharing one date, so group.date is usually unique across groups but not by
+            // construction. index always is.
+            <div key={`${group.date}-${index}`} className="session-date-group">
               <h3 className="session-date-heading">{formatSessionDateHeading(group.date, i18n.language)}</h3>
               {group.sessions.map((session) => <SessionRow key={session.id} session={session} />)}
             </div>
