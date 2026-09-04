@@ -315,17 +315,28 @@ body {
 
 /* SessionRow.tsx: two lines rather than the .override-table row above, because a session has no
    fixed set of columns to put in a table cell (see that component's own comment on why). The
-   first line splits into a date/type/duration group on the left and a calories/heart rate group
-   on the right; the second, when it renders at all, is a single muted line of whatever the
-   session actually recorded. */
+   first line splits into a type/duration group on the left and a calories/heart rate group on
+   the right; the second, when it renders at all, is a single muted line of whatever the session
+   actually recorded. */
 .session-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .session-row:last-child { border-bottom: 0; }
 .session-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.session-row-primary { color: var(--text-primary); }
+/* Wraps session-row-type and session-row-duration (plus an sr-only date, invisible either way) so
+   the gap between them comes from layout rather than a literal space character joining two spans
+   with nothing else to tell them apart. */
+.session-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+/* The prominent half of the line now that the date is gone: font-weight 600 is the same weight
+   .rail-item[aria-current='page'] and .segment[aria-pressed='true'] already use for "this one is
+   the point", not a new value invented for this row. */
+.session-row-type { color: var(--text-primary); font-weight: 600; }
+/* The secondary half beside it: text-secondary and font-size-xs are the same pairing
+   .stepper-label already uses for a label that supports the element next to it rather than
+   standing on its own. */
+.session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .session-row-detail { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: var(--space-1); }
 
-/* SessionList.tsx's own root: min-width: 0 so the scroll container below can actually shrink
+/* SessionList.tsx's own root: min-width: 0 so a row's own flex children can actually shrink
    inside the card's grid column rather than pushing it wide, the same reason .card itself carries
    this. */
 .session-list { min-width: 0; }
@@ -333,9 +344,9 @@ body {
    describes, the same header row shape .card's own .label plays elsewhere. */
 .session-list-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
 .session-list-count { font-size: var(--font-size-xs); color: var(--text-muted); }
-/* A cap, not a fit: 480px holds about ten of the two line rows a session with a detail line
-   renders as, and the reporting household's full months hold 16 to 37 sessions (median 25), so a
-   Month range scrolls and a Year range's ~190 rows scroll a long way. The cap is there so this
-   card does not stretch past every other one on the page, and the count in the header above is
-   what tells a reader whether the rows inside are all of them or a scrolled-past remainder. */
-.session-list-scroll { max-height: 480px; overflow-y: auto; }
+/* One .session-date-group per run of consecutive same-day rows; the gap between groups is what
+   separates one day's rows from the next now that nothing else does (a border would repeat the
+   one every .session-row already carries between rows within a day). */
+.session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
+.session-date-group { min-width: 0; }
+.session-date-heading { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary); margin: 0 0 var(--space-1); }

@@ -84,6 +84,23 @@ export function formatLocalDate(date: string, language: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleString(language, { dateStyle: 'medium', timeZone: 'UTC' })
 }
 
+/**
+ * The full weekday and date of a local calendar date, e.g. "donderdag 27 augustus" in Dutch. Two
+ * call sites share this: SessionList's own heading above a run of same-day rows, and, hidden
+ * under `sr-only`, SessionRow's per-row date now that the heading carries the visible one. Both
+ * going through the one function is what keeps them from ever naming a different day for the same
+ * session; formatLocalDate above is not reused here because its `dateStyle: 'medium'` gives no way
+ * to ask for a weekday or drop the year, both of which this shape needs.
+ *
+ * Anchored at UTC midnight and read back in UTC, the same convention formatLocalDate above already
+ * uses, so the day printed does not depend on which zone the browser happens to sit in.
+ */
+export function formatSessionDateHeading(date: string, language: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleString(language, {
+    weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
+  })
+}
+
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").
 export function formatDuration(minutes: number): string {
   const total = Math.round(minutes)
