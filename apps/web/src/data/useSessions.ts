@@ -26,6 +26,16 @@ export interface WorkoutSession {
  * sourceParam so the all sources sentinel is omitted rather than sent literally, which is the
  * defect the M3 phase review found in exportPathFor: the server knows no source called 'all' and
  * every request 400s at the default view.
+ *
+ * 'merged' is a real row value on the tier 1 `daily` rollup (MERGED_SOURCE), which is why
+ * useSeries and useBaseline can send it as-is. Tier 2 reads (this route) go straight to the
+ * `sessions` table in packages/core/src/query/sessions.ts, which carries only per-device source
+ * ids; personQuery.sessions calls requireSource with an empty alsoAllowed array
+ * (packages/core/src/query/personQuery.ts line 274), so a literal 'merged' here is not a known
+ * source and the request 400s (ConfigError). sourceParam only omits the all sources sentinel, so
+ * it does not prevent 'merged' from being sent. The callers for this hook do not yet exist; a
+ * future caller that skips resolveSource and passes an unresolved source straight through would
+ * not be caught here.
  */
 export function sessionsPath(
   personId: string,
