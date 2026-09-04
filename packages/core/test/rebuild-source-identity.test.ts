@@ -3,7 +3,8 @@ import { afterAll, afterEach, describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { eq } from 'drizzle-orm'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
-import { samples, sources } from '../src/db/schema/index.ts'
+import { samples, sourceAliases, sources } from '../src/db/schema/index.ts'
+import { SourceAliasStore } from '../src/store/sourceAliases.ts'
 import { openRebuildLab, seedRebuildable } from '../src/testing/fixtures.ts'
 import type { Rebuildable } from '../src/testing/fixtures.ts'
 
@@ -247,5 +248,38 @@ describe('describe() distinguishes what predates it collapsed', () => {
         expect(new Set(rows.map((r) => r.externalId)).size).toBe(2)
       },
     ), { numRuns: 50 })
+  })
+})
+
+describe('a source a rebuild drops takes its name with it', () => {
+  let h: Rebuildable
+  afterEach(() => { h.cleanup() })
+
+  test('deletes the alias and reports how many went', () => {
+    // A source with an alias and no rows referencing it: exactly what a widened describe() leaves
+    // behind, and what dropUnreferencedSources exists to clean up.
+    h = seedRebuildable()
+    h.db.insert(sources).values([
+      { id: 'stale', personId: h.personId, externalId: 'OLD:phone', displayName: 'phone', kind: 'app', createdAtMs: 0 },
+    ]).run()
+    new SourceAliasStore(h.db).put({ personId: h.personId, sourceId: 'stale', alias: 'Old phone', nowMs: 0 })
+
+    const report = runRebuild({ ...h.deps, nowMs: 1, force: true })
+
+    expect(report.people[0]!.sourcesRemoved).toBe(1)
+    expect(report.people[0]!.aliasesRemoved).toBe(1)
+    expect(h.db.select().from(sourceAliases).all()).toEqual([])
+  })
+
+  test('reports zero when the dropped sources had no names', () => {
+    h = seedRebuildable()
+    h.db.insert(sources).values([
+      { id: 'stale', personId: h.personId, externalId: 'OLD:phone', displayName: 'phone', kind: 'app', createdAtMs: 0 },
+    ]).run()
+
+    const report = runRebuild({ ...h.deps, nowMs: 1, force: true })
+
+    expect(report.people[0]!.sourcesRemoved).toBe(1)
+    expect(report.people[0]!.aliasesRemoved).toBe(0)
   })
 })
