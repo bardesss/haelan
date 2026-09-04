@@ -4,6 +4,7 @@ import { apiGet, apiSend } from '../api/client.js'
 import type { ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
+import { requirePersonId } from './useAnnotations.js'
 
 // Mirrors NamedSource in packages/core/src/store/sourceAliases.ts, which the route sends whole,
 // the same choice useSyncStatus.ts makes for its own response type and for the same reason: the
@@ -66,9 +67,12 @@ export function useRenameSource(): UseMutationResult<{ name: string }, ApiError,
   const personId = session.data?.personId
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input) => apiSend<{ name: string }>(
-      'PUT', `/api/v1/p/${personId!}/sources/${input.sourceId}/alias`, { alias: input.alias },
-    ),
+    mutationFn: (input) => {
+      const id = requirePersonId(personId)
+      return apiSend<{ name: string }>(
+        'PUT', `/api/v1/p/${id}/sources/${input.sourceId}/alias`, { alias: input.alias },
+      )
+    },
     onSuccess: () => {
       if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: sourceNamesKey(personId) })
     },
@@ -80,9 +84,12 @@ export function useClearSourceName(): UseMutationResult<{ name: string }, ApiErr
   const personId = session.data?.personId
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input) => apiSend<{ name: string }>(
-      'DELETE', `/api/v1/p/${personId!}/sources/${input.sourceId}/alias`,
-    ),
+    mutationFn: (input) => {
+      const id = requirePersonId(personId)
+      return apiSend<{ name: string }>(
+        'DELETE', `/api/v1/p/${id}/sources/${input.sourceId}/alias`,
+      )
+    },
     onSuccess: () => {
       if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: sourceNamesKey(personId) })
     },

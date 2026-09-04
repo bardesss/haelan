@@ -11,6 +11,7 @@ import type { Session } from '../src/auth/session.js'
 import { ControlRow } from '../src/components/ControlRow.js'
 import type { PageControlsState } from '../src/controls/usePageControls.js'
 import { syncStatusKey } from '../src/data/useSyncStatus.js'
+import { sourceNamesKey } from '../src/data/useSourceNames.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 import { exportPathFor } from '../src/data/pageShell.js'
 
@@ -44,16 +45,18 @@ const PERSON: Session = {
 }
 
 /**
- * ControlRow now reads the session and the sync status through TanStack Query, so it needs a
- * client in the tree the way it did not before Task 12. Both are seeded directly, following
- * dashboard-round-trip.test.tsx's pattern, rather than left to fetch: an unmocked fetch to either
- * route would be a real network call in this environment, not merely a slow one. The sync status
- * seed also keeps the button enabled for the test below that clicks it.
+ * ControlRow now reads the session, the sync status and the source names through TanStack Query,
+ * so it needs a client in the tree the way it did not before Task 12. All three are seeded
+ * directly, following dashboard-round-trip.test.tsx's pattern, rather than left to fetch: an
+ * unmocked fetch to any of the three routes would be a real network call in this environment, not
+ * merely a slow one. The sync status seed also keeps the button enabled for the test below that
+ * clicks it.
  */
 function withQuery(node: ReactNode): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  client.setQueryData(sourceNamesKey(PERSON.personId), { items: [] })
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 

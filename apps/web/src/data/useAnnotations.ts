@@ -234,8 +234,9 @@ function invalidateResource(queryClient: QueryClient, personId: string, resource
 
 /** Throws rather than requesting a path naming an undefined person: unlike a read's `enabled`
  * guard, a mutation has no render cycle to withhold itself from, so the guard has to live in the
- * function a caller can only invoke by hand, after the session has had a chance to resolve. */
-function requirePersonId(personId: string | undefined): string {
+ * function a caller can only invoke by hand, after the session has had a chance to resolve.
+ * Exported for useSourceNames.ts's own mutations, which need exactly the same guard. */
+export function requirePersonId(personId: string | undefined): string {
   if (personId === undefined) throw new ApiError('unauthorized', null, 'no signed in person')
   return personId
 }
