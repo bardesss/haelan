@@ -16,6 +16,7 @@ import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
+import { SessionList } from './activity/SessionList.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
@@ -340,6 +341,14 @@ export function Activity() {
             exact call InsightCard's own default makes without a formatValue override. */}
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
           label={t('activity.insights.steps')} />
+
+        {/* Below the tiles and the heatmap, reusing this same ControlRow rather than a rail item
+            of its own (nine unlabelled icons already proved to be too many three days before this
+            task started): the range, the source picker and the export all apply to this section
+            without being rebuilt. */}
+        <Card span={12} label={t('activity.sessions.label')}>
+          <SessionList controls={resolved} />
+        </Card>
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

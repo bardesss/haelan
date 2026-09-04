@@ -372,6 +372,17 @@
       "SWIMMING_POOL": "Baanzwemmen",
       "SPORT": "Sport",
       "unknown": "Onbekend"
+    },
+    "sessions": {
+      "label": "Sessies",
+      "count_one": "{{count}} sessie in deze periode",
+      "count_other": "{{count}} sessies in deze periode",
+      "filterLabel": "Filter op type",
+      "allTypes": "Alle types",
+      "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",
+      "emptyPeriodDetail": "Er is nog niets gesynchroniseerd voor deze datums.",
+      "emptyFilteredTitle": "Geen {{type}} sessies in deze periode.",
+      "emptyFilteredDetail": "Kies een ander type om de rest van de sessies in deze periode te zien."
     }
   },
   "charts": {

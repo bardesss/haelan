@@ -324,3 +324,16 @@ body {
 .session-row-primary { color: var(--text-primary); }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .session-row-detail { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: var(--space-1); }
+
+/* SessionList.tsx's own root: min-width: 0 so the scroll container below can actually shrink
+   inside the card's grid column rather than pushing it wide, the same reason .card itself carries
+   this. */
+.session-list { min-width: 0; }
+/* The count sits opposite the type filter (when there is one) rather than above the rows it
+   describes, the same header row shape .card's own .label plays elsewhere. */
+.session-list-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-2); }
+.session-list-count { font-size: var(--font-size-xs); color: var(--text-muted); }
+/* Tall enough that a Month range's ~15 rows never scroll at all, capped so a Year range's ~190
+   does not stretch the card past every other one on the page. The count in the header above is
+   what tells a reader whether the rows inside are all of them or a scrolled-past remainder. */
+.session-list-scroll { max-height: 480px; overflow-y: auto; }
