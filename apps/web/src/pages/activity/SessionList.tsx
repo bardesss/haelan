@@ -66,10 +66,27 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
     return [...seen.entries()].map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label))
   }, [typed, t])
+  // A chosen type the range no longer holds stays listed. resolveSource answers the same problem
+  // for the source picker by falling the value back to the sentinel (controls/source.ts), and
+  // that answer is not open here: falling back would silently turn "no sessions of this type"
+  // into "here is the period again", collapsing the two claims the unreset selection above exists
+  // to keep apart. Listing the orphan instead keeps both, and gives the select an option matching
+  // its own controlled value, which is what stops a browser from quietly showing the first option
+  // ("All types") over rows a different type is filtering.
+  const options = useMemo(() => {
+    if (selectedType === ALL_TYPES) return typeOptions
+    if (typeOptions.some((option) => option.value === selectedType)) return typeOptions
+    const label = exerciseTypeLabel(t, selectedType === UNKNOWN_TYPE ? null : selectedType)
+    return [...typeOptions, { value: selectedType, label }].sort((a, b) => a.label.localeCompare(b.label))
+  }, [typeOptions, selectedType, t])
+
   // A filter of one option is not a filter: ControlRow already applies this ruling to the source
   // picker on Notes (sources={[]} there), and a range that holds exactly one exercise type is the
-  // same case here.
-  const hasTypeFilter = typeOptions.length > 1
+  // same case here. A filter already narrowing the rows is the exception, whatever the range now
+  // holds: without the second clause a reader who steps into a single type period with a
+  // different type selected sees no select, no rows, and a message telling them to choose another
+  // type with nothing to choose with.
+  const hasTypeFilter = options.length > 1 || selectedType !== ALL_TYPES
 
   const filtered = selectedType === ALL_TYPES
     ? typed.map((entry) => entry.session)
@@ -108,7 +125,7 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
             <span className="sr-only">{t('activity.sessions.filterLabel')}</span>
             <select value={selectedType} onChange={(e) => setSelectedType(e.currentTarget.value)}>
               <option value={ALL_TYPES}>{t('activity.sessions.allTypes')}</option>
-              {typeOptions.map((option) => (
+              {options.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>

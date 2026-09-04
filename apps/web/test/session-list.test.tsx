@@ -205,4 +205,42 @@ describe('SessionList', () => {
     expect(container!.querySelector('.session-list .basis')!.textContent)
       .toBe('One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.')
   })
+  // The stranding case. SessionList deliberately never resets selectedType when the data changes
+  // (the filtered-empty message depends on the selection outliving the rows it was built from),
+  // so a reader who picks WALKING and then steps into a period holding only RUNNING has a filter
+  // matching nothing. Hiding the select at one option, the ruling the test above pins, then took
+  // away the only control that could clear it: no select, no rows, and "choose another type" with
+  // nothing to choose with. Reachable on real data, where two of 31 weeks hold exactly one type
+  // and nearly every Day range does.
+  it('keeps the type control on screen when the chosen type leaves the range', async () => {
+    const client = clientWith([session('a', 'RUNNING'), session('b', 'WALKING')])
+    mount(<QueryClientProvider client={client}><SessionList controls={CONTROLS} /></QueryClientProvider>, 'nl')
+
+    const chosen = [...selects()[0]!.options].find((o) => (o.textContent ?? '').includes('Wandelen'))!.value
+    act(() => {
+      selects()[0]!.value = chosen
+      selects()[0]!.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    // The period moves on to one holding a single type, WALKING gone, the WALKING filter still set.
+    await act(async () => {
+      client.setQueryData(SESSIONS_KEY, { items: [session('a', 'RUNNING')], cursor: null })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    expect(rows(), 'the filter still matches nothing, which is the state being escaped from').toHaveLength(0)
+
+    expect(selects(), 'a filter with a selection always needs a control to clear it').toHaveLength(1)
+    const select = selects()[0]!
+    // Not merely rendered: showing the real selection back. A browser select silently falls an
+    // unmatched controlled value to whichever option renders first, so a select whose chosen type
+    // is missing from its own options would read "Alle types" over WALKING-filtered rows.
+    expect(select.value, 'the control has to show the type actually filtering the rows').toBe(chosen)
+
+    const all = [...select.options].find((o) => (o.textContent ?? '').includes('Alle types'))!
+    act(() => {
+      select.value = all.value
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(rows(), 'and clearing it brings the period back').toHaveLength(1)
+  })
 })
