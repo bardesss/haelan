@@ -87,6 +87,16 @@ describe('put', () => {
       .toThrow(ConfigError)
   })
 
+  // The duplicate check excludes the source being written (`ne(sourceAliases.sourceId, ...)` in
+  // sourceAliases.ts) so a person retyping a source's own current name into the settings field --
+  // an unremarkable no-op edit, not a rename -- does not read back as a clash with itself.
+  it('lets a source keep the name it already has', () => {
+    store.put({ personId: 'p1', sourceId: 'watch', alias: 'Watch', nowMs: 100 })
+    expect(() => store.put({ personId: 'p1', sourceId: 'watch', alias: 'Watch', nowMs: 200 }))
+      .not.toThrow()
+    expect(store.listNamed('p1')[0]!.name).toBe('Watch')
+  })
+
   it('lets another person use the same name', () => {
     store.put({ personId: 'p1', sourceId: 'watch', alias: 'Watch', nowMs: 100 })
     store.put({ personId: 'p2', sourceId: 'theirs', alias: 'Watch', nowMs: 100 })

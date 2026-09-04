@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseMutationResult } from '@tanstack/react-query'
 import { apiGet, apiSend } from '../api/client.js'
@@ -52,14 +53,23 @@ export function useSourceNames(): SourceNames {
     queryFn: () => apiGet<SourcesResponse>(`/api/v1/p/${personId!}/sources`),
   })
 
-  const sources = query.data?.items ?? []
-  const byId = new Map(sources.map((s) => [s.id, s.name]))
-  return {
-    nameOf: (sourceId: string) => byId.get(sourceId) ?? sourceId,
-    sources,
-    isPending: query.isPending,
-    isError: query.isError,
-  }
+  const items = query.data?.items
+  // Memoised on the query's own data reference, not rebuilt as a fresh object literal every
+  // render: `nameOf` sits in IntradayHeartRate's `build` useCallback deps, which useChart keys its
+  // init/dispose effect on, so a fresh function here (even one that reads the same names) disposed
+  // and reinitialised that chart on every render regardless of whether anything it draws had
+  // changed -- the exact defect chart-lifecycle.test.tsx exists to catch, on a chart that test
+  // didn't reach until it grew a Day tab case.
+  return useMemo(() => {
+    const sources = items ?? []
+    const byId = new Map(sources.map((s) => [s.id, s.name]))
+    return {
+      nameOf: (sourceId: string) => byId.get(sourceId) ?? sourceId,
+      sources,
+      isPending: query.isPending,
+      isError: query.isError,
+    }
+  }, [items, query.isPending, query.isError])
 }
 
 export function useRenameSource(): UseMutationResult<{ name: string }, ApiError, { sourceId: string, alias: string }> {

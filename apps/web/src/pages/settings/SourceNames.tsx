@@ -93,9 +93,9 @@ function SourceNameRow({ source }: { source: NamedSource }) {
       <span className="source-name-kind">{t(`settings.sourceNames.kind.${source.kind}`)}</span>
       {failed && (
         <span className="field-error">
-          {rename.error?.kind === 'config' || clear.error?.kind === 'config'
-            ? (rename.error ?? clear.error)!.message
-            : t('settings.sourceNames.saveFailed')}
+          {/* clear is a DELETE: it only 404s or succeeds, never 400s, so a config error can only
+              ever come from rename -- the duplicate name case the server states in its own words. */}
+          {rename.error?.kind === 'config' ? rename.error.message : t('settings.sourceNames.saveFailed')}
         </span>
       )}
     </li>
