@@ -354,6 +354,21 @@
       "label": "Work-outminuten",
       "basis": "som, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse work-outminuten in {{period}}"
+    },
+    "exerciseTypes": {
+      "CARDIO_WORKOUT": "Cardiotraining",
+      "WALKING": "Wandelen",
+      "RUNNING": "Hardlopen",
+      "WORKOUT": "Work-out",
+      "SPINNING": "Spinning",
+      "BIKING": "Fietsen",
+      "TREADMILL": "Loopband",
+      "HIKING": "Hiken",
+      "WEIGHTLIFTING": "Krachttraining",
+      "STROLLER_WALK": "Wandelen met kinderwagen",
+      "SWIMMING_POOL": "Baanzwemmen",
+      "SPORT": "Sport",
+      "unknown": "Onbekend"
     }
   },
   "charts": {

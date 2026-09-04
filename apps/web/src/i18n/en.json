@@ -354,6 +354,21 @@
       "label": "Workout minutes",
       "basis": "sum, {{reported}} of {{total}} days",
       "chartLabel": "Daily workout minutes through {{period}}"
+    },
+    "exerciseTypes": {
+      "CARDIO_WORKOUT": "Cardio workout",
+      "WALKING": "Walking",
+      "RUNNING": "Running",
+      "WORKOUT": "Workout",
+      "SPINNING": "Spinning",
+      "BIKING": "Biking",
+      "TREADMILL": "Treadmill",
+      "HIKING": "Hiking",
+      "WEIGHTLIFTING": "Weightlifting",
+      "STROLLER_WALK": "Stroller walk",
+      "SWIMMING_POOL": "Swimming pool",
+      "SPORT": "Sport",
+      "unknown": "Unknown"
     }
   },
   "charts": {
