@@ -6,6 +6,19 @@ const respond = (status: number, body: unknown) => new Response(
   { status, headers: { 'content-type': 'application/json' } },
 )
 
+// Stubs fetch and hands back the rejection itself, so a test can assert on individual fields of
+// the ApiError rather than repeating the stub/await/catch boilerplate at every call site. Throws
+// rather than silently returning undefined if apiGet does not reject, so a broken stub fails loud.
+const rejection = async (status: number, body: unknown): Promise<ApiError> => {
+  vi.stubGlobal('fetch', vi.fn(async () => respond(status, body)))
+  try {
+    await apiGet('/api/v1/x')
+    throw new Error('expected apiGet to reject')
+  } catch (error) {
+    return error as ApiError
+  }
+}
+
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('the api client', () => {
@@ -27,7 +40,8 @@ describe('the api client', () => {
   })
 
   it('reports the 409 an empty instance answers with, which the wizard depends on', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => respond(409, { error: { kind: 'config', code: 'setup_incomplete' } })))
+    // setupGate.ts sends this exact kind/code pair for a /api/v1/* route it blocks.
+    vi.stubGlobal('fetch', vi.fn(async () => respond(409, { error: { kind: 'setup_incomplete', code: 'setup_incomplete' } })))
     await expect(apiGet('/api/v1/x')).rejects.toMatchObject({ kind: 'setup_incomplete' })
   })
 
@@ -37,8 +51,35 @@ describe('the api client', () => {
   })
 
   it('is an ApiError, so a caller can narrow on it', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => respond(500, { error: { kind: 'transient', code: 'oops' } })))
+    // The body a real 500 carries: sendCoreError's unrecognised-throw branch in envelope.ts always
+    // answers 'internal', never 'transient' - a server 500 with a transient kind does not occur.
+    vi.stubGlobal('fetch', vi.fn(async () => respond(500, { error: { kind: 'internal', code: 'internal_error', message: 'something went wrong' } })))
     await expect(apiGet('/api/v1/x')).rejects.toBeInstanceOf(ApiError)
+  })
+
+  // The distinction the whole field exists for: the status alone cannot tell a deterministic 500
+  // from a transient one, which is exactly why envelope.ts puts 'internal' in the body at all.
+  it('takes the kind from the envelope when the server sends one', async () => {
+    const error = await rejection(500, { error: { kind: 'internal', code: 'internal_error', message: 'something went wrong' } })
+    expect(error.kind).toBe('internal')
+  })
+
+  it('still maps by status when the body carries no kind', async () => {
+    const error = await rejection(500, {})
+    expect(error.kind).toBe('transient')
+  })
+
+  it('ignores a kind the client does not know', async () => {
+    const error = await rejection(500, { error: { kind: 'not_a_kind', message: 'x' } })
+    expect(error.kind).toBe('transient')
+  })
+
+  // 'unreachable' is a thrown-fetch-only kind (see the ApiError above for the network-failure
+  // case): a body spelling it must not be believed, or a slow instance's own 500 would be read
+  // back as the network being down and mask the real failure.
+  it('does not accept unreachable from a response body', async () => {
+    const error = await rejection(500, { error: { kind: 'unreachable', message: 'x' } })
+    expect(error.kind).toBe('transient')
   })
 
   it('reports a 502 with an HTML body as transient, not unreachable', async () => {

@@ -1,8 +1,36 @@
 import { describe, it, expect, vi } from 'vitest'
 import { QueryObserver } from '@tanstack/react-query'
-import { createQueryClient, createBoundQueryClient } from '../src/api/queryClient.js'
+import { createQueryClient, createBoundQueryClient, shouldRetry } from '../src/api/queryClient.js'
 import { ApiError } from '../src/api/client.js'
 import { queryKeys } from '../src/api/queryKeys.js'
+
+describe('shouldRetry', () => {
+  // The regression this task fixes: an 'internal' kind means the server hit a bug in its own
+  // code, and retrying a deterministic failure only delays the error and triples the work.
+  it('does not retry an internal error', () => {
+    expect(shouldRetry(new ApiError('internal', 500, 'x'))).toBe(false)
+  })
+
+  it('still retries a transient one', () => {
+    expect(shouldRetry(new ApiError('transient', 503, 'x'))).toBe(true)
+  })
+
+  it('still retries an unreachable instance', () => {
+    expect(shouldRetry(new ApiError('unreachable', null, 'x'))).toBe(true)
+  })
+
+  it('stops retrying a transient error after two attempts', () => {
+    expect(shouldRetry(new ApiError('transient', 503, 'x'), 2)).toBe(false)
+  })
+
+  it('does not retry a kind that is an answer, not a failure', () => {
+    expect(shouldRetry(new ApiError('unauthorized', 401, 'x'))).toBe(false)
+  })
+
+  it('does not retry an error that is not an ApiError', () => {
+    expect(shouldRetry(new TypeError('boom'))).toBe(false)
+  })
+})
 
 // Gives an in-flight loop time to run its extra fetches before we count them. Long enough that a
 // real loop (each iteration is a microtask, not a timer) fires several times over; short enough
