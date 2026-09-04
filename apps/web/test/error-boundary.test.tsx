@@ -2,7 +2,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
-import { act } from 'react'
+import { act, useEffect, useRef } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
 import { ErrorBoundary } from '../src/components/ErrorBoundary.js'
@@ -64,8 +64,8 @@ describe('ErrorBoundary', () => {
   })
 
   // A boundary that latches forever has traded a white screen for a permanently dead card. The
-  // retry has to remount the subtree, which a boolean flag alone does not do: React reuses the
-  // same instances, so the child must be given a new key to re-run cleanly.
+  // retry has to put the subtree back, and a boolean flag alone does exactly that: the test
+  // below this one records why.
   it('recovers when the retry is pressed and the child stops throwing', () => {
     mount(<ErrorBoundary><Boom throws /></ErrorBoundary>)
     expect(container!.textContent).toContain('This did not load.')
@@ -76,6 +76,50 @@ describe('ErrorBoundary', () => {
 
     expect(container!.textContent).toContain('recovered')
     expect(container!.textContent).not.toContain('This did not load.')
+  })
+
+  // The behaviour the boundary's recovery rests on, and it is React's rather than ours, so it is
+  // pinned here instead of assumed. The boundary used to carry a `key={attempt}` on its children,
+  // on the stated grounds that a retry would otherwise reuse the instance that already threw.
+  // Instrumented with the effects below, React does the unmounting on its own: the fallback
+  // replaces the children rather than rendering beside them, so the failed child's cleanup runs
+  // as the fallback appears, and clearing the flag mounts a fresh instance. That was measured
+  // with the key in place and again with it removed, and the sequence was identical both times.
+  //
+  // So this asserts the guarantee the boundary now relies on having nothing of its own to do:
+  // one mount, one unmount when it throws, and a second, different instance on retry. A React
+  // release that kept the failed subtree alive would show up here as a missing unmount and a
+  // reused instance, which is the state a component that has already thrown must never be left in.
+  it('unmounts the failed child and mounts a fresh one on retry', () => {
+    const log: string[] = []
+    let instances = 0
+
+    function Instrumented({ throws }: { throws: boolean }) {
+      // A ref rather than a counter read at render time, because a re-render of the same
+      // instance must keep the same number: that is the whole distinction being asserted.
+      const id = useRef<number | null>(null)
+      if (id.current === null) id.current = ++instances
+      const mine = id.current
+      useEffect(() => {
+        log.push(`mount#${mine}`)
+        return () => { log.push(`unmount#${mine}`) }
+      }, [mine])
+      if (throws) throw new Error('field was undefined')
+      return <p>recovered</p>
+    }
+
+    mount(<ErrorBoundary><Instrumented throws={false} /></ErrorBoundary>)
+    expect(log).toEqual(['mount#1'])
+
+    mount(<ErrorBoundary><Instrumented throws /></ErrorBoundary>)
+    expect(log).toEqual(['mount#1', 'unmount#1'])
+
+    mount(<ErrorBoundary><Instrumented throws={false} /></ErrorBoundary>)
+    const retry = container!.querySelector('button')!
+    act(() => { retry.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+
+    expect(log).toEqual(['mount#1', 'unmount#1', 'mount#2'])
+    expect(container!.textContent).toContain('recovered')
   })
 
   // It catches for the reader, not to hide a bug from whoever has to fix it.

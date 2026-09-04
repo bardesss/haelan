@@ -1,4 +1,4 @@
-import { Component, Fragment } from 'react'
+import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { ErrorState } from './ErrorState.js'
 
@@ -10,8 +10,8 @@ import { ErrorState } from './ErrorState.js'
  * about the wire rather than a guarantee, and a server older than the frontend is the normal case
  * during an upgrade rather than an edge case. One absent field used to unmount the whole tree.
  */
-export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean, attempt: number }> {
-  override state = { failed: false, attempt: 0 }
+export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false }
 
   static getDerivedStateFromError(): { failed: true } {
     return { failed: true }
@@ -25,11 +25,17 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { failed: 
 
   override render(): ReactNode {
     if (this.state.failed) {
-      return <ErrorState onRetry={() => this.setState((s) => ({ failed: false, attempt: s.attempt + 1 }))} />
+      return <ErrorState onRetry={() => this.setState({ failed: false })} />
     }
-    // Keyed on the attempt so a retry remounts the subtree rather than reusing instances that
-    // already threw. A Fragment carries the key without adding a node, which matters because this
-    // sits inside a card's grid layout and a wrapper div would become a layout box.
-    return <Fragment key={this.state.attempt}>{this.props.children}</Fragment>
+    // A boolean is the whole of the state, and the retry needs nothing else. This carried a
+    // `key={attempt}` on a Fragment as well, justified by a claim that a retry would otherwise
+    // reuse the instances that already threw. That claim is false. Measured directly, with a
+    // child logging from a mount effect and its cleanup: rendering the fallback runs the failed
+    // child's cleanup, because the fallback replaces the children rather than sitting beside
+    // them, and clearing `failed` then mounts a fresh instance. The key changed nothing, which
+    // is why removing it broke no test. The observed sequence is pinned in
+    // test/error-boundary.test.tsx, so a React release that stopped unmounting the failed
+    // subtree would be caught rather than silently reusing a component that has already thrown.
+    return this.props.children
   }
 }
