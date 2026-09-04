@@ -17,6 +17,8 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
+import { useBaseline } from '../data/useBaseline.js'
+import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
@@ -75,6 +77,16 @@ function datesBetween(from: string, to: string): string[] {
     dates.push(new Date(cursor).toISOString().slice(0, 10))
   }
   return dates
+}
+
+function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
+  // Thin stays undefined, not a band drawn thin: a band computed from a handful of days looks
+  // exactly as authoritative as one computed from sixty, and thin is the reader's only signal
+  // that it is not. Same reasoning as Recovery.tsx's own bandFrom, page owned rather than shared
+  // for the same reason that file's own comment on datesBetween states.
+  return baseline !== null && !baseline.thin
+    ? { low: baseline.center - baseline.spread, high: baseline.center + baseline.spread }
+    : undefined
 }
 
 export function Health() {
@@ -171,6 +183,18 @@ export function Health() {
   )
   const dailySpo2Headline = mean(values(dailySpo2Points))
 
+  // The daily summary card's own band. Not spo2Range above: that chart draws min/mean/max on one
+  // set of category axes with no y position a band could sit behind (Spo2Range's own top comment
+  // already states it carries no baseline equivalent to HeartRateRange's), so only daily_spo2, the
+  // once a day summary, gets one. 'last' explicitly, the same reason Recovery.tsx passes it rather
+  // than the default: daily_spo2's only agg is 'last'. historicalTo, not controls.to: see
+  // Dashboard.tsx's own hrBaseline comment for why a Month or Year view's calendar end is not the
+  // same date as the last day that has actually happened.
+  const dailySpo2Baseline = useBaseline('daily_spo2', controls.historicalTo, source, 'last')
+  const dailySpo2Band = useMemo(
+    () => bandFrom(dailySpo2Baseline.data?.baseline ?? null), [dailySpo2Baseline.data],
+  )
+
   // The one insight card the brief's own table gives this page: daily_spo2 at the last agg the
   // card above already requests (REQUESTS.last). /insights is its own, unbatched request, so this
   // is one call added on top of the five requests above (LAST_METRICS plus spo2's own four). `to`
@@ -252,6 +276,7 @@ export function Health() {
               {oneDayRange ? <ChartNote /> : (
                 <Sparkline values={dailySpo2Spark.values} labels={dailySpo2Spark.labels} metric="daily_spo2"
                   label={t('health.dailySpo2.chartLabel', { period })} unit={t('health.units.percent')}
+                  baseline={dailySpo2Band}
                   annotations={dailySpo2Annotations} excluded={dailySpo2Overrides.excluded}
                   onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'daily_spo2' })} />
               )}

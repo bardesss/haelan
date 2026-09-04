@@ -16,6 +16,8 @@ import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useTrend } from '../data/useTrend.js'
+import { useBaseline } from '../data/useBaseline.js'
+import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
@@ -56,6 +58,19 @@ function datesBetween(from: string, to: string): string[] {
     dates.push(new Date(cursor).toISOString().slice(0, 10))
   }
   return dates
+}
+
+function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
+  // Thin stays undefined, not a band drawn thin: a band computed from a handful of readings looks
+  // exactly as authoritative as one computed from sixty days, and thin is the reader's only signal
+  // that it is not. Same reasoning as Recovery.tsx's own bandFrom, page owned rather than shared
+  // for the same reason that file's own comment on datesBetween states. In grams, the stored unit,
+  // the same unit weightTrend and spark.values already stay in below: a chart's y axis is a linear
+  // rescale of whatever unit it is handed, so the band never needs the kilogram conversion the
+  // headline and the insight card apply for display.
+  return baseline !== null && !baseline.thin
+    ? { low: baseline.center - baseline.spread, high: baseline.center + baseline.spread }
+    : undefined
 }
 
 export function Weight() {
@@ -127,6 +142,16 @@ export function Weight() {
     return rangeDates.map((date) => byDate.get(date) ?? null)
   }, [rangeDates, weightTrendQuery.data])
 
+  // weight's own baseline band, not body_fat's: this is the card the audit named ("Weight's
+  // trend"), and body_fat carries no trend line either (see card()'s own `trend` parameter
+  // comment for why that stays undefined for it too). 'last' explicitly, the same reason
+  // Recovery.tsx passes it rather than the default: weight's catalogue entry pairs `aggs: ['last',
+  // 'mean']`, and this page only ever asks for 'last' (REQUESTS above). historicalTo, not
+  // controls.to: see Dashboard.tsx's own hrBaseline comment for why a Month or Year view's
+  // calendar end is not the same date as the last day that has actually happened.
+  const weightBaseline = useBaseline('weight', controls.historicalTo, source, 'last')
+  const weightBand = useMemo(() => bandFrom(weightBaseline.data?.baseline ?? null), [weightBaseline.data])
+
   // The one insight card the brief's own table gives this page: weight at the last agg both
   // cards above already request (REQUESTS.last). /insights is its own, unbatched request, so this
   // is one call added on top of the single group above. Suppresses often, correctly: 130 readings
@@ -193,6 +218,9 @@ export function Weight() {
     // built against the weight metric this card requests (weightTrendQuery above), and no sibling
     // card on this page has a trend line to draw.
     trend?: (number | null)[],
+    // Undefined for body_fat, the same as `trend` above: weightBand (above) is the one baseline
+    // this page requests, over the one metric the audit named ("Weight's trend").
+    band?: { low: number, high: number },
   ) => {
     const points = metricGroups.pointsOf(metric)
     const headline = mean(values(points))
@@ -220,7 +248,7 @@ export function Weight() {
             basis={basis} delta={deltaFor(t, metric, values(points), 'neutral')}>
             {oneDayRange ? <ChartNote /> : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat} episodic
-                label={t(chartLabelKey, { period })} unit={t(unitKey)} trend={trend}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)} trend={trend} baseline={band}
                 annotations={annotations} excluded={excluded}
                 onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
@@ -255,7 +283,7 @@ export function Weight() {
           // to 0 and prints a real "0.0" on either of those rows instead of the absence word
           // ("excluded" or "no reading") the row is meant to carry.
           (v, absent) => formatNumber(v === null ? null : v / 1000, 1, i18n.language, absent),
-          weightTrend)}
+          weightTrend, weightBand)}
         {card('body_fat', 'weight.bodyFat.label', 'weight.bodyFat.basis', 'weight.bodyFat.readings',
           'weight.bodyFat.chartLabel', 'weight.units.percent', 'weight.units.percentShort')}
 
