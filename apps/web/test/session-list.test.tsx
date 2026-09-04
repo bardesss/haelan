@@ -68,6 +68,17 @@ function mountWith(items: WorkoutSession[], lng = 'nl'): void {
   )
 }
 
+/**
+ * Two sessions the derivation folds into one workout: the same window, two different sources.
+ * groupSessions (packages/core/src/derive/sessionOverlap.ts) unions any pair whose shared span
+ * exceeds overlapRatio times the shorter one, and an identical window shares all of it, so this
+ * pair is one group under every ratio below 1 and deriveExerciseDay writes workout_count 1 for
+ * the day while the sessions table still holds both rows.
+ */
+const mergeable = (id: string, sourceId: string): WorkoutSession => ({
+  ...session(id, 'RUNNING'), sourceId,
+})
+
 const selects = () => [...container!.querySelectorAll('select')] as HTMLSelectElement[]
 const rows = () => container!.querySelectorAll('.session-row')
 
@@ -180,5 +191,18 @@ describe('SessionList', () => {
     expect(filtered).toContain('Geen Wandelen sessies in deze periode.')
     expect(filtered, 'the filtered-empty message must not also read as the empty-period one')
       .not.toContain('Geen activiteiten geregistreerd in deze periode.')
+  })
+  // The Workouts tile above this list sums merged `daily` workout_count, which counts a run
+  // recorded by a watch and a phone once; this list counts the rows the sessions table holds,
+  // which counts it twice. Live data: 186 against 192 over seven months, differing on six days.
+  // The two are different quantities and stay different quantities, so the list has to name its
+  // own rather than print a bare "2 sessions" a reader will read as the tile's word for them.
+  it('names its own quantity rather than the one the workout tile counts', () => {
+    mountWith([mergeable('a', 'watch'), mergeable('b', 'phone')], 'en')
+    expect(rows(), 'both rows are shown; only the tile above collapses them').toHaveLength(2)
+    expect(container!.querySelector('.session-list-count')!.textContent)
+      .toBe('2 recorded sessions in this period')
+    expect(container!.querySelector('.session-list .basis')!.textContent)
+      .toBe('One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.')
   })
 })

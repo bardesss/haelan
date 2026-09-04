@@ -350,12 +350,12 @@
     },
     "workoutCount": {
       "label": "Work-outs",
-      "basis": "aantal, {{reported}} van {{total}} dagen",
+      "basis": "aantal, één per work-out ongeacht hoeveel apparaten die registreerden, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijks aantal work-outs in {{period}}"
     },
     "workoutMinutes": {
       "label": "Work-outminuten",
-      "basis": "som, {{reported}} van {{total}} dagen",
+      "basis": "som, één per work-out ongeacht hoeveel apparaten die registreerden, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse work-outminuten in {{period}}"
     },
     "exerciseTypes": {
@@ -375,8 +375,9 @@
     },
     "sessions": {
       "label": "Sessies",
-      "count_one": "{{count}} sessie in deze periode",
-      "count_other": "{{count}} sessies in deze periode",
+      "count_one": "{{count}} geregistreerde sessie in deze periode",
+      "count_other": "{{count}} geregistreerde sessies in deze periode",
+      "basis": "Eén rij per geregistreerde sessie. De tegel Work-outs telt een work-out één keer, ook als twee apparaten dezelfde registreerden, dus die kan lager uitvallen.",
       "filterLabel": "Filter op type",
       "allTypes": "Alle types",
       "emptyPeriodTitle": "Geen activiteiten geregistreerd in deze periode.",

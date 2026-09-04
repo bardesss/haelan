@@ -350,12 +350,12 @@
     },
     "workoutCount": {
       "label": "Workouts",
-      "basis": "count, {{reported}} of {{total}} days",
+      "basis": "count, one per workout however many devices recorded it, {{reported}} of {{total}} days",
       "chartLabel": "Daily workout count through {{period}}"
     },
     "workoutMinutes": {
       "label": "Workout minutes",
-      "basis": "sum, {{reported}} of {{total}} days",
+      "basis": "sum, one per workout however many devices recorded it, {{reported}} of {{total}} days",
       "chartLabel": "Daily workout minutes through {{period}}"
     },
     "exerciseTypes": {
@@ -375,8 +375,9 @@
     },
     "sessions": {
       "label": "Sessions",
-      "count_one": "{{count}} session in this period",
-      "count_other": "{{count}} sessions in this period",
+      "count_one": "{{count}} recorded session in this period",
+      "count_other": "{{count}} recorded sessions in this period",
+      "basis": "One row per recorded session. The Workouts tile counts a workout once even when two devices recorded it, so it can read lower.",
       "filterLabel": "Filter by type",
       "allTypes": "All types",
       "emptyPeriodTitle": "No activities recorded in this period.",

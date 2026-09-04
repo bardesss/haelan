@@ -115,6 +115,13 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
           </label>
         )}
       </div>
+      {/* The Workouts tile at the top of this page sums merged `daily` workout_count, which
+          deriveExerciseDay writes from groupSessions: the same run recorded by a watch and a
+          phone is one workout there and two rows here. Over the reporting household's seven
+          months that is 186 against 192, differing on six days, so on an all sources Month the
+          tile can sit lower than the rows beneath it. The two are different quantities, and this
+          line is what says so, since nothing else on the page distinguishes them. */}
+      <p className="basis">{t('activity.sessions.basis')}</p>
       {filtered.length === 0 ? (
         <EmptyState title={t('activity.sessions.emptyFilteredTitle', { type: selectedLabel })}
           detail={t('activity.sessions.emptyFilteredDetail')} />
