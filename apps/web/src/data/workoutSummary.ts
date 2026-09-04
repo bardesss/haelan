@@ -38,13 +38,22 @@ const METERS_PER_KM = 1000
  * A recorded zero survives, from either type. A guard written as `value ? Number(value) : null`
  * would satisfy the absence cases above and silently discard a real zero, which is why the tests
  * assert both directions.
+ *
+ * Negative zero is normalised on the way out. It is a value JSON can carry and Number('-0')
+ * produces, and the formatters do not clean it up: (-0).toLocaleString('nl', {
+ * maximumFractionDigits: 0 }) is "-0", so a session recording a signed zero would print a minus
+ * sign in front of it. Nothing in the live data carries one, which makes this cheap insurance
+ * rather than a fix, but M3e-2 already found the same signed zero reaching a reader through the
+ * weight deltas and the same care applies here.
  */
 export function numberOrNull(value: unknown): number | null {
+  // `n === 0 ? 0 : n` rather than an isNegativeZero test: -0 === 0 is true, so this returns the
+  // positive zero literal for both and leaves every other value alone.
+  const finite = (n: number): number | null => (Number.isFinite(n) ? (n === 0 ? 0 : n) : null)
   if (value === null || value === undefined) return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'number') return finite(value)
   if (typeof value !== 'string' || value.trim() === '') return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
+  return finite(Number(value))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

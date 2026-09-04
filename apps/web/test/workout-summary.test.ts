@@ -19,6 +19,18 @@ describe('numberOrNull', () => {
     expect(numberOrNull('0')).toBe(0)
   })
 
+  // Signed zero survives arithmetic and survives JSON, and it does not survive formatting
+  // unchanged: (-0).toLocaleString('nl', { maximumFractionDigits: 0 }) is "-0", so a row would
+  // print a minus sign in front of a zero distance. The same signed zero was fixed once already in
+  // M3e-2's weight deltas; nothing in the live data carries one, and the clause costs one
+  // comparison, so it is closed here rather than deferred on the false hope that the formatters
+  // normalise it.
+  it('normalises negative zero, which the formatters print with a minus sign', () => {
+    expect(Object.is(numberOrNull(-0), 0), 'a number -0').toBe(true)
+    expect(Object.is(numberOrNull('-0'), 0), 'the string "-0"').toBe(true)
+    expect(Object.is(numberOrNull('-0.0'), 0), 'a string that parses to -0').toBe(true)
+  })
+
   it('reads the two types the provider actually mixes', () => {
     expect(numberOrNull(169)).toBe(169)
     expect(numberOrNull('116')).toBe(116)
