@@ -344,8 +344,11 @@ export function Activity() {
 
         {/* Below the tiles and the heatmap, reusing this same ControlRow rather than a rail item
             of its own (nine unlabelled icons already proved to be too many three days before this
-            task started): the range, the source picker and the export all apply to this section
-            without being rebuilt. */}
+            task started): the range and the source picker both apply to this section without
+            being rebuilt, since SessionList queries from the same `resolved` the cards do. The
+            export does not: exportPathFor builds a daily rollup download over SUM_METRICS and
+            knows nothing about sessions, so the link beside these controls will not carry the
+            rows below them. */}
         <Card span={12} label={t('activity.sessions.label')}>
           <SessionList controls={resolved} />
         </Card>
