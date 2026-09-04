@@ -77,25 +77,4 @@ describe('emptyStateFor', () => {
     expect(emptyStateFor('resting_heart_rate', [point(58, 1 / 24), point(60, 1 / 24)])).toBeNull()
   })
 
-  // A baseline computed from three days looks exactly as authoritative as one from thirty. The
-  // thin flag is the reader's only signal, so it has to reach them.
-  it('reports insufficient data when the baseline is thin', () => {
-    expect(emptyStateFor(WORN, [point(900, 0.9)], { center: 900, spread: 10, n: 3, thin: true }))
-      .toBe('insufficient')
-  })
-
-  it('says nothing when the baseline is present and not thin', () => {
-    expect(emptyStateFor(WORN, [point(900, 0.9)], { center: 900, spread: 10, n: 28, thin: false }))
-      .toBeNull()
-  })
-
-  // An absent baseline is not the same as a thin one. A card that never asked for a baseline
-  // must not be told its data is insufficient.
-  it('says nothing when no baseline was requested', () => {
-    expect(emptyStateFor(WORN, [point(900, 0.9)], undefined)).toBeNull()
-  })
-
-  it('prefers the stronger statement when the range is empty and a baseline is thin', () => {
-    expect(emptyStateFor(WORN, [], { center: 0, spread: 0, n: 1, thin: true })).toBe('no_data')
-  })
 })

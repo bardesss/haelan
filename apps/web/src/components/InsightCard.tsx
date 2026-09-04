@@ -82,9 +82,10 @@ export function InsightCard({ insight, query, metric, span, label, formatValue, 
   // coverage means wear the device more consistently. A reader told "not enough data" for both
   // would have no way to tell which fix applies to them. `emptyState.insufficient` is reused
   // verbatim for `thin-days`, not reimplemented, because that string already says exactly this
-  // ("There are too few days here to say anything useful yet"); reusing it does not make
-  // `emptyStateFor`'s own `insufficient` branch (gated on a thin baseline) reachable, since this
-  // card never calls `emptyStateFor` and never consults a baseline at all.
+  // ("There are too few days here to say anything useful yet"). The key stays live through this
+  // card alone: `emptyStateFor` carried an `insufficient` branch of its own once, gated on a thin
+  // baseline no caller ever passed it, and M3e-2 had it removed as dead code; this card never
+  // called `emptyStateFor` and never consulted a baseline, so nothing here depended on it.
   //
   // The second half of this condition guards two different gaps, not one. `current`/`previous`/
   // `delta` do go null together with `suppressed`/`reason` (`insights.ts`'s own `refuse`), so a

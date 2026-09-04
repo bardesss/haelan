@@ -647,10 +647,11 @@ export function Dashboard() {
             wear/plain switch has nothing left to decide between; whichever branch it takes renders
             the same text. worn/count/reported still land in the call MetricCard makes for the wear
             branch, but heartRateBasisKey's four templates reference none of them, so they are
-            unused interpolation values, not a second, competing basis. baseline stays unset here,
-            the same omission the card made by hand before: a thin baseline should blank only the
-            band this chart draws around its lines, not the lines themselves, and passing baseline
-            through would hand that decision to emptyStateFor's own insufficient state instead. */}
+            unused interpolation values, not a second, competing basis. heartRateBand goes to
+            HeartRateRange below, never to MetricCard: a thin baseline should blank only the band
+            that chart draws around its lines, not the lines themselves, and MetricCard's own
+            `baseline` prop, which once fed emptyStateFor's `insufficient` branch, went with that
+            branch when M3e-2 had both removed as dead code no caller ever reached. */}
         {controls.tab === 'day' ? (
           // With from === to the daily series this card used to read holds at most one row (see
           // emptyStateFor's own opening comment in emptyState.ts for why a one day range is
