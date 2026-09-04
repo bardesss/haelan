@@ -2,6 +2,10 @@ import { setImmediate } from 'node:timers/promises'
 import { PeopleStore, peopleNeedingRebuild, runRebuild } from '@haelan/core'
 import type { RebuildFailure, RebuildReport, openHaelan } from '@haelan/core'
 
+// Re-exported so rebuildWorker.ts and rebuildInWorker.ts, which know rebuildIfNeeded through this
+// module rather than through @haelan/core directly, can name the shape of what it returns.
+export type { RebuildFailure, RebuildReport }
+
 export interface BootRebuildDeps {
   instance: ReturnType<typeof openHaelan>
   nowMs: () => number
@@ -9,13 +13,17 @@ export interface BootRebuildDeps {
 }
 
 /**
- * Rebuilds whoever needs it, one person per turn of the event loop.
+ * Rebuilds whoever needs it, yielding to the event loop once between each person.
  *
- * better-sqlite3 is synchronous, so a rebuild holds Node's only thread for as long as it runs.
- * One person per call with a yield in between gives Fastify the gaps it needs to keep answering,
- * which is the difference between a slow upgrade and an unreachable one. Inside a single person
- * the thread is still held, and that is the price of the atomicity the design rests on: nobody
- * ever reads a person whose tier 2 and tier 3 disagree.
+ * better-sqlite3 is synchronous, so runRebuild holds Node's only thread for the whole of one
+ * person's rebuild; the `await setImmediate()` below only opens a gap after that person's
+ * transaction has already returned, before the next one starts. That gap does nothing for a
+ * household of one, which a self hosted personal dashboard mostly is: with a single person there
+ * is no "between" for it to fall in, so the entire rebuild runs inside one turn regardless, and
+ * that was measured at about fifteen minutes on real data. What actually keeps the caller
+ * reachable during that time is running this whole function off the main thread, which is what
+ * rebuildInWorker.ts now does; this function's own shape is unchanged and is still what atomicity
+ * within a person rests on, since nobody ever reads a person whose tier 2 and tier 3 disagree.
  */
 export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildReport> {
   const peopleStore = new PeopleStore(deps.instance.db)

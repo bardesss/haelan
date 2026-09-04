@@ -9,6 +9,7 @@ import { useTranslation } from './i18n/index.js'
 import { ApiError } from './api/client.js'
 import { signOutAndResetSession } from './auth/signOutRequest.js'
 import { ROUTES } from './routes.js'
+import { ErrorBoundary } from './components/ErrorBoundary.js'
 
 export function Shell() {
   const { t } = useTranslation()
@@ -79,23 +80,31 @@ export function Shell() {
 
   return (
     <div className="layout">
-      <Sidebar
-        active={active.path}
-        person={session.data.displayName}
-        signOutError={signOutError}
-        onSignOut={() => {
-          setSignOutError(null)
-          // See signOutRequest.ts for why this resets rather than clears the cache: clearing
-          // silently leaves the mounted useSession observer reporting the old session forever.
-          void signOutAndResetSession(queryClient).then((result) => {
-            // A request that never reached the server (an unreachable instance, a dropped
-            // connection) should leave the signed-in state exactly as it was rather than
-            // silently doing nothing: the reader needs to know the click did not work.
-            if (!result.ok) setSignOutError(t('shell.signOutFailed'))
-          })
-        }}
-      />
-      <main className="main">{active.element}</main>
+      {/* The rail's own boundary, kept apart from the page's below. A throw here costs the reader
+          navigation and sign out, not the page they came for; the two boundaries are separate so
+          neither failure takes both. */}
+      <ErrorBoundary>
+        <Sidebar
+          active={active.path}
+          person={session.data.displayName}
+          signOutError={signOutError}
+          onSignOut={() => {
+            setSignOutError(null)
+            // See signOutRequest.ts for why this resets rather than clears the cache: clearing
+            // silently leaves the mounted useSession observer reporting the old session forever.
+            void signOutAndResetSession(queryClient).then((result) => {
+              // A request that never reached the server (an unreachable instance, a dropped
+              // connection) should leave the signed-in state exactly as it was rather than
+              // silently doing nothing: the reader needs to know the click did not work.
+              if (!result.ok) setSignOutError(t('shell.signOutFailed'))
+            })
+          }}
+        />
+      </ErrorBoundary>
+      {/* A backstop for what a card's own boundary cannot catch within a page: the page's own
+          layout, its control row, anything above its cards. A reader hitting this one has lost
+          the page rather than one card. */}
+      <main className="main"><ErrorBoundary>{active.element}</ErrorBoundary></main>
     </div>
   )
 }
