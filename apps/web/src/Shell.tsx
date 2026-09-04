@@ -9,6 +9,7 @@ import { useTranslation } from './i18n/index.js'
 import { ApiError } from './api/client.js'
 import { signOutAndResetSession } from './auth/signOutRequest.js'
 import { ROUTES } from './routes.js'
+import { ErrorBoundary } from './components/ErrorBoundary.js'
 
 export function Shell() {
   const { t } = useTranslation()
@@ -95,7 +96,10 @@ export function Shell() {
           })
         }}
       />
-      <main className="main">{active.element}</main>
+      {/* A backstop for what a card's own boundary cannot catch: the rail, the control row, a
+          page's own layout above its cards. A reader hitting this one has lost the whole page
+          rather than one card. */}
+      <main className="main"><ErrorBoundary>{active.element}</ErrorBoundary></main>
     </div>
   )
 }

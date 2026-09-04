@@ -5,6 +5,7 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { ErrorBoundary } from '../src/components/ErrorBoundary.js'
+import { Card } from '../src/components/Card.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -67,5 +68,25 @@ describe('ErrorBoundary', () => {
   it('logs the error rather than swallowing it', () => {
     mount(<ErrorBoundary><Boom throws /></ErrorBoundary>)
     expect(console.error).toHaveBeenCalled()
+  })
+
+  // The property the granularity choice exists for, and the one a boundary placed too high gets
+  // wrong. A page is not the unit; a card is.
+  it('leaves a sibling card standing when one card throws', () => {
+    mount(
+      <>
+        <Card span={4} label="Broken"><Boom throws /></Card>
+        <Card span={4} label="Fine"><p>still here</p></Card>
+      </>,
+    )
+    expect(container!.textContent).toContain('still here')
+  })
+
+  // The failed card keeps its own frame and its label, so the reader can see WHICH card failed.
+  // A boundary wrapped around Card from outside would take the label with it.
+  it('keeps the failed card its label', () => {
+    mount(<Card span={4} label="Broken"><Boom throws /></Card>)
+    expect(container!.textContent).toContain('Broken')
+    expect(container!.textContent).toContain('This did not load.')
   })
 })
