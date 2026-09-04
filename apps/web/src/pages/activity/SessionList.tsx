@@ -4,6 +4,7 @@ import { useSessions } from '../../data/useSessions.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '../../data/workoutSummary.js'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
+import { formatSessionDateHeading } from '../../format.js'
 import { SessionRow } from './SessionRow.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
@@ -21,14 +22,15 @@ const ALL_TYPES = '__all__'
 const UNKNOWN_TYPE = '__unknown__'
 
 /**
- * The section 192 real exercise sessions had no surface for: a scrolling list below Activity's
- * tiles and heatmap, filtered by a type picker built from what the range actually holds. Handles
+ * The section 192 real exercise sessions had no surface for: a list below Activity's tiles and
+ * heatmap, grouped by day and filtered by a type picker built from what the range actually holds.
+ * The page itself scrolls to reach it; this list carries no scroll container of its own. Handles
  * its three query states by hand (isError, isPending, then the list) for the same reason the
  * Dashboard's flagged days card does: a session carries no metric and no points, so there is no
  * MetricCard to gate on.
  */
 export function SessionList({ controls }: { controls: PageControlsState }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Local, not URL, state: this is a view of one section on the page, not a dimension the page's
   // own range, source or export cares about. Not reset when the query answers again (a new sync,
   // a stepped period): a selection outliving the data it was built from is what lets "no sessions
@@ -92,6 +94,21 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
     ? typed.map((entry) => entry.session)
     : typed.filter((entry) => (entry.type ?? UNKNOWN_TYPE) === selectedType).map((entry) => entry.session)
 
+  // Five sessions on one day used to print their own date five times ("do 27 aug" x5). This
+  // partitions `filtered` into runs of a shared localDate rather than sorting or bucketing it
+  // fresh, which is what keeps grouping from reordering anything: `filtered` is already
+  // newest-first, and a partition of a list preserves that list's own order both inside and
+  // across the runs it produces.
+  const groups = useMemo(() => {
+    const result: { date: string, sessions: WorkoutSession[] }[] = []
+    for (const session of filtered) {
+      const last = result[result.length - 1]
+      if (last !== undefined && last.date === session.localDate) last.sessions.push(session)
+      else result.push({ date: session.localDate, sessions: [session] })
+    }
+    return result
+  }, [filtered])
+
   if (query.isError) return <ErrorState onRetry={() => void query.refetch()} />
   if (query.isPending) return <Loading />
 
@@ -113,9 +130,7 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
   return (
     <div className="session-list">
       <div className="session-list-header">
-        {/* The count is stated because a scroll container hides its own length: a reader looking
-            at a fixed-height list of rows has no other way to tell fifteen rows from all of
-            fifteen. Unfiltered it counts the period, which is what "in this period" claims. A
+        {/* Unfiltered the count states the period, which is what "in this period" claims. A
             filter does not narrow that claim, it changes it: the shown figure alone would say a
             four session month held one, and in the filtered-empty branch would read "0 recorded
             sessions in this period" directly above a message offering to show the rest of the
@@ -148,15 +163,17 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
         <EmptyState title={t('activity.sessions.emptyFilteredTitle', { type: selectedLabel })}
           detail={t('activity.sessions.emptyFilteredDetail')} />
       ) : (
-        // The one scroll container in this app whose children hold nothing focusable, so it is
-        // the one that needs a tab stop of its own: without it a keyboard reader reaches roughly
-        // the first ten of a Year range's ~190 rows and cannot scroll to the rest (WCAG 2.1.1). A
-        // focusable element with no role announces as a tab stop with nothing to say, so it takes
-        // a named role too, the same role="group" plus aria-label pairing ControlRow's segmented
-        // range buttons already use.
-        <div className="session-list-scroll" tabIndex={0} role="group"
-          aria-label={t('activity.sessions.scrollLabel')}>
-          {filtered.map((session) => <SessionRow key={session.id} session={session} />)}
+        // No scroll container here any more: the page around this card already scrolls, so a
+        // second scrollbar inside it only trapped the wheel and clipped the first row. Each
+        // group is a run of same-day rows under one heading (built above in `groups`); SessionRow
+        // itself stops printing the date now that this heading carries it.
+        <div className="session-groups">
+          {groups.map((group) => (
+            <div key={group.date} className="session-date-group">
+              <h3 className="session-date-heading">{formatSessionDateHeading(group.date, i18n.language)}</h3>
+              {group.sessions.map((session) => <SessionRow key={session.id} session={session} />)}
+            </div>
+          ))}
         </div>
       )}
     </div>

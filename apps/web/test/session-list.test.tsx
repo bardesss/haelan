@@ -46,10 +46,11 @@ const SESSIONS_KEY = queryKeys.resource('p1', 'sessions', {
   kind: 'exercise', from: CONTROLS.from, to: CONTROLS.to, source: CONTROLS.source,
 })
 
-const session = (id: string, type: string): WorkoutSession => ({
+const session = (id: string, type: string, over: Partial<WorkoutSession> = {}): WorkoutSession => ({
   id, sourceId: 'watch', startMs: Date.UTC(2026, 7, 3, 8, 0), endMs: Date.UTC(2026, 7, 3, 8, 54),
   startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-03',
   attrs: { exerciseType: type, metricsSummary: { caloriesKcal: 300 } },
+  ...over,
 })
 
 /** Seeds the sessions response directly, so no test here depends on a network call. */
@@ -284,18 +285,38 @@ describe('SessionList', () => {
     expect(container!.textContent, 'the remedy offered has to still be true')
       .toContain("Choose another type to see the rest of this period's sessions.")
   })
-  // app.css caps this container at 480px and scrolls it, which fits roughly ten rows; a Year
-  // range holds about 190. The rows carry no focusable element of their own, so without a tab
-  // stop of its own the container was unreachable by keyboard and everything past the first
-  // screenful was unreadable without a mouse (WCAG 2.1.1). The app's other scroll containers hold
-  // focusable children and get this for free, which is why this is the first place it bites. A
-  // focusable container also needs a role carrying an accessible name, or a screen reader
-  // announces a tab stop with nothing to say about it.
-  it('gives the scrolling list a keyboard tab stop and an accessible name', () => {
+  // The inner scroll container this test used to pin (max-height: 480px, its own tab stop) is
+  // gone: the page around this card already scrolls, so a second scrollbar inside it only trapped
+  // the wheel and clipped the first row. Removing it removes the keyboard trap it existed to
+  // patch too, so there is nothing left here to reach with Tab.
+  it('no longer wraps the rows in a scrolling container', () => {
     mountWith(Array.from({ length: 15 }, (_, i) => session(`s${i}`, 'RUNNING')), 'en')
-    const scroll = container!.querySelector('.session-list-scroll') as HTMLElement
-    expect(scroll.tabIndex).toBe(0)
-    expect(scroll.getAttribute('role')).toBe('group')
-    expect(scroll.getAttribute('aria-label')).toBe('Scrollable list of sessions')
+    expect(container!.querySelector('.session-list-scroll')).toBeNull()
+  })
+
+  // Five sessions on one day used to print their own date five times. Grouping by localDate is
+  // what stops that: one heading per run of consecutive same-day rows, in the order the rows
+  // already sorted into (newest first), never resorted by the grouping itself.
+  it('prints one date heading per day, in the same newest-first order as the rows', () => {
+    mountWith([
+      session('a', 'RUNNING', { localDate: '2026-08-27', startMs: Date.UTC(2026, 7, 27, 8, 0), endMs: Date.UTC(2026, 7, 27, 8, 28) }),
+      session('b', 'RUNNING', { localDate: '2026-08-27', startMs: Date.UTC(2026, 7, 27, 7, 0), endMs: Date.UTC(2026, 7, 27, 7, 24) }),
+      session('c', 'WALKING', { localDate: '2026-08-24', startMs: Date.UTC(2026, 7, 24, 8, 0), endMs: Date.UTC(2026, 7, 24, 8, 43) }),
+    ], 'nl')
+
+    const headings = [...container!.querySelectorAll('.session-date-heading')].map((h) => h.textContent)
+    // Two headings for three rows: the two 27th sessions share one heading rather than each
+    // printing their own, which is the defect this change exists to fix.
+    expect(headings).toEqual(['donderdag 27 augustus', 'maandag 24 augustus'])
+    expect(rows()).toHaveLength(3)
+  })
+
+  // The heading carries the date now (SessionRow itself stops printing it, see session-row.test),
+  // through the same Intl call SessionRow's own sr-only span uses, not a hand built string: the
+  // full Dutch weekday and date is the one shape a hand built format is likeliest to get wrong
+  // ("do 27 aug" is not "donderdag 27 augustus").
+  it('spells the heading as the full weekday and date, not an abbreviation', () => {
+    mountWith([session('a', 'RUNNING', { localDate: '2026-08-27' })], 'nl')
+    expect(container!.querySelector('.session-date-heading')!.textContent).toBe('donderdag 27 augustus')
   })
 })

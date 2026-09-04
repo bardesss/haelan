@@ -13,10 +13,44 @@ const render = (session: WorkoutSession, lng = 'nl') =>
   renderToStaticMarkup(<I18nProvider lng={lng}><SessionRow session={session} /></I18nProvider>)
 
 describe('SessionRow', () => {
-  it('puts the date, the type and the duration on the first line', () => {
+  it('puts the type and the duration on the first line', () => {
     const html = render(run({ exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 874 } }))
     expect(html).toContain('Hardlopen')
     expect(html).toContain('54')
+  })
+
+  // The date used to be the first word on the visible line; SessionList now prints it once as a
+  // heading above a run of same-day rows instead, which took it out of each row's own accessible
+  // name. A screen reader user who lands on one row (arrow-key browsing, not just Tab, since a
+  // plain div carries no stop of its own) must still be able to tell which day it is on without
+  // relying on having heard the heading first, so the row keeps naming its own date, just not
+  // where sighted readers see it. `sr-only` is the project's own convention for exactly this split
+  // (Sidebar.tsx's collapsed rail labels, ControlRow's "Filter by source"), reused rather than a
+  // second hidden-text mechanism invented here.
+  it('keeps the date in the row for assistive technology even though it no longer shows it', () => {
+    const html = render(run({ exerciseType: 'RUNNING', metricsSummary: {} }, { localDate: '2026-08-27' }))
+    expect(html).toContain('sr-only')
+    expect(html, 'the full weekday and date, the same shape the heading above it prints')
+      .toContain('donderdag 27 augustus')
+  })
+
+  // The visible line must not double what the sr-only span above already says: a sighted reader
+  // scanning the row should see the type and duration only, with the date living in the heading.
+  it('does not print the date on the visible line', () => {
+    const html = renderToStaticMarkup(
+      <I18nProvider lng="nl"><SessionRow session={run({ exerciseType: 'RUNNING', metricsSummary: {} }, { localDate: '2026-08-27' })} /></I18nProvider>,
+    )
+    const visible = html.replace(/<span class="sr-only">.*?<\/span>/, '')
+    expect(visible).not.toContain('27 aug')
+  })
+
+  // Change 3: the type is the prominent element now that the date is gone, the duration secondary
+  // beside it. Pinned on the class each carries rather than on font-size or colour directly, since
+  // those live in app.css and a passing test here should not depend on reading that file too.
+  it('gives the type and the duration their own elements', () => {
+    const html = render(run({ exerciseType: 'RUNNING', metricsSummary: {} }))
+    expect(html).toContain('class="session-row-type"')
+    expect(html).toContain('class="session-row-duration"')
   })
 
   // The reason this is two lines rather than a table: 95 of 192 sessions have no distance, and a
