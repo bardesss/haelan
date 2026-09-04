@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { sessions } from '../db/schema/index.ts'
+import { sessions, overrides as overridesTable } from '../db/schema/index.ts'
+import { parseSessionTarget } from '../derive/targetKey.ts'
 
 // Named WorkoutSession rather than a generic SessionRow: the reader also serves readSleepNights'
 // underlying rows for kind 'sleep', but a workout list is its most interesting caller.
@@ -13,6 +14,15 @@ export interface WorkoutSession {
   endOffsetMinutes: number
   localDate: string
   attrs: unknown
+  /**
+   * Whether this person excluded this session. Marked rather than filtered: `workout_count` and
+   * every other derived figure already drop it at derivation (applyToSessions), so a list that
+   * dropped it too would leave a reader with a number that fell and no way to see what left. The
+   * two disagreeing visibly is the point.
+   */
+  excluded: boolean
+  /** The reason the person gave, so the list can say why rather than only that. */
+  excludeReason: string | null
 }
 
 /**
@@ -44,6 +54,16 @@ export function readSessions(db: DbOrTx, input: {
   // did not actually change.
   )).orderBy(asc(sessions.startMs), asc(sessions.id)).all()
 
+  // Read here rather than taken as a parameter: every caller of this reader wants the same answer,
+  // and one that forgot to pass them would silently answer as though the person had corrected
+  // nothing. Overrides are hand-entered and few, so this is one small indexed read.
+  const excluded = new Map<string, string | null>()
+  for (const row of db.select().from(overridesTable)
+    .where(and(eq(overridesTable.personId, input.personId), eq(overridesTable.scope, 'session'))).all()) {
+    if (row.action !== 'exclude') continue
+    excluded.set(parseSessionTarget(row.targetKey), row.reason ?? null)
+  }
+
   return rows.map((row) => ({
     id: row.id,
     sourceId: row.sourceId,
@@ -53,6 +73,8 @@ export function readSessions(db: DbOrTx, input: {
     endOffsetMinutes: row.endOffsetMinutes,
     localDate: row.localDate,
     attrs: parseAttrs(row.attrs),
+    excluded: excluded.has(row.id),
+    excludeReason: excluded.get(row.id) ?? null,
   }))
 }
 
