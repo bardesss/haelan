@@ -123,9 +123,19 @@ describe('ErrorBoundary', () => {
   })
 
   // It catches for the reader, not to hide a bug from whoever has to fix it.
+  //
+  // The boundary's own line, by its own words, rather than toHaveBeenCalled(). React 19 reports a
+  // caught error through console.error itself, so a bare toHaveBeenCalled() passes with the whole
+  // of componentDidCatch deleted: it was asserting React's logging, not ours. The error and the
+  // component stack are asserted too, because the message alone would still be there if the
+  // arguments that make it useful to whoever has to fix the bug were dropped.
   it('logs the error rather than swallowing it', () => {
     mount(<ErrorBoundary><Boom throws /></ErrorBoundary>)
-    expect(console.error).toHaveBeenCalled()
+    expect(console.error).toHaveBeenCalledWith(
+      'a card failed to render',
+      expect.any(Error),
+      expect.anything(),
+    )
   })
 
   // The property the granularity choice exists for, and the one a boundary placed too high gets
