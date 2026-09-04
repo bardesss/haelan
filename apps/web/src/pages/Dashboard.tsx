@@ -12,6 +12,7 @@ import { ChartNote } from '../components/ChartNote.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
@@ -734,8 +735,17 @@ export function Dashboard() {
             : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
-            <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
-              label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
+            <>
+              <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
+                label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
+              {/* Reused from Sleep.tsx rather than a second copy of this paragraph: both pages
+                  build their hypnogram from the same useNights row, so a night an exclusion
+                  shortened needs the same explanation here that Sleep.tsx already drew, the defect
+                  a reader excluding a sleep session used to see (an unexplained short night on
+                  this page, an explained one on Sleep) otherwise reopens on every edit to one page
+                  that forgets the other. */}
+              <NightExcludedSessions count={lastNight.excludedSessions.length} />
+            </>
           )}
         </Card>
         {/* metric is sleep_bedtime_minutes only to pick the plain key: neither bedtime nor

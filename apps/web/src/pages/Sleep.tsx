@@ -12,6 +12,7 @@ import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
@@ -435,14 +436,7 @@ export function Sleep() {
             <>
               <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
                 label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
-              {/* excludedSessions is always present (empty is a measurement, packages/core/src/
-                  query/sleepNights.ts), so a shorter night this reader threw a session out of
-                  reads as a decision here rather than a recording that just happened to be short. */}
-              {lastNight.excludedSessions.length > 0 && (
-                <p className="chart-note">
-                  {t('sleep.sleepStages.nightExcludedSessions', { count: lastNight.excludedSessions.length })}
-                </p>
-              )}
+              <NightExcludedSessions count={lastNight.excludedSessions.length} />
             </>
           )}
         </Card>

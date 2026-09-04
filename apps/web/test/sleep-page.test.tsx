@@ -653,6 +653,21 @@ describe('the Sleep page', () => {
     restore()
   })
 
+  // Finding 1 of the second pass review: stubSleep grew this parameter and every other page test
+  // left it defaulted, so nothing under test ever rendered sleep.sleepStages.nightExcludedSessions
+  // even though it is the one new Sleep surface this branch shipped. Two excluded ids, for the
+  // plural form, and the whole sentence rather than a substring: a dropped pluralisation ("2 sleep
+  // session excluded...") still contains "2" and "excluded from this night".
+  it('says a session was excluded from the night the hypnogram draws', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [], ['s2', 's3'])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const notes = [...container!.querySelectorAll('.chart-note')].map((n) => n.textContent)
+    expect(notes, container!.innerHTML).toContain('2 sleep sessions excluded from this night')
+    restore()
+  })
+
   // Suppression, exercised with a null current rather than the suppressed flag alone: this pins
   // the hazard note's own "vary your fixtures" example (a null field), and confirms the card falls
   // back to the safe empty state rather than reaching formatDuration with a null it cannot handle.

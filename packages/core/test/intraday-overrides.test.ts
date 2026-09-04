@@ -174,4 +174,73 @@ describe('readIntraday applies a sample correction the way applyToSamples does',
       { sourceId: 'watch', utcMs: MINUTE_ONE, min: null, mean: 60, max: null, n: 1, excluded: false },
     ])
   })
+
+  // Parsed and re-encoded rather than trusted as written (finding 5): a target key stored with a
+  // different field order still passes OverrideStore.validate, which parses but does not
+  // canonicalise before insert, and used to match nothing in this reader's own lookup while
+  // applyToSamples, which does re-encode, applied it at derivation regardless. Written straight
+  // against the table, the same reason the null-correction test above bypasses `put`: OverrideStore
+  // itself always calls sampleTarget in the field order above and could never produce this key.
+  it('applies a sample override whose stored key uses a different field order', () => {
+    insert({ utcMs: MINUTE_ONE, agg: 'mean', value: 60 })
+    test.db.insert(overridesTable).values({
+      id: 'reordered-key', personId: 'p1', scope: 'sample',
+      targetKey: JSON.stringify({ utcMs: MINUTE_ONE, metric: 'heart_rate', source: 'watch' }),
+      action: 'exclude', correctedValue: null, reason: 'reordered on write', createdAtMs: 1_000,
+    }).run()
+
+    const result = read()
+    expect(result.points).toEqual([
+      { sourceId: 'watch', utcMs: MINUTE_ONE, min: null, mean: 60, max: null, n: 1, excluded: true },
+    ])
+  })
+})
+
+describe('the Correct guard\'s own instant, for a raw metric holding exactly one reading', () => {
+  // Finding 4: for agg 'raw' rows a point's utcMs used to be the bucket start (the minute floored),
+  // not a stored instant, so a raw minute holding exactly one reading offered Correct (n === 1) but
+  // wrote sampleTarget({utcMs: <bucket start>}), which neither applyToSamples nor this reader's own
+  // per-row lookup (keyed on row.utcMs) matches when the reading falls anywhere but the minute's
+  // own top. The write succeeded and changed nothing. Fifteen seconds into the minute, not on its
+  // boundary, is what tells the bucket start and the row's real instant apart.
+  //
+  // Taken from the point the reader itself returned, not from the inserted instant directly: that
+  // is the only route AnnotatePanel actually has (IntradayHeartRate.tsx's onClick hands the panel
+  // the clicked point's own utcMs), so a test that built the override straight from `readingMs`
+  // would pass even if readIntraday still reported the bucket start, the exact defect this covers.
+  it('changes the value a correction written against the reader\'s own point actually changes', () => {
+    const readingMs = MINUTE_ONE + 15_000
+    insert({ utcMs: readingMs, agg: 'raw', value: 97, metric: 'spo2' })
+
+    const before = read('spo2')
+    expect(before.points).toHaveLength(1)
+    expect(before.points[0]!.n).toBe(1)
+    // The assertion that would have caught this directly: n === 1 promises a stored instant, and
+    // the bucket start this point used to carry is not one (nothing was inserted at MINUTE_ONE).
+    expect(before.points[0]!.utcMs).toBe(readingMs)
+
+    overrides.put({
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'spo2', utcMs: before.points[0]!.utcMs }),
+      action: 'correct', correctedValue: 94, reason: 'recalibrated', nowMs: 1_000,
+    })
+
+    const after = read('spo2')
+    expect(after.points).toEqual([
+      { sourceId: 'watch', utcMs: readingMs, min: 94, mean: 94, max: 94, n: 1, excluded: false },
+    ])
+  })
+
+  // The other side of the guard: two readings in the same minute leave no single instant to name,
+  // so the bucket start is what the point keeps, and a correction has no real row to land on either
+  // way — which is exactly why AnnotatePanel withholds Correct whenever n is not 1.
+  it('leaves a multi-reading bucket at its own start, where Correct is withheld', () => {
+    insert({ utcMs: MINUTE_ONE + 5_000, agg: 'raw', value: 97, metric: 'spo2' })
+    insert({ utcMs: MINUTE_ONE + 40_000, agg: 'raw', value: 95, metric: 'spo2' })
+
+    const result = read('spo2')
+    expect(result.points).toEqual([
+      { sourceId: 'watch', utcMs: MINUTE_ONE, min: 95, mean: 96, max: 97, n: 2, excluded: false },
+    ])
+  })
 })

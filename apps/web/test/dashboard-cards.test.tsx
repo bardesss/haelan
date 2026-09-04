@@ -248,6 +248,53 @@ function stubOneNight(): () => void {
 }
 
 /**
+ * A night carrying one excluded sleep session, for the finding that this page drew a shortened
+ * night with no explanation while Sleep.tsx drew the same night's own excludedSessions line: both
+ * pages build their hypnogram from the same useNights row, and readSleepNights reports what it
+ * excluded alongside the applied session set (packages/core/src/query/sleepNights.ts), so this is
+ * the same shape sleep-page.test.tsx's own hypnogramNightsResponse sends, minted here rather than
+ * imported since the two test files stub fetch independently.
+ */
+function stubNightExcludedSession(): () => void {
+  const original = globalThis.fetch
+  const startMs = Date.UTC(2026, 7, 15, 23, 0)
+  const endMs = Date.UTC(2026, 7, 16, 7, 0)
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/api/auth/me')) {
+      return new Response(JSON.stringify(PERSON), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', 60)], reduction: null }
+      }
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/sleep/nights')) {
+      return new Response(JSON.stringify({
+        items: [{
+          localDate: '2026-08-16', sourceId: 'watch', sessionIds: ['s1'],
+          startMs, endMs, startOffsetMinutes: 0, endOffsetMinutes: 0, naps: [],
+          excludedSessions: ['s2'],
+          segments: [{ stage: 'LIGHT', startMs, endMs }],
+        }],
+        cursor: null,
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/baselines')) {
+      return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/insights')) {
+      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
  * What the wire actually looks like once an exclusion has applied: deriveDay deletes the excluded
  * metric's daily row, so /series answers with that day simply absent, and GET /overrides is the
  * only thing that still knows it existed. Every point lands on a different day from the excluded
@@ -465,6 +512,21 @@ describe('the remaining Dashboard cards', () => {
     // nights" too.
     expect(container!.textContent).toContain('bed and wake time, 1 night')
     expect(container!.textContent).not.toContain('bed and wake time, 1 nights')
+    restore()
+  })
+
+  // Finding 3 of the second pass review: this card used to render Hypnogram from the same
+  // useNights data Sleep.tsx reads and print no excluded-sessions line, so a reader excluding a
+  // sleep session saw an unexplained short night here and an explained one on Sleep. Whole
+  // sentence, not a substring, the same reason sleep-page.test.tsx's own copy of this assertion
+  // does.
+  it('says a session was excluded from the night this card draws too, not only Sleep\'s own copy', async () => {
+    const restore = stubNightExcludedSession()
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const notes = [...container!.querySelectorAll('.chart-note')].map((n) => n.textContent)
+    expect(notes, container!.innerHTML).toContain('1 sleep session excluded from this night')
     restore()
   })
 
