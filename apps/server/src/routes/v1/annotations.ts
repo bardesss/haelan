@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import {
-  ConfigError, localDateOf, peopleNeedingRebuild, requireDate, runDerive, widenedUtcWindow,
+  ConfigError, peopleNeedingRebuild, requireDate, runDerive,
 } from '@haelan/core'
 import type { OverrideScope, StoredOverride } from '@haelan/core'
 import { parseSampleTarget } from '@haelan/core/target-key'
@@ -231,28 +231,9 @@ export function registerAnnotationRoutes(app: FastifyInstance): void {
     const personId = personIdOf(request)
     const { from, to } = requireDateRange(request.query)
 
-    // EventStore.listFor takes instants, not local dates: an event carries the offset in force
-    // at its own start rather than the account carrying one timezone this route could resolve
-    // `from`/`to` against. A UTC calendar day is the wrong boundary for either end: 00:30 local
-    // at UTC+2 on `from` is 22:30Z the day before, outside a `from`T00:00:00Z window even though
-    // its own local day is in range, and the same offset can put a `to + 1` local day inside a
-    // `to`-shaped UTC window. widenedUtcWindow and localDateOf exist for exactly this, the same
-    // pair deriveDayInto and readIntraday use: widen the SQL fetch past every offset the provider
-    // can report, UTC-12 to UTC+14, then narrow row by row using the instant and offset that row
-    // actually carries, which is what makes the wide first pass safe rather than merely broader.
-    const window = { start: widenedUtcWindow(from).start, end: widenedUtcWindow(to).end }
-    const candidates = app.haelan.instance.events.listFor(personId, window.start, window.end)
-    // localDate is computed here regardless, to decide whether a candidate is in range at all, so
-    // this hands it back on the item rather than discarding it. A browser placing this event on a
-    // chart needs the same local day this filter just used, and the arithmetic that produces it
-    // (localDateOf, DST sensitive) lives only in packages/core/src/derive/localDay.ts, which has no
-    // browser safe subpath the way target-key and metrics do. Computing it a second time client side
-    // would mean duplicating that arithmetic somewhere it can drift from this one; returning the
-    // answer already sitting in scope here means it never has to.
-    const items = candidates.flatMap((event) => {
-      const localDate = localDateOf(event.startedAtMs, event.startedAtOffsetMinutes)
-      return localDate >= from && localDate <= to ? [{ ...event, localDate }] : []
-    })
+    // EventStore.listFor takes local dates and does the widening and per-row narrowing itself
+    // (see its own comment for why both exist); this route is validation plus the one call.
+    const items = app.haelan.instance.events.listFor(personId, from, to)
 
     // Not paginated, deliberately: events are entered by hand, same as overrides below, so a
     // range wide enough to matter for pagination is not a range a person filled by hand.

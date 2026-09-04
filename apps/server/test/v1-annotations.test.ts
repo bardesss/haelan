@@ -90,9 +90,11 @@ describe('the note and event routes', () => {
     const write = await postEvent(harness, token, { kind: 'dentist', startedAtMs: 1_770_000_000_000 })
     expect(write.statusCode).toBe(200)
 
-    // No GET /events yet either; bracket the fixture's own timestamp rather than the '2026-08'
-    // range the eventual route will take, since this event was not planted in August.
-    const list = harness.app.haelan.instance.events.listFor('p1', 1_769_000_000_000, 1_771_000_000_000)
+    // No GET /events yet either; bracket the fixture's own timestamp (2026-02-02T02:40:00Z, offset
+    // 0 so its local date is the same string) rather than the '2026-08' range the eventual route
+    // will take, since this event was not planted in August. listFor takes local dates, not
+    // instants, since Task 11 moved that arithmetic into the store.
+    const list = harness.app.haelan.instance.events.listFor('p1', '2026-02-01', '2026-02-03')
     expect(list[0]!.kind).toBe('dentist')
   })
 
@@ -104,7 +106,8 @@ describe('the note and event routes', () => {
       headers: { authorization: `Bearer ${token}`, ...ORIGIN },
     })
     expect(removed.statusCode).toBe(200)
-    expect(harness.app.haelan.instance.events.listFor('p1', 1_769_000_000_000, 1_771_000_000_000)).toHaveLength(0)
+    // Local dates, not instants, for the same reason as the test above.
+    expect(harness.app.haelan.instance.events.listFor('p1', '2026-02-01', '2026-02-03')).toHaveLength(0)
   })
 
   it('removes a note by local date', async () => {

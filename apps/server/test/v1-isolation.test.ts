@@ -710,8 +710,8 @@ describe('the versioned surface, beyond the per-route table', () => {
       // p1, not p2: both requests above name p1 in the path, so a guard that failed open would
       // create or delete p1's own event, never p2's. p2's event is read too, for the symmetry, but
       // it was never the one a broken guard here would touch.
-      expect(events.listFor('p1', startedAtMs - 1_000, startedAtMs + 120_000)).toEqual([])
-      expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
+      expect(events.listFor('p1', '2026-08-01', '2026-08-01')).toEqual([])
+      expect(events.listFor('p2', '2026-08-01', '2026-08-01').map((e) => e.id)).toEqual([theirs])
     })
 
     // Both directions of the event write routes, the same pairing the override case above uses:
@@ -740,7 +740,7 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(removed.statusCode).toBe(403)
       expect(removed.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
-      expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
+      expect(events.listFor('p2', '2026-08-01', '2026-08-01').map((e) => e.id)).toEqual([theirs])
     })
 
     it("creates and removes an event for the session's own person", async () => {
@@ -756,14 +756,14 @@ describe('the versioned surface, beyond the per-route table', () => {
       })
       expect(written.statusCode).toBe(200)
       const id = (written.json() as { id: string }).id
-      expect(events.listFor('p1', startedAtMs - 1_000, startedAtMs + 1_000)).toMatchObject([{ id, kind: 'own write' }])
+      expect(events.listFor('p1', '2026-08-01', '2026-08-01')).toMatchObject([{ id, kind: 'own write' }])
 
       const removed = await harness.app.inject({
         method: 'DELETE', url: `/api/v1/p/p1/events/${id}`,
         headers: { authorization: `Bearer ${token}`, ...ORIGIN },
       })
       expect(removed.statusCode).toBe(200)
-      expect(events.listFor('p1', startedAtMs - 1_000, startedAtMs + 1_000)).toEqual([])
+      expect(events.listFor('p1', '2026-08-01', '2026-08-01')).toEqual([])
     })
 
     // Not the 403 case above: this path segment is the caller's own, which is what lets the
@@ -785,7 +785,7 @@ describe('the versioned surface, beyond the per-route table', () => {
         headers: { authorization: `Bearer ${token}`, ...ORIGIN },
       })
       expect(removed.statusCode).toBe(200)
-      expect(events.listFor('p2', startedAtMs - 1_000, startedAtMs + 120_000).map((e) => e.id)).toEqual([theirs])
+      expect(events.listFor('p2', '2026-08-01', '2026-08-01').map((e) => e.id)).toEqual([theirs])
     })
   })
 
