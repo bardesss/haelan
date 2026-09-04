@@ -26,9 +26,11 @@ afterEach(() => test.cleanup())
 
 // Same helper shape sleep-nights.test.ts already seeds a night with, reused rather than
 // reinvented: two DB rows on one local date, joined by assembleNights into a single night.
-const insertSession = (o: { id: string, startMs: number, endMs: number, localDate: string }) =>
+// sourceId defaults to the one source every other test in this file seeds; the two-source test
+// below is the only caller that passes a second one.
+const insertSession = (o: { id: string, startMs: number, endMs: number, localDate: string, sourceId?: string }) =>
   test.db.insert(sessions).values({
-    id: o.id, personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: o.id,
+    id: o.id, personId: 'p1', sourceId: o.sourceId ?? 'watch', kind: 'sleep', externalId: o.id,
     startMs: o.startMs, startOffsetMinutes: 120, endMs: o.endMs, endOffsetMinutes: 120,
     localDate: o.localDate, rawPayloadId: null, attrs: JSON.stringify({ mainSleep: true }),
   }).run()
@@ -86,5 +88,34 @@ describe('readSleepNights and overrides', () => {
     const [night] = read()
     expect(night!.excludedSessions).toEqual([])
     expect(night!.sessionIds).toEqual(['sleep-1', 'sleep-2'])
+  })
+
+  // Two devices reporting the same local date must not see each other's corrections: a night is
+  // grouped by (localDate, sourceId), and excludedByDate is keyed the same way. Scoping by
+  // localDate alone would still pass every test above it in this file, since they all seed a
+  // single implicit source — this is the test that actually exercises the second key.
+  it('reports only its own source\'s excluded session when two sources share a date', () => {
+    test.db.insert(sources).values({
+      id: 'ring', personId: 'p1', externalId: 'ring', displayName: 'ring', kind: 'device', createdAtMs: 0,
+    }).run()
+
+    insertSession({ id: 'watch-1', sourceId: 'watch', startMs: BEDTIME, endMs: BEDTIME + 4 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'watch-2', sourceId: 'watch', startMs: BEDTIME + 4 * H, endMs: BEDTIME + 8 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'ring-1', sourceId: 'ring', startMs: BEDTIME, endMs: BEDTIME + 5 * H, localDate: '2026-08-22' })
+    insertSession({ id: 'ring-2', sourceId: 'ring', startMs: BEDTIME + 5 * H, endMs: BEDTIME + 9 * H, localDate: '2026-08-22' })
+    overrides.put({
+      personId: 'p1', scope: 'session', targetKey: sessionTarget('watch-2'),
+      action: 'exclude', reason: 'strap came loose', nowMs: 1_000,
+    })
+    overrides.put({
+      personId: 'p1', scope: 'session', targetKey: sessionTarget('ring-2'),
+      action: 'exclude', reason: 'left charging', nowMs: 1_000,
+    })
+
+    const nights = read()
+    const watchNight = nights.find((n) => n.sourceId === 'watch')
+    const ringNight = nights.find((n) => n.sourceId === 'ring')
+    expect(watchNight!.excludedSessions).toEqual(['watch-2'])
+    expect(ringNight!.excludedSessions).toEqual(['ring-2'])
   })
 })
