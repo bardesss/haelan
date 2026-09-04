@@ -96,3 +96,27 @@ export class SourceRegistry {
     }
   }
 }
+
+export interface SourceRow {
+  id: string
+  personId: string
+  externalId: string
+  displayName: string
+  kind: 'device' | 'app' | 'manual'
+  createdAtMs: number
+}
+
+/**
+ * One source, scoped by person, or undefined.
+ *
+ * The person is part of the lookup rather than checked afterwards, so a caller cannot forget to
+ * check: a source id belonging to somebody else is indistinguishable from one that does not
+ * exist, which is what the route wants to answer anyway. This is the first read of `sources` in
+ * the codebase - SourceRegistry above resolves payloads to ids and nothing has ever needed to
+ * look one up or list them, which is why the picker has been showing raw ids.
+ */
+export function getSource(db: DbOrTx, personId: string, sourceId: string): SourceRow | undefined {
+  return db.select().from(sources)
+    .where(and(eq(sources.id, sourceId), eq(sources.personId, personId)))
+    .get()
+}

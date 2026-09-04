@@ -98,6 +98,10 @@ export type { MixEntry, MergeDayInput } from './derive/merge.ts'
 export { MERGED_SOURCE } from './derive/rollup.ts'
 export { SourcePriorityStore } from './store/sourcePriority.ts'
 export type { StoredList } from './store/sourcePriority.ts'
+export { SourceAliasStore, nameFor, MAX_ALIAS_LENGTH } from './store/sourceAliases.ts'
+export type { NamedSource } from './store/sourceAliases.ts'
+export { getSource } from './store/sources.ts'
+export type { SourceRow } from './store/sources.ts'
 export {
   sampleTarget, sessionTarget, dayMetricTarget,
   parseSampleTarget, parseSessionTarget, parseDayMetricTarget,
