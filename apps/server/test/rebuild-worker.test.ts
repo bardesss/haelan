@@ -56,10 +56,15 @@ describe('rebuildInWorker', () => {
     expect(lines.join(' '), 'the worker reported no progress at all').toContain('rebuild')
   })
 
-  // The guarantee index.ts's own comment names: closing SQLite under a write transaction is how a
-  // shutdown turns into a stack trace. shutdown() awaits `rebuilding` for exactly this reason, so
-  // what has to hold is that awaiting the worker's promise really does mean its transaction is
-  // finished and the file is safe to close.
+  // Runs a real rebuild end to end against a real data directory and checks that the file it
+  // leaves behind opens and closes cleanly afterward. It does not prove the ordering index.ts's
+  // shutdown depends on: packages/core/src/db/open.ts puts the database in WAL mode with a 5
+  // second busy timeout, and under WAL a second connection's open and close do not block on a
+  // writer, so this assertion would pass the same way even if the worker's connection were still
+  // open. The close-before-exit ordering shutdown relies on is structural rather than asserted
+  // here: it follows from rebuildWorker.ts closing its instance in a `finally` around the whole
+  // module body, and from rebuildInWorker's promise resolving out of the worker's `exit` handler,
+  // which Node fires only after that module body, `finally` included, has finished running.
   it('leaves the database closable the moment its promise settles', async () => {
     const instance = openHaelan(dataDir, {})
     seedPerson(instance.db, 'p1')
