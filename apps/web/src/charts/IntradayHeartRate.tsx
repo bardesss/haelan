@@ -10,6 +10,7 @@ import { formatMetricValue } from '../format.js'
 import type { Translate } from '../format.js'
 import type { IntradayPoint, IntradayResult } from '../data/useIntraday.js'
 import { useSession } from '../auth/session.js'
+import { useSourceNames } from '../data/useSourceNames.js'
 
 type Props = {
   points: IntradayPoint[]
@@ -89,6 +90,7 @@ function timeOfDay(utcMs: number, timeZone: string, language: string): string {
 export function IntradayHeartRate({ points, label }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
+  const { nameOf } = useSourceNames()
   // UTC while /api/auth/me is still pending (this component's first render, always, since the
   // session query starts unresolved) or has failed, rather than throwing: every point already has
   // a real instant regardless of whether the reader's own zone is known yet, and UTC is a real,
@@ -98,11 +100,18 @@ export function IntradayHeartRate({ points, label }: Props) {
 
   const series = useMemo(() => seriesBySource(points), [points])
 
-  // Read by the tooltip formatter to find the point a hovered mean-line sample names: `build`
-  // draws each source's mean line off `s.points` directly (in this same order), so a dataIndex the
-  // formatter gets back from that line counts into exactly this array.
-  const pointsBySource = useMemo(
-    () => new Map(series.map((s) => [s.sourceId, s.points])),
+  /**
+   * Keyed by the series index of each source's mean line, not by its name.
+   *
+   * Three series per source in the order built below, mean last, so source i's mean line is
+   * series 3i+2. The lookup used to key on `seriesName` and match the bare source id, which was
+   * only safe while a series was named by its id: a name is a label, two sources can share one
+   * (one person's alias can equal another source's provider name), and a tooltip that resolves a
+   * hovered point by label would then report the wrong source's readings. An index cannot
+   * collide.
+   */
+  const pointsBySeriesIndex = useMemo(
+    () => new Map(series.map((s, i) => [i * 3 + 2, s.points])),
     [series],
   )
 
@@ -120,18 +129,17 @@ export function IntradayHeartRate({ points, label }: Props) {
         formatter: (params) => {
           const list = Array.isArray(params) ? params : [params]
           const lines = list
-            // Only a source's mean line is named with the bare sourceId (the min/range lines
-            // below carry a " min"/" range" suffix precisely so this lookup excludes them): the
-            // other two exist only to draw the band and have nothing of their own to report.
-            .filter((p): p is typeof p & { seriesName: string, dataIndex: number } =>
-              typeof p.seriesName === 'string' && pointsBySource.has(p.seriesName))
+            // Only a source's mean line has anything to report: the min and range series exist to
+            // draw the band and carry no readings of their own.
+            .filter((p): p is typeof p & { seriesIndex: number, dataIndex: number } =>
+              typeof p.seriesIndex === 'number' && pointsBySeriesIndex.has(p.seriesIndex))
             .map((p) => {
-              const point = pointsBySource.get(p.seriesName)![p.dataIndex]
+              const point = pointsBySeriesIndex.get(p.seriesIndex)![p.dataIndex]
               if (!point) return ''
               const mean = formatMetricValue(point.mean, 'heart_rate', i18n.language, '')
               const min = formatMetricValue(point.min, 'heart_rate', i18n.language, '')
               const max = formatMetricValue(point.max, 'heart_rate', i18n.language, '')
-              return `${timeOfDay(point.utcMs, timezone, i18n.language)} ${point.sourceId}`
+              return `${timeOfDay(point.utcMs, timezone, i18n.language)} ${nameOf(point.sourceId)}`
                 + `<br/>${t('charts.hrTooltip.mean', { value: mean })}`
                 + `<br/>${t('charts.hrTooltip.range', { min, max })}`
             })
@@ -147,26 +155,25 @@ export function IntradayHeartRate({ points, label }: Props) {
       yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
       series: series.flatMap(({ sourceId, points: ownPoints }, index) => {
         const color = colors[index % colors.length]!
-        // Stacked per source (`range-${sourceId}`), not one shared 'range' stack: the same band
-        // technique Spo2Range and HeartRateRange use for a single source's own min/max range,
-        // given a distinct stack key per source so two sources' bands are drawn independently
-        // instead of piling one source's range on top of another's.
+        const label = nameOf(sourceId)
+        // The stack key stays the id. It is not a label: it is what keeps two sources' bands from
+        // being drawn on top of each other, and two sources can share a label.
         return [
-          { name: `${sourceId} min`, type: 'line' as const,
+          { name: `${label} min`, type: 'line' as const,
             data: ownPoints.map((p) => [p.utcMs, p.min]),
             showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 },
             stack: `range-${sourceId}`, areaStyle: { opacity: 0 } },
-          { name: `${sourceId} range`, type: 'line' as const,
+          { name: `${label} range`, type: 'line' as const,
             data: ownPoints.map((p) => [p.utcMs, p.max !== null && p.min !== null ? p.max - p.min : null]),
             showSymbol: false, connectNulls: false, lineStyle: { opacity: 0 },
             stack: `range-${sourceId}`, areaStyle: { color: tokens.stageLight, opacity: OPACITY.rangeBand } },
-          { name: sourceId, type: 'line' as const,
+          { name: label, type: 'line' as const,
             data: ownPoints.map((p) => [p.utcMs, p.mean]),
             showSymbol: false, connectNulls: false, lineStyle: { width: STROKE.series, color } },
         ]
       }),
     }
-  }, [series, pointsBySource, timezone, t, i18n.language])
+  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf])
 
   const { host, style } = useChart(build, 170)
   return (
@@ -180,7 +187,7 @@ export function IntradayHeartRate({ points, label }: Props) {
           const absent = t('charts.absence.noReading')
           return [
             timeOfDay(p.utcMs, timezone, i18n.language),
-            p.sourceId,
+            nameOf(p.sourceId),
             formatMetricValue(p.min, 'heart_rate', i18n.language, absent),
             formatMetricValue(p.mean, 'heart_rate', i18n.language, absent),
             formatMetricValue(p.max, 'heart_rate', i18n.language, absent),
