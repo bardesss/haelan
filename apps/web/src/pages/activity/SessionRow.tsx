@@ -59,6 +59,12 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       : `${formatNumber(summary.averageHeartRateBpm, 0, language, '')} ${t('activity.units.bpm')}`,
   ].filter((part): part is string => part !== null)
 
+  // Distance, pace and elevation gain only. workoutSummary also carries steps and
+  // activeZoneMinutes, but activeZoneMinutes alone covers 167 of 192 sessions, which would make
+  // this line a routine five figures on the common case rather than the one to three the two line
+  // design was scoped for. Steps on a run restates distance and active zone minutes restates the
+  // heart rate already on the first line, so leaving both off keeps this line reserved for what a
+  // reader actually came to a workout row to see (fix round 1 review).
   const detail = [
     summary.distanceMeters === null ? null
       : `${formatNumber(summary.distanceMeters / 1000, 1, language, '')} ${t('activity.units.km')}`,
@@ -66,10 +72,6 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
       : `${formatPace(summary.paceSecondsPerKm, language)} ${t('activity.units.paceSuffix')}`,
     summary.elevationGainMeters === null ? null
       : `${formatNumber(summary.elevationGainMeters, 0, language, '')} ${t('activity.units.elevationGainShort')}`,
-    summary.steps === null ? null
-      : `${formatNumber(summary.steps, 0, language, '')} ${t('activity.units.stepsShort')}`,
-    summary.activeZoneMinutes === null ? null
-      : `${formatNumber(summary.activeZoneMinutes, 0, language, '')} ${t('activity.units.activeZoneMinutesShort')}`,
   ].filter((part): part is string => part !== null)
 
   return (

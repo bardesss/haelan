@@ -281,9 +281,7 @@
       "workoutsShort": "work-outs",
       "bpm": "bpm",
       "paceSuffix": "/km",
-      "elevationGainShort": "m omhoog",
-      "stepsShort": "stappen",
-      "activeZoneMinutesShort": "actieve min"
+      "elevationGainShort": "m omhoog"
     },
     "insights": {
       "steps": "Stappen, deze periode tegenover de vorige"

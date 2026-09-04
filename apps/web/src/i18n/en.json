@@ -281,9 +281,7 @@
       "workoutsShort": "workouts",
       "bpm": "bpm",
       "paceSuffix": "/km",
-      "elevationGainShort": "m gained",
-      "stepsShort": "steps",
-      "activeZoneMinutesShort": "active min"
+      "elevationGainShort": "m gained"
     },
     "insights": {
       "steps": "Steps, this period against the last"

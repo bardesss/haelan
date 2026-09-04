@@ -57,4 +57,14 @@ describe('SessionRow', () => {
     expect(html).toContain('Snowboarding')
     expect(html).not.toContain('SNOWBOARDING')
   })
+
+  // The neighbouring case to "no fields renders no line" (above): one field is still enough to
+  // render the line, not just two or three. Elevation gain is used because it is the rarest of
+  // the three detail fields (69 of 192 sessions), so a session carrying it alone is the realistic
+  // shape of this case, not a fixture invented to hit a branch.
+  it('renders the detail line for a session with only one of its fields', () => {
+    const html = render(run({ exerciseType: 'HIKING', metricsSummary: { elevationGainMillimeters: 169906 } }))
+    expect(html).toContain('session-row-detail')
+    expect(html).toContain('170')
+  })
 })
