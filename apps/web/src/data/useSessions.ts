@@ -33,9 +33,11 @@ export interface WorkoutSession {
  * ids; personQuery.sessions calls requireSource with an empty alsoAllowed array
  * (packages/core/src/query/personQuery.ts line 274), so a literal 'merged' here is not a known
  * source and the request 400s (ConfigError). sourceParam only omits the all sources sentinel, so
- * it does not prevent 'merged' from being sent. The callers for this hook do not yet exist; a
- * future caller that skips resolveSource and passes an unresolved source straight through would
- * not be caught here.
+ * it does not prevent 'merged' from being sent. Its one caller, SessionList, is handed a source
+ * already run through resolveSource (Activity.tsx builds `resolved` from it), and resolveSource
+ * only ever answers ALL_SOURCES or a source id read out of a sourceMix, which names devices and
+ * never 'merged'. A future caller that skips that step and passes an unresolved source straight
+ * through would not be caught here.
  */
 export function sessionsPath(
   personId: string,
