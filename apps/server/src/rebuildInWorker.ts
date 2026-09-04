@@ -53,10 +53,13 @@ export function reviveFailure(failure: SerializedFailure): RebuildFailure {
 /**
  * Runs the rebuild on another thread so the main one keeps serving.
  *
- * The rebuild is a synchronous loop over people and days (runRebuild.ts has no awaits at all), so
- * called directly it blocks the event loop for its whole duration and the server answers nothing.
- * index.ts has always run it after listen, meaning to avoid exactly that; this is what makes that
- * intent true.
+ * One person's rebuild is a synchronous loop over their days (runRebuild.ts has no awaits at all),
+ * so it holds the event loop from the first day to the last and the server answers nothing for as
+ * long as that takes. rebuildIfNeeded's `await setImmediate()` does open a gap, but only after a
+ * person's transaction has already returned, so it buys nothing at all for a household of one,
+ * which is the case that reported this and the case a self hosted dashboard mostly is. index.ts
+ * has always run the rebuild after listen, meaning to keep the server answering; this is what
+ * makes that intent true however many people there are.
  *
  * Rejects when the worker fails or exits non zero, so runBootSequence's catch reports it and
  * shutdown never waits on a promise that will not settle.
