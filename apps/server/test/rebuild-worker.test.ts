@@ -2,8 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openHaelan, seedPerson } from '@haelan/core'
-import { rebuildInWorker, rebuildInWorkerIfNeeded } from '../src/rebuildInWorker.ts'
+import { corruptArchivedBodies, openHaelan, schema, seedPerson } from '@haelan/core'
+import { rebuildInWorker, rebuildInWorkerIfNeeded, reviveFailure, toSerializableFailure } from '../src/rebuildInWorker.ts'
 
 let dataDir: string
 beforeEach(() => { dataDir = mkdtempSync(join(tmpdir(), 'haelan-worker-')) })
@@ -111,5 +111,102 @@ describe('rebuildInWorkerIfNeeded', () => {
     } finally {
       instance.close()
     }
+  })
+})
+
+describe('a failure crossing the thread boundary', () => {
+  // The one part of this the rest of the file never touches: every other test asserts failures is
+  // empty, so toSerializableFailure and reviveFailure could both be deleted and nothing here
+  // would notice. structuredClone, which postMessage uses, copies message and stack out of the
+  // built in Error subclasses only; better-sqlite3's SqliteError is not one of those, so an
+  // uncopied failure arrives with its name and message undefined and runBootSequence, which
+  // interpolates `failure.error.message` into the line naming the quarantined person, would tell
+  // the operator that somebody could not be rebuilt because of undefined.
+  //
+  // Driven through a real rebuild rather than a hand built error, using boot.test.ts's
+  // seedPersonWhoseRebuildFails technique: an archived body corrupted in place, so the replay
+  // cannot inflate it. What that throws is a plain zlib Error, which structured clone does handle,
+  // so this covers the revive half and the wiring around it. The half structured clone actually
+  // breaks needs an error a rebuild cannot be made to throw on demand, and has its own test below.
+  it('carries a message the boot log can print', async () => {
+    const instance = openHaelan(dataDir, {})
+    seedPerson(instance.db, 'p1')
+    instance.archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: {},
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: '{}',
+    })
+    corruptArchivedBodies(instance.db, 'p1')
+    instance.close()
+
+    const outcome = await rebuildInWorker({ dataDir, log: () => {} })
+
+    expect(outcome.failures.map((f) => f.personId)).toEqual(['p1'])
+    const { error } = outcome.failures[0]!
+    // A real Error on this side, not the plain object that crossed: RebuildFailure promises its
+    // callers an Error and runBootSequence hands it straight to logError.
+    expect(error).toBeInstanceOf(Error)
+    // The message itself, quoted, because this is the string the operator reads and the exact
+    // thing structured clone drops.
+    expect(error.message).toContain('incorrect header check')
+    expect(error.name).toBe('Error')
+    // And the reasons ride along beside it, since the person is named by the same line.
+    expect(outcome.failures[0]!.reasons.join(' ')).toContain('version')
+  })
+})
+
+describe('the serialise and revive pair', () => {
+  /** A real better-sqlite3 SqliteError, thrown the way one is: by breaking a constraint. */
+  function realSqliteError(): Error & { code?: string } {
+    const instance = openHaelan(dataDir, {})
+    try {
+      // personId 'p1' does not exist, so this trips the foreign key.
+      instance.db.insert(schema.sources).values({
+        id: 's1', personId: 'p1', externalId: 'X', displayName: 'X', kind: 'app', createdAtMs: 1,
+      }).run()
+      throw new Error('the insert was supposed to fail and did not')
+    } catch (error) {
+      return error as Error & { code?: string }
+    } finally {
+      instance.close()
+    }
+  }
+
+  // The premise the pair exists for, asserted rather than assumed, because it is a fact about
+  // structuredClone and better-sqlite3 rather than about this repo, and if a later better-sqlite3
+  // built its errors through `class SqliteError extends Error` the flattening would become dead
+  // code that nothing here would flag.
+  it('is needed, because structured clone drops a SqliteError message on the floor', () => {
+    const error = realSqliteError()
+    expect(error.constructor.name).toBe('SqliteError')
+    expect(error.message).toContain('FOREIGN KEY constraint failed')
+
+    const cloned = structuredClone(error) as Error & { code?: string }
+
+    // Not an Error at all on the far side, with the two fields the operator reads gone and only
+    // the enumerable own property left. This is what postMessage would deliver unflattened.
+    expect(cloned instanceof Error).toBe(false)
+    expect(cloned.message).toBeUndefined()
+    expect(cloned.name).toBeUndefined()
+    expect(cloned.code).toBe(error.code)
+  })
+
+  // And the pair put through the same clone, which is the transport it is written against. Not a
+  // direct call of one on the other's output: that would pass with both functions deleted.
+  it('carries a SqliteError through structured clone intact', () => {
+    const error = realSqliteError()
+
+    const revived = reviveFailure(
+      structuredClone(toSerializableFailure({ personId: 'p1', reasons: ['mapping version'], error })),
+    )
+
+    expect(revived.error).toBeInstanceOf(Error)
+    expect(revived.error.message).toBe(error.message)
+    expect(revived.error.name).toBe('SqliteError')
+    // The enumerable extras ride along too. `code` is the one an operator grepping a boot log
+    // for SQLITE_ anything would look for.
+    expect((revived.error as Error & { code?: string }).code).toBe(error.code)
+    expect(revived.personId).toBe('p1')
+    expect(revived.reasons).toEqual(['mapping version'])
   })
 })

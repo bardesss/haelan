@@ -6,8 +6,8 @@ import type { Instance } from '@haelan/core'
 import type { RebuildFailure } from './rebuild.ts'
 
 /** What rebuildWorker.ts actually posts: failures with their error flattened to plain data, since
- * that is the part structured clone cannot be trusted with (see rebuildWorker.ts). */
-interface SerializedFailure {
+ * that is the part structured clone cannot be trusted with (see toSerializableFailure below). */
+export interface SerializedFailure {
   personId: string
   reasons: string[]
   error: { name: string, message: string, stack?: string, [extra: string]: unknown }
@@ -17,10 +17,27 @@ type WorkerMessage =
   | { kind: 'log', line: string }
   | { kind: 'done', failures: readonly SerializedFailure[], threadId: number }
 
-// The inverse of rebuildWorker.ts's toSerializableFailure: turns the plain data that crossed the
-// thread boundary back into a real Error, which is what RebuildFailure promises its callers and
-// what runBootSequence hands to logError.
-function reviveFailure(failure: SerializedFailure): RebuildFailure {
+// structuredClone, which postMessage uses, only special cases the built in Error subclasses
+// (Error, TypeError, RangeError and the like): message and stack are copied out of those
+// directly, even though both are non enumerable. Anything else with Error in its prototype chain
+// falls through to the generic object path, which copies only own enumerable properties. Checked
+// directly against better-sqlite3's SqliteError, the error a rebuild is most likely to throw: it
+// is not on the recognised list, so a cloned one arrives with name and message undefined and only
+// its enumerable `code` surviving. A failure is therefore flattened to plain data before posting
+// and rebuilt into a real Error by reviveFailure below, where runBootSequence's logError expects
+// one. Both directions are checked against a real SqliteError in test/rebuild-worker.test.ts.
+export function toSerializableFailure(failure: RebuildFailure): SerializedFailure {
+  const { error, ...rest } = failure
+  const { name, message, stack } = error
+  const extra = Object.fromEntries(
+    Object.entries(error).filter(([key]) => key !== 'name' && key !== 'message' && key !== 'stack'),
+  )
+  return { ...rest, error: { name, message, stack, ...extra } }
+}
+
+// The inverse: turns the plain data that crossed the thread boundary back into a real Error,
+// which is what RebuildFailure promises its callers and what runBootSequence hands to logError.
+export function reviveFailure(failure: SerializedFailure): RebuildFailure {
   const { error, ...rest } = failure
   const revived = new Error(error.message)
   revived.name = error.name
