@@ -96,6 +96,22 @@ function stubFetch(): () => void {
       })
     }
     if (url.includes('/insights')) return json(insightBody(url))
+    // Only reached on the Day tab: useSourceNames (IntradayHeartRate's own nameOf) and useIntraday
+    // both mount there and nowhere else on this page (Dashboard.tsx gates both on controls.tab).
+    if (url.includes('/sources')) {
+      return json({
+        items: [{
+          id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4',
+          alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 0,
+        }],
+      })
+    }
+    if (url.includes('/intraday')) {
+      return json({
+        points: [{ sourceId: 'watch', utcMs: Date.parse('2026-08-12T08:00:00Z'), min: 55, mean: 60, max: 65 }],
+        reduction: null,
+      })
+    }
     return json({ baseline: { center: 60, spread: 4, n: 40, thin: false } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -141,6 +157,39 @@ describe('the charts across a rerender', () => {
 
     // A second render of the same component with the same client: every query is already settled
     // and staleTime is Infinity, so nothing the charts draw has changed.
+    act(() => { root!.render(tree(<Dashboard />)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    const after = chartRoots()
+    expect(after).toHaveLength(before.length)
+    for (let i = 0; i < before.length; i += 1) {
+      expect(after[i], `chart ${i} was re-initialised`).toBe(before[i])
+    }
+    restore()
+  })
+
+  // Finding 1 of the m5a source naming branch's final review: useSourceNames handed back a fresh
+  // object, and so a fresh `nameOf`, on every render. IntradayHeartRate's own `build` closes over
+  // `nameOf` and lists it in that useCallback's deps, and useChart keys its init/dispose effect on
+  // `build`, so a stable session and a stable query cache still tore the chart down and rebuilt it
+  // on every render -- the case above never caught it because it stays on the week tab, and
+  // Dashboard.tsx only mounts IntradayHeartRate on the Day tab.
+  it('are not disposed and re-initialised on the Day tab either, where IntradayHeartRate lives', async () => {
+    const restore = stubFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', '/dashboard?range=day&on=2026-08-12')
+    const tree = (node: ReactNode): ReactNode => (
+      <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
+    )
+
+    act(() => { root!.render(tree(<Dashboard />)) })
+    await flush(client, () => container!.innerHTML)
+
+    const before = chartRoots()
+    expect(before.length).toBeGreaterThan(0)
+    expect(before.every((node) => node !== null)).toBe(true)
+
     act(() => { root!.render(tree(<Dashboard />)) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 

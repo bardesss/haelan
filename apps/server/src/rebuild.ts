@@ -83,6 +83,15 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildRep
           + 'sources and cannot be rebuilt, so set them again',
         )
       }
+      // Its own line and only when there is something to say, for the same reason the rankings
+      // get one: a name somebody typed is not a row that came back from tier 1, and folded into
+      // the stale source count it would read as housekeeping.
+      if (person.aliasesRemoved > 0) {
+        deps.log(
+          `${person.aliasesRemoved} source names for ${person.personId} went with those sources `
+          + 'and cannot be rebuilt, so set them again',
+        )
+      }
       if (person.unmappablePayloads > 0) {
         deps.log(`${person.unmappablePayloads} payloads had no current mapper and were skipped`)
       }

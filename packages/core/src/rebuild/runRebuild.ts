@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
-import { daily, samples, sessions, sources, sourcePriority } from '../db/schema/index.ts'
+import { daily, samples, sessions, sources, sourceAliases, sourcePriority } from '../db/schema/index.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 import { deriveDayInto } from '../derive/deriveDay.ts'
@@ -33,6 +33,13 @@ export interface RebuildPersonReport {
    * wins for which metric, which nothing here or anywhere else can put back.
    */
   rankingsRemoved: number
+  /**
+   * How many names went with those sources. Beside the other two rather than folded in, for the
+   * reason `rankingsRemoved` is: a stale source is a regenerable cache entry, a ranking and a name
+   * are both the household member's own input and neither can be put back. A name is the cheaper
+   * of the two to retype, which is why it gets a count rather than a line each.
+   */
+  aliasesRemoved: number
   overridesRetargeted: number
   overridesOrphaned: OrphanedOverride[]
   unmappablePayloads: number
@@ -197,6 +204,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           dailyRows,
           sourcesRemoved: dropped.sources,
           rankingsRemoved: dropped.rankings,
+          aliasesRemoved: dropped.aliases,
           overridesRetargeted: retarget.retargeted,
           overridesOrphaned: retarget.orphaned,
           unmappablePayloads: counts.unmappable,
@@ -226,26 +234,29 @@ export function runRebuild(input: RebuildInput): RebuildReport {
 }
 
 /**
- * Removes the source rows the replay did not recreate, and the rankings that pointed at them.
+ * Removes the source rows the replay did not recreate, and the rankings and names that pointed
+ * at them.
  *
  * Source ids are derived from the person and the external id, so a source the current
  * `describe()` still produces comes back under the same id and survives untouched. What is left
  * over is exactly the identities the old mapping produced and the current one does not, which is
  * what makes this the difference between re-deriving source identity and preserving it.
  *
- * The rankings go with them because `source_priority.source_id` is a foreign key, and a ranking
- * of a source that no longer exists is not a preference anybody can act on.
+ * The rankings and the names go with them because `source_priority.source_id` and
+ * `source_aliases.source_id` are both foreign keys, and a ranking or a name for a source that no
+ * longer exists is not something anybody can act on.
  *
- * They are counted separately, and the caller says so out loud, because they are the one thing a
+ * They are counted separately, and the caller says so out loud, because they are the two things a
  * rebuild destroys that no rebuild can restore. Every other row here comes back from tier 1; a
- * ranking is the household member's own decision about which device wins for which metric and
- * exists nowhere else. Re-targeting them the way overrides are re-targeted is not available: an
- * override's key names an instant we can look up again, while a stale source's identity carries
- * no record of which new identity replaced it, and the change to the identity rules is exactly
- * the thing we cannot invert. So reporting is the whole of what is possible, and reporting
- * nothing would leave a household's merge preferences quietly different after an upgrade.
+ * ranking is the household member's own decision about which device wins for which metric, and a
+ * name is what they called it, and neither exists anywhere else. Re-targeting them the way
+ * overrides are re-targeted is not available: an override's key names an instant we can look up
+ * again, while a stale source's identity carries no record of which new identity replaced it, and
+ * the change to the identity rules is exactly the thing we cannot invert. So reporting is the
+ * whole of what is possible, and reporting nothing would leave a household's merge preferences and
+ * source names quietly different after an upgrade.
  */
-interface Dropped { sources: number, rankings: number }
+interface Dropped { sources: number, rankings: number, aliases: number }
 
 function dropUnreferencedSources(tx: DbOrTx, personId: string): Dropped {
   const referenced = new Set<string>([
@@ -258,7 +269,7 @@ function dropUnreferencedSources(tx: DbOrTx, personId: string): Dropped {
   const owned = tx.select({ id: sources.id }).from(sources)
     .where(eq(sources.personId, personId)).all().map((row) => row.id)
   const stale = owned.filter((id) => !referenced.has(id))
-  if (stale.length === 0) return { sources: 0, rankings: 0 }
+  if (stale.length === 0) return { sources: 0, rankings: 0, aliases: 0 }
 
   const doomed = and(
     eq(sourcePriority.personId, personId),
@@ -270,6 +281,17 @@ function dropUnreferencedSources(tx: DbOrTx, personId: string): Dropped {
   const rankings = tx.select({ metric: sourcePriority.metric }).from(sourcePriority)
     .where(doomed).all().length
   tx.delete(sourcePriority).where(doomed).run()
+
+  const doomedAliases = and(
+    eq(sourceAliases.personId, personId),
+    inArray(sourceAliases.sourceId, stale),
+  )
+  // Read before deleting, the same way the rankings are: a delete's changes count is not
+  // available through this handle and the number an operator needs is rows either way.
+  const aliases = tx.select({ sourceId: sourceAliases.sourceId }).from(sourceAliases)
+    .where(doomedAliases).all().length
+  tx.delete(sourceAliases).where(doomedAliases).run()
+
   tx.delete(sources).where(inArray(sources.id, stale)).run()
-  return { sources: stale.length, rankings }
+  return { sources: stale.length, rankings, aliases }
 }

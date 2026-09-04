@@ -1,5 +1,16 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment happy-dom
+//
+// happy-dom, not the default node environment: the option-capture tests below need a real mount
+// (createRoot + act) so useChart's own useEffect actually runs and calls echarts.init, the same
+// reason spo2-range.test.tsx and chart-marks.test.tsx give for their own files. The existing
+// renderToStaticMarkup tests above run no effects and so never touch echarts at all regardless of
+// which environment the file runs under.
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import type { EChartsOption } from 'echarts'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { IntradayHeartRate, intradayBasis, seriesBySource } from '../src/charts/IntradayHeartRate.js'
 import type { IntradayPoint } from '../src/data/useIntraday.js'
@@ -7,6 +18,81 @@ import type { Translate } from '../src/format.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import { CHART_VARS } from '../src/charts/tokens.js'
+import { sourceNamesKey } from '../src/data/useSourceNames.js'
+import type { NamedSource } from '../src/data/useSourceNames.js'
+
+// happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
+// this, the same reason spo2-range.test.tsx and chart-marks.test.tsx set them. Needed even though
+// echarts.init itself is mocked below: build(currentChartTokens()) still runs before the mocked
+// setOption ever sees its argument.
+for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+/**
+ * Stands in for the real echarts instance useChart.ts creates, the same stub spo2-range.test.tsx
+ * and chart-marks.test.tsx use for their own wiring tests, so `setOption`'s own argument (the
+ * option this chart actually built) can be captured without a real canvas.
+ */
+function chartStub() {
+  return { on: vi.fn(), setOption: vi.fn(), dispose: vi.fn(), resize: vi.fn() }
+}
+type ChartStub = ReturnType<typeof chartStub>
+const chartStubs: ChartStub[] = []
+
+vi.mock('echarts/core', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    init: () => {
+      const stub = chartStub()
+      chartStubs.push(stub)
+      return stub
+    },
+  }
+})
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  chartStubs.length = 0
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+/**
+ * Mounts IntradayHeartRate inside a QueryClientProvider whose client has the session and
+ * sourceNamesKey('p1') seeded (the latter with `namedSources`, mirroring how control-row.test.tsx
+ * seeds the same query so an unmocked fetch never runs in this environment), and returns the
+ * ECharts option the mount actually built.
+ */
+function optionForPoints(points: IntradayPoint[], namedSources: NamedSource[]): EChartsOption {
+  const session: Session = {
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
+  }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), session)
+  client.setQueryData(sourceNamesKey('p1'), { items: namedSources })
+  act(() => {
+    root!.render(
+      <I18nProvider lng="en">
+        <QueryClientProvider client={client}>
+          <IntradayHeartRate points={points} reduction={null} label="Heart rate" />
+        </QueryClientProvider>
+      </I18nProvider>,
+    )
+  })
+  const stub = chartStubs.at(-1)!
+  return stub.setOption.mock.calls[0]![0] as EChartsOption
+}
 
 const at = (utcMs: number, sourceId: string, mean: number): IntradayPoint =>
   ({ sourceId, utcMs, min: mean - 5, mean, max: mean + 5 })
@@ -127,5 +213,42 @@ describe('IntradayHeartRate time of day', () => {
   it('falls back to UTC rather than throwing while the session has not loaded yet', () => {
     const table = renderTable(undefined)
     expect(table).toContain('20:00')
+  })
+})
+
+describe('source names in the intraday heart rate chart', () => {
+  it('names the mean series with the name, and keeps the stack keyed by id', () => {
+    // Two points from one source, rendered with an alias set for it.
+    const option = optionForPoints(
+      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70 }],
+      [{ id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 }],
+    )
+    const series = option.series as { name: string, stack?: string }[]
+    expect(series.map((s) => s.name)).toEqual(['My watch min', 'My watch range', 'My watch'])
+    // The stack is the part a rename must not touch: two sources' bands are drawn independently
+    // because their stack keys differ, and a stack keyed by a name two sources can share would
+    // silently pile one source's range on top of another's.
+    expect(series.map((s) => s.stack)).toEqual(['range-src-hex-id', 'range-src-hex-id', undefined])
+  })
+
+  it('falls back to the id when no names are loaded', () => {
+    const option = optionForPoints(
+      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70 }],
+      [],
+    )
+    expect((option.series as { name: string }[]).map((s) => s.name))
+      .toEqual(['src-hex-id min', 'src-hex-id range', 'src-hex-id'])
+  })
+
+  it('still finds the hovered point after a rename', () => {
+    const option = optionForPoints(
+      [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70 }],
+      [{ id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 }],
+    )
+    const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter
+    // seriesIndex 2 is the mean line: three series per source, mean last.
+    const html = formatter([{ seriesName: 'My watch', seriesIndex: 2, dataIndex: 0 }])
+    expect(html).toContain('My watch')
+    expect(html).not.toContain('src-hex-id')
   })
 })

@@ -34,3 +34,21 @@ export const sourcePriority = sqliteTable('source_priority', {
   // Zero is best. Dense and contiguous by construction, because the store rewrites whole lists.
   rank: integer('rank').notNull(),
 }, (t) => [primaryKey({ columns: [t.personId, t.metric, t.sourceId] })])
+
+// Per person, the name this person gave a source. Its own table rather than an `alias` column on
+// `sources` for exactly the reason source_priority is its own table: a rebuild regenerates
+// `sources` from the archive and deletes the ones the archive no longer produces, and an alias is
+// the one thing about a source that no rebuild can put back, because a person typed it.
+//
+// The unique index is not housekeeping. Two sources sharing a name make a picker that cannot be
+// used and an ECharts legend that merges two series into one entry, so the collision is refused at
+// the point it is created rather than handled at each of the places it would show up.
+export const sourceAliases = sqliteTable('source_aliases', {
+  personId: text('person_id').notNull().references(() => people.id),
+  sourceId: text('source_id').notNull().references(() => sources.id),
+  alias: text('alias').notNull(),
+  updatedAtMs: integer('updated_at_ms').notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.personId, t.sourceId] }),
+  unique('source_aliases_person_alias').on(t.personId, t.alias),
+])

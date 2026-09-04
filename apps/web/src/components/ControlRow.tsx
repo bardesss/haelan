@@ -6,6 +6,7 @@ import type { PageControlsState } from '../controls/usePageControls.js'
 import { apiSend, ApiError } from '../api/client.js'
 import { useSession } from '../auth/session.js'
 import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
+import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES } from '../controls/source.js'
 import { periodLabel } from '../controls/periodLabel.js'
 
@@ -39,6 +40,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
   const personId = session.data?.personId
   const queryClient = useQueryClient()
   const status = useSyncStatus()
+  const { nameOf } = useSourceNames()
   // tryStart on the server takes the mutex synchronously and answers before the run finishes
   // (routes/sync.ts, runner.ts's tryStart), so this mutation's own pending state is only the
   // moment of that one request, not the run it kicks off. status.data?.running, refreshed by the
@@ -100,7 +102,7 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
             <select value={controls.source} onChange={(e) => controls.setSource(e.currentTarget.value)}>
               {options.map((source) => (
                 <option key={source} value={source}>
-                  {source === ALL_SOURCES ? t('controlRow.sourceAll') : source}
+                  {source === ALL_SOURCES ? t('controlRow.sourceAll') : nameOf(source)}
                 </option>
               ))}
             </select>

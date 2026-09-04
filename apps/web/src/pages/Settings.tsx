@@ -1,6 +1,7 @@
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { OverrideList } from './settings/OverrideList.js'
+import { SourceNames } from './settings/SourceNames.js'
 
 // The settings page: no sections existed before this one, so pages/settings/ holds each section's
 // own component (OverrideList.tsx is the first) and this file is the shell that gives them a
@@ -13,6 +14,9 @@ export function Settings() {
       <div className="grid">
         <Card span={12} label={t('settings.overrides.title')}>
           <OverrideList />
+        </Card>
+        <Card span={12} label={t('settings.sourceNames.title')}>
+          <SourceNames />
         </Card>
       </div>
     </>

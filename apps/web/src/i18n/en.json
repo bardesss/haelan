@@ -730,6 +730,16 @@
       "removeAriaUnreadable": "Remove {{target}}, {{date}} ({{id}})",
       "removeFailed": "That did not remove. Try again.",
       "removedNotYetApplied": "Removed. The numbers behind it have not caught up yet."
+    },
+    "sourceNames": {
+      "title": "Source names",
+      "nameLabel": "Name for {{source}}",
+      "empty": {
+        "title": "No sources yet",
+        "detail": "Nothing has reported data yet. Sources appear here after the first sync."
+      },
+      "kind": { "device": "Device", "app": "App", "manual": "Entered by hand" },
+      "saveFailed": "That did not save. Try again."
     }
   }
 }

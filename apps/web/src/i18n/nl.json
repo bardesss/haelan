@@ -730,6 +730,16 @@
       "removeAriaUnreadable": "Verwijder {{target}}, {{date}} ({{id}})",
       "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
       "removedNotYetApplied": "Verwijderd. De cijfers erachter zijn nog niet bijgewerkt."
+    },
+    "sourceNames": {
+      "title": "Bronnamen",
+      "nameLabel": "Naam voor {{source}}",
+      "empty": {
+        "title": "Nog geen bronnen",
+        "detail": "Er is nog geen data binnengekomen. Bronnen verschijnen hier na de eerste synchronisatie."
+      },
+      "kind": { "device": "Apparaat", "app": "App", "manual": "Handmatig ingevoerd" },
+      "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
     }
   }
 }
