@@ -763,6 +763,12 @@
       "kind": { "device": "Device", "app": "App", "manual": "Entered by hand" },
       "saveFailed": "That did not save. Try again."
     },
+    "dataTypes": {
+      "title": "What to sync",
+      "detail": "Turning one off stops fetching it. Nothing already fetched is deleted.",
+      "allOff": "Nothing is being synced. Turn at least one back on to see anything here.",
+      "failed": "That did not save. Try again."
+    },
     "members": {
       "title": "Members",
       "state": { "active": "Active", "invited": "Invited", "disabled": "Suspended", "expired": "Invite expired" },

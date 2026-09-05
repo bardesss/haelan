@@ -4,6 +4,7 @@ import { Card } from '../components/Card.js'
 import { ConnectGoogle } from '../auth/ConnectGoogle.js'
 import { OverrideList } from './settings/OverrideList.js'
 import { SourceNames } from './settings/SourceNames.js'
+import { DataTypes } from './settings/DataTypes.js'
 import { Members } from './settings/Members.js'
 
 // The settings page: no sections existed before this one, so pages/settings/ holds each section's
@@ -25,6 +26,11 @@ export function Settings() {
         </Card>
         <Card span={12} label={t('settings.sourceNames.title')}>
           <SourceNames />
+        </Card>
+        {/* Not gated on isAdmin: DataTypes.tsx's own comment on why this is per person rather
+            than household wide. */}
+        <Card span={12} label={t('settings.dataTypes.title')}>
+          <DataTypes />
         </Card>
         {/* Admin only, and gated here rather than inside Members itself: the five routes it calls
             already answer 'forbidden' to anyone else, but mounting the section at all for a

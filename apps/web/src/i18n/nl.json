@@ -763,6 +763,12 @@
       "kind": { "device": "Apparaat", "app": "App", "manual": "Handmatig ingevoerd" },
       "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
     },
+    "dataTypes": {
+      "title": "Wat wordt gesynchroniseerd",
+      "detail": "Iets uitzetten stopt het ophalen ervan. Wat al is opgehaald, wordt niet verwijderd.",
+      "allOff": "Er wordt niets gesynchroniseerd. Zet er minstens één weer aan om hier iets te zien.",
+      "failed": "Dat is niet opgeslagen. Probeer het opnieuw."
+    },
     "members": {
       "title": "Leden",
       "state": { "active": "Actief", "invited": "Uitgenodigd", "disabled": "Geschorst", "expired": "Uitnodiging verlopen" },
