@@ -79,7 +79,7 @@ function portOf(hostHeader: string | undefined): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 4235
 }
 
-function isKnownTimezone(timezone: string): boolean {
+export function isKnownTimezone(timezone: string): boolean {
   try {
     new Intl.DateTimeFormat('en-CA', { timeZone: timezone })
     return true

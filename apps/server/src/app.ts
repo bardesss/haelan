@@ -12,9 +12,11 @@ import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
 import { registerSettings } from './routes/settings.ts'
+import { registerMemberRoutes } from './routes/members.ts'
 import { registerV1 } from './routes/v1/index.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
+import { registerRequireAdmin } from './api/requireAdmin.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
 export interface EndpointOverrides {
@@ -125,10 +127,12 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
 
   app.get('/api/health', async () => ({ ok: true }))
   registerAuth(app)
+  registerRequireAdmin(app)
   registerSetup(app)
   registerOauth(app)
   registerSync(app)
   registerSettings(app)
+  registerMemberRoutes(app)
   registerSetupGate(app)
   // Registered through app.register, not called directly like the routes above: the /api/v1
   // prefix and Fastify's plugin encapsulation are what keep this surface's error handler and
