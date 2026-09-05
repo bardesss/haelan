@@ -104,6 +104,7 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M3 second pass** Corrections a second audit found | The tier-2 readers learn about a person's corrections: the session reader marks an excluded session instead of ignoring it, the sleep reader stops drawing a night the daily figures had already dropped, and the intraday reader applies corrections and marks exclusions; the Correct action, deferred across two milestones, finally gets its home on the intraday chart, guarded so it is offered only where a plotted point stands for exactly one stored reading; the drift check learns to look at data types and to say what it cannot see; the parent design's oldest open item is retired by one test that runs a real server behind a real render; and a tail of smaller corrections lands with it | In review |
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5a** Source naming | The listing route this project never had, a person scoped name for each source that dies with it the way a ranking does, and the Settings section where a reader turns a 32 character hex id into "My watch" | Done, [#91](https://github.com/bardesss/haelan/pull/91) |
+| **M5b** People | An `invites` table storing a token's hash and never the token, a person row created the moment the invite is written so a member exists before anyone can log in as them, a one-time link where the member chooses their own username and password, the first guard in this codebase that reads `is_admin`, suspension that revokes live sessions and fails login exactly like a wrong password, and person isolation proven against a member the real invite flow created rather than one a harness seeded | In review |
 | **M5** Packaging | Cut into five units: M5a source naming, M5b people, M5c packaging, M5d backup and the upgrade path, M5e documentation and the envelope migration. M3f's drift check diffs enums, not the data-type catalogue; that half is bounded by what the API exposes, since there is no `dataTypes.list` method, and macronutrients are left as ingestion work | In progress |
 
 **M3d comes before M3c in this table**, out of milestone letter order: section 6's creation flow is a click on a plotted point, and the pages that plot real points are M3d's, so building the annotation panel first would mean targeting fixture points that correspond to no row an override could name.
@@ -125,10 +126,10 @@ retroactively; resolution cannot be recovered.
 
 **M5 comes before M4**, also out of letter order, and for two reasons rather than convenience.
 M4's `sql_query` is the widest read surface this project will have, and person isolation is so far
-proven against a database holding one person: M5 brings the person switcher and member management,
-which is where a second person first exists to prove it against. And M5 carries backup and the
-upgrade path while `DERIVATION_VERSION` and `MAPPING_VERSION` still move often enough to force
-rebuilds. M4 adds a surface; M5 retires a risk that is already live.
+proven against a database holding one person: M5 brings member management, which is where a second
+person first exists to prove it against. And M5 carries backup and the upgrade path while
+`DERIVATION_VERSION` and `MAPPING_VERSION` still move often enough to force rebuilds. M4 adds a
+surface; M5 retires a risk that is already live.
 
 **Every milestone pull request updates this table**, in the same pull request rather than
 afterwards. Everything else leaves it alone: a dependency bump or a documentation fix has no row
