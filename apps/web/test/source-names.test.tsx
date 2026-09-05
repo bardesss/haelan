@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', connected: true, baseUrl: 'http://localhost:4235',
 }
 
 const named = (id: string, displayName: string, alias: string | null): NamedSource => ({

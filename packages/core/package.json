@@ -9,7 +9,8 @@
     "./metrics": "./src/derive/metrics.ts",
     "./coverage-signal": "./src/query/coverageSignal.ts",
     "./target-key": "./src/derive/targetKey.ts",
-    "./baseline-window": "./src/query/baseline.ts"
+    "./baseline-window": "./src/query/baseline.ts",
+    "./metric-data-type": "./src/api/metricDataType.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"

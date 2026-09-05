@@ -69,6 +69,36 @@ describe('the consent handoff', () => {
     expect(credentials.listConnectedPeople()).toContain('p1')
   })
 
+  // The Important this suite did not catch: an invited member's own consent used to land on
+  // '/setup/backfill' unconditionally, the wizard screen the admin who ran setup sees, whose
+  // Continue buttons call an admin only route. Setup is already 'done' by the time a second
+  // person ever reaches /oauth/start (the admin finished it first), which is what this member's
+  // redirect has to key off instead.
+  it('sends an invited member to the dashboard, not the wizard, once setup is already done', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.completeSetup()
+    const { personId } = await harness.addPerson({ id: 'p2', displayName: 'Member', username: 'member' })
+
+    const login = await harness.app.inject({
+      method: 'POST', url: '/api/auth/login', headers,
+      payload: { username: 'member', password: 'a good long password' },
+    })
+    const cookie = login.cookies.find((c) => c.name === 'haelan_session')!.value
+
+    const start = await harness.app.inject({
+      method: 'GET', url: '/oauth/start', headers, cookies: { haelan_session: cookie },
+    })
+    expect(start.statusCode, 'a member reaches consent the same as the admin does').toBe(302)
+    const state = new URL(start.headers.location as string).searchParams.get('state')!
+
+    const callback = await harness.app.inject({
+      method: 'GET', url: `/oauth/callback?code=good&state=${encodeURIComponent(state)}`, headers,
+    })
+    expect(callback.statusCode).toBe(302)
+    expect(callback.headers.location).toBe('/')
+    expect(harness.app.haelan.stores.credentials.listConnectedPeople()).toContain(personId)
+  })
+
   it('refuses to start consent without a session', async () => {
     harness = await withServer()
     await readyForConsent(harness)

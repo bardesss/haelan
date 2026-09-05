@@ -91,6 +91,7 @@
   "emptyState": {
     "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
     "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
+    "not_synced": { "title": "Not being synced", "detail": "You turned this data type off. Turn it back on in Settings to start fetching it." },
     "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
   },
   "insightCard": {
@@ -633,6 +634,11 @@
         "fiveYears": "5 years"
       }
     },
+    "dataTypes": {
+      "title": "What to sync",
+      "intro": "All of it, unless you say otherwise. You can change this later in Settings.",
+      "continue": "Continue"
+    },
     "app": {
       "steps": {
         "account": "Account",
@@ -706,6 +712,12 @@
     "removeNoteAria": "Remove note, {{date}}",
     "removeFailed": "That did not remove. Try again."
   },
+  "connect": {
+    "title": "Connect your Google account",
+    "detail": "haelan reads your health data from Google. Nothing appears here until you connect.",
+    "action": "Connect",
+    "wrongAddress": "Google will send you back to {{baseUrl}}, which is not the address you are using. Consent will fail. Open haelan at {{baseUrl}}, or ask whoever set this up for a Tailscale or proxy address."
+  },
   "settings": {
     "title": "Settings",
     "overrides": {
@@ -756,6 +768,12 @@
       },
       "kind": { "device": "Device", "app": "App", "manual": "Entered by hand" },
       "saveFailed": "That did not save. Try again."
+    },
+    "dataTypes": {
+      "title": "What to sync",
+      "detail": "Turning one off stops fetching it. Nothing already fetched is deleted.",
+      "allOff": "Nothing is being synced. Turn at least one back on to see anything here.",
+      "failed": "That did not save. Try again."
     },
     "members": {
       "title": "Members",

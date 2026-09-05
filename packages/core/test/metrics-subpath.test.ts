@@ -36,13 +36,16 @@ describe('the @haelan/core/metrics subpath', () => {
   it('is published, and points at the catalogue module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
-    // The barrel is still the only other way in besides the four named subpaths. `exports`
+    // The barrel is still the only other way in besides the five named subpaths. `exports`
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
-    // dragging argon2 along behind it. ./coverage-signal, ./target-key and ./baseline-window are
-    // the other three browser-safe entry points; coverage-signal-subpath.test.ts,
-    // target-key-subpath.test.ts and baseline-window-subpath.test.ts carry their own guarantees,
-    // each a different shape because none of those three modules, unlike this one, is import-free.
-    expect(Object.keys(pkg.exports).sort()).toEqual(['.', './baseline-window', './coverage-signal', SUBPATH, './target-key'])
+    // dragging argon2 along behind it. ./coverage-signal, ./target-key, ./baseline-window and
+    // ./metric-data-type are the other four browser-safe entry points; coverage-signal-subpath.
+    // test.ts, target-key-subpath.test.ts, baseline-window-subpath.test.ts and
+    // metric-data-type-subpath.test.ts carry their own guarantees, each a different shape because
+    // none of those four modules, unlike this one, is import-free.
+    expect(Object.keys(pkg.exports).sort()).toEqual([
+      '.', './baseline-window', './coverage-signal', './metric-data-type', SUBPATH, './target-key',
+    ])
   })
 
   it('reaches no other module, which is the whole of why it is browser safe', () => {

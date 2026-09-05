@@ -72,7 +72,7 @@ afterEach(() => {
 })
 
 const SESSION: Session = {
-  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
+  personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', connected: true, baseUrl: 'http://localhost:4235',
 }
 
 /**

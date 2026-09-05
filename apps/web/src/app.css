@@ -350,6 +350,22 @@ body {
 .member-state[data-state='disabled'] { color: var(--text-faint); }
 .member-actions { display: flex; gap: var(--space-2); margin-left: auto; }
 
+/* DataTypePicker.tsx: the same row shape .member-row uses, but the field itself is the row's own
+   checkbox and label rather than a name column beside a separate action, since checking a box
+   here is the whole interaction this list offers. */
+.data-type-picker { display: block; }
+.data-type-list { list-style: none; margin: 0; padding: 0; }
+.data-type-row {
+  display: flex; align-items: center; gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
+}
+.data-type-row:last-child { border-bottom: 0; }
+.data-type-row label { display: flex; align-items: center; gap: var(--space-2); flex: 1; }
+.data-type-label { color: var(--text-primary); }
+.data-type-tier {
+  font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
+}
+
 /* The invite link panel: the same .copy-field/.copy-value vocabulary CopyField.tsx established for
    a value that is exact and meant to be pasted elsewhere, not restyled for this one screen. The
    warning underneath is the same muted caption weight .field-hint already carries everywhere else,
@@ -405,3 +421,12 @@ body {
 .session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 .session-date-group { min-width: 0; }
 .session-date-heading { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary); margin: 0 0 var(--space-1); }
+
+/* ConnectGoogle.tsx: the explanation reads at body size and secondary tone, the same pairing
+   .setup-step's own intro paragraph uses, since this card is making the identical kind of ask (an
+   action the reader has not taken yet) outside the wizard. .form-error is reused as-is for the
+   address warning above the link rather than a second colour introduced for it: a redirect Google
+   cannot deliver fails consent the same way a rejected form submission fails a save, so it earns
+   the same negative-toned box, not a milder one that would undersell what is about to go wrong. */
+.connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
+.connect-action { margin-top: var(--space-2); }

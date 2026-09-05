@@ -1,4 +1,4 @@
-﻿import { eq, isNull } from 'drizzle-orm'
+﻿import { and, eq, isNull } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { oauthClient, credentials } from '../db/schema/index.ts'
 import { seal, unseal } from '../crypto/secretBox.ts'
@@ -109,5 +109,14 @@ export class CredentialStore {
   listConnectedPeople(): string[] {
     return this.#db.select({ personId: credentials.personId }).from(credentials)
       .where(isNull(credentials.revokedAtMs)).all().map((r) => r.personId)
+  }
+
+  // The single-person form of listConnectedPeople's own predicate: a credentials row exists and
+  // its token was never revoked. Anything that wants to know "does this person have a usable
+  // connection" - the session payload included - calls this rather than re-deriving the
+  // revocation check, so there is exactly one place that decides what "connected" means.
+  isConnected(personId: string): boolean {
+    return this.#db.select({ personId: credentials.personId }).from(credentials)
+      .where(and(eq(credentials.personId, personId), isNull(credentials.revokedAtMs))).get() !== undefined
   }
 }
