@@ -5,7 +5,7 @@ import {
   AccountStore, CredentialStore, PeopleStore, RawArchive, SessionStore, SettingsStore, SourceRegistry,
   SyncStateStore,
 } from '@haelan/core'
-import type { Instance, RateLimiter } from '@haelan/core'
+import type { ExcludedDataTypeStore, Instance, RateLimiter } from '@haelan/core'
 import { registerSetupGate } from './routes/setupGate.ts'
 import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
@@ -80,6 +80,7 @@ export interface Stores {
   syncState: SyncStateStore
   sources: SourceRegistry
   archive: RawArchive
+  excludedDataTypes: ExcludedDataTypeStore
 }
 
 export interface ServerContext extends ServerDeps {
@@ -114,6 +115,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     syncState: new SyncStateStore(deps.instance.db),
     sources: new SourceRegistry(deps.instance.db),
     archive: deps.instance.archive,
+    excludedDataTypes: deps.instance.excludedDataTypes,
   }
   // The runner takes the context and the context holds the runner, so it is assigned rather
   // than passed. One object, so a route reaching app.haelan.runner reaches the same instance

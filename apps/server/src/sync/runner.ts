@@ -2,7 +2,7 @@
   DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, peopleNeedingRebuild,
   runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
 } from '@haelan/core'
-import type { JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
+import type { DataType, JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
 
 // probe/findings/scopes.md measured 300 requests per minute per user. Running at the ceiling is
@@ -147,6 +147,21 @@ export class SyncRunner {
     return this.#context.stores.settings.get()?.backfillHorizonDays ?? DEFAULT_USER_HORIZON_DAYS
   }
 
+  /**
+   * The types this person actually wants, in catalogue order.
+   *
+   * One helper rather than an exclusion check in each of the three walks below: a rule spelled
+   * three times is a rule that drifts the first time one of them is edited alone.
+   *
+   * routes/settings.ts's horizon raise deliberately does not filter through this. It clears
+   * backfill-complete marks for every type, and clearing the mark of a type nothing will fetch is
+   * harmless - filtering there would put the rule in a second place for no change in behaviour.
+   */
+  #typesFor(personId: string): DataType[] {
+    const excluded = new Set(this.#context.stores.excludedDataTypes.listFor(personId))
+    return DATA_TYPES.filter((type) => !excluded.has(type.id))
+  }
+
   /** The instance-wide facts, with nothing of anybody's data in them. */
   runState(): RunState {
     return {
@@ -167,7 +182,7 @@ export class SyncRunner {
   status(personId: string): RunnerStatus {
     const userHorizonDays = this.#userHorizonDays()
     const backfill: BackfillSummary[] = []
-    for (const type of DATA_TYPES) {
+    for (const type of this.#typesFor(personId)) {
       if (!supports(type, 'list')) continue
       const state = this.#context.stores.syncState.get(personId, type.id)
       backfill.push({
@@ -418,7 +433,7 @@ export class SyncRunner {
     const floorMs = this.#context.now() - sprintDays * DAY_MS
     for (const personId of personIds) {
       if (!this.#context.stores.people.get(personId)) continue
-      for (const type of DATA_TYPES) {
+      for (const type of this.#typesFor(personId)) {
         if (!supports(type, 'list')) continue
         const state = this.#context.stores.syncState.get(personId, type.id)
         if (state?.backfillCompleteAtMs != null) continue
@@ -445,7 +460,7 @@ export class SyncRunner {
     for (const personId of personIds) {
       const person = this.#context.stores.people.get(personId)
       if (!person) continue
-      for (const dataType of DATA_TYPES) {
+      for (const dataType of this.#typesFor(personId)) {
         if (!supports(dataType, 'list')) continue
         if (this.#aborted) return cursorAdvanced
         const resolved = horizonDaysFor(dataType, userHorizonDays)
