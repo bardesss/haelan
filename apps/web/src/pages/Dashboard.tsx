@@ -12,6 +12,7 @@ import { ChartNote } from '../components/ChartNote.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
@@ -432,7 +433,7 @@ export function Dashboard() {
               <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
           </StatTile>
         )}
@@ -647,10 +648,12 @@ export function Dashboard() {
             wear/plain switch has nothing left to decide between; whichever branch it takes renders
             the same text. worn/count/reported still land in the call MetricCard makes for the wear
             branch, but heartRateBasisKey's four templates reference none of them, so they are
-            unused interpolation values, not a second, competing basis. baseline stays unset here,
-            the same omission the card made by hand before: a thin baseline should blank only the
-            band this chart draws around its lines, not the lines themselves, and passing baseline
-            through would hand that decision to emptyStateFor's own insufficient state instead. */}
+            unused interpolation values, not a second, competing basis. heartRateBand goes to
+            HeartRateRange below, never to MetricCard: a thin baseline should blank only the band
+            that chart draws around its lines, not the lines themselves, and MetricCard's own
+            `baseline` prop, which once fed emptyStateFor's `insufficient` branch, went with that
+            branch: M3e-2 marked both for removal, and this task removed them as dead code no
+            caller ever reached. */}
         {controls.tab === 'day' ? (
           // With from === to the daily series this card used to read holds at most one row (see
           // emptyStateFor's own opening comment in emptyState.ts for why a one day range is
@@ -669,7 +672,10 @@ export function Dashboard() {
                 <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
               ) : (
                 <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
-                  label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })} />
+                  label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })}
+                  onPointClick={(point) => setAnnotateTarget({
+                    scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
+                  })} />
               )}
           </Card>
         ) : (
@@ -685,7 +691,7 @@ export function Dashboard() {
                 annotations={annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'heart_rate')}
                 excluded={heartRateOverrides.excluded}
                 label={t('dashboard.heartRateRange.chartLabel', { period })}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'heart_rate' })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'heart_rate' })} />
             )}
           </MetricCard>
         )}
@@ -729,8 +735,17 @@ export function Dashboard() {
             : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
-            <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
-              label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
+            <>
+              <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
+                label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
+              {/* Reused from Sleep.tsx rather than a second copy of this paragraph: both pages
+                  build their hypnogram from the same useNights row, so a night an exclusion
+                  shortened needs the same explanation here that Sleep.tsx already drew, the defect
+                  a reader excluding a sleep session used to see (an unexplained short night on
+                  this page, an explained one on Sleep) otherwise reopens on every edit to one page
+                  that forgets the other. */}
+              <NightExcludedSessions count={lastNight.excludedSessions.length} />
+            </>
           )}
         </Card>
         {/* metric is sleep_bedtime_minutes only to pick the plain key: neither bedtime nor

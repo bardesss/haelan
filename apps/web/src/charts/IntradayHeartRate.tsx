@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
-import type { EChartsOption } from 'echarts'
+import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, OPACITY, STROKE } from './base.js'
+import { chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
 import { scaleStops } from './tokens.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -20,6 +20,11 @@ type Props = {
   // directly, the same object it separately hands `intradayBasis` below to build the card's basis.
   reduction: IntradayResult['reduction']
   label: string
+  // Handed the clicked point's own sourceId, utcMs and n, the three fields a sample scoped target
+  // needs (AnnotatePanel.tsx's own AnnotateTarget), rather than a single localDate the way the
+  // day_metric charts' onPointClick reports: a click here names one (source, minute) bucket, not
+  // a day, and the panel's Correct guard needs n to decide whether that bucket is one stored row.
+  onPointClick?: (point: { sourceId: string, utcMs: number, n: number }) => void
 }
 
 /**
@@ -87,7 +92,7 @@ function timeOfDay(utcMs: number, timeZone: string, language: string): string {
   return new Date(utcMs).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone })
 }
 
-export function IntradayHeartRate({ points, label }: Props) {
+export function IntradayHeartRate({ points, label, onPointClick }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
   const { nameOf } = useSourceNames()
@@ -112,6 +117,17 @@ export function IntradayHeartRate({ points, label }: Props) {
    */
   const pointsBySeriesIndex = useMemo(
     () => new Map(series.map((s, i) => [i * 3 + 2, s.points])),
+    [series],
+  )
+
+  // The excluded subset of each source's own points, keyed the same way and for the same reason
+  // as pointsBySeriesIndex above: a click on the excluded marker itself reports the mean series'
+  // own index but a dataIndex counting into that marker's own markPoint.data array, not into
+  // `points`, so resolving it needs this second lookup rather than the first one indexed
+  // differently (the same split Sparkline/HeartRateRange draw between a series click and an
+  // overlay click, in base.ts's own dayMarks/markClickDate).
+  const excludedBySeriesIndex = useMemo(
+    () => new Map(series.map((s, i) => [i * 3 + 2, s.points.filter((p) => p.excluded)])),
     [series],
   )
 
@@ -169,20 +185,44 @@ export function IntradayHeartRate({ points, label }: Props) {
             stack: `range-${sourceId}`, areaStyle: { color: tokens.stageLight, opacity: OPACITY.rangeBand } },
           { name: label, type: 'line' as const,
             data: ownPoints.map((p) => [p.utcMs, p.mean]),
-            showSymbol: false, connectNulls: false, lineStyle: { width: STROKE.series, color } },
+            showSymbol: false, connectNulls: false, lineStyle: { width: STROKE.series, color },
+            // Same marker Sparkline and HeartRateRange draw over an excluded value (SYMBOL.excluded,
+            // tokens.excluded): unlike their day scoped exclusion, a sample scoped one does not
+            // remove the point from readIntraday's own aggregation (readIntraday's own comment on
+            // `excluded` says why: the reading is still folded into min/mean/max), so the point is
+            // always still here to anchor a marker on, never moved to a by-position mark the way
+            // dayMarks moves a day with no value left.
+            markPoint: { symbolSize: SYMBOL.excluded, itemStyle: { color: tokens.excluded },
+              data: ownPoints.filter((p) => p.excluded).map((p) => ({
+                name: 'excluded', coord: [p.utcMs, p.mean ?? p.max ?? p.min ?? 0],
+              })) } },
         ]
       }),
     }
   }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf])
 
-  const { host, style } = useChart(build, 170)
+  const onClick = useCallback((event: ECElementEvent) => {
+    const seriesIndex = event.seriesIndex
+    if (seriesIndex === undefined) return
+    const point = event.componentType === 'markPoint'
+      ? excludedBySeriesIndex.get(seriesIndex)?.[event.dataIndex]
+      : pointsBySeriesIndex.get(seriesIndex)?.[event.dataIndex]
+    if (point !== undefined) onPointClick?.({ sourceId: point.sourceId, utcMs: point.utcMs, n: point.n })
+  }, [pointsBySeriesIndex, excludedBySeriesIndex, onPointClick])
+
+  const { host, style } = useChart(build, 170, onClick)
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
         columns: [
           t('charts.columns.time'), t('charts.columns.source'),
           t('charts.columns.minimum'), t('charts.columns.mean'), t('charts.columns.maximum'),
+          t('charts.columns.note'),
         ],
+        // The note column carries only "excluded", never a reason: unlike a day_metric exclusion
+        // (whose reason reaches this chart's own annotations prop on the day_metric charts), a
+        // sample override's reason lives with the row itself, on the corrections list
+        // (Settings' own OverrideList), not threaded through readIntraday onto each point.
         rows: points.map((p) => {
           const absent = t('charts.absence.noReading')
           return [
@@ -191,6 +231,7 @@ export function IntradayHeartRate({ points, label }: Props) {
             formatMetricValue(p.min, 'heart_rate', i18n.language, absent),
             formatMetricValue(p.mean, 'heart_rate', i18n.language, absent),
             formatMetricValue(p.max, 'heart_rate', i18n.language, absent),
+            p.excluded ? t('charts.absence.excluded') : '',
           ]
         }),
       }} />

@@ -71,20 +71,6 @@ describe('MetricCard', () => {
     expect(container!.textContent).toContain('drawn')
   })
 
-  // A band computed from three days looks exactly as authoritative as one computed from thirty,
-  // and an absent baseline is not a thin one: a card that never asked must not be told its data
-  // is insufficient.
-  it('tells a thin baseline apart from an absent one', () => {
-    mount(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK} points={[point(900, 0.9)]}
-      baseline={{ center: 900, spread: 10, n: 3, thin: true }}
-      basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>)
-    expect(container!.textContent).toContain('emptyState.insufficient.title')
-
-    act(() => { root!.render(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK} points={[point(900, 0.9)]}
-      basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>) })
-    expect(container!.textContent).toContain('drawn')
-  })
-
   // The whole reason this component exists. The basis reaches the renderer, so a card cannot
   // print one claim while drawing another.
   it('hands the basis to the renderer rather than letting a page compute its own', () => {

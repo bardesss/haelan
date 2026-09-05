@@ -234,7 +234,7 @@ export function Recovery() {
               <Sparkline values={spark.values} labels={spark.labels} metric={metric}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
                 annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
           </StatTile>
         )}

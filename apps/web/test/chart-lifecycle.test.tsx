@@ -90,6 +90,10 @@ function stubFetch(): () => void {
           localDate: '2026-08-12', sourceId: 'watch', sessionIds: ['s1'],
           startMs: start, endMs: start + 6 * 3_600_000,
           startOffsetMinutes: 120, endOffsetMinutes: 120, naps: [],
+          // Always present on the real route (packages/core/src/query/sleepNights.ts, empty is a
+          // measurement); Dashboard.tsx now reads its length unconditionally for the
+          // excluded-sessions line, the same field sleep-page.test.tsx's own fixture already sends.
+          excludedSessions: [],
           segments: [{ stage: 'DEEP', startMs: start, endMs: start + 6 * 3_600_000 }],
         }],
         cursor: null,

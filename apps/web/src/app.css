@@ -298,8 +298,13 @@ body {
 .annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: 600; }
 /* The applied:false report: the write is saved, only the re-derive has not caught up, which is
    not an error state and does not borrow form-error's negative tone. Reused as-is by
-   OverrideList.tsx for the same report after a removal, not copied under a second name. */
-.annotate-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
+   OverrideList.tsx for the same report after a removal, not copied under a second name.
+   annotate-note-withheld carries the identical rule (the guard explaining an absent Correct
+   segment is the same kind of informational aside), added to the selector list rather than
+   duplicated under it, so the two can never drift in appearance; it exists as its own class only
+   so annotate-panel.test.tsx can find this one message without it colliding with notYetApplied's,
+   which can render at the same time. */
+.annotate-note, .annotate-note-withheld { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
 
 /* The overrides management list (OverrideList.tsx) and the notes and events list
    (pages/notes/NotesList.tsx): both a table with a row per record and a remove control, so both
@@ -351,6 +356,14 @@ body {
 .session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .session-row-detail { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: var(--space-1); }
+/* An excluded session stays in the list, muted and struck through rather than removed: the same
+   "still visible, no longer counted" pairing .setup-rejected code already uses (text-faint plus
+   line-through) for a rejected event kept on screen. The decoration sits on the row itself so it
+   paints across every child's text without restating it on session-row-type, -duration, -stats
+   and -detail individually; the reason line turns it back off, since a strikethrough reads as
+   "this text is gone" and the reason is the opposite, the one line explaining why. */
+.session-row-excluded { color: var(--text-faint); text-decoration: line-through; }
+.session-row-excluded-reason { font-size: var(--font-size-xs); color: var(--text-faint); text-decoration: none; margin-top: var(--space-1); }
 
 /* SessionList.tsx's own root: min-width: 0 so a row's own flex children can actually shrink
    inside the card's grid column rather than pushing it wide, the same reason .card itself carries

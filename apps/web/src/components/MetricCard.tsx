@@ -6,7 +6,6 @@ import { Loading } from './Loading.js'
 import { EmptyState } from './EmptyState.js'
 import { emptyStateFor, wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import type { SeriesPoint } from '../data/useSeries.js'
-import type { Baseline } from '../data/useBaseline.js'
 
 /**
  * Resolves a query's state and, once there is data, the basis line that goes with it, in one
@@ -39,11 +38,10 @@ import type { Baseline } from '../data/useBaseline.js'
  * right for a caller that says nothing, the same reasoning `worn` and `reported` are typed `never`
  * on `basisValues` rather than merely documented as reserved.
  */
-export function MetricCard({ metric, query, points, baseline, span, label, basisPlacement, basisKey, basisWornKey, basisValues, oneDayRange, after, children }: {
+export function MetricCard({ metric, query, points, span, label, basisPlacement, basisKey, basisWornKey, basisValues, oneDayRange, after, children }: {
   metric: string
   query: { isError: boolean, isPending: boolean, refetch: () => unknown }
   points: SeriesPoint[]
-  baseline?: Baseline | null
   span: number
   label?: string
   // Whether the page this card sits on is showing a single calendar day (controls.tab === 'day'),
@@ -105,7 +103,7 @@ export function MetricCard({ metric, query, points, baseline, span, label, basis
   // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
   if (query.isPending) return <Card span={span} label={label}><Loading />{after}</Card>
 
-  const empty = emptyStateFor(metric, points, baseline)
+  const empty = emptyStateFor(metric, points)
   if (empty !== null) {
     return (
       <Card span={span} label={label}>

@@ -8,6 +8,8 @@
 const URL = 'https://health.googleapis.com/$discovery/rest?version=v4'
 
 const { EXERCISE_TYPES, SLEEP_STAGE_TYPES } = await import('../packages/core/src/api/enums.ts')
+const { DATA_TYPES } = await import('../packages/core/src/api/catalogue.ts')
+const { dataTypesNamedIn } = await import('../packages/core/src/api/discoveryDataTypes.ts')
 
 const response = await fetch(URL)
 if (!response.ok) {
@@ -107,5 +109,31 @@ for (const [property, checkedIn] of [['exerciseType', EXERCISE_TYPES], ['type', 
   if (added.length > 0) console.error(`${property}: ${added.length} added -> ${added.join(', ')}`)
   if (removed.length > 0) console.error(`${property}: ${removed.length} removed -> ${removed.join(', ')}`)
 }
+
+// Data types are a different shape of check than the enums above: there is no `dataTypes.list`
+// method, and no schema enumerates them either. `users.dataTypes.dataPoints` takes the data type
+// as a path parameter, so the only place identifiers surface is prose - the rollup-value
+// descriptions - and only rollup-capable types are ever named there. That is a known, permanent
+// blind spot, not a bug in this check, so it is reported unconditionally rather than folded into
+// `drifted`: a type the catalogue lacks that never happens to be named here would otherwise make a
+// dirty run print clean, which is the exact failure a curated map was rejected for.
+const named = dataTypesNamedIn(doc)
+const catalogued = DATA_TYPES.map((t) => t.id)
+const namedButUncatalogued = named.filter((id) => !catalogued.includes(id))
+const cataloguedButUnnamed = catalogued.filter((id) => !named.includes(id))
+
+console.log('')
+console.log(`data types: document names ${named.length} in rollup-value descriptions, catalogue declares ${catalogued.length}.`)
+if (namedButUncatalogued.length > 0) {
+  console.log(`data types: named in the document but not in the catalogue -> ${namedButUncatalogued.join(', ')}`)
+} else {
+  console.log('data types: nothing named in the document is missing from the catalogue.')
+}
+if (cataloguedButUnnamed.length > 0) {
+  console.log(`data types: in the catalogue but never named in the document -> ${cataloguedButUnnamed.join(', ')}`)
+} else {
+  console.log('data types: everything in the catalogue is named in the document.')
+}
+console.log('data types: this check sees only rollup-capable types, named in prose the document happens to carry - it cannot see the rest of the catalogue drifting. The release notes at https://developers.google.com/health/release-notes remain the authority.')
 
 process.exit(drifted ? 1 : 0)

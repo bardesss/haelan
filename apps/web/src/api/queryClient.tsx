@@ -5,6 +5,22 @@ import type { ReactNode } from 'react'
 import { ApiError } from './client.js'
 import { queryKeys } from './queryKeys.js'
 
+// Retry exactly the two kinds worth retrying, and nothing else. An expired session and a
+// forbidden person are answers, not failures: retrying them delays the sign-in screen by three
+// round trips and tells the reader nothing. 'internal' means the server hit a bug in its own
+// code, distinct from 'transient' precisely so this predicate would not retry it: retrying a bug
+// delays the error and triples the work. Anything that is not an ApiError never reached apiSend
+// (a queryFn throwing something else is a bug in our own code) and is likewise left alone.
+// error before attempt, unlike the (failureCount, error) order TanStack's own retry option takes:
+// this is the pure predicate, tested directly, and attempt only matters once a kind is retryable
+// at all, so it defaults to 0 for a caller checking just the kind.
+export function shouldRetry(error: unknown, attempt = 0): boolean {
+  if (error instanceof ApiError && (error.kind === 'transient' || error.kind === 'unreachable')) {
+    return attempt < 2
+  }
+  return false
+}
+
 export function createQueryClient(onUnauthorized: (query: Query<unknown, unknown, unknown>) => void): QueryClient {
   return new QueryClient({
     // On the cache rather than per query: a session expires between one request and the next, and
@@ -16,17 +32,7 @@ export function createQueryClient(onUnauthorized: (query: Query<unknown, unknown
     }),
     defaultOptions: {
       queries: {
-        // Retry exactly the two kinds worth retrying, and nothing else. An expired session and a
-        // forbidden person are answers, not failures: retrying them delays the sign-in screen by
-        // three round trips and tells the reader nothing. Everything that reaches a queryFn goes
-        // through apiSend, which throws only ApiError, so anything else here is a bug in our own
-        // code, and retrying a bug delays the error and triples the work.
-        retry: (attempt, error) => {
-          if (error instanceof ApiError && (error.kind === 'transient' || error.kind === 'unreachable')) {
-            return attempt < 2
-          }
-          return false
-        },
+        retry: (attempt, error) => shouldRetry(error, attempt),
         // Derived data changes when a sync drains, not while the reader looks at it.
         staleTime: 60_000,
         refetchOnWindowFocus: false,

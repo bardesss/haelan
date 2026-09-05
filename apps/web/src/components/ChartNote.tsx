@@ -5,8 +5,8 @@ import { useTranslation } from '../i18n/index.js'
  * itself.
  *
  * Deliberately not `EmptyState`: `EmptyState` is a title plus a detail line standing in for a
- * card's *entire* content (no_data, not_worn, insufficient all mean "nothing below the label is
- * worth drawing"), and a one day range with a value is not that case. The value, its delta and the
+ * card's *entire* content (no_data and not_worn both mean "nothing below the label is worth
+ * drawing"), and a one day range with a value is not that case. The value, its delta and the
  * basis line all still render around this; only the chart a trend line would otherwise draw one
  * dot for is replaced, with one short line saying why, not a title-and-detail pair explaining a
  * card that is not actually empty.

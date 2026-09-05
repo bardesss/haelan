@@ -33,6 +33,7 @@ const STATUS_BY_KIND: Record<ApiErrorKind, number | null> = {
   setup_incomplete: 409,
   config: 400,
   transient: 500,
+  internal: 500,
   unreachable: null,
 }
 

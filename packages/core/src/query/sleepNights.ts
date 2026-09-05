@@ -1,7 +1,9 @@
 import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { sessions, sessionSegments } from '../db/schema/index.ts'
+import { sessions, sessionSegments, overrides as overridesTable } from '../db/schema/index.ts'
 import { assembleNights, mainSleepOf, DEFAULT_NIGHT_GAP_MINUTES } from '../derive/sleep.ts'
+import { applyToSessions } from '../derive/overrides.ts'
+import type { OverrideLike } from '../derive/overrides.ts'
 import { SettingsStore } from '../store/settings.ts'
 
 export interface NightSegment {
@@ -25,6 +27,13 @@ export interface Night {
    */
   naps: number[]
   segments: NightSegment[]
+  /**
+   * The ids of this date's sleep sessions the person excluded. Empty is a measurement, the same
+   * rule `naps` follows. Reported rather than merely acted on: the night below is assembled
+   * without these, so a night that quietly got shorter would otherwise look like a night the
+   * device recorded badly.
+   */
+  excludedSessions: string[]
 }
 
 /**
@@ -75,6 +84,45 @@ export function readSleepNights(db: DbOrTx, input: {
 
   if (sessionRows.length === 0) return []
 
+  // Read here rather than taken as a parameter, the same call readSessions makes for the same
+  // reason: every caller of this reader wants the same answer, and one that forgot to pass
+  // overrides through would silently draw a night the person had already corrected out from
+  // under the daily figures — the exact bug this function exists to close. Overrides are
+  // hand-entered and few, so this is one small indexed read scoped by person and scope.
+  const overrideRows = db.select().from(overridesTable).where(and(
+    eq(overridesTable.personId, input.personId),
+    eq(overridesTable.scope, 'session'),
+  )).all()
+  const overrideLikes: OverrideLike[] = overrideRows.map((row) => ({
+    scope: row.scope, targetKey: row.targetKey, action: row.action, correctedValue: row.correctedValue ?? null,
+  }))
+
+  // The same function deriveSleepDay runs its sessions through before assembling a night, so a
+  // session the person excluded cannot be in this reader's night while it is already gone from
+  // the daily figures. What it drops is kept separately below, not thrown away: a night that got
+  // shorter because of a correction is reported as such rather than looking like a device fault.
+  const kept = applyToSessions(
+    sessionRows.map((row) => ({ id: row.id, sourceId: row.sourceId, kind: row.kind, startMs: row.startMs, endMs: row.endMs })),
+    overrideLikes,
+  )
+  const keptIds = new Set(kept.map((s) => s.id))
+  const filteredRows = sessionRows.filter((row) => keptIds.has(row.id))
+
+  if (filteredRows.length === 0) return []
+
+  // Grouped by date then by source, the same shape the night groups below use, so each excluded
+  // session can be handed to the one night it would have joined rather than to every night on
+  // its date: two devices reporting the same date must not see each other's corrections.
+  const excludedByDate = new Map<string, Map<string, string[]>>()
+  for (const row of sessionRows) {
+    if (keptIds.has(row.id)) continue
+    const bySource = excludedByDate.get(row.localDate) ?? new Map<string, string[]>()
+    excludedByDate.set(row.localDate, bySource)
+    const list = bySource.get(row.sourceId)
+    if (list) list.push(row.id)
+    else bySource.set(row.sourceId, [row.id])
+  }
+
   // The instance's own gap, read here rather than taken from the default, because a night
   // assembled at one gap and read back at another is two different nights. runDerive.ts and
   // runRebuild.ts read it the same way; the default stands in only for an instance that has not
@@ -84,17 +132,18 @@ export function readSleepNights(db: DbOrTx, input: {
   // session_segments_session covers the IN lookup on session_id, but it is ordered
   // (session_id, start_ms), which sorts each session's own segments, not the merged list across
   // however many sessions make up a night. The order by below is what actually produces start
-  // order across the group; sqlite still runs a sort step to get it.
+  // order across the group; sqlite still runs a sort step to get it. Scoped to the filtered rows,
+  // so an excluded session's own segments never reach a hypnogram it no longer belongs to.
   const segmentRows = db.select().from(sessionSegments)
-    .where(inArray(sessionSegments.sessionId, sessionRows.map((row) => row.id)))
+    .where(inArray(sessionSegments.sessionId, filteredRows.map((row) => row.id)))
     .orderBy(asc(sessionSegments.startMs))
     .all()
 
   // Nested by date then by source, rather than one map keyed by a string built from both, so two
   // different local dates or sources can never collide on the same key.
-  const byDate = new Map<string, Map<string, typeof sessionRows>>()
-  for (const row of sessionRows) {
-    const bySource = byDate.get(row.localDate) ?? new Map<string, typeof sessionRows>()
+  const byDate = new Map<string, Map<string, typeof filteredRows>>()
+  for (const row of filteredRows) {
+    const bySource = byDate.get(row.localDate) ?? new Map<string, typeof filteredRows>()
     byDate.set(row.localDate, bySource)
     const group = bySource.get(row.sourceId)
     if (group) group.push(row)
@@ -139,6 +188,7 @@ export function readSleepNights(db: DbOrTx, input: {
         segments: segmentRows
           .filter((segment) => ids.has(segment.sessionId))
           .map((segment) => ({ stage: segment.stage, startMs: segment.startMs, endMs: segment.endMs })),
+        excludedSessions: excludedByDate.get(group[0]!.localDate)?.get(group[0]!.sourceId) ?? [],
       })
     }
   }

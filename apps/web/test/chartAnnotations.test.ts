@@ -42,10 +42,11 @@ describe('overridesByMetric', () => {
     expect(entry.annotations).toEqual([{ date: '2026-08-11', text: 'Chest strap read low' }])
   })
 
-  // `sample` and `session` scoped rows: this milestone's panel never writes either (AnnotatePanel.tsx
-  // builds every target with `dayMetricTarget` alone), but the /overrides list this reads is not
-  // scoped to what one panel writes, and a `sample`/`session` row names no metric a by-day chart
-  // could place a mark against.
+  // `sample` and `session` scoped rows. The panel can write a `sample` row too now (a click on an
+  // intraday chart, AnnotatePanel.tsx's own AnnotateTarget), but session rows never come from it,
+  // and the /overrides list this reads is not scoped to what one panel writes regardless: a
+  // `sample`/`session` row names no metric a by-day chart could place a mark against, whichever
+  // wrote it.
   //
   // Both cases below give the mismatched row a `targetKey` that parses as a valid day_metric shape
   // anyway (rather than each scope's own real shape, `sampleTarget`/`sessionTarget`), on purpose:

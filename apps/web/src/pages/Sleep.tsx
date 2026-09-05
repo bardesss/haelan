@@ -12,6 +12,7 @@ import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
@@ -394,7 +395,7 @@ export function Sleep() {
               <Sparkline values={spark.values} labels={spark.labels} metric={metric}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)} baseline={band}
                 annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
           </StatTile>
         )}
@@ -432,8 +433,11 @@ export function Sleep() {
             : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
-            <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
-              label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
+            <>
+              <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
+                label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
+              <NightExcludedSessions count={lastNight.excludedSessions.length} />
+            </>
           )}
         </Card>
         {/* Gated on lastSeries, the 'last' agg group sleep_bedtime_minutes/sleep_waketime_minutes

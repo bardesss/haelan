@@ -1,8 +1,7 @@
 import { coverageIsMeaningful } from '@haelan/core/coverage-signal'
 import type { SeriesPoint } from './useSeries.js'
-import type { Baseline } from './useBaseline.js'
 
-export type EmptyStateKind = 'no_data' | 'not_worn' | 'insufficient'
+export type EmptyStateKind = 'no_data' | 'not_worn'
 
 /**
  * Whether a metric's coverage is a statement about whether a device was worn.
@@ -53,15 +52,20 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
 }
 
 /**
- * Which of the three empty states a card should render, or null to render the data.
+ * Which of the two empty states a card should render, or null to render the data.
  *
- * The parent spec requires these read differently and that none renders as zero or as a blank
- * chart, because "no naps detected", "device not worn" and "not enough data to summarise" are
- * three different statements and only one of them is a number.
+ * The parent spec requires these read differently and that neither renders as zero or as a blank
+ * chart, because "no naps detected" and "device not worn" are two different statements and
+ * neither of them is a number.
+ *
+ * A third state, `insufficient`, lived here until M3e-2 marked it for removal: no caller in
+ * apps/web ever passed a baseline, since Dashboard.tsx withholds one on purpose (a thin baseline
+ * should blank the band a chart draws rather than the lines themselves), so the branch could
+ * never fire through this function. Its copy lives on as a suppressed insight card's own
+ * `thin-days` reason (InsightCard.tsx), which reuses the `emptyState.insufficient` translation
+ * key verbatim without ever calling this function.
  */
-export function emptyStateFor(
-  metric: string, points: SeriesPoint[] | undefined, baseline?: Baseline | null,
-): EmptyStateKind | null {
+export function emptyStateFor(metric: string, points: SeriesPoint[] | undefined): EmptyStateKind | null {
   // A one day range with a value is deliberately not read here at all, even though MetricCard
   // knows it (its own `oneDayRange` prop): this function answers "is there nothing to show", and
   // a one day range with a value has something to show, a number with no chart worth drawing
@@ -70,9 +74,6 @@ export function emptyStateFor(
   // basis line along with the chart, on a range where none of the three had anything wrong with
   // them. MetricCard reads `oneDayRange` itself and hands it to `children`, which is the one place
   // that can swap out the chart alone and leave the rest of the card standing.
-  //
-  // Ordered strongest first. Nothing at all outranks a thin baseline: telling a reader their
-  // baseline is thin implies there is a series it was thin against.
   if (points === undefined || points.length === 0) return 'no_data'
 
   // Only the rows that can answer the coverage question get a vote, and a metric with no such
@@ -80,15 +81,6 @@ export function emptyStateFor(
   // is the rule this function is named for and used to break one field over.
   const answers = points.map((point) => wornOn(metric, point)).filter((w): w is boolean => w !== null)
   if (answers.length > 0 && !answers.includes(true)) return 'not_worn'
-
-  // Dead code: no caller in apps/web ever passes a baseline here. Dashboard.tsx withholds one on
-  // purpose, because a thin baseline should blank the band a chart draws rather than the lines
-  // themselves, so a chart card should never reach `insufficient` through this function at all.
-  // The copy this branch would have shown now lives on a suppressed insight card's own
-  // `thin-days` reason (InsightCard.tsx), which reuses `emptyState.insufficient` verbatim without
-  // ever calling this function or consulting a baseline. Recorded here rather than deleted yet:
-  // M3e-2's own spec (section 2) calls this the branch's real home and marks it for removal.
-  if (baseline != null && baseline.thin) return 'insufficient'
 
   return null
 }

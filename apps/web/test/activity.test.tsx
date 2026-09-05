@@ -162,6 +162,61 @@ function stubActivityValues(overrides: Record<string, number>): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * The finding this stub exists for: the workout count tile and the session list beneath it read
+ * two different things, a derived daily total with an exclusion already applied and a raw session
+ * list this reader marks rather than drops, and only a fixture where the two actually disagree
+ * proves they still agree on purpose (R1's own rule: two workouts counted above three listed, one
+ * of them struck through). Three sessions, one excluded; workout_count answers 2, the same total
+ * deriveExerciseDay would have written with the excluded session already subtracted.
+ */
+function stubActivityExcludedWorkout(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/series')) {
+      const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
+      const body: Record<string, unknown> = {}
+      for (const metric of metrics) {
+        const value = metric === 'workout_count' ? 2 : 60
+        body[metric] = { points: [seriesPoint(metric, '2026-08-15', value)], reduction: null }
+      }
+      return json(body)
+    }
+    if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/sessions')) {
+      return json({
+        items: [
+          {
+            id: 's1', sourceId: 'watch', startMs: Date.UTC(2026, 7, 3, 8, 0), endMs: Date.UTC(2026, 7, 3, 8, 30),
+            startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-03',
+            attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 250 } },
+            excluded: false, excludeReason: null,
+          },
+          {
+            id: 's2', sourceId: 'watch', startMs: Date.UTC(2026, 7, 5, 8, 0), endMs: Date.UTC(2026, 7, 5, 8, 30),
+            startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-05',
+            attrs: { exerciseType: 'CYCLING', metricsSummary: { caloriesKcal: 400 } },
+            excluded: true, excludeReason: 'strap fell off',
+          },
+          {
+            id: 's3', sourceId: 'watch', startMs: Date.UTC(2026, 7, 7, 8, 0), endMs: Date.UTC(2026, 7, 7, 8, 30),
+            startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-07',
+            attrs: { exerciseType: 'RUNNING', metricsSummary: { caloriesKcal: 300 } },
+            excluded: false, excludeReason: null,
+          },
+        ],
+        cursor: null,
+      })
+    }
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 describe('the Activity page', () => {
   // The two provider only metrics are the reason Task 1 of this milestone exists. If the request
   // carried a source parameter at all, both would come back empty here (see stubActivity's own
@@ -430,6 +485,26 @@ describe('the Activity page', () => {
   // and one agg per call, distinct from the two /series requests (sum, count) this page already
   // issues, so the steps insight is a third request rather than a card riding along on the sum
   // group's own response.
+  // Finding 2 of the second pass review: session-list-excluded.test.tsx mounts SessionList alone,
+  // so nothing rendered the whole Activity page with an excluded session and read the workout
+  // count tile beside it. The disagreement is the feature, not a bug the two queries happen to
+  // share: this is the one test where they sit on the page together and are asserted together.
+  it('shows the excluded session struck through in the list, beside a count that already excludes it', async () => {
+    const restore = stubActivityExcludedWorkout()
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Workouts')
+    expect(card?.querySelector('.value')?.textContent).toBe('2 workouts')
+    // Newest first (SessionList's own order): s3 (Aug 7), s2 (Aug 5, excluded), s1 (Aug 3).
+    const rows = [...container!.querySelectorAll('.session-row')].map((r) => r.className)
+    expect(rows).toEqual(['session-row', 'session-row session-row-excluded', 'session-row'])
+    const reasons = [...container!.querySelectorAll('.session-row-excluded-reason')].map((r) => r.textContent)
+    expect(reasons).toEqual(['Excluded: strap fell off'])
+    restore()
+  })
+
   it('asks for the steps insight at agg sum, separately from the sum series request', async () => {
     const urls: string[] = []
     const restore = stubActivity(urls)

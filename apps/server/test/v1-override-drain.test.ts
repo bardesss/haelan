@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import fc from 'fast-check'
 import {
   DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, runDerive, sampleTarget, schema,
 } from '@haelan/core'
@@ -103,7 +104,62 @@ async function postOverride(h: Harness, token: string, metric: string, localDate
   })
 }
 
+async function postRaw(h: Harness, token: string, body: Record<string, unknown>) {
+  return h.app.inject({
+    method: 'POST', url: '/api/v1/p/p1/overrides',
+    headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+    payload: body,
+  })
+}
+
 const STEPS_ON_THE_15TH = '/series?metric=steps&agg=sum&from=2026-08-15&to=2026-08-15'
+const stepsSeriesUrl = (localDate: string): string => `/series?metric=steps&agg=sum&from=${localDate}&to=${localDate}`
+
+const reasonArb = fc.string({ minLength: 1, maxLength: 40 })
+
+/**
+ * Four ways a body reaches route.ts's own textField/enumField refusals or the deeper mismatch
+ * annotations.ts's validate() enforces, none of which the type system stops at the JSON boundary.
+ * Varied by junk text rather than fixed strings, so the property is not replaying one hand-picked
+ * body the way the four `answers 400 for...` tests above already do.
+ */
+function invalidOverrideBody(): fc.Arbitrary<Record<string, unknown>> {
+  // A scope enumField has never heard of. Filtered against the three real ones, since a random
+  // string landing on 'sample' by chance would turn this into a body the route accepts.
+  const unknownScope = fc.string({ minLength: 1, maxLength: 20 })
+    .filter((s) => !(['sample', 'session', 'day_metric'] as string[]).includes(s))
+    .chain((scope) => reasonArb.map((reason) => ({ scope, targetKey: '{}', action: 'exclude', reason })))
+
+  // Same shape, for action rather than scope: a well formed day_metric target so the refusal is
+  // action's alone, not a target the parser would have rejected anyway.
+  const unknownAction = fc.string({ minLength: 1, maxLength: 20 })
+    .filter((s) => !(['exclude', 'correct'] as string[]).includes(s))
+    .chain((action) => fc.tuple(reasonArb, fc.string({ minLength: 1, maxLength: 10 }))
+      .map(([reason, localDate]) => ({
+        scope: 'day_metric', targetKey: dayMetricTarget({ localDate, metric: 'steps' }), action, reason,
+      })))
+
+  // OverrideStore.validate's own rule: a day_metric override can only exclude, since a corrected
+  // figure names no source at that scope to be inspected against. Well formed everywhere but the
+  // one field the rule is about.
+  const dayMetricAskedToCorrect = fc.tuple(
+    fc.string({ minLength: 1, maxLength: 10 }), reasonArb, fc.integer({ min: 1, max: 100_000 }),
+  ).map(([localDate, reason, correctedValue]) => ({
+    scope: 'day_metric', targetKey: dayMetricTarget({ localDate, metric: 'steps' }), action: 'correct',
+    reason, correctedValue,
+  }))
+
+  // The other half of that same store rule: a correcting override with no figure to correct to.
+  // The target names no sample that exists, which affectedLocalDate answers with null rather than
+  // a throw; the refusal below comes from validate() instead, once put() is reached.
+  const sampleCorrectionWithNoValue = fc.tuple(
+    fc.string({ minLength: 1, maxLength: 10 }), fc.integer({ min: 0, max: 2_000_000_000 }), reasonArb,
+  ).map(([source, utcMs, reason]) => ({
+    scope: 'sample', targetKey: sampleTarget({ source, metric: 'steps', utcMs }), action: 'correct', reason,
+  }))
+
+  return fc.oneof(unknownScope, unknownAction, dayMetricAskedToCorrect, sampleCorrectionWithNoValue)
+}
 
 describe('POST /overrides', () => {
   // The whole point of draining in the request: the number a reader sees after the panel closes
@@ -159,6 +215,36 @@ describe('POST /overrides', () => {
 
     const after = await get(harness, token, STEPS_ON_THE_15TH)
     expect(after.json().steps.points[0].value).toBe(900)
+  })
+
+  // Master design: an override never overwrites the original reading, so removing one restores
+  // it exactly. "Exactly" is a claim about every value a day could have held, not about 900, the
+  // one number the example test above happens to pick, so this is a property rather than another
+  // example. One harness reused across every run, a fresh local day per run so a later run's
+  // sample can never add to an earlier run's sum.
+  it('removing an override restores the pre-override value exactly', async () => {
+    harness = await withServer()
+    const h = harness
+    const token = await h.signIn()
+    let day = 0
+
+    await fc.assert(fc.asyncProperty(fc.integer({ min: 1, max: 100_000 }), async (value) => {
+      const localDate = new Date(Date.UTC(2026, 0, 1) + (day += 1) * 86_400_000).toISOString().slice(0, 10)
+      seedSamplesFor(h, localDate, 'steps', value)
+      drainOnce(h)
+
+      const before = (await get(h, token, stepsSeriesUrl(localDate))).json().steps.points[0].value
+
+      const id = (await postOverride(h, token, 'steps', localDate)).json().id
+      const removed = await h.app.inject({
+        method: 'DELETE', url: `/api/v1/p/p1/overrides/${id}`,
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+      })
+      expect(removed.statusCode).toBe(200)
+
+      const after = (await get(h, token, stepsSeriesUrl(localDate))).json().steps.points[0].value
+      expect(after).toBe(before)
+    }))
   })
 
   // The failure mode draining inside a request introduces. The override is committed either way,
@@ -296,6 +382,30 @@ describe('POST /overrides', () => {
     const write = await postOverride(harness, token, 'steps', '2026-08-15')
     expect(write.statusCode).toBe(500)
     expect(overrides.listFor('p1')).toEqual([])
+  })
+
+  // What the test above was reaching for and stopped short of: it asserts the override list is
+  // empty, but the queue mark and the override row are a single write (OverrideStore.put wraps
+  // both in one transaction, and validate() throws before either happens), so a rejected write
+  // that left the list empty could still, on a wrong implementation, have left a day queued. A
+  // wrongly queued day would derive nothing new since no override applies to it, but it would
+  // still cost a derive cycle for a request nothing about it actually changed. A backlog seeded
+  // once up front, so this is a claim about the queue never moving rather than about it staying
+  // at zero, which every one of these bodies would satisfy even if the write route enqueued
+  // something by mistake.
+  it('a failed write leaves no queued derive rows', async () => {
+    harness = await withServer()
+    const h = harness
+    const token = await h.signIn()
+    seedBacklog(h, 5)
+    const queue = h.app.haelan.instance.deriveQueue
+
+    await fc.assert(fc.asyncProperty(invalidOverrideBody(), async (body) => {
+      const before = queue.size()
+      const response = await postRaw(h, token, body)
+      expect(response.statusCode).toBe(400)
+      expect(queue.size()).toBe(before)
+    }))
   })
 
   // Section 15, at the one moment a request does work on somebody's behalf. An unscoped drain

@@ -263,7 +263,7 @@ export function Activity() {
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
-                onPointClick={(localDate) => setAnnotateTarget({ localDate, metric })} />
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
             )}
           </StatTile>
         )}
@@ -281,7 +281,7 @@ export function Activity() {
             : stepsQuery.isPending ? <Loading /> : (
             <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })}
               annotations={stepsAnnotations} excluded={stepsOverrides.excluded}
-              onPointClick={(localDate) => setAnnotateTarget({ localDate, metric: 'steps' })} />
+              onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'steps' })} />
           )}
         </Card>
 

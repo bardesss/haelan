@@ -1,7 +1,8 @@
 import { and, eq, gte, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { samples } from '../db/schema/index.ts'
+import { samples, overrides as overridesTable } from '../db/schema/index.ts'
 import { localDateOf, widenedUtcWindow } from '../derive/localDay.ts'
+import { parseSampleTarget, sampleTarget } from '../derive/targetKey.ts'
 import { thinBand } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 
@@ -14,6 +15,17 @@ export interface IntradayPoint {
   min: number | null
   mean: number | null
   max: number | null
+  /**
+   * How many readings this point combines. One for heart rate, which is stored downsampled to
+   * the minute (three rows, min/mean/max, for that one reading, not three); more for a metric
+   * stored per reading whose minute held several. A sample override names one exact instant, and
+   * carries no `agg` of its own (targetKey.ts's own comment on `sampleTarget` says why), so
+   * readings rather than rows is the count a target can actually stand for: a point with n above
+   * one has no single instant to correct, which is what the panel's Correct guard reads this for.
+   */
+  n: number
+  /** Whether a sample-scope exclusion names the row behind this point. */
+  excluded: boolean
 }
 
 export interface IntradayResult {
@@ -70,6 +82,26 @@ export function readIntraday(db: DbOrTx, input: {
   )).all()
     .filter((row) => localDateOf(row.utcMs, row.tzOffsetMinutes) === input.localDate)
 
+  // Read here rather than taken as a parameter, the same choice readSessions and readSleepNights
+  // made: every caller wants the same answer, and one small indexed read (few rows, scoped by
+  // person and scope) beats a caller that forgot to pass corrections and silently saw none.
+  // A sample override names one exact (source, metric, utcMs) instant, which is a raw row's own
+  // key, not a bucket's — the map is checked per row below, before rows are folded into a bucket.
+  // Both actions are kept, not just exclude: a tier-2 reader applies exactly the overrides
+  // derivation applies (applyToSamples, packages/core/src/derive/overrides.ts), and a sample scope
+  // correct is one of the two, or a correction written from this chart would change the daily
+  // rollup and leave the chart it was corrected on still drawing the original value.
+  const sampleOverrides = new Map<string, { action: 'exclude' | 'correct', correctedValue: number | null }>()
+  for (const row of db.select().from(overridesTable)
+    .where(and(eq(overridesTable.personId, input.personId), eq(overridesTable.scope, 'sample'))).all()) {
+    // Parsed and re-encoded rather than trusted as written, the same reason applyToSamples gives
+    // (packages/core/src/derive/overrides.ts): OverrideStore.validate parses a target key but does
+    // not canonicalise it before insert, so a key written with a different field order would pass
+    // the route and match nothing here, silently invisible to this reader while derivation, which
+    // does re-encode, still applied it.
+    sampleOverrides.set(sampleTarget(parseSampleTarget(row.targetKey)), row)
+  }
+
   // Keyed by source first, then minute, rather than one map keyed by a string built from both: a
   // source id is arbitrary text and this avoids ever having to reason about whether two different
   // (source, minute) pairs could print to the same key.
@@ -77,22 +109,40 @@ export function readIntraday(db: DbOrTx, input: {
   // rawValues accumulates a raw metric's readings for the minute so they can be combined once
   // every row for that minute has been seen, rather than folded in one at a time: a running
   // min/mean/max would need its own running sum and count anyway, which is exactly what an array
-  // and a single pass at the end already gives for free.
-  const bySource = new Map<string, Map<number, IntradayPoint & { rawValues: number[] }>>()
+  // and a single pass at the end already gives for free. Its length becomes n for a raw metric.
+  // Each entry keeps the row's own utcMs alongside its value, not the value alone: a bucket that
+  // turns out to hold exactly one raw reading needs that reading's real instant below, not the
+  // floored minute it was grouped under, which is a bucket boundary rather than anything stored.
+  const bySource = new Map<string, Map<number, IntradayPoint & { rawValues: { value: number, utcMs: number }[] }>>()
   for (const row of rows) {
     if (row.value === null) continue
     // A raw reading keeps its own instant, not the minute; grouping it under the minute it
     // belongs to is what lets several readings in one minute combine, the same partition
     // downsampleToMinute uses at ingest for the one metric that already gets this treatment.
     const bucketMs = row.agg === 'raw' ? Math.floor(row.utcMs / MINUTE_MS) * MINUTE_MS : row.utcMs
-    const byMinute = bySource.get(row.sourceId) ?? new Map<number, IntradayPoint & { rawValues: number[] }>()
+    const byMinute = bySource.get(row.sourceId)
+      ?? new Map<number, IntradayPoint & { rawValues: { value: number, utcMs: number }[] }>()
     bySource.set(row.sourceId, byMinute)
     const point = byMinute.get(bucketMs)
-      ?? { sourceId: row.sourceId, utcMs: bucketMs, min: null, mean: null, max: null, rawValues: [] }
-    if (row.agg === 'min') point.min = row.value
-    else if (row.agg === 'mean') point.mean = row.value
-    else if (row.agg === 'max') point.max = row.value
-    else if (row.agg === 'raw') point.rawValues.push(row.value)
+      ?? { sourceId: row.sourceId, utcMs: bucketMs, min: null, mean: null, max: null, n: 1, excluded: false, rawValues: [] }
+
+    const override = sampleOverrides.get(sampleTarget({ source: row.sourceId, metric: input.metric, utcMs: row.utcMs }))
+    // Applied the same way applyToSamples applies it, and for the same reason its own comment
+    // gives: every aggregate of the minute takes the corrected reading, because the person
+    // corrected a reading, not one of its three summaries. A correction carrying no value is not
+    // an exclusion — the reading stands until somebody says what it should be instead.
+    const value = override?.action === 'correct' && override.correctedValue !== null
+      ? override.correctedValue
+      : row.value
+    if (row.agg === 'min') point.min = value
+    else if (row.agg === 'mean') point.mean = value
+    else if (row.agg === 'max') point.max = value
+    else if (row.agg === 'raw') point.rawValues.push({ value, utcMs: row.utcMs })
+    // Marked on any row in the bucket, not only when every row is: a bucket of one is the
+    // ordinary case, but a bucket where one of several raw readings was thrown out is still a
+    // point whose surviving value was computed with a reading the person disowned folded in, and
+    // a reader deciding whether to trust it needs to see that, not a point that looks untouched.
+    if (override?.action === 'exclude') point.excluded = true
     byMinute.set(bucketMs, point)
   }
 
@@ -117,13 +167,27 @@ export function readIntraday(db: DbOrTx, input: {
   const perSourcePoints = sourceIds.map((sourceId) => {
     const series: IntradayPoint[] = [...bySource.get(sourceId)!.values()]
       .map(({ rawValues, ...point }) => (
+        // n starts at 1, right for a downsampled metric whose bucket is one reading no matter how
+        // many of its min/mean/max component rows are present, and whose utcMs is already that
+        // reading's own recorded instant (bucketMs above is row.utcMs unchanged for a non-raw
+        // agg). A raw metric's bucket instead holds one row per reading, so n becomes the count
+        // actually folded together here.
         rawValues.length === 0
           ? point
           : {
               ...point,
-              min: Math.min(...rawValues),
-              mean: rawValues.reduce((total, v) => total + v, 0) / rawValues.length,
-              max: Math.max(...rawValues),
+              min: Math.min(...rawValues.map((r) => r.value)),
+              mean: rawValues.reduce((total, r) => total + r.value, 0) / rawValues.length,
+              max: Math.max(...rawValues.map((r) => r.value)),
+              n: rawValues.length,
+              // point.utcMs is otherwise the floored bucket start, not a stored instant: a raw
+              // minute holding exactly one reading has one to name instead, and naming it is what
+              // keeps this point's utcMs a real row whenever the Correct guard offers it
+              // (AnnotatePanel.tsx's actionsFor, n === 1) — sampleTarget({utcMs: point.utcMs}) has
+              // to match the same row the per-row lookup above keyed on row.utcMs, or a correction
+              // written from this point applies nowhere. Left at the bucket start for n > 1, where
+              // Correct is withheld and no single instant could stand for the bucket anyway.
+              utcMs: rawValues.length === 1 ? rawValues[0]!.utcMs : point.utcMs,
             }
       ))
       .sort((a, b) => a.utcMs - b.utcMs)
