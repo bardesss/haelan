@@ -3,11 +3,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar } from './components/Sidebar.js'
 import { SetupApp } from './setup/SetupApp.js'
 import { SignIn } from './auth/SignIn.js'
+import { RedeemInvite } from './auth/RedeemInvite.js'
 import { useSession } from './auth/session.js'
-import { useRoute, matchRoute, navigate } from './router.js'
+import { useRoute, matchRoute, routeParams, navigate } from './router.js'
 import { useTranslation } from './i18n/index.js'
 import { ApiError } from './api/client.js'
 import { signOutAndResetSession } from './auth/signOutRequest.js'
+import { queryKeys } from './api/queryKeys.js'
 import { ROUTES } from './routes.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 
@@ -30,11 +32,42 @@ export function Shell() {
   const setupIncomplete = errorKind === 'setup_incomplete'
   const [signOutError, setSignOutError] = useState<string | null>(null)
 
+  // An invite link is a deliberate destination on its own, not one of ROUTES' pages (routes.tsx's
+  // own comment says why the signed-in table can never carry it): a member holding this link has
+  // no account yet, so the token in the URL, not the session, decides whether this screen renders.
+  const inviteToken = routeParams('/invite/:token', route)?.token ?? null
+
+  // Reading data alone would be wrong for the reason the big comment below spells out (query-core
+  // keeps it forever after one success), but data together with a null error is reliable: that
+  // combination exists only once a fetch has actually settled without failing, which is what
+  // "already looking at a signed-in session" means here. The pending default (no error yet, no
+  // data yet) and a stale display name sitting behind a fresh error both read false, which is
+  // exactly what keeps the join screen up through both those states below.
+  const signedIn = session.data !== undefined && session.error === null
+
   // Not called from the render body: pushState is a side effect, and StrictMode's double-invoked
   // initial render would push the same entry to the history stack twice back to back.
   useEffect(() => {
-    if (setupIncomplete) navigate('/setup/account')
-  }, [setupIncomplete])
+    // Skipped on an invite path: an invited member has no account yet, so a fresh instance
+    // answering setup_incomplete is not this reader's cue to build one. Redirecting here would
+    // bounce them into the wizard before the join screen below ever got a chance to render.
+    if (setupIncomplete && inviteToken === null) navigate('/setup/account')
+  }, [setupIncomplete, inviteToken])
+
+  // Ahead of every other branch, including the isPending guard below: the join screen depends on
+  // the token in the URL, never on the session, so there is no reason to wait for the session
+  // query to settle, or to fall through to the sign-in or wizard screens further down, before
+  // showing it. `!signedIn` is what lets this stop applying itself the moment RedeemInvite's own
+  // onJoined callback invalidates the session query and it refetches successfully, so the
+  // fallthrough at the bottom of this function takes over on the very next render.
+  if (inviteToken !== null && !signedIn) {
+    return (
+      <RedeemInvite
+        token={inviteToken}
+        onJoined={() => { void queryClient.invalidateQueries({ queryKey: queryKeys.session() }) }}
+      />
+    )
+  }
 
   if (session.isPending) return null
 

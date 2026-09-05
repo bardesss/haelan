@@ -15,6 +15,7 @@ export interface AccountRow {
   personId: string
   username: string
   isAdmin: boolean
+  disabledAtMs: number | null
 }
 
 export interface CreateAccountInput {
@@ -65,7 +66,7 @@ export class AccountStore {
       isAdmin: input.isAdmin,
       createdAtMs: input.nowMs,
     }).run()
-    return { id: input.id, personId: input.personId, username, isAdmin: input.isAdmin }
+    return { id: input.id, personId: input.personId, username, isAdmin: input.isAdmin, disabledAtMs: null }
   }
 
   async login(input: LoginInput): Promise<LoginResult> {
@@ -89,6 +90,12 @@ export class AccountStore {
       return { ok: false, reason: 'bad_password' }
     }
 
+    // Checked after the verify rather than instead of it, so a disabled account costs the same
+    // time as a live one and the answer is the same one a wrong password gets. Telling the two
+    // apart would confirm to anyone trying a username that the account exists, and the admin who
+    // disabled it is the one who tells the member - the app has no way to reach them.
+    if (row.disabledAtMs !== null) return { ok: false, reason: 'bad_password' }
+
     this.#db.update(accounts).set({ failedAttempts: 0, lockedUntilMs: null })
       .where(eq(accounts.id, row.id)).run()
     return { ok: true, account: toRow(row) }
@@ -103,8 +110,22 @@ export class AccountStore {
     const row = this.#db.select().from(accounts).where(eq(accounts.personId, personId)).get()
     return row ? toRow(row) : null
   }
+
+  disable(id: string, nowMs: number): void {
+    this.#db.update(accounts).set({ disabledAtMs: nowMs }).where(eq(accounts.id, id)).run()
+  }
+
+  enable(id: string): void {
+    this.#db.update(accounts).set({ disabledAtMs: null }).where(eq(accounts.id, id)).run()
+  }
 }
 
 function toRow(row: typeof accounts.$inferSelect): AccountRow {
-  return { id: row.id, personId: row.personId, username: row.username, isAdmin: row.isAdmin }
+  return {
+    id: row.id,
+    personId: row.personId,
+    username: row.username,
+    isAdmin: row.isAdmin,
+    disabledAtMs: row.disabledAtMs,
+  }
 }

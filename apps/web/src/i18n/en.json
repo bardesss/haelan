@@ -8,6 +8,15 @@
     "failed": "That username and password do not match an account on this instance.",
     "unreachable": "The instance did not answer. Check that it is running and try again."
   },
+  "invite": {
+    "joinAs": "Join as {{name}}",
+    "explain": "Choose a username and password. Only you will know them.",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Create my account",
+    "invalid": "This invite is no longer valid",
+    "failed": "That did not work. Try again."
+  },
   "shell": {
     "signOut": "Sign out",
     "signOutFailed": "Sign-out did not reach the instance. Try again.",
@@ -747,6 +756,26 @@
       },
       "kind": { "device": "Device", "app": "App", "manual": "Entered by hand" },
       "saveFailed": "That did not save. Try again."
+    },
+    "members": {
+      "title": "Members",
+      "state": { "active": "Active", "invited": "Invited", "disabled": "Suspended", "expired": "Invite expired" },
+      "invite": "Invite a member",
+      "displayName": "Name",
+      "timezone": "Time zone",
+      "create": "Create invite",
+      "linkTitle": "Their invite link",
+      "linkOnce": "This link is shown once. Copy it now and hand it over.",
+      "expiresOn": "This link expires on {{date}}.",
+      "copy": "Copy",
+      "suspend": "Suspend",
+      "restore": "Restore",
+      "revoke": "Revoke invite",
+      "empty": {
+        "title": "No other members",
+        "detail": "Invite someone to give them their own account and their own data."
+      },
+      "failed": "That did not work. Try again."
     }
   }
 }

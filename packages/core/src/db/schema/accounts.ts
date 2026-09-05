@@ -15,6 +15,9 @@ export const accounts = sqliteTable('accounts', {
   failedAttempts: integer('failed_attempts').notNull().default(0),
   lockedUntilMs: integer('locked_until_ms'),
   createdAtMs: integer('created_at_ms').notNull(),
+  // A timestamp rather than a boolean: "when was this account suspended" is the question an admin
+  // asks afterwards, and a boolean throws the answer away. Null means active.
+  disabledAtMs: integer('disabled_at_ms'),
 })
 
 // Not called sessions: that name belongs to sleep and exercise in tier 2.
@@ -26,6 +29,25 @@ export const authSessions = sqliteTable('auth_sessions', {
   createdAtMs: integer('created_at_ms').notNull(),
   expiresAtMs: integer('expires_at_ms').notNull(),
   lastSeenAtMs: integer('last_seen_at_ms').notNull(),
+})
+
+// An invite is a live credential until it is redeemed - it is the thing that creates an account -
+// so it is stored the way auth_sessions stores a session: the hash of the token, never the token.
+// A copied database is then a list of expiry times rather than a set of usable links.
+//
+// The person row exists before the invite does, which is the arrangement the parent spec says the
+// people/accounts split is for: somebody can exist as a person before anyone can log in as them.
+export const invites = sqliteTable('invites', {
+  id: text('id').primaryKey(),
+  personId: text('person_id').notNull().references(() => people.id),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdByAccountId: text('created_by_account_id').notNull().references(() => accounts.id),
+  createdAtMs: integer('created_at_ms').notNull(),
+  expiresAtMs: integer('expires_at_ms').notNull(),
+  // Null until redeemed. Kept rather than deleted so an admin's list can say what happened to an
+  // invite, and so a redeemed token cannot be re-redeemed by a row that no longer exists to refuse.
+  redeemedAtMs: integer('redeemed_at_ms'),
+  revokedAtMs: integer('revoked_at_ms'),
 })
 
 export const CONSENT_PATHS = ['localhost', 'tailscale', 'proxy'] as const

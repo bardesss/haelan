@@ -334,6 +334,32 @@ body {
   font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
 }
 
+/* Members.tsx: the same row shape .source-name-row uses (a fixed field, a muted detail, an action
+   at the end), but the "field" here is a state label rather than an input, so the row never grows
+   an .input the way that list's does. */
+.member-list { list-style: none; margin: 0; padding: 0; }
+.member-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
+}
+.member-row:last-child { border-bottom: 0; }
+.member-name { color: var(--text-primary); font-weight: 600; flex: 1; min-width: 120px; }
+.member-state { color: var(--text-secondary); font-size: var(--font-size-xs); }
+/* A disabled account is not a wrong value the way .delta's bad tone is, only an inactive one, so
+   this reads as .source-name-kind's own faint, no-alarm treatment rather than borrowing --negative. */
+.member-state[data-state='disabled'] { color: var(--text-faint); }
+.member-actions { display: flex; gap: var(--space-2); margin-left: auto; }
+
+/* The invite link panel: the same .copy-field/.copy-value vocabulary CopyField.tsx established for
+   a value that is exact and meant to be pasted elsewhere, not restyled for this one screen. The
+   warning underneath is the same muted caption weight .field-hint already carries everywhere else,
+   because that is exactly what it is here too: a caption on the constraint of the field above it. */
+.invite-link-panel {
+  background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  padding: var(--space-3); margin-top: var(--space-4);
+}
+.invite-link-panel .copy-field { padding: 0 0 var(--space-2); }
+
 /* SessionRow.tsx: two lines rather than the .override-table row above, because a session has no
    fixed set of columns to put in a table cell (see that component's own comment on why). The
    first line splits into a type/duration group on the left and a calories/heart rate group on

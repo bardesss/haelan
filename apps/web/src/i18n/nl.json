@@ -8,6 +8,15 @@
     "failed": "Deze gebruikersnaam en dit wachtwoord horen niet bij een account op deze instantie.",
     "unreachable": "De instantie gaf geen antwoord. Controleer of deze draait en probeer het opnieuw."
   },
+  "invite": {
+    "joinAs": "Word lid als {{name}}",
+    "explain": "Kies een gebruikersnaam en wachtwoord. Alleen jij kent ze.",
+    "username": "Gebruikersnaam",
+    "password": "Wachtwoord",
+    "submit": "Mijn account aanmaken",
+    "invalid": "Deze uitnodiging is niet meer geldig",
+    "failed": "Dat is niet gelukt. Probeer het opnieuw."
+  },
   "shell": {
     "signOut": "Uitloggen",
     "signOutFailed": "Uitloggen bereikte de instantie niet. Probeer het opnieuw.",
@@ -747,6 +756,26 @@
       },
       "kind": { "device": "Apparaat", "app": "App", "manual": "Handmatig ingevoerd" },
       "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
+    },
+    "members": {
+      "title": "Leden",
+      "state": { "active": "Actief", "invited": "Uitgenodigd", "disabled": "Geschorst", "expired": "Uitnodiging verlopen" },
+      "invite": "Nodig een lid uit",
+      "displayName": "Naam",
+      "timezone": "Tijdzone",
+      "create": "Uitnodiging aanmaken",
+      "linkTitle": "Hun uitnodigingslink",
+      "linkOnce": "Deze link wordt maar één keer getoond. Kopieer hem nu en geef hem door.",
+      "expiresOn": "Deze link verloopt op {{date}}.",
+      "copy": "Kopiëren",
+      "suspend": "Schorsen",
+      "restore": "Herstellen",
+      "revoke": "Uitnodiging intrekken",
+      "empty": {
+        "title": "Geen andere leden",
+        "detail": "Nodig iemand uit om diegene een eigen account en eigen gegevens te geven."
+      },
+      "failed": "Dat is niet gelukt. Probeer het opnieuw."
     }
   }
 }

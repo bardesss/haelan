@@ -40,7 +40,10 @@ describe('AccountStore', () => {
   it('accepts the right password', async () => {
     await create()
     const result = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 })
-    expect(result).toEqual({ ok: true, account: { id: 'a1', personId: 'p1', username: 'bartus', isAdmin: true } })
+    expect(result).toEqual({
+      ok: true,
+      account: { id: 'a1', personId: 'p1', username: 'bartus', isAdmin: true, disabledAtMs: null },
+    })
   })
 
   it('rejects the wrong password without saying whether the account exists', async () => {
