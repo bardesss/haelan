@@ -198,6 +198,12 @@ describe('the members section', () => {
     // INVITE_TTL_MS is why an expiry exists at all; the copy stating it is what this asserts,
     // not the exact formatted instant, which is locale and machine timezone dependent.
     expect(container!.textContent).toContain('This link expires on')
+    // The server keeps only a hash of the token, so a copy of it sitting in the query cache would
+    // be a copy of a credential meant to exist in exactly one place: on screen, once. Serialising
+    // every cache entry (not just membersKey()) catches a future onSuccess that starts stashing
+    // the mutation result anywhere, not only the one spot this test happens to look at today.
+    const cacheDump = JSON.stringify(client.getQueryCache().getAll().map((q) => q.state.data))
+    expect(cacheDump).not.toContain('TOKEN123')
   })
 
   it('is not rendered at all for a non-admin', () => {
