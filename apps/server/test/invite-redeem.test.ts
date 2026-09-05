@@ -86,6 +86,32 @@ describe('POST /api/invite/:token', () => {
     expect((await redeem(token, 'bob2', 'another password')).statusCode).toBe(404)
   })
 
+  // Two POSTs on one token, fired together rather than one after the other: both reach
+  // findByToken's check while the token is still good, the exact window that used to leave the
+  // second one stopped only by accounts.person_id UNIQUE - a generic 500, not the 404 every other
+  // invalid token gets. claimRedemption's conditional UPDATE settles which of the two gets to try
+  // creating an account before either does, so the loser is refused at the same point, and the
+  // same way, as a token that never existed.
+  it('redeemed twice at once produces exactly one account, and the loser gets the ordinary 404', async () => {
+    const [first, second] = await Promise.all([
+      redeem(token, 'bob', 'correct horse battery'),
+      redeem(token, 'bob-two', 'another good password'),
+    ])
+    const results = [first, second]
+    const winners = results.filter((r) => r.statusCode === 201)
+    const losers = results.filter((r) => r.statusCode !== 201)
+    expect(winners).toHaveLength(1)
+    expect(losers).toHaveLength(1)
+    expect(losers[0]!.statusCode).toBe(404)
+    expect(losers[0]!.json()).toEqual({
+      error: { kind: 'not_found', code: 'no_such_invite', message: 'this invite is no longer valid' },
+    })
+    // Exactly one account exists for the person the invite named, under whichever username won -
+    // accounts.person_id UNIQUE is a backstop here, not what this test is asking of the route.
+    const account = h.app.haelan.stores.accounts.getByPersonId(bobPersonId)
+    expect(account?.username).toBe((winners[0]!.json() as { username: string }).username)
+  })
+
   it('refuses a username somebody already has', async () => {
     expect((await redeem(token, 'bartus', 'correct horse battery')).statusCode).toBe(400)
   })

@@ -159,9 +159,14 @@ describe('the members section', () => {
       member({ displayName: 'Ann', username: 'ann', state: 'active', isAdmin: true }),
       member({ displayName: 'Bob', username: null, state: 'invited' }),
       member({ displayName: 'Cat', username: 'cat', state: 'disabled' }),
+      // Revoked or expired, either way: no account and no pending invite left. Its own honest
+      // label, and no control at all - it draws neither the revoke button (no inviteId) nor
+      // suspend or restore (no accountId).
+      member({ displayName: 'Dee', username: null, state: 'expired', accountId: null, inviteId: null }),
     ])
-    expect(rowNames()).toEqual(['Ann', 'Bob', 'Cat'])
-    expect(rowStates()).toEqual(['Active', 'Invited', 'Suspended'])
+    expect(rowNames()).toEqual(['Ann', 'Bob', 'Cat', 'Dee'])
+    expect(rowStates()).toEqual(['Active', 'Invited', 'Suspended', 'Invite expired'])
+    expect(container!.querySelectorAll('.member-actions button')).toHaveLength(3)
   })
 
   it('says so when there is nobody else in the household', () => {
@@ -190,6 +195,9 @@ describe('the members section', () => {
     expect(post?.body).toEqual({ displayName: 'New Person', timezone: 'Europe/Amsterdam' })
     expect(linkText()).toBe(`${window.location.origin}/invite/TOKEN123`)
     expect(container!.textContent).toContain('This link is shown once')
+    // INVITE_TTL_MS is why an expiry exists at all; the copy stating it is what this asserts,
+    // not the exact formatted instant, which is locale and machine timezone dependent.
+    expect(container!.textContent).toContain('This link expires on')
   })
 
   it('is not rendered at all for a non-admin', () => {

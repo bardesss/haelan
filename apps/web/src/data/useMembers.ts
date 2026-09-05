@@ -8,7 +8,7 @@ import { useSession } from '../auth/session.js'
 // choice useSourceNames.ts makes for NamedSource and for the same reason: apps/web imports only
 // @haelan/core's browser safe subpaths, and this shape does not come from @haelan/core at all, so
 // there is nothing to import even in principle -- it is declared once, by value, on each side.
-export type MemberState = 'active' | 'invited' | 'disabled'
+export type MemberState = 'active' | 'invited' | 'disabled' | 'expired'
 
 export interface MemberRow {
   personId: string

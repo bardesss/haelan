@@ -8,9 +8,11 @@ interface CreateMemberBody { displayName?: unknown, timezone?: unknown }
 interface AccountParams { accountId: string }
 interface InviteParams { id: string }
 
-export type MemberState = 'active' | 'invited' | 'disabled'
+// Not exported: apps/web declares its own copy of both (useMembers.ts's own comment says why),
+// and nothing in this app imports these from here.
+type MemberState = 'active' | 'invited' | 'disabled' | 'expired'
 
-export interface MemberRow {
+interface MemberRow {
   personId: string
   displayName: string
   timezone: string
@@ -65,9 +67,12 @@ export function registerMemberRoutes(app: FastifyInstance): void {
         accountId: null,
         username: null,
         isAdmin: false,
-        // No account and no pending invite is an expired invite nobody redeemed. The person row
-        // still exists, so it stays listed rather than vanishing into a state nothing explains.
-        state: 'invited',
+        // No account and no pending invite is a revoked or expired invite nobody redeemed. The
+        // person row still exists, so it stays listed rather than vanishing into a state nothing
+        // explains - it just gets its own honest label instead of the still-pending one. Ruling:
+        // re-issuing against this row and deleting it are both new surface the spec does not
+        // scope here; this state exists to name what the row is, not to offer a way out of it.
+        state: invite ? 'invited' : 'expired',
         inviteId: invite?.id ?? null,
       }
     })
@@ -144,10 +149,11 @@ export function registerMemberRoutes(app: FastifyInstance): void {
 }
 
 /**
- * requireAdmin has already resolved request.accountId to a real, admin account by the time any
- * handler above runs - a missing or unknown id stops there with its own 401, before this is ever
- * called. The decoration itself stays nullable (see auth.ts): it is set once for the whole app,
- * and its type cannot be narrowed to what only this file's preHandler chain guarantees.
+ * By the time any handler above runs, requireSession has already stopped a missing session with
+ * its own 401 and requireAdmin has confirmed the account it resolved is an admin, so
+ * request.accountId is a real, admin account here. The decoration itself stays nullable (see
+ * auth.ts): it is set once for the whole app, and its type cannot be narrowed to what only this
+ * file's preHandler chain guarantees.
  */
 function callerAccountId(request: FastifyRequest): string {
   return request.accountId as string

@@ -9,10 +9,10 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 const DAY_MS = 86_400_000
 
-async function sessionCookie(h: Harness): Promise<string> {
+async function sessionCookie(h: Harness, username = 'bartus'): Promise<string> {
   const response = await h.app.inject({
     method: 'POST', url: '/api/auth/login', headers,
-    payload: { username: 'bartus', password: 'a good long password' },
+    payload: { username, password: 'a good long password' },
   })
   return response.cookies.find((c) => c.name === 'haelan_session')!.value
 }
@@ -59,6 +59,24 @@ describe('settings routes', () => {
       method: 'PUT', url: '/api/settings/backfill-horizon', headers, payload: { days: 365 },
     })
     expect(response.statusCode).toBe(401)
+  })
+
+  // Instance-wide, not the caller's own: a raise loops every person in the household clearing
+  // their backfill-complete marks, which is exactly what requireAdmin's own comment says it
+  // exists to gate. requireAdmin answers the {kind,code,message} envelope, not this family's own
+  // flat {error} shape - asserted as the guard actually sends it, not as this file's neighbours
+  // otherwise answer.
+  it('refuses a non-admin caller', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await harness.addPerson({ id: 'p-outsider', displayName: 'Outsider', username: 'outsider' })
+    const cookie = await sessionCookie(harness, 'outsider')
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/backfill-horizon', headers, cookies: { haelan_session: cookie },
+      payload: { days: 365 },
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json()).toEqual({ error: { kind: 'forbidden', code: 'not_admin', message: 'this needs an admin' } })
   })
 
   it('raising the horizon clears a completed daily type so it walks further on the next run', async () => {

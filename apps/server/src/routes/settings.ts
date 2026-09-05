@@ -20,7 +20,12 @@ export function registerSettings(app: FastifyInstance): void {
 
   // Constrained to the three offered values rather than any integer: the cost of a horizon is
   // not linear in it, and the wizard shows a measured disk figure beside each of the three.
-  app.put<{ Body: HorizonBody }>('/api/settings/backfill-horizon', { preHandler: [app.requireSession] }, async (request, reply) => {
+  //
+  // requireAdmin, not requireSession alone: this setting is instance-wide (it drives every
+  // person's backfill, not just the caller's own), the exact thing requireAdmin's own comment
+  // says it exists to gate. The GET above stays on requireSession - reading the current horizon
+  // leaks nothing an ordinary member should not see.
+  app.put<{ Body: HorizonBody }>('/api/settings/backfill-horizon', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     const { days } = request.body ?? {}
     if (typeof days !== 'number' || !(USER_HORIZON_CHOICES as readonly number[]).includes(days)) {
       return reply.code(400).send({ error: `days must be one of ${USER_HORIZON_CHOICES.join(', ')}` })

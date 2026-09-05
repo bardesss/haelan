@@ -16,23 +16,26 @@ afterEach(async () => { await h.cleanup() })
 
 // A function, not a const object: the token named varies per caller across these tests (admin,
 // bob, an outsider), unlike v1-sources.test.ts's single fixed session.
-const authHeader = (token: string) => ({ authorization: `Bearer ${token}` })
+// null stands for no session at all: every case below that wants the 401 path calls its request
+// with no token rather than a bad one, the same distinction v1-isolation.test.ts draws between
+// "no session" and "a session that owns something else".
+const authHeader = (token: string | null) => (token === null ? {} : { authorization: `Bearer ${token}` })
 
-const list = (token: string) => h.app.inject({ method: 'GET', url: '/api/members', headers: authHeader(token) })
+const list = (token: string | null) => h.app.inject({ method: 'GET', url: '/api/members', headers: authHeader(token) })
 
-const invite = (token: string, displayName: string, timezone: string) => h.app.inject({
+const invite = (token: string | null, displayName: string, timezone: string) => h.app.inject({
   method: 'POST', url: '/api/members', headers: authHeader(token), payload: { displayName, timezone },
 })
 
-const disable = (token: string, accountId: string) => h.app.inject({
+const disable = (token: string | null, accountId: string) => h.app.inject({
   method: 'POST', url: `/api/members/${accountId}/disable`, headers: authHeader(token),
 })
 
-const enable = (token: string, accountId: string) => h.app.inject({
+const enable = (token: string | null, accountId: string) => h.app.inject({
   method: 'POST', url: `/api/members/${accountId}/enable`, headers: authHeader(token),
 })
 
-const revoke = (token: string, id: string) => h.app.inject({
+const revoke = (token: string | null, id: string) => h.app.inject({
   method: 'DELETE', url: `/api/members/invites/${id}`, headers: authHeader(token),
 })
 
@@ -50,15 +53,38 @@ describe('GET /api/members', () => {
       },
     ])
   })
+})
 
-  it('needs a session', async () => {
-    expect((await h.app.inject({ method: 'GET', url: '/api/members' })).statusCode).toBe(401)
+// Spec section 7 asks this of every route this file registers, not just GET: unauthorized with no
+// session, forbidden for a signed in non-admin. Before this table, only GET carried both cases -
+// the whole authorization claim rested on one shared `guard` array literal in members.ts and
+// nothing here would have failed if a future edit dropped it from one of the other four.
+describe('every route requires a session and an admin', () => {
+  let outsiderToken: string
+
+  beforeEach(async () => {
+    await h.addPerson({ id: 'p-outsider', displayName: 'Outsider', username: 'outsider' })
+    outsiderToken = await h.signIn('outsider', PASSWORD)
   })
 
-  it('refuses a non-admin', async () => {
-    await h.addPerson({ id: 'p-outsider', displayName: 'Outsider', username: 'outsider' })
-    const outsiderToken = await h.signIn('outsider', PASSWORD)
-    const response = await list(outsiderToken)
+  const cases: { name: string, send: (token: string | null) => ReturnType<typeof list> }[] = [
+    { name: 'GET /api/members', send: (token) => list(token) },
+    { name: 'POST /api/members', send: (token) => invite(token, 'Someone', 'Europe/Amsterdam') },
+    // Both ids are made up: the guard runs as a preHandler, ahead of any lookup the handler itself
+    // does, so a request that never gets past the guard cannot tell an unknown id from a real one.
+    { name: 'POST /api/members/:accountId/disable', send: (token) => disable(token, 'a-nonexistent') },
+    { name: 'POST /api/members/:accountId/enable', send: (token) => enable(token, 'a-nonexistent') },
+    { name: 'DELETE /api/members/invites/:id', send: (token) => revoke(token, 'invite-nonexistent') },
+  ]
+
+  it.each(cases)('$name answers unauthorized with no session', async ({ send }) => {
+    const response = await send(null)
+    expect(response.statusCode).toBe(401)
+    expect(response.json().error.kind).toBe('unauthorized')
+  })
+
+  it.each(cases)('$name answers forbidden for a non-admin session', async ({ send }) => {
+    const response = await send(outsiderToken)
     expect(response.statusCode).toBe(403)
     expect(response.json().error.kind).toBe('forbidden')
   })
@@ -140,11 +166,12 @@ describe('DELETE /api/members/invites/:id', () => {
 
     // The redemption route this token would otherwise reach is a later task's, so the token
     // itself can't be checked here. What proves revoke() actually ran, rather than the handler
-    // just answering 204, is that the pending invite is gone from the member list.
+    // just answering 204, is that the row now reads as an expired invite rather than the still
+    // pending one: no account and no pending invite is exactly what the 'expired' state means.
     const carol = (await list(adminToken)).json().items.find((m: { personId: string }) => m.personId === created.personId)
     expect(carol).toEqual({
       personId: created.personId, displayName: 'Carol', timezone: 'Europe/Amsterdam',
-      accountId: null, username: null, isAdmin: false, state: 'invited', inviteId: null,
+      accountId: null, username: null, isAdmin: false, state: 'expired', inviteId: null,
     })
 
     // A second revoke of the same id finds nothing pending to revoke.

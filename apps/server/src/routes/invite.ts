@@ -43,23 +43,35 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       }
 
       const now = app.haelan.now()
-      // Create, then mark redeemed, then set the cookie, in that order. If create throws, the
-      // invite has not been touched yet, so it stays usable - this ordering is what gives that
-      // for free. Redeeming first would burn the member's only link on a typo'd password.
-      //
+      // Claimed first, not marked redeemed after create succeeds: two concurrent POSTs on one
+      // token both pass findByToken's check above, and claimRedemption's conditional UPDATE is
+      // what settles which of them gets to try creating an account at all - the loser's WHERE
+      // matches nothing and falls straight to the same 404 every other invalid token gets, rather
+      // than racing accounts.person_id UNIQUE and surfacing as a generic 500.
+      if (!app.haelan.instance.invites.claimRedemption(invite.id, now)) {
+        return reply.code(statusFor('not_found')).send(notFound())
+      }
       // isAdmin is always false and is not read from the body: an invite has no way to ask for
       // admin, so redeeming one can never mint a second one. is_admin governs the OAuth client
       // and every instance-level setting, so a second admin created by accident is the failure
       // this route is built to make impossible rather than merely unlikely.
-      const account = await app.haelan.stores.accounts.create({
-        id: randomUUID(),
-        personId: invite.personId,
-        username,
-        password,
-        isAdmin: false,
-        nowMs: now,
-      })
-      app.haelan.instance.invites.markRedeemed(invite.id, now)
+      let account
+      try {
+        account = await app.haelan.stores.accounts.create({
+          id: randomUUID(),
+          personId: invite.personId,
+          username,
+          password,
+          isAdmin: false,
+          nowMs: now,
+        })
+      } catch (error) {
+        // The claim above already burned the flag; undo it so a typo'd password or a taken
+        // username does not cost the member their only link, the same "still usable" guarantee
+        // the old create-then-mark ordering gave for free.
+        app.haelan.instance.invites.releaseRedemption(invite.id)
+        throw error
+      }
       setSessionCookie(request, reply, app.haelan.stores.sessions.create(account.id, now))
       return reply.code(201).send({ personId: account.personId, username: account.username })
     })

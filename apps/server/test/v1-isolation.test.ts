@@ -972,11 +972,6 @@ describe('isolation against a member invited and redeemed through the real route
     inviteHarness = await withServer()
     adminToken = await inviteHarness.signIn()
 
-    // A marker on the inviter's own person, distinct from anything a brand new member's read of
-    // their own, empty history could ever contain, so a guard that failed open would surface as a
-    // leaked value rather than as a response neither of the other two cases below would catch.
-    seedDaily(inviteHarness, { personId: inviterPersonId, localDate: dateOf(1), value: 424242 })
-
     // Both requests below omit Origin, the same way the 401-with-no-session cases elsewhere in
     // this file do: auth.ts's origin hook only checks a mutating request that carries one, so
     // leaving it off reaches the handler without needing ORIGIN's host to match this harness.
@@ -1025,6 +1020,10 @@ describe('isolation against a member invited and redeemed through the real route
       headers: { cookie: memberCookie },
     })
     expect(response.statusCode).toBe(200)
+    // The whole body, not only the status: a brand new member has no history of their own yet, so
+    // the honest answer is an empty series rather than anything a status-only assertion would also
+    // pass for.
+    expect(response.json()).toEqual({ steps: { points: [], reduction: null } })
   })
 
   // The one people assume works the other way. Section 15 gives an admin no override over another

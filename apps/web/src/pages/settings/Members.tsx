@@ -39,16 +39,18 @@ type RevokeMutation = UseMutationResult<void, ApiError, { inviteId: string }>
 
 /**
  * Every person in the household, the state their account is in, and the one control each row
- * needs: suspend or restore an account, or revoke an invite nobody has redeemed yet. An invited
- * row and an active/disabled row never both apply to the same person (MemberRow.state is one of
- * the three), so a row draws at most one control besides its name and state.
+ * needs: suspend or restore an account, revoke an invite nobody has redeemed yet, or - for a
+ * revoked or expired invite - nothing at all (MemberRow.state is one of four; 'expired' draws no
+ * control, since re-issuing against the row and deleting it are both out of scope here). No two
+ * of the four ever apply to the same person, so a row draws at most one control besides its name
+ * and state.
  *
  * Mounted only for an admin -- Settings.tsx's own guard on session.data?.isAdmin -- which is also
  * who the five routes this file calls accept; everyone else already gets 'forbidden' from the
  * server regardless of what renders here.
  */
 export function Members() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const session = useSession()
   const queryClient = useQueryClient()
   const query = useMembers()
@@ -135,6 +137,14 @@ export function Members() {
               retry to show this again, so the reader is told that plainly rather than finding out
               the hard way the next time they look for it. */}
           <p className="field-hint">{t('settings.members.linkOnce')}</p>
+          {/* INVITE_TTL_MS is why this exists at all (packages/core/src/store/invites.ts's own
+              comment): a constant the copy has to state, not a number the reader would otherwise
+              have to guess at. Same formatting OverrideList.tsx uses for a stored instant. */}
+          <p className="field-hint">
+            {t('settings.members.expiresOn', {
+              date: new Date(justInvited.expiresAtMs).toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' }),
+            })}
+          </p>
           <div className="form-actions">
             <button type="button" className="button" onClick={() => setJustInvited(null)}>
               {t('annotate.close')}

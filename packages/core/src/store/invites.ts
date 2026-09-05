@@ -79,6 +79,32 @@ export class InviteStore {
   markRedeemed(id: string, nowMs: number): void {
     this.#db.update(invites).set({ redeemedAtMs: nowMs }).where(eq(invites.id, id)).run()
   }
+
+  /**
+   * Conditional on `redeemed_at_ms` still being null, checked through `changes` rather than a
+   * read-then-write: two concurrent redemptions of one token both pass findByToken's check before
+   * either writes anything, so whichever call this raced against - a plain UPDATE with no WHERE on
+   * the flag - would let both through, and what stopped the second from minting a second account
+   * would be accounts.person_id UNIQUE instead, surfacing as a generic 500 rather than the 404
+   * every other invalid token gets. This UPDATE can only ever win once: the first caller's write
+   * flips the flag inside SQLite's own statement-level lock, so the second caller's identical
+   * UPDATE matches zero rows and this returns false for it, before either has created an account.
+   */
+  claimRedemption(id: string, nowMs: number): boolean {
+    const result = this.#db.update(invites).set({ redeemedAtMs: nowMs })
+      .where(and(eq(invites.id, id), isNull(invites.redeemedAtMs))).run()
+    return result.changes > 0
+  }
+
+  /**
+   * Undoes a claimRedemption call whose account creation then failed - a taken username, a short
+   * password - so the invite is not burned by a redemption the caller never actually completed.
+   * Safe to call unconditionally on that failure path: the claim that just succeeded is the only
+   * way redeemedAtMs could be non-null for an id this route only ever claims once per request.
+   */
+  releaseRedemption(id: string): void {
+    this.#db.update(invites).set({ redeemedAtMs: null }).where(eq(invites.id, id)).run()
+  }
 }
 
 function toPending(row: typeof invites.$inferSelect): PendingInvite {
