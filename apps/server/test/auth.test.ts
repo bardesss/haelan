@@ -101,6 +101,17 @@ describe('auth', () => {
     expect((await me(harness, token)).json()).toMatchObject({ connected: true })
   })
 
+  // A revoked credentials row is not deleted (see CredentialStore.markRevoked), so this proves
+  // "connected" reads the revocation, not merely whether a row exists - the same row that reports
+  // true before revoke() must flip to false after it, distinct from a person who never had one.
+  it('reports a revoked person as not connected', async () => {
+    harness = await withServer()
+    await harness.connectPerson()
+    harness.app.haelan.stores.credentials.markRevoked('p1', harness.clock.nowMs)
+    const token = await harness.signIn()
+    expect((await me(harness, token)).json()).toMatchObject({ connected: false })
+  })
+
   // The client compares this against its own origin to decide whether consent can succeed at all.
   it('carries the instance base URL', async () => {
     harness = await withServer()
