@@ -77,10 +77,12 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
 export function emptyStateFor(
   metric: string, points: SeriesPoint[] | undefined, excludedTypes: readonly string[] = [],
 ): EmptyStateKind | null {
-  // dataTypeForMetric answers null for a metric no catalogue entry produces (every sleep and
-  // workout metric, which have no data type of their own to be excluded through), and null can
-  // never be a member of excludedTypes, so a metric with no data type simply falls through to the
-  // checks below rather than needing a guard of its own here.
+  // dataTypeForMetric answers null only for a metric no catalogue entry produces and no hand
+  // written association names either (metricDataType.ts's own comment explains why sleep and
+  // exercise need one: both are session-derived families with no data type of their own on the
+  // catalogue, but they are excludable through 'sleep'/'exercise' all the same). Null can never be
+  // a member of excludedTypes, so a metric that is genuinely nobody's falls through to the checks
+  // below rather than needing a guard of its own here.
   const dataType = dataTypeForMetric(metric)
   if (dataType !== null && excludedTypes.includes(dataType)) return 'not_synced'
 

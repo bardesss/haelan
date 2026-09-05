@@ -32,13 +32,16 @@ export function DataTypes() {
     )
   }
 
+  const excluded = items.filter((item) => item.excluded).map((item) => item.id)
+
   return (
     <div>
       <p className="field-hint">{t('settings.dataTypes.detail')}</p>
       <DataTypePicker
         items={items}
+        excluded={excluded}
         disabled={setDataTypes.isPending}
-        onChange={(excluded) => setDataTypes.mutate({ excluded })}
+        onChange={(next) => setDataTypes.mutate({ excluded: next })}
       />
       {setDataTypes.isError && <p className="field-error">{t('settings.dataTypes.failed')}</p>}
     </div>

@@ -148,4 +148,12 @@ describe('the data types section', () => {
     mountSection([choice('steps', true), choice('floors', true)])
     expect(container!.textContent).toContain('Nothing is being synced')
   })
+
+  // Settings hands DataTypePicker `excluded` computed straight from `items` (the server's own
+  // last answer), rather than the wizard's own pending-choice state, precisely because a click
+  // here mutates and invalidates immediately: the picker's checked state is a direct read of
+  // server truth once that round trip settles, which is what every toggle test above already
+  // exercises end to end. The multi-click-before-the-response race Finding 1 was about belongs to
+  // DataTypeStep alone, which fires no mutation at all until Continue -- setup-data-types.test.tsx
+  // covers it there.
 })

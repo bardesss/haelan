@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { dataTypeForMetric } from '../src/api/metricDataType.ts'
 import { DATA_TYPES } from '../src/api/catalogue.ts'
+import { SLEEP_METRICS } from '../src/derive/metrics.ts'
 
 describe('dataTypeForMetric', () => {
   it('maps a plain metric to the type that produces it', () => {
@@ -14,6 +15,19 @@ describe('dataTypeForMetric', () => {
 
   it('answers null for a metric no catalogue entry produces', () => {
     expect(dataTypeForMetric('not_a_metric')).toBeNull()
+  })
+
+  // The Important this file did not catch: sleep and exercise are session-derived families with
+  // no data type of their own to inherit from on the catalogue, which used to leave every metric
+  // below answering null -- and so unexcludable -- despite the picker offering 'sleep' and
+  // 'exercise' as ordinary types a person can turn off.
+  it('maps every sleep metric to the sleep session type', () => {
+    for (const metric of SLEEP_METRICS) expect(dataTypeForMetric(metric)).toBe('sleep')
+  })
+
+  it('maps both workout metrics to the exercise session type', () => {
+    expect(dataTypeForMetric('workout_count')).toBe('exercise')
+    expect(dataTypeForMetric('workout_minutes')).toBe('exercise')
   })
 
   // Derived from the catalogue rather than written out, so a type added tomorrow is covered.

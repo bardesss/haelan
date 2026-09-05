@@ -41,6 +41,8 @@ import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
+import { useDataTypes } from '../data/useDataTypes.js'
+import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import { distinctSources, exportPathFor } from '../data/pageShell.js'
 import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, deltaFor, formatMetricValue } from '../format.js'
 
@@ -223,6 +225,13 @@ export function Dashboard() {
   const { t, i18n } = useTranslation()
   const session = useSession()
   const controls = usePageControls()
+  // Every other card on this page reads its own exclusion through MetricCard, which calls this
+  // same hook internally (data-types.ts's own dataTypesKey, so this costs no second request). The
+  // Day tab's intraday heart rate card below is not a MetricCard -- see its own comment for why --
+  // and used to have no exclusion check at all, claiming "no data" for a type nobody had asked
+  // haelan to fetch in the first place.
+  const { items: dashboardDataTypes } = useDataTypes()
+  const excludedDataTypes = dashboardDataTypes.filter((d) => d.excluded).map((d) => d.id)
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
 
   // The control row's source selector has to be read off the unfiltered (merged-preferring) view,
@@ -673,7 +682,15 @@ export function Dashboard() {
             basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
             {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} />
               : intraday.isPending ? <Loading />
-              : intraday.data.points.length === 0 ? (
+              // Checked ahead of the real no-data branch below, the same precedence emptyStateFor
+              // gives excludedTypes over both of its own no_data and not_worn checks: an excluded
+              // type has nothing this request could ever have answered, so the exclusion is the
+              // more specific and more actionable truth. dataTypeForMetric('heart_rate') is
+              // 'heart-rate', an ordinary excludable catalogue entry, so this is exactly the
+              // dataTypes/excludedTypes pair MetricCard's own gate reads, not a second rule.
+              : excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '') ? (
+                <EmptyState title={t('emptyState.not_synced.title')} detail={t('emptyState.not_synced.detail')} />
+              ) : intraday.data.points.length === 0 ? (
                 <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
               ) : (
                 <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}

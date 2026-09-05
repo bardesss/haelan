@@ -55,12 +55,3 @@ describe('setFor', () => {
     expect(store.listFor('p1')).toEqual(['a-type-that-no-longer-exists'])
   })
 })
-
-describe('isExcluded', () => {
-  it('answers per person and per type', () => {
-    store.setFor({ personId: 'p1', dataTypeIds: ['floors'], nowMs: NOW })
-    expect(store.isExcluded('p1', 'floors')).toBe(true)
-    expect(store.isExcluded('p1', 'steps')).toBe(false)
-    expect(store.isExcluded('p2', 'floors')).toBe(false)
-  })
-})

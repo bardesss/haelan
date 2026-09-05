@@ -60,8 +60,14 @@ type Baseline = { center: number, spread: number, n: number, thin: boolean } | n
  * baseline the test wants. One canned point per metric, the same way
  * dashboard-round-trip.test.tsx's stubFetchOnePointPerMetric does, so heart_rate has something to
  * plot and the band, when the baseline says to draw one, has an axis to sit on.
+ *
+ * /intraday and /data-types answer real, non-empty shapes too (two samples; nothing excluded),
+ * even though every existing caller mounts the week view and never reaches either route: the Day
+ * tab tests below share this stub rather than rolling a second copy, and a genuinely empty
+ * /intraday response would be indistinguishable from the no-data case those tests exist to tell
+ * apart from an excluded one.
  */
-function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () => void {
+function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, excludedDataTypes?: string[] }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -90,6 +96,22 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean }): () =>
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/intraday')) {
+      const date = new URLSearchParams(url.split('?')[1] ?? '').get('date') ?? '2026-08-15'
+      return new Response(JSON.stringify({
+        points: [
+          { sourceId: 'watch', utcMs: Date.parse(`${date}T08:00:00Z`), min: 58, mean: 62, max: 70, n: 1, excluded: false },
+        ],
+        reduction: null,
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/data-types')) {
+      const excluded = new Set(opts.excludedDataTypes ?? [])
+      // Only the one id these tests ever exclude: a real GET lists the whole catalogue, but
+      // nothing here reads any id but heart-rate's own exclusion flag.
+      return new Response(JSON.stringify({ items: [{ id: 'heart-rate', tier: 'intraday', excluded: excluded.has('heart-rate') }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -552,6 +574,41 @@ describe('the remaining Dashboard cards', () => {
     const text = container!.textContent!
     expect(text).toContain('the baseline is still loading')
     expect(text).not.toContain('no baseline yet to compare against')
+    restore()
+  })
+
+  // Finding 4 of the final review: the Day tab's intraday heart rate chart hand rolls its own
+  // error/pending/empty order (it is not a MetricCard; see its own comment in Dashboard.tsx for
+  // why) and used to have no exclusion check in it at all, so excluding heart-rate rendered "No
+  // data yet" -- the untrue claim the empty-state work exists to prevent. The stub answers a real
+  // intraday point for this day, so a render that still shows no_data here would be reading the
+  // hand-rolled points.length check instead of the exclusion this test is for. Scoped to the
+  // "Heart rate range" card itself, not the whole page: this stub's /sleep/nights answers no
+  // nights at all, so the unrelated sleep stages card legitimately renders its own "No data yet"
+  // regardless of what this test is about.
+  it('says the excluded heart rate type was never synced, not that the day has no data', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({ baseline: null, excludedDataTypes: ['heart-rate'] })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
+    expect(card?.textContent).toContain('Not being synced')
+    expect(card?.textContent).not.toContain('No data yet')
+    restore()
+  })
+
+  it('draws the intraday chart normally when heart rate is not excluded', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
+    expect(card?.textContent).not.toContain('Not being synced')
+    expect(card?.textContent).not.toContain('No data yet')
     restore()
   })
 

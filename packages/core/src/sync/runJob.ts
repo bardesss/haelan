@@ -38,13 +38,14 @@ export interface JobDeps {
   client: HealthClient
   now: () => number
   /**
-   * Optional, and unset by every caller today. dueJobs returns all twenty data types per
-   * person, filtered on carrying any action rather than on being listable specifically; the
-   * eighteen that support list still drive the request volume, roughly 720 for a trailing
-   * week across a five person household, issued as fast as the event loop allows, against the
-   * 300 per minute per user probe/findings/scopes.md measured. Choosing the rate is a settings
-   * decision and belongs to M1d; the seat is here so filling it then is not a breaking change
-   * to a published interface.
+   * Optional, and unset by every caller today. dueJobs filters on carrying any action rather
+   * than on being listable specifically, and, since M5f, on the person not having excluded the
+   * type; the request volume this describes is therefore a person's own catalogue minus
+   * whatever they turned off, not a fixed count for every household. Measured before exclusions
+   * existed at roughly 720 requests for a trailing week across a five person household with
+   * everything on, issued as fast as the event loop allows, against the 300 per minute per user
+   * probe/findings/scopes.md measured. Choosing the rate is a settings decision and belongs to
+   * M1d; the seat is here so filling it then is not a breaking change to a published interface.
    */
   limiter?: RateLimiter
   /** Called as work completes. Optional: nothing in core needs it, the SSE stream does. */

@@ -68,6 +68,13 @@ export function registerOauth(app: FastifyInstance): void {
     const settings = stores().settings.get()
     if (!client || !settings) return fail('wrong_step', 'The OAuth client is no longer configured.')
 
+    // Read before this callback can change it: an invited member granting their own consent
+    // reaches this route with setup already 'done' (the admin finished it long ago), and that has
+    // to send them past the wizard rather than into it. markSetupComplete below runs unconditionally
+    // (it is also how a revoked admin's own fresh grant clears the revocation), so checking after it
+    // would find every caller 'done' and this distinction would never fire.
+    const alreadySetUp = currentStep() === 'done'
+
     try {
       const exchanged = await exchangeAuthorizationCode({
         code: request.query.code,
@@ -97,7 +104,13 @@ export function registerOauth(app: FastifyInstance): void {
       // something has to be. Without this the scheduler's first tick is a whole interval away
       // and the backfill screen truthfully reports that nothing has started, for an hour.
       app.haelan.runner.tryStart('setup')
-      return reply.redirect('/setup/backfill', 302)
+      // A member invited after the admin's own setup finished has no wizard steps left to walk --
+      // '/setup/backfill' shows Continue buttons that call an admin only route (PUT
+      // /api/settings/backfill-horizon) and no way back to the Dashboard for anyone else. '/' is
+      // reachable regardless of who is signed in, and setupGate.ts's own gate is already 'done' by
+      // this point (this route runs unauthenticated, and stays open past 'done' by that file's own
+      // design), so there is nothing this redirect needs to route around.
+      return reply.redirect(alreadySetUp ? '/' : '/setup/backfill', 302)
     } catch (error) {
       return fail('exchange_failed', error instanceof Error ? error.message : 'the exchange failed')
     }

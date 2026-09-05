@@ -25,7 +25,11 @@ interface ExcludedBody { excluded?: unknown }
  * distinction from being "fixed" into the store later by someone who assumes the two should agree.
  */
 export function registerDataTypeRoutes(app: FastifyInstance): void {
-  const store = () => app.haelan.instance.excludedDataTypes
+  // app.haelan.stores.excludedDataTypes, not app.haelan.instance.excludedDataTypes: the same
+  // object either way (app.ts wires Stores.excludedDataTypes straight from the instance), but
+  // runner.ts's own #typesFor reads it through `stores`, and this route used to be the one place
+  // reaching around that to the instance directly for no reason tied to what it does.
+  const store = () => app.haelan.stores.excludedDataTypes
 
   app.get<{ Params: PersonParams }>('/p/:personId/data-types', async (request, reply) => {
     const excluded = new Set(store().listFor(request.params.personId))

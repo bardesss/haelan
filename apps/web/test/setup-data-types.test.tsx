@@ -181,6 +181,40 @@ describe("the wizard's data type step", () => {
     expect(lastPutBody(api.requests)).toEqual({ excluded: ['floors'] })
   })
 
+  // The Critical this step reproduced worse than Settings does: no mutation fires until Continue
+  // at all, so `items` is guaranteed never to have caught up between two unchecks, not merely
+  // likely not to have. A picker deriving the checked set from `items` here drops the first
+  // uncheck outright rather than merely racing it, which is what `pending` (DataTypeStep's own
+  // state) exists to fix: DataTypePicker's `excluded` prop reads back from it, not from `items`.
+  it('keeps both boxes unchecked when two are unchecked before continuing', async () => {
+    const api = mockApi([choice('steps', false), choice('floors', false)])
+    const client = mount([choice('steps', false), choice('floors', false)])
+
+    uncheck('steps')
+    uncheck('floors')
+    clickContinue()
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(lastPutBody(api.requests)).toEqual({ excluded: ['steps', 'floors'] })
+  })
+
+  // The other half: the checkbox itself has to stay unchecked on screen, not just the eventual PUT
+  // body, and `items` never changes under this step at all (no mutation fires before Continue), so
+  // a picker reading `item.excluded` back would show every box exactly as the GET first drew it,
+  // regardless of what was clicked.
+  it('shows a box as unchecked immediately after it is clicked', () => {
+    const api = mockApi([choice('steps', false), choice('floors', false)])
+    mount([choice('steps', false), choice('floors', false)])
+
+    uncheck('floors')
+    const checked = [...container!.querySelectorAll('.data-type-row input[type="checkbox"]')]
+      .map((el) => (el as HTMLInputElement).checked)
+    api.restore()
+
+    expect(checked).toEqual([true, false])
+  })
+
   // The failure this guard exists for: a wizard that cannot be finished because nobody made an
   // optional choice is worse than fetching a type somebody did not want. A choice is made here
   // (uncheck) so the PUT this fails is a real one, not a no-op Continue would have skipped anyway.

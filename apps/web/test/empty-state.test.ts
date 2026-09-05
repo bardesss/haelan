@@ -101,11 +101,18 @@ describe('emptyStateFor', () => {
     expect(emptyStateFor(WORN, [point(900, 0.9)], ['weight'])).toBeNull()
   })
 
-  // A sleep metric has no data type of its own (catalogue.ts's own comment: sleep is derived from
-  // sessions, not fetched as a metric), so dataTypeForMetric answers null for it and no exclusion
-  // list could ever match. Excluding 'sleep' itself, the id of the session type, does not apply
-  // to the derived minute metrics that come out of it.
-  it('cannot be excluded through a metric with no data type of its own', () => {
-    expect(emptyStateFor('sleep_asleep_minutes', [point(420, null)], ['sleep'])).toBeNull()
+  // The Important this file used to pin as correct: a sleep metric carries no data type of its
+  // own on the catalogue (sleep is derived from sessions, not fetched as a metric), but
+  // metricDataType.ts names the association by hand for exactly this reason, so excluding 'sleep'
+  // -- the id of the session type -- does reach the derived minute metrics that come out of it.
+  // Turning sleep off used to leave every sleep card on the Dashboard claiming "no data" instead.
+  it('is excluded through the session type that derives it, for sleep', () => {
+    expect(emptyStateFor('sleep_asleep_minutes', [point(420, null)], ['sleep'])).toBe('not_synced')
+  })
+
+  // Same fix, the other session-derived family: workout_count and workout_minutes come from
+  // 'exercise' sessions, not from a catalogue entry of their own.
+  it('is excluded through the session type that derives it, for exercise', () => {
+    expect(emptyStateFor('workout_count', [point(2, null)], ['exercise'])).toBe('not_synced')
   })
 })

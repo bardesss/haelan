@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { excludedDataTypes } from '../db/schema/index.ts'
 
@@ -33,13 +33,5 @@ export class ExcludedDataTypeStore {
           .values({ personId: input.personId, dataTypeId, excludedAtMs: input.nowMs }).run()
       }
     })
-  }
-
-  isExcluded(personId: string, dataTypeId: string): boolean {
-    return this.#db.select({ id: excludedDataTypes.dataTypeId }).from(excludedDataTypes)
-      .where(and(
-        eq(excludedDataTypes.personId, personId),
-        eq(excludedDataTypes.dataTypeId, dataTypeId),
-      )).get() !== undefined
   }
 }

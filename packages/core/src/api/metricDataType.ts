@@ -1,4 +1,5 @@
 import { DATA_TYPES } from './catalogue.ts'
+import { SLEEP_METRICS } from '../derive/metrics.ts'
 
 /**
  * Built once, from the catalogue rather than hand-copied, for the reason coverageSignal.ts's own
@@ -15,6 +16,26 @@ for (const type of DATA_TYPES) {
     DATA_TYPE_BY_METRIC.set(metric, type.id)
   }
 }
+
+/**
+ * `sleep` and `exercise` are `target: 'sessions'` catalogue entries: their own `metric` field
+ * ('sleep', 'exercise', both handled by the loop above) is a placeholder nothing on a chart ever
+ * reads, and the metrics a person actually sees -- sleep_asleep_minutes and its ten siblings,
+ * workout_count, workout_minutes -- are produced by derive/sleep.ts and derive/exercise.ts from
+ * the sessions these two types fetch, not by the catalogue at all. Neither the catalogue nor
+ * derive/metrics.ts's MetricSpec records which data type produced a derived metric (metrics.ts's
+ * own comment on MetricSpec.unit: sub-dimension and sleep metrics "have no data type of their own
+ * to inherit one from"), so this association cannot be derived the way every entry above it is,
+ * and turning sleep or exercise off used to leave every one of these metrics with no data type to
+ * be excluded through at all -- the empty-state fix this map exists for silently not applying to
+ * either family. Named by hand instead, which means a metric added to either family later has to
+ * be added here too. SLEEP_METRICS is reused rather than re-typed, since sleep-derive.test.ts
+ * already holds it equal to what deriveSleepDay emits and a second copy here could only drift from
+ * it; no equivalent list is exported for workouts, so those two are spelled out against
+ * derive/exercise.ts's own two push() calls instead.
+ */
+for (const metric of SLEEP_METRICS) DATA_TYPE_BY_METRIC.set(metric, 'sleep')
+for (const metric of ['workout_count', 'workout_minutes']) DATA_TYPE_BY_METRIC.set(metric, 'exercise')
 
 /**
  * Which catalogue entry produces a metric, or null when none does.
