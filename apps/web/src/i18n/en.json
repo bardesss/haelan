@@ -8,6 +8,15 @@
     "failed": "That username and password do not match an account on this instance.",
     "unreachable": "The instance did not answer. Check that it is running and try again."
   },
+  "invite": {
+    "joinAs": "Join as {{name}}",
+    "explain": "Choose a username and password. Only you will know them.",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Create my account",
+    "invalid": "This invite is no longer valid",
+    "failed": "That did not work. Try again."
+  },
   "shell": {
     "signOut": "Sign out",
     "signOutFailed": "Sign-out did not reach the instance. Try again.",

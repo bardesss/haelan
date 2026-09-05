@@ -8,6 +8,15 @@
     "failed": "Deze gebruikersnaam en dit wachtwoord horen niet bij een account op deze instantie.",
     "unreachable": "De instantie gaf geen antwoord. Controleer of deze draait en probeer het opnieuw."
   },
+  "invite": {
+    "joinAs": "Word lid als {{name}}",
+    "explain": "Kies een gebruikersnaam en wachtwoord. Alleen jij kent ze.",
+    "username": "Gebruikersnaam",
+    "password": "Wachtwoord",
+    "submit": "Mijn account aanmaken",
+    "invalid": "Deze uitnodiging is niet meer geldig",
+    "failed": "Dat is niet gelukt. Probeer het opnieuw."
+  },
   "shell": {
     "signOut": "Uitloggen",
     "signOutFailed": "Uitloggen bereikte de instantie niet. Probeer het opnieuw.",
