@@ -112,6 +112,15 @@ export function registerAuth(app: FastifyInstance): void {
       isAdmin: account.isAdmin,
       // The browser resolves the person's today from this rather than from its own clock's zone.
       timezone: person?.timezone ?? 'UTC',
+      // Whether this person has a Google connection at all. On the session payload rather than
+      // behind its own route because the Shell reads this before it can render anything: an
+      // invited member with no credentials needs a way to start consent, and until M5f nothing
+      // in the app linked to /oauth/start except the setup wizard.
+      connected: app.haelan.stores.credentials.getRefreshToken(account.personId) !== null,
+      // The address Google will send anyone back to. The client compares it against its own
+      // origin, which is the only reliable way to tell before consent that the redirect cannot
+      // land - and after consent is far too late, because access has already been granted.
+      baseUrl: app.haelan.stores.settings.get()?.baseUrl ?? '',
     })
   })
 }

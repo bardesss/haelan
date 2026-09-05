@@ -14,6 +14,10 @@ const login = (h: Harness, password = 'a good long password') => h.app.inject({
 const cookieFrom = (response: { cookies: Array<{ name: string, value: string, secure?: boolean }> }) =>
   response.cookies.find((c) => c.name === 'haelan_session')
 
+const me = (h: Harness, token: string) => h.app.inject({
+  method: 'GET', url: '/api/auth/me', headers: { authorization: `Bearer ${token}` },
+})
+
 describe('auth', () => {
   it('hands back a session cookie that is httpOnly, lax and rooted at /', async () => {
     harness = await withServer()
@@ -80,8 +84,28 @@ describe('auth', () => {
     })
     expect(response.json()).toEqual({
       personId: 'p1', displayName: 'Bartus', username: 'bartus', isAdmin: true,
-      timezone: 'Europe/Amsterdam',
+      timezone: 'Europe/Amsterdam', connected: false, baseUrl: 'http://localhost:4235',
     })
+  })
+
+  it('reports a person with no Google credentials as not connected', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    expect((await me(harness, token)).json()).toMatchObject({ connected: false })
+  })
+
+  it('reports a connected person as connected', async () => {
+    harness = await withServer()
+    await harness.connectPerson()
+    const token = await harness.signIn()
+    expect((await me(harness, token)).json()).toMatchObject({ connected: true })
+  })
+
+  // The client compares this against its own origin to decide whether consent can succeed at all.
+  it('carries the instance base URL', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    expect((await me(harness, token)).json().baseUrl).toBe('http://localhost:4235')
   })
 
   // Every local date in this system is the person's, not the viewer's. The browser needs the
