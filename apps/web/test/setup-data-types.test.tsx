@@ -43,6 +43,11 @@ beforeEach(() => {
     onmessage: ((event: MessageEvent) => void) | null = null
     close(): void {}
   })
+  // dataTypesDone now survives in sessionStorage (SetupApp.tsx), which happy-dom keeps alive
+  // across tests in the same file same as a real browser tab would keep it across reloads. Without
+  // this, whichever test below reaches BackfillStep first would leave every test after it starting
+  // there too, rather than each test seeing the fresh wizard the rest of this suite assumes.
+  sessionStorage.clear()
 })
 
 afterEach(() => {
@@ -131,8 +136,9 @@ function clickContinue(): void {
 }
 
 function uncheck(id: string): void {
-  const row = [...container!.querySelectorAll('.data-type-row')]
-    .find((r) => r.querySelector('.data-type-label')?.textContent === id)
+  // Looked up by data-id, not by the rendered label: the label carries the translated name
+  // (dataTypeName.ts), not the raw catalogue id.
+  const row = container!.querySelector(`.data-type-row[data-id="${id}"]`)
   const input = row!.querySelector('input[type="checkbox"]') as HTMLInputElement
   act(() => { input.click() })
 }
@@ -226,6 +232,32 @@ describe("the wizard's data type step", () => {
     api.failNextPut()
     clickContinue()
     await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(heading()).toBe(BACKFILL_HEADING)
+  })
+
+  // The fix SetupApp.tsx's dataTypesDone comment describes: a bare useState reset to false on
+  // every fresh mount, so a reload during backfill re-showed this step over a backfill that was
+  // already running. Unmounting the root and building a new one, the way this test does below, is
+  // what a real reload does to React state; sessionStorage (not cleared here, unlike beforeEach)
+  // is the only thing a real reload leaves behind too.
+  it('does not re-show the data type step after a reload during backfill', async () => {
+    const api = mockApi([choice('steps', false), choice('floors', false)])
+    mount([choice('steps', false), choice('floors', false)])
+
+    clickContinue()
+    await pumpUntil(() => heading() === BACKFILL_HEADING, 'the backfill heading to render')
+
+    act(() => { root?.unmount() })
+    container!.remove()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    navigate('/setup/backfill', { replace: true })
+
+    mount([choice('steps', false), choice('floors', false)])
+    await pumpUntil(() => heading() === BACKFILL_HEADING, 'the backfill heading to render again after reload')
     api.restore()
 
     expect(heading()).toBe(BACKFILL_HEADING)

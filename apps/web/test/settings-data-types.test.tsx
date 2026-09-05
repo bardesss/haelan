@@ -69,8 +69,10 @@ const checkedState = (): boolean[] =>
     .map((el) => (el as HTMLInputElement).checked)
 
 function toggle(id: string): void {
-  const row = [...container!.querySelectorAll('.data-type-row')]
-    .find((r) => r.querySelector('.data-type-label')?.textContent === id)
+  // Looked up by data-id, not by the rendered label: the label now carries the translated name
+  // (dataTypeName.ts), not the raw catalogue id, so the id is only reachable through the attribute
+  // DataTypePicker puts on the row for exactly this purpose.
+  const row = container!.querySelector(`.data-type-row[data-id="${id}"]`)
   const input = row!.querySelector('input[type="checkbox"]') as HTMLInputElement
   // A native click, not a dispatched change event: for a checkbox the click itself is what flips
   // `checked`, the same distinction annotate-panel.test.tsx's own type() helper draws for text
@@ -118,7 +120,9 @@ function lastPutBody(requests: { method: string, body: Record<string, unknown> |
 describe('the data types section', () => {
   it('shows every type, checked when it is being synced', () => {
     mountSection([choice('steps', false), choice('floors', true)])
-    expect(rowLabels()).toEqual(['steps', 'floors'])
+    // The translated name (dataTypes.steps / dataTypes.floors in en.json), not the raw catalogue
+    // id: this is the whole reason DataTypePicker got names in the first place.
+    expect(rowLabels()).toEqual(['Steps', 'Floors climbed'])
     expect(checkedState()).toEqual([true, false])
   })
 

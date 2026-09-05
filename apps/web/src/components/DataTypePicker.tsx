@@ -1,5 +1,6 @@
 import { useTranslation } from '../i18n/index.js'
 import type { DataTypeChoice } from '../data/useDataTypes.js'
+import { dataTypeName } from '../data/dataTypeName.js'
 
 /**
  * One checkbox per catalogue type the sync engine can fetch, checked when the type is being
@@ -22,12 +23,19 @@ import type { DataTypeChoice } from '../data/useDataTypes.js'
  * would restore a just-unchecked box because `items` still said it was on, showing the opposite of
  * what the pending PUT was about to do. Taking the checked set as a prop means there is exactly one
  * place either caller's state actually lives, and this component never has an opinion about it.
+ *
+ * `allOffKey` is a prop, not a literal `settings.dataTypes.allOff` baked in here, because
+ * DataTypeStep.tsx reuses this component before Settings exists for a person to visit: rendering
+ * Settings' own copy on the wizard screen would have one namespace's wording govern two different
+ * pages, which is the mistake the split keeps from happening. Each caller names its own key under
+ * its own namespace.
  */
-export function DataTypePicker({ items, excluded, onChange, disabled }: {
+export function DataTypePicker({ items, excluded, onChange, disabled, allOffKey }: {
   items: DataTypeChoice[]
   excluded: string[]
   onChange: (excluded: string[]) => void
   disabled: boolean
+  allOffKey: string
 }) {
   const { t } = useTranslation()
   const excludedSet = new Set(excluded)
@@ -40,10 +48,10 @@ export function DataTypePicker({ items, excluded, onChange, disabled }: {
 
   return (
     <div className="data-type-picker">
-      {allOff && <p className="field-hint">{t('settings.dataTypes.allOff')}</p>}
+      {allOff && <p className="field-hint">{t(allOffKey)}</p>}
       <ul className="data-type-list">
         {items.map((item) => (
-          <li key={item.id} className="data-type-row">
+          <li key={item.id} className="data-type-row" data-id={item.id}>
             <label>
               <input
                 type="checkbox"
@@ -51,7 +59,7 @@ export function DataTypePicker({ items, excluded, onChange, disabled }: {
                 disabled={disabled}
                 onChange={(e) => toggle(item.id, e.currentTarget.checked)}
               />
-              <span className="data-type-label">{item.id}</span>
+              <span className="data-type-label">{dataTypeName(t, item.id)}</span>
             </label>
             <span className="data-type-tier">{item.tier}</span>
           </li>

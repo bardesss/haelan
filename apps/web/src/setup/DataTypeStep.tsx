@@ -45,7 +45,13 @@ export function DataTypeStep({ onDone }: { onDone: () => void }) {
     <section className="setup-step">
       <h1>{t('setup.dataTypes.title')}</h1>
       <p>{t('setup.dataTypes.intro')}</p>
-      <DataTypePicker items={items} excluded={excluded} disabled={setDataTypes.isPending} onChange={setPending} />
+      <DataTypePicker
+        items={items}
+        excluded={excluded}
+        disabled={setDataTypes.isPending}
+        onChange={setPending}
+        allOffKey="setup.dataTypes.allOff"
+      />
       <div className="form-actions">
         <button
           type="button"

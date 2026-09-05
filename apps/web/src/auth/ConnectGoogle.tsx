@@ -48,7 +48,7 @@ export function ConnectGoogle() {
     <Card span={12} label={t('connect.title')}>
       <p className="connect-detail">{t('connect.detail')}</p>
       {mismatch && (
-        <p className="form-error">{t('connect.wrongAddress', { baseUrl: session.data.baseUrl })}</p>
+        <p className="connect-warning">{t('connect.wrongAddress', { baseUrl: session.data.baseUrl })}</p>
       )}
       <a href="/oauth/start" className="button button-primary connect-action">{t('connect.action')}</a>
     </Card>

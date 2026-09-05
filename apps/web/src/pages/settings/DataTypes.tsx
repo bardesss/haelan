@@ -42,6 +42,7 @@ export function DataTypes() {
         excluded={excluded}
         disabled={setDataTypes.isPending}
         onChange={(next) => setDataTypes.mutate({ excluded: next })}
+        allOffKey="settings.dataTypes.allOff"
       />
       {setDataTypes.isError && <p className="field-error">{t('settings.dataTypes.failed')}</p>}
     </div>

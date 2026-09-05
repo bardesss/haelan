@@ -21,6 +21,18 @@ const STEPS = [
 const pathForStep = (step: string) =>
   STEPS.find((entry) => entry.step === step)?.path ?? '/setup/backfill'
 
+// Reload survival for dataTypesDone (see the state below): sessionStorage rather than a plain
+// module variable, because a reload discards the module the same way it discards React state, and
+// rather than localStorage, because this is scoped to the setup session that is still open, not a
+// fact worth remembering into a future one where the wizard runs again for a different household
+// member's own browser profile.
+const DATA_TYPES_DONE_KEY = 'haelan.setup.dataTypesDone'
+
+function readDataTypesDone(): boolean {
+  if (typeof sessionStorage === 'undefined') return false
+  return sessionStorage.getItem(DATA_TYPES_DONE_KEY) === 'true'
+}
+
 function Rail({ current }: { current: string }) {
   const { t } = useTranslation()
   const index = STEPS.findIndex((entry) => entry.step === current)
@@ -49,8 +61,16 @@ export function SetupApp() {
   const [horizonFailure, setHorizonFailure] = useState<string | null>(null)
   // Not one of setupStep's values (see DataTypeStep.tsx's own doc comment for why): the server
   // has nothing to say about whether this screen has been shown, so the browser tracks it here,
-  // the same way it already tracks candidates and scopes for the Google screen above.
-  const [dataTypesDone, setDataTypesDone] = useState(false)
+  // the same way it already tracks candidates and scopes for the Google screen above. Written
+  // through to sessionStorage, not left as bare useState: a reload mid-backfill used to re-run the
+  // getSetupState() effect below, land back on /setup/backfill with dataTypesDone reset to false,
+  // and re-show DataTypeStep over a backfill that was already running -- harmless to click Continue
+  // on again, but a lie about where the wizard actually was.
+  const [dataTypesDone, setDataTypesDoneState] = useState(readDataTypesDone)
+  const setDataTypesDone = (done: boolean): void => {
+    setDataTypesDoneState(done)
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(DATA_TYPES_DONE_KEY, String(done))
+  }
 
   // The server owns which step is due, so the browser asks rather than remembers. A reload
   // mid wizard, or a callback that landed on the wrong path, both resolve here.

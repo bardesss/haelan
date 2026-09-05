@@ -53,7 +53,9 @@ function link(): HTMLAnchorElement | null {
 }
 
 function warningText(): string | null {
-  return container!.querySelector('.form-error')?.textContent ?? null
+  // .connect-warning, not .form-error: ConnectGoogle.tsx's address warning has its own class now
+  // (app.css), since this card holds no form for a form-error class to describe.
+  return container!.querySelector('.connect-warning')?.textContent ?? null
 }
 
 describe('the connect control', () => {

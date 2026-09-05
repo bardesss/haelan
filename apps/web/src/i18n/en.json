@@ -637,7 +637,8 @@
     "dataTypes": {
       "title": "What to sync",
       "intro": "All of it, unless you say otherwise. You can change this later in Settings.",
-      "continue": "Continue"
+      "continue": "Continue",
+      "allOff": "Nothing will sync. Turn at least one back on to fetch anything."
     },
     "app": {
       "steps": {
@@ -717,6 +718,28 @@
     "detail": "haelan reads your health data from Google. Nothing appears here until you connect.",
     "action": "Connect",
     "wrongAddress": "Google will send you back to {{baseUrl}}, which is not the address you are using. Consent will fail. Open haelan at {{baseUrl}}, or ask whoever set this up for a Tailscale or proxy address."
+  },
+  "dataTypes": {
+    "steps": "Steps",
+    "distance": "Distance",
+    "active-minutes": "Active minutes",
+    "active-zone-minutes": "Active zone minutes",
+    "active-energy-burned": "Active energy burned",
+    "heart-rate": "Heart rate (continuous)",
+    "heart-rate-variability": "Heart rate variability (continuous)",
+    "oxygen-saturation": "Oxygen saturation (continuous)",
+    "weight": "Weight",
+    "body-fat": "Body fat",
+    "daily-resting-heart-rate": "Resting heart rate (daily)",
+    "daily-heart-rate-variability": "Heart rate variability (daily)",
+    "daily-oxygen-saturation": "Oxygen saturation (daily)",
+    "daily-respiratory-rate": "Respiratory rate (daily)",
+    "sleep": "Sleep",
+    "exercise": "Exercise",
+    "hydration-log": "Hydration",
+    "nutrition-log": "Nutrition",
+    "total-calories": "Total calories",
+    "floors": "Floors climbed"
   },
   "settings": {
     "title": "Settings",
