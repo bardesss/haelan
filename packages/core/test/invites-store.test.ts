@@ -68,6 +68,9 @@ describe('findByToken', () => {
     const { token } = make()
     expect(store.findByToken(token, NOW + INVITE_TTL_MS - 1)).not.toBeNull()
     expect(store.findByToken(token, NOW + INVITE_TTL_MS + 1)).toBeNull()
+    // Expiry boundary: spent exactly on the tick when expiresAtMs equals nowMs. Changing gt to gte
+    // would pass all prior assertions but drop this one, so this pins the actual comparison choice.
+    expect(store.findByToken(token, NOW + INVITE_TTL_MS)).toBeNull()
   })
 
   it('does not find a revoked one', () => {
@@ -96,5 +99,8 @@ describe('listPending', () => {
   it('omits an expired invite', () => {
     make()
     expect(store.listPending(NOW + INVITE_TTL_MS + 1)).toEqual([])
+    // Expiry boundary: listPending uses the same gt comparison, so the exact-tick boundary must also
+    // exclude the invite. Changing gt to gte would pass the above but fail here.
+    expect(store.listPending(NOW + INVITE_TTL_MS)).toEqual([])
   })
 })
