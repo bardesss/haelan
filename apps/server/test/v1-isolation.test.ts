@@ -952,3 +952,91 @@ describe('the versioned surface, beyond the per-route table', () => {
     }
   })
 })
+
+// Every case above proves isolation against a person the harness put into the stores directly,
+// through addPerson - a shortcut no real account ever takes. M5b built the routes a household
+// actually uses to add a second person: an admin invites them through POST /api/members and the
+// invited person redeems that invite through POST /api/invite/:token, picking their own username
+// and password and getting a session cookie back the same way a login would. The milestone after
+// this one puts a sql_query tool over this same data, so the guard that tool will lean on has to
+// be proven against an account that came into being exactly that way, not against a database
+// merely shaped like one.
+describe('isolation against a member invited and redeemed through the real routes', () => {
+  let inviteHarness: Harness
+  let adminToken: string
+  let memberCookie: string
+  let memberPersonId: string
+  const inviterPersonId = 'p1'
+
+  beforeAll(async () => {
+    inviteHarness = await withServer()
+    adminToken = await inviteHarness.signIn()
+
+    // A marker on the inviter's own person, distinct from anything a brand new member's read of
+    // their own, empty history could ever contain, so a guard that failed open would surface as a
+    // leaked value rather than as a response neither of the other two cases below would catch.
+    seedDaily(inviteHarness, { personId: inviterPersonId, localDate: dateOf(1), value: 424242 })
+
+    // Both requests below omit Origin, the same way the 401-with-no-session cases elsewhere in
+    // this file do: auth.ts's origin hook only checks a mutating request that carries one, so
+    // leaving it off reaches the handler without needing ORIGIN's host to match this harness.
+    const created = await inviteHarness.app.inject({
+      method: 'POST', url: '/api/members',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { displayName: 'Wilma', timezone: 'Europe/Amsterdam' },
+    })
+    if (created.statusCode !== 200) throw new Error(`invite creation failed: ${created.statusCode} ${created.body}`)
+    const { token } = created.json() as { token: string }
+
+    const redeemed = await inviteHarness.app.inject({
+      method: 'POST', url: `/api/invite/${token}`,
+      payload: { username: 'wilma', password: 'a good long password' },
+    })
+    if (redeemed.statusCode !== 201) throw new Error(`invite redemption failed: ${redeemed.statusCode} ${redeemed.body}`)
+    memberPersonId = (redeemed.json() as { personId: string }).personId
+
+    // The harness's own signIn extracts this same cookie out of a login response; a redeem sets
+    // an identical one, since both routes end by calling sessions.create and setSessionCookie the
+    // same way (see invite.ts and auth.ts), so this follows that recipe rather than inventing a
+    // second one for a cookie that is not actually different.
+    const cookie = redeemed.cookies.find((c) => c.name === 'haelan_session')
+    if (!cookie) throw new Error(`redeem set no session cookie: ${redeemed.statusCode} ${redeemed.body}`)
+    memberCookie = `haelan_session=${cookie.value}`
+  })
+
+  afterAll(async () => {
+    await inviteHarness.cleanup()
+  })
+
+  it('an invited member cannot read the person who invited them', async () => {
+    const response = await inviteHarness.app.inject({
+      method: 'GET',
+      url: `/api/v1/p/${inviterPersonId}/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`,
+      headers: { cookie: memberCookie },
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+  })
+
+  it('and reads their own person happily', async () => {
+    const response = await inviteHarness.app.inject({
+      method: 'GET',
+      url: `/api/v1/p/${memberPersonId}/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`,
+      headers: { cookie: memberCookie },
+    })
+    expect(response.statusCode).toBe(200)
+  })
+
+  // The one people assume works the other way. Section 15 gives an admin no override over another
+  // person's data, and is_admin governs instance settings only - creating this account is not the
+  // same thing as owning what it goes on to hold.
+  it('the admin who invited them cannot read their data', async () => {
+    const response = await inviteHarness.app.inject({
+      method: 'GET',
+      url: `/api/v1/p/${memberPersonId}/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+  })
+})
