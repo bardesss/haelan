@@ -284,6 +284,27 @@ const ROUTES: readonly RouteCase[] = [
     ownNeedle: 'own-source-ok',
     otherNeedle: 'leaked-source-999999',
   },
+  {
+    name: 'data-types',
+    template: '/api/v1/p/:personId/data-types',
+    // This route's items are the catalogue itself, the same list for every person; the only thing
+    // that varies per person is which entries carry excluded: true. So unlike every route above,
+    // a leak here would not add or remove an id, it would flip a boolean on an id that is already
+    // in both people's answers - which is why the needles below are JSON fragments naming a
+    // specific id *and* its excluded value, not just the id on its own (both people's answers
+    // contain the literal text "weight", exclusion aside). hydration-log and weight are both real,
+    // listable catalogue ids (catalogue.ts), chosen only because they are not steps, which the
+    // first GET test in v1-data-types.test.ts already pins at excluded: false by default.
+    path: (p) => `/api/v1/p/${p}/data-types`,
+    seedOwn: (h) => h.app.haelan.instance.excludedDataTypes.setFor({ personId: 'p1', dataTypeIds: ['hydration-log'], nowMs: h.clock.nowMs }),
+    seedOther: (h, personId) => h.app.haelan.instance.excludedDataTypes.setFor({ personId, dataTypeIds: ['weight'], nowMs: h.clock.nowMs }),
+    ownNeedle: '"id":"hydration-log","tier":"daily","excluded":true',
+    otherNeedle: '"id":"weight","tier":"daily","excluded":true',
+    extraOwnAssertions: (body) => {
+      const items = (body as { items: { id: string, excluded: boolean }[] }).items
+      expect(items.find((i) => i.id === 'weight')?.excluded).toBe(false)
+    },
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
@@ -410,6 +431,7 @@ describe('the versioned surface, beyond the per-route table', () => {
     'DELETE /api/v1/p/:personId/events/:eventId',
     'PUT /api/v1/p/:personId/sources/:sourceId/alias',
     'DELETE /api/v1/p/:personId/sources/:sourceId/alias',
+    'PUT /api/v1/p/:personId/data-types',
   ]
 
   // A mutating request is refused by the origin hook unless these two agree, so a write test that
@@ -899,6 +921,70 @@ describe('the versioned surface, beyond the per-route table', () => {
       expect(removed.statusCode).toBe(404)
       expect(removed.json()).toMatchObject({ error: { kind: 'not_found', code: 'no_such_source' } })
       expect(aliases.listNamed('p2').find((s) => s.id === 'theirs')?.alias).toBe('Theirs')
+    })
+  })
+
+  // The one write route on this surface with no id in its path at all: it replaces a person's
+  // whole exclusion set in one call, so there is no equivalent of the "foreign id, own path" case
+  // the override/event/source families above each carry. What could leak here is the same as in
+  // the data-types table entry above: not a row appearing where it should not, but this person's
+  // set silently including or excluding an id that only the other person's request named.
+  describe('data-types writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const excludedDataTypes = harness.app.haelan.instance.excludedDataTypes
+      excludedDataTypes.setFor({ personId: 'p2', dataTypeIds: ['weight'], nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/data-types',
+        payload: { excluded: ['steps'] },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      // p1, not p2: the request above names p1 in the path, so a guard that failed open would set
+      // p1's own exclusions, never p2's. p2's are read too, for the symmetry, but they were never
+      // the ones a broken guard here would touch.
+      expect(excludedDataTypes.listFor('p1')).toEqual([])
+      expect(excludedDataTypes.listFor('p2')).toEqual(['weight'])
+    })
+
+    // The one direction this write has, unlike the create-and-delete pairs above: setFor always
+    // replaces the whole set, so there is nothing separate to call "removing" it.
+    it('refuses the write against another person, and leaves their exclusions unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      const excludedDataTypes = harness.app.haelan.instance.excludedDataTypes
+      excludedDataTypes.setFor({ personId: 'p2', dataTypeIds: ['weight'], nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p2/data-types',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { excluded: ['steps'] },
+      })
+      expect(written.statusCode).toBe(403)
+      // The envelope, not only the status: see the comment on the override 403 case above for why
+      // a status-only assertion here can pass for the wrong reason.
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(excludedDataTypes.listFor('p2')).toEqual(['weight'])
+    })
+
+    it("replaces the set for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      const excludedDataTypes = harness.app.haelan.instance.excludedDataTypes
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/data-types',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { excluded: ['steps', 'weight'] },
+      })
+      expect(written.statusCode).toBe(200)
+      expect(written.json()).toEqual({ excluded: ['steps', 'weight'] })
+      expect(excludedDataTypes.listFor('p1')).toEqual(['steps', 'weight'])
     })
   })
 
