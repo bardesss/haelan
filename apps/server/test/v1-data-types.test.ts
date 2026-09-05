@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { DATA_TYPES, supports } from '@haelan/core'
+import { DATA_TYPES } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -31,21 +31,39 @@ const putRaw = (body: Record<string, unknown>) => h.app.inject({
 const put = (excluded: string[]) => putRaw({ excluded })
 
 describe('GET /data-types', () => {
-  it('lists every listable catalogue type, none excluded to begin with', async () => {
+  it('lists every catalogue type the sync engine can fetch, none excluded to begin with', async () => {
+    // Same predicate as SyncStateStore.dueJobs (packages/core/src/store/syncState.ts), not
+    // `supports(t, 'list')`: this screen offers exactly what the sync engine could otherwise
+    // fetch, which includes `floors` and `total-calories` even though neither takes a `list`
+    // action (both are fetched through rollUp/dailyRollUp/reconcile instead).
     const items = (await list()).json().items
     expect(items.map((i: { id: string }) => i.id))
-      .toEqual(DATA_TYPES.filter((t) => supports(t, 'list')).map((t) => t.id))
+      .toEqual(DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => t.id))
     expect(items.every((i: { excluded: boolean }) => i.excluded === false)).toBe(true)
   })
 
   it('marks what the person excluded', async () => {
-    // hydration-log, not floors: floors takes no `list` action at all (its filterMember is null,
-    // catalogue.ts), so it never appears among these items regardless of exclusion. A person can
-    // still exclude it - proven in the PUT block below - just not somewhere this GET would show.
     await put(['hydration-log'])
     const items = (await list()).json().items
     expect(items.find((i: { id: string }) => i.id === 'hydration-log').excluded).toBe(true)
     expect(items.find((i: { id: string }) => i.id === 'steps').excluded).toBe(false)
+  })
+
+  it('lists a type with no `list` action, and it can be excluded through PUT', async () => {
+    // The finding this test is here to catch: `floors` has actions (rollUp, dailyRollUp,
+    // reconcile) but none of them is `list`, so a GET filtered on `supports(t, 'list')` would
+    // never show it - a permanent blind spot, since no screen built from this endpoint could
+    // ever offer a control to turn it off. dueJobs's own predicate does not have that gap.
+    const before = (await list()).json().items
+    expect(before.find((i: { id: string }) => i.id === 'floors')).toEqual({
+      id: 'floors', tier: 'daily', excluded: false,
+    })
+
+    await put(['floors'])
+    const after = (await list()).json().items
+    expect(after.find((i: { id: string }) => i.id === 'floors')).toEqual({
+      id: 'floors', tier: 'daily', excluded: true,
+    })
   })
 
   it('answers 304 for a repeated ETag', async () => {

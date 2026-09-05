@@ -1,18 +1,21 @@
 import type { FastifyInstance } from 'fastify'
-import { ConfigError, DATA_TYPES, dataTypeById, supports } from '@haelan/core'
+import { ConfigError, DATA_TYPES, dataTypeById } from '@haelan/core'
 import { sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 interface ExcludedBody { excluded?: unknown }
 
 /**
- * The screen this feeds is a picker, not an inventory: only the catalogue types Google Health
- * answers a `list` request for are things a person can recognise well enough to choose among.
- * `floors` and `total-calories`, for instance, are fetched through `rollUp`/`dailyRollUp` alone
- * (see catalogue.ts) and never appear here, though the exclusion still applies to them -
- * ExcludedDataTypeStore and the sync runner's own filtering (runner.ts's `#typesFor`) both work
- * over the whole catalogue, not this route's listable slice. A person can still turn `floors` off,
- * just not from this particular list; nothing about the store or the sync engine needed to change.
+ * GET lists every catalogue type with at least one action - the same `t.actions.length > 0`
+ * predicate SyncStateStore.dueJobs (packages/core/src/store/syncState.ts) filters on before
+ * grouping jobs by person. That predicate, not `supports(t, 'list')`, is what "fetchable"
+ * means here: this screen exists so a person can turn off what the sync engine would otherwise
+ * fetch for them, and a type with only `rollUp`/`dailyRollUp`/`reconcile` actions - `floors` and
+ * `total-calories` - is still fetched, just never through a `list` call. `supports(t, 'list')`
+ * answers a different question (does the runner's status() view have per-item backfill progress
+ * to show for this type?) and is rightly narrower; reusing it here would silently make `floors`
+ * and `total-calories` impossible for a person to ever turn off through this endpoint. The two
+ * filters are deliberately not the same expression and must not be made to agree.
  *
  * On the asymmetry between the two routes below: ExcludedDataTypeStore.setFor accepts any id at
  * all, on purpose, so a row for a type later retired from DATA_TYPES survives as a harmless
@@ -26,7 +29,7 @@ export function registerDataTypeRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: PersonParams }>('/p/:personId/data-types', async (request, reply) => {
     const excluded = new Set(store().listFor(request.params.personId))
-    const items = DATA_TYPES.filter((t) => supports(t, 'list')).map((t) => ({
+    const items = DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => ({
       id: t.id,
       tier: t.tier,
       excluded: excluded.has(t.id),
