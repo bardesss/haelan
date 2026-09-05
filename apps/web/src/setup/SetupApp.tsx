@@ -5,6 +5,7 @@ import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
+import { DataTypeStep } from './DataTypeStep.js'
 import {
   getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus, putBackfillHorizon,
 } from './api.js'
@@ -46,6 +47,10 @@ export function SetupApp() {
   const [callbackError, setCallbackError] = useState<SetupError | null>(null)
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [horizonFailure, setHorizonFailure] = useState<string | null>(null)
+  // Not one of setupStep's values (see DataTypeStep.tsx's own doc comment for why): the server
+  // has nothing to say about whether this screen has been shown, so the browser tracks it here,
+  // the same way it already tracks candidates and scopes for the Google screen above.
+  const [dataTypesDone, setDataTypesDone] = useState(false)
 
   // The server owns which step is due, so the browser asks rather than remembers. A reload
   // mid wizard, or a callback that landed on the wrong path, both resolve here.
@@ -69,8 +74,13 @@ export function SetupApp() {
   }, [onGoogleRoute, route])
 
   const onBackfill = route.startsWith('/setup/backfill')
+  // Gated on dataTypesDone as well as the route: fetching progress and opening the live stream
+  // is preparation for BackfillStep specifically, and starting it while DataTypeStep is still on
+  // screen would mean tearing an open EventSource down again the moment Continue is clicked,
+  // for no reader-visible benefit.
+  const showBackfill = onBackfill && dataTypesDone
   useEffect(() => {
-    if (!onBackfill) return
+    if (!showBackfill) return
     void getSyncStatus().then(setStatus)
     // EventSource for live progress, with the status route as the fallback: a proxy that
     // buffers the stream would otherwise leave the page frozen at whatever it first drew.
@@ -85,7 +95,7 @@ export function SetupApp() {
     }
     const poll = setInterval(() => { void getSyncStatus().then(setStatus) }, 5000)
     return () => { stream.close(); clearInterval(poll) }
-  }, [onBackfill])
+  }, [showBackfill])
 
   return (
     <div className="setup-shell">
@@ -105,25 +115,27 @@ export function SetupApp() {
               />
             )
             : onBackfill
-              ? (status
-                ? <BackfillStep
-                    status={status}
-                    nowMs={Date.now()}
-                    failure={horizonFailure}
-                    onHorizonChange={(days) => {
-                      // Mirrors AccountStep/InstanceUrlStep's clear-then-catch shape: BackfillStep
-                      // is presentational, so the failure lives here and is handed down to render,
-                      // rather than silently leaving an unhandled rejection and a clicked button
-                      // that appears to do nothing.
-                      setHorizonFailure(null)
-                      putBackfillHorizon(days)
-                        .then(() => getSyncStatus().then(setStatus))
-                        .catch((cause: unknown) => {
-                          setHorizonFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
-                        })
-                    }}
-                  />
-                : <p className="empty">{t('setup.app.loadingProgress')}</p>)
+              ? (!dataTypesDone
+                ? <DataTypeStep onDone={() => setDataTypesDone(true)} />
+                : status
+                  ? <BackfillStep
+                      status={status}
+                      nowMs={Date.now()}
+                      failure={horizonFailure}
+                      onHorizonChange={(days) => {
+                        // Mirrors AccountStep/InstanceUrlStep's clear-then-catch shape: BackfillStep
+                        // is presentational, so the failure lives here and is handed down to render,
+                        // rather than silently leaving an unhandled rejection and a clicked button
+                        // that appears to do nothing.
+                        setHorizonFailure(null)
+                        putBackfillHorizon(days)
+                          .then(() => getSyncStatus().then(setStatus))
+                          .catch((cause: unknown) => {
+                            setHorizonFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
+                          })
+                      }}
+                    />
+                  : <p className="empty">{t('setup.app.loadingProgress')}</p>)
               : <AccountStep onDone={refresh} />}
       </div>
     </div>

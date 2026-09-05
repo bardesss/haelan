@@ -633,6 +633,11 @@
         "fiveYears": "5 years"
       }
     },
+    "dataTypes": {
+      "title": "What to sync",
+      "intro": "All of it, unless you say otherwise. You can change this later in Settings.",
+      "continue": "Continue"
+    },
     "app": {
       "steps": {
         "account": "Account",

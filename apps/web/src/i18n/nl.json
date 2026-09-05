@@ -633,6 +633,11 @@
         "fiveYears": "5 jaar"
       }
     },
+    "dataTypes": {
+      "title": "Wat wordt gesynchroniseerd",
+      "intro": "Alles, tenzij je anders aangeeft. Dit kun je later nog aanpassen in Instellingen.",
+      "continue": "Doorgaan"
+    },
     "app": {
       "steps": {
         "account": "Account",
