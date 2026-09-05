@@ -105,7 +105,8 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
 | **M5a** Source naming | The listing route this project never had, a person scoped name for each source that dies with it the way a ranking does, and the Settings section where a reader turns a 32 character hex id into "My watch" | Done, [#91](https://github.com/bardesss/haelan/pull/91) |
 | **M5b** People | An `invites` table storing a token's hash and never the token, a person row created the moment the invite is written so a member exists before anyone can log in as them, a one-time link where the member chooses their own username and password, the first guard in this codebase that reads `is_admin`, suspension that revokes live sessions and fails login exactly like a wrong password, and person isolation proven against a member the real invite flow created rather than one a harness seeded | In review |
-| **M5** Packaging | Cut into five units: M5a source naming, M5b people, M5c packaging, M5d backup and the upgrade path, M5e documentation and the envelope migration. M3f's drift check diffs enums, not the data-type catalogue; that half is bounded by what the API exposes, since there is no `dataTypes.list` method, and macronutrients are left as ingestion work | In progress |
+| **M5f** Wizard polish | A connect card on the Dashboard and in Settings, since `/oauth/start` had been reachable from nowhere but the setup wizard and an invited member signed in to an empty Dashboard with no control that could start Google consent; the redirect URI warning moved before consent instead of after, comparing the browser's own origin against the instance's stored address so `redirect_uri_mismatch` is never the first anyone hears of it; per-person data type selection stored as exclusions, where the empty set means everything is on so a type the catalogue gains later is never silently off for someone already set up; the sync engine honouring the exclusion everywhere it fetches, the three backfill walks and the nightly `dueJobs` path, which review found was still requesting the full catalogue regardless; and a fourth reason a chart is empty, "you turned this off", distinct from "no data" and "not worn" | In review |
+| **M5** Packaging | Cut into six units: M5a source naming, M5b people, M5c packaging, M5d backup and the upgrade path, M5e documentation and the envelope migration, M5f wizard polish and the connect surface M5b left out. M3f's drift check diffs enums, not the data-type catalogue; that half is bounded by what the API exposes, since there is no `dataTypes.list` method, and macronutrients are left as ingestion work | In progress |
 
 **M3d comes before M3c in this table**, out of milestone letter order: section 6's creation flow is a click on a plotted point, and the pages that plot real points are M3d's, so building the annotation panel first would mean targeting fixture points that correspond to no row an override could name.
 
@@ -130,6 +131,11 @@ proven against a database holding one person: M5 brings member management, which
 person first exists to prove it against. And M5 carries backup and the upgrade path while
 `DERIVATION_VERSION` and `MAPPING_VERSION` still move often enough to force rebuilds. M4 adds a
 surface; M5 retires a risk that is already live.
+
+**Within M5, M5f runs before M5c, M5d and M5e**, also out of letter order: M5c is the unit that
+packages the image, and landing the wizard and connect polish first means the first published
+artifact already carries it rather than the image going out once and the polish arriving in a
+rebuild.
 
 **Every milestone pull request updates this table**, in the same pull request rather than
 afterwards. Everything else leaves it alone: a dependency bump or a documentation fix has no row
