@@ -706,6 +706,12 @@
     "removeNoteAria": "Remove note, {{date}}",
     "removeFailed": "That did not remove. Try again."
   },
+  "connect": {
+    "title": "Connect your Google account",
+    "detail": "haelan reads your health data from Google. Nothing appears here until you connect.",
+    "action": "Connect",
+    "wrongAddress": "Google will send you back to {{baseUrl}}, which is not the address you are using. Consent will fail. Open haelan at {{baseUrl}}, or ask whoever set this up for a Tailscale or proxy address."
+  },
   "settings": {
     "title": "Settings",
     "overrides": {

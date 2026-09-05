@@ -706,6 +706,12 @@
     "removeNoteAria": "Verwijder notitie, {{date}}",
     "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw."
   },
+  "connect": {
+    "title": "Verbind je Google-account",
+    "detail": "haelan leest je gezondheidsgegevens uit Google. Hier verschijnt niets totdat je verbinding maakt.",
+    "action": "Verbinden",
+    "wrongAddress": "Google stuurt je na het geven van toestemming terug naar {{baseUrl}}, en dat is niet het adres dat je nu gebruikt. Toestemming geven mislukt dan. Open haelan op {{baseUrl}}, of vraag degene die dit heeft ingesteld om een Tailscale- of proxyadres."
+  },
   "settings": {
     "title": "Instellingen",
     "overrides": {

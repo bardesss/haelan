@@ -1,6 +1,7 @@
 import { useTranslation } from '../i18n/index.js'
 import { useSession } from '../auth/session.js'
 import { Card } from '../components/Card.js'
+import { ConnectGoogle } from '../auth/ConnectGoogle.js'
 import { OverrideList } from './settings/OverrideList.js'
 import { SourceNames } from './settings/SourceNames.js'
 import { Members } from './settings/Members.js'
@@ -15,6 +16,10 @@ export function Settings() {
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('settings.title')}</h1>
       <div className="grid">
+        {/* A person whose token was revoked lands on this page with somewhere to reconnect from
+            that is not the Dashboard's front page forever: ConnectGoogle renders nothing once
+            connected (its own doc comment), so this is silent for the common case. */}
+        <ConnectGoogle />
         <Card span={12} label={t('settings.overrides.title')}>
           <OverrideList />
         </Card>

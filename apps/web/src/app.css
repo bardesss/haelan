@@ -405,3 +405,12 @@ body {
 .session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 .session-date-group { min-width: 0; }
 .session-date-heading { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary); margin: 0 0 var(--space-1); }
+
+/* ConnectGoogle.tsx: the explanation reads at body size and secondary tone, the same pairing
+   .setup-step's own intro paragraph uses, since this card is making the identical kind of ask (an
+   action the reader has not taken yet) outside the wizard. .form-error is reused as-is for the
+   address warning above the link rather than a second colour introduced for it: a redirect Google
+   cannot deliver fails consent the same way a rejected form submission fails a save, so it earns
+   the same negative-toned box, not a milder one that would undersell what is about to go wrong. */
+.connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
+.connect-action { margin-top: var(--space-2); }
