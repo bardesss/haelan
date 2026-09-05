@@ -5,6 +5,7 @@ import { ErrorState } from './ErrorState.js'
 import { Loading } from './Loading.js'
 import { EmptyState } from './EmptyState.js'
 import { emptyStateFor, wornOn, coverageIsWearSignal } from '../data/emptyState.js'
+import { useDataTypes } from '../data/useDataTypes.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 
 /**
@@ -89,6 +90,13 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   children: (basis: string, oneDayRange: boolean) => ReactNode
 }): ReactNode {
   const { t } = useTranslation()
+  // Called unconditionally, ahead of every early return below, because it is a hook: a page whose
+  // query has already failed or is still pending still needs this one to run so the hook order
+  // stays the same on every render. The query itself is the one useDataTypes defines
+  // (data-types.ts's dataTypesKey), shared by every MetricCard on the page and by DataTypePicker
+  // itself, so mounting eight cards costs the one request their shared cache already pays for on
+  // the page's first card, not eight.
+  const { items: dataTypes } = useDataTypes()
 
   // A failed request is not an empty period, and it outranks the pending check even when both
   // flags are true at once: a composite query built by OR-ing several requests together (the
@@ -103,7 +111,11 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.
   if (query.isPending) return <Card span={span} label={label}><Loading />{after}</Card>
 
-  const empty = emptyStateFor(metric, points)
+  // DataTypeChoice.id is the catalogue's kebab-case id (dataTypeForMetric's own return shape),
+  // carried through from ExcludedDataTypeStore unchanged (useDataTypes.ts's own comment), so no
+  // translation happens on either side of this comparison.
+  const excludedTypes = dataTypes.filter((d) => d.excluded).map((d) => d.id)
+  const empty = emptyStateFor(metric, points, excludedTypes)
   if (empty !== null) {
     return (
       <Card span={span} label={label}>

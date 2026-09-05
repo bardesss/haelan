@@ -91,6 +91,7 @@
   "emptyState": {
     "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
     "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
+    "not_synced": { "title": "Not being synced", "detail": "You turned this data type off. Turn it back on in Settings to start fetching it." },
     "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
   },
   "insightCard": {

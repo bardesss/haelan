@@ -77,4 +77,35 @@ describe('emptyStateFor', () => {
     expect(emptyStateFor('resting_heart_rate', [point(58, 1 / 24), point(60, 1 / 24)])).toBeNull()
   })
 
+  // The fourth reason a chart is empty: nobody asked for it. 'steps' is produced by the 'steps'
+  // data type (an ordinary, non-sub-dimensional entry), so excluding that one id is enough to
+  // trigger this regardless of what points would otherwise say.
+  it('reports not synced when the metric belongs to an excluded data type', () => {
+    expect(emptyStateFor(WORN, [point(900, 0.9)], ['steps'])).toBe('not_synced')
+  })
+
+  // Checked ahead of no_data: an excluded type never has rows, so both are always "true" for it
+  // at once, and not_synced is the one the reader can act on.
+  it('prefers not synced over no data for an excluded type with no rows at all', () => {
+    expect(emptyStateFor(WORN, [], ['steps'])).toBe('not_synced')
+  })
+
+  // Checked ahead of not_worn too: "not worn" is a claim about coverage this household's rows
+  // recorded, and an excluded type has no rows to have recorded anything in.
+  it('prefers not synced over not worn for an excluded type nobody could have worn a device for', () => {
+    expect(emptyStateFor(WORN, [point(null, 1 / 24), point(null, 1 / 24)], ['steps'])).toBe('not_synced')
+  })
+
+  // Excluding an unrelated type must not blank a metric this household still syncs.
+  it('says nothing about a metric whose own type was not excluded', () => {
+    expect(emptyStateFor(WORN, [point(900, 0.9)], ['weight'])).toBeNull()
+  })
+
+  // A sleep metric has no data type of its own (catalogue.ts's own comment: sleep is derived from
+  // sessions, not fetched as a metric), so dataTypeForMetric answers null for it and no exclusion
+  // list could ever match. Excluding 'sleep' itself, the id of the session type, does not apply
+  // to the derived minute metrics that come out of it.
+  it('cannot be excluded through a metric with no data type of its own', () => {
+    expect(emptyStateFor('sleep_asleep_minutes', [point(420, null)], ['sleep'])).toBeNull()
+  })
 })

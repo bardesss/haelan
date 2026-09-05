@@ -1,7 +1,8 @@
 import { coverageIsMeaningful } from '@haelan/core/coverage-signal'
+import { dataTypeForMetric } from '@haelan/core/metric-data-type'
 import type { SeriesPoint } from './useSeries.js'
 
-export type EmptyStateKind = 'no_data' | 'not_worn'
+export type EmptyStateKind = 'no_data' | 'not_worn' | 'not_synced'
 
 /**
  * Whether a metric's coverage is a statement about whether a device was worn.
@@ -52,11 +53,19 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
 }
 
 /**
- * Which of the two empty states a card should render, or null to render the data.
+ * Which of the three empty states a card should render, or null to render the data.
  *
  * The parent spec requires these read differently and that neither renders as zero or as a blank
- * chart, because "no naps detected" and "device not worn" are two different statements and
- * neither of them is a number.
+ * chart, because "no naps detected", "device not worn" and "you turned this off" are three
+ * different statements and none of them is a number.
+ *
+ * `excludedTypes` is checked first, ahead of both `no_data` and `not_worn`, because it is the more
+ * specific truth and the one reason here the reader can act on: the other two describe the data
+ * that came back, and a type nobody fetches has no data to describe at all. It outranks
+ * `not_worn` for a reason `not_worn` cannot get around on its own terms: "not worn" is a claim
+ * about coverage this household's own rows recorded, and there is nothing to have recorded when
+ * the type was never synced. Answering `not_worn` for an excluded type would state a fact about
+ * evidence that does not exist.
  *
  * A third state, `insufficient`, lived here until M3e-2 marked it for removal: no caller in
  * apps/web ever passed a baseline, since Dashboard.tsx withholds one on purpose (a thin baseline
@@ -65,7 +74,16 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
  * `thin-days` reason (InsightCard.tsx), which reuses the `emptyState.insufficient` translation
  * key verbatim without ever calling this function.
  */
-export function emptyStateFor(metric: string, points: SeriesPoint[] | undefined): EmptyStateKind | null {
+export function emptyStateFor(
+  metric: string, points: SeriesPoint[] | undefined, excludedTypes: readonly string[] = [],
+): EmptyStateKind | null {
+  // dataTypeForMetric answers null for a metric no catalogue entry produces (every sleep and
+  // workout metric, which have no data type of their own to be excluded through), and null can
+  // never be a member of excludedTypes, so a metric with no data type simply falls through to the
+  // checks below rather than needing a guard of its own here.
+  const dataType = dataTypeForMetric(metric)
+  if (dataType !== null && excludedTypes.includes(dataType)) return 'not_synced'
+
   // A one day range with a value is deliberately not read here at all, even though MetricCard
   // knows it (its own `oneDayRange` prop): this function answers "is there nothing to show", and
   // a one day range with a value has something to show, a number with no chart worth drawing

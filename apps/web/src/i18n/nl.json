@@ -91,6 +91,7 @@
   "emptyState": {
     "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
     "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
+    "not_synced": { "title": "Wordt niet gesynchroniseerd", "detail": "Je hebt dit gegevenstype uitgezet. Zet het weer aan in Instellingen om het weer op te halen." },
     "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
   },
   "insightCard": {
