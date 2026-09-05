@@ -747,6 +747,25 @@
       },
       "kind": { "device": "Apparaat", "app": "App", "manual": "Handmatig ingevoerd" },
       "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
+    },
+    "members": {
+      "title": "Leden",
+      "state": { "active": "Actief", "invited": "Uitgenodigd", "disabled": "Geschorst" },
+      "invite": "Nodig een lid uit",
+      "displayName": "Naam",
+      "timezone": "Tijdzone",
+      "create": "Uitnodiging aanmaken",
+      "linkTitle": "Hun uitnodigingslink",
+      "linkOnce": "Deze link wordt maar één keer getoond. Kopieer hem nu en geef hem door.",
+      "copy": "Kopiëren",
+      "suspend": "Schorsen",
+      "restore": "Herstellen",
+      "revoke": "Uitnodiging intrekken",
+      "empty": {
+        "title": "Geen andere leden",
+        "detail": "Nodig iemand uit om diegene een eigen account en eigen gegevens te geven."
+      },
+      "failed": "Dat is niet gelukt. Probeer het opnieuw."
     }
   }
 }

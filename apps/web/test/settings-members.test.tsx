@@ -1,0 +1,204 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { I18nProvider } from '../src/i18n/index.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
+import { Settings } from '../src/pages/Settings.js'
+import { Members } from '../src/pages/settings/Members.js'
+import { membersKey } from '../src/data/useMembers.js'
+import type { MemberRow } from '../src/data/useMembers.js'
+import { sourceNamesKey } from '../src/data/useSourceNames.js'
+import { flush } from './flush.js'
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+const ADMIN: Session = {
+  personId: 'admin-1', displayName: 'Admin', username: 'admin', isAdmin: true, timezone: 'Europe/Amsterdam',
+}
+
+// Every field MemberRow needs, defaulted so a test only names what it is actually asserting on.
+// accountId/inviteId follow from state rather than being named separately in most calls, the same
+// way the route itself derives them (apps/server/src/routes/members.ts's own GET handler): an
+// invited row has no account yet, an active or disabled row has no pending invite left to revoke.
+let memberCounter = 0
+function member(overrides: Partial<MemberRow> & { displayName: string }): MemberRow {
+  memberCounter += 1
+  const state = overrides.state ?? 'active'
+  return {
+    personId: `person-${memberCounter}`,
+    timezone: 'Europe/Amsterdam',
+    accountId: state === 'invited' ? null : `account-${memberCounter}`,
+    username: null,
+    isAdmin: false,
+    state,
+    inviteId: state === 'invited' ? `invite-${memberCounter}` : null,
+    ...overrides,
+  }
+}
+
+/**
+ * Mounts the Members section alone, with the members list pre-seeded under the same key
+ * useMembers/every mutation's own invalidation shares (membersKey). An unseeded query would reach
+ * the real network in this environment rather than merely running slow -- see
+ * apps/web/test/control-row.test.tsx's own comment on withQuery -- so every test here seeds it,
+ * including the one seeding an empty list.
+ */
+function mountSection(items: MemberRow[]): QueryClient {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
+  })
+  client.setQueryData(queryKeys.session(), ADMIN)
+  client.setQueryData(membersKey(), { items })
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en"><Members /></I18nProvider>
+      </QueryClientProvider>,
+    )
+  })
+  return client
+}
+
+/**
+ * Mounts the whole Settings page as a given session, the way a real admin or a real non-admin
+ * member would see it. OverrideList and SourceNames mount alongside Members here regardless of
+ * which this test cares about, so both of their own queries need seeding too, or they reach the
+ * real network the same way an unseeded members query would.
+ */
+function mountSettingsAs(overrides: Partial<Session>): void {
+  const session: Session = { ...ADMIN, ...overrides }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), session)
+  client.setQueryData(sourceNamesKey(session.personId), { items: [] })
+  client.setQueryData(queryKeys.resource(session.personId, 'overrides'), { items: [] })
+  client.setQueryData(membersKey(), { items: [] })
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en"><Settings /></I18nProvider>
+      </QueryClientProvider>,
+    )
+  })
+}
+
+const rowNames = (): string[] =>
+  [...container!.querySelectorAll('.member-name')].map((n) => n.textContent ?? '')
+
+const rowStates = (): string[] =>
+  [...container!.querySelectorAll('.member-state')].map((n) => n.textContent ?? '')
+
+const linkText = (): string =>
+  container!.querySelector('.copy-value')?.textContent ?? ''
+
+// Native setter, not `input.value =`: the latter goes through React's own tracked setter and
+// leaves onChange never firing, the same reason settings-source-names.test.tsx's own type() exists.
+function type(input: HTMLInputElement, value: string): void {
+  const nativeValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+  nativeValueSetter.call(input, value)
+  act(() => { input.dispatchEvent(new Event('input', { bubbles: true })) })
+}
+
+function click(el: Element): void {
+  act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+}
+
+/**
+ * Stands in for the real routes (apps/server/src/routes/members.ts): GET answers whatever the
+ * last invite left behind, and POST answers the one shape this suite cares about -- a token that
+ * exists nowhere else, because that is the entire point of Task 5's invite flow. Neither the
+ * account state routes nor the revoke route are exercised here, so mocking only these two is
+ * enough for the invite test that needs the network at all.
+ */
+function mockMembersApi(initialItems: MemberRow[]): {
+  restore: () => void
+  requests: { method: string, url: string, body: Record<string, unknown> | null }[]
+} {
+  let items = initialItems
+  const requests: { method: string, url: string, body: Record<string, unknown> | null }[] = []
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    const method = init?.method ?? 'GET'
+    const body = init?.body ? (JSON.parse(String(init.body)) as Record<string, unknown>) : null
+    requests.push({ method, url, body })
+    const json = (status: number, payload: unknown) =>
+      new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
+
+    if (method === 'GET' && url.endsWith('/api/members')) return json(200, { items })
+    if (method === 'POST' && url.endsWith('/api/members')) {
+      const invited = member({ displayName: String(body!['displayName']), state: 'invited' })
+      items = [...items, invited]
+      return json(200, { personId: invited.personId, inviteId: invited.inviteId, token: 'TOKEN123', expiresAtMs: 1_000 })
+    }
+    throw new Error(`unexpected request: ${method} ${url}`)
+  }) as typeof fetch
+  return { restore: () => { globalThis.fetch = original }, requests }
+}
+
+describe('the members section', () => {
+  it('lists each member with their state', () => {
+    mountSection([
+      member({ displayName: 'Ann', username: 'ann', state: 'active', isAdmin: true }),
+      member({ displayName: 'Bob', username: null, state: 'invited' }),
+      member({ displayName: 'Cat', username: 'cat', state: 'disabled' }),
+    ])
+    expect(rowNames()).toEqual(['Ann', 'Bob', 'Cat'])
+    expect(rowStates()).toEqual(['Active', 'Invited', 'Suspended'])
+  })
+
+  it('says so when there is nobody else in the household', () => {
+    mountSection([])
+    expect(container!.textContent).toContain('No other members')
+  })
+
+  // The one behaviour this whole task exists to get right: the token is rendered straight from
+  // the mutation's own result, never round tripped through a cache entry, and the reader is told
+  // in as many words that this is the only time they will ever see it.
+  it('shows the invite link once, with the warning', async () => {
+    const api = mockMembersApi([])
+    const client = mountSection([])
+
+    click(container!.querySelector('.form-actions button')!)
+
+    const inputs = [...container!.querySelectorAll('input')] as HTMLInputElement[]
+    type(inputs[0]!, 'New Person')
+    type(inputs[1]!, 'Europe/Amsterdam')
+    click(container!.querySelector('button[type="submit"]')!)
+
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    const post = api.requests.find((r) => r.method === 'POST')
+    expect(post?.body).toEqual({ displayName: 'New Person', timezone: 'Europe/Amsterdam' })
+    expect(linkText()).toBe(`${window.location.origin}/invite/TOKEN123`)
+    expect(container!.textContent).toContain('This link is shown once')
+  })
+
+  it('is not rendered at all for a non-admin', () => {
+    mountSettingsAs({ isAdmin: false })
+    expect(container!.textContent).not.toContain('Members')
+  })
+
+  it('is rendered for an admin', () => {
+    mountSettingsAs({ isAdmin: true })
+    expect(container!.textContent).toContain('Members')
+  })
+})

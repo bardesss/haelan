@@ -747,6 +747,25 @@
       },
       "kind": { "device": "Device", "app": "App", "manual": "Entered by hand" },
       "saveFailed": "That did not save. Try again."
+    },
+    "members": {
+      "title": "Members",
+      "state": { "active": "Active", "invited": "Invited", "disabled": "Suspended" },
+      "invite": "Invite a member",
+      "displayName": "Name",
+      "timezone": "Time zone",
+      "create": "Create invite",
+      "linkTitle": "Their invite link",
+      "linkOnce": "This link is shown once. Copy it now and hand it over.",
+      "copy": "Copy",
+      "suspend": "Suspend",
+      "restore": "Restore",
+      "revoke": "Revoke invite",
+      "empty": {
+        "title": "No other members",
+        "detail": "Invite someone to give them their own account and their own data."
+      },
+      "failed": "That did not work. Try again."
     }
   }
 }
