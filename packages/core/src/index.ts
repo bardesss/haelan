@@ -118,6 +118,8 @@ export { NoteStore } from './store/notes.ts'
 export type { PutNoteInput, StoredNote } from './store/notes.ts'
 export { EventStore } from './store/events.ts'
 export type { AddEventInput, StoredEvent } from './store/events.ts'
+export { InviteStore, INVITE_TTL_MS } from './store/invites.ts'
+export type { PendingInvite } from './store/invites.ts'
 export { groupSessions, DEFAULT_OVERLAP_RATIO } from './derive/sessionOverlap.ts'
 export type { SessionGroup, GroupSessionsInput } from './derive/sessionOverlap.ts'
 
