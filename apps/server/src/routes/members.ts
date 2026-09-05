@@ -76,7 +76,9 @@ export function registerMemberRoutes(app: FastifyInstance): void {
 
   app.post<{ Body: CreateMemberBody }>('/api/members', { preHandler: guard }, async (request, reply) => {
     const { displayName, timezone } = request.body ?? {}
-    if (typeof displayName !== 'string' || displayName === '' || typeof timezone !== 'string') {
+    // trim(), not === '': a name of only spaces is exactly as useless as an empty one, and the
+    // household member list is what a person sees named after them - it deserves the same refusal.
+    if (typeof displayName !== 'string' || displayName.trim() === '' || typeof timezone !== 'string') {
       return reply.code(statusFor('config'))
         .send(errorBody('config', 'config', 'displayName and timezone are required'))
     }

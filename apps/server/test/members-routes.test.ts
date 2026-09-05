@@ -81,6 +81,16 @@ describe('POST /api/members', () => {
   it('refuses an unknown timezone', async () => {
     expect((await invite(adminToken, 'Bob', 'Mars/Olympus')).statusCode).toBe(400)
   })
+
+  it('refuses an empty or whitespace-only displayName', async () => {
+    const empty = await invite(adminToken, '', 'Europe/Amsterdam')
+    expect(empty.statusCode).toBe(400)
+    expect(empty.json().error.kind).toBe('config')
+
+    const blank = await invite(adminToken, '   ', 'Europe/Amsterdam')
+    expect(blank.statusCode).toBe(400)
+    expect(blank.json().error.kind).toBe('config')
+  })
 })
 
 describe('disable and enable', () => {
@@ -127,9 +137,18 @@ describe('DELETE /api/members/invites/:id', () => {
     const created = (await invite(adminToken, 'Carol', 'Europe/Amsterdam')).json()
     const revokeResponse = await revoke(adminToken, created.inviteId)
     expect(revokeResponse.statusCode).toBe(204)
-    // The redemption route this token would otherwise reach is a later task's; unregistered, it
-    // 404s regardless. What this proves today is that the revoke call itself succeeded above.
-    expect((await h.app.inject({ method: 'GET', url: `/api/invite/${created.token}` })).statusCode).toBe(404)
+
+    // The redemption route this token would otherwise reach is a later task's, so the token
+    // itself can't be checked here. What proves revoke() actually ran, rather than the handler
+    // just answering 204, is that the pending invite is gone from the member list.
+    const carol = (await list(adminToken)).json().items.find((m: { personId: string }) => m.personId === created.personId)
+    expect(carol).toEqual({
+      personId: created.personId, displayName: 'Carol', timezone: 'Europe/Amsterdam',
+      accountId: null, username: null, isAdmin: false, state: 'invited', inviteId: null,
+    })
+
+    // A second revoke of the same id finds nothing pending to revoke.
+    expect((await revoke(adminToken, created.inviteId)).statusCode).toBe(404)
   })
 
   it('refuses an unknown invite id', async () => {
