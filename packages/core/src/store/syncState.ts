@@ -1,6 +1,6 @@
-﻿import { and, eq } from 'drizzle-orm'
+﻿import { and, eq, inArray } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { syncState } from '../db/schema/index.ts'
+import { syncState, excludedDataTypes } from '../db/schema/index.ts'
 import { DATA_TYPES } from '../api/catalogue.ts'
 import { SchemaDriftError } from '../errors.ts'
 
@@ -106,9 +106,35 @@ export class SyncStateStore {
     this.upsert(personId, dataType, { backfillCompleteAtMs: null })
   }
 
+  /**
+   * A job for a type this person turned off is not due, so the exclusion is read here rather
+   * than trusted to every caller of dueJobs to apply for itself. Queried against
+   * excluded_data_types directly instead of taking an ExcludedDataTypeStore: this store already
+   * holds the db handle the query needs, the two tables live in the same schema file for exactly
+   * this kind of read, and a constructor dependency would have to be threaded through every
+   * existing SyncStateStore call site (apps/server's wiring and four test files) for a query this
+   * store can already run itself.
+   *
+   * One query across every requested person rather than one per person, so a household sync does
+   * not pay for a round trip per member. Grouped back out per person below because an exclusion
+   * is never allowed to leak from one person's set to another's jobs.
+   */
   dueJobs(personIds: string[], _nowMs: number): SyncJob[] {
-    return personIds.flatMap((personId) =>
-      DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => ({ personId, dataType: t.id })))
+    if (personIds.length === 0) return []
+    const excludedRows = this.#db.select({
+      personId: excludedDataTypes.personId, dataTypeId: excludedDataTypes.dataTypeId,
+    }).from(excludedDataTypes).where(inArray(excludedDataTypes.personId, personIds)).all()
+    const excludedByPerson = new Map<string, Set<string>>()
+    for (const row of excludedRows) {
+      const set = excludedByPerson.get(row.personId) ?? new Set<string>()
+      set.add(row.dataTypeId)
+      excludedByPerson.set(row.personId, set)
+    }
+    return personIds.flatMap((personId) => {
+      const excluded = excludedByPerson.get(personId) ?? new Set<string>()
+      return DATA_TYPES.filter((t) => t.actions.length > 0 && !excluded.has(t.id))
+        .map((t) => ({ personId, dataType: t.id }))
+    })
   }
 
   private upsert(personId: string, dataType: string, set: Partial<typeof syncState.$inferInsert>): void {

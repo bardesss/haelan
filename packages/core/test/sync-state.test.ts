@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
+import { ExcludedDataTypeStore } from '../src/store/excludedDataTypes.ts'
 import { DATA_TYPES } from '../src/api/catalogue.ts'
 import { TransientError, SchemaDriftError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -95,5 +96,47 @@ describe('SyncStateStore', () => {
     seedPerson(ctx.db, 'p2')
     store.recordSuccess({ personId: 'p1', dataType: 'steps', highWaterMs: 5000, nowMs: 6000 })
     expect(store.get('p2', 'steps')).toBeNull()
+  })
+
+  describe('dueJobs and exclusions', () => {
+    let excluded: ExcludedDataTypeStore
+
+    beforeEach(() => {
+      seedPerson(ctx.db, 'p2')
+      excluded = new ExcludedDataTypeStore(ctx.db)
+    })
+
+    // Pinned to the full catalogue minus the one excluded id, not a spot check: a set this size
+    // would also pass a spot check on 'steps' alone if the filter dropped every type but one, or
+    // if it were applied to the wrong person.
+    it('omits an excluded type from that person\'s jobs and no other', () => {
+      excluded.setFor({ personId: 'p1', dataTypeIds: ['weight'], nowMs: 1000 })
+      const jobTypes = store.dueJobs(['p1'], 1000).map((j) => j.dataType)
+      expect(new Set(jobTypes)).toEqual(
+        new Set(DATA_TYPES.filter((t) => t.actions.length > 0 && t.id !== 'weight').map((t) => t.id)),
+      )
+    })
+
+    it('does not apply one person\'s exclusion to another\'s jobs', () => {
+      excluded.setFor({ personId: 'p1', dataTypeIds: ['weight'], nowMs: 1000 })
+      const p2Types = new Set(store.dueJobs(['p2'], 1000).map((j) => j.dataType))
+      expect(p2Types).toEqual(new Set(DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => t.id)))
+    })
+
+    it('returns every listable-with-an-action type when the exclusion set is empty', () => {
+      excluded.setFor({ personId: 'p1', dataTypeIds: [], nowMs: 1000 })
+      const jobTypes = new Set(store.dueJobs(['p1'], 1000).map((j) => j.dataType))
+      expect(jobTypes).toEqual(new Set(DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => t.id)))
+    })
+
+    it('excludes correctly for each person when both are asked for in one call', () => {
+      excluded.setFor({ personId: 'p1', dataTypeIds: ['weight'], nowMs: 1000 })
+      const jobs = store.dueJobs(['p1', 'p2'], 1000)
+      const typesFor = (personId: string) => new Set(jobs.filter((j) => j.personId === personId).map((j) => j.dataType))
+      expect(typesFor('p1')).toEqual(
+        new Set(DATA_TYPES.filter((t) => t.actions.length > 0 && t.id !== 'weight').map((t) => t.id)),
+      )
+      expect(typesFor('p2')).toEqual(new Set(DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => t.id)))
+    })
   })
 })

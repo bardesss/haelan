@@ -4,6 +4,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
+import { ExcludedDataTypeStore } from '../src/store/excludedDataTypes.ts'
 import { HealthClient } from '../src/api/client.ts'
 import { runSync, reachBackTo } from '../src/sync/runSync.ts'
 import { DATA_TYPES, DEFAULT_USER_HORIZON_DAYS, INTRADAY_HORIZON_DAYS, supports } from '../src/api/catalogue.ts'
@@ -266,6 +267,38 @@ describe('runSync', () => {
     // that the list path is untouched.
     const rows = ctx.db.select({ dataType: rawPayloads.dataType }).from(rawPayloads).all()
     expect(rows.some((r) => r.dataType === 'steps')).toBe(true)
+  })
+
+  // The finding this closes: dueJobs used to hand back every catalogue type regardless of what
+  // a person turned off, so runSync requested an excluded type's trailing window on every run
+  // even though the backfill screen had stopped listing it. Checked against the URLs runSync's
+  // own fetch actually issued, not against archived row counts or sync_state marks - those sit
+  // downstream of RawArchive's dedup, which a frozen test clock defeats by making a repeated
+  // request byte-identical to the one before it, exactly the mechanism that hid this in the
+  // first place. seenUrls is appended before dedup ever runs, so it cannot be fooled that way.
+  describe('a person\'s excluded types', () => {
+    // One person only: the request URL this stub sees carries no person id (the real API scopes
+    // by OAuth token, not by a query parameter), so a two-person run could not tell "alice's
+    // weight never went out" apart from "bob's weight did, and that's what's in the list". The
+    // per-person boundary itself - one person's exclusion never reaching another's job list - is
+    // already pinned at the unit level in sync-state.test.ts's dueJobs tests, which can and do
+    // inspect each person's jobs separately.
+    it('are not requested during a sync run, while an unexcluded type still is', async () => {
+      new ExcludedDataTypeStore(ctx.db).setFor({ personId: 'alice', dataTypeIds: ['weight'], nowMs: 1 })
+      const seenUrls: string[] = []
+      const fetchMock = vi.fn().mockImplementation(async (url: unknown) => {
+        seenUrls.push(String(url))
+        return new Response(emptyFor(url), { status: 200 })
+      })
+      const deps = build(fetchMock)
+
+      await runSync({ personIds: ['alice'], trailingDays: 7, userHorizonDays: DEFAULT_USER_HORIZON_DAYS, deps })
+
+      const idFrom = (url: string) => /\/dataTypes\/([^/]+)\/dataPoints/.exec(url)?.[1]
+      const requestedIds = new Set(seenUrls.map(idFrom).filter((id): id is string => id !== undefined))
+      expect(requestedIds).not.toContain('weight')
+      expect(requestedIds).toContain('steps')
+    })
   })
 
   it('walks the whole horizon the first time a rollup type runs, and only the gap after that', async () => {

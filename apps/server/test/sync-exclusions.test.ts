@@ -45,14 +45,14 @@ describe('a person\'s excluded types', () => {
   })
 
   // "Fetched" is asserted through the backfill cursor rather than through raw_payloads rows: the
-  // trailing week's sync (runSync's dueJobs, in packages/core) walks every catalogue type with an
-  // action regardless of this table - out of scope for this task, which names exactly three walks
-  // in runner.ts - and it re-requests the same trailing window on every run. With the clock frozen
-  // in this harness that window's body and bounds never change, so RawArchive's dedup key (see
-  // rawArchive.ts) swallows the second request whether or not the type is excluded, and a raw-row
-  // count could not tell the two cases apart here. The backfill cursor can: #backfillPass and
-  // #sprintPending are the walks this task actually filters, and their effect is exactly whether
-  // that cursor ever moves.
+  // trailing sync also re-requests the same window on every run, and with the clock frozen in
+  // this harness that window's body and bounds never change, so RawArchive's dedup key (see
+  // rawArchive.ts) swallows the second request whether or not the type is excluded - a raw-row
+  // count could not tell the two cases apart here regardless of which walk is at fault. The
+  // backfill cursor can: #backfillPass and #sprintPending are the walks *this file's* helper
+  // filters, and their effect is exactly whether that cursor ever moves. (dueJobs, in
+  // packages/core, filters the trailing sync itself now and has its own clock-free coverage in
+  // packages/core/test/sync-state.test.ts and run-sync.test.ts.)
   it('is not walked by the backfill pass during a sync run', async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
