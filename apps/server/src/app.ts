@@ -13,6 +13,7 @@ import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
 import { registerSettings } from './routes/settings.ts'
 import { registerMemberRoutes } from './routes/members.ts'
+import { registerInviteRoutes } from './routes/invite.ts'
 import { registerV1 } from './routes/v1/index.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
@@ -133,6 +134,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerSync(app)
   registerSettings(app)
   registerMemberRoutes(app)
+  registerInviteRoutes(app)
   registerSetupGate(app)
   // Registered through app.register, not called directly like the routes above: the /api/v1
   // prefix and Fastify's plugin encapsulation are what keep this surface's error handler and
