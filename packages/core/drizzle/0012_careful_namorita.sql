@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `disabled_at_ms` integer;

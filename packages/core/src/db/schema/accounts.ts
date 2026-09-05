@@ -15,6 +15,9 @@ export const accounts = sqliteTable('accounts', {
   failedAttempts: integer('failed_attempts').notNull().default(0),
   lockedUntilMs: integer('locked_until_ms'),
   createdAtMs: integer('created_at_ms').notNull(),
+  // A timestamp rather than a boolean: "when was this account suspended" is the question an admin
+  // asks afterwards, and a boolean throws the answer away. Null means active.
+  disabledAtMs: integer('disabled_at_ms'),
 })
 
 // Not called sessions: that name belongs to sleep and exercise in tier 2.

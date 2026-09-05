@@ -42,6 +42,14 @@ export class SessionStore {
     this.#db.delete(authSessions).where(eq(authSessions.idHash, digest(rawId))).run()
   }
 
+  /**
+   * Every live session for one account, removed at once. Suspension without this leaves the member
+   * signed in until their cookie expires.
+   */
+  destroyForAccount(accountId: string): number {
+    return this.#db.delete(authSessions).where(eq(authSessions.accountId, accountId)).run().changes
+  }
+
   purgeExpired(nowMs: number): number {
     return this.#db.delete(authSessions).where(lte(authSessions.expiresAtMs, nowMs)).run().changes
   }
