@@ -51,7 +51,7 @@ export function DataTypePicker({ items, excluded, onChange, disabled, allOffKey 
       {allOff && <p className="field-hint">{t(allOffKey)}</p>}
       <ul className="data-type-list">
         {items.map((item) => (
-          <li key={item.id} className="data-type-row" data-id={item.id}>
+          <li key={item.id} className="data-type-row">
             <label>
               <input
                 type="checkbox"

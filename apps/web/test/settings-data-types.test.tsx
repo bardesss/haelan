@@ -32,6 +32,11 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', connected: true, baseUrl: 'http://localhost:4235',
 }
 
+// The exact name DataTypePicker renders for this catalogue id (dataTypes.steps in en.json),
+// pinned the same way setup-data-types.test.tsx pins BACKFILL_HEADING: the row toggle() below
+// finds is findable by what it actually prints, not by an id the label no longer carries.
+const STEPS_LABEL = 'Steps'
+
 /** Builds one item the same shape the real GET answers with; tier is never asserted on below, so
  * every choice here is 'daily' rather than threading a second parameter through every call site. */
 function choice(id: string, excluded: boolean): DataTypeChoice {
@@ -68,11 +73,11 @@ const checkedState = (): boolean[] =>
   [...container!.querySelectorAll('.data-type-row input[type="checkbox"]')]
     .map((el) => (el as HTMLInputElement).checked)
 
-function toggle(id: string): void {
-  // Looked up by data-id, not by the rendered label: the label now carries the translated name
-  // (dataTypeName.ts), not the raw catalogue id, so the id is only reachable through the attribute
-  // DataTypePicker puts on the row for exactly this purpose.
-  const row = container!.querySelector(`.data-type-row[data-id="${id}"]`)
+function toggle(label: string): void {
+  // Matched against the rendered label (dataTypeName.ts), the same string rowLabels() already
+  // asserts on above, rather than an id the row no longer carries anywhere in shipped markup.
+  const labelEl = [...container!.querySelectorAll('.data-type-label')].find((el) => el.textContent === label)
+  const row = labelEl!.closest('.data-type-row')
   const input = row!.querySelector('input[type="checkbox"]') as HTMLInputElement
   // A native click, not a dispatched change event: for a checkbox the click itself is what flips
   // `checked`, the same distinction annotate-panel.test.tsx's own type() helper draws for text
@@ -130,7 +135,7 @@ describe('the data types section', () => {
     const api = mockDataTypesApi([choice('steps', false), choice('floors', false)])
     const client = mountSection([choice('steps', false), choice('floors', false)])
 
-    toggle('steps')
+    toggle(STEPS_LABEL)
     await flush(client, () => container!.innerHTML)
     api.restore()
 
@@ -141,7 +146,7 @@ describe('the data types section', () => {
     const api = mockDataTypesApi([choice('steps', true)])
     const client = mountSection([choice('steps', true)])
 
-    toggle('steps')
+    toggle(STEPS_LABEL)
     await flush(client, () => container!.innerHTML)
     api.restore()
 
