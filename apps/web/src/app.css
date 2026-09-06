@@ -424,9 +424,18 @@ body {
 
 /* ConnectGoogle.tsx: the explanation reads at body size and secondary tone, the same pairing
    .setup-step's own intro paragraph uses, since this card is making the identical kind of ask (an
-   action the reader has not taken yet) outside the wizard. .form-error is reused as-is for the
-   address warning above the link rather than a second colour introduced for it: a redirect Google
-   cannot deliver fails consent the same way a rejected form submission fails a save, so it earns
-   the same negative-toned box, not a milder one that would undersell what is about to go wrong. */
+   action the reader has not taken yet) outside the wizard. The address warning below carries the
+   same negative-toned box .form-error uses -- a redirect Google cannot deliver fails consent the
+   same way a rejected form submission fails a save, so it earns the same weight, not a milder one
+   that would undersell what is about to go wrong -- but under its own class rather than .form-error
+   itself: this card holds no form, and a class named for one should not have to answer for a screen
+   that never submits anything. */
 .connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
 .connect-action { margin-top: var(--space-2); }
+.connect-warning {
+  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  background: color-mix(in srgb, var(--negative) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
+  border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+}

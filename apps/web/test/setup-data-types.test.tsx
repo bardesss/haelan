@@ -18,6 +18,12 @@ import { flush, pumpUntil } from './flush.js'
 // real catalogue value is what has to show up on screen once DataTypeStep hands off.
 const BACKFILL_HEADING = 'Filling in your history'
 
+// The exact names DataTypePicker renders for these two catalogue ids (dataTypes.steps /
+// dataTypes.floors in en.json), pinned the same way BACKFILL_HEADING above is: uncheck() below
+// finds a row by what it actually prints, not by an id the label no longer carries.
+const STEPS_LABEL = 'Steps'
+const FLOORS_LABEL = 'Floors climbed'
+
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', connected: true, baseUrl: 'http://localhost:4235',
 }
@@ -43,6 +49,11 @@ beforeEach(() => {
     onmessage: ((event: MessageEvent) => void) | null = null
     close(): void {}
   })
+  // dataTypesDone now survives in sessionStorage (SetupApp.tsx), which happy-dom keeps alive
+  // across tests in the same file same as a real browser tab would keep it across reloads. Without
+  // this, whichever test below reaches BackfillStep first would leave every test after it starting
+  // there too, rather than each test seeing the fresh wizard the rest of this suite assumes.
+  sessionStorage.clear()
 })
 
 afterEach(() => {
@@ -130,9 +141,12 @@ function clickContinue(): void {
   act(() => { button!.click() })
 }
 
-function uncheck(id: string): void {
-  const row = [...container!.querySelectorAll('.data-type-row')]
-    .find((r) => r.querySelector('.data-type-label')?.textContent === id)
+function uncheck(label: string): void {
+  // Matched against the rendered label (dataTypeName.ts), pinned as a literal the same way
+  // BACKFILL_HEADING above is, rather than an id the row no longer carries anywhere in shipped
+  // markup.
+  const labelEl = [...container!.querySelectorAll('.data-type-label')].find((el) => el.textContent === label)
+  const row = labelEl!.closest('.data-type-row')
   const input = row!.querySelector('input[type="checkbox"]') as HTMLInputElement
   act(() => { input.click() })
 }
@@ -173,7 +187,7 @@ describe("the wizard's data type step", () => {
     const api = mockApi([choice('steps', false), choice('floors', false)])
     const client = mount([choice('steps', false), choice('floors', false)])
 
-    uncheck('floors')
+    uncheck(FLOORS_LABEL)
     clickContinue()
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -190,8 +204,8 @@ describe("the wizard's data type step", () => {
     const api = mockApi([choice('steps', false), choice('floors', false)])
     const client = mount([choice('steps', false), choice('floors', false)])
 
-    uncheck('steps')
-    uncheck('floors')
+    uncheck(STEPS_LABEL)
+    uncheck(FLOORS_LABEL)
     clickContinue()
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -207,7 +221,7 @@ describe("the wizard's data type step", () => {
     const api = mockApi([choice('steps', false), choice('floors', false)])
     mount([choice('steps', false), choice('floors', false)])
 
-    uncheck('floors')
+    uncheck(FLOORS_LABEL)
     const checked = [...container!.querySelectorAll('.data-type-row input[type="checkbox"]')]
       .map((el) => (el as HTMLInputElement).checked)
     api.restore()
@@ -222,10 +236,36 @@ describe("the wizard's data type step", () => {
     const api = mockApi([choice('steps', false), choice('floors', false)])
     const client = mount([choice('steps', false), choice('floors', false)])
 
-    uncheck('floors')
+    uncheck(FLOORS_LABEL)
     api.failNextPut()
     clickContinue()
     await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(heading()).toBe(BACKFILL_HEADING)
+  })
+
+  // The fix SetupApp.tsx's dataTypesDone comment describes: a bare useState reset to false on
+  // every fresh mount, so a reload during backfill re-showed this step over a backfill that was
+  // already running. Unmounting the root and building a new one, the way this test does below, is
+  // what a real reload does to React state; sessionStorage (not cleared here, unlike beforeEach)
+  // is the only thing a real reload leaves behind too.
+  it('does not re-show the data type step after a reload during backfill', async () => {
+    const api = mockApi([choice('steps', false), choice('floors', false)])
+    mount([choice('steps', false), choice('floors', false)])
+
+    clickContinue()
+    await pumpUntil(() => heading() === BACKFILL_HEADING, 'the backfill heading to render')
+
+    act(() => { root?.unmount() })
+    container!.remove()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    navigate('/setup/backfill', { replace: true })
+
+    mount([choice('steps', false), choice('floors', false)])
+    await pumpUntil(() => heading() === BACKFILL_HEADING, 'the backfill heading to render again after reload')
     api.restore()
 
     expect(heading()).toBe(BACKFILL_HEADING)

@@ -1,4 +1,5 @@
 import { useTranslation } from '../i18n/index.js'
+import { dataTypeName } from '../data/dataTypeName.js'
 import type { SyncStatus } from './api.js'
 
 const DAY_MS = 86_400_000
@@ -58,7 +59,7 @@ export function BackfillStep({ status, nowMs, onHorizonChange, failure }: {
           const fraction = reached(row.cursorMs, row.horizonDays, now)
           return (
             <li key={row.dataType} data-complete={String(row.complete)}>
-              <span className="progress-type">{row.dataType}</span>
+              <span className="progress-type">{dataTypeName(t, row.dataType)}</span>
               <span className="field-hint">{t('setup.backfill.daysBack', { days: row.horizonDays })}</span>
               <span className="progress-state">
                 {row.complete

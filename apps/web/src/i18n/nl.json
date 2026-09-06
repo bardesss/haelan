@@ -637,7 +637,8 @@
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",
       "intro": "Alles, tenzij je anders aangeeft. Dit kun je later nog aanpassen in Instellingen.",
-      "continue": "Doorgaan"
+      "continue": "Doorgaan",
+      "allOff": "Er wordt dan niets gesynchroniseerd. Zet er minstens één weer aan om iets op te halen."
     },
     "app": {
       "steps": {
@@ -716,7 +717,29 @@
     "title": "Verbind je Google-account",
     "detail": "haelan leest je gezondheidsgegevens uit Google. Hier verschijnt niets totdat je verbinding maakt.",
     "action": "Verbinden",
-    "wrongAddress": "Google stuurt je na het geven van toestemming terug naar {{baseUrl}}, en dat is niet het adres dat je nu gebruikt. Toestemming geven mislukt dan. Open haelan op {{baseUrl}}, of vraag degene die dit heeft ingesteld om een Tailscale- of proxyadres."
+    "wrongAddress": "Google stuurt je na het geven van toestemming terug naar {{baseUrl}}, en dat is niet het adres dat je nu gebruikt, waardoor het geven van toestemming mislukt. Open haelan op {{baseUrl}}, of vraag degene die dit heeft ingesteld om een Tailscale- of proxyadres."
+  },
+  "dataTypes": {
+    "steps": "Stappen",
+    "distance": "Afstand",
+    "active-minutes": "Actieve minuten",
+    "active-zone-minutes": "Actieve zoneminuten",
+    "active-energy-burned": "Verbrande actieve energie",
+    "heart-rate": "Hartslag (doorlopend)",
+    "heart-rate-variability": "Hartslagvariabiliteit (doorlopend)",
+    "oxygen-saturation": "Zuurstofsaturatie (doorlopend)",
+    "weight": "Gewicht",
+    "body-fat": "Vetpercentage",
+    "daily-resting-heart-rate": "Rusthartslag (dagelijks)",
+    "daily-heart-rate-variability": "Hartslagvariabiliteit (dagelijks)",
+    "daily-oxygen-saturation": "Zuurstofsaturatie (dagelijks)",
+    "daily-respiratory-rate": "Ademhalingsfrequentie (dagelijks)",
+    "sleep": "Slaap",
+    "exercise": "Training",
+    "hydration-log": "Vochtinname",
+    "nutrition-log": "Voeding",
+    "total-calories": "Totale calorieën",
+    "floors": "Beklommen verdiepingen"
   },
   "settings": {
     "title": "Instellingen",

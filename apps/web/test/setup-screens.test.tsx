@@ -138,9 +138,12 @@ describe('the wizard screens', () => {
         { dataType: 'weight', complete: true, cursorMs: null, horizonDays: 1825 },
       ],
     }} onHorizonChange={() => {}} />)
-    expect(html).toContain('heart-rate')
+    // The translated name (dataTypes.heart-rate / dataTypes.weight in en.json), not the raw
+    // catalogue id: BackfillStep reads its progress list through dataTypeName.ts now, the same as
+    // DataTypePicker.
+    expect(html).toContain('Heart rate (continuous)')
     expect(html).toContain('60')
-    expect(html).toContain('weight')
+    expect(html).toContain('Weight')
   })
 
   it('says a finished type is finished rather than showing it as stalled at nothing', () => {
