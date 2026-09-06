@@ -72,6 +72,25 @@ export const METRICS: Record<string, MetricSpec> = {
   // distance and floors do, so it sums for the day rather than taking the last value.
   altitude_gain: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'millimeters' },
 
+  // Group F scalars, measured 2026-09-06. vo2_max_general and daily_vo2_max are named apart from
+  // vo2_max (run-vo2-max's own metric) so three VO2 max series never collide; both keep vo2_max's
+  // 'up' direction, the same judgment. basal_energy is 'neutral' rather than 'up' like
+  // active_energy: a higher resting metabolic rate is not itself an activity goal the way burning
+  // more active calories is. sleep_temperature and sleep_respiratory_rate are 'neutral', the same
+  // reasoning as core_body_temperature and respiratory_rate - a night's reading is not read as
+  // simply better when higher.
+  vo2_max_general: { aggs: ['last', 'mean'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
+  daily_vo2_max: { aggs: ['last'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
+  basal_energy: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'kcal' },
+  sleep_temperature: { aggs: ['last'], precision: 1, direction: 'neutral', unit: 'celsius' },
+  sleep_respiratory_rate: { aggs: ['last'], precision: 1, direction: 'neutral', unit: 'breaths_per_minute' },
+  // One metric per heart rate zone ceiling - a threshold the day's zones were computed with, not
+  // a measurement, hence 'neutral' and the _max_bpm name rather than a reading-style one.
+  heart_rate_zone_light_max_bpm: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'bpm' },
+  heart_rate_zone_moderate_max_bpm: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'bpm' },
+  heart_rate_zone_vigorous_max_bpm: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'bpm' },
+  heart_rate_zone_peak_max_bpm: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'bpm' },
+
   // Group B: four interval types whose value is a duration or a count, not a spot reading, so
   // they sum for the day the same way distance does. sedentary-period has no split; the other
   // three have one metric per named enum value, same shape as active_minutes_* and

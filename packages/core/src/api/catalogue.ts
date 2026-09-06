@@ -296,6 +296,54 @@ export const DATA_TYPES: readonly DataType[] = [
   // archived, with mapping deferred until a real payload confirms or corrects the leaf.
   listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'calories', { mappingDeferred: true }),
 
+  // Group F: six data types named by neither the release notes nor the drift check - the drift
+  // check sees only rollup-capable types named in prose. Measured 2026-09-06 against VO2Max,
+  // DailyVo2Max, BasalEnergyBurned, DailySleepTemperatureDerivations,
+  // RespiratoryRateSleepSummary and DailyHeartRateZones; see
+  // .superpowers/sdd/2026-09-06-catalogue-catches-up/task-11-brief.md for the measured
+  // payloadKey/clock/value/unit table this group is built from.
+  //
+  // vo2-max and daily-vo2-max cannot reuse run-vo2-max's metric name 'vo2_max' - three VO2 max
+  // types now exist (from running, a general measurement, and a daily summary) and each needs a
+  // name a reader can tell apart.
+  listable('vo2-max', 'vo2Max', 'sample_time.physical_time', METRICS, 'vo2_max_general', 'ml_kg_min', 'vo2Max'),
+  listable('daily-vo2-max', 'dailyVo2Max', 'date', METRICS, 'daily_vo2_max', 'ml_kg_min', 'vo2Max'),
+  // interval.start_time, the same convention active-energy-burned and altitude use.
+  listable('basal-energy-burned', 'basalEnergyBurned', 'interval.start_time', ACTIVITY, 'basal_energy', 'kcal', 'kcal'),
+  // DailySleepTemperatureDerivations also carries baselineTemperatureCelsius (the 30-day
+  // baseline) and relativeNightlyStddev30dCelsius (that baseline's spread). nightlyTemperature
+  // Celsius is the night's own figure and is mapped for the same reason
+  // daily-heart-rate-variability picks the whole-night HRV over its deep-sleep-only variant: the
+  // other two fields would quietly answer a narrower question than "this night's temperature".
+  listable('daily-sleep-temperature-derivations', 'dailySleepTemperatureDerivations', 'date', SLEEP, 'sleep_temperature', 'celsius', 'nightlyTemperatureCelsius'),
+  // RespiratoryRateSleepSummary also carries remSleepStats, deepSleepStats and lightSleepStats,
+  // each shaped like fullSleepStats. fullSleepStats.breathsPerMinute is the whole night's figure
+  // and is mapped for the same reason as above; the three stage-only variants are archived, not
+  // mapped. The metric cannot be named respiratory_rate - daily-respiratory-rate already owns it.
+  listable('respiratory-rate-sleep-summary', 'respiratoryRateSleepSummary', 'sample_time.physical_time', SLEEP, 'sleep_respiratory_rate', 'breaths_per_minute', 'fullSleepStats.breathsPerMinute'),
+  // Sub-dimension: heart rate zone ceiling. heartRateZones[] holds
+  // {heartRateZoneType, minBeatsPerMinute, maxBeatsPerMinute}, both declared `string` in the
+  // schema (int64-as-string, same convention parseNumeric already accepts everywhere else).
+  // Only maxBeatsPerMinute is mapped: minBeatsPerMinute is archived rather than given its own
+  // metric, because one zone's floor is the previous zone's ceiling - mapping both would
+  // double-count the same boundary under two names. This is a threshold the day's zones were
+  // computed with, not a measurement, so the metric names say so (_max_bpm) rather than reading
+  // like a reading of anything. HEART_RATE_ZONE_TYPE_UNSPECIFIED is left unnamed for the same
+  // reason as time-in-heart-rate-zone above.
+  listable('daily-heart-rate-zones', 'dailyHeartRateZones', 'date', ACTIVITY, 'daily_heart_rate_zones', 'bpm', '', {
+    subDimension: {
+      arrayPath: 'heartRateZones',
+      keyPath: 'heartRateZoneType',
+      valuePath: 'maxBeatsPerMinute',
+      metricByKey: {
+        LIGHT: 'heart_rate_zone_light_max_bpm',
+        MODERATE: 'heart_rate_zone_moderate_max_bpm',
+        VIGOROUS: 'heart_rate_zone_vigorous_max_bpm',
+        PEAK: 'heart_rate_zone_peak_max_bpm',
+      },
+    },
+  }),
+
   // Rejects list, and takes no filter at all: see filterMember above. Measured request and
   // response shapes: probe/findings/rollup-methods.md.
   {

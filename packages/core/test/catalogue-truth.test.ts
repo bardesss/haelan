@@ -35,7 +35,7 @@ describe('the catalogue tells the truth about where a value lives', () => {
 
   it('covers every mappable type, so this test cannot quietly shrink', () => {
     // Pinned exactly: a looser floor would not notice the set losing an entry.
-    expect(mappable.length).toBe(18)
+    expect(mappable.length).toBe(23)
   })
 
   for (const t of mappable) {
