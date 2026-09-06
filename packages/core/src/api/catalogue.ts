@@ -207,7 +207,7 @@ export const DATA_TYPES: readonly DataType[] = [
   // a metric: a reading's meal context is a fact about that reading, and splitting on any of them
   // would produce four or five sparse series where a household has one number to look at.
   listable('blood-glucose', 'bloodGlucose', 'sample_time.physical_time', METRICS, 'blood_glucose', 'mg_dl', 'bloodGlucoseMilligramsPerDeciliter'),
-  listable('run-vo2-max', 'runVo2Max', 'sample_time.physical_time', METRICS, 'vo2_max', 'ml_kg_min', 'runVo2Max'),
+  listable('run-vo2-max', 'runVo2Max', 'sample_time.physical_time', METRICS, 'run_vo2_max', 'ml_kg_min', 'runVo2Max'),
   // interval.start_time, not interval.end_time: an altitude gain belongs to when the climb
   // began, unlike sleep (which is filed at its end - the one documented exception).
   listable('altitude', 'altitude', 'interval.start_time', ACTIVITY, 'altitude_gain', 'millimeters', 'gainMillimeters'),
@@ -303,10 +303,12 @@ export const DATA_TYPES: readonly DataType[] = [
   // .superpowers/sdd/2026-09-06-catalogue-catches-up/task-11-brief.md for the measured
   // payloadKey/clock/value/unit table this group is built from.
   //
-  // vo2-max and daily-vo2-max cannot reuse run-vo2-max's metric name 'vo2_max' - three VO2 max
-  // types now exist (from running, a general measurement, and a daily summary) and each needs a
-  // name a reader can tell apart.
-  listable('vo2-max', 'vo2Max', 'sample_time.physical_time', METRICS, 'vo2_max_general', 'ml_kg_min', 'vo2Max'),
+  // vo2-max is the generic, unqualified reading, so it takes the bare metric name 'vo2_max' -
+  // the same convention as hrv/daily_hrv and spo2/daily_spo2. run-vo2-max, the running-specific
+  // reading, is qualified instead ('run_vo2_max'); daily-vo2-max's civil-date summary follows the
+  // daily_ prefix convention. Three VO2 max types now exist (from running, a general measurement,
+  // and a daily summary) and each needs a name a reader can tell apart.
+  listable('vo2-max', 'vo2Max', 'sample_time.physical_time', METRICS, 'vo2_max', 'ml_kg_min', 'vo2Max'),
   listable('daily-vo2-max', 'dailyVo2Max', 'date', METRICS, 'daily_vo2_max', 'ml_kg_min', 'vo2Max'),
   // interval.start_time, the same convention active-energy-burned and altitude use.
   listable('basal-energy-burned', 'basalEnergyBurned', 'interval.start_time', ACTIVITY, 'basal_energy', 'kcal', 'kcal'),

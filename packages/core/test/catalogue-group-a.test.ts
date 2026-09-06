@@ -44,7 +44,7 @@ describe('catalogue group A: five scalars', () => {
       id: 'run-vo2-max', payloadKey: 'runVo2Max',
       filterMember: 'sample_time.physical_time',
       scope: 'googlehealth.health_metrics_and_measurements.readonly',
-      target: 'samples', metric: 'vo2_max',
+      target: 'samples', metric: 'run_vo2_max',
       unit: 'ml_kg_min', valuePath: 'runVo2Max',
     })
   })

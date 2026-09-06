@@ -23,7 +23,7 @@ describe('the catalogue declares Group F', () => {
       metric: dt.metric, target: dt.target, unit: dt.unit, valuePath: dt.valuePath,
     }).toEqual({
       id: 'vo2-max', payloadKey: 'vo2Max', filterMember: 'sample_time.physical_time',
-      scope: METRICS_SCOPE, metric: 'vo2_max_general', target: 'samples',
+      scope: METRICS_SCOPE, metric: 'vo2_max', target: 'samples',
       unit: 'ml_kg_min', valuePath: 'vo2Max',
     })
     // The whole reason this type needs its own name: it must not collide with run-vo2-max's.

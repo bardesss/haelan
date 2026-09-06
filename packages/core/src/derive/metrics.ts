@@ -61,25 +61,26 @@ export const METRICS: Record<string, MetricSpec> = {
   // Group A scalars, same episodic-reading shape as weight and body_fat above. height barely
   // moves for an adult, so 'neutral' rather than a direction that would imply taller or shorter
   // is the goal; the same reasoning as body_fat's 'neutral' applies to core_body_temperature and
-  // blood_glucose, whose healthy range is not a monotonic "more/less is better" line. vo2_max is
-  // the one exception with an unambiguous direction: a higher cardiorespiratory fitness reading
-  // is better, the same judgment already made for hrv above.
+  // blood_glucose, whose healthy range is not a monotonic "more/less is better" line.
+  // run_vo2_max is the one exception with an unambiguous direction: a higher cardiorespiratory
+  // fitness reading is better, the same judgment already made for hrv above.
   height: { aggs: ['last', 'mean'], precision: 0, direction: 'neutral', unit: 'millimeters' },
   core_body_temperature: { ...SPOT, unit: 'celsius' },
   blood_glucose: { aggs: ['last', 'mean'], precision: 0, direction: 'neutral', unit: 'mg_dl' },
-  vo2_max: { aggs: ['last', 'mean'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
+  run_vo2_max: { aggs: ['last', 'mean'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
   // Unlike the four spot readings above, an altitude gain accrues over an interval the same way
   // distance and floors do, so it sums for the day rather than taking the last value.
   altitude_gain: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'millimeters' },
 
-  // Group F scalars, measured 2026-09-06. vo2_max_general and daily_vo2_max are named apart from
-  // vo2_max (run-vo2-max's own metric) so three VO2 max series never collide; both keep vo2_max's
-  // 'up' direction, the same judgment. basal_energy is 'neutral' rather than 'up' like
-  // active_energy: a higher resting metabolic rate is not itself an activity goal the way burning
-  // more active calories is. sleep_temperature and sleep_respiratory_rate are 'neutral', the same
-  // reasoning as core_body_temperature and respiratory_rate - a night's reading is not read as
-  // simply better when higher.
-  vo2_max_general: { aggs: ['last', 'mean'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
+  // Group F scalars, measured 2026-09-06. vo2_max is the generic, unqualified reading and takes
+  // the bare name, the same convention as hrv/daily_hrv and spo2/daily_spo2; daily_vo2_max is its
+  // daily summary. Both keep run_vo2_max's 'up' direction, the same judgment, so three VO2 max
+  // series never collide. basal_energy is 'neutral' rather than 'up' like active_energy: a higher
+  // resting metabolic rate is not itself an activity goal the way burning more active calories is.
+  // sleep_temperature and sleep_respiratory_rate are 'neutral', the same reasoning as
+  // core_body_temperature and respiratory_rate - a night's reading is not read as simply better
+  // when higher.
+  vo2_max: { aggs: ['last', 'mean'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
   daily_vo2_max: { aggs: ['last'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
   basal_energy: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'kcal' },
   sleep_temperature: { aggs: ['last'], precision: 1, direction: 'neutral', unit: 'celsius' },
