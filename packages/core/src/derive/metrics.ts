@@ -72,6 +72,26 @@ export const METRICS: Record<string, MetricSpec> = {
   // distance and floors do, so it sums for the day rather than taking the last value.
   altitude_gain: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'millimeters' },
 
+  // Group B: four interval types whose value is a duration or a count, not a spot reading, so
+  // they sum for the day the same way distance does. sedentary-period has no split; the other
+  // three have one metric per named enum value, same shape as active_minutes_* and
+  // active_zone_minutes_* above. direction is 'down' for sedentary (less is better) and 'up' for
+  // the active levels and heart rate zones (more is better); swim strokes are 'neutral' - a count
+  // of strokes taken is not itself a fitness judgement the way minutes spent moving is.
+  sedentary_minutes: { aggs: ['sum'], precision: 0, direction: 'down', unit: 'minutes' },
+  activity_level_sedentary_minutes: { aggs: ['sum'], precision: 0, direction: 'down', unit: 'minutes' },
+  activity_level_lightly_active_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  activity_level_moderately_active_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  activity_level_very_active_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  time_in_heart_rate_zone_light_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  time_in_heart_rate_zone_moderate_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  time_in_heart_rate_zone_vigorous_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  time_in_heart_rate_zone_peak_minutes: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'minutes' },
+  swim_lengths_freestyle_strokes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'count' },
+  swim_lengths_backstroke_strokes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'count' },
+  swim_lengths_breaststroke_strokes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'count' },
+  swim_lengths_butterfly_strokes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'count' },
+
   // One value a day from the API already. last is the whole story; mean would average one number.
   resting_heart_rate: { aggs: ['last'], precision: 0, direction: 'down', unit: 'bpm' },
   daily_hrv: { aggs: ['last'], precision: 0, direction: 'up', unit: 'milliseconds' },

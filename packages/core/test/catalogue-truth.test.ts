@@ -26,10 +26,12 @@ const shapeFor = (id: string) => {
 }
 
 describe('the catalogue tells the truth about where a value lives', () => {
-  // A sub-dimension type has no single valuePath to build shapeFor from; its own shape is
-  // exercised separately in map-samples.test.ts instead.
+  // A sub-dimension type has no single valuePath to build shapeFor from, and a durationMinutes
+  // type (sedentary-period) has no valuePath at all - its value is the interval's own length, not
+  // a leaf shapeFor could plant a 7 at. Both shapes are exercised separately, in
+  // map-samples-duration.test.ts and catalogue-group-b.test.ts instead.
   const mappable = DATA_TYPES.filter((t) =>
-    supports(t, 'list') && t.target === 'samples' && !t.mappingDeferred && !t.subDimension)
+    supports(t, 'list') && t.target === 'samples' && !t.mappingDeferred && !t.subDimension && !t.durationMinutes)
 
   it('covers every mappable type, so this test cannot quietly shrink', () => {
     // Pinned exactly: a looser floor would not notice the set losing an entry.

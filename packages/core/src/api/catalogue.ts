@@ -212,6 +212,72 @@ export const DATA_TYPES: readonly DataType[] = [
   // began, unlike sleep (which is filed at its end - the one documented exception).
   listable('altitude', 'altitude', 'interval.start_time', ACTIVITY, 'altitude_gain', 'millimeters', 'gainMillimeters'),
 
+  // Group B: four interval types, measured 2026-09-06 against SedentaryPeriod, ActivityLevel,
+  // TimeInHeartRateZone and SwimLengthsData; see the same api-schemas.md as Group A. All four
+  // carry an ObservationTimeInterval and nothing else that identifies when the row belongs -
+  // filterMember is interval.start_time for the same reason distance and altitude use it. Three
+  // of the four have no value field at all: the interval itself is the only measurement, which is
+  // what `durationMinutes` (Task 1's parseIntervalMinutes) exists for - do not go looking for a
+  // valuePath here, there was never one to find.
+  //
+  // sedentary-period has nothing to split on, so it is an ordinary duration type.
+  listable('sedentary-period', 'sedentaryPeriod', 'interval.start_time', ACTIVITY, 'sedentary_minutes', 'minutes', '', {
+    durationMinutes: true,
+  }),
+  // activity-level splits on activityLevelType the same way active-minutes splits on
+  // activityLevel: one metric per level, value is the interval's own length. The enum's
+  // UNSPECIFIED member is deliberately left unnamed - an unspecified level is not a level, and
+  // naming it would produce a metric meaning "we do not know", which mapSamples' skip-unnamed-key
+  // behaviour (see SubDimension's own doc comment) is exactly the right response to.
+  listable('activity-level', 'activityLevel', 'interval.start_time', ACTIVITY, 'activity_level', 'minutes', '', {
+    subDimension: {
+      keyPath: 'activityLevelType',
+      valuePath: '',
+      durationMinutes: true,
+      metricByKey: {
+        SEDENTARY: 'activity_level_sedentary_minutes',
+        LIGHTLY_ACTIVE: 'activity_level_lightly_active_minutes',
+        MODERATELY_ACTIVE: 'activity_level_moderately_active_minutes',
+        VERY_ACTIVE: 'activity_level_very_active_minutes',
+      },
+    },
+  }),
+  // time-in-heart-rate-zone splits on heartRateZoneType the same way active-zone-minutes splits
+  // on heartRateZone, but the zone vocabulary here is Google's newer four-value one (LIGHT,
+  // MODERATE, VIGOROUS, PEAK), not active-zone-minutes' three-value FAT_BURN/CARDIO/PEAK - the two
+  // types are not the same zones under different names, so their metrics are kept separate rather
+  // than merged. HEART_RATE_ZONE_TYPE_UNSPECIFIED is left unnamed for the same reason as above.
+  listable('time-in-heart-rate-zone', 'timeInHeartRateZone', 'interval.start_time', ACTIVITY, 'time_in_heart_rate_zone', 'minutes', '', {
+    subDimension: {
+      keyPath: 'heartRateZoneType',
+      valuePath: '',
+      durationMinutes: true,
+      metricByKey: {
+        LIGHT: 'time_in_heart_rate_zone_light_minutes',
+        MODERATE: 'time_in_heart_rate_zone_moderate_minutes',
+        VIGOROUS: 'time_in_heart_rate_zone_vigorous_minutes',
+        PEAK: 'time_in_heart_rate_zone_peak_minutes',
+      },
+    },
+  }),
+  // swim-lengths-data is the exception in its own group: strokeCount is a real value (int64 as
+  // string, same convention parseNumeric already accepts everywhere else), not a duration, so it
+  // does not get durationMinutes. The split is still on an enum, swimStrokeType, so it still goes
+  // through subDimension - a count sub-dimension looks the same as a duration one except for which
+  // leaf is read. SWIM_STROKE_TYPE_UNSPECIFIED is left unnamed for the same reason as above.
+  listable('swim-lengths-data', 'swimLengthsData', 'interval.start_time', ACTIVITY, 'swim_lengths', 'count', '', {
+    subDimension: {
+      keyPath: 'swimStrokeType',
+      valuePath: 'strokeCount',
+      metricByKey: {
+        FREESTYLE: 'swim_lengths_freestyle_strokes',
+        BACKSTROKE: 'swim_lengths_backstroke_strokes',
+        BREASTSTROKE: 'swim_lengths_breaststroke_strokes',
+        BUTTERFLY: 'swim_lengths_butterfly_strokes',
+      },
+    },
+  }),
+
   listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute', { actions: ['list', 'reconcile'] }),
   // averageHeartRateVariabilityMilliseconds is the day's overall figure. A deep-sleep-only
   // variant also exists, deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds, and was
