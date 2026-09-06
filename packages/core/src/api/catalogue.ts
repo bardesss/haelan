@@ -191,6 +191,27 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('weight', 'weight', 'sample_time.physical_time', METRICS, 'weight', 'grams', 'weightGrams'),
   listable('body-fat', 'bodyFat', 'sample_time.physical_time', METRICS, 'body_fat', 'percent', 'percentage'),
 
+  // Group A: five ordinary scalars added to close the catalogue gap behind the v4 discovery
+  // document. Measured 2026-09-06 against Height, CoreBodyTemperature, BloodGlucose, RunVO2Max
+  // and Altitude; see .superpowers/sdd/2026-09-06-catalogue-catches-up/api-schemas.md. Each is a
+  // number with a unit at an instant or over an interval - exactly what samples and mapSamples
+  // already handle, so no new field or mechanism was needed, only five more listable() calls.
+  // heightMillimeters and gainMillimeters are declared `string` in the schema (int64-as-string,
+  // same convention as heart rate's beatsPerMinute); parseNumeric already accepts that shape.
+  listable('height', 'height', 'sample_time.physical_time', METRICS, 'height', 'millimeters', 'heightMillimeters'),
+  // measurementLocation (armpit, ear, forehead, ...) is context on the reading, not a metric of
+  // its own - same reasoning as the four blood glucose context fields immediately below.
+  listable('core-body-temperature', 'coreBodyTemperature', 'sample_time.physical_time', METRICS, 'core_body_temperature', 'celsius', 'temperatureCelsius'),
+  // Blood glucose carries four context enums on the reading itself - mealType, measurementTiming,
+  // specimen and measurementSource - describing how and when the sample was taken. None becomes
+  // a metric: a reading's meal context is a fact about that reading, and splitting on any of them
+  // would produce four or five sparse series where a household has one number to look at.
+  listable('blood-glucose', 'bloodGlucose', 'sample_time.physical_time', METRICS, 'blood_glucose', 'mg_dl', 'bloodGlucoseMilligramsPerDeciliter'),
+  listable('run-vo2-max', 'runVo2Max', 'sample_time.physical_time', METRICS, 'vo2_max', 'ml_kg_min', 'runVo2Max'),
+  // interval.start_time, not interval.end_time: an altitude gain belongs to when the climb
+  // began, unlike sleep (which is filed at its end - the one documented exception).
+  listable('altitude', 'altitude', 'interval.start_time', ACTIVITY, 'altitude_gain', 'millimeters', 'gainMillimeters'),
+
   listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute', { actions: ['list', 'reconcile'] }),
   // averageHeartRateVariabilityMilliseconds is the day's overall figure. A deep-sleep-only
   // variant also exists, deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds, and was

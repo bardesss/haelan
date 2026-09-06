@@ -58,6 +58,20 @@ export const METRICS: Record<string, MetricSpec> = {
   weight: { aggs: ['last', 'mean'], precision: 1, direction: 'neutral', unit: 'grams' },
   body_fat: { ...SPOT, unit: 'percent' },
 
+  // Group A scalars, same episodic-reading shape as weight and body_fat above. height barely
+  // moves for an adult, so 'neutral' rather than a direction that would imply taller or shorter
+  // is the goal; the same reasoning as body_fat's 'neutral' applies to core_body_temperature and
+  // blood_glucose, whose healthy range is not a monotonic "more/less is better" line. vo2_max is
+  // the one exception with an unambiguous direction: a higher cardiorespiratory fitness reading
+  // is better, the same judgment already made for hrv above.
+  height: { aggs: ['last', 'mean'], precision: 0, direction: 'neutral', unit: 'millimeters' },
+  core_body_temperature: { ...SPOT, unit: 'celsius' },
+  blood_glucose: { aggs: ['last', 'mean'], precision: 0, direction: 'neutral', unit: 'mg_dl' },
+  vo2_max: { aggs: ['last', 'mean'], precision: 1, direction: 'up', unit: 'ml_kg_min' },
+  // Unlike the four spot readings above, an altitude gain accrues over an interval the same way
+  // distance and floors do, so it sums for the day rather than taking the last value.
+  altitude_gain: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'millimeters' },
+
   // One value a day from the API already. last is the whole story; mean would average one number.
   resting_heart_rate: { aggs: ['last'], precision: 0, direction: 'down', unit: 'bpm' },
   daily_hrv: { aggs: ['last'], precision: 0, direction: 'up', unit: 'milliseconds' },
