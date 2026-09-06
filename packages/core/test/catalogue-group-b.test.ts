@@ -10,11 +10,91 @@ const ctx = { personId: 'p1', resolveSource: () => 'watch', rawPayloadId: 'raw1'
 // map-samples.test.ts's active-minutes and active-zone-minutes cases, and map-samples-duration.
 // test.ts's synthetic duration types.
 
+const ACTIVITY_SCOPE = 'googlehealth.activity_and_fitness.readonly'
+
+// Pins each entry's shape field by field rather than a whole-object toEqual, because DataType
+// carries other fields (actions, agg, tier, downsampleToMinute, filterRoot, ...) this test has no
+// opinion about. The point of naming durationMinutes and valuePath explicitly, including inside
+// subDimension, is the asymmetry described below: three of the four are pure durations with an
+// empty leaf, and swim-lengths-data is the one with a real value and no duration.
 describe('the catalogue declares Group B', () => {
-  it('declares sedentary-period, activity-level, time-in-heart-rate-zone and swim-lengths-data', () => {
-    for (const id of ['sedentary-period', 'activity-level', 'time-in-heart-rate-zone', 'swim-lengths-data']) {
-      expect(dataTypeById(id), id).toBeDefined()
-    }
+  it('declares sedentary-period: a plain duration type, no subDimension', () => {
+    const dt = dataTypeById('sedentary-period')!
+    expect({
+      id: dt.id, payloadKey: dt.payloadKey, filterMember: dt.filterMember, scope: dt.scope,
+      metric: dt.metric, target: dt.target, unit: dt.unit, valuePath: dt.valuePath,
+      durationMinutes: dt.durationMinutes, subDimension: dt.subDimension,
+    }).toEqual({
+      id: 'sedentary-period', payloadKey: 'sedentaryPeriod', filterMember: 'interval.start_time',
+      scope: ACTIVITY_SCOPE, metric: 'sedentary_minutes', target: 'samples', unit: 'minutes',
+      valuePath: '', durationMinutes: true, subDimension: undefined,
+    })
+  })
+
+  it('declares activity-level: a duration split by activityLevelType, empty leaf per level', () => {
+    const dt = dataTypeById('activity-level')!
+    expect({
+      id: dt.id, payloadKey: dt.payloadKey, filterMember: dt.filterMember, scope: dt.scope,
+      metric: dt.metric, target: dt.target, unit: dt.unit, valuePath: dt.valuePath,
+      durationMinutes: dt.durationMinutes, subDimension: dt.subDimension,
+    }).toEqual({
+      id: 'activity-level', payloadKey: 'activityLevel', filterMember: 'interval.start_time',
+      scope: ACTIVITY_SCOPE, metric: 'activity_level', target: 'samples', unit: 'minutes',
+      valuePath: '', durationMinutes: undefined,
+      subDimension: {
+        keyPath: 'activityLevelType', valuePath: '', durationMinutes: true,
+        metricByKey: {
+          SEDENTARY: 'activity_level_sedentary_minutes',
+          LIGHTLY_ACTIVE: 'activity_level_lightly_active_minutes',
+          MODERATELY_ACTIVE: 'activity_level_moderately_active_minutes',
+          VERY_ACTIVE: 'activity_level_very_active_minutes',
+        },
+      },
+    })
+  })
+
+  it('declares time-in-heart-rate-zone: a duration split by heartRateZoneType, empty leaf per zone', () => {
+    const dt = dataTypeById('time-in-heart-rate-zone')!
+    expect({
+      id: dt.id, payloadKey: dt.payloadKey, filterMember: dt.filterMember, scope: dt.scope,
+      metric: dt.metric, target: dt.target, unit: dt.unit, valuePath: dt.valuePath,
+      durationMinutes: dt.durationMinutes, subDimension: dt.subDimension,
+    }).toEqual({
+      id: 'time-in-heart-rate-zone', payloadKey: 'timeInHeartRateZone', filterMember: 'interval.start_time',
+      scope: ACTIVITY_SCOPE, metric: 'time_in_heart_rate_zone', target: 'samples', unit: 'minutes',
+      valuePath: '', durationMinutes: undefined,
+      subDimension: {
+        keyPath: 'heartRateZoneType', valuePath: '', durationMinutes: true,
+        metricByKey: {
+          LIGHT: 'time_in_heart_rate_zone_light_minutes',
+          MODERATE: 'time_in_heart_rate_zone_moderate_minutes',
+          VIGOROUS: 'time_in_heart_rate_zone_vigorous_minutes',
+          PEAK: 'time_in_heart_rate_zone_peak_minutes',
+        },
+      },
+    })
+  })
+
+  it('declares swim-lengths-data: a count split by swimStrokeType, real valuePath and no duration', () => {
+    const dt = dataTypeById('swim-lengths-data')!
+    expect({
+      id: dt.id, payloadKey: dt.payloadKey, filterMember: dt.filterMember, scope: dt.scope,
+      metric: dt.metric, target: dt.target, unit: dt.unit, valuePath: dt.valuePath,
+      durationMinutes: dt.durationMinutes, subDimension: dt.subDimension,
+    }).toEqual({
+      id: 'swim-lengths-data', payloadKey: 'swimLengthsData', filterMember: 'interval.start_time',
+      scope: ACTIVITY_SCOPE, metric: 'swim_lengths', target: 'samples', unit: 'count',
+      valuePath: '', durationMinutes: undefined,
+      subDimension: {
+        keyPath: 'swimStrokeType', valuePath: 'strokeCount', durationMinutes: undefined,
+        metricByKey: {
+          FREESTYLE: 'swim_lengths_freestyle_strokes',
+          BACKSTROKE: 'swim_lengths_backstroke_strokes',
+          BREASTSTROKE: 'swim_lengths_breaststroke_strokes',
+          BUTTERFLY: 'swim_lengths_butterfly_strokes',
+        },
+      },
+    })
   })
 })
 

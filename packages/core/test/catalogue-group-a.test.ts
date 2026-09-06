@@ -14,14 +14,17 @@ describe('catalogue group A: five scalars', () => {
   it('declares height, an instant reading in millimeters', () => {
     expect(dataTypeById('height')).toMatchObject({
       id: 'height', payloadKey: 'height', filterMember: 'sample_time.physical_time',
-      target: 'samples', unit: 'millimeters', valuePath: 'heightMillimeters',
+      scope: 'googlehealth.health_metrics_and_measurements.readonly',
+      target: 'samples', metric: 'height', unit: 'millimeters', valuePath: 'heightMillimeters',
     })
   })
 
   it('declares core-body-temperature, an instant reading in celsius', () => {
     expect(dataTypeById('core-body-temperature')).toMatchObject({
       id: 'core-body-temperature', payloadKey: 'coreBodyTemperature',
-      filterMember: 'sample_time.physical_time', target: 'samples',
+      filterMember: 'sample_time.physical_time',
+      scope: 'googlehealth.health_metrics_and_measurements.readonly',
+      target: 'samples', metric: 'core_body_temperature',
       unit: 'celsius', valuePath: 'temperatureCelsius',
     })
   })
@@ -29,7 +32,9 @@ describe('catalogue group A: five scalars', () => {
   it('declares blood-glucose, an instant reading in mg/dL', () => {
     expect(dataTypeById('blood-glucose')).toMatchObject({
       id: 'blood-glucose', payloadKey: 'bloodGlucose',
-      filterMember: 'sample_time.physical_time', target: 'samples',
+      filterMember: 'sample_time.physical_time',
+      scope: 'googlehealth.health_metrics_and_measurements.readonly',
+      target: 'samples', metric: 'blood_glucose',
       unit: 'mg_dl', valuePath: 'bloodGlucoseMilligramsPerDeciliter',
     })
   })
@@ -37,7 +42,9 @@ describe('catalogue group A: five scalars', () => {
   it('declares run-vo2-max, an instant reading in ml/kg/min', () => {
     expect(dataTypeById('run-vo2-max')).toMatchObject({
       id: 'run-vo2-max', payloadKey: 'runVo2Max',
-      filterMember: 'sample_time.physical_time', target: 'samples',
+      filterMember: 'sample_time.physical_time',
+      scope: 'googlehealth.health_metrics_and_measurements.readonly',
+      target: 'samples', metric: 'vo2_max',
       unit: 'ml_kg_min', valuePath: 'runVo2Max',
     })
   })
@@ -45,7 +52,9 @@ describe('catalogue group A: five scalars', () => {
   it('declares altitude, an interval reading in millimeters attributed to the interval start', () => {
     expect(dataTypeById('altitude')).toMatchObject({
       id: 'altitude', payloadKey: 'altitude',
-      filterMember: 'interval.start_time', target: 'samples',
+      filterMember: 'interval.start_time',
+      scope: 'googlehealth.activity_and_fitness.readonly',
+      target: 'samples', metric: 'altitude_gain',
       unit: 'millimeters', valuePath: 'gainMillimeters',
     })
   })
