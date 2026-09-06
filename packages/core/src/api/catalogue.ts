@@ -33,6 +33,12 @@ export interface SubDimension {
   keyPath: string
   valuePath: string
   metricByKey: Readonly<Record<string, string>>
+  /**
+   * The value is the interval's own length rather than a leaf read through `valuePath`. Exists
+   * because some enum-keyed types (an activity period keyed by its kind, say) carry no numeric
+   * field at all - the interval itself is the only measurement.
+   */
+  durationMinutes?: true
 }
 
 export const ACTIONS = ['list', 'rollUp', 'dailyRollUp', 'reconcile'] as const
@@ -81,6 +87,12 @@ export interface DataType {
   mappingDeferred?: true
   /** Set when a dimension in the payload becomes part of the metric name instead of a column. */
   subDimension?: SubDimension
+  /**
+   * The value is the interval's own length rather than a `valuePath` read. Exists because four
+   * of the sixteen types the catalogue is missing carry no other field - sedentary-period has
+   * nothing but an interval - so the idea is expressed once here instead of once per type.
+   */
+  durationMinutes?: true
 }
 
 // agg records how we computed the row, not how a rollup should combine it. A value the source
