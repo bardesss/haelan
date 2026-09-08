@@ -57,6 +57,34 @@ export const sessionSegments = sqliteTable('session_segments', {
   endMs: integer('end_ms').notNull(),
 }, (t) => [index('session_segments_session').on(t.sessionId, t.startMs)])
 
+// Tier 2, not events. events is tier 1, user-authored, and survives every rebuild; an
+// observation is machine-written and a rebuild deletes and regenerates it. One table holding
+// both would force a rebuild to delete some rows and keep others, let a person delete something
+// the next sync recreates, and put machine-written rows on the Notes page as though somebody had
+// typed them. That is why ObservationStore.deleteForPerson takes a person rather than a row: it
+// exists for the rebuild path, which events has no equivalent of. Spec section 3, group C.
+export const observations = sqliteTable('observations', {
+  id: text('id').primaryKey(),
+  personId: text('person_id').notNull().references(() => people.id),
+  sourceId: text('source_id').notNull().references(() => sources.id),
+  // 'mood', 'symptom', 'ovulation_test', ... — the declared five, not a free string like events.kind.
+  kind: text('kind').notNull(),
+  startedAtMs: integer('started_at_ms').notNull(),
+  startedAtOffsetMinutes: integer('started_at_offset_minutes').notNull(),
+  // Null for a point observation. Must round-trip as null, not zero: a point has no end, and a
+  // fabricated 0 would read back as an interval of length zero.
+  endedAtMs: integer('ended_at_ms'),
+  endedAtOffsetMinutes: integer('ended_at_offset_minutes'),
+  // The same local-day rule every tier-2 row follows.
+  localDate: text('local_date').notNull(),
+  // Text, not a number: these are categories, and coercing "luteal" or "fatigue" to a number
+  // would invent an ordering nothing measured.
+  value: text('value'),
+  rawPayloadId: text('raw_payload_id').references(() => rawPayloads.id),
+}, (t) => [
+  index('observations_person_date').on(t.personId, t.localDate),
+])
+
 export const daily = sqliteTable('daily', {
   personId: text('person_id').notNull().references(() => people.id),
   localDate: text('local_date').notNull(),
