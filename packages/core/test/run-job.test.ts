@@ -12,7 +12,7 @@ import { runJob } from '../src/sync/runJob.ts'
 import { dayWindows } from '../src/sync/windows.ts'
 import { RevokedError } from '../src/api/tokens.ts'
 import { samplePoint, sleepPoint, body } from '../src/testing/payloads.ts'
-import { samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
+import { observations, samples, sessions, sources, syncState } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 const AMS = 'Europe/Amsterdam'
@@ -187,6 +187,51 @@ describe('runJob', () => {
     const state = ctx.db.select().from(syncState).all()[0]
     expect(state?.consecutiveFailures).toBe(0)
     expect(state?.lastError).toBeNull()
+  })
+
+  it('upserts an observation on a second sync over the same window, so a re-fetched point does not duplicate', async () => {
+    // The third target, alongside the samples and sessions cases above. mapObservations derives
+    // id from the natural key (person, source, type, instant, index), so a re-fetch of this same
+    // window remaps to the same id on the second run - which is exactly the case a plain insert
+    // cannot survive twice.
+    const point = () => samplePoint({
+      payloadKey: 'ovulationTest', valuePath: 'result', value: 'positive', physicalTime: '2026-08-18T10:00:00Z',
+    })
+    // A single local day, not the shared full-UTC-day window: that one spans two AMS calendar
+    // days and would fetch (and therefore map) this same point twice on the very first sync,
+    // which is a different thing from the second-sync duplication this test is checking.
+    const args = {
+      personId: 'p1', dataType: dataTypeById('ovulation-test')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-18T22:00:00Z'),
+    }
+    const rows = () => ctx.db.select().from(observations).all()
+
+    const first = await runJob({ ...args, deps: build(vi.fn().mockImplementation(async () => new Response(body([point()]), { status: 200 }))) })
+    expect(first.rowsWritten).toBe(1)
+    const after = rows()
+    // A count is what tells a working upsert apart from a silent duplicate; toHaveLength alone
+    // is the assertion a plain-insert regression would still pass on the first sync.
+    expect(after).toHaveLength(1)
+    expect(after[0]).toEqual({
+      id: after[0]?.id,
+      personId: 'p1',
+      sourceId: after[0]?.sourceId,
+      kind: 'ovulation_test',
+      startedAtMs: Date.parse('2026-08-18T10:00:00Z'),
+      startedAtOffsetMinutes: 120,
+      endedAtMs: null,
+      endedAtOffsetMinutes: null,
+      localDate: '2026-08-18',
+      value: 'positive',
+      rawPayloadId: after[0]?.rawPayloadId,
+    })
+
+    const second = await runJob({ ...args, deps: build(vi.fn().mockImplementation(async () => new Response(body([point()]), { status: 200 }))) })
+    expect(second.rowsWritten).toBe(1)
+    // Same window, same point, mapped to the same id: the row count must stay at one rather than
+    // growing to two, and the row itself - not merely its count - must still be whole afterwards.
+    expect(rows()).toHaveLength(1)
+    expect(rows()[0]).toEqual(after[0])
   })
 
   it('advances the high water mark on success', async () => {

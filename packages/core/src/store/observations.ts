@@ -29,6 +29,14 @@ export class ObservationStore {
     this.#db = db
   }
 
+  // runJob re-fetches a trailing window on every sync, so the same point is re-mapped on the
+  // next run and arrives here with the id it had before - mapObservations' stableId is derived
+  // from the natural key, not random, for exactly this reason. A plain insert would throw a
+  // UNIQUE violation on that repeat; upserting on id is what makes a re-fetch a no-op instead of
+  // a failed window. id is also the whole target: the array index folded into it means a
+  // reordered array (Google returning moods[] in a different order between fetches) swaps which
+  // id gets which value rather than colliding two ids, so this upsert corrects the swapped row
+  // in place rather than ever needing to delete one.
   writeMany(rows: readonly ObservationRow[]): void {
     for (const row of rows) {
       this.#db.insert(observations).values({
@@ -43,6 +51,20 @@ export class ObservationStore {
         localDate: row.localDate,
         value: row.value,
         rawPayloadId: row.rawPayloadId,
+      }).onConflictDoUpdate({
+        target: observations.id,
+        set: {
+          personId: row.personId,
+          sourceId: row.sourceId,
+          kind: row.kind,
+          startedAtMs: row.startedAtMs,
+          startedAtOffsetMinutes: row.startedAtOffsetMinutes,
+          endedAtMs: row.endedAtMs,
+          endedAtOffsetMinutes: row.endedAtOffsetMinutes,
+          localDate: row.localDate,
+          value: row.value,
+          rawPayloadId: row.rawPayloadId,
+        },
       }).run()
     }
   }
