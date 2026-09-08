@@ -127,9 +127,11 @@ const ECG = 'googlehealth.ecg.readonly'
 const IRN = 'googlehealth.irn.readonly'
 const NUTRITION = 'googlehealth.nutrition.readonly'
 // The three most sensitive categories, each confirmed on the console's Data Access page on
-// 2026-09-08 with Google's own description. Together with nutrition, four of the scopes this app
-// requests are absent from the discovery document's `auth.oauth2.scopes` block - which is why that
-// block is not treated as a list of what exists.
+// 2026-09-08 with Google's own description - and each absent from the discovery document's
+// `auth.oauth2.scopes` block when it was read two days earlier, which is why that block is not
+// treated as a list of what exists. A re-read on 2026-09-08 found the document had grown from 18
+// scopes to 21 and now names all three; `googlehealth.nutrition.readonly` is still missing from it
+// and still real. The document corrects itself, so its silence dates rather than disproves.
 const REPRODUCTIVE = 'googlehealth.reproductive_health.readonly'
 const SYMPTOMS = 'googlehealth.logged_symptoms.readonly'
 const MINDFULNESS = 'googlehealth.mindfulness.readonly'
