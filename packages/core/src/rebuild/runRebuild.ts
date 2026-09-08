@@ -1,5 +1,6 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
+import { checkpointTruncate } from '../db/open.ts'
 import {
   daily, observations, samples, sessions, sources, sourceAliases, sourcePriority,
 } from '../db/schema/index.ts'
@@ -235,6 +236,15 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       })
       continue
     }
+
+    // After the commit, never inside it: a checkpoint cannot run within a transaction, and the
+    // whole point is to reclaim the log that transaction just produced. Per person rather than
+    // once at the end, so a five person household never holds five people's worth of log at once.
+    //
+    // The return value is deliberately unused. A busy checkpoint means a reader held the file and
+    // the space will be reclaimed by the next one; this person's rows are committed either way,
+    // and failing their rebuild over a disk tidy-up would be a far worse outcome than a large file.
+    checkpointTruncate(input.db)
 
     report.people.push(personReport)
     input.onPersonDone?.(personReport)
