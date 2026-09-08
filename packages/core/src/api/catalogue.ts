@@ -93,6 +93,16 @@ export interface DataType {
    * nothing but an interval - so the idea is expressed once here instead of once per type.
    */
   durationMinutes?: true
+  /**
+   * Extra tables the same payload also writes to, beyond `target`. Empty for every type today:
+   * three catalogue entries sharing one `payloadKey` was the alternative and was rejected, since
+   * each would get its own `sync_state` row and fetch independently, tripling API calls and
+   * archive writes for one dataset. Exists for Task 8's ECG payload, which writes a session, a
+   * sample and an observation from a single fetch. Each mapper's own-target guard reads this
+   * ("target is mine, or `alsoTargets` includes mine") so a type can name a foreign mapper
+   * without that mapper refusing it as ConfigError.
+   */
+  alsoTargets?: readonly MappingTarget[]
 }
 
 // agg records how we computed the row, not how a rollup should combine it. A value the source

@@ -165,6 +165,20 @@ describe('mapSessions', () => {
     expect(() => mapSessions({ dataType: spo2, ...ctx, body: body([]) })).toThrow(/not a session type/)
   })
 
+  // Task 5's alsoTargets generalisation: a type may write here as an extra target, not only as
+  // its primary one, without the guard refusing it as foreign. And unchanged for a type that
+  // does not declare it, which is every type in the catalogue today.
+  it('accepts a type whose primary target is foreign when alsoTargets names sessions', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const hybrid = { ...spo2, target: 'samples' as const, alsoTargets: ['sessions'] as const }
+    expect(() => mapSessions({ dataType: hybrid, ...ctx, body: body([]) })).not.toThrow()
+  })
+
+  it('still refuses a foreign target with no alsoTargets naming this one, unchanged from before', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    expect(spo2.alsoTargets).toBeUndefined()
+  })
+
   it('attributes each session to its own point source rather than one source for the whole body', () => {
     const fitbitNight = sleepPoint({
       name: 'users/me/dataTypes/sleep/dataPoints/fitbit',

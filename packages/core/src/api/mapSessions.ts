@@ -48,7 +48,11 @@ function localDateOfEnd(endMs: number, endOffsetMinutes: number): string {
 
 export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], segments: SegmentRow[] } {
   const t = input.dataType
-  if (t.target !== 'sessions') throw new ConfigError(`${t.id} is not a session type`)
+  // A type may write here as its primary target, or as an extra one named in alsoTargets (Task
+  // 8's ECG payload does both) - either is "mine", and only neither is a foreign type.
+  if (t.target !== 'sessions' && !t.alsoTargets?.includes('sessions')) {
+    throw new ConfigError(`${t.id} is not a session type`)
+  }
 
   let parsed: unknown
   try {
