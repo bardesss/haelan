@@ -334,6 +334,33 @@ export const DATA_TYPES: readonly DataType[] = [
   // a fuller mapping to be designed against.
   listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'energy.kcal', { mappingDeferred: true }),
 
+  // food replaces the group D the spec described, which named the wrong type: the spec expected
+  // Food to carry the macronutrients and map to samples, but Food has no time field at all - no
+  // sampleTime, no interval, measured 2026-09-06 against the schema in
+  // .superpowers/sdd/2026-09-06-catalogue-catches-up/api-schemas.md. It is a food *definition* -
+  // displayName, brand, accessLevel, servings, nutrients and three energy figures - not an
+  // occurrence of eating one, and nothing without a clock can become a dated row. mappingDeferred
+  // here is therefore permanent, not a placeholder for later design work the way nutrition-log's
+  // is: there is no future payload shape that gives this type a clock. It is declared but never
+  // fetched - see the actions note below - and kept rather than left out of the catalogue entirely
+  // because NutritionLog.food references a Food by name, and the entry is the record of what that
+  // reference points at and why nothing resolves it yet.
+  // food-measurement-unit, a pure global lookup table with no per-person data point at all, is
+  // excluded outright rather than deferred - it is a different kind of thing than either of these.
+  //
+  // filterMember is null and actions is empty rather than ['list']: every list call this codebase
+  // makes is a windowed date-range fetch (buildFilter in client.ts), and there is no field here to
+  // build that window from. Declaring 'list' anyway would not fetch anything - it would throw the
+  // moment sync actually tried. dueJobs (syncState.ts) skips a type with no actions, so this entry
+  // is catalogued and scoped without being scheduled, which is the honest state until food gets a
+  // fetch-by-reference path of its own - out of scope here.
+  //
+  // metric and unit exist only to satisfy metrics.test.ts's completeness guard over every
+  // samples-target entry (mapSamples needs target: 'samples' to return [] rather than throw for a
+  // deferred type, per its own ConfigError guard) - mapSamples' mappingDeferred check returns
+  // before either is ever read, the same as nutrition-log's own 'nutrition' spec never fires today.
+  listable('food', 'food', null, NUTRITION, 'food', 'kcal', '', { actions: [], mappingDeferred: true }),
+
   // Group F: six data types named by neither the release notes nor the drift check - the drift
   // check sees only rollup-capable types named in prose. Measured 2026-09-06 against VO2Max,
   // DailyVo2Max, BasalEnergyBurned, DailySleepTemperatureDerivations,
