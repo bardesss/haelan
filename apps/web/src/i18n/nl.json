@@ -599,10 +599,16 @@
       "saving": "Bezig met opslaan",
       "submit": "Doorgaan"
     },
+    "redirect": {
+      "thisMachine": "Deze machine",
+      "literalLoopback": "Deze machine, letterlijke loopback",
+      "proxyOrTailscale": "Reverse proxy of Tailscale"
+    },
     "google": {
       "title": "Google verbinden",
       "intro": "Dit is de ene stap die niet te automatiseren is. Google biedt geen API om een OAuth-client aan te maken; die wordt eenmalig aangemaakt in de console en hier weer geplakt.",
-      "step1": "Open console.cloud.google.com en maak een project aan, of kies een bestaand project.",
+      "step1Before": "Open",
+      "step1After": "en maak een project aan, of kies een bestaand project.",
       "step2": "Schakel onder APIs en services de Google Health API in.",
       "step3": "Configureer het OAuth-toestemmingsscherm en declareer de {{count}} scopes hieronder, ook de datatypen die nu niet gewenst zijn: declareren gebeurt eenmalig, toestemming geven per persoon, en een overgeslagen scope betekent later een tweede bezoek. De console verdeelt ze zelf in gevoelige en beperkte groepen; dat is normaal.",
       "allScopesLabel": "Alles",

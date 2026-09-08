@@ -599,10 +599,16 @@
       "saving": "Saving",
       "submit": "Continue"
     },
+    "redirect": {
+      "thisMachine": "This machine",
+      "literalLoopback": "This machine, literal loopback",
+      "proxyOrTailscale": "Reverse proxy or Tailscale"
+    },
     "google": {
       "title": "Connect Google",
       "intro": "This is the one step nobody can automate. Google exposes no API for creating an OAuth client, so you create one once, in the console, and paste it back here.",
-      "step1": "Open console.cloud.google.com and create a project, or pick an existing one.",
+      "step1Before": "Open",
+      "step1After": "and create a project, or pick an existing one.",
       "step2": "Under APIs and services, enable the Google Health API.",
       "step3": "Configure the OAuth consent screen and declare the {{count}} scopes listed below, even the data types you do not want today: declaring is once, granting is per person, and a scope you skip now means a second visit later. The console sorts them into sensitive and restricted groups by itself, which is expected.",
       "allScopesLabel": "All of them",

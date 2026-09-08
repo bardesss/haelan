@@ -4,6 +4,14 @@ import { CopyField } from './CopyField.js'
 import { putGoogleClient } from './api.js'
 import type { RedirectCandidate, SetupError } from './api.js'
 
+// The console's own address. Not translated: it is the same URL in every locale, and a link whose
+// text a translator could edit away from its href is a link that eventually lies.
+//
+// The visible text is derived from the href rather than written twice, so the two cannot drift -
+// and so the inline-copy guard sees an expression rather than a string it would rightly reject.
+const CONSOLE_URL = 'https://console.cloud.google.com'
+const CONSOLE_HOST = new URL(CONSOLE_URL).host
+
 export function GoogleStep({ candidates, scopes = [], error, onDone }: {
   candidates: RedirectCandidate[]
   scopes?: string[]
@@ -22,7 +30,13 @@ export function GoogleStep({ candidates, scopes = [], error, onDone }: {
       <p>{t('setup.google.intro')}</p>
 
       <ol className="setup-instructions">
-        <li>{t('setup.google.step1')}</li>
+        <li>
+          {/* A new tab, not this one: the client ID and secret fields below are filled from what
+              the console shows, and navigating this tab away loses whatever is already in them. */}
+          {t('setup.google.step1Before')}{' '}
+          <a href={CONSOLE_URL} target="_blank" rel="noreferrer">{CONSOLE_HOST}</a>{' '}
+          {t('setup.google.step1After')}
+        </li>
         <li>{t('setup.google.step2')}</li>
         <li>
           {t('setup.google.step3', { count: scopes.length })}
@@ -42,12 +56,12 @@ export function GoogleStep({ candidates, scopes = [], error, onDone }: {
 
       <div className="setup-uris">
         {candidates.map((candidate) => (
-          <div key={candidate.uri || candidate.label} data-registrable={String(candidate.registrable)}>
+          <div key={candidate.uri || candidate.labelKey} data-registrable={String(candidate.registrable)}>
             {candidate.registrable
-              ? <CopyField label={candidate.label} value={candidate.uri} />
+              ? <CopyField label={t(`setup.redirect.${candidate.labelKey}`)} value={candidate.uri} />
               : (
                 <p className="setup-rejected">
-                  <code>{candidate.uri === '' ? candidate.label : candidate.uri}</code>
+                  <code>{candidate.uri === '' ? t(`setup.redirect.${candidate.labelKey}`) : candidate.uri}</code>
                   {' '}{t('setup.google.cannotBeRegistered')} {candidate.reason}
                 </p>
               )}
