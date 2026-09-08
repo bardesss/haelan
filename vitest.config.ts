@@ -1,4 +1,17 @@
+import { cpus } from 'node:os'
 import { defineConfig } from 'vitest/config'
+
+/**
+ * Six was measured on a 22-core development machine, where it is both faster and more reliable
+ * than the one-fork-per-core default. Six on a CI runner with four cores is the opposite: it is
+ * oversubscription, which is the very thing the cap exists to prevent, and it duly timed out a
+ * 61ms test at 64s on one leg of the matrix while the other leg passed.
+ *
+ * So the cap is now the smaller of that measurement and what the machine can actually carry.
+ * Leaving one core free matters more than the exact fraction: the runner still has a main process,
+ * and a suite that saturates every core makes its own timing budgets meaningless.
+ */
+const WORKERS = Math.max(1, Math.min(6, cpus().length - 1))
 
 export default defineConfig({
   test: {
@@ -32,9 +45,9 @@ export default defineConfig({
     // bottleneck is contention rather than CPU. Raising testTimeout instead would have bought the
     // same green run by blinding the hang-detector for all 2500 tests.
     //
-    // Six is measured, not chosen for elegance. If this moves, re-measure - and re-measure on the
-    // slowest machine that has to run it, not the fastest.
-    maxWorkers: 6,
+    // See WORKERS above: the measurement is a ceiling, not the number itself, because the slowest
+    // machine that has to run this suite is a CI runner and not the one it was measured on.
+    maxWorkers: WORKERS,
     // Sets globalThis.IS_REACT_ACT_ENVIRONMENT, which is React's switch for "this is a test".
     // Nothing set it before, and both halves of that were costing us something.
     //
