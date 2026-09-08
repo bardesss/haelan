@@ -1,10 +1,11 @@
 import { and, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily, samples, sessions, sessionSegments } from '../db/schema/index.ts'
+import { daily, observations, samples, sessions, sessionSegments } from '../db/schema/index.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { mapSessions } from '../api/mapSessions.ts'
 import { mapRollups } from '../api/mapRollups.ts'
+import { mapObservations } from '../api/mapObservations.ts'
 import { localDateOf } from '../derive/localDay.ts'
 import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { ArchivedPayload, RawArchive } from '../store/rawArchive.ts'
@@ -23,6 +24,7 @@ export interface ReplayCounts {
   sessions: number
   segments: number
   providerDaily: number
+  observations: number
   /** Payloads no current mapper claims. Reported rather than thrown, see below. */
   unmappable: number
   /** Every local date a replayed row landed on, which is what needs deriving after. */
@@ -39,7 +41,8 @@ export interface ReplayCounts {
  */
 export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const counts: ReplayCounts = {
-    samples: 0, sessions: 0, segments: 0, providerDaily: 0, unmappable: 0, localDates: [],
+    samples: 0, sessions: 0, segments: 0, providerDaily: 0, observations: 0,
+    unmappable: 0, localDates: [],
   }
   const localDates = new Set<string>()
   const resolveSource = (dataSource: unknown): string =>
@@ -120,6 +123,38 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
       continue
     }
 
+    if (t.target === 'observations') {
+      // One mapObservations call per page, the same granularity writeObservations in runJob.ts
+      // uses. Unlike samples there is no coverage or aggregate to get wrong by mapping a page on
+      // its own, so there is no reason to reassemble fetch episodes the way the samples path below
+      // has to.
+      for (const page of group.pages) {
+        const rows = mapObservations({
+          dataType: t, personId: input.personId, resolveSource,
+          body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+        })
+        for (const row of rows) {
+          tx.insert(observations).values(row).onConflictDoUpdate({
+            target: observations.id,
+            set: {
+              personId: row.personId,
+              sourceId: row.sourceId,
+              kind: row.kind,
+              startedAtMs: row.startedAtMs,
+              startedAtOffsetMinutes: row.startedAtOffsetMinutes,
+              endedAtMs: row.endedAtMs,
+              endedAtOffsetMinutes: row.endedAtOffsetMinutes,
+              localDate: row.localDate,
+              value: row.value,
+              rawPayloadId: row.rawPayloadId,
+            },
+          }).run()
+          localDates.add(row.localDate)
+        }
+      }
+      continue
+    }
+
     // One mapWindowSamples call per fetch episode, oldest first, not one call over the whole
     // group. Pagination pages of a single fetch must still be mapped together, which is the
     // reason groupIntoWindows exists at all, so this splits WITHIN a group rather than reverting
@@ -171,6 +206,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
     .from(daily)
     .where(and(eq(daily.personId, input.personId), eq(daily.source, PROVIDER_SOURCE)))
     .get()?.n ?? 0
+  counts.observations = tx.select({ n: sql<number>`count(*)` })
+    .from(observations).where(eq(observations.personId, input.personId)).get()?.n ?? 0
 
   counts.localDates = [...localDates].sort()
   return counts
