@@ -61,8 +61,11 @@ const SPEC_BY_ID: Readonly<Record<string, ObservationSpec>> = {
   // irregular-rhythm-notification's) is the clock; resultClassification is a single enum leaf,
   // same shape as ovulation-test's result.
   // Keyed by data type id, which is `electrocardiogram` - the API's own collection name - while
-  // the session kind and the scope are both spelled `ecg`. A miss here is silent: the loop skips a
-  // type it has no spec for, so the wrong key writes zero rows rather than failing.
+  // the session kind and the scope are both spelled `ecg`. A miss here is not silent: mapObservations
+  // throws ConfigError for a target: 'observations' (or alsoTargets-observations) type with no
+  // entry here, since every such type is one of the five below by construction of the catalogue,
+  // so a miss means this map fell out of sync with catalogue.ts rather than a payload shape to
+  // shrug off.
   electrocardiogram: { kind: 'ecg_classification', clock: 'interval', value: 'field', valuePath: 'resultClassification' },
 }
 

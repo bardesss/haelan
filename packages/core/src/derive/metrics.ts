@@ -36,9 +36,9 @@ export const METRICS: Record<string, MetricSpec> = {
   hydration: { aggs: ['sum'], precision: 0, direction: 'up', unit: 'milliliters' },
   nutrition: { ...TOTAL, unit: 'kcal' },
   // food (catalogue.ts) is mappingDeferred with no clock to ever produce a row from, so this spec
-  // is never read by a rollup - it exists only because this test file's own completeness guard
-  // holds every samples-target catalogue entry to a spec, deferred or not, the same as nutrition
-  // just above.
+  // is never read by a rollup - it exists only because metrics.test.ts's "declares every sample
+  // metric the data type catalogue names" guard holds every samples-target catalogue entry to a
+  // spec, deferred or not, the same as nutrition just above.
   food: { aggs: ['last'], precision: 0, direction: 'neutral', unit: 'kcal' },
 
   // One metric per activity level and per heart rate zone. The sub-dimension is in the name,
