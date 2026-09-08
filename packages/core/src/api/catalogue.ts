@@ -457,7 +457,7 @@ export const DATA_TYPES: readonly DataType[] = [
   // alsoTargets sends the same point on to two more mappers: mapSamples writes beatsPerMinuteAvg
   // (this entry's own metric/unit/valuePath exist to serve that write - mapSessions reads none of
   // them), and mapObservations writes resultClassification (mapObservations.ts's own SPEC_BY_ID
-  // overrides its valuePath for 'ecg', since this entry's valuePath already names a different
+  // overrides its valuePath for 'electrocardiogram', since this entry's valuePath already names a different
   // leaf for mapSamples to read).
   //
   // waveformSamples[], samplingFrequencyHertz, millivoltsScalingFactor, leadNumber and
@@ -465,7 +465,12 @@ export const DATA_TYPES: readonly DataType[] = [
   // a thirty-second trace at the declared sampling frequency is thousands of points, nothing in
   // this app draws one, and writing it into samples would multiply the largest table in the
   // database for a chart that does not exist.
-  listable('ecg', 'electrocardiogram', 'interval.start_time', ECG, 'ecg_heart_rate', 'bpm', 'beatsPerMinuteAvg', {
+  // The id is `electrocardiogram`, not `ecg`, and the difference is a 404 rather than a preference:
+  // `id` is the URL path segment (`/users/me/dataTypes/{id}/dataPoints`) and the root of every
+  // filter member, and the discovery document names the collection explicitly - "Data for points in
+  // the `electrocardiogram` session data type collection". The scope is `googlehealth.ecg.readonly`
+  // and the session kind is 'ecg'; neither is the data type's own name.
+  listable('electrocardiogram', 'electrocardiogram', 'interval.start_time', ECG, 'ecg_heart_rate', 'bpm', 'beatsPerMinuteAvg', {
     target: 'sessions',
     alsoTargets: ['samples', 'observations'],
   }),

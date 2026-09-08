@@ -13,7 +13,7 @@ import { body } from '../src/testing/payloads.ts'
 // invented. waveformSamples is non-empty on purpose: an empty array would let a mapper that
 // walked it pass by accident, proving nothing about the assertion below.
 const ctx = { personId: 'p1', resolveSource: () => 's1', rawPayloadId: 'r1' }
-const ecg = dataTypeById('ecg')!
+const ecg = dataTypeById('electrocardiogram')!
 
 const aReading = {
   name: 'users/me/dataTypes/electrocardiogram/dataPoints/reading1',
@@ -41,7 +41,7 @@ const aReading = {
 describe('catalogue: ecg declares itself correctly', () => {
   it('is session-shaped and names the two extra tables the same payload also writes', () => {
     expect(ecg).toMatchObject({
-      id: 'ecg', payloadKey: 'electrocardiogram', filterMember: 'interval.start_time',
+      id: 'electrocardiogram', payloadKey: 'electrocardiogram', filterMember: 'interval.start_time',
       scope: 'googlehealth.ecg.readonly',
       target: 'sessions', alsoTargets: ['samples', 'observations'],
       metric: 'ecg_heart_rate', unit: 'bpm', valuePath: 'beatsPerMinuteAvg',

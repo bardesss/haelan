@@ -266,7 +266,7 @@ describe('runJob', () => {
     // A single local day, the same pattern the ovulation-test upsert test above uses, so the one
     // point is fetched (and therefore mapped) exactly once rather than by two overlapping windows.
     const args = {
-      personId: 'p1', dataType: dataTypeById('ecg')!, timezone: AMS,
+      personId: 'p1', dataType: dataTypeById('electrocardiogram')!, timezone: AMS,
       fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-18T22:00:00Z'),
     }
     const queue = new DeriveQueue(ctx.db)

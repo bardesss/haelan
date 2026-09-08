@@ -60,7 +60,10 @@ const SPEC_BY_ID: Readonly<Record<string, ObservationSpec>> = {
   // Task 8: the ECG payload's own interval (SessionTimeInterval, same shape as
   // irregular-rhythm-notification's) is the clock; resultClassification is a single enum leaf,
   // same shape as ovulation-test's result.
-  ecg: { kind: 'ecg_classification', clock: 'interval', value: 'field', valuePath: 'resultClassification' },
+  // Keyed by data type id, which is `electrocardiogram` - the API's own collection name - while
+  // the session kind and the scope are both spelled `ecg`. A miss here is silent: the loop skips a
+  // type it has no spec for, so the wrong key writes zero rows rather than failing.
+  electrocardiogram: { kind: 'ecg_classification', clock: 'interval', value: 'field', valuePath: 'resultClassification' },
 }
 
 export function mapObservations(input: MapObservationsInput): ObservationRow[] {

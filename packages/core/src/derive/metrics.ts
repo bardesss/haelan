@@ -154,7 +154,7 @@ export const METRICS: Record<string, MetricSpec> = {
 
   // Task 8: the ECG session's own averaged rate, written to samples via alsoTargets rather than
   // derived from sessions the way sleep/workout are - unlike those two, ecg is a real DATA_TYPES
-  // metric (catalogue.ts's 'ecg' entry, target 'sessions'), so it needs an entry here for
+  // metric (catalogue.ts's 'electrocardiogram' entry, target 'sessions'), so it needs an entry here for
   // rollUpDay to aggregate it at all. Episodic like weight/body_fat rather than continuous like
   // heart_rate, so 'last'/'mean' and 'neutral': a single measured session's rate is not read as
   // simply healthier when lower, the same reasoning as weight's own 'neutral'.
