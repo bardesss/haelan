@@ -1,4 +1,17 @@
+import { cpus } from 'node:os'
 import { defineConfig } from 'vitest/config'
+
+/**
+ * Six was measured on a 22-core development machine, where it is both faster and more reliable
+ * than the one-fork-per-core default. Six on a CI runner with four cores is the opposite: it is
+ * oversubscription, which is the very thing the cap exists to prevent, and it duly timed out a
+ * 61ms test at 64s on one leg of the matrix while the other leg passed.
+ *
+ * So the cap is now the smaller of that measurement and what the machine can actually carry.
+ * Leaving one core free matters more than the exact fraction: the runner still has a main process,
+ * and a suite that saturates every core makes its own timing budgets meaningless.
+ */
+const WORKERS = Math.max(1, Math.min(6, cpus().length - 1))
 
 export default defineConfig({
   test: {
@@ -17,6 +30,24 @@ export default defineConfig({
     // roughly one fork per core: how much CPU any one test gets depends on what else is running,
     // which is why a test with less than a 2x margin here eventually flakes.
     testTimeout: 20_000,
+    // Capped, because uncapped was both slower and unreliable.
+    //
+    // vitest defaults to roughly one fork per core, which is 22 on this machine. A lot of this
+    // suite is server tests that each create a temp directory, open SQLite, run every migration,
+    // then gzip and commit a payload per window across every listable data type. Twenty-two of
+    // those at once contend for one disk, and the contention is superlinear: measured, an
+    // ordinary 1.7s test ("delivers progress events to a subscriber and stops after unsubscribe")
+    // exceeded the 20s budget above during a full run - a 12x stretch, where the comment on that
+    // budget assumed 2x was the danger line.
+    //
+    // Measured on the full suite: uncapped 260s with a test failing, capped at 6 workers 241s with
+    // none of that class failing. Fewer workers is FASTER here, which is the tell that the
+    // bottleneck is contention rather than CPU. Raising testTimeout instead would have bought the
+    // same green run by blinding the hang-detector for all 2500 tests.
+    //
+    // See WORKERS above: the measurement is a ceiling, not the number itself, because the slowest
+    // machine that has to run this suite is a CI runner and not the one it was measured on.
+    maxWorkers: WORKERS,
     // Sets globalThis.IS_REACT_ACT_ENVIRONMENT, which is React's switch for "this is a test".
     // Nothing set it before, and both halves of that were costing us something.
     //

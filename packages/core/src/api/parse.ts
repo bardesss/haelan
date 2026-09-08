@@ -61,6 +61,24 @@ export function parseInstant(node: unknown): Instant | null {
   return null
 }
 
+/**
+ * How long an interval lasted, in minutes.
+ *
+ * Both ends are absolute instants, so the UTC offsets play no part - which matters because the
+ * two ends can carry different ones across a DST change, and a duration computed from local wall
+ * clocks would be an hour wrong exactly twice a year and right every time anyone tested it.
+ *
+ * Null rather than a negative number when the interval runs backwards: an end before its start is
+ * drift in the payload, and a negative duration would flow into a chart as a real measurement.
+ */
+export function parseIntervalMinutes(node: unknown): number | null {
+  if (!isRecord(node)) return null
+  const start = typeof node['startTime'] === 'string' ? Date.parse(node['startTime']) : NaN
+  const end = typeof node['endTime'] === 'string' ? Date.parse(node['endTime']) : NaN
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return null
+  return (end - start) / 60_000
+}
+
 export function parseCivilDate(node: unknown): string | null {
   if (!isRecord(node)) return null
   const y = node['year']

@@ -1,6 +1,6 @@
 export interface RedirectCandidate {
   uri: string
-  label: string
+  labelKey: string
   registrable: boolean
   reason?: string
 }

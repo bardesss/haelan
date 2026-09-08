@@ -26,20 +26,25 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // and the first was the flake this comment described without covering.
 const SPRINT_BUDGET_MS = 60_000
 
-// One of the SPRINT_BUDGET_MS tests below - "fills the sprint window in one run rather than one
-// batch an hour" - is not in that weight class, it is a full class heavier again: it drives the
-// real sprintDays (90) all the way to completion across every listable type for one person, seven
-// batches deep, so it is the one test in the file that is legitimately dominated by the sprint
-// loop itself rather than by run-once overhead. Measured alone, with the machine otherwise idle,
-// it costs ~60.2s of its ~62.1s file total - already sitting at the default 60s testTimeout before
-// any other process competes for it. That is this host's timer granularity at work (setTimeout
-// costs 10-14ms here instead of the nominal ~1ms, so anything timer-bound runs roughly 3x nominal
-// wall clock on this machine) landing on a test that legitimately needs many timer-driven passes.
-// The fix is a wider timeout, not a cheaper test: sprintDays and the batch size are the numbers
-// that ship, and shrinking them here would make the test pass for the wrong reason (see its own
-// comment). 180s gives ~3x headroom over the solo run so ordinary full-suite contention cannot tip
-// it, without hiding a genuine hang the way raising the global testTimeout would for every other test.
-const SPRINT_WINDOW_FILL_BUDGET_MS = 180_000
+// Two tests below drive the real sprintDays (90) rather than a small convergent number, so they
+// are dominated by the sprint loop itself rather than by run-once overhead: "fills the sprint
+// window in one run rather than one batch an hour" and "stops at the sprint window and leaves the
+// deep history to later runs". Both need this budget.
+//
+// This constant used to cover only the first, on the stated grounds that it was "the one test in
+// the file" in that weight class. Measured per test with the machine otherwise idle, that was
+// wrong: fills costs 36.3s and stops costs 33.0s. They are the same weight. stops was left on the
+// 60s SPRINT_BUDGET_MS, a 1.8x margin, and duly failed a full run - it is the only test that still
+// failed with parallelism capped, because its margin is too thin to depend on contention at all.
+//
+// The underlying cost is this host's timer granularity: setTimeout costs 10-14ms here against a
+// nominal ~1ms, so anything timer-bound runs roughly 3x nominal wall clock, landing on tests that
+// legitimately need many timer-driven passes. The fix is a wider budget, not a cheaper test:
+// sprintDays and the batch size are the numbers that ship, and shrinking them here would make both
+// tests pass for the wrong reason. 180s is ~5x their solo cost, so ordinary contention cannot tip
+// them, without hiding a genuine hang the way raising the global testTimeout would for every other
+// test in the suite.
+const REAL_SPRINT_BUDGET_MS = 180_000
 
 describe('the sync runner', () => {
   it('refuses a second run while one is in flight and says so rather than queueing', async () => {
@@ -261,7 +266,7 @@ describe('the sync runner', () => {
     for (const row of status.backfill) {
       expect(row.complete || (row.cursorMs !== null && row.cursorMs <= sprintFloor)).toBe(true)
     }
-  }, SPRINT_WINDOW_FILL_BUDGET_MS)
+  }, REAL_SPRINT_BUDGET_MS)
 
   it('stops at the sprint window and leaves the deep history to later runs', async () => {
     // The real sprintDays and real batch size: at the harness's default batch of 1, forty
@@ -275,7 +280,7 @@ describe('the sync runner', () => {
     // Daily types were asked for five years; the sprint must not have walked them there.
     expect(weight?.complete).toBe(false)
     expect(weight?.cursorMs).toBeGreaterThan(harness.clock.nowMs - 1825 * 86_400_000)
-  }, SPRINT_BUDGET_MS)
+  }, REAL_SPRINT_BUDGET_MS)
 
   it('reverts to one batch per type once the sprint window is filled', async () => {
     // This test is about the revert, not about the number 90 - it only needs the sprint to

@@ -58,16 +58,24 @@ describe('data type catalogue', () => {
   })
 
   it('gives every type at least one action it can actually be read with', () => {
-    for (const t of DATA_TYPES) {
+    // food is the one exception: every action here is a windowed date-range read (list) or a
+    // civil-interval one (rollUp/dailyRollUp/reconcile), and Food carries no field either shape
+    // could be built from. An empty set is what keeps dueJobs (syncState.ts) from ever scheduling
+    // a fetch this codebase cannot actually make, rather than declaring an action untrue of it.
+    for (const t of DATA_TYPES.filter((t) => t.id !== 'food')) {
       expect(t.actions.length, t.id).toBeGreaterThan(0)
       for (const action of t.actions) expect(ACTIONS).toContain(action)
     }
+    expect(dataTypeById('food')?.actions).toEqual([])
   })
 
-  it('gives every listable type a metric and a target', () => {
+  it('gives every listable type a target, and a metric when it writes samples', () => {
     for (const t of DATA_TYPES.filter((t) => supports(t, 'list'))) {
-      expect(t.metric, t.id).toBeTruthy()
-      expect(['samples', 'sessions'], t.id).toContain(t.target)
+      expect(['samples', 'sessions', 'observations'], t.id).toContain(t.target)
+      // Only a samples-target type is charted by metric name; sessions and observations types
+      // carry their own identity (kind, or a derived family) and leave metric '' on purpose -
+      // metricDataType.ts's own DATA_TYPE_BY_METRIC skips a type whose metric is ''.
+      if (t.target === 'samples') expect(t.metric, t.id).toBeTruthy()
     }
   })
 
@@ -85,7 +93,10 @@ describe('data type catalogue', () => {
   })
 
   it('keeps every mapping-deferred type listable, since it is still fetched and archived', () => {
-    for (const t of DATA_TYPES.filter((t) => t.mappingDeferred)) {
+    // food is the one exception: it is deferred because it has no clock, not because its shape
+    // is undecided, so it is never listable in the first place - see the previous test and
+    // catalogue.ts's own comment on the entry.
+    for (const t of DATA_TYPES.filter((t) => t.mappingDeferred && t.id !== 'food')) {
       expect(supports(t, 'list'), t.id).toBe(true)
     }
   })

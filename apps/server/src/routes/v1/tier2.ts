@@ -133,8 +133,16 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
 
-    const kindChecked = kind as 'sleep' | 'exercise' // requireSessionKind validates this at runtime, inside the core call below
-    const all: WorkoutSession[] = personQuery.sessions({ kind: kindChecked, from, to, sourceId: source })
+    // SESSION_KINDS (personQuery's own runtime validator) now also allows 'ecg', a kind this
+    // route does not serve: WorkoutSession's attrs carries no ECG classification and nothing has
+    // designed what an ECG list response should look like yet. Checked here, ahead of the call
+    // below, so kind=ecg is refused with a clear error rather than silently taking the
+    // 'sleep' | 'exercise' branch a bare `as` cast used to assert into existence - the cast could
+    // no longer back that claim once SESSION_KINDS widened, and nothing would have caught it.
+    if (kind !== 'sleep' && kind !== 'exercise') {
+      throw new ConfigError(`kind must be one of sleep, exercise, got '${kind}'`)
+    }
+    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
     return sendHashed(reply, request, page)
   })

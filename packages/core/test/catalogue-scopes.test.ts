@@ -1,0 +1,117 @@
+import { describe, expect, it } from 'vitest'
+import { DATA_TYPES, UNGRANTABLE_SCOPES } from '../src/api/catalogue.ts'
+import { SCOPES } from '../src/api/oauth.ts'
+
+const PREFIX = 'https://www.googleapis.com/auth/'
+
+/**
+ * The readable scopes named by `auth.oauth2.scopes` in the v4 discovery document, read twice:
+ * 2026-09-06, when it named 18 scopes, and 2026-09-08, when it named 21. Three of that
+ * difference - `googlehealth.reproductive_health.readonly`, `googlehealth.logged_symptoms.readonly`
+ * and `googlehealth.mindfulness.readonly` - moved here from CONSOLE_OBSERVED_SCOPES below on the
+ * later read: the document now names them itself, so they no longer need the console as their
+ * only evidence.
+ *
+ * The rule this comment exists to state is unchanged, and better evidenced than it was on
+ * 2026-09-06: the document's silence about those three scopes was wrong, and it has since
+ * corrected itself. Silence is still not evidence a scope does not exist - `googlehealth.
+ * nutrition.readonly` remains absent from both reads, eleven days apart, and is nonetheless real
+ * (see CONSOLE_OBSERVED_SCOPES: the console's Data Access page lists it with a Google-authored
+ * description, and hydration-log returned 33 real points under it). Reasoning from the document's
+ * silence to a scope's nonexistence once removed the nutrition scope from consent, which would
+ * have cost every new connection its hydration history.
+ *
+ * Pinned as a literal rather than fetched, because a test that asks the network what the answer is
+ * cannot fail when the answer changes underneath it - and this list changing is precisely the
+ * event a person should hear about.
+ */
+const REGISTRY_READONLY_SCOPES = [
+  'googlehealth.activity_and_fitness.readonly',
+  'googlehealth.ecg.readonly',
+  'googlehealth.health_metrics_and_measurements.readonly',
+  'googlehealth.irn.readonly',
+  'googlehealth.location.readonly',
+  'googlehealth.logged_symptoms.readonly',
+  'googlehealth.mindfulness.readonly',
+  'googlehealth.profile.readonly',
+  'googlehealth.reproductive_health.readonly',
+  'googlehealth.settings.readonly',
+  'googlehealth.sleep.readonly',
+]
+
+/**
+ * Scopes the discovery document omits but Google's own console shows, each with the measurement
+ * that puts it here. A scope joining this list needs a console observation or a successful fetch,
+ * not an inference.
+ *
+ * Down to one entry as of the 2026-09-08 re-read: `reproductive_health`, `logged_symptoms` and
+ * `mindfulness` used to need the console alone and now moved to REGISTRY_READONLY_SCOPES above,
+ * because the document names them too. `nutrition` has not - it has now survived two reads,
+ * 2026-09-06 and 2026-09-08, without the document naming it once.
+ */
+const CONSOLE_OBSERVED_SCOPES = [
+  // Data Access page, 2026-08-19, classified Restricted, described "See your Google Health
+  // nutrition data". hydration-log then returned 33 points under a token granted from it. Still
+  // absent from the discovery document on the 2026-09-08 re-read.
+  'googlehealth.nutrition.readonly',
+]
+
+// oauth.ts writes the full URL form because that is what the authorization request carries, while
+// the catalogue writes the bare name. Comparing the two without saying so is how a catalogue entry
+// and a requested scope drifted apart unnoticed in the first place.
+const requested = SCOPES.map((scope) => scope.slice(PREFIX.length))
+
+describe('a data type never names a scope consent does not carry', () => {
+  it('writes every requested scope in the URL form the comparison below assumes', () => {
+    // Without this, a change to the prefix would leave `requested` full of full URLs, no declared
+    // scope would ever match one, and the guard below would still pass by way of its own escape
+    // hatch being wrong rather than by the property holding.
+    expect(SCOPES.filter((scope) => scope.startsWith(PREFIX))).toEqual([...SCOPES])
+  })
+
+  it('requests only scopes something has actually observed', () => {
+    const evidenced = requested.filter((scope) =>
+      REGISTRY_READONLY_SCOPES.includes(scope) || CONSOLE_OBSERVED_SCOPES.includes(scope))
+    expect(evidenced).toEqual(requested)
+  })
+
+  it('requests the nutrition scope, which the discovery document omits and the console shows', () => {
+    // Regression guard, and the only test here that exists because of a specific mistake: this
+    // scope was removed on the reasoning that the discovery document does not name it. Removing it
+    // costs hydration-log, which is mapped and populated.
+    expect(requested.includes('googlehealth.nutrition.readonly')).toBe(true)
+  })
+
+  it('asks for no write scope, because a writeonly one could only edit what this app wrote', () => {
+    // Google's writeonly scopes grant edit and delete over the data the app itself added. haelan
+    // adds none, so a write scope would buy no ability to correct a bad reading and would put a
+    // request to write health data in front of every member for nothing. Corrections live in the
+    // overrides table instead.
+    expect(requested.filter((scope) => scope.includes('writeonly'))).toEqual([])
+  })
+
+  it('requests the ECG and irregular rhythm scopes their data types need', () => {
+    expect(requested.includes('googlehealth.ecg.readonly')).toBe(true)
+    expect(requested.includes('googlehealth.irn.readonly')).toBe(true)
+  })
+
+  it('declares no scope the app neither requests nor records as ungrantable', () => {
+    // The guard that matters. A catalogue entry naming a scope nobody asked consent for fetches
+    // nothing, and nothing else in the suite would notice.
+    const declared = [...new Set(DATA_TYPES.map((t) => t.scope))].sort()
+    const accounted = declared.filter(
+      (scope) => requested.includes(scope) || UNGRANTABLE_SCOPES.includes(scope),
+    )
+    expect(accounted).toEqual(declared)
+  })
+
+  it('holds nothing in the ungrantable set, so every declared scope is a requested one', () => {
+    // Pinned empty rather than deleted. A scope entering this list is a claim that Google offers no
+    // way to read a category at all - which has to come from the console or a failed fetch, never
+    // from the discovery document's silence, because that silence has already been wrong once.
+    expect([...UNGRANTABLE_SCOPES]).toEqual([])
+    const unreachable = DATA_TYPES
+      .filter((t) => UNGRANTABLE_SCOPES.includes(t.scope)).map((t) => t.id).sort()
+    expect(unreachable).toEqual([])
+  })
+})

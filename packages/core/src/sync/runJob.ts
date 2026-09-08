@@ -13,6 +13,8 @@ import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { localDateOf } from '../derive/localDay.ts'
 import { mapSessions } from '../api/mapSessions.ts'
+import { mapObservations } from '../api/mapObservations.ts'
+import { ObservationStore } from '../store/observations.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
 
 /**
@@ -137,9 +139,25 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         const pages = listed.payloadIds.map((id) => ({
           body: deps.archive.getBody(input.personId, id), rawPayloadId: id,
         }))
-        const written = t.target === 'samples'
-          ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
-          : writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+        const writeFor = (target: DataType['target']) =>
+          target === 'samples'
+            ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+            : target === 'sessions'
+            ? writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+            : writeObservations(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+        // ECG (and any future type like it) names one primary target plus alsoTargets, and one
+        // fetched page has to become a row in each: the primary writer alone is what left the
+        // samples and observations rows unwritten before this loop existed. Every writer's own
+        // guard already reads alsoTargets to accept a foreign-looking dataType (mapSamples.ts,
+        // mapSessions.ts, mapObservations.ts), so running one writer per named target is the
+        // other half of that contract.
+        const writes = [writeFor(t.target), ...(t.alsoTargets ?? []).map(writeFor)]
+        const rowsWrittenHere = writes.reduce((sum, w) => sum + w.rows, 0)
+        // Merged across every writer, not just the primary one: the derive queue is marked from
+        // this set, and a local date only the samples or observations writer touched - never the
+        // primary sessions writer - would otherwise never be marked dirty, leaving its derived
+        // values stale forever.
+        const localDates = new Set(writes.flatMap((w) => w.localDates))
         // The days the rows themselves fall on, not the day this window asked for. A window is
         // computed in the person's current timezone, while runDerive selects a day's rows by
         // each row's own offset, so a sample from a trip abroad can arrive in window D and
@@ -147,12 +165,12 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         // uncorrected by any later run. Through tx, so a mark commits and rolls back with the
         // rows it describes: a day marked for rows that rolled back would derive from data that
         // is not there.
-        for (const localDate of written.localDates) {
+        for (const localDate of localDates) {
           deps.deriveQueue?.markDirty(
             { personId: input.personId, localDate, nowMs: deps.now() }, tx,
           )
         }
-        return written.rows
+        return rowsWrittenHere
       })
       rowsWritten += writtenHere
       report({
@@ -291,4 +309,18 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
     for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
   }
   return { rows: written, localDates: [...localDates] }
+}
+
+function writeObservations(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
+  dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
+  pages: Array<{ body: string, rawPayloadId: string }>,
+}): Written {
+  const store = new ObservationStore(tx)
+  const rows = args.pages.flatMap((page) => mapObservations({
+    dataType: args.dataType, personId: args.personId, resolveSource: args.resolveSource,
+    body: page.body, rawPayloadId: page.rawPayloadId,
+  }))
+  store.writeMany(rows)
+  const localDates = new Set(rows.map((row) => row.localDate))
+  return { rows: rows.length, localDates: [...localDates] }
 }

@@ -17,5 +17,10 @@
  *    non-staged model derived no stage, asleep, awake or efficiency figure at all. Under 5 such a
  *    night derives all of those except the three staged minutes, which it omits rather than
  *    writing as zero, because a night nobody staged has no deep, light or REM measurement.
+ * 6: the catalogue caught up with the API, adding a third derived table - `observations`, for the
+ *    categorical types that have no numeric value - alongside new metrics across samples. A person
+ *    derived under 5 has an empty observations table and none of those metrics, and unlike the
+ *    bumps above this one is less about a function computing something different and more about
+ *    there being new rows to compute at all.
  */
-export const DERIVATION_VERSION = 5
+export const DERIVATION_VERSION = 6

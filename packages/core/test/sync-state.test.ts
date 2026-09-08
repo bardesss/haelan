@@ -89,7 +89,10 @@ describe('SyncStateStore', () => {
     // only equality against every id in DATA_TYPES actually detects that regression.
     // floors rejects list but answers rollUp, dailyRollUp and reconcile, so it is due too;
     // runJob is what dispatches on which action a type actually gets, not dueJobs.
-    expect(types).toEqual(new Set(DATA_TYPES.map((t) => t.id)))
+    // food is the one id excluded: it carries no action at all (catalogue.ts's own comment on
+    // the entry - there is no field to build a fetch from), and dueJobs filters on exactly that,
+    // the same predicate this test's own title names.
+    expect(types).toEqual(new Set(DATA_TYPES.filter((t) => t.actions.length > 0).map((t) => t.id)))
   })
 
   it('keeps one person state separate from another', () => {

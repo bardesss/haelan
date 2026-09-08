@@ -5,12 +5,45 @@ export const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 export const API_ROOT = 'https://health.googleapis.com/v4'
 
-// The six scopes M0 requested and had granted, recorded in probe/findings/scopes.md. Declaring
-// the full set once is what keeps a later data type from needing a second console visit.
+// Every scope this instance asks a household member to grant. Declaring the full set once is what
+// keeps a later data type from needing a second console visit.
+//
+// `googlehealth.nutrition.readonly` is here on the strength of two measurements that outrank the
+// discovery document. It appears on the console's own Data Access page, classified Restricted with
+// a Google-authored description - "See your Google Health nutrition data" - recorded in
+// probe/findings/scopes.md on 2026-08-19; and hydration-log returned 33 real data points under a
+// token granted from a list naming it (probe/findings/field-map.md).
+//
+// It is absent from `auth.oauth2.scopes` in the v4 discovery document. That block is therefore
+// incomplete, and an argument of the form "the registry does not name it, so it does not exist" is
+// unsound. This comment exists because that argument was made, acted on, and briefly removed this
+// scope - which would have cost every new connection its hydration history.
+//
+// reproductive_health, logged_symptoms and mindfulness were confirmed the same way, on the
+// console's Data Access page on 2026-09-08. Four of the scopes below are absent from the discovery
+// document; its silence has now been wrong four times, so it is not consulted for whether a scope
+// exists.
+//
+// Those three are the most sensitive categories the API offers, and every member sees them named
+// on their own consent screen. Someone who would rather not share them turns those data types off
+// afterwards, per person, which is what the exclusion table is for.
+//
+// Every scope here is readonly, and deliberately: a writeonly scope grants edit and delete over
+// the data the app itself added, which for haelan is nothing, so it would buy no ability to
+// correct a bad reading and would ask for permission to write health data that nothing uses.
+//
+// ecg and irn are new here, for the data types this branch adds. Anyone who connected earlier
+// holds a token granted against the old list, so those two answer with a permission error until
+// they reconnect; runJob records that per data type and the rest of their sync continues.
 export const SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
   'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
+  'https://www.googleapis.com/auth/googlehealth.reproductive_health.readonly',
+  'https://www.googleapis.com/auth/googlehealth.logged_symptoms.readonly',
+  'https://www.googleapis.com/auth/googlehealth.mindfulness.readonly',
+  'https://www.googleapis.com/auth/googlehealth.ecg.readonly',
+  'https://www.googleapis.com/auth/googlehealth.irn.readonly',
   'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
   'https://www.googleapis.com/auth/googlehealth.settings.readonly',

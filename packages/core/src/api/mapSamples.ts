@@ -1,6 +1,6 @@
 import type { DataType } from './catalogue.ts'
 import type { SampleAgg } from '../db/schema/derived.ts'
-import { parseInstant, parseCivilDate, parseNumeric, valueAt } from './parse.ts'
+import { parseInstant, parseCivilDate, parseNumeric, parseIntervalMinutes, valueAt } from './parse.ts'
 import { downsampleToMinute } from './downsample.ts'
 import { ConfigError } from '../errors.ts'
 
@@ -26,7 +26,11 @@ export interface MapSamplesInput {
 
 export function mapSamples(input: MapSamplesInput): SampleRow[] {
   const t = input.dataType
-  if (t.target !== 'samples') throw new ConfigError(`${t.id} is not a sample type`)
+  // A type may write here as its primary target, or as an extra one named in alsoTargets (Task
+  // 8's ECG payload does both) - either is "mine", and only neither is a foreign type.
+  if (t.target !== 'samples' && !t.alsoTargets?.includes('samples')) {
+    throw new ConfigError(`${t.id} is not a sample type`)
+  }
 
   // Deferred types are fetched and archived, but their shape is not yet confirmed against a
   // real payload, so a valuePath would be a guess rather than a measurement.
@@ -76,6 +80,39 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
     }
 
     const sub = t.subDimension
+
+    // The ordinary row and the sub-dimension rows below are additive, not a choice: a
+    // sub-dimension type with no valuePath of its own (every one the catalogue declares today)
+    // skips this branch exactly as it always has, since parsing an empty valuePath would only
+    // resolve to nothing anyway. A type declaring both - Task 7's nutrition log, a top-level
+    // EnergyQuantity beside an array of macronutrients - writes an ordinary row here and then
+    // its sub-dimension rows below, from the same point.
+    if (!sub || t.valuePath !== '') {
+      // A duration type's value is the interval's own length: some of these carry no other
+      // field to read at all.
+      const value = t.durationMinutes
+        ? parseIntervalMinutes(valueAt(payload, 'interval'))
+        : parseNumeric(valueAt(payload, t.valuePath))
+      // A point with no value is a point the device did not record. Writing a zero here is the
+      // single easiest way to turn a gap into a fabricated measurement. Spec invariant 2.
+      if (value !== null) {
+        // Per point, not once per call: a single payload carries more than one platform, and
+        // spec invariant 4 requires every row to keep its own source.
+        const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+        rows.push({
+          personId: input.personId,
+          sourceId,
+          metric: t.metric,
+          utcMs,
+          tzOffsetMinutes,
+          agg: t.agg,
+          value,
+          n: 1,
+          rawPayloadId: input.rawPayloadId,
+        })
+      }
+    }
+
     if (sub) {
       const arrayValue = sub.arrayPath ? valueAt(payload, sub.arrayPath) : undefined
       const elements = sub.arrayPath ? (Array.isArray(arrayValue) ? arrayValue : []) : [payload]
@@ -88,8 +125,11 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
         // A key the field map never recorded is schema drift, not a new metric. Writing it
         // anyway would put a series on a chart that no catalogue entry describes, silently.
         if (metric === undefined) continue
-        // Both value fields are int64 and arrive as JSON strings, same as an ordinary type.
-        const minutes = parseNumeric(valueAt(element, sub.valuePath))
+        // Both value fields are int64 and arrive as JSON strings, same as an ordinary type -
+        // except a duration sub-dimension, whose value is the interval's own length.
+        const minutes = sub.durationMinutes
+          ? parseIntervalMinutes(valueAt(payload, 'interval'))
+          : parseNumeric(valueAt(element, sub.valuePath))
         if (minutes === null) continue
         rows.push({
           personId: input.personId,
@@ -103,29 +143,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
           rawPayloadId: input.rawPayloadId,
         })
       }
-      continue
     }
-
-    const value = parseNumeric(valueAt(payload, t.valuePath))
-    // A point with no value is a point the device did not record. Writing a zero here is the
-    // single easiest way to turn a gap into a fabricated measurement. Spec invariant 2.
-    if (value === null) continue
-
-    // Per point, not once per call: a single payload carries more than one platform, and spec
-    // invariant 4 requires every row to keep its own source.
-    const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
-
-    rows.push({
-      personId: input.personId,
-      sourceId,
-      metric: t.metric,
-      utcMs,
-      tzOffsetMinutes,
-      agg: t.agg,
-      value,
-      n: 1,
-      rawPayloadId: input.rawPayloadId,
-    })
   }
 
   return rows

@@ -124,6 +124,18 @@ describe('GET /sessions', () => {
     expect(response.json().error.kind).toBe('config')
   })
 
+  // SESSION_KINDS (the schema's own validator) widened to include 'ecg' when the electrocardiogram
+  // data type landed, so kind=ecg now passes that check - unlike kind=Sleep above, which the
+  // schema itself refuses. This route still has to refuse it on its own: WorkoutSession has no
+  // ECG-shaped response designed yet, and a route that let the validated value straight through
+  // would silently start serving ECG sessions as workouts the day this test stopped protecting it.
+  it('answers 400 for kind=ecg, a session kind the schema allows but this route does not serve', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sessions?kind=ecg&from=2026-08-01&to=2026-08-31')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
   it('filters to one source when asked', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedWorkout(harness, { localDate: '2026-08-01', sourceId: 'watch' })

@@ -17,3 +17,8 @@ probe/findings/token-log.jsonl
 # Linked worktrees. Kept out of the tree they live in: a git add -A from the repository root
 # would otherwise record one as an embedded repository and commit a gitlink nobody wanted.
 .worktrees/
+
+# Local editor and agent state: settings.local.json, a scheduled-task lock, worktree bookkeeping,
+# and a launch.json naming this machine's dev servers. None of it describes the project, and
+# settings.local.json is the kind of file that carries local paths into a public repository.
+.claude/

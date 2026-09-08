@@ -13,8 +13,8 @@ import { I18nProvider } from '../src/i18n/index.js'
 const render = (node: ReactElement) => renderToStaticMarkup(<I18nProvider lng="en">{node}</I18nProvider>)
 
 const CANDIDATES = [
-  { uri: 'http://localhost:4235/oauth/callback', label: 'This machine', registrable: true },
-  { uri: 'http://127.0.0.1:4235/oauth/callback', label: 'This machine, literal loopback', registrable: true },
+  { uri: 'http://localhost:4235/oauth/callback', labelKey: 'thisMachine', registrable: true },
+  { uri: 'http://127.0.0.1:4235/oauth/callback', labelKey: 'literalLoopback', registrable: true },
 ]
 
 const HORIZON_STATUS = {
@@ -54,7 +54,7 @@ describe('the wizard screens', () => {
   it('marks a rejected candidate as rejected and shows the rule instead of a copy button', () => {
     const html = render(<GoogleStep
       candidates={[...CANDIDATES, {
-        uri: 'https://192.168.178.82/oauth/callback', label: 'Reverse proxy or Tailscale',
+        uri: 'https://192.168.178.82/oauth/callback', labelKey: 'proxyOrTailscale',
         registrable: false, reason: 'Hosts cannot be raw IP addresses. Localhost IP addresses are exempted from this rule.',
       }]}
       error={null} onDone={() => {}}
@@ -65,7 +65,7 @@ describe('the wizard screens', () => {
 
   it('offers a copy control for every registrable URI and none for a rejected one', () => {
     const rejected = {
-      uri: 'https://192.168.178.82/oauth/callback', label: 'Reverse proxy or Tailscale',
+      uri: 'https://192.168.178.82/oauth/callback', labelKey: 'proxyOrTailscale',
       registrable: false, reason: 'Hosts cannot be raw IP addresses.',
     }
     const html = render(<GoogleStep
@@ -112,6 +112,28 @@ describe('the wizard screens', () => {
   it('says the unverified app warning is expected, because that is where installs are abandoned', () => {
     const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
     expect(html).toMatch(/unverified/i)
+  })
+
+  it('makes the console a link, and opens it in a new tab so the form below survives', () => {
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
+    // The whole anchor, not just the href: the step read as plain text for a milestone, and a
+    // test matching only the URL would have passed throughout that.
+    expect(html).toContain(
+      '<a href="https://console.cloud.google.com" target="_blank" rel="noreferrer">console.cloud.google.com</a>',
+    )
+  })
+
+  it('translates the redirect labels, which the server sends as keys and not as copy', () => {
+    // The reported bug: the server sent the English string "This machine" and the wizard printed
+    // it verbatim, so a Dutch setup showed English labels over Dutch instructions. Rendering under
+    // nl is the only way to catch it - every other test here pins English and would stay green.
+    const dutch = renderToStaticMarkup(
+      <I18nProvider lng="nl">
+        <GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />
+      </I18nProvider>,
+    )
+    expect(dutch).toContain('Deze machine')
+    expect(dutch).not.toContain('This machine')
   })
 
   it('tells the owner to switch publishing to In production, which M0 found is required', () => {

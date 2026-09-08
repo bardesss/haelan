@@ -1,6 +1,8 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Database, DbOrTx } from '../db/open.ts'
-import { daily, samples, sessions, sources, sourceAliases, sourcePriority } from '../db/schema/index.ts'
+import {
+  daily, observations, samples, sessions, sources, sourceAliases, sourcePriority,
+} from '../db/schema/index.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 import { deriveDayInto } from '../derive/deriveDay.ts'
@@ -12,6 +14,7 @@ import type { PeopleStore } from '../store/people.ts'
 import type { OverrideStore } from '../store/overrides.ts'
 import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import type { SettingsStore } from '../store/settings.ts'
+import { ObservationStore } from '../store/observations.ts'
 import { peopleNeedingRebuild } from './versions.ts'
 import { replayPerson } from './replay.ts'
 import { retargetOverrides } from './retarget.ts'
@@ -23,6 +26,8 @@ export interface RebuildPersonReport {
   reasons: string[]
   samples: number
   sessions: number
+  /** How many observations were regenerated. Tier 2, the same as samples and sessions beside it. */
+  observations: number
   daysDerived: number
   dailyRows: number
   sourcesRemoved: number
@@ -163,6 +168,10 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         // Provider rows included. They are mapped from archived rollup responses like everything
         // else, so the replay puts them back.
         tx.delete(daily).where(eq(daily.personId, personId)).run()
+        // Through the store rather than a bare tx.delete, the same way the rest of this function
+        // never touches events: deleteForPerson is the one door onto this table a rebuild is
+        // allowed to use, and going around it here would leave the guard with nothing behind it.
+        new ObservationStore(tx).deleteForPerson(personId)
 
         const counts = replayPerson(tx, {
           personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
@@ -200,6 +209,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           reasons,
           samples: counts.samples,
           sessions: counts.sessions,
+          observations: counts.observations,
           daysDerived: counts.localDates.length,
           dailyRows,
           sourcesRemoved: dropped.sources,
@@ -259,11 +269,18 @@ export function runRebuild(input: RebuildInput): RebuildReport {
 interface Dropped { sources: number, rankings: number, aliases: number }
 
 function dropUnreferencedSources(tx: DbOrTx, personId: string): Dropped {
+  // observations.sourceId included alongside samples and sessions, not just those two: a person
+  // whose only reading under a source is a mood or a symptom - no sample, no session - would
+  // otherwise leave that source "unreferenced" by this function's own count while a freshly
+  // replayed observation row still points at it, and the delete below would hit the foreign key
+  // observations.source_id declares rather than the row it was actually meant to catch.
   const referenced = new Set<string>([
     ...tx.selectDistinct({ id: samples.sourceId }).from(samples)
       .where(eq(samples.personId, personId)).all().map((row) => row.id),
     ...tx.selectDistinct({ id: sessions.sourceId }).from(sessions)
       .where(eq(sessions.personId, personId)).all().map((row) => row.id),
+    ...tx.selectDistinct({ id: observations.sourceId }).from(observations)
+      .where(eq(observations.personId, personId)).all().map((row) => row.id),
   ])
 
   const owned = tx.select({ id: sources.id }).from(sources)

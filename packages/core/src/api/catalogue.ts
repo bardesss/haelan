@@ -15,7 +15,7 @@ export const FILTER_MEMBERS = [
 ] as const
 export type FilterMember = (typeof FILTER_MEMBERS)[number]
 
-export type MappingTarget = 'samples' | 'sessions'
+export type MappingTarget = 'samples' | 'sessions' | 'observations'
 
 export type TypeTier = 'intraday' | 'daily'
 
@@ -33,6 +33,12 @@ export interface SubDimension {
   keyPath: string
   valuePath: string
   metricByKey: Readonly<Record<string, string>>
+  /**
+   * The value is the interval's own length rather than a leaf read through `valuePath`. Exists
+   * because some enum-keyed types (an activity period keyed by its kind, say) carry no numeric
+   * field at all - the interval itself is the only measurement.
+   */
+  durationMinutes?: true
 }
 
 export const ACTIONS = ['list', 'rollUp', 'dailyRollUp', 'reconcile'] as const
@@ -81,6 +87,33 @@ export interface DataType {
   mappingDeferred?: true
   /** Set when a dimension in the payload becomes part of the metric name instead of a column. */
   subDimension?: SubDimension
+  /**
+   * The value is the interval's own length rather than a `valuePath` read. Exists because four
+   * of the sixteen types the catalogue is missing carry no other field - sedentary-period has
+   * nothing but an interval - so the idea is expressed once here instead of once per type.
+   */
+  durationMinutes?: true
+  /**
+   * Extra tables the same payload also writes to, beyond `target`. Empty for every type today:
+   * three catalogue entries sharing one `payloadKey` was the alternative and was rejected, since
+   * each would get its own `sync_state` row and fetch independently, tripling API calls and
+   * archive writes for one dataset. Exists for Task 8's ECG payload, which writes a session, a
+   * sample and an observation from a single fetch. Each mapper's own-target guard reads this
+   * ("target is mine, or `alsoTargets` includes mine") so a type can name a foreign mapper
+   * without that mapper refusing it as ConfigError.
+   */
+  alsoTargets?: readonly MappingTarget[]
+  /**
+   * True when the document's filter grammar for this type supports only `>=`, with no upper
+   * bound and no `AND`. Documented for electrocardiogram alone: "Session start time (ECG
+   * specific): Pattern: electrocardiogram.interval.start_time - Supported comparison operators:
+   * >=", and "Only filtering by start time is supported for ECG." buildFilter (client.ts) reads
+   * this to drop the `< end` clause it emits for every other type. The cost is that each window
+   * then returns everything from its start rather than a bounded slice - acceptable here because
+   * an ECG is a handful of readings a year, not a dense type, and MAX_PAGES still bounds a
+   * runaway; a 400 on every fetch is the worse failure.
+   */
+  filterLowerBoundOnly?: true
 }
 
 // agg records how we computed the row, not how a rollup should combine it. A value the source
@@ -90,7 +123,34 @@ export interface DataType {
 const ACTIVITY = 'googlehealth.activity_and_fitness.readonly'
 const METRICS = 'googlehealth.health_metrics_and_measurements.readonly'
 const SLEEP = 'googlehealth.sleep.readonly'
+const ECG = 'googlehealth.ecg.readonly'
+const IRN = 'googlehealth.irn.readonly'
 const NUTRITION = 'googlehealth.nutrition.readonly'
+// The three most sensitive categories, each confirmed on the console's Data Access page on
+// 2026-09-08 with Google's own description - and each absent from the discovery document's
+// `auth.oauth2.scopes` block when it was read two days earlier, which is why that block is not
+// treated as a list of what exists. A re-read on 2026-09-08 found the document had grown from 18
+// scopes to 21 and now names all three; `googlehealth.nutrition.readonly` is still missing from it
+// and still real. The document corrects itself, so its silence dates rather than disproves.
+const REPRODUCTIVE = 'googlehealth.reproductive_health.readonly'
+const SYMPTOMS = 'googlehealth.logged_symptoms.readonly'
+const MINDFULNESS = 'googlehealth.mindfulness.readonly'
+
+/**
+ * Scopes a data type may declare that consent cannot carry.
+ *
+ * Empty, and the emptiness is the point. It briefly held NUTRITION on the reasoning that
+ * `auth.oauth2.scopes` in the v4 discovery document names no readonly form for the category. That
+ * reasoning was wrong: the console's Data Access page lists `googlehealth.nutrition.readonly` with
+ * a Google-authored description (probe/findings/scopes.md), and hydration-log returned 33 real
+ * points under it (probe/findings/field-map.md). The registry is incomplete, so its silence is not
+ * evidence of absence.
+ *
+ * Kept rather than deleted because the guard test needs somewhere to put a scope that is genuinely
+ * unreachable, and because a future entry here is a claim that must be measured against the
+ * console rather than inferred from the discovery document.
+ */
+export const UNGRANTABLE_SCOPES: readonly string[] = []
 
 /**
  * The cap on types that report many times a day. Cost is density multiplied by horizon, and
@@ -179,6 +239,93 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('weight', 'weight', 'sample_time.physical_time', METRICS, 'weight', 'grams', 'weightGrams'),
   listable('body-fat', 'bodyFat', 'sample_time.physical_time', METRICS, 'body_fat', 'percent', 'percentage'),
 
+  // Group A: five ordinary scalars added to close the catalogue gap behind the v4 discovery
+  // document. Measured 2026-09-06 against Height, CoreBodyTemperature, BloodGlucose, RunVO2Max
+  // and Altitude; see .superpowers/sdd/2026-09-06-catalogue-catches-up/api-schemas.md. Each is a
+  // number with a unit at an instant or over an interval - exactly what samples and mapSamples
+  // already handle, so no new field or mechanism was needed, only five more listable() calls.
+  // heightMillimeters and gainMillimeters are declared `string` in the schema (int64-as-string,
+  // same convention as heart rate's beatsPerMinute); parseNumeric already accepts that shape.
+  listable('height', 'height', 'sample_time.physical_time', METRICS, 'height', 'millimeters', 'heightMillimeters'),
+  // measurementLocation (armpit, ear, forehead, ...) is context on the reading, not a metric of
+  // its own - same reasoning as the four blood glucose context fields immediately below.
+  listable('core-body-temperature', 'coreBodyTemperature', 'sample_time.physical_time', METRICS, 'core_body_temperature', 'celsius', 'temperatureCelsius'),
+  // Blood glucose carries four context enums on the reading itself - mealType, measurementTiming,
+  // specimen and measurementSource - describing how and when the sample was taken. None becomes
+  // a metric: a reading's meal context is a fact about that reading, and splitting on any of them
+  // would produce four or five sparse series where a household has one number to look at.
+  listable('blood-glucose', 'bloodGlucose', 'sample_time.physical_time', METRICS, 'blood_glucose', 'mg_dl', 'bloodGlucoseMilligramsPerDeciliter'),
+  listable('run-vo2-max', 'runVo2Max', 'sample_time.physical_time', METRICS, 'run_vo2_max', 'ml_kg_min', 'runVo2Max'),
+  // interval.start_time, not interval.end_time: an altitude gain belongs to when the climb
+  // began, unlike sleep (which is filed at its end - the one documented exception).
+  listable('altitude', 'altitude', 'interval.start_time', ACTIVITY, 'altitude_gain', 'millimeters', 'gainMillimeters'),
+
+  // Group B: four interval types, measured 2026-09-06 against SedentaryPeriod, ActivityLevel,
+  // TimeInHeartRateZone and SwimLengthsData; see the same api-schemas.md as Group A. All four
+  // carry an ObservationTimeInterval and nothing else that identifies when the row belongs -
+  // filterMember is interval.start_time for the same reason distance and altitude use it. Three
+  // of the four have no value field at all: the interval itself is the only measurement, which is
+  // what `durationMinutes` (Task 1's parseIntervalMinutes) exists for - do not go looking for a
+  // valuePath here, there was never one to find.
+  //
+  // sedentary-period has nothing to split on, so it is an ordinary duration type.
+  listable('sedentary-period', 'sedentaryPeriod', 'interval.start_time', ACTIVITY, 'sedentary_minutes', 'minutes', '', {
+    durationMinutes: true,
+  }),
+  // activity-level splits on activityLevelType the same way active-minutes splits on
+  // activityLevel: one metric per level, value is the interval's own length. The enum's
+  // UNSPECIFIED member is deliberately left unnamed - an unspecified level is not a level, and
+  // naming it would produce a metric meaning "we do not know", which mapSamples' skip-unnamed-key
+  // behaviour (see SubDimension's own doc comment) is exactly the right response to.
+  listable('activity-level', 'activityLevel', 'interval.start_time', ACTIVITY, 'activity_level', 'minutes', '', {
+    subDimension: {
+      keyPath: 'activityLevelType',
+      valuePath: '',
+      durationMinutes: true,
+      metricByKey: {
+        SEDENTARY: 'activity_level_sedentary_minutes',
+        LIGHTLY_ACTIVE: 'activity_level_lightly_active_minutes',
+        MODERATELY_ACTIVE: 'activity_level_moderately_active_minutes',
+        VERY_ACTIVE: 'activity_level_very_active_minutes',
+      },
+    },
+  }),
+  // time-in-heart-rate-zone splits on heartRateZoneType the same way active-zone-minutes splits
+  // on heartRateZone, but the zone vocabulary here is Google's newer four-value one (LIGHT,
+  // MODERATE, VIGOROUS, PEAK), not active-zone-minutes' three-value FAT_BURN/CARDIO/PEAK - the two
+  // types are not the same zones under different names, so their metrics are kept separate rather
+  // than merged. HEART_RATE_ZONE_TYPE_UNSPECIFIED is left unnamed for the same reason as above.
+  listable('time-in-heart-rate-zone', 'timeInHeartRateZone', 'interval.start_time', ACTIVITY, 'time_in_heart_rate_zone', 'minutes', '', {
+    subDimension: {
+      keyPath: 'heartRateZoneType',
+      valuePath: '',
+      durationMinutes: true,
+      metricByKey: {
+        LIGHT: 'time_in_heart_rate_zone_light_minutes',
+        MODERATE: 'time_in_heart_rate_zone_moderate_minutes',
+        VIGOROUS: 'time_in_heart_rate_zone_vigorous_minutes',
+        PEAK: 'time_in_heart_rate_zone_peak_minutes',
+      },
+    },
+  }),
+  // swim-lengths-data is the exception in its own group: strokeCount is a real value (int64 as
+  // string, same convention parseNumeric already accepts everywhere else), not a duration, so it
+  // does not get durationMinutes. The split is still on an enum, swimStrokeType, so it still goes
+  // through subDimension - a count sub-dimension looks the same as a duration one except for which
+  // leaf is read. SWIM_STROKE_TYPE_UNSPECIFIED is left unnamed for the same reason as above.
+  listable('swim-lengths-data', 'swimLengthsData', 'interval.start_time', ACTIVITY, 'swim_lengths', 'count', '', {
+    subDimension: {
+      keyPath: 'swimStrokeType',
+      valuePath: 'strokeCount',
+      metricByKey: {
+        FREESTYLE: 'swim_lengths_freestyle_strokes',
+        BACKSTROKE: 'swim_lengths_backstroke_strokes',
+        BREASTSTROKE: 'swim_lengths_breaststroke_strokes',
+        BUTTERFLY: 'swim_lengths_butterfly_strokes',
+      },
+    },
+  }),
+
   listable('daily-resting-heart-rate', 'dailyRestingHeartRate', 'date', METRICS, 'resting_heart_rate', 'bpm', 'beatsPerMinute', { actions: ['list', 'reconcile'] }),
   // averageHeartRateVariabilityMilliseconds is the day's overall figure. A deep-sleep-only
   // variant also exists, deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds, and was
@@ -192,10 +339,90 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('exercise', 'exercise', 'interval.civil_start_time', ACTIVITY, 'exercise', 'session', '', { target: 'sessions' }),
 
   listable('hydration-log', 'hydrationLog', 'interval.civil_start_time', NUTRITION, 'hydration', 'milliliters', 'amountConsumed.milliliters'),
-  // This household has never logged food, so the field map has no observed shape for
-  // nutrition-log. 'calories' is an unverified guess, not a measured value; kept fetchable and
-  // archived, with mapping deferred until a real payload confirms or corrects the leaf.
-  listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'calories', { mappingDeferred: true }),
+  // The valuePath is measured now rather than guessed: read off the v4 schema on 2026-09-06, the
+  // leaf is `energy.kcal`, correcting the `calories` this entry invented. Mapping stays deferred
+  // for a different and smaller reason - the payload also carries `nutrients[]`, `totalFat` and
+  // `totalCarbohydrate`, so a single kcal column answers less than the type holds, and the
+  // household has logged no food at all (0 points in probe/findings/field-map.md) for the shape of
+  // a fuller mapping to be designed against.
+  listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'energy.kcal', { mappingDeferred: true }),
+
+  // food replaces the group D the spec described, which named the wrong type: the spec expected
+  // Food to carry the macronutrients and map to samples, but Food has no time field at all - no
+  // sampleTime, no interval, measured 2026-09-06 against the schema in
+  // .superpowers/sdd/2026-09-06-catalogue-catches-up/api-schemas.md. It is a food *definition* -
+  // displayName, brand, accessLevel, servings, nutrients and three energy figures - not an
+  // occurrence of eating one, and nothing without a clock can become a dated row. mappingDeferred
+  // here is therefore permanent, not a placeholder for later design work the way nutrition-log's
+  // is: there is no future payload shape that gives this type a clock. It is declared but never
+  // fetched - see the actions note below - and kept rather than left out of the catalogue entirely
+  // because NutritionLog.food references a Food by name, and the entry is the record of what that
+  // reference points at and why nothing resolves it yet.
+  // food-measurement-unit, a pure global lookup table with no per-person data point at all, is
+  // excluded outright rather than deferred - it is a different kind of thing than either of these.
+  //
+  // filterMember is null and actions is empty rather than ['list']: every list call this codebase
+  // makes is a windowed date-range fetch (buildFilter in client.ts), and there is no field here to
+  // build that window from. Declaring 'list' anyway would not fetch anything - it would throw the
+  // moment sync actually tried. dueJobs (syncState.ts) skips a type with no actions, so this entry
+  // is catalogued and scoped without being scheduled, which is the honest state until food gets a
+  // fetch-by-reference path of its own - out of scope here.
+  //
+  // metric and unit exist only to satisfy metrics.test.ts's completeness guard over every
+  // samples-target entry (mapSamples needs target: 'samples' to return [] rather than throw for a
+  // deferred type, per its own ConfigError guard) - mapSamples' mappingDeferred check returns
+  // before either is ever read, the same as nutrition-log's own 'nutrition' spec never fires today.
+  listable('food', 'food', null, NUTRITION, 'food', 'kcal', '', { actions: [], mappingDeferred: true }),
+
+  // Group F: six data types named by neither the release notes nor the drift check - the drift
+  // check sees only rollup-capable types named in prose. Measured 2026-09-06 against VO2Max,
+  // DailyVo2Max, BasalEnergyBurned, DailySleepTemperatureDerivations,
+  // RespiratoryRateSleepSummary and DailyHeartRateZones; see
+  // .superpowers/sdd/2026-09-06-catalogue-catches-up/task-11-brief.md for the measured
+  // payloadKey/clock/value/unit table this group is built from.
+  //
+  // vo2-max is the generic, unqualified reading, so it takes the bare metric name 'vo2_max' -
+  // the same convention as hrv/daily_hrv and spo2/daily_spo2. run-vo2-max, the running-specific
+  // reading, is qualified instead ('run_vo2_max'); daily-vo2-max's civil-date summary follows the
+  // daily_ prefix convention. Three VO2 max types now exist (from running, a general measurement,
+  // and a daily summary) and each needs a name a reader can tell apart.
+  listable('vo2-max', 'vo2Max', 'sample_time.physical_time', METRICS, 'vo2_max', 'ml_kg_min', 'vo2Max'),
+  listable('daily-vo2-max', 'dailyVo2Max', 'date', METRICS, 'daily_vo2_max', 'ml_kg_min', 'vo2Max'),
+  // interval.start_time, the same convention active-energy-burned and altitude use.
+  listable('basal-energy-burned', 'basalEnergyBurned', 'interval.start_time', ACTIVITY, 'basal_energy', 'kcal', 'kcal'),
+  // DailySleepTemperatureDerivations also carries baselineTemperatureCelsius (the 30-day
+  // baseline) and relativeNightlyStddev30dCelsius (that baseline's spread). nightlyTemperature
+  // Celsius is the night's own figure and is mapped for the same reason
+  // daily-heart-rate-variability picks the whole-night HRV over its deep-sleep-only variant: the
+  // other two fields would quietly answer a narrower question than "this night's temperature".
+  listable('daily-sleep-temperature-derivations', 'dailySleepTemperatureDerivations', 'date', SLEEP, 'sleep_temperature', 'celsius', 'nightlyTemperatureCelsius'),
+  // RespiratoryRateSleepSummary also carries remSleepStats, deepSleepStats and lightSleepStats,
+  // each shaped like fullSleepStats. fullSleepStats.breathsPerMinute is the whole night's figure
+  // and is mapped for the same reason as above; the three stage-only variants are archived, not
+  // mapped. The metric cannot be named respiratory_rate - daily-respiratory-rate already owns it.
+  listable('respiratory-rate-sleep-summary', 'respiratoryRateSleepSummary', 'sample_time.physical_time', SLEEP, 'sleep_respiratory_rate', 'breaths_per_minute', 'fullSleepStats.breathsPerMinute'),
+  // Sub-dimension: heart rate zone ceiling. heartRateZones[] holds
+  // {heartRateZoneType, minBeatsPerMinute, maxBeatsPerMinute}, both declared `string` in the
+  // schema (int64-as-string, same convention parseNumeric already accepts everywhere else).
+  // Only maxBeatsPerMinute is mapped: minBeatsPerMinute is archived rather than given its own
+  // metric, because one zone's floor is the previous zone's ceiling - mapping both would
+  // double-count the same boundary under two names. This is a threshold the day's zones were
+  // computed with, not a measurement, so the metric names say so (_max_bpm) rather than reading
+  // like a reading of anything. HEART_RATE_ZONE_TYPE_UNSPECIFIED is left unnamed for the same
+  // reason as time-in-heart-rate-zone above.
+  listable('daily-heart-rate-zones', 'dailyHeartRateZones', 'date', ACTIVITY, 'daily_heart_rate_zones', 'bpm', '', {
+    subDimension: {
+      arrayPath: 'heartRateZones',
+      keyPath: 'heartRateZoneType',
+      valuePath: 'maxBeatsPerMinute',
+      metricByKey: {
+        LIGHT: 'heart_rate_zone_light_max_bpm',
+        MODERATE: 'heart_rate_zone_moderate_max_bpm',
+        VIGOROUS: 'heart_rate_zone_vigorous_max_bpm',
+        PEAK: 'heart_rate_zone_peak_max_bpm',
+      },
+    },
+  }),
 
   // Rejects list, and takes no filter at all: see filterMember above. Measured request and
   // response shapes: probe/findings/rollup-methods.md.
@@ -207,6 +434,79 @@ export const DATA_TYPES: readonly DataType[] = [
     ...listable('floors', 'floors', null, ACTIVITY, 'floors', 'count', 'countSum'),
     actions: ['rollUp', 'dailyRollUp', 'reconcile'],
   },
+
+  // Group C: five categorical types, target: 'observations' rather than 'samples' - a reading is
+  // a category (an enum spelling, or nothing at all), not a number, so the samples table's
+  // numeric value column is the wrong home for it. Measured 2026-09-06 against OvulationTest,
+  // Moods, Symptoms, MenstrualPeriod and IrregularRhythmNotification; see
+  // .superpowers/sdd/2026-09-06-catalogue-catches-up/api-schemas.md. metric and unit are left
+  // empty - the placeholder listable() would otherwise require - because mapObservations never
+  // reads them and metricDataType.ts's own DATA_TYPE_BY_METRIC skips a type whose metric is ''.
+  //
+  // REPRODUCTIVE, SYMPTOMS, MINDFULNESS and IRN are declared above; this group was briefly cut to
+  // IRN alone on the reasoning that the other three have no readonly scope, which was wrong the
+  // same way NUTRITION's absence from auth.oauth2.scopes was wrong - all three are on the
+  // console's Data Access page with Google's own description, confirmed 2026-09-08, and all four
+  // scopes here are already requested (catalogue-scopes.test.ts).
+  listable('ovulation-test', 'ovulationTest', 'sample_time.physical_time', REPRODUCTIVE, '', '', 'result', { target: 'observations' }),
+  // moods carries valences[] alongside moods[], a parallel array over the same instant. Only
+  // moods[] becomes a row; pairing a mood with its valence is a second decision nothing has asked
+  // for yet, so valences stays archived rather than guessed at - see mapObservations.ts.
+  listable('moods', 'moods', 'sample_time.physical_time', MINDFULNESS, '', '', 'moods', { target: 'observations' }),
+  listable('symptoms', 'symptoms', 'sample_time.physical_time', SYMPTOMS, '', '', 'symptoms', { target: 'observations' }),
+  // interval.start_time, the same convention every other interval type but sleep uses. notes is
+  // archived rather than stored: nothing has asked this table to hold free text yet.
+  listable('menstrual-period', 'menstrualPeriod', 'interval.start_time', REPRODUCTIVE, '', '', '', { target: 'observations' }),
+  // alertWindows[] and medicalDeviceInfo are archived rather than stored, for the same reason
+  // notes is above - this type's own interval is the only thing mapObservations reads from it.
+  //
+  // filterMember is interval.civil_start_time, not interval.start_time. IRN is a session data
+  // type - the discovery document says "Data for points in the irregular-rhythm-notification
+  // session data type collection" - and its interval is a SessionTimeInterval, so it takes the
+  // document's own quoted pattern for a session: "Session civil start time (Excluding Sleep and
+  // ECG): {session_data_type}.interval.civil_start_time". interval.start_time is the pattern for
+  // an *interval* data type, which IRN is not; that mismatch shipped once (this branch's own
+  // history) and would 400 every fetch. exercise and hydration-log, the other SessionTimeInterval
+  // types, already use civil_start_time; sleep and electrocardiogram are the document's two named
+  // exceptions, not IRN.
+  listable('irregular-rhythm-notification', 'irregularRhythmNotification', 'interval.civil_start_time', IRN, '', '', '', { target: 'observations' }),
+
+  // Group E: electrocardiogram, the one type that maps three ways from a single payload.
+  // Electrocardiogram declares a SessionTimeInterval - the same interval shape
+  // irregular-rhythm-notification uses immediately above - and its own description calls it "an
+  // ECG measurement session", which is why target is 'sessions' rather than 'samples'.
+  //
+  // filterMember is interval.start_time, not interval.civil_start_time - and unlike IRN just
+  // above, that is not a mistake. The document names ECG as its own explicit exception to the
+  // session civil-start-time pattern: "Session start time (ECG specific): Pattern:
+  // electrocardiogram.interval.start_time", the same way it names sleep as the exception for
+  // interval.end_time. Do not read this entry as following IRN's precedent, or copy its value
+  // onto a future session type without checking the document names that type as an exception
+  // too - IRN's own filterMember was wrong for exactly that reason.
+  //
+  // alsoTargets sends the same point on to two more mappers: mapSamples writes beatsPerMinuteAvg
+  // (this entry's own metric/unit/valuePath exist to serve that write - mapSessions reads none of
+  // them), and mapObservations writes resultClassification (mapObservations.ts's own SPEC_BY_ID
+  // overrides its valuePath for 'electrocardiogram', since this entry's valuePath already names a different
+  // leaf for mapSamples to read).
+  //
+  // waveformSamples[], samplingFrequencyHertz, millivoltsScalingFactor, leadNumber and
+  // medicalDeviceInfo are archived in the raw payload and deliberately never read by any mapper:
+  // a thirty-second trace at the declared sampling frequency is thousands of points, nothing in
+  // this app draws one, and writing it into samples would multiply the largest table in the
+  // database for a chart that does not exist.
+  // The id is `electrocardiogram`, not `ecg`, and the difference is a 404 rather than a preference:
+  // `id` is the URL path segment (`/users/me/dataTypes/{id}/dataPoints`) and the root of every
+  // filter member, and the discovery document names the collection explicitly - "Data for points in
+  // the `electrocardiogram` session data type collection". The scope is `googlehealth.ecg.readonly`
+  // and the session kind is 'ecg'; neither is the data type's own name.
+  listable('electrocardiogram', 'electrocardiogram', 'interval.start_time', ECG, 'ecg_heart_rate', 'bpm', 'beatsPerMinuteAvg', {
+    target: 'sessions',
+    alsoTargets: ['samples', 'observations'],
+    // See filterLowerBoundOnly's own doc comment: the document supports only `>=` for ECG, no
+    // upper bound and no AND, which is a narrower grammar than every other listable type gets.
+    filterLowerBoundOnly: true,
+  }),
 ]
 
 const BY_ID = new Map(DATA_TYPES.map((t) => [t.id, t]))
