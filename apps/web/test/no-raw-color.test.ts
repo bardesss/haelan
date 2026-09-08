@@ -42,7 +42,10 @@ const RULES: [string, RegExp][] = [
 function files(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true, recursive: true })
     .filter((e) => e.isFile())
-    .map((e) => join(e.parentPath ?? e.path, e.name))
+    // parentPath only, no `?? e.path` fallback: @types/node 26 dropped the deprecated `path`
+    // alias, so naming it no longer typechecks. Node has carried parentPath since 20.12 and this
+    // repo's floor is well above that, so the fallback was already unreachable.
+    .map((e) => join(e.parentPath, e.name))
 }
 
 describe('colour discipline', () => {
