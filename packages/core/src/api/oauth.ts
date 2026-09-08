@@ -5,12 +5,24 @@ export const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 export const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 export const API_ROOT = 'https://health.googleapis.com/v4'
 
-// The six scopes M0 requested and had granted, recorded in probe/findings/scopes.md. Declaring
-// the full set once is what keeps a later data type from needing a second console visit.
+// Every scope this instance asks a household member to grant. Declaring the full set once is what
+// keeps a later data type from needing a second console visit.
+//
+// Each name here is one Google's own registry defines - `auth.oauth2.scopes` in the v4 discovery
+// document, read 2026-09-06 - which the six M0 requested were not. `googlehealth.nutrition.readonly`
+// was among them and is not a scope: the nutrition category has only a `.writeonly` form. Consent
+// accepted it regardless, so the only symptom was a name Google does not define being shown to
+// somebody deciding whether to hand over their health data. It is gone rather than corrected,
+// because there is nothing to correct it to.
+//
+// ecg and irn are new here. Anyone who connected before this change holds a token granted against
+// the old list, so those two categories answer with a permission error until they reconnect; that
+// is recorded per data type and does not stop the rest of their sync.
 export const SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
-  'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
+  'https://www.googleapis.com/auth/googlehealth.ecg.readonly',
+  'https://www.googleapis.com/auth/googlehealth.irn.readonly',
   'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
   'https://www.googleapis.com/auth/googlehealth.profile.readonly',
   'https://www.googleapis.com/auth/googlehealth.settings.readonly',

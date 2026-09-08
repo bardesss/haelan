@@ -20,10 +20,12 @@ describe('buildConsentUrl', () => {
     expect(url.searchParams.get('redirect_uri')).toBe(redirectUri)
   })
 
-  it('requests exactly the six scopes M0 recorded', () => {
+  it('requests exactly the scopes the catalogue is built on', () => {
     const url = new URL(buildConsentUrl({ clientId: client.clientId, redirectUri, state: 'st' }))
     expect(url.searchParams.get('scope')?.split(' ').sort()).toEqual([...SCOPES].sort())
-    expect(SCOPES).toHaveLength(6)
+    // Seven since ecg and irn joined and the nutrition one, which Google never defined, left.
+    // catalogue-scopes.test.ts is what pins which seven; this only pins that the URL carries them.
+    expect(SCOPES).toHaveLength(7)
   })
 })
 

@@ -102,7 +102,21 @@ export interface DataType {
 const ACTIVITY = 'googlehealth.activity_and_fitness.readonly'
 const METRICS = 'googlehealth.health_metrics_and_measurements.readonly'
 const SLEEP = 'googlehealth.sleep.readonly'
+const ECG = 'googlehealth.ecg.readonly'
+const IRN = 'googlehealth.irn.readonly'
 const NUTRITION = 'googlehealth.nutrition.readonly'
+
+/**
+ * Scopes a data type names that consent can never carry. Google's registry, read 2026-09-06 from
+ * the discovery document's `auth.oauth2.scopes` block, defines eighteen scopes, and for four
+ * categories - nutrition, reproductive_health, logged_symptoms and mindfulness - the only form is
+ * `.writeonly`, which grants an app read-back of its own writes. haelan writes nothing to Google
+ * Health, so a type under one of those four is unreadable to it no matter what is asked for.
+ *
+ * The scope constant survives anyway, because it is how the entries beneath it say which category
+ * they belong to, and the category is the reason they cannot be fetched.
+ */
+export const UNGRANTABLE_SCOPES: readonly string[] = [NUTRITION]
 
 /**
  * The cap on types that report many times a day. Cost is density multiplied by horizon, and
@@ -290,11 +304,17 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('sleep', 'sleep', 'interval.end_time', SLEEP, 'sleep', 'session', '', { target: 'sessions', actions: ['list', 'reconcile'] }),
   listable('exercise', 'exercise', 'interval.civil_start_time', ACTIVITY, 'exercise', 'session', '', { target: 'sessions' }),
 
+  // Both of the next two are under the nutrition category, whose scope is in UNGRANTABLE_SCOPES.
+  // hydration-log nonetheless returned 33 real points in M0 (probe/findings/field-map.md), under a
+  // token granted from a scope list that named `googlehealth.nutrition.readonly`. Whatever
+  // authorised that read, the registry does not name it, so nothing here can promise it renews.
   listable('hydration-log', 'hydrationLog', 'interval.civil_start_time', NUTRITION, 'hydration', 'milliliters', 'amountConsumed.milliliters'),
-  // This household has never logged food, so the field map has no observed shape for
-  // nutrition-log. 'calories' is an unverified guess, not a measured value; kept fetchable and
-  // archived, with mapping deferred until a real payload confirms or corrects the leaf.
-  listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'calories', { mappingDeferred: true }),
+  // Mapping is deferred for a measured reason now rather than an unverified one. The leaf was
+  // read off the v4 schema on 2026-09-06 and is `energy.kcal`, correcting the 'calories' this
+  // entry guessed at; the payload also carries `nutrients[]`, `totalFat` and `totalCarbohydrate`,
+  // so one kcal column is a narrower answer than the type has. Moot either way while the category
+  // has no readable scope: the entry stays as the record of a type that exists and cannot be read.
+  listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'energy.kcal', { mappingDeferred: true }),
 
   // Group F: six data types named by neither the release notes nor the drift check - the drift
   // check sees only rollup-capable types named in prose. Measured 2026-09-06 against VO2Max,

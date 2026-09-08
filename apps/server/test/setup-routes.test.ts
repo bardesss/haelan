@@ -109,9 +109,9 @@ describe('setup routes', () => {
     })
     expect(response.statusCode).toBe(200)
     const body = response.json() as { scopes: string[] }
-    // Six, because the wizard's copy says six. A list that disagreed with the number in the
-    // instructions would send somebody to the console to declare the wrong set.
-    expect(body.scopes).toHaveLength(6)
+    // The wizard counts what it is handed rather than printing a number, so this pins the length
+    // only to catch the list silently shrinking between core and the route that serves it.
+    expect(body.scopes).toHaveLength(7)
     for (const scope of body.scopes) {
       expect(scope.startsWith('https://www.googleapis.com/auth/googlehealth.')).toBe(true)
     }
