@@ -5,14 +5,21 @@ import { SCOPES } from '../src/api/oauth.ts'
 const PREFIX = 'https://www.googleapis.com/auth/'
 
 /**
- * The readable scopes named by `auth.oauth2.scopes` in the v4 discovery document, read 2026-09-06.
+ * The readable scopes named by `auth.oauth2.scopes` in the v4 discovery document, read twice:
+ * 2026-09-06, when it named 18 scopes, and 2026-09-08, when it named 21. Three of that
+ * difference - `googlehealth.reproductive_health.readonly`, `googlehealth.logged_symptoms.readonly`
+ * and `googlehealth.mindfulness.readonly` - moved here from CONSOLE_OBSERVED_SCOPES below on the
+ * later read: the document now names them itself, so they no longer need the console as their
+ * only evidence.
  *
- * **This list is known to be incomplete.** `googlehealth.nutrition.readonly` is absent from it and
- * is nonetheless real: the console's Data Access page lists it with a Google-authored description
- * (probe/findings/scopes.md, 2026-08-19) and hydration-log returned 33 real points under it
- * (probe/findings/field-map.md). So membership here is evidence a scope exists, and absence is
- * evidence of nothing at all. Reasoning in the other direction once removed the nutrition scope
- * from consent, which would have cost every new connection its hydration history.
+ * The rule this comment exists to state is unchanged, and better evidenced than it was on
+ * 2026-09-06: the document's silence about those three scopes was wrong, and it has since
+ * corrected itself. Silence is still not evidence a scope does not exist - `googlehealth.
+ * nutrition.readonly` remains absent from both reads, eleven days apart, and is nonetheless real
+ * (see CONSOLE_OBSERVED_SCOPES: the console's Data Access page lists it with a Google-authored
+ * description, and hydration-log returned 33 real points under it). Reasoning from the document's
+ * silence to a scope's nonexistence once removed the nutrition scope from consent, which would
+ * have cost every new connection its hydration history.
  *
  * Pinned as a literal rather than fetched, because a test that asks the network what the answer is
  * cannot fail when the answer changes underneath it - and this list changing is precisely the
@@ -24,7 +31,10 @@ const REGISTRY_READONLY_SCOPES = [
   'googlehealth.health_metrics_and_measurements.readonly',
   'googlehealth.irn.readonly',
   'googlehealth.location.readonly',
+  'googlehealth.logged_symptoms.readonly',
+  'googlehealth.mindfulness.readonly',
   'googlehealth.profile.readonly',
+  'googlehealth.reproductive_health.readonly',
   'googlehealth.settings.readonly',
   'googlehealth.sleep.readonly',
 ]
@@ -33,15 +43,17 @@ const REGISTRY_READONLY_SCOPES = [
  * Scopes the discovery document omits but Google's own console shows, each with the measurement
  * that puts it here. A scope joining this list needs a console observation or a successful fetch,
  * not an inference.
+ *
+ * Down to one entry as of the 2026-09-08 re-read: `reproductive_health`, `logged_symptoms` and
+ * `mindfulness` used to need the console alone and now moved to REGISTRY_READONLY_SCOPES above,
+ * because the document names them too. `nutrition` has not - it has now survived two reads,
+ * 2026-09-06 and 2026-09-08, without the document naming it once.
  */
 const CONSOLE_OBSERVED_SCOPES = [
   // Data Access page, 2026-08-19, classified Restricted, described "See your Google Health
-  // nutrition data". hydration-log then returned 33 points under a token granted from it.
+  // nutrition data". hydration-log then returned 33 points under a token granted from it. Still
+  // absent from the discovery document on the 2026-09-08 re-read.
   'googlehealth.nutrition.readonly',
-  // Data Access page, 2026-09-08, each with Google's own description.
-  'googlehealth.reproductive_health.readonly',
-  'googlehealth.logged_symptoms.readonly',
-  'googlehealth.mindfulness.readonly',
 ]
 
 // oauth.ts writes the full URL form because that is what the authorization request carries, while
