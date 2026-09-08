@@ -103,6 +103,17 @@ export interface DataType {
    * without that mapper refusing it as ConfigError.
    */
   alsoTargets?: readonly MappingTarget[]
+  /**
+   * True when the document's filter grammar for this type supports only `>=`, with no upper
+   * bound and no `AND`. Documented for electrocardiogram alone: "Session start time (ECG
+   * specific): Pattern: electrocardiogram.interval.start_time - Supported comparison operators:
+   * >=", and "Only filtering by start time is supported for ECG." buildFilter (client.ts) reads
+   * this to drop the `< end` clause it emits for every other type. The cost is that each window
+   * then returns everything from its start rather than a bounded slice - acceptable here because
+   * an ECG is a handful of readings a year, not a dense type, and MAX_PAGES still bounds a
+   * runaway; a 400 on every fetch is the worse failure.
+   */
+  filterLowerBoundOnly?: true
 }
 
 // agg records how we computed the row, not how a rollup should combine it. A value the source
@@ -490,6 +501,9 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('electrocardiogram', 'electrocardiogram', 'interval.start_time', ECG, 'ecg_heart_rate', 'bpm', 'beatsPerMinuteAvg', {
     target: 'sessions',
     alsoTargets: ['samples', 'observations'],
+    // See filterLowerBoundOnly's own doc comment: the document supports only `>=` for ECG, no
+    // upper bound and no AND, which is a narrower grammar than every other listable type gets.
+    filterLowerBoundOnly: true,
   }),
 ]
 

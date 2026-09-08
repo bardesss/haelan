@@ -72,6 +72,30 @@ describe('HealthClient', () => {
     expect(filter).toContain('exercise.interval.civil_start_time >= "2026-08-18T00:30:00"')
   })
 
+  it('emits only a lower bound for ECG, no AND and no upper bound', async () => {
+    // The document's own grammar for ECG: "Supported comparison operators: >=" and "Only
+    // filtering by start time is supported for ECG" - no < clause and no logical operator at
+    // all, unlike every other listable type. The whole filter string, not a substring: a
+    // toContain('>=') here would still pass a filter that also carried the AND < clause this
+    // is meant to prove is absent.
+    const fetchMock = vi.fn().mockResolvedValue(page([]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('electrocardiogram')!, ...WINDOW })
+    const filter = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get('filter')
+    expect(filter).toBe('electrocardiogram.interval.start_time >= "2026-08-18T00:00:00.000Z"')
+  })
+
+  it('still emits a bounded filter for an ordinary type, unaffected by ECG\'s narrower grammar', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(page([]))
+    const client = new HealthClient(tokens, archive, { fetch: fetchMock, now: () => 1, sleep: async () => {}, random: () => 0 })
+    await client.listDataPoints({ personId: 'p1', dataType: dataTypeById('heart-rate')!, ...WINDOW })
+    const filter = new URL(fetchMock.mock.calls[0]?.[0] as string).searchParams.get('filter')
+    expect(filter).toBe(
+      'heart_rate.sample_time.physical_time >= "2026-08-18T00:00:00.000Z" AND '
+      + 'heart_rate.sample_time.physical_time < "2026-08-19T00:00:00.000Z"',
+    )
+  })
+
   it('follows pagination until the token runs out', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(page([{ a: 1 }], 'tok-2'))

@@ -45,6 +45,7 @@ describe('catalogue: ecg declares itself correctly', () => {
       scope: 'googlehealth.ecg.readonly',
       target: 'sessions', alsoTargets: ['samples', 'observations'],
       metric: 'ecg_heart_rate', unit: 'bpm', valuePath: 'beatsPerMinuteAvg',
+      filterLowerBoundOnly: true,
     })
   })
 })

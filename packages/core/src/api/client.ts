@@ -106,6 +106,11 @@ function buildFilter(t: DataType, startMs: number, endMs: number, timezone: stri
   const fmt = t.filterMember === 'date' ? (ms: number) => day(ms, timezone)
     : t.filterMember === 'interval.civil_start_time' ? (ms: number) => civil(ms, timezone)
     : iso
+  // ECG's documented grammar supports only `>=`, with no upper bound and no AND - see
+  // filterLowerBoundOnly's own doc comment in catalogue.ts. Every other type gets the bounded
+  // form, which is what keeps a window's fetch (and the archive row it produces) scoped to the
+  // range runJob actually asked for.
+  if (t.filterLowerBoundOnly) return `${member} >= "${fmt(startMs)}"`
   return `${member} >= "${fmt(startMs)}" AND ${member} < "${fmt(endMs)}"`
 }
 
