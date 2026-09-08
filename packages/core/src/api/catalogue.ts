@@ -15,7 +15,7 @@ export const FILTER_MEMBERS = [
 ] as const
 export type FilterMember = (typeof FILTER_MEMBERS)[number]
 
-export type MappingTarget = 'samples' | 'sessions'
+export type MappingTarget = 'samples' | 'sessions' | 'observations'
 
 export type TypeTier = 'intraday' | 'daily'
 

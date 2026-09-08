@@ -13,6 +13,8 @@ import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { localDateOf } from '../derive/localDay.ts'
 import { mapSessions } from '../api/mapSessions.ts'
+import { mapObservations } from '../api/mapObservations.ts'
+import { ObservationStore } from '../store/observations.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
 
 /**
@@ -139,7 +141,9 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         }))
         const written = t.target === 'samples'
           ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
-          : writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+          : t.target === 'sessions'
+          ? writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+          : writeObservations(tx, { dataType: t, personId: input.personId, resolveSource, pages })
         // The days the rows themselves fall on, not the day this window asked for. A window is
         // computed in the person's current timezone, while runDerive selects a day's rows by
         // each row's own offset, so a sample from a trip abroad can arrive in window D and
@@ -291,4 +295,18 @@ function writeSessions(tx: Parameters<Parameters<Database['transaction']>[0]>[0]
     for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
   }
   return { rows: written, localDates: [...localDates] }
+}
+
+function writeObservations(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
+  dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
+  pages: Array<{ body: string, rawPayloadId: string }>,
+}): Written {
+  const store = new ObservationStore(tx)
+  const rows = args.pages.flatMap((page) => mapObservations({
+    dataType: args.dataType, personId: args.personId, resolveSource: args.resolveSource,
+    body: page.body, rawPayloadId: page.rawPayloadId,
+  }))
+  store.writeMany(rows)
+  const localDates = new Set(rows.map((row) => row.localDate))
+  return { rows: rows.length, localDates: [...localDates] }
 }
