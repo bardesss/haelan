@@ -234,6 +234,107 @@ describe('runJob', () => {
     expect(rows()[0]).toEqual(after[0])
   })
 
+  it('fans an ECG payload out to all three tables its alsoTargets name, and marks every local date any of them wrote', async () => {
+    // runJob's own dispatch used to switch on t.target alone, so a real ECG sync wrote only the
+    // sessions row and silently dropped the samples row (beatsPerMinuteAvg) and the observations
+    // row (resultClassification) that catalogue.ts's alsoTargets: ['samples', 'observations']
+    // promises. The three mappers already honour alsoTargets on their own - see
+    // catalogue-ecg.test.ts for each mapper in isolation - so this is the one test that actually
+    // runs a sync and checks the database, the shape missing from the suite that let the defect
+    // ship. Reading matches catalogue-ecg.test.ts's aReading fixture so a failure here points at
+    // runJob's dispatch, not at a payload shape unique to this test.
+    const reading = {
+      name: 'users/me/dataTypes/electrocardiogram/dataPoints/reading1',
+      dataSource: {
+        platform: 'FITBIT', recordingMethod: 'ACTIVELY_MEASURED',
+        device: { displayName: 'Sense 2', formFactor: 'WATCH' },
+      },
+      electrocardiogram: {
+        interval: {
+          startTime: '2026-08-18T09:00:00Z', startUtcOffset: '7200s',
+          endTime: '2026-08-18T09:00:30Z', endUtcOffset: '7200s',
+        },
+        beatsPerMinuteAvg: '72',
+        resultClassification: 'ATRIAL_FIBRILLATION',
+        waveformSamples: Array.from({ length: 500 }, (_, i) => i % 40),
+        samplingFrequencyHertz: 250,
+        millivoltsScalingFactor: 1,
+        leadNumber: 1,
+        medicalDeviceInfo: { manufacturer: 'Acme', model: 'Watch 9' },
+      },
+    }
+    // A single local day, the same pattern the ovulation-test upsert test above uses, so the one
+    // point is fetched (and therefore mapped) exactly once rather than by two overlapping windows.
+    const args = {
+      personId: 'p1', dataType: dataTypeById('ecg')!, timezone: AMS,
+      fromMs: Date.parse('2026-08-18T00:00:00Z'), toMs: Date.parse('2026-08-18T22:00:00Z'),
+    }
+    const queue = new DeriveQueue(ctx.db)
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(body([reading]), { status: 200 }))
+    const result = await runJob({ ...args, deps: { ...build(fetchMock), deriveQueue: queue } })
+
+    // One row per table, not merely "at least one": a mapper that quietly duplicated or a
+    // dispatch that ran a writer twice would still pass a >0 check.
+    expect(result.rowsWritten).toBe(3)
+
+    const sessionRows = ctx.db.select().from(sessions).all()
+    expect(sessionRows).toHaveLength(1)
+    expect(sessionRows[0]).toEqual({
+      id: sessionRows[0]?.id,
+      personId: 'p1',
+      sourceId: sessionRows[0]?.sourceId,
+      kind: 'ecg',
+      externalId: 'users/me/dataTypes/electrocardiogram/dataPoints/reading1',
+      startMs: Date.parse('2026-08-18T09:00:00Z'),
+      startOffsetMinutes: 120,
+      endMs: Date.parse('2026-08-18T09:00:30Z'),
+      endOffsetMinutes: 120,
+      localDate: '2026-08-18',
+      attrs: JSON.stringify({
+        type: null, mainSleep: null, stagesStatus: null, summary: null,
+        metricsSummary: null, shortAwakenings: null, exerciseType: null,
+      }),
+      rawPayloadId: sessionRows[0]?.rawPayloadId,
+    })
+
+    const sampleRows = ctx.db.select().from(samples).all()
+    expect(sampleRows).toHaveLength(1)
+    expect(sampleRows[0]).toEqual({
+      personId: 'p1',
+      sourceId: sampleRows[0]?.sourceId,
+      metric: 'ecg_heart_rate',
+      utcMs: Date.parse('2026-08-18T09:00:00Z'),
+      tzOffsetMinutes: 120,
+      agg: 'raw',
+      value: 72,
+      n: 1,
+      rawPayloadId: sampleRows[0]?.rawPayloadId,
+    })
+
+    const observationRows = ctx.db.select().from(observations).all()
+    expect(observationRows).toHaveLength(1)
+    expect(observationRows[0]).toEqual({
+      id: observationRows[0]?.id,
+      personId: 'p1',
+      sourceId: observationRows[0]?.sourceId,
+      kind: 'ecg_classification',
+      startedAtMs: Date.parse('2026-08-18T09:00:00Z'),
+      startedAtOffsetMinutes: 120,
+      endedAtMs: Date.parse('2026-08-18T09:00:30Z'),
+      endedAtOffsetMinutes: 120,
+      localDate: '2026-08-18',
+      value: 'ATRIAL_FIBRILLATION',
+      rawPayloadId: observationRows[0]?.rawPayloadId,
+    })
+
+    // All three writers land the same instant on the same local date here, but the point of
+    // merging localDates rather than keeping only the primary writer's is that they need not:
+    // a future alsoTargets type whose extra writer's row falls on a different local date (an
+    // overnight session paired with a same-instant observation, say) would otherwise leave that
+    // date unmarked, and runDerive would never refresh it.
+    expect(queue.claim(10).map((e) => e.localDate)).toEqual(['2026-08-18'])
+  })
+
   it('advances the high water mark on success', async () => {
     const fetchMock = vi.fn().mockImplementation(async () => new Response(body([spo2Point('2026-08-18T10:00:00Z', 97)]), { status: 200 }))
     await runJob({
