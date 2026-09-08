@@ -111,7 +111,7 @@ describe('setup routes', () => {
     const body = response.json() as { scopes: string[] }
     // The wizard counts what it is handed rather than printing a number, so this pins the length
     // only to catch the list silently shrinking between core and the route that serves it.
-    expect(body.scopes).toHaveLength(8)
+    expect(body.scopes).toHaveLength(11)
     for (const scope of body.scopes) {
       expect(scope.startsWith('https://www.googleapis.com/auth/googlehealth.')).toBe(true)
     }

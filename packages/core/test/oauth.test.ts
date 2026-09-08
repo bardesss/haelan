@@ -23,9 +23,9 @@ describe('buildConsentUrl', () => {
   it('requests exactly the scopes the catalogue is built on', () => {
     const url = new URL(buildConsentUrl({ clientId: client.clientId, redirectUri, state: 'st' }))
     expect(url.searchParams.get('scope')?.split(' ').sort()).toEqual([...SCOPES].sort())
-    // Eight since ecg and irn joined the six M0 requested.
+    // Eleven: the six M0 requested, plus ecg and irn, plus the three sensitive categories.
     // catalogue-scopes.test.ts is what pins which eight; this only pins that the URL carries them.
-    expect(SCOPES).toHaveLength(8)
+    expect(SCOPES).toHaveLength(11)
   })
 })
 

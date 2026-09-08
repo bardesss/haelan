@@ -38,6 +38,10 @@ const CONSOLE_OBSERVED_SCOPES = [
   // Data Access page, 2026-08-19, classified Restricted, described "See your Google Health
   // nutrition data". hydration-log then returned 33 points under a token granted from it.
   'googlehealth.nutrition.readonly',
+  // Data Access page, 2026-09-08, each with Google's own description.
+  'googlehealth.reproductive_health.readonly',
+  'googlehealth.logged_symptoms.readonly',
+  'googlehealth.mindfulness.readonly',
 ]
 
 // oauth.ts writes the full URL form because that is what the authorization request carries, while
@@ -64,6 +68,14 @@ describe('a data type never names a scope consent does not carry', () => {
     // scope was removed on the reasoning that the discovery document does not name it. Removing it
     // costs hydration-log, which is mapped and populated.
     expect(requested.includes('googlehealth.nutrition.readonly')).toBe(true)
+  })
+
+  it('asks for no write scope, because a writeonly one could only edit what this app wrote', () => {
+    // Google's writeonly scopes grant edit and delete over the data the app itself added. haelan
+    // adds none, so a write scope would buy no ability to correct a bad reading and would put a
+    // request to write health data in front of every member for nothing. Corrections live in the
+    // overrides table instead.
+    expect(requested.filter((scope) => scope.includes('writeonly'))).toEqual([])
   })
 
   it('requests the ECG and irregular rhythm scopes their data types need', () => {

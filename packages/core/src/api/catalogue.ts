@@ -105,6 +105,13 @@ const SLEEP = 'googlehealth.sleep.readonly'
 const ECG = 'googlehealth.ecg.readonly'
 const IRN = 'googlehealth.irn.readonly'
 const NUTRITION = 'googlehealth.nutrition.readonly'
+// The three most sensitive categories, each confirmed on the console's Data Access page on
+// 2026-09-08 with Google's own description. Together with nutrition, four of the scopes this app
+// requests are absent from the discovery document's `auth.oauth2.scopes` block - which is why that
+// block is not treated as a list of what exists.
+const REPRODUCTIVE = 'googlehealth.reproductive_health.readonly'
+const SYMPTOMS = 'googlehealth.logged_symptoms.readonly'
+const MINDFULNESS = 'googlehealth.mindfulness.readonly'
 
 /**
  * Scopes a data type names that consent can never carry. Google's registry, read 2026-09-06 from
