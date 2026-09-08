@@ -12,5 +12,10 @@
  *    written before that widening are the reason this milestone exists.
  * 2: M3b's downsampler emits a fourth row per minute carrying that minute's reading tally, so a
  *    person's tier 2 built under 1 has no count rows for heart rate and cannot roll one up.
+ * 3: the catalogue caught up with the API - twenty-two data types the app fetched nothing for,
+ *    across six shapes. Tier 2 built under 2 has no rows at all for any of them, and the archive
+ *    it would be re-derived from does hold their payloads for whatever window was already
+ *    fetched, so the bump is what turns that archived history into rows rather than leaving only
+ *    the types' future visible.
  */
-export const MAPPING_VERSION = 2
+export const MAPPING_VERSION = 3
