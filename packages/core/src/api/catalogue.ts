@@ -404,6 +404,32 @@ export const DATA_TYPES: readonly DataType[] = [
     ...listable('floors', 'floors', null, ACTIVITY, 'floors', 'count', 'countSum'),
     actions: ['rollUp', 'dailyRollUp', 'reconcile'],
   },
+
+  // Group C: five categorical types, target: 'observations' rather than 'samples' - a reading is
+  // a category (an enum spelling, or nothing at all), not a number, so the samples table's
+  // numeric value column is the wrong home for it. Measured 2026-09-06 against OvulationTest,
+  // Moods, Symptoms, MenstrualPeriod and IrregularRhythmNotification; see
+  // .superpowers/sdd/2026-09-06-catalogue-catches-up/api-schemas.md. metric and unit are left
+  // empty - the placeholder listable() would otherwise require - because mapObservations never
+  // reads them and metricDataType.ts's own DATA_TYPE_BY_METRIC skips a type whose metric is ''.
+  //
+  // REPRODUCTIVE, SYMPTOMS, MINDFULNESS and IRN are declared above; this group was briefly cut to
+  // IRN alone on the reasoning that the other three have no readonly scope, which was wrong the
+  // same way NUTRITION's absence from auth.oauth2.scopes was wrong - all three are on the
+  // console's Data Access page with Google's own description, confirmed 2026-09-08, and all four
+  // scopes here are already requested (catalogue-scopes.test.ts).
+  listable('ovulation-test', 'ovulationTest', 'sample_time.physical_time', REPRODUCTIVE, '', '', 'result', { target: 'observations' }),
+  // moods carries valences[] alongside moods[], a parallel array over the same instant. Only
+  // moods[] becomes a row; pairing a mood with its valence is a second decision nothing has asked
+  // for yet, so valences stays archived rather than guessed at - see mapObservations.ts.
+  listable('moods', 'moods', 'sample_time.physical_time', MINDFULNESS, '', '', 'moods', { target: 'observations' }),
+  listable('symptoms', 'symptoms', 'sample_time.physical_time', SYMPTOMS, '', '', 'symptoms', { target: 'observations' }),
+  // interval.start_time, the same convention every other interval type but sleep uses. notes is
+  // archived rather than stored: nothing has asked this table to hold free text yet.
+  listable('menstrual-period', 'menstrualPeriod', 'interval.start_time', REPRODUCTIVE, '', '', '', { target: 'observations' }),
+  // alertWindows[] and medicalDeviceInfo are archived rather than stored, for the same reason
+  // notes is above - this type's own interval is the only thing mapObservations reads from it.
+  listable('irregular-rhythm-notification', 'irregularRhythmNotification', 'interval.start_time', IRN, '', '', '', { target: 'observations' }),
 ]
 
 const BY_ID = new Map(DATA_TYPES.map((t) => [t.id, t]))

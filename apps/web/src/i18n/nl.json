@@ -760,7 +760,12 @@
     "hydration-log": "Vochtinname",
     "nutrition-log": "Voeding",
     "total-calories": "Totale calorieën",
-    "floors": "Beklommen verdiepingen"
+    "floors": "Beklommen verdiepingen",
+    "ovulation-test": "Ovulatietest",
+    "moods": "Stemming",
+    "symptoms": "Symptomen",
+    "menstrual-period": "Menstruatie",
+    "irregular-rhythm-notification": "Melding onregelmatig ritme"
   },
   "settings": {
     "title": "Instellingen",

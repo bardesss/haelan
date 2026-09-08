@@ -64,10 +64,13 @@ describe('data type catalogue', () => {
     }
   })
 
-  it('gives every listable type a metric and a target', () => {
+  it('gives every listable type a target, and a metric when it writes samples', () => {
     for (const t of DATA_TYPES.filter((t) => supports(t, 'list'))) {
-      expect(t.metric, t.id).toBeTruthy()
-      expect(['samples', 'sessions'], t.id).toContain(t.target)
+      expect(['samples', 'sessions', 'observations'], t.id).toContain(t.target)
+      // Only a samples-target type is charted by metric name; sessions and observations types
+      // carry their own identity (kind, or a derived family) and leave metric '' on purpose -
+      // metricDataType.ts's own DATA_TYPE_BY_METRIC skips a type whose metric is ''.
+      if (t.target === 'samples') expect(t.metric, t.id).toBeTruthy()
     }
   })
 

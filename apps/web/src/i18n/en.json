@@ -760,7 +760,12 @@
     "hydration-log": "Hydration",
     "nutrition-log": "Nutrition",
     "total-calories": "Total calories",
-    "floors": "Floors climbed"
+    "floors": "Floors climbed",
+    "ovulation-test": "Ovulation test",
+    "moods": "Mood",
+    "symptoms": "Symptoms",
+    "menstrual-period": "Menstrual period",
+    "irregular-rhythm-notification": "Irregular rhythm notification"
   },
   "settings": {
     "title": "Settings",
