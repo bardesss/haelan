@@ -124,16 +124,6 @@ const SYMPTOMS = 'googlehealth.logged_symptoms.readonly'
 const MINDFULNESS = 'googlehealth.mindfulness.readonly'
 
 /**
- * Scopes a data type names that consent can never carry. Google's registry, read 2026-09-06 from
- * the discovery document's `auth.oauth2.scopes` block, defines eighteen scopes, and for four
- * categories - nutrition, reproductive_health, logged_symptoms and mindfulness - the only form is
- * `.writeonly`, which grants an app read-back of its own writes. haelan writes nothing to Google
- * Health, so a type under one of those four is unreadable to it no matter what is asked for.
- *
- * The scope constant survives anyway, because it is how the entries beneath it say which category
- * they belong to, and the category is the reason they cannot be fetched.
- */
-/**
  * Scopes a data type may declare that consent cannot carry.
  *
  * Empty, and the emptiness is the point. It briefly held NUTRITION on the reasoning that
