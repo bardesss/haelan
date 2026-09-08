@@ -116,7 +116,21 @@ const NUTRITION = 'googlehealth.nutrition.readonly'
  * The scope constant survives anyway, because it is how the entries beneath it say which category
  * they belong to, and the category is the reason they cannot be fetched.
  */
-export const UNGRANTABLE_SCOPES: readonly string[] = [NUTRITION]
+/**
+ * Scopes a data type may declare that consent cannot carry.
+ *
+ * Empty, and the emptiness is the point. It briefly held NUTRITION on the reasoning that
+ * `auth.oauth2.scopes` in the v4 discovery document names no readonly form for the category. That
+ * reasoning was wrong: the console's Data Access page lists `googlehealth.nutrition.readonly` with
+ * a Google-authored description (probe/findings/scopes.md), and hydration-log returned 33 real
+ * points under it (probe/findings/field-map.md). The registry is incomplete, so its silence is not
+ * evidence of absence.
+ *
+ * Kept rather than deleted because the guard test needs somewhere to put a scope that is genuinely
+ * unreachable, and because a future entry here is a claim that must be measured against the
+ * console rather than inferred from the discovery document.
+ */
+export const UNGRANTABLE_SCOPES: readonly string[] = []
 
 /**
  * The cap on types that report many times a day. Cost is density multiplied by horizon, and
@@ -304,16 +318,13 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('sleep', 'sleep', 'interval.end_time', SLEEP, 'sleep', 'session', '', { target: 'sessions', actions: ['list', 'reconcile'] }),
   listable('exercise', 'exercise', 'interval.civil_start_time', ACTIVITY, 'exercise', 'session', '', { target: 'sessions' }),
 
-  // Both of the next two are under the nutrition category, whose scope is in UNGRANTABLE_SCOPES.
-  // hydration-log nonetheless returned 33 real points in M0 (probe/findings/field-map.md), under a
-  // token granted from a scope list that named `googlehealth.nutrition.readonly`. Whatever
-  // authorised that read, the registry does not name it, so nothing here can promise it renews.
   listable('hydration-log', 'hydrationLog', 'interval.civil_start_time', NUTRITION, 'hydration', 'milliliters', 'amountConsumed.milliliters'),
-  // Mapping is deferred for a measured reason now rather than an unverified one. The leaf was
-  // read off the v4 schema on 2026-09-06 and is `energy.kcal`, correcting the 'calories' this
-  // entry guessed at; the payload also carries `nutrients[]`, `totalFat` and `totalCarbohydrate`,
-  // so one kcal column is a narrower answer than the type has. Moot either way while the category
-  // has no readable scope: the entry stays as the record of a type that exists and cannot be read.
+  // The valuePath is measured now rather than guessed: read off the v4 schema on 2026-09-06, the
+  // leaf is `energy.kcal`, correcting the `calories` this entry invented. Mapping stays deferred
+  // for a different and smaller reason - the payload also carries `nutrients[]`, `totalFat` and
+  // `totalCarbohydrate`, so a single kcal column answers less than the type holds, and the
+  // household has logged no food at all (0 points in probe/findings/field-map.md) for the shape of
+  // a fuller mapping to be designed against.
   listable('nutrition-log', 'nutritionLog', 'interval.civil_start_time', NUTRITION, 'nutrition', 'kcal', 'energy.kcal', { mappingDeferred: true }),
 
   // Group F: six data types named by neither the release notes nor the drift check - the drift

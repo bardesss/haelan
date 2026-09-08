@@ -23,9 +23,9 @@ describe('buildConsentUrl', () => {
   it('requests exactly the scopes the catalogue is built on', () => {
     const url = new URL(buildConsentUrl({ clientId: client.clientId, redirectUri, state: 'st' }))
     expect(url.searchParams.get('scope')?.split(' ').sort()).toEqual([...SCOPES].sort())
-    // Seven since ecg and irn joined and the nutrition one, which Google never defined, left.
-    // catalogue-scopes.test.ts is what pins which seven; this only pins that the URL carries them.
-    expect(SCOPES).toHaveLength(7)
+    // Eight since ecg and irn joined the six M0 requested.
+    // catalogue-scopes.test.ts is what pins which eight; this only pins that the URL carries them.
+    expect(SCOPES).toHaveLength(8)
   })
 })
 

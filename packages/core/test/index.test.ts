@@ -109,7 +109,7 @@ describe('package barrel', () => {
     expect(typeof core.buildConsentUrl).toBe('function')
     expect(typeof core.exchangeAuthorizationCode).toBe('function')
     expect(typeof core.probeAccess).toBe('function')
-    expect(core.SCOPES).toHaveLength(7)
+    expect(core.SCOPES).toHaveLength(8)
   })
 
   it('exports the backfill and its horizon controls', () => {

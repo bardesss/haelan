@@ -8,19 +8,24 @@ export const API_ROOT = 'https://health.googleapis.com/v4'
 // Every scope this instance asks a household member to grant. Declaring the full set once is what
 // keeps a later data type from needing a second console visit.
 //
-// Each name here is one Google's own registry defines - `auth.oauth2.scopes` in the v4 discovery
-// document, read 2026-09-06 - which the six M0 requested were not. `googlehealth.nutrition.readonly`
-// was among them and is not a scope: the nutrition category has only a `.writeonly` form. Consent
-// accepted it regardless, so the only symptom was a name Google does not define being shown to
-// somebody deciding whether to hand over their health data. It is gone rather than corrected,
-// because there is nothing to correct it to.
+// `googlehealth.nutrition.readonly` is here on the strength of two measurements that outrank the
+// discovery document. It appears on the console's own Data Access page, classified Restricted with
+// a Google-authored description - "See your Google Health nutrition data" - recorded in
+// probe/findings/scopes.md on 2026-08-19; and hydration-log returned 33 real data points under a
+// token granted from a list naming it (probe/findings/field-map.md).
 //
-// ecg and irn are new here. Anyone who connected before this change holds a token granted against
-// the old list, so those two categories answer with a permission error until they reconnect; that
-// is recorded per data type and does not stop the rest of their sync.
+// It is absent from `auth.oauth2.scopes` in the v4 discovery document. That block is therefore
+// incomplete, and an argument of the form "the registry does not name it, so it does not exist" is
+// unsound. This comment exists because that argument was made, acted on, and briefly removed this
+// scope - which would have cost every new connection its hydration history.
+//
+// ecg and irn are new here, for the data types this branch adds. Anyone who connected earlier
+// holds a token granted against the old list, so those two answer with a permission error until
+// they reconnect; runJob records that per data type and the rest of their sync continues.
 export const SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
+  'https://www.googleapis.com/auth/googlehealth.nutrition.readonly',
   'https://www.googleapis.com/auth/googlehealth.ecg.readonly',
   'https://www.googleapis.com/auth/googlehealth.irn.readonly',
   'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
