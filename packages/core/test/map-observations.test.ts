@@ -1,47 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { mapObservations } from '../src/api/mapObservations.ts'
+import { dataTypeById } from '../src/api/catalogue.ts'
 import type { DataType } from '../src/api/catalogue.ts'
 import { body } from '../src/testing/payloads.ts'
 
 const ctx = { personId: 'p1', resolveSource: () => 's1', rawPayloadId: 'r1' }
 
-// Built here rather than read from the catalogue: Task 5 commits the mapper and the dispatch
-// before the catalogue entries land, so this file's own coverage of the five measured shapes
-// must not depend on catalogue.ts declaring them yet. Every field below matches what those
-// entries will say - id, payloadKey, filterMember, scope and valuePath measured 2026-09-06
-// against the v4 discovery document; see api-schemas.md.
-const base = {
-  filterMember: 'sample_time.physical_time' as const,
-  actions: ['list'] as const,
-  target: 'observations' as const,
-  metric: '',
-  agg: 'raw' as const,
-  unit: '',
-  downsampleToMinute: false,
-  tier: 'daily' as const,
-}
-
-const ovulationTest: DataType = {
-  ...base, id: 'ovulation-test', filterRoot: 'ovulation_test', payloadKey: 'ovulationTest',
-  scope: 'googlehealth.reproductive_health.readonly', valuePath: 'result',
-}
-const moods: DataType = {
-  ...base, id: 'moods', filterRoot: 'moods', payloadKey: 'moods',
-  scope: 'googlehealth.mindfulness.readonly', valuePath: 'moods',
-}
-const symptoms: DataType = {
-  ...base, id: 'symptoms', filterRoot: 'symptoms', payloadKey: 'symptoms',
-  scope: 'googlehealth.logged_symptoms.readonly', valuePath: 'symptoms',
-}
-const menstrualPeriod: DataType = {
-  ...base, id: 'menstrual-period', filterRoot: 'menstrual_period', payloadKey: 'menstrualPeriod',
-  filterMember: 'interval.start_time', scope: 'googlehealth.reproductive_health.readonly', valuePath: '',
-}
-const irregularRhythm: DataType = {
-  ...base, id: 'irregular-rhythm-notification', filterRoot: 'irregular_rhythm_notification',
-  payloadKey: 'irregularRhythmNotification', filterMember: 'interval.start_time',
-  scope: 'googlehealth.irn.readonly', valuePath: '',
-}
+// Read from the catalogue rather than hand-built. This file used to construct its own DataType
+// literal for each of these five ids, on the reasoning that Task 5 committed the mapper before
+// the catalogue entries existed. That gap closed once group C landed, and the copy was never
+// removed - so when irregular-rhythm-notification's real filterMember was wrong (finding 2), this
+// file's own hand-built copy just repeated the same mistake and agreed with it instead of
+// catching it. A mapper test that invents its own copy of a real entry can only ever agree with
+// itself; reading dataTypeById means a future drift here fails this file too, not just
+// catalogue-group-c.test.ts.
+const ovulationTest = dataTypeById('ovulation-test')!
+const moods = dataTypeById('moods')!
+const symptoms = dataTypeById('symptoms')!
+const menstrualPeriod = dataTypeById('menstrual-period')!
+const irregularRhythm = dataTypeById('irregular-rhythm-notification')!
 
 describe('mapObservations', () => {
   it('maps an ovulation test to one row carrying the API\'s own enum spelling', () => {

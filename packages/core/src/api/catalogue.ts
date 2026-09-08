@@ -446,13 +446,30 @@ export const DATA_TYPES: readonly DataType[] = [
   listable('menstrual-period', 'menstrualPeriod', 'interval.start_time', REPRODUCTIVE, '', '', '', { target: 'observations' }),
   // alertWindows[] and medicalDeviceInfo are archived rather than stored, for the same reason
   // notes is above - this type's own interval is the only thing mapObservations reads from it.
-  listable('irregular-rhythm-notification', 'irregularRhythmNotification', 'interval.start_time', IRN, '', '', '', { target: 'observations' }),
+  //
+  // filterMember is interval.civil_start_time, not interval.start_time. IRN is a session data
+  // type - the discovery document says "Data for points in the irregular-rhythm-notification
+  // session data type collection" - and its interval is a SessionTimeInterval, so it takes the
+  // document's own quoted pattern for a session: "Session civil start time (Excluding Sleep and
+  // ECG): {session_data_type}.interval.civil_start_time". interval.start_time is the pattern for
+  // an *interval* data type, which IRN is not; that mismatch shipped once (this branch's own
+  // history) and would 400 every fetch. exercise and hydration-log, the other SessionTimeInterval
+  // types, already use civil_start_time; sleep and electrocardiogram are the document's two named
+  // exceptions, not IRN.
+  listable('irregular-rhythm-notification', 'irregularRhythmNotification', 'interval.civil_start_time', IRN, '', '', '', { target: 'observations' }),
 
   // Group E: electrocardiogram, the one type that maps three ways from a single payload.
   // Electrocardiogram declares a SessionTimeInterval - the same interval shape
   // irregular-rhythm-notification uses immediately above - and its own description calls it "an
-  // ECG measurement session", which is why interval.start_time (measured for that neighbour, not
-  // guessed here) is the filterMember and target is 'sessions' rather than 'samples'.
+  // ECG measurement session", which is why target is 'sessions' rather than 'samples'.
+  //
+  // filterMember is interval.start_time, not interval.civil_start_time - and unlike IRN just
+  // above, that is not a mistake. The document names ECG as its own explicit exception to the
+  // session civil-start-time pattern: "Session start time (ECG specific): Pattern:
+  // electrocardiogram.interval.start_time", the same way it names sleep as the exception for
+  // interval.end_time. Do not read this entry as following IRN's precedent, or copy its value
+  // onto a future session type without checking the document names that type as an exception
+  // too - IRN's own filterMember was wrong for exactly that reason.
   //
   // alsoTargets sends the same point on to two more mappers: mapSamples writes beatsPerMinuteAvg
   // (this entry's own metric/unit/valuePath exist to serve that write - mapSessions reads none of
