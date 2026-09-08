@@ -8,6 +8,7 @@ import { samplePoint, sleepPoint, dailyRollupBody, body } from '../src/testing/p
 
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
+import { observations } from '../src/db/schema/index.ts'
 
 let t: TestDatabase
 afterEach(() => { t.cleanup() })
@@ -31,6 +32,31 @@ function pageWithBeats(beats: { atMs: number, bpm: number }[]): string {
 function rollupBody(localDate: string, kcal: number): string {
   const [year, month, day] = localDate.split('-').map(Number) as [number, number, number]
   return dailyRollupBody('totalCalories', [{ date: { year, month, day }, value: { kcalSum: kcal } }])
+}
+
+// Same reading catalogue-ecg.test.ts and run-job.test.ts's fan-out test both use, so a failure
+// here points at replay's own dispatch rather than at a payload shape unique to this file.
+function ecgBody(): string {
+  return body([{
+    name: 'users/me/dataTypes/electrocardiogram/dataPoints/reading1',
+    dataSource: {
+      platform: 'FITBIT', recordingMethod: 'ACTIVELY_MEASURED',
+      device: { displayName: 'Sense 2', formFactor: 'WATCH' },
+    },
+    electrocardiogram: {
+      interval: {
+        startTime: '2026-08-18T09:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T09:00:30Z', endUtcOffset: '7200s',
+      },
+      beatsPerMinuteAvg: '72',
+      resultClassification: 'ATRIAL_FIBRILLATION',
+      waveformSamples: Array.from({ length: 500 }, (_, i) => i % 40),
+      samplingFrequencyHertz: 250,
+      millivoltsScalingFactor: 1,
+      leadNumber: 1,
+      medicalDeviceInfo: { manufacturer: 'Acme', model: 'Watch 9' },
+    },
+  }])
 }
 
 // Same envelope shape map-sessions.test.ts uses for sleep: a list response whose one point
@@ -363,6 +389,51 @@ describe('replayPerson', () => {
     // an inequality check just as well as the right one.
     expect(counts.segments).toBe(2)
     expect(db.select().from(sessions).all()).toHaveLength(1)
+  })
+
+  // The bug this pins: electrocardiogram declares target: 'sessions' with
+  // alsoTargets: ['samples', 'observations'], and replayPerson used to dispatch on t.target
+  // alone. runRebuild empties tier 2 before calling replayPerson, so that bug did not just leave
+  // the sample and observation rows unwritten - a rebuild deleted an existing ECG's heart rate
+  // sample and classification observation and never put them back. One row in each of the three
+  // tables, not merely ">0" in any of them: a dispatch that ran a writer twice, or ran the wrong
+  // one, could still pass a looser check.
+  test('an ECG payload replays into all three tables its alsoTargets name', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'electrocardiogram', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: ecgBody(),
+    })
+
+    const counts = db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    expect(counts.sessions).toBe(1)
+    expect(counts.samples).toBe(1)
+    expect(counts.observations).toBe(1)
+
+    const sessionRows = db.select().from(sessions).where(eq(sessions.personId, 'p1')).all()
+    expect(sessionRows).toHaveLength(1)
+    expect(sessionRows[0]?.kind).toBe('ecg')
+
+    const sampleRows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
+    expect(sampleRows).toHaveLength(1)
+    expect(sampleRows[0]).toMatchObject({ metric: 'ecg_heart_rate', value: 72, agg: 'raw' })
+
+    const observationRows = db.select().from(observations).where(eq(observations.personId, 'p1')).all()
+    expect(observationRows).toHaveLength(1)
+    expect(observationRows[0]).toMatchObject({ kind: 'ecg_classification', value: 'ATRIAL_FIBRILLATION' })
+
+    // The session's own local date and the samples/observations dates coincide here (same
+    // instant), but localDates must still be the union across every branch that ran: a merge
+    // that kept only the primary target's dates would happen to pass this assertion by
+    // coincidence rather than by covering the property it exists to check.
+    expect(counts.localDates).toEqual(['2026-08-18'])
   })
 
   test('the source rows are created from the payloads, not assumed', () => {

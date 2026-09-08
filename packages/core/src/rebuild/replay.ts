@@ -86,103 +86,112 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
       continue
     }
 
-    if (t.target === 'sessions') {
-      // No lookup of a session's previous localDate here, unlike writeSessions in the live sync
-      // path. That lookup exists to mark the day a session left dirty when Google revises its end
-      // time across midnight, but the caller of replayPerson has already emptied this person's
-      // tier 2, so every row inserted below is new: there is no previous row for any session to
-      // have moved away from.
-      for (const page of group.pages) {
-        const { sessions: rows, segments } = mapSessions({
-          dataType: t, personId: input.personId, resolveSource,
-          body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
-        })
-        for (const row of rows) {
-          tx.insert(sessions).values(row).onConflictDoUpdate({
-            target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
-            set: {
-              startMs: row.startMs,
-              startOffsetMinutes: row.startOffsetMinutes,
-              endMs: row.endMs,
-              endOffsetMinutes: row.endOffsetMinutes,
-              localDate: row.localDate,
-              attrs: row.attrs,
-              rawPayloadId: row.rawPayloadId,
-            },
-          }).run()
-          localDates.add(row.localDate)
+    // ECG (and any future type like it) names one primary target plus alsoTargets, and one
+    // archived page has to replay into each: the branch below used to run only for t.target,
+    // which is what let a rebuild delete the alsoTargets rows a live sync had written and never
+    // put them back. runJob.ts's writeFor has the identical shape and the identical reason
+    // (runJob.ts:154): every mapper already accepts a foreign-looking dataType through its own
+    // "target is mine, or alsoTargets includes mine" guard, so running one branch per named
+    // target is the other half of that contract.
+    for (const target of [t.target, ...(t.alsoTargets ?? [])]) {
+      if (target === 'sessions') {
+        // No lookup of a session's previous localDate here, unlike writeSessions in the live sync
+        // path. That lookup exists to mark the day a session left dirty when Google revises its end
+        // time across midnight, but the caller of replayPerson has already emptied this person's
+        // tier 2, so every row inserted below is new: there is no previous row for any session to
+        // have moved away from.
+        for (const page of group.pages) {
+          const { sessions: rows, segments } = mapSessions({
+            dataType: t, personId: input.personId, resolveSource,
+            body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+          })
+          for (const row of rows) {
+            tx.insert(sessions).values(row).onConflictDoUpdate({
+              target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
+              set: {
+                startMs: row.startMs,
+                startOffsetMinutes: row.startOffsetMinutes,
+                endMs: row.endMs,
+                endOffsetMinutes: row.endOffsetMinutes,
+                localDate: row.localDate,
+                attrs: row.attrs,
+                rawPayloadId: row.rawPayloadId,
+              },
+            }).run()
+            localDates.add(row.localDate)
+          }
+          // Replaced wholesale for the sessions in this page, the same as ingest, a window fetched
+          // twice legitimately revises a night's stage timeline, and merging both versions of it
+          // would interleave them.
+          for (const row of rows) {
+            tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
+          }
+          for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
         }
-        // Replaced wholesale for the sessions in this page, the same as ingest, a window fetched
-        // twice legitimately revises a night's stage timeline, and merging both versions of it
-        // would interleave them.
-        for (const row of rows) {
-          tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
-        }
-        for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
+        continue
       }
-      continue
-    }
 
-    if (t.target === 'observations') {
-      // One mapObservations call per page, the same granularity writeObservations in runJob.ts
-      // uses. Unlike samples there is no coverage or aggregate to get wrong by mapping a page on
-      // its own, so there is no reason to reassemble fetch episodes the way the samples path below
-      // has to.
-      for (const page of group.pages) {
-        const rows = mapObservations({
-          dataType: t, personId: input.personId, resolveSource,
-          body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
-        })
+      if (target === 'observations') {
+        // One mapObservations call per page, the same granularity writeObservations in runJob.ts
+        // uses. Unlike samples there is no coverage or aggregate to get wrong by mapping a page on
+        // its own, so there is no reason to reassemble fetch episodes the way the samples path below
+        // has to.
+        for (const page of group.pages) {
+          const rows = mapObservations({
+            dataType: t, personId: input.personId, resolveSource,
+            body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+          })
+          for (const row of rows) {
+            tx.insert(observations).values(row).onConflictDoUpdate({
+              target: observations.id,
+              set: {
+                personId: row.personId,
+                sourceId: row.sourceId,
+                kind: row.kind,
+                startedAtMs: row.startedAtMs,
+                startedAtOffsetMinutes: row.startedAtOffsetMinutes,
+                endedAtMs: row.endedAtMs,
+                endedAtOffsetMinutes: row.endedAtOffsetMinutes,
+                localDate: row.localDate,
+                value: row.value,
+                rawPayloadId: row.rawPayloadId,
+              },
+            }).run()
+            localDates.add(row.localDate)
+          }
+        }
+        continue
+      }
+
+      // One mapWindowSamples call per fetch episode, oldest first, not one call over the whole
+      // group. Pagination pages of a single fetch must still be mapped together, which is the
+      // reason groupIntoWindows exists at all, so this splits WITHIN a group rather than reverting
+      // to one call per page. splitIntoEpisodes reads the episode the client recorded where there
+      // is one and infers it from pageToken where there is not. But runJob calls listDataPoints
+      // once per sync run, and the trailing window is re-fetched on every run by design, so two
+      // archived rows sharing a window's bounds are just as often two separate fetch episodes as
+      // two pages of one. Merging them into a single mapWindowSamples call would downsample
+      // across readings the original sync never saw
+      // together: a minute Google revised from 60 bpm to 100 bpm between two fetches would leave
+      // min 60, mean 80, max 100, n 2, where the sync itself left min 100, mean 100, max 100, n 1.
+      for (const episode of splitIntoEpisodes(group.pages)) {
+        const pages = episode.map((p) => ({
+          body: input.archive.getBody(input.personId, p.id),
+          rawPayloadId: p.id,
+        }))
+        const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
         for (const row of rows) {
-          tx.insert(observations).values(row).onConflictDoUpdate({
-            target: observations.id,
+          tx.insert(samples).values(row).onConflictDoUpdate({
+            target: [samples.personId, samples.sourceId, samples.metric, samples.utcMs, samples.agg],
             set: {
-              personId: row.personId,
-              sourceId: row.sourceId,
-              kind: row.kind,
-              startedAtMs: row.startedAtMs,
-              startedAtOffsetMinutes: row.startedAtOffsetMinutes,
-              endedAtMs: row.endedAtMs,
-              endedAtOffsetMinutes: row.endedAtOffsetMinutes,
-              localDate: row.localDate,
               value: row.value,
+              n: row.n,
+              tzOffsetMinutes: row.tzOffsetMinutes,
               rawPayloadId: row.rawPayloadId,
             },
           }).run()
-          localDates.add(row.localDate)
+          localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
         }
-      }
-      continue
-    }
-
-    // One mapWindowSamples call per fetch episode, oldest first, not one call over the whole
-    // group. Pagination pages of a single fetch must still be mapped together, which is the
-    // reason groupIntoWindows exists at all, so this splits WITHIN a group rather than reverting
-    // to one call per page. splitIntoEpisodes reads the episode the client recorded where there
-    // is one and infers it from pageToken where there is not. But runJob calls listDataPoints
-    // once per sync run, and the trailing window is re-fetched on every run by design, so two
-    // archived rows sharing a window's bounds are just as often two separate fetch episodes as
-    // two pages of one. Merging them into a single mapWindowSamples call would downsample
-    // across readings the original sync never saw
-    // together: a minute Google revised from 60 bpm to 100 bpm between two fetches would leave
-    // min 60, mean 80, max 100, n 2, where the sync itself left min 100, mean 100, max 100, n 1.
-    for (const episode of splitIntoEpisodes(group.pages)) {
-      const pages = episode.map((p) => ({
-        body: input.archive.getBody(input.personId, p.id),
-        rawPayloadId: p.id,
-      }))
-      const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
-      for (const row of rows) {
-        tx.insert(samples).values(row).onConflictDoUpdate({
-          target: [samples.personId, samples.sourceId, samples.metric, samples.utcMs, samples.agg],
-          set: {
-            value: row.value,
-            n: row.n,
-            tzOffsetMinutes: row.tzOffsetMinutes,
-            rawPayloadId: row.rawPayloadId,
-          },
-        }).run()
-        localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
       }
     }
   }
