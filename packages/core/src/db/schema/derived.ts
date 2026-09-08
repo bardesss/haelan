@@ -5,7 +5,7 @@ import { rawPayloads } from './raw.ts'
 export const SAMPLE_AGGS = ['raw', 'min', 'mean', 'max', 'sum', 'count'] as const
 export type SampleAgg = (typeof SAMPLE_AGGS)[number]
 
-export const SESSION_KINDS = ['sleep', 'exercise'] as const
+export const SESSION_KINDS = ['sleep', 'exercise', 'ecg'] as const
 export type SessionKind = (typeof SESSION_KINDS)[number]
 
 // Long and narrow. Heart rate arrives every 2 seconds, and agg lets a minute collapse to three

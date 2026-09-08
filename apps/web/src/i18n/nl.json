@@ -765,7 +765,8 @@
     "moods": "Stemming",
     "symptoms": "Symptomen",
     "menstrual-period": "Menstruatie",
-    "irregular-rhythm-notification": "Melding onregelmatig ritme"
+    "irregular-rhythm-notification": "Melding onregelmatig ritme",
+    "ecg": "ECG"
   },
   "settings": {
     "title": "Instellingen",

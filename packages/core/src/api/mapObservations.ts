@@ -38,6 +38,14 @@ interface ObservationSpec {
   kind: string
   clock: 'sample' | 'interval'
   value: 'field' | 'array' | 'none'
+  /**
+   * Overrides `t.valuePath` for the leaf this spec reads. Unset for the original five, which
+   * read `t.valuePath` directly because `target: 'observations'` is their only target and the
+   * catalogue's own valuePath already names the right leaf. ECG is the exception: its
+   * `t.valuePath` names `beatsPerMinuteAvg`, read by mapSamples via `alsoTargets`, so this mapper
+   * needs its own leaf name for `resultClassification` rather than sharing that one field.
+   */
+  valuePath?: string
 }
 
 const SPEC_BY_ID: Readonly<Record<string, ObservationSpec>> = {
@@ -49,6 +57,10 @@ const SPEC_BY_ID: Readonly<Record<string, ObservationSpec>> = {
   symptoms: { kind: 'symptom', clock: 'sample', value: 'array' },
   'menstrual-period': { kind: 'menstrual_period', clock: 'interval', value: 'none' },
   'irregular-rhythm-notification': { kind: 'irregular_rhythm', clock: 'interval', value: 'none' },
+  // Task 8: the ECG payload's own interval (SessionTimeInterval, same shape as
+  // irregular-rhythm-notification's) is the clock; resultClassification is a single enum leaf,
+  // same shape as ovulation-test's result.
+  ecg: { kind: 'ecg_classification', clock: 'interval', value: 'field', valuePath: 'resultClassification' },
 }
 
 export function mapObservations(input: MapObservationsInput): ObservationRow[] {
@@ -127,10 +139,10 @@ export function mapObservations(input: MapObservationsInput): ObservationRow[] {
     if (spec.value === 'none') {
       pushRow(null, 0)
     } else if (spec.value === 'field') {
-      const raw = valueAt(payload, t.valuePath)
+      const raw = valueAt(payload, spec.valuePath ?? t.valuePath)
       if (typeof raw === 'string' && raw !== '') pushRow(raw, 0)
     } else {
-      const raw = valueAt(payload, t.valuePath)
+      const raw = valueAt(payload, spec.valuePath ?? t.valuePath)
       const elements = Array.isArray(raw) ? raw : []
       elements.forEach((element, index) => {
         if (typeof element === 'string' && element !== '') pushRow(element, index)

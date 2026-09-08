@@ -420,6 +420,28 @@ export const DATA_TYPES: readonly DataType[] = [
   // alertWindows[] and medicalDeviceInfo are archived rather than stored, for the same reason
   // notes is above - this type's own interval is the only thing mapObservations reads from it.
   listable('irregular-rhythm-notification', 'irregularRhythmNotification', 'interval.start_time', IRN, '', '', '', { target: 'observations' }),
+
+  // Group E: electrocardiogram, the one type that maps three ways from a single payload.
+  // Electrocardiogram declares a SessionTimeInterval - the same interval shape
+  // irregular-rhythm-notification uses immediately above - and its own description calls it "an
+  // ECG measurement session", which is why interval.start_time (measured for that neighbour, not
+  // guessed here) is the filterMember and target is 'sessions' rather than 'samples'.
+  //
+  // alsoTargets sends the same point on to two more mappers: mapSamples writes beatsPerMinuteAvg
+  // (this entry's own metric/unit/valuePath exist to serve that write - mapSessions reads none of
+  // them), and mapObservations writes resultClassification (mapObservations.ts's own SPEC_BY_ID
+  // overrides its valuePath for 'ecg', since this entry's valuePath already names a different
+  // leaf for mapSamples to read).
+  //
+  // waveformSamples[], samplingFrequencyHertz, millivoltsScalingFactor, leadNumber and
+  // medicalDeviceInfo are archived in the raw payload and deliberately never read by any mapper:
+  // a thirty-second trace at the declared sampling frequency is thousands of points, nothing in
+  // this app draws one, and writing it into samples would multiply the largest table in the
+  // database for a chart that does not exist.
+  listable('ecg', 'electrocardiogram', 'interval.start_time', ECG, 'ecg_heart_rate', 'bpm', 'beatsPerMinuteAvg', {
+    target: 'sessions',
+    alsoTargets: ['samples', 'observations'],
+  }),
 ]
 
 const BY_ID = new Map(DATA_TYPES.map((t) => [t.id, t]))

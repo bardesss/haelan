@@ -7,10 +7,13 @@ describe('the metric catalogue', () => {
   // rolls up to nothing at all, silently, because rollUpDay has no aggregates to compute.
   //
   // A sub-dimension type's own `metric` is the family name, not a metric any row carries, so it
-  // is excluded here and checked separately below against metricByKey instead.
+  // is excluded here and checked separately below against metricByKey instead. A samples-target
+  // type is not the only source of a real samples row any more: Task 8's ECG declares
+  // target: 'sessions' with alsoTargets: ['samples', ...], and mapSamples writes its
+  // beatsPerMinuteAvg row under this same t.metric, so that case is included here too.
   it('declares every sample metric the data type catalogue names', () => {
     const sampleMetrics = DATA_TYPES
-      .filter((t) => t.target === 'samples' && !t.subDimension)
+      .filter((t) => (t.target === 'samples' || t.alsoTargets?.includes('samples')) && !t.subDimension)
       .map((t) => t.metric)
     for (const metric of sampleMetrics) {
       expect(METRICS[metric], `no METRICS entry for ${metric}`).toBeDefined()
@@ -26,9 +29,14 @@ describe('the metric catalogue', () => {
   })
 
   // Session metrics are M2c's: their daily figures come from sessions and segments, not from
-  // samples, so an entry here would claim a rollup that rollUpDay cannot produce.
+  // samples, so an entry here would claim a rollup that rollUpDay cannot produce. ECG is excluded
+  // from this rule rather than exempted from it: its target is 'sessions', but alsoTargets names
+  // 'samples' too, and it is that second, real samples row (not a session-derived figure) that
+  // this metric name describes - the opposite of what this test guards against.
   it('declares no session metric, because those are derived from sessions', () => {
-    const sessionMetrics = DATA_TYPES.filter((t) => t.target === 'sessions').map((t) => t.metric)
+    const sessionMetrics = DATA_TYPES
+      .filter((t) => t.target === 'sessions' && !t.alsoTargets?.includes('samples'))
+      .map((t) => t.metric)
     for (const metric of sessionMetrics) {
       expect(METRICS[metric], `unexpected METRICS entry for ${metric}`).toBeUndefined()
     }

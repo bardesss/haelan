@@ -765,7 +765,8 @@
     "moods": "Mood",
     "symptoms": "Symptoms",
     "menstrual-period": "Menstrual period",
-    "irregular-rhythm-notification": "Irregular rhythm notification"
+    "irregular-rhythm-notification": "Irregular rhythm notification",
+    "ecg": "ECG"
   },
   "settings": {
     "title": "Settings",
