@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, schema } from '@haelan/core'
+import { DERIVATION_VERSION, insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { stampEtag, hashEtag, notModified, SERIALIZATION_VERSION } from '../src/api/etag.ts'
@@ -348,10 +348,10 @@ describe('conditional requests on the hash backed routes', () => {
     harness = await withServer(); const token = await harness.signIn()
     seedSource(harness, 'watch')
     const utcMs = Date.UTC(2026, 7, 22, 9, 0) - 120 * 60_000
-    harness.app.haelan.instance.db.insert(schema.samples).values({
+    insertSample(harness.app.haelan.instance.db, {
       personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
-      utcMs, tzOffsetMinutes: 120, agg: 'mean', value: 60, n: 1, rawPayloadId: null,
-    }).run()
+      utcMs, tzOffsetMinutes: 120, agg: 'mean', value: 60,
+    })
 
     const first = await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22')
     expect(first.statusCode).toBe(200)
@@ -368,16 +368,16 @@ describe('conditional requests on the hash backed routes', () => {
     harness = await withServer(); const token = await harness.signIn()
     seedSource(harness, 'watch')
     const utcMs = Date.UTC(2026, 7, 22, 9, 0) - 120 * 60_000
-    harness.app.haelan.instance.db.insert(schema.samples).values({
+    insertSample(harness.app.haelan.instance.db, {
       personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
-      utcMs, tzOffsetMinutes: 120, agg: 'mean', value: 60, n: 1, rawPayloadId: null,
-    }).run()
+      utcMs, tzOffsetMinutes: 120, agg: 'mean', value: 60,
+    })
     const before = await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22')
 
-    harness.app.haelan.instance.db.insert(schema.samples).values({
+    insertSample(harness.app.haelan.instance.db, {
       personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
-      utcMs: utcMs + 60_000, tzOffsetMinutes: 120, agg: 'mean', value: 61, n: 1, rawPayloadId: null,
-    }).run()
+      utcMs: utcMs + 60_000, tzOffsetMinutes: 120, agg: 'mean', value: 61,
+    })
     const after = await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22')
     expect(after.headers.etag).not.toBe(before.headers.etag)
   })

@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, test } from 'vitest'
 import { and, eq } from 'drizzle-orm'
 import { deriveDayInto } from '../src/derive/deriveDay.ts'
-import { daily, samples } from '../src/db/schema/index.ts'
+import { daily } from '../src/db/schema/index.ts'
 import { priorityFrom } from '../src/derive/priority.ts'
 import { DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { downsampleToMinute } from '../src/api/downsample.ts'
 import type { SampleRow } from '../src/api/mapSamples.ts'
 
-import { createTestDatabase, seedDerivableDay } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedDerivableDay } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 let t: TestDatabase
@@ -66,7 +66,7 @@ describe('deriveDayInto', () => {
 
     // rawPayloadId is nulled rather than kept: nothing in this test archives a payload for it to
     // reference, and the foreign key exists precisely to catch a row claiming one that is not there.
-    for (const row of downsampled) db.insert(samples).values({ ...row, rawPayloadId: null }).run()
+    for (const row of downsampled) insertSample(db, { ...row, rawPayloadId: null })
 
     db.transaction((tx) => deriveDayInto(tx, { personId, localDate, ...tuning }))
 

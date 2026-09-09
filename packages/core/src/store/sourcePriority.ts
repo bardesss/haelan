@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { samples, sourcePriority, sources } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import type { DeriveQueue } from './deriveQueue.ts'
 import { ConfigError } from '../errors.ts'
 import { priorityFrom } from '../derive/priority.ts'
@@ -113,9 +114,15 @@ export class SourcePriorityStore {
    */
   #markEveryDay(personId: string, nowMs: number, tx: DbOrTx): void {
     const columns = { utcMs: samples.utcMs, tzOffsetMinutes: samples.tzOffsetMinutes }
-    const first = tx.select(columns).from(samples).where(eq(samples.personId, personId))
+    // Bound to the write's transaction. Only the person is translated: this reads the two boundary
+    // instants and nothing about which metric or source they belong to. IfKnown, because a person
+    // with no row has no samples either, which is the same nothing-to-mark the empty query below
+    // already answers with.
+    const personRef = new SampleKeys(tx).personRefIfKnown(personId)
+    if (personRef === undefined) return
+    const first = tx.select(columns).from(samples).where(eq(samples.personRef, personRef))
       .orderBy(asc(samples.utcMs)).limit(1).get()
-    const last = tx.select(columns).from(samples).where(eq(samples.personId, personId))
+    const last = tx.select(columns).from(samples).where(eq(samples.personRef, personRef))
       .orderBy(desc(samples.utcMs)).limit(1).get()
     if (!first || !last) return
 

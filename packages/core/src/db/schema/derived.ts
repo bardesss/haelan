@@ -5,6 +5,38 @@ import { rawPayloads } from './raw.ts'
 export const SAMPLE_AGGS = ['raw', 'min', 'mean', 'max', 'sum', 'count'] as const
 export type SampleAgg = (typeof SAMPLE_AGGS)[number]
 
+/**
+ * What `samples.agg_ref` holds, instead of the four to five characters of the name.
+ *
+ * A constant rather than a dictionary table, unlike the metric name beside it: `SAMPLE_AGGS` is a
+ * closed set decided in code, so a dictionary would be six rows and a join to express something
+ * this map already expresses, and unlike a metric name a new aggregate cannot appear without a
+ * code change anyway.
+ *
+ * **These numbers are permanent and must never be reordered or reused.** They are written into
+ * 1.6 million rows, and nothing in the database records which number meant which name at the time
+ * a row was written. Swapping two of them relabels every historical row silently: a minute's
+ * minimum becomes its maximum with no constraint violated and no test failing on the row itself.
+ * Adding an aggregate means taking the next unused number; retiring one means leaving its number
+ * behind unused, not closing the gap.
+ */
+export const SAMPLE_AGG_REFS: Record<SampleAgg, number> = {
+  raw: 1, min: 2, mean: 3, max: 4, sum: 5, count: 6,
+}
+
+const SAMPLE_AGG_BY_REF = new Map<number, SampleAgg>(
+  SAMPLE_AGGS.map((agg) => [SAMPLE_AGG_REFS[agg], agg]),
+)
+
+/**
+ * The reverse of `SAMPLE_AGG_REFS`. Returns undefined rather than guessing for a number no
+ * release ever assigned, which is what a database written by a newer version would carry: a
+ * caller that silently defaulted to 'raw' would report a stranger's minimum as a reading.
+ */
+export function sampleAggOf(ref: number): SampleAgg | undefined {
+  return SAMPLE_AGG_BY_REF.get(ref)
+}
+
 export const SESSION_KINDS = ['sleep', 'exercise', 'ecg'] as const
 export type SessionKind = (typeof SESSION_KINDS)[number]
 
@@ -28,20 +60,43 @@ export const metricDictionary = sqliteTable('metrics', {
 // writes at that per-minute policy landed in M1b, in mapWindowSamples. The 2-second truth stays
 // in raw_payloads either way, so this table is a cache that a rebuild can widen later without
 // re-fetching.
+//
+// Keyed on integers rather than the text identifiers it used to repeat. Five of the nine columns
+// were an identifier written out in full on every row - a person id, a source id, a metric name,
+// an aggregate name and a raw payload id - and on a measured 850 MB database that was 720 MB of
+// the file once both indexes below are counted, for identifiers whose distinct values number in
+// the tens. `SampleKeys` (packages/core/src/db/keys.ts) is the only thing that turns those
+// integers back into names, and every reader and writer of this table goes through it.
+//
+// Every one of the four refs that has a parent table is a declared foreign key, and
+// `openDatabase` sets `PRAGMA foreign_keys = ON` on every connection this package makes, so they
+// are enforced rather than documentary. That is deliberate and it is not only about referential
+// tidiness: `SampleKeys` caches in memory, so an instance reused across a transaction boundary
+// answers from its cache for rows that rolled back, and without these constraints the resulting
+// dangling number would be written with nothing failing at all. The constraints are what turn
+// that silent corruption into an error at the insert. The parent columns are `ref` rather than
+// each table's primary key, which SQLite allows because all four carry a unique index.
+//
+// `aggRef` is the exception and has no foreign key: it comes from the SAMPLE_AGG_REFS constant
+// above, which has no parent table to point at.
 export const samples = sqliteTable('samples', {
-  personId: text('person_id').notNull().references(() => people.id),
-  sourceId: text('source_id').notNull().references(() => sources.id),
-  metric: text('metric').notNull(),
+  personRef: integer('person_ref').notNull().references(() => people.ref),
+  sourceRef: integer('source_ref').notNull().references(() => sources.ref),
+  metricRef: integer('metric_ref').notNull().references(() => metricDictionary.ref),
   utcMs: integer('utc_ms').notNull(),
   tzOffsetMinutes: integer('tz_offset_minutes').notNull(),
-  agg: text('agg', { enum: SAMPLE_AGGS }).notNull(),
+  aggRef: integer('agg_ref').notNull(),
   // Nullable because a gap and a genuine zero must never render alike. Spec invariant 2.
   value: real('value'),
   n: integer('n').notNull(),
-  rawPayloadId: text('raw_payload_id').references(() => rawPayloads.id),
+  rawPayloadRef: integer('raw_payload_ref').references(() => rawPayloads.ref),
 }, (t) => [
-  unique('samples_natural').on(t.personId, t.sourceId, t.metric, t.utcMs, t.agg),
-  index('samples_person_metric_time').on(t.personId, t.metric, t.utcMs),
+  // The same five columns the natural key has always named, in the same order, now as refs. The
+  // upsert in runJob.ts and replay.ts targets exactly this list, and the two have to move
+  // together: a target naming a column combination no index covers throws on the second write of
+  // a window rather than the first, which is a defect a single sync run cannot see.
+  unique('samples_natural').on(t.personRef, t.sourceRef, t.metricRef, t.utcMs, t.aggRef),
+  index('samples_person_metric_time').on(t.personRef, t.metricRef, t.utcMs),
 ])
 
 export const sessions = sqliteTable('sessions', {

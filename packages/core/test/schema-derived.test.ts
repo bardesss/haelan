@@ -7,12 +7,12 @@ const columnNames = (table: Parameters<typeof getTableConfig>[0]) =>
 
 describe('tier 2 and 3 schema', () => {
   it('gives samples an aggregate dimension, so a downsampled minute keeps min, mean and max', () => {
-    expect(columnNames(samples)).toContain('agg')
+    expect(columnNames(samples)).toContain('agg_ref')
     expect(columnNames(samples)).toContain('n')
   })
 
   it('keeps every sample attributed to its source, because merging never happens on write', () => {
-    const sampleSource = getTableConfig(samples).columns.find((c) => c.name === 'source_id')
+    const sampleSource = getTableConfig(samples).columns.find((c) => c.name === 'source_ref')
     const sessionSource = getTableConfig(sessions).columns.find((c) => c.name === 'source_id')
     expect(sampleSource?.notNull).toBe(true)
     expect(sessionSource?.notNull).toBe(true)

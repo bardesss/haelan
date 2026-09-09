@@ -113,6 +113,13 @@
       "when": 1788948861386,
       "tag": "0015_common_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1788954856217,
+      "tag": "0016_blue_kylun",
+      "breakpoints": true
     }
   ]
 }

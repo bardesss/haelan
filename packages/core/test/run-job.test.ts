@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Mock } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, readSamples, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
 import { SyncStateStore } from '../src/store/syncState.ts'
@@ -84,7 +84,7 @@ describe('runJob', () => {
     expect(sourceRows.find((r) => r.displayName === 'Sense 2')?.kind).toBe('device')
     expect(sourceRows.find((r) => r.displayName === 'HEALTH_CONNECT')?.kind).toBe('app')
 
-    const rows = ctx.db.select().from(samples).all()
+    const rows = readSamples(ctx.db)
     expect(rows).toHaveLength(2)
     const sourceOf = (value: number) => rows.find((r) => r.value === value)?.sourceId
     expect(sourceOf(97)).toBe(sourceRows.find((r) => r.displayName === 'Sense 2')?.id)
@@ -297,7 +297,7 @@ describe('runJob', () => {
       rawPayloadId: sessionRows[0]?.rawPayloadId,
     })
 
-    const sampleRows = ctx.db.select().from(samples).all()
+    const sampleRows = readSamples(ctx.db)
     expect(sampleRows).toHaveLength(1)
     expect(sampleRows[0]).toEqual({
       personId: 'p1',
@@ -612,7 +612,7 @@ describe('runJob', () => {
 
     expect(result.rowsWritten).toBe(0)
     expect(queue.size()).toBe(0)
-    expect(ctx.db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(0)
+    expect(readSamples(ctx.db, 'p1')).toHaveLength(0)
   })
   it('withholds the high-water mark when a window came back unreadable', async () => {
     // The list half of the same defect. A renamed dataPoints array counted zero points and

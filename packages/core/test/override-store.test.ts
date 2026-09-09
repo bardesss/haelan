@@ -1,11 +1,11 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { OverrideStore } from '../src/store/overrides.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { sampleTarget, sessionTarget, dayMetricTarget } from '../src/derive/targetKey.ts'
 import { ConfigError } from '../src/errors.ts'
-import { samples, sessions, sources } from '../src/db/schema/index.ts'
+import { sessions, sources } from '../src/db/schema/index.ts'
 
 const OFFSET = 120
 const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
@@ -26,10 +26,10 @@ beforeEach(() => {
   test.db.insert(sources).values({
     id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0,
   }).run()
-  test.db.insert(samples).values({
+  insertSample(test.db, {
     personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: NINE_AM,
-    tzOffsetMinutes: OFFSET, agg: 'raw', value: 210, n: 1, rawPayloadId: null,
-  }).run()
+    tzOffsetMinutes: OFFSET, value: 210,
+  })
   queue = new DeriveQueue(test.db)
   store = new OverrideStore(test.db, queue)
 })
@@ -63,10 +63,10 @@ describe('OverrideStore', () => {
     // LATE_UTC falls after 22:00 UTC, so the +120 minute offset rolls it into the next UTC day.
     // Recomputing the day from the person timezone instead of the row's own offset is how a
     // night lands on the wrong side of a daylight saving change, and it would also fail here.
-    test.db.insert(samples).values({
+    insertSample(test.db, {
       personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs: LATE_UTC,
-      tzOffsetMinutes: OFFSET, agg: 'raw', value: 1, n: 1, rawPayloadId: null,
-    }).run()
+      tzOffsetMinutes: OFFSET,
+    })
     store.put({
       personId: 'p1', scope: 'sample',
       targetKey: sampleTarget({ source: 'watch', metric: 'steps', utcMs: LATE_UTC }),

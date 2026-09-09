@@ -8,7 +8,13 @@ export { CredentialStore } from './store/credentials.ts'
 export type { ClientCredentials, StoredRefreshToken } from './store/credentials.ts'
 export { RawArchive } from './store/rawArchive.ts'
 export type { PutInput, PutResult, ArchivedPayload } from './store/rawArchive.ts'
-export { createTestDatabase, seedPerson, corruptArchivedBodies } from './testing/fixtures.ts'
+// insertSample and readSamples are here rather than only in the package's own tests because
+// `samples` is keyed on integers now: a caller outside this package that reached for
+// `schema.samples` directly would have to build refs by hand, and could not read a metric
+// name back out of a row at all.
+export {
+  createTestDatabase, seedPerson, corruptArchivedBodies, insertSample, readSamples,
+} from './testing/fixtures.ts'
 export type { TestDatabase } from './testing/fixtures.ts'
 export {
   ACTIONS, DATA_TYPES, dataTypeById, FILTER_MEMBERS, horizonDaysFor, supports,
@@ -160,7 +166,8 @@ export type { TrendPoint } from './query/trend.ts'
 export type { ChangedPair, ChangesResult } from './query/changes.ts'
 
 // M5d-a. The translator between a metric name, a person id, a source id and a raw payload id and
-// the narrow integer ref each of their tables now carries. Nothing in this package calls it yet;
-// a later task rewires the call sites that write and read `samples` to go through it instead of
-// repeating the five text identifiers it replaces.
+// the narrow integer ref each of their tables carries. Every reader and writer of `samples` goes
+// through it, and a caller outside this package that wants to write or read a sample row has to:
+// the table's five identifier columns are integers, and a ref means nothing without it.
 export { SampleKeys } from './db/keys.ts'
+export type { SampleText } from './db/keys.ts'

@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { asc, eq } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../db/open.ts'
+import type { DbOrTx } from '../db/open.ts'
+import { SampleKeys } from '../db/keys.ts'
+import type { SampleText } from '../db/keys.ts'
 import { migrateToLatest } from '../db/migrate.ts'
 import {
   people, sources, sourcePriority, samples, sessions, sessionSegments, overrides, rawPayloads,
@@ -76,11 +79,10 @@ export function seedDerivableDay(db: Database): DerivableDay {
   db.insert(sources).values({
     id: 'watch', personId, externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0,
   }).run()
-  db.insert(samples).values({
+  insertSample(db, {
     personId, sourceId: 'watch', metric: 'steps',
-    utcMs: Date.parse(`${localDate}T09:00:00Z`), tzOffsetMinutes: 0,
-    agg: 'raw', value: 400, n: 1, rawPayloadId: null,
-  }).run()
+    utcMs: Date.parse(`${localDate}T09:00:00Z`), value: 400,
+  })
   return { personId, localDate }
 }
 
@@ -104,11 +106,69 @@ export function seedSample(db: Database, input: SeedSampleInput): string {
     id: input.sourceId, personId: input.personId, externalId: input.sourceId,
     displayName: input.sourceId, kind: 'device', createdAtMs: 0,
   }).onConflictDoNothing().run()
-  db.insert(samples).values({
-    personId: input.personId, sourceId: input.sourceId, metric: input.metric, utcMs: input.utcMs,
-    tzOffsetMinutes: 0, agg: input.agg ?? 'raw', value: input.value ?? 1, n: 1, rawPayloadId: null,
-  }).run()
+  insertSample(db, input)
   return input.sourceId
+}
+
+/**
+ * One `samples` row from the text a test can read, translated to refs on the way in.
+ *
+ * Every test that wants a sample goes through this rather than `db.insert(samples)`, for the
+ * reason the table's own comment gives: the columns are integers now, and a test spelling
+ * `metricRef: 3` would assert nothing a reader could check against the metric it meant. The
+ * person and the source have to exist already - `seedSample` above is the sugar that creates the
+ * source too - because their refs are assigned by the insert that created them.
+ */
+export function insertSample(db: DbOrTx, input: {
+  personId: string
+  sourceId: string
+  metric: string
+  utcMs: number
+  // Nullable, not merely optional: a gap and a genuine zero must never render alike, so a caller
+  // seeding the gap case has to be able to say null rather than leaving it out.
+  value?: number | null
+  agg?: SampleAgg
+  tzOffsetMinutes?: number
+  n?: number
+  rawPayloadId?: string | null
+}): void {
+  const keys = new SampleKeys(db)
+  db.insert(samples).values(keys.sampleRefs({
+    personId: input.personId,
+    sourceId: input.sourceId,
+    metric: input.metric,
+    utcMs: input.utcMs,
+    tzOffsetMinutes: input.tzOffsetMinutes ?? 0,
+    agg: input.agg ?? 'raw',
+    value: input.value === undefined ? 1 : input.value,
+    n: input.n ?? 1,
+    rawPayloadId: input.rawPayloadId ?? null,
+  })).run()
+}
+
+/**
+ * Every stored sample, back in text and ordered by its natural key.
+ *
+ * The counterpart to `insertSample`, and the shape assertions should be written against: two
+ * snapshots of ref columns can compare equal while meaning different metrics, because a ref is
+ * only meaningful next to the dictionary row it points at, and that row is not in the snapshot.
+ */
+export function readSamples(db: DbOrTx, personId?: string): SampleText[] {
+  const keys = new SampleKeys(db)
+  const query = db.select().from(samples)
+  const rows = personId === undefined
+    ? query.all()
+    : query.where(eq(samples.personRef, keys.personRef(personId))).all()
+  return rows.map((row) => keys.sampleText(row)).sort(compareSamples)
+}
+
+/** The natural key's own order, so a snapshot does not depend on however sqlite stored the rows. */
+function compareSamples(a: SampleText, b: SampleText): number {
+  return a.personId.localeCompare(b.personId)
+    || a.sourceId.localeCompare(b.sourceId)
+    || a.metric.localeCompare(b.metric)
+    || a.utcMs - b.utcMs
+    || a.agg.localeCompare(b.agg)
 }
 
 export interface SeedSessionInput {
@@ -172,7 +232,8 @@ export interface RebuildDeps {
 }
 
 export interface SecondPersonRows {
-  samples: (typeof samples.$inferSelect)[]
+  // Text, not the stored refs; see readSamples for why.
+  samples: SampleText[]
   sessions: (typeof sessions.$inferSelect)[]
   daily: (typeof daily.$inferSelect)[]
 }
@@ -202,7 +263,8 @@ export interface Rebuildable {
 
 export interface RebuildableSnapshot {
   sources: (typeof sources.$inferSelect)[]
-  samples: (typeof samples.$inferSelect)[]
+  // Text, not the stored refs; see readSamples for why.
+  samples: SampleText[]
   sessions: (typeof sessions.$inferSelect)[]
   sessionSegments: (typeof sessionSegments.$inferSelect)[]
   // Excludes updatedAtMs; see the comment beside the select in snapshotOf.
@@ -335,11 +397,7 @@ function snapshotOf(db: Database): RebuildableSnapshot {
   return {
     sources: db.select().from(sources)
       .orderBy(asc(sources.personId), asc(sources.externalId), asc(sources.id)).all(),
-    samples: db.select().from(samples)
-      .orderBy(
-        asc(samples.personId), asc(samples.sourceId), asc(samples.metric),
-        asc(samples.utcMs), asc(samples.agg),
-      ).all(),
+    samples: readSamples(db),
     sessions: db.select().from(sessions)
       .orderBy(
         asc(sessions.personId), asc(sessions.sourceId), asc(sessions.kind),
@@ -456,7 +514,7 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
         derivationVersion: DERIVATION_VERSION,
       }).run()
       return {
-        samples: db.select().from(samples).where(eq(samples.personId, otherId)).all(),
+        samples: readSamples(db, otherId),
         sessions: db.select().from(sessions).where(eq(sessions.personId, otherId)).all(),
         daily: db.select().from(daily).where(eq(daily.personId, otherId)).all(),
       }

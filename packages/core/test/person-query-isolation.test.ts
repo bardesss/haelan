@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sources } from '../src/db/schema/index.ts'
 import type { SessionKind } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 
@@ -96,16 +96,14 @@ describe('PersonQuery isolation, the readers bound to samples and sessions', () 
   it('reads intraday samples only for its own person', () => {
     insertSource('alice-watch', 'alice')
     insertSource('bart-watch', 'bart')
-    test.db.insert(samples).values([
-      {
-        personId: 'alice', sourceId: 'alice-watch', metric: 'heart_rate', utcMs: AT,
-        tzOffsetMinutes: 0, agg: 'mean', value: 60, n: 1, rawPayloadId: null,
-      },
-      {
-        personId: 'bart', sourceId: 'bart-watch', metric: 'heart_rate', utcMs: AT,
-        tzOffsetMinutes: 0, agg: 'mean', value: 150, n: 1, rawPayloadId: null,
-      },
-    ]).run()
+    insertSample(test.db, {
+      personId: 'alice', sourceId: 'alice-watch', metric: 'heart_rate', utcMs: AT,
+      agg: 'mean', value: 60,
+    })
+    insertSample(test.db, {
+      personId: 'bart', sourceId: 'bart-watch', metric: 'heart_rate', utcMs: AT,
+      agg: 'mean', value: 150,
+    })
 
     const out = alice.intraday({ metric: 'heart_rate', localDate: '2026-08-01' })
     expect(out.points.map((p) => p.mean)).toEqual([60])

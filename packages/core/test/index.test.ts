@@ -49,6 +49,11 @@ describe('package barrel', () => {
   it('exports the test fixtures', () => {
     expect(typeof core.createTestDatabase).toBe('function')
     expect(typeof core.seedPerson).toBe('function')
+    // The two sample helpers are part of the barrel for the reason index.ts gives beside them:
+    // `samples` is keyed on integers, so a caller outside this package cannot write or read a row
+    // through `schema.samples` alone.
+    expect(typeof core.insertSample).toBe('function')
+    expect(typeof core.readSamples).toBe('function')
   })
 
   it('exports the API catalogue', () => {
@@ -260,11 +265,10 @@ describe('package barrel', () => {
           id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch',
           kind: 'device', createdAtMs: 0,
         }).run()
-        test.db.insert(core.schema.samples).values({
+        core.insertSample(test.db, {
           personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
-          utcMs: Date.UTC(2026, 7, 1, 9, 0), tzOffsetMinutes: 0, agg: 'mean', value: 60,
-          n: 1, rawPayloadId: null,
-        }).run()
+          utcMs: Date.UTC(2026, 7, 1, 9, 0), agg: 'mean', value: 60,
+        })
         test.db.insert(core.schema.sessions).values({
           id: 'night', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'night',
           startMs: 0, startOffsetMinutes: 0, endMs: 1000, endOffsetMinutes: 0,

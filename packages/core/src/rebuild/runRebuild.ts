@@ -4,6 +4,7 @@ import { checkpointTruncate } from '../db/open.ts'
 import {
   daily, observations, samples, sessions, sources, sourceAliases, sourcePriority,
 } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 import { deriveDayInto } from '../derive/deriveDay.ts'
@@ -165,7 +166,12 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         // makes, which is the only way this package opens one. Deleting them explicitly first
         // would be a second statement doing what the first already does.
         tx.delete(sessions).where(eq(sessions.personId, personId)).run()
-        tx.delete(samples).where(eq(samples.personId, personId)).run()
+        // One instance for this person's transaction, handed to the two helpers below that need
+        // it. Not shared with the replay, which makes its own: two instances inside one
+        // transaction cost a repeated lookup or two, where one instance escaping the transaction
+        // would cost correctness.
+        const keys = new SampleKeys(tx)
+        tx.delete(samples).where(eq(samples.personRef, keys.personRef(personId))).run()
         // Provider rows included. They are mapped from archived rollup responses like everything
         // else, so the replay puts them back.
         tx.delete(daily).where(eq(daily.personId, personId)).run()
@@ -178,7 +184,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
         })
 
-        const dropped = dropUnreferencedSources(tx, personId)
+        const dropped = dropUnreferencedSources(tx, personId, keys)
 
         const retarget = retargetOverrides(tx, { personId, oldSessions })
 
@@ -278,15 +284,19 @@ export function runRebuild(input: RebuildInput): RebuildReport {
  */
 interface Dropped { sources: number, rankings: number, aliases: number }
 
-function dropUnreferencedSources(tx: DbOrTx, personId: string): Dropped {
+function dropUnreferencedSources(tx: DbOrTx, personId: string, keys: SampleKeys): Dropped {
   // observations.sourceId included alongside samples and sessions, not just those two: a person
   // whose only reading under a source is a mood or a symptom - no sample, no session - would
   // otherwise leave that source "unreferenced" by this function's own count while a freshly
   // replayed observation row still points at it, and the delete below would hit the foreign key
   // observations.source_id declares rather than the row it was actually meant to catch.
   const referenced = new Set<string>([
-    ...tx.selectDistinct({ id: samples.sourceId }).from(samples)
-      .where(eq(samples.personId, personId)).all().map((row) => row.id),
+    // Distinct refs translated back one at a time rather than joined onto `sources`: the set this
+    // builds is compared against source ids, and a person carries a handful of sources, so the
+    // translation is a handful of cached lookups rather than a join over the largest table.
+    ...tx.selectDistinct({ ref: samples.sourceRef }).from(samples)
+      .where(eq(samples.personRef, keys.personRef(personId))).all()
+      .map((row) => keys.sourceId(row.ref)),
     ...tx.selectDistinct({ id: sessions.sourceId }).from(sessions)
       .where(eq(sessions.personId, personId)).all().map((row) => row.id),
     ...tx.selectDistinct({ id: observations.sourceId }).from(observations)

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { overrides, samples, sessions } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import type { DeriveQueue } from './deriveQueue.ts'
 import { ConfigError } from '../errors.ts'
 import { localDateOf } from '../derive/localDay.ts'
@@ -117,12 +118,24 @@ export class OverrideStore {
     }
 
     const target = parseSampleTarget(targetKey)
+    // Bound to the write's own transaction handle, so the refs it resolves cannot outlive it.
+    const keys = new SampleKeys(tx)
+    // The IfKnown pair, because "nothing to mark" is an ordinary answer here and the caller above
+    // already says why: an override can be written before a backfill has reached the day it
+    // targets, and then neither the source nor the metric need exist yet. Resolving them strictly
+    // would turn that into a thrown write, and `metricRef` would additionally leave a dictionary
+    // row behind for a metric this instance may never sample.
+    const personRef = keys.personRefIfKnown(personId)
+    const sourceRef = keys.sourceRefIfKnown(target.source)
+    const metricRef = keys.metricRefIfKnown(target.metric)
+    if (personRef === undefined || sourceRef === undefined || metricRef === undefined) return null
+
     // The row's own offset, never the person's current timezone: the offset in force at that
     // instant is what decides which local day the reading belongs to.
     const row = tx.select({ tzOffsetMinutes: samples.tzOffsetMinutes }).from(samples).where(and(
-      eq(samples.personId, personId),
-      eq(samples.sourceId, target.source),
-      eq(samples.metric, target.metric),
+      eq(samples.personRef, personRef),
+      eq(samples.sourceRef, sourceRef),
+      eq(samples.metricRef, metricRef),
       eq(samples.utcMs, target.utcMs),
     )).get()
     return row ? localDateOf(target.utcMs, row.tzOffsetMinutes) : null

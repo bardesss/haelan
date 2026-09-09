@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, observations, samples, sessions, sessionSegments } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { mapSessions } from '../api/mapSessions.ts'
@@ -47,6 +48,11 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const localDates = new Set<string>()
   const resolveSource = (dataSource: unknown): string =>
     input.sources.resolve(input.personId, dataSource, input.nowMs, tx)
+  // Bound to the caller's transaction handle and not kept anywhere beyond this call: a rebuild is
+  // one transaction per person, and an instance shared across two would answer from cache for a
+  // person whose rebuild rolled back. This is the hot path the cache exists for - a person's whole
+  // archive replays through it, so a metric name costs one query rather than one per row.
+  const keys = new SampleKeys(tx)
 
   for (const group of groupIntoWindows(input.payloads)) {
     const t = dataTypeById(group.dataType)
@@ -181,13 +187,17 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         }))
         const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
         for (const row of rows) {
-          tx.insert(samples).values(row).onConflictDoUpdate({
-            target: [samples.personId, samples.sourceId, samples.metric, samples.utcMs, samples.agg],
+          // The same translation and the same upsert target runJob's writeSamples uses, and they
+          // have to stay the same: a replay that keyed a row differently from the sync would
+          // upsert onto a key the sync never wrote and double the table on the first rebuild.
+          const stored = keys.sampleRefs(row)
+          tx.insert(samples).values(stored).onConflictDoUpdate({
+            target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
             set: {
-              value: row.value,
-              n: row.n,
-              tzOffsetMinutes: row.tzOffsetMinutes,
-              rawPayloadId: row.rawPayloadId,
+              value: stored.value,
+              n: stored.n,
+              tzOffsetMinutes: stored.tzOffsetMinutes,
+              rawPayloadRef: stored.rawPayloadRef,
             },
           }).run()
           localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
@@ -203,7 +213,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // the database now". Every metric in ReplayCounts that a later task will surface to an operator
   // deciding whether their rebuild worked has to be this, or it is a plausible-looking lie.
   counts.samples = tx.select({ n: sql<number>`count(*)` })
-    .from(samples).where(eq(samples.personId, input.personId)).get()?.n ?? 0
+    .from(samples).where(eq(samples.personRef, keys.personRef(input.personId))).get()?.n ?? 0
   counts.sessions = tx.select({ n: sql<number>`count(*)` })
     .from(sessions).where(eq(sessions.personId, input.personId)).get()?.n ?? 0
   counts.segments = tx.select({ n: sql<number>`count(*)` })

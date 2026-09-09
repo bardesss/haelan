@@ -1,6 +1,7 @@
 import { and, eq, gte, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { samples, overrides as overridesTable } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import { localDateOf, widenedUtcWindow } from '../derive/localDay.ts'
 import { parseSampleTarget, sampleTarget } from '../derive/targetKey.ts'
 import { thinBand } from './downsample.ts'
@@ -73,14 +74,33 @@ export function readIntraday(db: DbOrTx, input: {
 }): IntradayResult {
   const { start: windowStart, end: windowEnd } = widenedUtcWindow(input.localDate)
 
+  // Scoped to this read, which is a single statement's worth of work: nothing here writes, so
+  // there is no transaction to outlive, and building it per call is what keeps that true.
+  const keys = new SampleKeys(db)
+  // The IfKnown readers rather than the resolving ones, because all three of these arrive from a
+  // request. A person, metric or source the database has never heard of is a day with no
+  // readings, which is what this reader has always answered for it; `metricRef` would instead
+  // write a dictionary row on a GET, one per distinct string a client cared to send.
+  const personRef = keys.personRefIfKnown(input.personId)
+  const metricRef = keys.metricRefIfKnown(input.metric)
+  const sourceRef = input.sourceId === undefined ? undefined : keys.sourceRefIfKnown(input.sourceId)
+  if (personRef === undefined || metricRef === undefined
+    || (input.sourceId !== undefined && sourceRef === undefined)) {
+    return { points: [], reduction: null }
+  }
+
   const rows = db.select().from(samples).where(and(
-    eq(samples.personId, input.personId),
-    eq(samples.metric, input.metric),
+    eq(samples.personRef, personRef),
+    eq(samples.metricRef, metricRef),
     gte(samples.utcMs, windowStart),
     lte(samples.utcMs, windowEnd),
-    input.sourceId === undefined ? undefined : eq(samples.sourceId, input.sourceId),
+    sourceRef === undefined ? undefined : eq(samples.sourceRef, sourceRef),
   )).all()
     .filter((row) => localDateOf(row.utcMs, row.tzOffsetMinutes) === input.localDate)
+    // Back into names for the rest of this function: a point carries the source id a client
+    // charts by and a correction is keyed on, and its own `agg` decides which of min, mean and
+    // max it fills in.
+    .map((row) => keys.sampleText(row))
 
   // Read here rather than taken as a parameter, the same choice readSessions and readSleepNights
   // made: every caller wants the same answer, and one small indexed read (few rows, scoped by

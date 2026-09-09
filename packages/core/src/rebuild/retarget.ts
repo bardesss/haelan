@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { overrides, samples, sessions } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import type { SessionKind } from '../db/schema/index.ts'
 import {
   parseSampleTarget, parseSessionTarget, sampleTarget, sessionTarget,
@@ -51,12 +52,16 @@ export function retargetOverrides(tx: DbOrTx, input: RetargetInput): RetargetOut
 
   const outcome: RetargetOutcome = { retargeted: 0, orphaned: [] }
 
+  // Bound to the caller's transaction, which is the rebuild's own: an override key names a source
+  // id and a metric name, and the rows it has to be matched against are keyed on refs.
+  const keys = new SampleKeys(tx)
+
   for (const row of rows) {
     // A day metric key is a local date and a metric. No source, no session, nothing to move.
     if (row.scope === 'day_metric') continue
 
     const resolved = row.scope === 'sample'
-      ? resolveSample(tx, input.personId, row.targetKey)
+      ? resolveSample(tx, input.personId, row.targetKey, keys)
       : resolveSession(tx, input.personId, row.targetKey, input.oldSessions)
 
     if (typeof resolved !== 'string') {
@@ -86,17 +91,26 @@ export function retargetOverrides(tx: DbOrTx, input: RetargetInput): RetargetOut
 
 interface Unresolved { reason: string }
 
-function resolveSample(tx: DbOrTx, personId: string, targetKey: string): string | Unresolved {
+function resolveSample(
+  tx: DbOrTx, personId: string, targetKey: string, keys: SampleKeys,
+): string | Unresolved {
   const target = parseSampleTarget(targetKey)
-  const rows = tx.select({ sourceId: samples.sourceId }).from(samples).where(and(
-    eq(samples.personId, personId),
-    eq(samples.metric, target.metric),
+  // IfKnown, not metricRef: an override can name a metric this person has no sample of at all -
+  // one they excluded before a backfill reached it, or one a retired catalogue entry used to
+  // produce - and the answer for that is the same "no sample at that instant" the empty query
+  // gives, not a new dictionary row written from a rebuild.
+  const metricRef = keys.metricRefIfKnown(target.metric)
+  if (metricRef === undefined) return { reason: 'no sample at that instant' }
+
+  const rows = tx.select({ sourceRef: samples.sourceRef }).from(samples).where(and(
+    eq(samples.personRef, keys.personRef(personId)),
+    eq(samples.metricRef, metricRef),
     eq(samples.utcMs, target.utcMs),
   )).all()
 
   // Distinct sources, not distinct rows. Per minute downsampling writes one row per aggregate
   // at the same instant, and three rows from one watch is still one unambiguous answer.
-  const sourceIds = [...new Set(rows.map((row) => row.sourceId))]
+  const sourceIds = [...new Set(rows.map((row) => keys.sourceId(row.sourceRef)))]
   if (sourceIds.length === 0) return { reason: 'no sample at that instant' }
 
   // Asked before ambiguity, not after. A phone and a watch on the same platform report the same

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { runDerive } from '../src/derive/runDerive.ts'
@@ -35,12 +35,12 @@ beforeEach(() => {
 })
 afterEach(() => test.cleanup())
 
-const insertSample = (o: { metric: string, value: number, hour: number, sourceId?: string, tzOffsetMinutes?: number }) =>
-  test.db.insert(samples).values({
+const addSample = (o: { metric: string, value: number, hour: number, sourceId?: string, tzOffsetMinutes?: number }) =>
+  insertSample(test.db, {
     personId: 'p1', sourceId: o.sourceId ?? 'watch', metric: o.metric,
     utcMs: MIDNIGHT_UTC + o.hour * 3_600_000, tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET,
-    agg: 'raw', value: o.value, n: 1, rawPayloadId: null,
-  }).run()
+    value: o.value,
+  })
 
 const dailyRows = () => test.db.select().from(daily).where(eq(daily.personId, 'p1')).all()
 const perSourceRows = () => dailyRows().filter((r) => r.source !== 'merged' && r.source !== 'provider')
@@ -73,7 +73,7 @@ const insertExercise = (o: { id: string, sourceId?: string, startHour: number, e
 
 describe('runDerive', () => {
   it('derives a queued day and clears it', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     const report = runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(report.daysDerived).toBe(1)
@@ -86,7 +86,7 @@ describe('runDerive', () => {
   // on top of it, which is the one mixing the version stamp exists to prevent.
   it('derives only for the people it was given, leaving the rest queued', () => {
     seedPerson(test.db, 'p2')
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     queue.markDirty({ personId: 'p2', localDate: LOCAL_DATE, nowMs: 2 })
 
@@ -99,7 +99,7 @@ describe('runDerive', () => {
   })
 
   it('is idempotent: draining twice writes the same rows, not twice the rows', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
@@ -111,7 +111,7 @@ describe('runDerive', () => {
   it('removes a row whose samples went away, rather than leaving a stale number', () => {
     // An override that excludes the only sample of a day has to leave the day empty, not
     // leave yesterday's answer standing.
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     test.db.delete(samples).run()
@@ -125,23 +125,23 @@ describe('runDerive', () => {
       personId: 'p1', localDate: LOCAL_DATE, metric: 'total_calories', agg: 'sum',
       source: 'provider', value: 2500, coverage: null, derivationVersion: 1,
     }).run()
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(dailyRows().filter((r) => r.source === 'provider')).toHaveLength(1)
   })
 
   it('reads only the queued day, not the ones either side of it', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
-    insertSample({ metric: 'steps', value: 999, hour: 30 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 999, hour: 30 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(perSourceRows().map((r) => r.value)).toEqual([400])
   })
 
   it('keeps a source split rather than adding two devices together', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
-    insertSample({ metric: 'steps', value: 900, hour: 9, sourceId: 'phone' })
+    addSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    addSample({ metric: 'steps', value: 900, hour: 9, sourceId: 'phone' })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(perSourceRows().map((r) => r.value).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([400, 900])
@@ -161,11 +161,10 @@ describe('runDerive', () => {
     // 2026-08-22T00:00Z for LOCAL_DATE; at tz -720 (UTC-12) that local day does not end until
     // 2026-08-23T12:00Z, nearly 36 hours past the anchor. Cutting the +38 hour upper bound to
     // +24 leaves every other test in this file green and drops this row silently.
-    test.db.insert(samples).values({
+    insertSample(test.db, {
       personId: 'p1', sourceId: 'watch', metric: 'steps',
-      utcMs: Date.UTC(2026, 7, 23, 11, 59), tzOffsetMinutes: -720,
-      agg: 'raw', value: 222, n: 1, rawPayloadId: null,
-    }).run()
+      utcMs: Date.UTC(2026, 7, 23, 11, 59), tzOffsetMinutes: -720, value: 222,
+    })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(perSourceRows().map((r) => r.value)).toEqual([222])
@@ -176,11 +175,10 @@ describe('runDerive', () => {
     // 2026-08-21T10:05Z is already 2026-08-22 locally, 11h55m before that UTC midnight and
     // outside a naive same-day scan. The bounded query in runDerive must widen far enough
     // (14h before midnight) to still catch it, or this row would silently vanish.
-    test.db.insert(samples).values({
+    insertSample(test.db, {
       personId: 'p1', sourceId: 'watch', metric: 'steps',
-      utcMs: Date.UTC(2026, 7, 21, 10, 5), tzOffsetMinutes: 840,
-      agg: 'raw', value: 111, n: 1, rawPayloadId: null,
-    }).run()
+      utcMs: Date.UTC(2026, 7, 21, 10, 5), tzOffsetMinutes: 840, value: 111,
+    })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(perSourceRows().map((r) => r.value)).toEqual([111])
@@ -189,8 +187,8 @@ describe('runDerive', () => {
   it('writes a merged row beside the per source rows, never instead of them', () => {
     // Invariant 4: merging never happens on write. The per source rows are what a merge is
     // inspected against, so a merged row that replaced them would destroy its own evidence.
-    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
-    insertSample({ metric: 'steps', value: 900, hour: 15, sourceId: 'phone' })
+    addSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    addSample({ metric: 'steps', value: 900, hour: 15, sourceId: 'phone' })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
@@ -203,27 +201,27 @@ describe('runDerive', () => {
   })
 
   it('follows a stored priority list rather than the fallback', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
-    insertSample({ metric: 'steps', value: 900, hour: 9, sourceId: 'phone' })
+    addSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    addSample({ metric: 'steps', value: 900, hour: 9, sourceId: 'phone' })
     priority.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(mergedRows()[0]?.value).toBe(900)
   })
 
   it('replaces a merged row wholesale, so a stale merge cannot outlive its inputs', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
+    addSample({ metric: 'steps', value: 400, hour: 9, sourceId: 'watch' })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     test.db.delete(samples).run()
-    insertSample({ metric: 'steps', value: 50, hour: 9, sourceId: 'watch' })
+    addSample({ metric: 'steps', value: 50, hour: 9, sourceId: 'watch' })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     expect(mergedRows().map((r) => r.value)).toEqual([50])
   })
 
   it('excludes an overridden reading from both the per source row and the merged one', () => {
-    insertSample({ metric: 'heart_rate', value: 210, hour: 9 })
-    insertSample({ metric: 'heart_rate', value: 60, hour: 10 })
+    addSample({ metric: 'heart_rate', value: 210, hour: 9 })
+    addSample({ metric: 'heart_rate', value: 60, hour: 10 })
     overrideStore.put({
       personId: 'p1', scope: 'sample',
       targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: MIDNIGHT_UTC + 9 * 3_600_000 }),
@@ -237,8 +235,8 @@ describe('runDerive', () => {
 
   it('restores the original exactly when the override is removed', () => {
     // The point of applying at derivation: tier 1 was never modified, so removal is not a repair.
-    insertSample({ metric: 'heart_rate', value: 210, hour: 9 })
-    insertSample({ metric: 'heart_rate', value: 60, hour: 10 })
+    addSample({ metric: 'heart_rate', value: 210, hour: 9 })
+    addSample({ metric: 'heart_rate', value: 60, hour: 10 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
     const before = dailyRows()
@@ -257,7 +255,7 @@ describe('runDerive', () => {
   })
 
   it('substitutes a corrected reading', () => {
-    insertSample({ metric: 'weight', value: 205, hour: 9 })
+    addSample({ metric: 'weight', value: 205, hour: 9 })
     overrideStore.put({
       personId: 'p1', scope: 'sample',
       targetKey: sampleTarget({ source: 'watch', metric: 'weight', utcMs: MIDNIGHT_UTC + 9 * 3_600_000 }),
@@ -272,7 +270,7 @@ describe('runDerive', () => {
       personId: 'p1', localDate: LOCAL_DATE, metric: 'total_calories', agg: 'sum',
       source: 'provider', value: 2500, coverage: null, sourceMix: null, derivationVersion: 1,
     }).run()
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     overrideStore.put({
       personId: 'p1', scope: 'day_metric',
       targetKey: dayMetricTarget({ localDate: LOCAL_DATE, metric: 'total_calories' }),
@@ -286,7 +284,7 @@ describe('runDerive', () => {
   })
 
   it('leaves another day of the same metric alone', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     overrideStore.put({
       personId: 'p1', scope: 'day_metric',
       targetKey: dayMetricTarget({ localDate: '2026-08-21', metric: 'steps' }),
@@ -360,7 +358,7 @@ describe('runDerive', () => {
   })
 
   it('writes no workout rows at all for a day with no exercise sessions', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1 })
 
@@ -404,7 +402,7 @@ describe('runDerive', () => {
   })
 
   it('stamps every derived row with the clock it was derived at', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1_700_000_000_000 })
     expect(dailyRows().every((r) => r.updatedAtMs === 1_700_000_000_000)).toBe(true)
@@ -413,7 +411,7 @@ describe('runDerive', () => {
   // The column exists to answer "what changed since", so a row that did not change must not claim
   // it did. Re-deriving replaces rows wholesale, so this is a real question, not a hypothetical.
   it('moves the stamp when a day is derived again', () => {
-    insertSample({ metric: 'steps', value: 400, hour: 9 })
+    addSample({ metric: 'steps', value: 400, hour: 9 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({ db: test.db, queue, priority, overrides: overrideStore, settings, nowMs: 1_000 })
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 2 })

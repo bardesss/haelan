@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { DERIVATION_VERSION, runDerive, schema } from '@haelan/core'
+import { DERIVATION_VERSION, insertSample, runDerive, schema } from '@haelan/core'
 import { sampleTarget } from '@haelan/core/target-key'
 import { hashEtag } from '../src/api/etag.ts'
 import { withServer } from './harness.ts'
@@ -92,10 +92,10 @@ describe('the derive path itself never rounds, only the response route does', ()
     // Distinct hours, same UTC local day (offset 0), so rollUpDay folds all three into one day's
     // weighted mean rather than three separate single-reading days.
     for (const [i, value] of values.entries()) {
-      h.app.haelan.instance.db.insert(schema.samples).values({
+      insertSample(h.app.haelan.instance.db, {
         personId: 'p1', sourceId: 'watch', metric,
-        utcMs: Date.parse(`${localDate}T0${i}:00:00Z`), tzOffsetMinutes: 0, agg: 'raw', value, n: 1, rawPayloadId: null,
-      }).run()
+        utcMs: Date.parse(`${localDate}T0${i}:00:00Z`), value,
+      })
     }
     h.app.haelan.instance.deriveQueue.markDirty({ personId: 'p1', localDate, nowMs: h.clock.nowMs })
   }
@@ -195,10 +195,10 @@ describe('GET /intraday rounds min, mean and max to the metric\'s own precision'
     // 61.333333333333336, which heart_rate's precision-0 catalogue entry has no business handing
     // a reader with three decimals still attached.
     for (const [i, value] of [60, 61, 63].entries()) {
-      harness.app.haelan.instance.db.insert(schema.samples).values({
+      insertSample(harness.app.haelan.instance.db, {
         personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
-        utcMs: utcMs + i * 1_000, tzOffsetMinutes: 120, agg: 'raw', value, n: 1, rawPayloadId: null,
-      }).run()
+        utcMs: utcMs + i * 1_000, tzOffsetMinutes: 120, value,
+      })
     }
 
     const response = await get(harness, token, '/intraday?metric=heart_rate&date=2026-08-22')

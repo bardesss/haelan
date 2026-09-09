@@ -16,6 +16,7 @@ import { mapSessions } from '../api/mapSessions.ts'
 import { mapObservations } from '../api/mapObservations.ts'
 import { ObservationStore } from '../store/observations.ts'
 import { samples, sessions, sessionSegments } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 
 /**
  * Emitted as work completes. Nothing in core subscribes; the server's progress stream does,
@@ -139,9 +140,14 @@ export async function runJob(input: JobInput): Promise<JobResult> {
         const pages = listed.payloadIds.map((id) => ({
           body: deps.archive.getBody(input.personId, id), rawPayloadId: id,
         }))
+        // One per transaction, and never hoisted out of this callback. Its caches answer from
+        // memory, so an instance that outlived a rolled back window would keep handing out refs
+        // for rows that went with it; the foreign keys on `samples` would then reject the next
+        // write rather than let it land, but the window it rejected would be a good one.
+        const keys = new SampleKeys(tx)
         const writeFor = (target: DataType['target']) =>
           target === 'samples'
-            ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages })
+            ? writeSamples(tx, { dataType: t, personId: input.personId, resolveSource, pages, keys })
             : target === 'sessions'
             ? writeSessions(tx, { dataType: t, personId: input.personId, resolveSource, pages })
             : writeObservations(tx, { dataType: t, personId: input.personId, resolveSource, pages })
@@ -249,14 +255,24 @@ interface Written { rows: number, localDates: string[] }
 
 function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0], args: {
   dataType: DataType, personId: string, resolveSource: (d: unknown) => string,
-  pages: Array<{ body: string, rawPayloadId: string }>,
+  pages: Array<{ body: string, rawPayloadId: string }>, keys: SampleKeys,
 }): Written {
   const rows = mapWindowSamples(args)
   const localDates = new Set<string>()
   for (const row of rows) {
-    tx.insert(samples).values(row).onConflictDoUpdate({
-      target: [samples.personId, samples.sourceId, samples.metric, samples.utcMs, samples.agg],
-      set: { value: row.value, n: row.n, tzOffsetMinutes: row.tzOffsetMinutes, rawPayloadId: row.rawPayloadId },
+    // Translated here rather than in the mapper: mapWindowSamples reads a provider's JSON and has
+    // no database to ask. The upsert target has to name the same five columns samples_natural is
+    // built on, refs included, or the trailing window every sync re-fetches by design would insert
+    // a second copy of every minute it already holds instead of updating it.
+    const stored = args.keys.sampleRefs(row)
+    tx.insert(samples).values(stored).onConflictDoUpdate({
+      target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
+      set: {
+        value: stored.value,
+        n: stored.n,
+        tzOffsetMinutes: stored.tzOffsetMinutes,
+        rawPayloadRef: stored.rawPayloadRef,
+      },
     }).run()
     localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
