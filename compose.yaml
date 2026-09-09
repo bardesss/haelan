@@ -1,0 +1,12 @@
+# No environment variables: readConfig (apps/server/src/config.ts) already defaults dataDir,
+# port and host, so every variable here would exist for people who disagree, not for people
+# installing. No healthcheck either: the image carries one, and a second definition here would
+# silently override it.
+services:
+  haelan:
+    image: ghcr.io/bardesss/haelan:latest
+    ports: ['4235:4235']
+    volumes: ['haelan-data:/data']
+    restart: unless-stopped
+volumes:
+  haelan-data:

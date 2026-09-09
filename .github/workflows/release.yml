@@ -1,0 +1,97 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Not cancel-in-progress: two tags pushed close together would otherwise race to write `latest`,
+# but killing a publish partway through -- after amd64 pushed, before arm64 does -- is worse than
+# making the second tag wait for the first to finish.
+concurrency:
+  group: ${{ github.workflow }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      # The commit is already green on master. This is insurance against tagging a commit whose
+      # CI never ran, which costs one wrong image on a registry other people pull from.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # arm64 runs under emulation, which is what lets the boot check below start it. The native
+      # prebuilds differ per architecture, so the one that is not booted is the one most likely
+      # to be broken.
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # v1.2.3 publishes 1.2.3, 1.2, 1 and latest. latest has to move, because compose.yaml
+          # pins it and an install instruction that does not resolve is worse than none.
+          #
+          # There is deliberately no `type=raw,value=latest` line here, and it is worth saying why
+          # since adding one looks like the obvious way to guarantee the tag. A raw value fires on
+          # every tag that matches v*, including a pre-release: v1.0.0-rc.1 would move latest to
+          # the release candidate, and every fresh `docker compose up` would then install it.
+          # metadata-action's default flavor is `latest=auto`, which already emits latest for a
+          # full release and withholds it for a pre-release, so the explicit line is both
+          # redundant and harmful.
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      # Built and loaded per architecture first, so each one is booted before anything is pushed.
+      - name: Build and boot amd64
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: haelan:release-amd64
+      - run: bash scripts/check-image-boots.sh haelan:release-amd64 linux/amd64
+
+      - name: Build and boot arm64
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: haelan:release-arm64
+      - run: bash scripts/check-image-boots.sh haelan:release-arm64 linux/arm64
+
+      # This is a third, separate invocation, not a re-push of the two images just booted above --
+      # build-push-action has no "push what you already built" mode. It relies on the per-platform
+      # buildx cache populated by those two builds to hit, so what reaches the registry is
+      # *probably* the exact bits that were booted, not provably so. That gap is accepted, not
+      # fixed, here.
+      - name: Push both architectures
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
