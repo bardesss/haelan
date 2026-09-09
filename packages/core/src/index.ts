@@ -158,3 +158,9 @@ export type { TrendPoint } from './query/trend.ts'
 // reachable only through PersonQuery.changes, so a later SQL surface never gets a way to name a
 // person id straight from the outside.
 export type { ChangedPair, ChangesResult } from './query/changes.ts'
+
+// M5d-a. The translator between a metric name, a person id, a source id and a raw payload id and
+// the narrow integer ref each of their tables now carries. Nothing in this package calls it yet;
+// a later task rewires the call sites that write and read `samples` to go through it instead of
+// repeating the five text identifiers it replaces.
+export { SampleKeys } from './db/keys.ts'
