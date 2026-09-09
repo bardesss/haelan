@@ -19,6 +19,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Set by boot 1, checked by boot 2: the value that proves boot 2 opened the very file boot 1
+# created rather than a fresh one the (still-empty-looking) volume let it create again.
+DB_INODE=""
+
 boot() {
   local attempt="$1"
   docker run -d --name "$CONTAINER" "${PLATFORM_ARG[@]}" \
@@ -48,6 +52,19 @@ boot() {
 
   docker exec "$CONTAINER" test -f /data/haelan.sqlite \
     || { echo "boot $attempt: /data/haelan.sqlite was not created" >&2; return 1; }
+
+  # Inode, not mtime: a migrate-over-existing-database boot still opens (and often writes to,
+  # via WAL checkpointing on connection close) a database it did not create, so mtime moves on
+  # both boots and proves nothing. The inode only changes when the file is deleted and recreated
+  # -- exactly what boot 2 must NOT have done for this script to have exercised the migrate path.
+  local inode
+  inode=$(docker exec "$CONTAINER" stat -c %i /data/haelan.sqlite)
+  if [ "$attempt" = 1 ]; then
+    DB_INODE="$inode"
+  elif [ "$inode" != "$DB_INODE" ]; then
+    echo "boot $attempt: /data/haelan.sqlite is inode $inode, expected $DB_INODE from boot 1 -- a new database was created instead of the existing one being opened" >&2
+    return 1
+  fi
 
   # Non-root, asserted rather than assumed: a container that quietly runs as root still passes
   # every other check here.
