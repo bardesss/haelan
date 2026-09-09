@@ -15,8 +15,12 @@ apps/web/src/theme.generated.css
 # Secrets and local runtime data. .gitignore is the source of truth for what must never be
 # published; COPY . . in the build stage will otherwise pull these into a layer, and once this
 # image builds in CI with layer caching, "local only" stops being true.
-.env
-.env.local
-*.sqlite
-*.sqlite-wal
-*.sqlite-shm
+#
+# Unlike .gitignore, a .dockerignore pattern with no slash matches only the context root, not
+# every directory -- so these need the same **/ prefix already used above for node_modules and
+# dist, or an apps/server/.env.local slips straight through COPY . .
+**/.env
+**/.env.local
+**/*.sqlite
+**/*.sqlite-wal
+**/*.sqlite-shm
