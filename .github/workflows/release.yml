@@ -42,12 +42,20 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-          # v1.2.3 publishes 1.2.3, 1.2, 1 and latest. latest moves because compose.yaml pins it.
+          # v1.2.3 publishes 1.2.3, 1.2, 1 and latest. latest has to move, because compose.yaml
+          # pins it and an install instruction that does not resolve is worse than none.
+          #
+          # There is deliberately no `type=raw,value=latest` line here, and it is worth saying why
+          # since adding one looks like the obvious way to guarantee the tag. A raw value fires on
+          # every tag that matches v*, including a pre-release: v1.0.0-rc.1 would move latest to
+          # the release candidate, and every fresh `docker compose up` would then install it.
+          # metadata-action's default flavor is `latest=auto`, which already emits latest for a
+          # full release and withholds it for a pre-release, so the explicit line is both
+          # redundant and harmful.
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=raw,value=latest
 
       # Built and loaded per architecture first, so each one is booted before anything is pushed.
       - name: Build and boot amd64
