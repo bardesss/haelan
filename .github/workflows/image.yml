@@ -1,0 +1,32 @@
+name: Image
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Loaded into the local daemon rather than pushed: this job proves the image works, and
+      # nothing here should be able to publish one.
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: haelan:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Boot it from an empty volume, twice
+        run: bash scripts/check-image-boots.sh haelan:ci
