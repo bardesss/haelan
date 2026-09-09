@@ -22,5 +22,11 @@
  *    derived under 5 has an empty observations table and none of those metrics, and unlike the
  *    bumps above this one is less about a function computing something different and more about
  *    there being new rows to compute at all.
+ * 7: M5d-A rekeys `samples` onto integers, and migration 0016 drops the old table rather than
+ *    copying its 1.6 million rows, so every day derived under 6 was derived from rows that are no
+ *    longer on disk. Nothing about what deriveDay computes changed - the same readings produce the
+ *    same numbers - and the bump is here anyway, because tier 3 standing over an empty tier 2 is
+ *    the exact state a stamp exists to prevent, and a mapping bump alone would say the layer below
+ *    moved while leaving these rows claiming to have been derived from it.
  */
-export const DERIVATION_VERSION = 6
+export const DERIVATION_VERSION = 7

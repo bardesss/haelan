@@ -8,7 +8,8 @@ import { SettingsStore } from '../src/store/settings.ts'
 import { runDerive } from '../src/derive/runDerive.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { dayMetricTarget } from '../src/derive/targetKey.ts'
-import { samples, sources } from '../src/db/schema/index.ts'
+import { sources } from '../src/db/schema/index.ts'
+import { insertSample } from '../src/testing/fixtures.ts'
 import { shiftLocalDate } from '../src/derive/localDay.ts'
 
 /**
@@ -64,10 +65,10 @@ const seedDays = () => {
     // One wild day among seven ordinary ones, which is the case an override exists for.
     const value = day === GLITCH_DAY ? 210 : 60
     for (const hour of WORN_HOURS) {
-      test.db.insert(samples).values({
+      insertSample(test.db, {
         personId: 'p1', sourceId: 'watch', metric: 'heart_rate', utcMs: AT(day, hour),
-        tzOffsetMinutes: OFFSET, agg: 'raw', value, n: 1, rawPayloadId: null,
-      }).run()
+        tzOffsetMinutes: OFFSET, agg: 'raw', value,
+      })
     }
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE(day), nowMs: day })
   }

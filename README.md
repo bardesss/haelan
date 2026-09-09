@@ -114,8 +114,10 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M5b** People | Invites stored as a hash, a member who chooses their own password, the first `is_admin` guard, and suspension | Done, [#94](https://github.com/bardesss/haelan/pull/94) |
 | **M5f** Wizard polish | The connect card `/oauth/start` had been reachable from nowhere, and per person data type exclusions | Done, [#95](https://github.com/bardesss/haelan/pull/95), [#96](https://github.com/bardesss/haelan/pull/96) |
 | **M5c** Packaging | The image that runs the TypeScript it was tested as, booted twice over one volume on both architectures | Done, [#104](https://github.com/bardesss/haelan/pull/104) |
+| **M5d-D** Cheaper sync tests | A test's data types bounded the way its depth already was, after the catalogue took every sprint test from twenty types to forty-two | Done, [#106](https://github.com/bardesss/haelan/pull/106) |
 | **The catalogue catches up** | Twenty-two data types the app fetched nothing for, measured off the API's own envelope rather than its release notes; food is recorded unfetchable because a Food carries no clock | Done, [#101](https://github.com/bardesss/haelan/pull/101) |
-| **M5** Packaging | Cut into six units, a, b, c, d and f as listed here plus M5e for documentation and the envelope migration, with the catalogue work and the image both landing before the v1.0.0 tag | In progress |
+| **M5d-A** Narrow sample keys | The five identifiers every one of 1.6 million sample rows wrote out in full become integer references; measured 632 MB down to 247 MB | In review |
+| **M5** Packaging | Cut into six units, a, b, c, d and f as listed here plus M5e for documentation and the envelope migration, with M5d itself cut into four strands - D cheaper tests, A narrow keys, B reclaiming the space a rebuild frees but never returns, C backup and restore - and the catalogue work and the image both landing before the v1.0.0 tag | In progress |
 
 **M3d comes before M3c in this table**, out of milestone letter order: section 6's creation flow is a click on a plotted point, and the pages that plot real points are M3d's, so building the annotation panel first would mean targeting fixture points that correspond to no row an override could name.
 
@@ -157,6 +159,14 @@ was then allowed to correct it, since the next milestone's pull request has no b
 another row. **A pull request may correct a status this table gets wrong**, and only that. M1d
 carried "In review" for a day after [#21](https://github.com/bardesss/haelan/pull/21) merged
 because of it.
+
+**Upgrading past M5d-A costs one rebuild.** Migration 0016 drops `samples` rather than translating
+it, so the first boot after this release rebuilds tier 2 from the archive; measured at 11 minutes
+36 seconds on 1.6 million rows over 741 days. The dashboard is reachable while that runs, and its
+intraday charts are empty for the duration, which is not distinguishable from a day with no data.
+The database file does not shrink: live content falls from 632.4 MB to 246.8 MB measured like for
+like, but SQLite keeps the freed pages on its freelist - about 595 MB - and returns them to the
+operating system only on a `VACUUM`, which nothing in this project runs yet. That is M5d-B.
 
 ## Layout
 

@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readIntraday } from '../src/query/intraday.ts'
-import { samples, sources } from '../src/db/schema/index.ts'
+import { sources } from '../src/db/schema/index.ts'
+import { insertSample } from '../src/testing/fixtures.ts'
 import type { SampleAgg } from '../src/db/schema/index.ts'
 
 const OFFSET = 120
@@ -23,11 +24,10 @@ afterEach(() => test.cleanup())
 const insert = (o: {
   utcMs: number, agg: SampleAgg, value: number, tzOffsetMinutes?: number, sourceId?: string, metric?: string,
 }) =>
-  test.db.insert(samples).values({
+  insertSample(test.db, {
     personId: 'p1', sourceId: o.sourceId ?? 'watch', metric: o.metric ?? 'heart_rate', utcMs: o.utcMs,
-    tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET, agg: o.agg, value: o.value, n: 1,
-    rawPayloadId: null,
-  }).run()
+    tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET, agg: o.agg, value: o.value,
+  })
 
 // 09:00 local on 2026-08-22 at +120 is 07:00Z.
 const NINE_AM = Date.UTC(2026, 7, 22, 7, 0)

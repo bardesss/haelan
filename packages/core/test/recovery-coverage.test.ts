@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { eq } from 'drizzle-orm'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
@@ -9,7 +9,7 @@ import { SettingsStore } from '../src/store/settings.ts'
 import { runDerive } from '../src/derive/runDerive.ts'
 import { METRICS } from '../src/derive/metrics.ts'
 import { DATA_TYPES } from '../src/api/catalogue.ts'
-import { daily, samples, sources } from '../src/db/schema/index.ts'
+import { daily, sources } from '../src/db/schema/index.ts'
 
 // The three the M2 spec's M2c row names. They are sample metrics, so nothing in M2c derives them:
 // this file exists to prove that, rather than to leave it an assumption somebody re-litigates.
@@ -49,11 +49,10 @@ describe('recovery metrics', () => {
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
 
     for (const metric of RECOVERY) {
-      test.db.insert(samples).values({
+      insertSample(test.db, {
         personId: 'p1', sourceId: 'watch', metric,
-        utcMs: MIDNIGHT_UTC + 9 * 3_600_000, tzOffsetMinutes: OFFSET,
-        agg: 'raw', value: 55, n: 1, rawPayloadId: null,
-      }).run()
+        utcMs: MIDNIGHT_UTC + 9 * 3_600_000, tzOffsetMinutes: OFFSET, value: 55,
+      })
     }
     queue.markDirty({ personId: 'p1', localDate: LOCAL_DATE, nowMs: 1 })
     runDerive({

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { schema } from '@haelan/core'
+import { insertSample, schema } from '@haelan/core'
 import { MAX_RANGE_DAYS } from '../src/routes/v1/shared.ts'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -37,10 +37,10 @@ function seedIntraday(h: Harness, input: {
 }): void {
   seedSource(h, input.sourceId)
   const utcMs = Date.UTC(2026, 7, 22, input.localHour, input.minute ?? 0) - OFFSET_MINUTES * 60_000
-  h.app.haelan.instance.db.insert(schema.samples).values({
+  insertSample(h.app.haelan.instance.db, {
     personId: 'p1', sourceId: input.sourceId, metric: input.metric ?? 'heart_rate',
-    utcMs, tzOffsetMinutes: OFFSET_MINUTES, agg: 'mean', value: input.value, n: 1, rawPayloadId: null,
-  }).run()
+    utcMs, tzOffsetMinutes: OFFSET_MINUTES, agg: 'mean', value: input.value,
+  })
 }
 
 let workoutCounter = 0

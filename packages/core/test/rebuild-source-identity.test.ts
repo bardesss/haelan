@@ -3,9 +3,9 @@ import { afterAll, afterEach, describe, expect, test } from 'vitest'
 import fc from 'fast-check'
 import { eq } from 'drizzle-orm'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
-import { samples, sourceAliases, sources } from '../src/db/schema/index.ts'
+import { sourceAliases, sources } from '../src/db/schema/index.ts'
 import { SourceAliasStore } from '../src/store/sourceAliases.ts'
-import { openRebuildLab, seedRebuildable } from '../src/testing/fixtures.ts'
+import { insertSample, openRebuildLab, readSamples, seedRebuildable } from '../src/testing/fixtures.ts'
 import type { Rebuildable } from '../src/testing/fixtures.ts'
 
 const idFor = (personId: string, externalId: string): string =>
@@ -37,7 +37,7 @@ describe('rebuild re-derives source identity', () => {
     expect(rows.map((r) => r.externalId)).toEqual(['HEALTH_CONNECT:com.example.scale'])
     expect(rows[0]!.id).toBe(idFor(h.personId, 'HEALTH_CONNECT:com.example.scale'))
     // And nothing is left pointing at the identity that came off the disk.
-    expect(h.db.select().from(samples).where(eq(samples.sourceId, stale)).all()).toEqual([])
+    expect(readSamples(h.db).filter((row) => row.sourceId === stale)).toEqual([])
   })
 })
 
@@ -116,8 +116,7 @@ describe('rebuild source identity, as a property', () => {
         for (const row of rows) expect(row.id).toBe(idFor(lab.personId, row.externalId))
         // And no sample points at a source that is gone.
         const live = new Set(rows.map((r) => r.id))
-        const orphans = lab.db.select().from(samples)
-          .where(eq(samples.personId, lab.personId)).all()
+        const orphans = readSamples(lab.db, lab.personId)
           .filter((row) => !live.has(row.sourceId))
         expect(orphans).toEqual([])
       },
@@ -185,10 +184,9 @@ describe('rebuild source identity, as a property', () => {
           // actually looks. runRebuild's own bulk delete clears this regardless of which
           // describe() is running; it is here for fixture realism, not because the assertion
           // below depends on it surviving that delete.
-          lab.db.insert(samples).values({
+          insertSample(lab.db, {
             personId: lab.personId, sourceId: oldId, metric: 'heart_rate', utcMs: 0,
-            tzOffsetMinutes: 0, agg: 'raw', value: 1, n: 1, rawPayloadId: null,
-          }).run()
+          })
         }
 
         runRebuild({ ...lab.deps, nowMs: 1, force: true })

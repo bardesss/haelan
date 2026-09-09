@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
-import { DERIVATION_VERSION, dayMetricTarget, schema } from '@haelan/core'
+import { DERIVATION_VERSION, dayMetricTarget, insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -49,10 +49,10 @@ function seedSource(h: Harness, personId: string, sourceId: string): void {
 function seedSample(h: Harness, input: { personId: string, sourceId: string, value: number }): void {
   seedSource(h, input.personId, input.sourceId)
   const utcMs = Date.UTC(2026, 7, 22, 9, 0) - OFFSET_MINUTES * 60_000
-  h.app.haelan.instance.db.insert(schema.samples).values({
+  insertSample(h.app.haelan.instance.db, {
     personId: input.personId, sourceId: input.sourceId, metric: 'heart_rate',
-    utcMs, tzOffsetMinutes: OFFSET_MINUTES, agg: 'mean', value: input.value, n: 1, rawPayloadId: null,
-  }).run()
+    utcMs, tzOffsetMinutes: OFFSET_MINUTES, agg: 'mean', value: input.value,
+  })
 }
 
 // The `sessions` seed /sleep/nights and /sessions read, one kind at a time. Both readers carry

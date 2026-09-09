@@ -13,7 +13,7 @@ import { PROVIDER_SOURCE } from '../src/derive/rollup.ts'
 // Builds a database holding one person, one archived heart rate window and one archived sleep
 // window, plus a sync_state row. Returns the handles runRebuild needs.
 import {
-  seedOverride, seedRebuildable, seedSession,
+  readSamples, seedOverride, seedRebuildable, seedSession,
   REBUILDABLE_DATE, REBUILDABLE_SLEEP_EXTERNAL_ID,
 } from '../src/testing/fixtures.ts'
 import type { Rebuildable } from '../src/testing/fixtures.ts'
@@ -159,7 +159,7 @@ describe('runRebuild', () => {
     // person filter on sessions or on daily is one household member losing another's nights or
     // another's dashboard while somebody else rebuilds, which this project treats as a
     // correctness bug rather than a nicety.
-    expect(h.db.select().from(samples).where(eq(samples.personId, 'p2')).all()).toEqual(other.samples)
+    expect(readSamples(h.db, 'p2')).toEqual(other.samples)
     expect(h.db.select().from(sessions).where(eq(sessions.personId, 'p2')).all()).toEqual(other.sessions)
     expect(h.db.select().from(daily).where(eq(daily.personId, 'p2')).all()).toEqual(other.daily)
   })

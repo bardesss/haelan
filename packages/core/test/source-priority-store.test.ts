@@ -1,11 +1,11 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { UNRANKED_BASE, DEFAULT_LIST } from '../src/derive/priority.ts'
 import { ConfigError } from '../src/errors.ts'
-import { samples, sources } from '../src/db/schema/index.ts'
+import { sources } from '../src/db/schema/index.ts'
 
 const OFFSET = 120
 const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
@@ -28,18 +28,16 @@ beforeEach(() => {
 })
 afterEach(() => test.cleanup())
 
-const insertSample = (hour: number) =>
-  test.db.insert(samples).values({
+const insertAtHour = (hour: number) =>
+  insertSample(test.db, {
     personId: 'p1', sourceId: 'watch', metric: 'steps',
     utcMs: MIDNIGHT_UTC + hour * 3_600_000, tzOffsetMinutes: OFFSET,
-    agg: 'raw', value: 1, n: 1, rawPayloadId: null,
-  }).run()
+  })
 
 const insertAt = (utcMs: number, tzOffsetMinutes: number) =>
-  test.db.insert(samples).values({
-    personId: 'p1', sourceId: 'watch', metric: 'steps',
-    utcMs, tzOffsetMinutes, agg: 'raw', value: 1, n: 1, rawPayloadId: null,
-  }).run()
+  insertSample(test.db, {
+    personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes,
+  })
 
 const markedDates = () => queue.claim(100).map((entry) => entry.localDate)
 
@@ -72,8 +70,8 @@ describe('SourcePriorityStore', () => {
   })
 
   it('marks every day the person has samples for, because changing priority is a rebuild', () => {
-    insertSample(9)
-    insertSample(24 + 9)
+    insertAtHour(9)
+    insertAtHour(24 + 9)
     store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone'], nowMs: 1 })
     // The two sample days plus the spare day at each end. An extra empty derive is the price of
     // never leaving a boundary day on the old merge.
@@ -109,7 +107,7 @@ describe('SourcePriorityStore', () => {
   })
 
   it('marks the same days when a list is cleared', () => {
-    insertSample(9)
+    insertAtHour(9)
     store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone'], nowMs: 1 })
     queue.clear(queue.claim(100))
     store.clear({ personId: 'p1', metric: 'steps', nowMs: 2 })

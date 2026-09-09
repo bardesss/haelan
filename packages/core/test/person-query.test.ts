@@ -1,9 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { ConfigError } from '../src/errors.ts'
-import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sources } from '../src/db/schema/index.ts'
 import type { SessionKind } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 
@@ -40,13 +40,13 @@ const insertSource = (id: string, personId = 'p1') =>
     id, personId, externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
   }).run()
 
-const insertSample = (o: {
+const addSample = (o: {
   utcMs: number, value: number, personId?: string, sourceId?: string,
 }) =>
-  test.db.insert(samples).values({
+  insertSample(test.db, {
     personId: o.personId ?? 'p1', sourceId: o.sourceId ?? 'p1-watch', metric: 'heart_rate',
-    utcMs: o.utcMs, tzOffsetMinutes: 0, agg: 'mean', value: o.value, n: 1, rawPayloadId: null,
-  }).run()
+    utcMs: o.utcMs, agg: 'mean', value: o.value,
+  })
 
 const insertSession = (o: {
   id: string, kind: SessionKind, personId?: string, sourceId?: string,
@@ -223,7 +223,7 @@ describe('PersonQuery.intraday', () => {
 
   it("reads the person's own samples for the local day", () => {
     insertSource('p1-watch')
-    insertSample({ utcMs: NINE_AM, value: 62 })
+    addSample({ utcMs: NINE_AM, value: 62 })
     const out = query.intraday({ metric: 'heart_rate', localDate: '2026-08-22' })
     expect(out.points).toHaveLength(1)
     expect(out.points[0]?.mean).toBe(62)
@@ -233,8 +233,8 @@ describe('PersonQuery.intraday', () => {
     seedPerson(test.db, 'other')
     insertSource('p1-watch', 'p1')
     insertSource('other-watch', 'other')
-    insertSample({ utcMs: NINE_AM, value: 62, personId: 'p1', sourceId: 'p1-watch' })
-    insertSample({ utcMs: NINE_AM, value: 999, personId: 'other', sourceId: 'other-watch' })
+    addSample({ utcMs: NINE_AM, value: 62, personId: 'p1', sourceId: 'p1-watch' })
+    addSample({ utcMs: NINE_AM, value: 999, personId: 'other', sourceId: 'other-watch' })
 
     const out = query.intraday({ metric: 'heart_rate', localDate: '2026-08-22' })
     expect(out.points.map((p) => p.mean)).toEqual([62])

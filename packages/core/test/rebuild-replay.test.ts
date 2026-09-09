@@ -3,10 +3,10 @@ import { and, eq, sql } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
-import { daily, samples, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sources } from '../src/db/schema/index.ts'
 import { samplePoint, sleepPoint, dailyRollupBody, body } from '../src/testing/payloads.ts'
 
-import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
+import { createTestDatabase, readSamples, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { observations } from '../src/db/schema/index.ts'
 
@@ -75,9 +75,10 @@ function sleepBody(): string {
 // The mean row for one downsampled minute. Four tests below check a minute's mean and n, and
 // spelling the filter out at each one buried what they were actually claiming.
 function meanAt(db: TestDatabase['db'], utcMs: number): unknown {
-  return db.select().from(samples)
-    .where(and(eq(samples.personId, 'p1'), eq(samples.utcMs, utcMs), eq(samples.agg, 'mean')))
-    .get()
+  // Through readSamples rather than a select, so the row comes back with its metric name and
+  // aggregate spelled out. A ref-shaped assertion here would keep passing if the aggregate map
+  // were reordered underneath it, which is the one thing that map must never survive.
+  return readSamples(db, 'p1').find((row) => row.utcMs === utcMs && row.agg === 'mean')
 }
 
 describe('replayPerson', () => {
@@ -107,8 +108,7 @@ describe('replayPerson', () => {
       sources: new SourceRegistry(db), nowMs: 1,
     }))
 
-    const rows = db.select().from(samples)
-      .where(and(eq(samples.personId, 'p1'), eq(samples.utcMs, 60_000))).all()
+    const rows = readSamples(db, 'p1').filter((row) => row.utcMs === 60_000)
     expect(rows).toHaveLength(4)
     const byAgg = Object.fromEntries(rows.map((r) => [r.agg, r]))
     expect(byAgg.min).toMatchObject({ value: 100, n: 1 })
@@ -150,7 +150,7 @@ describe('replayPerson', () => {
     // The correction wins, because it was fetched second. Ordering on window bounds puts it first
     // and leaves 60 standing, which is the reading Google had already replaced. The count row is
     // excluded here: its value is a tally of readings, one in this fixture, not a bpm figure.
-    const rows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
+    const rows = readSamples(db, 'p1')
     const bpmRows = rows.filter((row) => row.agg !== 'count')
     expect(bpmRows.every((row) => row.value === 100), 'the older reading overwrote the correction').toBe(true)
   })
@@ -179,7 +179,7 @@ describe('replayPerson', () => {
     }))
 
     // One minute, one row per aggregate. Replaying page by page would produce two sets.
-    const rows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
+    const rows = readSamples(db, 'p1')
     expect(new Set(rows.map((r) => r.utcMs)).size).toBe(1)
     // A concrete number, not rows.length: counts.samples is measured against the table
     // independently of this query, and comparing it to a number derived from the very same table
@@ -421,7 +421,7 @@ describe('replayPerson', () => {
     expect(sessionRows).toHaveLength(1)
     expect(sessionRows[0]?.kind).toBe('ecg')
 
-    const sampleRows = db.select().from(samples).where(eq(samples.personId, 'p1')).all()
+    const sampleRows = readSamples(db, 'p1')
     expect(sampleRows).toHaveLength(1)
     expect(sampleRows[0]).toMatchObject({ metric: 'ecg_heart_rate', value: 72, agg: 'raw' })
 
@@ -483,7 +483,7 @@ describe('replayPerson', () => {
     // samples is now measured against: that comparison would pass regardless of which number,
     // right or wrong, both sides happened to agree on.
     expect(counts.samples).toBe(4)
-    expect(db.select().from(samples).where(eq(samples.personId, 'p1')).all()).toHaveLength(4)
+    expect(readSamples(db, 'p1')).toHaveLength(4)
   })
 
   test('the local dates the rows landed on come back sorted, deduplicated, and including rollup-only dates', () => {

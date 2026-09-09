@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import fc from 'fast-check'
 import {
-  DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, runDerive, sampleTarget, schema,
+  DERIVATION_VERSION, MAPPING_VERSION, dayMetricTarget, insertSample, runDerive, sampleTarget,
+  schema,
 } from '@haelan/core'
 import { DRAIN_BATCH_DAYS } from '../src/routes/v1/annotations.ts'
 import { withServer } from './harness.ts'
@@ -28,11 +29,11 @@ function seedSamplesFor(h: Harness, localDate: string, metric: string, value: nu
   instance.db.insert(schema.sources).values({
     id: 'watch', personId: 'p1', externalId: 'watch', displayName: 'watch', kind: 'device', createdAtMs: 0,
   }).onConflictDoNothing().run()
-  instance.db.insert(schema.samples).values({
+  insertSample(instance.db, {
     personId: 'p1', sourceId: 'watch', metric,
     utcMs: Date.parse(`${localDate}T09:00:00Z`) - OFFSET_MINUTES * 60_000,
-    tzOffsetMinutes: OFFSET_MINUTES, agg: 'raw', value, n: 1, rawPayloadId: null,
-  }).run()
+    tzOffsetMinutes: OFFSET_MINUTES, value,
+  })
   instance.deriveQueue.markDirty({ personId: 'p1', localDate, nowMs: h.clock.nowMs })
 }
 

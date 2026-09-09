@@ -4,7 +4,8 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readIntraday } from '../src/query/intraday.ts'
 import { OverrideStore } from '../src/store/overrides.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
-import { overrides as overridesTable, samples, sources } from '../src/db/schema/index.ts'
+import { overrides as overridesTable, sources } from '../src/db/schema/index.ts'
+import { insertSample } from '../src/testing/fixtures.ts'
 import type { SampleAgg } from '../src/db/schema/index.ts'
 import { sampleTarget } from '../src/derive/targetKey.ts'
 
@@ -33,11 +34,10 @@ afterEach(() => test.cleanup())
 const insert = (o: {
   utcMs: number, agg: SampleAgg, value: number, tzOffsetMinutes?: number, sourceId?: string, metric?: string,
 }) =>
-  test.db.insert(samples).values({
+  insertSample(test.db, {
     personId: 'p1', sourceId: o.sourceId ?? 'watch', metric: o.metric ?? 'heart_rate', utcMs: o.utcMs,
-    tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET, agg: o.agg, value: o.value, n: 1,
-    rawPayloadId: null,
-  }).run()
+    tzOffsetMinutes: o.tzOffsetMinutes ?? OFFSET, agg: o.agg, value: o.value,
+  })
 
 const read = (metric = 'heart_rate') =>
   readIntraday(test.db, { personId: 'p1', metric, localDate: LOCAL_DATE })

@@ -1,6 +1,7 @@
 import { and, eq, gte, inArray, lte, ne } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, samples, sessions, sessionSegments } from '../db/schema/index.ts'
+import { SampleKeys } from '../db/keys.ts'
 import { rollUpDay, PROVIDER_SOURCE, MERGED_SOURCE } from './rollup.ts'
 import type { SampleLike } from './rollup.ts'
 import { mergeDay } from './merge.ts'
@@ -40,17 +41,28 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   // the number of rows read to get there changes.
   const { start: windowStart, end: windowEnd } = widenedUtcWindow(input.localDate)
 
-  const dayRows = tx.select().from(samples).where(and(
-    eq(samples.personId, input.personId),
+  // Bound to the caller's transaction, whether that is the queue drain's one-day transaction or a
+  // rebuild's whole-person one. Its cache is what keeps the translation below affordable: a day of
+  // heart rate is thousands of rows naming a handful of metrics and one or two sources, so this
+  // costs a query per distinct name rather than a query per row.
+  const keys = new SampleKeys(tx)
+
+  // Translated back to names before anything derives from them. Everything downstream - the
+  // rollups, the merge, the priority list, the override keys - is keyed on the metric name and the
+  // source id a person actually configured, and pushing refs through it would mean teaching every
+  // one of those a database representation none of them has any use for.
+  const dayRows: SampleLike[] = tx.select().from(samples).where(and(
+    eq(samples.personRef, keys.personRef(input.personId)),
     gte(samples.utcMs, windowStart),
     lte(samples.utcMs, windowEnd),
   )).all()
     .filter((row) => localDateOf(row.utcMs, row.tzOffsetMinutes) === input.localDate)
+    .map((row) => keys.sampleText(row))
 
   const personOverrides = input.overrides
   // Before aggregation, so an excluded reading is absent from the mean rather than removed
   // from it afterwards, and so an hour whose only reading was excluded is not an hour won.
-  const kept = applyToSamples(dayRows as SampleLike[], personOverrides)
+  const kept = applyToSamples(dayRows, personOverrides)
 
   const derived = rollUpDay({
     personId: input.personId,
