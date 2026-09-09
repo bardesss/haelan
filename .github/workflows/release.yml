@@ -82,6 +82,11 @@ jobs:
           tags: haelan:release-arm64
       - run: bash scripts/check-image-boots.sh haelan:release-arm64 linux/arm64
 
+      # This is a third, separate invocation, not a re-push of the two images just booted above --
+      # build-push-action has no "push what you already built" mode. It relies on the per-platform
+      # buildx cache populated by those two builds to hit, so what reaches the registry is
+      # *probably* the exact bits that were booted, not provably so. That gap is accepted, not
+      # fixed, here.
       - name: Push both architectures
         uses: docker/build-push-action@v7
         with:
