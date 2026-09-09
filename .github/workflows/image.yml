@@ -21,12 +21,12 @@ jobs:
       - name: Validate compose.yaml
         run: docker compose -f compose.yaml config -q
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Loaded into the local daemon rather than pushed: this job proves the image works, and
       # nothing here should be able to publish one.
       - name: Build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           load: true
