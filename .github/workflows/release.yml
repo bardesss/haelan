@@ -4,6 +4,12 @@ on:
   push:
     tags: ['v*']
 
+# Not cancel-in-progress: two tags pushed close together would otherwise race to write `latest`,
+# but killing a publish partway through -- after amd64 pushed, before arm64 does -- is worse than
+# making the second tag wait for the first to finish.
+concurrency:
+  group: ${{ github.workflow }}
+
 jobs:
   publish:
     runs-on: ubuntu-latest
