@@ -2,6 +2,13 @@ import { sqliteTable, text, integer, unique, primaryKey } from 'drizzle-orm/sqli
 
 export const people = sqliteTable('people', {
   id: text('id').primaryKey(),
+  // A narrow stand-in for `id` so `samples` (and anything else keyed on a person) can carry a
+  // four-byte reference instead of repeating the text id. `id` stays the real identity; this
+  // column has no meaning of its own. Default 0 is a placeholder that exists for the instant
+  // between a row landing and the insert trigger (see the migration) overwriting it with the
+  // table's rowid, which is what makes the column addition to an already-populated table legal
+  // under SQLite's NOT NULL-needs-a-constant-default rule without colliding on the unique index.
+  ref: integer('ref').notNull().unique().default(0),
   displayName: text('display_name').notNull(),
   // Day boundaries are computed here, not in UTC. Spec invariant 3.
   timezone: text('timezone').notNull(),
@@ -16,6 +23,10 @@ export const people = sqliteTable('people', {
 
 export const sources = sqliteTable('sources', {
   id: text('id').primaryKey(),
+  // Same narrow stand-in as people.ref, for the same reason: samples references a source many
+  // times over, and four bytes beats the 32 hex characters of `id`. `id` remains the real
+  // identity. See people.ref for why the placeholder default is 0.
+  ref: integer('ref').notNull().unique().default(0),
   personId: text('person_id').notNull().references(() => people.id),
   externalId: text('external_id').notNull(),
   displayName: text('display_name').notNull(),

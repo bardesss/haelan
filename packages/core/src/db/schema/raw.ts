@@ -6,6 +6,10 @@ import { people } from './people.ts'
 // for heart rate alone.
 export const rawPayloads = sqliteTable('raw_payloads', {
   id: text('id').primaryKey(),
+  // Same narrow stand-in as people.ref and sources.ref: samples will carry this instead of the
+  // 32 hex character id. `id` remains the archive's real index. See people.ref for why the
+  // placeholder default is 0.
+  ref: integer('ref').notNull().unique().default(0),
   personId: text('person_id').notNull().references(() => people.id),
   dataType: text('data_type').notNull(),
   requestParams: text('request_params').notNull(),

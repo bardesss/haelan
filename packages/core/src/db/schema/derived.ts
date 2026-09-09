@@ -8,6 +8,17 @@ export type SampleAgg = (typeof SAMPLE_AGGS)[number]
 export const SESSION_KINDS = ['sleep', 'exercise', 'ecg'] as const
 export type SessionKind = (typeof SESSION_KINDS)[number]
 
+// The dictionary samples.metric will reference instead of repeating a metric name ~14 characters
+// long, 1.6 million times over. AUTOINCREMENT, not a bare INTEGER PRIMARY KEY: SQLite reuses the
+// highest rowid of a plain INTEGER PRIMARY KEY once that row is deleted, and a reused ref would
+// silently repoint every historical sample of a deleted metric onto whatever metric is inserted
+// next — a heart rate becoming a body temperature, with nothing failing. Nothing deletes a metric
+// today, which is exactly why this has to be decided now rather than discovered after it matters.
+export const metrics = sqliteTable('metrics', {
+  ref: integer('ref').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull().unique(),
+})
+
 // Long and narrow. Heart rate arrives every 2 seconds, and agg lets a minute collapse to three
 // rows (min, mean, max) rather than thirty, the reduction M0 measured. The ingest code that
 // writes at that per-minute policy landed in M1b, in mapWindowSamples. The 2-second truth stays
