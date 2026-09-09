@@ -40,6 +40,11 @@ COPY apps/server/package.json apps/server/
 # package. --no-frozen-lockfile still resolves every package from the committed lockfile, since
 # none of the versions or manifests changed; the only thing that changes is that the peer-filled
 # entries are no longer added.
+#
+# The guarantee that flag usually carries is not lost, because the build stage above installs the
+# same lockfile and the same manifests with --frozen-lockfile. A lockfile that had drifted from a
+# manifest would fail there, in this same build, so no image can be produced from a mismatched
+# pair whatever this line says.
 RUN pnpm install --no-frozen-lockfile --prod --config.autoInstallPeers=false
 
 FROM node:24-slim AS runtime
