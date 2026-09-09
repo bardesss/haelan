@@ -45,7 +45,11 @@ COPY apps/server/package.json apps/server/
 # same lockfile and the same manifests with --frozen-lockfile. A lockfile that had drifted from a
 # manifest would fail there, in this same build, so no image can be produced from a mismatched
 # pair whatever this line says.
-RUN pnpm install --no-frozen-lockfile --prod --config.autoInstallPeers=false
+# --filter @haelan/server... (the trailing ... pulls in its dependencies, i.e. @haelan/core) is
+# what keeps this install to the server's production graph. Without it, a workspace-wide install
+# has no way to know apps/web's react/echarts/i18next/etc are dead weight here: vite already
+# bundled them into apps/web/dist, and nothing in the runtime image ever imports them again.
+RUN pnpm install --filter @haelan/server... --no-frozen-lockfile --prod --config.autoInstallPeers=false
 
 FROM node:24-slim AS runtime
 WORKDIR /app
