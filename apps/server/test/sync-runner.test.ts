@@ -6,47 +6,37 @@ import type { Harness } from './harness.ts'
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
 
-// The four tests below that pass sprintDays and backfillBatchDays are deliberately expensive:
-// they assert against production's own numbers, and at the harness's speed-picked defaults they
-// would pass for the wrong reason (see each one's comment). Measured with one extra vitest
-// process competing for the machine, they cost 13.0s, 13.5s, 9.2s and 6.9s - against a global
-// testTimeout of 20s, which is a margin of well under two on a machine whose load nobody
-// controls. That is the whole flake: not a race, not shared state, just a budget sized for
-// ordinary tests applied to tests that are two orders of magnitude heavier.
+// One budget for every test in this file, applied on the describe. There is no ordinary test
+// here: each one boots a real Fastify server, creates an account through argon2 (deliberately
+// expensive), and most then await a sync that walks every listable data type for every connected
+// person. The global 20s testTimeout is sized for the six hundred tests that do none of that.
 //
-// Raising the global budget would blunt it for the other six hundred tests, where 20s means "this
-// is hung". So the cost is declared where it is incurred. Generous on purpose: it is a
-// hang-detector for these tests, not a performance assertion, and a performance assertion is
-// exactly what it must not become on hardware this suite does not choose.
+// 180s looks absurd next to a solo run of this file, where the heaviest test is 47s and most are
+// under three. It is sized for contention, not for solo cost, because solo cost turned out to
+// understate a full run by up to 3x on this hardware: "does not let one broken type block a
+// healthy type" measures 21.6s alone and exceeded 60s in a full suite run. The file itself goes
+// from 229s alone to 334s under a full run.
 //
-// Two tests carry it for a second reason, which the original wording missed and a full-suite run
-// then proved: a test that awaits a whole run to completion is in the same weight class even at
-// the harness's small defaults, because a run syncs every listable type for every connected
-// person. The first test below awaits one, the quarantine drain test awaits one for two people,
-// and the first was the flake this comment described without covering.
-const SPRINT_BUDGET_MS = 60_000
+// It got here by two wrong answers, both worth keeping so nobody retries them. First, per-test
+// annotations on the four obvious offenders - which missed a fifth test that measures 75ms alone,
+// timed out at 20s on a CI runner and turned master red, because what those tests share is the
+// harness rather than the sprint. Then a two-tier scheme, a 60s floor with 180s for the real
+// sprint tests - which failed on the one test whose 2.8x margin was not the 3x it needed.
+//
+// The cost doubled when it was last measured for a different reason: a run walks every listable
+// data type, and the catalogue went from 20 types to 42. The budgets predating that were all
+// sized against half the work.
+//
+// This is a hang-detector, not a performance assertion, and a performance assertion is exactly
+// what it must not become on hardware this suite does not choose. The global 20s still guards the
+// other 227 files, where 20s genuinely means "this is hung".
+//
+// The real fix is cheaper tests rather than a wider budget: these tests need two or three data
+// types to prove what they assert, not 42. That is a larger change and is recorded rather than
+// attempted here.
+const SPRINT_BUDGET_MS = 180_000
 
-// Two tests below drive the real sprintDays (90) rather than a small convergent number, so they
-// are dominated by the sprint loop itself rather than by run-once overhead: "fills the sprint
-// window in one run rather than one batch an hour" and "stops at the sprint window and leaves the
-// deep history to later runs". Both need this budget.
-//
-// This constant used to cover only the first, on the stated grounds that it was "the one test in
-// the file" in that weight class. Measured per test with the machine otherwise idle, that was
-// wrong: fills costs 36.3s and stops costs 33.0s. They are the same weight. stops was left on the
-// 60s SPRINT_BUDGET_MS, a 1.8x margin, and duly failed a full run - it is the only test that still
-// failed with parallelism capped, because its margin is too thin to depend on contention at all.
-//
-// The underlying cost is this host's timer granularity: setTimeout costs 10-14ms here against a
-// nominal ~1ms, so anything timer-bound runs roughly 3x nominal wall clock, landing on tests that
-// legitimately need many timer-driven passes. The fix is a wider budget, not a cheaper test:
-// sprintDays and the batch size are the numbers that ship, and shrinking them here would make both
-// tests pass for the wrong reason. 180s is ~5x their solo cost, so ordinary contention cannot tip
-// them, without hiding a genuine hang the way raising the global testTimeout would for every other
-// test in the suite.
-const REAL_SPRINT_BUDGET_MS = 180_000
-
-describe('the sync runner', () => {
+describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
   it('refuses a second run while one is in flight and says so rather than queueing', async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()
@@ -55,7 +45,7 @@ describe('the sync runner', () => {
     const second = await runner.trigger('manual')
     expect(second).toMatchObject({ started: false, reason: 'already_running' })
     await first
-  }, SPRINT_BUDGET_MS)
+  })
 
   it('skips a person whose derived data is not at the current versions', async () => {
     harness = await withServer({ google: 'ok' })
@@ -100,7 +90,7 @@ describe('the sync runner', () => {
     expect(instance.deriveQueue.claim(10)).toEqual([
       { personId: 'p1', localDate: '2026-08-22' },
     ])
-  }, SPRINT_BUDGET_MS)
+  })
 
   it('says a person is being skipped once rather than on every tick', async () => {
     harness = await withServer({ google: 'ok' })
@@ -266,7 +256,7 @@ describe('the sync runner', () => {
     for (const row of status.backfill) {
       expect(row.complete || (row.cursorMs !== null && row.cursorMs <= sprintFloor)).toBe(true)
     }
-  }, REAL_SPRINT_BUDGET_MS)
+  })
 
   it('stops at the sprint window and leaves the deep history to later runs', async () => {
     // The real sprintDays and real batch size: at the harness's default batch of 1, forty
@@ -280,7 +270,7 @@ describe('the sync runner', () => {
     // Daily types were asked for five years; the sprint must not have walked them there.
     expect(weight?.complete).toBe(false)
     expect(weight?.cursorMs).toBeGreaterThan(harness.clock.nowMs - 1825 * 86_400_000)
-  }, REAL_SPRINT_BUDGET_MS)
+  })
 
   it('reverts to one batch per type once the sprint window is filled', async () => {
     // This test is about the revert, not about the number 90 - it only needs the sprint to
@@ -299,7 +289,12 @@ describe('the sync runner', () => {
     // One batch of fourteen days (backfillBatchDays passed above), not another sprint.
     expect(before - after).toBeLessThanOrEqual(16 * 86_400_000)
     expect(after).toBeLessThan(before)
-  }, SPRINT_BUDGET_MS)
+    // REAL_SPRINT despite the small sprintDays above, which reads like a contradiction and is not.
+    // The sprint here is cheap; the two full runs either side of it are not, because a run walks
+    // every listable data type and the catalogue went from 20 types to 42. Measured at 47.0s alone
+    // against the 60s floor - a 1.28x margin, the thinnest in the file and the next one that would
+    // have failed on a slower runner.
+  })
 
   it('abandons a sprint promptly when asked to stop, so shutdown does not wait for it', async () => {
     // Not about the number 90: stop() lands before runSync's first await resolves (see the
@@ -388,5 +383,5 @@ describe('the sync runner', () => {
     const brokenType = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === LIST_FAILS_TYPE)
     expect(brokenType?.complete).toBe(false)
-  }, SPRINT_BUDGET_MS)
+  })
 })
