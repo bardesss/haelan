@@ -17,5 +17,12 @@
  *    it would be re-derived from does hold their payloads for whatever window was already
  *    fetched, so the bump is what turns that archived history into rows rather than leaving only
  *    the types' future visible.
+ * 4: M5d-A rekeys `samples` onto integers. The five identifiers the table used to write out in
+ *    full on every row - a person id, a source id, a metric name, an aggregate name and a raw
+ *    payload id - are now refs into the tables that own them, so tier 2's shape is different in
+ *    every row it holds. Migration 0016 drops the old table rather than translating 1.6 million
+ *    rows inside a migration transaction, which means a person stamped 3 has no samples at all
+ *    rather than samples in the older shape, and this bump is the whole of what refills them from
+ *    the archive on the first boot after the upgrade.
  */
-export const MAPPING_VERSION = 3
+export const MAPPING_VERSION = 4
