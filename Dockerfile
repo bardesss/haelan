@@ -29,7 +29,18 @@ COPY packages/tokens/package.json packages/tokens/
 COPY packages/core/package.json packages/core/
 COPY apps/web/package.json apps/web/
 COPY apps/server/package.json apps/server/
-RUN pnpm install --frozen-lockfile --prod
+# autoInstallPeers=false here only: pnpm was filling peer slots for i18next/react-i18next and
+# drizzle-orm with typescript and @types/* packages, which then rode --prod into this stage since
+# a peer dependency isn't a dev dependency pnpm knows to drop. The build stage still needs the
+# full peer graph to run `pnpm build`, so this flag is not set there.
+#
+# --frozen-lockfile refuses to run at all here: it also checks the "settings" pnpm recorded in
+# the lockfile against the settings this install would use, and autoInstallPeers is one of them,
+# so overriding it always trips ERR_PNPM_LOCKFILE_CONFIG_MISMATCH before installing a single
+# package. --no-frozen-lockfile still resolves every package from the committed lockfile, since
+# none of the versions or manifests changed; the only thing that changes is that the peer-filled
+# entries are no longer added.
+RUN pnpm install --no-frozen-lockfile --prod --config.autoInstallPeers=false
 
 FROM node:24-slim AS runtime
 WORKDIR /app
@@ -51,7 +62,12 @@ COPY --from=build /app/apps/web/dist apps/web/dist
 
 # node:24-slim ships an unprivileged `node` user. /data is the only path the process writes, and
 # it is a volume, so its ownership has to be set before the volume is declared.
-RUN mkdir -p /data && chown -R node:node /data /app
+#
+# /app used to be chowned to node too, which meant the process could rewrite its own source
+# (proved: `touch apps/server/src/index.ts` succeeded as node). /app only needs to be readable,
+# not writable, by the user the process runs as, and files COPYed in as root are already
+# world-readable, so leaving /app root-owned costs nothing.
+RUN mkdir -p /data && chown -R node:node /data
 USER node
 VOLUME ["/data"]
 EXPOSE 4235

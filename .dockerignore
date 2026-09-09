@@ -11,3 +11,12 @@ probe
 **/dist
 **/*.tsbuildinfo
 apps/web/src/theme.generated.css
+
+# Secrets and local runtime data. .gitignore is the source of truth for what must never be
+# published; COPY . . in the build stage will otherwise pull these into a layer, and once this
+# image builds in CI with layer caching, "local only" stops being true.
+.env
+.env.local
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
