@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+.git
+.github
+.worktrees
+.superpowers
+.claude
+docs
+probe
+.local-data
+**/dist
+**/*.tsbuildinfo
+apps/web/src/theme.generated.css
