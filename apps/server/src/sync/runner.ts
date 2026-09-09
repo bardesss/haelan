@@ -32,8 +32,13 @@ const SPRINT_DAYS = 90
  * A pass that keeps fetching without moving a cursor is a type failing every window. Bounded so
  * that case ends the sprint rather than looping on it; 90 days at the smallest useful batch
  * needs far fewer passes than this.
+ *
+ * Exported only so a test can size itself against it: "fills the sprint window in one run"
+ * walks a subset of the catalogue and needs that subset to be large enough that a pass
+ * advancing one type instead of all of them runs out of passes here rather than converging
+ * anyway. Reading the number beats restating it in a comment that would not notice it moving.
  */
-const MAX_SPRINT_PASSES = 40
+export const MAX_SPRINT_PASSES = 40
 
 /**
  * runDerive claims one batch per call, and a sprint marks far more days than one batch holds.
