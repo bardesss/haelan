@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, SCOPES, supports } from '@haelan/core'
 import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
+import { MAX_SPRINT_PASSES } from '../src/sync/runner.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -15,11 +16,11 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // up to 3x on this hardware: "does not let one broken type block a healthy type" measured 21.6s
 // alone and still exceeded 60s in a full suite run.
 //
-// It is now generously above what the file needs, which is where a hang-detector belongs. The
-// narrowing below took the file from 229s to 85s alone and the heaviest test from 47s to 30s, so
-// the margin went from uncomfortable to ample without the number moving. Tightening it to match
-// would trade a real safety margin for nothing, and would hide a future cost regression behind a
-// budget that had been pulled down to meet it.
+// It is now generously above what the file needs, which is where a hang-detector belongs. Two
+// rounds of narrowing took the file from 229s to 85s and then to 32s alone, and the heaviest test
+// in it from 47s to 39.5s to 5.4s, so the margin went from uncomfortable to ample without the
+// number moving. Tightening it to match would trade a real safety margin for nothing, and would
+// hide a future cost regression behind a budget that had been pulled down to meet it.
 //
 // It got here by two wrong answers, both worth keeping so nobody retries them. First, per-test
 // annotations on the four obvious offenders - which missed a fifth test that measures 75ms alone,
@@ -35,12 +36,42 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // what it must not become on hardware this suite does not choose. The global 20s still guards the
 // other 227 files, where 20s genuinely means "this is hung".
 //
-// The real fix was cheaper tests rather than a wider budget, and it has since been done: three of
-// these tests now pass `dataTypes` to the harness and walk one or two types instead of 42, because
-// their subject is the sprint loop and not the catalogue. "fills the sprint window" deliberately
-// still walks all of them - it asserts over every row of status.backfill, so breadth is its
-// subject rather than its cost.
+// The real fix was cheaper tests rather than a wider budget, and it has since been done: four of
+// these tests now pass `dataTypes` to the harness and walk a handful of types instead of all 39
+// listable ones, because their subject is the sprint loop and not the catalogue.
+//
+// "fills the sprint window" was the one held back, on the argument that it asserts over every row
+// of status.backfill and so breadth was its subject rather than its cost. That was half right and
+// it cost us a red master: at 39 types it walked 4,368 backfill windows, 39.5s alone here and
+// 509s on a contended CI runner, past this very budget. Breadth is its subject; the whole
+// catalogue was never what its subject required, and it now walks six types chosen so the defect
+// it exists for still fails it. The comment on the test says which six and why that number.
+//
+// Where the per-window cost actually is, measured rather than assumed, since the last two
+// attempts at this file both guessed: 59% of that run was Intl.DateTimeFormat construction inside
+// startOfLocalDay (packages/core/src/sync/windows.ts), which builds a formatter per probe and
+// probes ~30 times per window. gzip was 1.8% and every SQLite call together about 15%. Memoising
+// that formatter per zone cuts the same run 4.6x, and is a production win rather than a test one;
+// it is not what fixed this file, and it is still worth doing.
 const SPRINT_BUDGET_MS = 180_000
+
+// What "fills the sprint window in one run rather than one batch an hour" walks, and the two
+// production numbers it walks them with. Named rather than written as literals at the call
+// because that test guards itself with arithmetic over them, and a guard reading numbers the
+// harness is not actually given would be a guard over nothing. See the comment there for why
+// six types, and which six.
+const SPRINT_DAYS = 90
+const SPRINT_BATCH_DAYS = 14
+const PASSES_PER_TYPE = Math.ceil(SPRINT_DAYS / SPRINT_BATCH_DAYS)
+const SPRINT_TYPES = [
+  // Intraday, so their horizon resolves to the 365 day cap.
+  'heart-rate', 'steps',
+  // Daily, so their horizon follows the operator's 730 day default - the other side of the
+  // per-type cap skip in #backfillPass.
+  'weight', 'blood-glucose',
+  // The other two write targets, which cost nothing extra to include here.
+  'sleep', 'moods',
+]
 
 describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
   it('refuses a second run while one is in flight and says so rather than queueing', async () => {
@@ -255,15 +286,40 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // comfortably covers the ceil(90 / 14) = 7 passes a real sprint needs. Reaching the sprint
     // depth proves the run looped rather than yielded.
     //
-    // The one test in this file that keeps the whole catalogue, deliberately: it asserts over
-    // every row of status.backfill, so its subject IS the breadth. Narrowing it the way its
-    // neighbours are narrowed would leave nothing checking that a sprint reaches the floor for
-    // every type rather than for the first one it happens to walk.
-    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
+    // Six types rather than all thirty-nine listable ones, which is a change of position from
+    // what stood here: this used to keep the whole catalogue on the argument that breadth was
+    // its subject. Breadth is its subject, but the whole catalogue was never what the subject
+    // required - 39 types at this depth is 4,368 backfill windows, measured at 39.5s alone and
+    // 509s on a contended CI runner, where it blew the file's 180s budget and turned master red.
+    // What the assertion below actually needs is more than one row, so that a sprint reaching
+    // the floor for the first type it walks and leaving the rest short fails here.
+    //
+    // Six and not two, because the weaker version of that defect is a pass that advances one
+    // type per pass instead of every type, and it hides at small breadth: a sprint needs
+    // ceil(90 / 14) = 7 passes per type, so five types converge inside MAX_SPRINT_PASSES anyway
+    // and six cannot. The expect below reads that constant rather than trusting this paragraph,
+    // so raising MAX_SPRINT_PASSES fails here instead of silently buying the coverage back out.
+    // Which six is not arbitrary either: the sprint cap is skipped per type against the type's
+    // resolved horizon, so both resolutions are present (intraday's 365 day cap, and the 730 day
+    // operator default the daily types follow), and all three write targets come with them.
+    //
+    // That every listable type is reported and walked at all is a different claim, and it is
+    // asserted where it costs nothing: "leaves every other catalogue type present, including
+    // ones nobody has heard of" and "is not walked by the backfill pass during a sync run", both
+    // in sync-exclusions.test.ts at harness defaults.
+    expect(SPRINT_TYPES.length * PASSES_PER_TYPE,
+      'a pass advancing one type instead of all of them would still converge').toBeGreaterThan(MAX_SPRINT_PASSES)
+    harness = await withServer({
+      google: 'ok', sprintDays: SPRINT_DAYS, backfillBatchDays: SPRINT_BATCH_DAYS,
+      dataTypes: SPRINT_TYPES,
+    })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     const status = harness.app.haelan.runner.status('p1')
-    const sprintFloor = harness.clock.nowMs - 90 * 86_400_000
+    // The loop below is vacuously true over an empty array, and a mistyped id in SPRINT_TYPES
+    // would produce exactly that - a green test walking nothing at all.
+    expect(status.backfill).toHaveLength(SPRINT_TYPES.length)
+    const sprintFloor = harness.clock.nowMs - SPRINT_DAYS * 86_400_000
     for (const row of status.backfill) {
       expect(row.complete || (row.cursorMs !== null && row.cursorMs <= sprintFloor)).toBe(true)
     }
@@ -274,8 +330,8 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // passes only reaches 40 days and the sprint-floor skip this test is actually about never
     // fires - the test would pass because MAX_SPRINT_PASSES ran out, not because the cap held.
     //
-    // One type, unlike its neighbour above: every assertion here reads 'weight' and nothing else,
-    // so the other forty-one only add cost. The breadth case is that neighbour's job.
+    // One type, where its neighbour above walks six: every assertion here reads 'weight' and
+    // nothing else, so any other type only adds cost. The breadth case is that neighbour's job.
     harness = await withServer({
       google: 'ok', sprintDays: 90, backfillBatchDays: 14, dataTypes: ['weight'],
     })
