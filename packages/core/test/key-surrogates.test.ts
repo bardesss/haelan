@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { people, sources, rawPayloads, metrics } from '../src/db/schema/index.ts'
+import { people, sources, rawPayloads, metricDictionary } from '../src/db/schema/index.ts'
 
 let test: TestDatabase
 
@@ -50,27 +50,69 @@ describe('surrogate refs are assigned on insert', () => {
   it('never gives two rows in the same table the same ref', () => {
     seedPerson(test.db, 'p1')
     seedPerson(test.db, 'p2')
-    const rows = test.db.select({ ref: people.ref }).from(people).all()
-    expect(rows).toHaveLength(2)
-    expect(rows[0]?.ref).not.toBe(rows[1]?.ref)
+    test.db.insert(sources).values([
+      { id: 's1', personId: 'p1', externalId: 's1', displayName: 's1', kind: 'device', createdAtMs: 0 },
+      { id: 's2', personId: 'p1', externalId: 's2', displayName: 's2', kind: 'device', createdAtMs: 0 },
+    ]).run()
+    insertRawPayload('r1', 'p1')
+    insertRawPayload('r2', 'p1')
+
+    const peopleRefs = test.db.select({ ref: people.ref }).from(people).all()
+    const sourceRefs = test.db.select({ ref: sources.ref }).from(sources).all()
+    const payloadRefs = test.db.select({ ref: rawPayloads.ref }).from(rawPayloads).all()
+
+    expect(peopleRefs).toHaveLength(2)
+    expect(peopleRefs[0]?.ref).not.toBe(peopleRefs[1]?.ref)
+    // sources and raw_payloads are the two tables production actually deletes rows from
+    // (dropUnreferencedSources), so a reused ref here is the one that would silently repoint a
+    // stored sample at the wrong entity.
+    expect(sourceRefs).toHaveLength(2)
+    expect(sourceRefs[0]?.ref).not.toBe(sourceRefs[1]?.ref)
+    expect(payloadRefs).toHaveLength(2)
+    expect(payloadRefs[0]?.ref).not.toBe(payloadRefs[1]?.ref)
+  })
+
+  // The trigger that assigns ref copies rowid; nothing else about it is guaranteed. Later tasks
+  // store this ref in samples and expect it to keep meaning "this row", including across the
+  // rowid lookups a backup or a migration might do directly. If a future change ever assigns ref
+  // some other way, this is the test that has to fail, and it has to fail by naming the
+  // invariant rather than as a UNIQUE constraint violation on an unrelated insert.
+  it('keeps ref equal to the row\'s own rowid, not merely a unique number assigned alongside it', () => {
+    seedPerson(test.db, 'p1')
+    test.db.insert(sources).values(
+      { id: 's1', personId: 'p1', externalId: 's1', displayName: 's1', kind: 'device', createdAtMs: 0 },
+    ).run()
+    insertRawPayload('r1', 'p1')
+
+    const personRowid = test.db.get<{ rowid: number }>(sql`select rowid from people where id = 'p1'`)
+    const sourceRowid = test.db.get<{ rowid: number }>(sql`select rowid from sources where id = 's1'`)
+    const payloadRowid = test.db.get<{ rowid: number }>(sql`select rowid from raw_payloads where id = 'r1'`)
+
+    const person = test.db.select().from(people).where(eq(people.id, 'p1')).get()
+    const source = test.db.select().from(sources).where(eq(sources.id, 's1')).get()
+    const payload = test.db.select().from(rawPayloads).where(eq(rawPayloads.id, 'r1')).get()
+
+    expect(person?.ref).toBe(personRowid?.rowid)
+    expect(source?.ref).toBe(sourceRowid?.rowid)
+    expect(payload?.ref).toBe(payloadRowid?.rowid)
   })
 })
 
 describe('metrics dictionary', () => {
   it('round-trips a name to a ref and back', () => {
-    test.db.insert(metrics).values({ name: 'heart_rate' }).run()
-    const byName = test.db.select().from(metrics).where(eq(metrics.name, 'heart_rate')).get()
+    test.db.insert(metricDictionary).values({ name: 'heart_rate' }).run()
+    const byName = test.db.select().from(metricDictionary).where(eq(metricDictionary.name, 'heart_rate')).get()
     expect(byName?.name).toBe('heart_rate')
 
-    const byRef = test.db.select().from(metrics).where(eq(metrics.ref, byName!.ref)).get()
+    const byRef = test.db.select().from(metricDictionary).where(eq(metricDictionary.ref, byName!.ref)).get()
     expect(byRef?.name).toBe('heart_rate')
   })
 
   it('rejects a second row for the same name rather than producing two refs', () => {
-    test.db.insert(metrics).values({ name: 'steps' }).run()
-    expect(() => test.db.insert(metrics).values({ name: 'steps' }).run()).toThrow()
+    test.db.insert(metricDictionary).values({ name: 'steps' }).run()
+    expect(() => test.db.insert(metricDictionary).values({ name: 'steps' }).run()).toThrow()
 
-    const rows = test.db.select().from(metrics).where(eq(metrics.name, 'steps')).all()
+    const rows = test.db.select().from(metricDictionary).where(eq(metricDictionary.name, 'steps')).all()
     expect(rows).toHaveLength(1)
   })
 
@@ -80,13 +122,13 @@ describe('metrics dictionary', () => {
   // with or without the keyword; only "the next ref is higher than the one that was freed" tells
   // the two apart.
   it('does not reuse a ref after the row holding it is deleted', () => {
-    test.db.insert(metrics).values({ name: 'first' }).run()
-    const second = test.db.insert(metrics).values({ name: 'second' }).run()
+    test.db.insert(metricDictionary).values({ name: 'first' }).run()
+    const second = test.db.insert(metricDictionary).values({ name: 'second' }).run()
     const secondRef = Number(second.lastInsertRowid)
 
-    test.db.delete(metrics).where(eq(metrics.ref, secondRef)).run()
+    test.db.delete(metricDictionary).where(eq(metricDictionary.ref, secondRef)).run()
 
-    const third = test.db.insert(metrics).values({ name: 'third' }).run()
+    const third = test.db.insert(metricDictionary).values({ name: 'third' }).run()
     const thirdRef = Number(third.lastInsertRowid)
 
     expect(thirdRef).toBeGreaterThan(secondRef)

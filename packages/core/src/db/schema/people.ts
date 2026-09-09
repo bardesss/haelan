@@ -8,6 +8,17 @@ export const people = sqliteTable('people', {
   // between a row landing and the insert trigger (see the migration) overwriting it with the
   // table's rowid, which is what makes the column addition to an already-populated table legal
   // under SQLite's NOT NULL-needs-a-constant-default rule without colliding on the unique index.
+  //
+  // `ref` is this row's `rowid`, and code may rely on that. It follows that `INSERT OR REPLACE`
+  // on this table is forbidden: that statement is a delete plus an insert, so it takes a new
+  // rowid and silently re-issues this person's `ref`, which later tasks will have stored in
+  // `samples`. No call site does this today; that is the point of writing it down now.
+  // `ON CONFLICT DO UPDATE` is fine and leaves an existing ref alone. `INSERT ... RETURNING ref`
+  // yields the placeholder 0, not the assigned ref, because RETURNING is computed before AFTER
+  // triggers fire - read the ref back with a follow-up select instead. And a logical restore (a
+  // `.dump` and replay, as opposed to a file copy) reassigns rowids while carrying `ref` values
+  // verbatim, permanently diverging the two; whoever builds backup and restore must carry rowids
+  // explicitly or reassign both together.
   ref: integer('ref').notNull().unique().default(0),
   displayName: text('display_name').notNull(),
   // Day boundaries are computed here, not in UTC. Spec invariant 3.
@@ -25,7 +36,8 @@ export const sources = sqliteTable('sources', {
   id: text('id').primaryKey(),
   // Same narrow stand-in as people.ref, for the same reason: samples references a source many
   // times over, and four bytes beats the 32 hex characters of `id`. `id` remains the real
-  // identity. See people.ref for why the placeholder default is 0.
+  // identity. See people.ref for why the placeholder default is 0, and for the constraints that
+  // come with ref being this row's rowid.
   ref: integer('ref').notNull().unique().default(0),
   personId: text('person_id').notNull().references(() => people.id),
   externalId: text('external_id').notNull(),

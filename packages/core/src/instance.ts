@@ -1,4 +1,4 @@
-import { openDatabase, closeDatabase } from './db/open.ts'
+import { openDatabase, closeDatabase, checkpointTruncate } from './db/open.ts'
 import { migrateToLatest } from './db/migrate.ts'
 import { loadOrCreateKey } from './crypto/key.ts'
 import { CredentialStore } from './store/credentials.ts'
@@ -39,6 +39,11 @@ export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): I
   const db = openDatabase(dir)
   try {
     migrateToLatest(db)
+    // Covers any migration that rewrites rows in bulk, not just this one: 0015's
+    // `UPDATE raw_payloads SET ref = rowid` touches every archived body in one transaction, which
+    // is the same shape of WAL surprise checkpointTruncate exists for elsewhere (runRebuild). A
+    // no-op once the log is already small, which is every boot after the first.
+    checkpointTruncate(db)
     const key = loadOrCreateKey(dir, env)
     const deriveQueue = new DeriveQueue(db)
     return {

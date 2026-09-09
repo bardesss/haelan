@@ -14,7 +14,11 @@ export type SessionKind = (typeof SESSION_KINDS)[number]
 // silently repoint every historical sample of a deleted metric onto whatever metric is inserted
 // next — a heart rate becoming a body temperature, with nothing failing. Nothing deletes a metric
 // today, which is exactly why this has to be decided now rather than discovered after it matters.
-export const metrics = sqliteTable('metrics', {
+//
+// Named `metricDictionary`, not the camelCase-of-the-table-name `metrics` the rest of this schema
+// uses, because `METRICS` already means the derivation catalogue in `derive/metrics.ts`, and a
+// module that imports both needs the names to say which is which.
+export const metricDictionary = sqliteTable('metrics', {
   ref: integer('ref').primaryKey({ autoIncrement: true }),
   name: text('name').notNull().unique(),
 })
