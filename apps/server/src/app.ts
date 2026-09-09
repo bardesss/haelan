@@ -54,6 +54,22 @@ export interface ServerDeps {
    */
   sprintDays?: number
   /**
+   * Restricts which data types a run walks, by id. Unset in production, where a run walks the
+   * whole catalogue minus whatever each person excluded.
+   *
+   * Exists for the same reason sprintDays above does, one axis over. A run's cost is depth times
+   * breadth: sprintDays bounds the depth so a test that merely completes consent does not pay for
+   * a 90 day walk, and this bounds the breadth so a test about the sprint's own mechanics does not
+   * pay for 42 data types to prove something two would prove. The catalogue going from 20 types to
+   * 42 doubled every such test and turned one of them red on CI.
+   *
+   * Deliberately not the per-person exclusions table, which would also have worked: an exclusion
+   * means a person turned a type off, and borrowing that to make a test fast would conflate their
+   * intent with a test's indifference. Deliberately opt-in, so a test only narrows its own breadth
+   * by saying so - no test can lose coverage by inheriting a default.
+   */
+  dataTypeIdsForTest?: readonly string[]
+  /**
    * Lets a test register an extra route inside the /api/v1 plugin scope, with no preHandler of
    * its own, to prove the versioned surface's guard hook covers a route nobody remembered to
    * guard rather than relying on a per-route list. Unset in production.

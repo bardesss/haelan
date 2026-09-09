@@ -159,7 +159,12 @@ export class SyncRunner {
    */
   #typesFor(personId: string): DataType[] {
     const excluded = new Set(this.#context.stores.excludedDataTypes.listFor(personId))
+    // The test narrowing applies after the exclusions rather than instead of them, so a test that
+    // sets both still sees a person's own choices honoured. Unset in production; see
+    // ServerDeps.dataTypeIdsForTest for why this is a named seam rather than the exclusions table.
+    const only = this.#context.dataTypeIdsForTest
     return DATA_TYPES.filter((type) => !excluded.has(type.id))
+      .filter((type) => only === undefined || only.includes(type.id))
   }
 
   /** The instance-wide facts, with nothing of anybody's data in them. */
