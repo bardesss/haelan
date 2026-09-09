@@ -34,6 +34,16 @@ export interface WithServerOptions {
    * this suite's speed-picked default.
    */
   backfillBatchDays?: number
+  /**
+   * Which data types this instance's runs walk, by id. Unset means all of them, which is what
+   * every test got before this existed and what most still want.
+   *
+   * The other half of the cost sprintDays bounds: a run is depth times breadth, and a test about
+   * the sprint's own mechanics pays for 42 data types to prove something two would prove. Pass a
+   * short list where the test's subject is the loop rather than the catalogue, and say so in the
+   * test - a narrowed test that reads as if it covered the whole catalogue is worse than a slow one.
+   */
+  dataTypes?: readonly string[]
   /** See ServerDeps.v1TestExtra. Unset by every test but the one that exercises it. */
   v1TestExtra?: (app: FastifyInstance) => void
   /** See ServerDeps.onRouteForTest. Unset by every test but the isolation suite's route-coverage guard. */
@@ -131,6 +141,9 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // How deep a sprint walks before this instance settles into the trickle. See
     // WithServerOptions.sprintDays above for why this defaults small.
     sprintDays: options.sprintDays ?? 2,
+    // Undefined by default on purpose: a test walks the whole catalogue unless it says otherwise,
+    // so breadth coverage can only be given up deliberately and never inherited.
+    dataTypeIdsForTest: options.dataTypes,
     v1TestExtra: options.v1TestExtra,
     onRouteForTest: options.onRouteForTest,
   })

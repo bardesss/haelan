@@ -11,11 +11,15 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // expensive), and most then await a sync that walks every listable data type for every connected
 // person. The global 20s testTimeout is sized for the six hundred tests that do none of that.
 //
-// 180s looks absurd next to a solo run of this file, where the heaviest test is 47s and most are
-// under three. It is sized for contention, not for solo cost, because solo cost turned out to
-// understate a full run by up to 3x on this hardware: "does not let one broken type block a
-// healthy type" measures 21.6s alone and exceeded 60s in a full suite run. The file itself goes
-// from 229s alone to 334s under a full run.
+// 180s is sized for contention rather than solo cost, because solo cost understates a full run by
+// up to 3x on this hardware: "does not let one broken type block a healthy type" measured 21.6s
+// alone and still exceeded 60s in a full suite run.
+//
+// It is now generously above what the file needs, which is where a hang-detector belongs. The
+// narrowing below took the file from 229s to 85s alone and the heaviest test from 47s to 30s, so
+// the margin went from uncomfortable to ample without the number moving. Tightening it to match
+// would trade a real safety margin for nothing, and would hide a future cost regression behind a
+// budget that had been pulled down to meet it.
 //
 // It got here by two wrong answers, both worth keeping so nobody retries them. First, per-test
 // annotations on the four obvious offenders - which missed a fifth test that measures 75ms alone,
@@ -31,9 +35,11 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 // what it must not become on hardware this suite does not choose. The global 20s still guards the
 // other 227 files, where 20s genuinely means "this is hung".
 //
-// The real fix is cheaper tests rather than a wider budget: these tests need two or three data
-// types to prove what they assert, not 42. That is a larger change and is recorded rather than
-// attempted here.
+// The real fix was cheaper tests rather than a wider budget, and it has since been done: three of
+// these tests now pass `dataTypes` to the harness and walk one or two types instead of 42, because
+// their subject is the sprint loop and not the catalogue. "fills the sprint window" deliberately
+// still walks all of them - it asserts over every row of status.backfill, so breadth is its
+// subject rather than its cost.
 const SPRINT_BUDGET_MS = 180_000
 
 describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
@@ -248,6 +254,11 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // a single-batch run would leave every cursor fourteen days back, and MAX_SPRINT_PASSES (40)
     // comfortably covers the ceil(90 / 14) = 7 passes a real sprint needs. Reaching the sprint
     // depth proves the run looped rather than yielded.
+    //
+    // The one test in this file that keeps the whole catalogue, deliberately: it asserts over
+    // every row of status.backfill, so its subject IS the breadth. Narrowing it the way its
+    // neighbours are narrowed would leave nothing checking that a sprint reaches the floor for
+    // every type rather than for the first one it happens to walk.
     harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
@@ -262,7 +273,12 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // The real sprintDays and real batch size: at the harness's default batch of 1, forty
     // passes only reaches 40 days and the sprint-floor skip this test is actually about never
     // fires - the test would pass because MAX_SPRINT_PASSES ran out, not because the cap held.
-    harness = await withServer({ google: 'ok', sprintDays: 90, backfillBatchDays: 14 })
+    //
+    // One type, unlike its neighbour above: every assertion here reads 'weight' and nothing else,
+    // so the other forty-one only add cost. The breadth case is that neighbour's job.
+    harness = await withServer({
+      google: 'ok', sprintDays: 90, backfillBatchDays: 14, dataTypes: ['weight'],
+    })
     await harness.connectPerson()
     harness.app.haelan.stores.settings.putBackfillHorizon(1825, harness.clock.nowMs)
     await harness.app.haelan.runner.trigger('setup')
@@ -278,7 +294,11 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // two passes (ceil(28 / 14) = 2) proves the same revert far cheaper than walking to the
     // real 90; the production number is asserted where it belongs, in "stops at the sprint
     // window and leaves the deep history to later runs" below.
-    harness = await withServer({ google: 'ok', sprintDays: 28, backfillBatchDays: 14 })
+    // One type. The subject is the revert from a sprint to a single batch, which 'weight' - the
+    // only type the assertions below read - demonstrates as completely as forty-two would.
+    harness = await withServer({
+      google: 'ok', sprintDays: 28, backfillBatchDays: 14, dataTypes: ['weight'],
+    })
     await harness.connectPerson()
     await harness.app.haelan.runner.trigger('setup')
     const before = harness.app.haelan.runner.status('p1').backfill
@@ -364,7 +384,13 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     // depend on how deep the sprint's own floor is. A small sprintDays that still converges in
     // a couple of passes (ceil(28 / 14) = 2, plus one more pass for the stuck type alone to
     // confirm nothing else is left) proves the same fix far cheaper than walking to 90.
-    harness = await withServer({ google: 'list_fails', sprintDays: 28, backfillBatchDays: 14 })
+    // Two types, which is exactly what the assertions below name: the broken one and 'weight'
+    // as the healthy one that must keep advancing past it. The other forty prove nothing here
+    // and cost the whole difference.
+    harness = await withServer({
+      google: 'list_fails', sprintDays: 28, backfillBatchDays: 14,
+      dataTypes: [LIST_FAILS_TYPE, 'weight'],
+    })
     await harness.connectPerson()
     const sprintFloor = harness.clock.nowMs - 28 * 86_400_000
 
