@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path'
  */
 
 interface Snapshot { readonly id: string; readonly prevId: string }
-interface JournalEntry { readonly idx: number; readonly tag: string }
+interface JournalEntry { readonly idx: number; readonly tag: string; readonly when: number }
 interface Journal { readonly entries: readonly JournalEntry[] }
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -74,6 +74,17 @@ describe('the migration journal and snapshot chain', () => {
   it('has a journal whose idx runs contiguously from 0, with no gap and no repeat', () => {
     const sortedIdx = journal.entries.map((entry) => entry.idx).sort((a, b) => a - b)
     expect(sortedIdx).toEqual(sortedIdx.map((_, i) => i))
+  })
+
+  it('has a journal whose when is strictly increasing in idx order', () => {
+    // The one field the rest of this file does not cover, and the one drizzle's migrator actually
+    // reads at boot: it applies an entry only when its when is newer than the last applied
+    // migration's created_at. A hand-edit that lowers a when would pass every other assertion here
+    // and silently skip that migration on every existing database.
+    const byIdx = [...journal.entries].sort((a, b) => a.idx - b.idx)
+    for (let i = 1; i < byIdx.length; i++) {
+      expect(byIdx[i]!.when, byIdx[i]!.tag).toBeGreaterThan(byIdx[i - 1]!.when)
+    }
   })
 
   it('matches every journal tag to a .sql file, and every .sql file to a journal tag', () => {

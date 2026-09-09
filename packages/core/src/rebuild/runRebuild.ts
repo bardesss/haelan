@@ -71,7 +71,10 @@ export interface RebuildReport {
   people: RebuildPersonReport[]
   /**
    * One entry per person whose rebuild threw. Their transaction rolled back and their version
-   * stamp went with it, so they keep the rows they had and the next boot retries them.
+   * stamp went with it, so for `daily` they keep the rows they had and the next boot retries
+   * them. Not true of `samples` as of M5d-A: migration 0016 drops that table outright, outside
+   * any rebuild transaction, so a person whose rebuild then fails has no samples at all until a
+   * later boot succeeds, not the rows they had before the upgrade.
    */
   failures: RebuildFailure[]
 }
@@ -230,11 +233,14 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     } catch (error) {
       // Caught per person, so one broken payload shape costs one household member their
       // rebuild instead of costing everybody their sync. The transaction has already rolled
-      // back by the time this runs, which is what makes continuing safe: this person keeps
-      // the derived rows they had, their version stamp rolled back with them, and so the next
-      // boot picks them up again with nothing for an operator to reset. Their sync is skipped
-      // meanwhile (see the runner), so the stale rows are never mixed with rows derived at a
-      // different version, which is the invariant the stamp exists to protect.
+      // back by the time this runs, which is what makes continuing safe: this person's version
+      // stamp rolled back with it, and so the next boot picks them up again with nothing for an
+      // operator to reset. For `daily` that means they keep the rows they had; for `samples` it
+      // does not, since migration 0016 drops that table outright, outside any rebuild
+      // transaction, so a failure here leaves them with no samples until a later boot succeeds.
+      // Their sync is skipped meanwhile (see the runner), so the stale rows that do survive are
+      // never mixed with rows derived at a different version, which is the invariant the stamp
+      // exists to protect.
       report.failures.push({
         personId,
         reasons,

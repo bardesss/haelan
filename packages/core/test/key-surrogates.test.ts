@@ -77,24 +77,56 @@ describe('surrogate refs are assigned on insert', () => {
   // rowid lookups a backup or a migration might do directly. If a future change ever assigns ref
   // some other way, this is the test that has to fail, and it has to fail by naming the
   // invariant rather than as a UNIQUE constraint violation on an unrelated insert.
+  //
+  // Three rows inserted with no gaps would pass this identically under a plain running counter,
+  // which is not what the comment above claims. So this deletes the middle row of three and
+  // inserts a fourth, opening a gap between the counter a running total would produce and the
+  // rowid SQLite actually assigns; only across that gap do the two diverge, which is what makes
+  // asserting ref == rowid here mean the rowid relationship specifically.
   it('keeps ref equal to the row\'s own rowid, not merely a unique number assigned alongside it', () => {
     seedPerson(test.db, 'p1')
+    seedPerson(test.db, 'p2')
+    seedPerson(test.db, 'p3')
+    test.db.delete(people).where(eq(people.id, 'p2')).run()
+    seedPerson(test.db, 'p4')
+
     test.db.insert(sources).values(
       { id: 's1', personId: 'p1', externalId: 's1', displayName: 's1', kind: 'device', createdAtMs: 0 },
     ).run()
+    test.db.insert(sources).values(
+      { id: 's2', personId: 'p1', externalId: 's2', displayName: 's2', kind: 'device', createdAtMs: 0 },
+    ).run()
+    test.db.insert(sources).values(
+      { id: 's3', personId: 'p1', externalId: 's3', displayName: 's3', kind: 'device', createdAtMs: 0 },
+    ).run()
+    test.db.delete(sources).where(eq(sources.id, 's2')).run()
+    test.db.insert(sources).values(
+      { id: 's4', personId: 'p1', externalId: 's4', displayName: 's4', kind: 'device', createdAtMs: 0 },
+    ).run()
+
     insertRawPayload('r1', 'p1')
+    insertRawPayload('r2', 'p1')
+    insertRawPayload('r3', 'p1')
+    test.db.delete(rawPayloads).where(eq(rawPayloads.id, 'r2')).run()
+    insertRawPayload('r4', 'p1')
 
-    const personRowid = test.db.get<{ rowid: number }>(sql`select rowid from people where id = 'p1'`)
-    const sourceRowid = test.db.get<{ rowid: number }>(sql`select rowid from sources where id = 's1'`)
-    const payloadRowid = test.db.get<{ rowid: number }>(sql`select rowid from raw_payloads where id = 'r1'`)
+    for (const id of ['p1', 'p3', 'p4']) {
+      const rowid = test.db.get<{ rowid: number }>(sql`select rowid from people where id = ${id}`)
+      const person = test.db.select().from(people).where(eq(people.id, id)).get()
+      expect(person?.ref, id).toBe(rowid?.rowid)
+    }
 
-    const person = test.db.select().from(people).where(eq(people.id, 'p1')).get()
-    const source = test.db.select().from(sources).where(eq(sources.id, 's1')).get()
-    const payload = test.db.select().from(rawPayloads).where(eq(rawPayloads.id, 'r1')).get()
+    for (const id of ['s1', 's3', 's4']) {
+      const rowid = test.db.get<{ rowid: number }>(sql`select rowid from sources where id = ${id}`)
+      const source = test.db.select().from(sources).where(eq(sources.id, id)).get()
+      expect(source?.ref, id).toBe(rowid?.rowid)
+    }
 
-    expect(person?.ref).toBe(personRowid?.rowid)
-    expect(source?.ref).toBe(sourceRowid?.rowid)
-    expect(payload?.ref).toBe(payloadRowid?.rowid)
+    for (const id of ['r1', 'r3', 'r4']) {
+      const rowid = test.db.get<{ rowid: number }>(sql`select rowid from raw_payloads where id = ${id}`)
+      const payload = test.db.select().from(rawPayloads).where(eq(rawPayloads.id, id)).get()
+      expect(payload?.ref, id).toBe(rowid?.rowid)
+    }
   })
 })
 
