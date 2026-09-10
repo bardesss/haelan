@@ -19,6 +19,13 @@ const instance = openHaelan(dataDir)
 // server only dev run, where Vite serves the app on its own port and proxies back here, so a
 // missing dist is a normal state rather than a failure.
 const webRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), '../../web/dist'))
+// True from before the boot rebuild starts until rebuildInWorkerIfNeeded settles, which is the
+// only window in which a second connection - the worker thread, on rebuildWorker.ts's own thread
+// - might actually be open on haelan.sqlite. The reclaim and backup routes read it through
+// ServerDeps.rebuildInFlight to decline rather than run against a file a second writer might
+// still be advancing; see routes/maintenance.ts for why declining beats correcting the comment
+// that used to claim this could never happen.
+let rebuildInFlight = true
 const app = buildServer({
   instance,
   now: Date.now,
@@ -26,6 +33,7 @@ const app = buildServer({
   dataDir,
   backupKeep: config.backupKeep,
   backupIntervalHours: config.backupIntervalHours,
+  rebuildInFlight: () => rebuildInFlight,
   ...(existsSync(join(webRoot, 'index.html')) ? { webRoot } : {}),
 })
 
@@ -77,7 +85,8 @@ console.log(`data directory ${dataDir}`)
 // runBootSequence itself, in rebuild.ts, where a test can hold a mutation against it; this is
 // wiring only.
 rebuilding = runBootSequence({
-  rebuild: () => rebuildInWorkerIfNeeded({ instance, dataDir, log: (line) => { console.log(line) } }),
+  rebuild: () => rebuildInWorkerIfNeeded({ instance, dataDir, log: (line) => { console.log(line) } })
+    .finally(() => { rebuildInFlight = false }),
   startSync: () => { app.haelan.runner.start() },
   log: (line) => { console.log(line) },
   logError: (message, error) => { console.error(message, error) },
@@ -90,14 +99,28 @@ rebuilding = runBootSequence({
 // process holds one connection, so it is a stall (about 1.5s on an 891 MB database) rather than a
 // lock conflict. The maintenance tick starts here too, once, for the same reason: it must not
 // take its first tick until the file it is about to back up is settled.
+//
+// The vacuum and the tick start do not share a fate, on purpose - a `.then` with no `.catch`
+// producing a *new* promise was exactly the bug here before: `rebuilding` is what `shutdown`
+// awaits with its own `.catch(() => {})`, but that guard does not run until SIGTERM, so a throw
+// from `VACUUM` (SQLITE_FULL, or SQLITE_BUSY against a slow-booting rebuild worker) was an
+// unhandled rejection in the meantime, which Node terminates on by default. And a version that
+// merely survived that would still have skipped `maintenance.start()` below it, which is an
+// instance that silently never takes a backup - the exact failure this unit exists to prevent.
+// So the vacuum is caught right here, never allowed to reject this chain, and the scheduler start
+// is unconditional rather than downstream of whether the vacuum happened to succeed.
 rebuilding = rebuilding.then(() => {
-  const outcome = vacuumIfBloated(instance.db, dataDir)
-  if (outcome.ran) {
-    console.log(`reclaimed ${Math.round(outcome.reclaimedBytes / 1_000_000)} MB in ${outcome.ms} ms`)
-  } else if (outcome.reason === 'not_enough_disk') {
-    // Logged rather than thrown: it is a correct decision about the machine's state, and it is
-    // the one an operator most needs to hear, since the space stays spent until they act.
-    console.log(`${Math.round(outcome.bloat.freeBytes / 1_000_000)} MB is reclaimable, but the disk cannot hold a second copy`)
+  try {
+    const outcome = vacuumIfBloated(instance.db, dataDir)
+    if (outcome.ran) {
+      console.log(`reclaimed ${Math.round(outcome.reclaimedBytes / 1_000_000)} MB in ${outcome.ms} ms`)
+    } else if (outcome.reason === 'not_enough_disk') {
+      // Logged rather than thrown: it is a correct decision about the machine's state, and it is
+      // the one an operator most needs to hear, since the space stays spent until they act.
+      console.log(`${Math.round(outcome.bloat.freeBytes / 1_000_000)} MB is reclaimable, but the disk cannot hold a second copy`)
+    }
+  } catch (error) {
+    console.error('boot vacuum failed', error)
   }
   maintenance.start()
 })

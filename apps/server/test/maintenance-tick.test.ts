@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { listBackups, openHaelan } from '@haelan/core'
@@ -70,6 +70,47 @@ describe('MaintenanceTick', () => {
         expect(tick.dueNow()).toBe(false)
         expect(tick.runIfDue()).toBeNull()
         expect(listBackups(dir)).toHaveLength(0)
+      } finally { instance.close() }
+    })
+  })
+
+  // setInterval waits a whole interval before its first call, so without this an instance
+  // restarted more often than its interval would never back up at all - the same hazard
+  // SyncRunner.start() documents and avoids (sync/runner.ts). start() itself is what has to take
+  // the first tick; dueNow()/runIfDue() alone, called directly the way every test above does,
+  // would never catch a start() that forgot to.
+  it('takes a backup immediately on start rather than waiting a full interval', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        const tick = new MaintenanceTick({
+          instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+        })
+        expect(listBackups(dir)).toHaveLength(0)
+        tick.start()
+        try {
+          expect(listBackups(dir)).toHaveLength(1)
+        } finally { tick.stop() }
+      } finally { instance.close() }
+    })
+  })
+
+  // The hazard this whole task exists to close: runBackup is fully synchronous and this is
+  // called from inside a bare setInterval callback, with no process.on('uncaughtException')
+  // anywhere in the app to catch what escapes one. A throw here used to take the whole process
+  // down; reproduced with a real throw (a plain file where runBackup's mkdirSync expects to
+  // create the backups directory), not a stub, so this proves the catch actually wraps the real
+  // call rather than a call this test invented.
+  it('survives a backup that throws, rather than letting it escape the tick', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        writeFileSync(join(dir, 'backups'), 'not a directory')
+        const tick = new MaintenanceTick({
+          instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+        })
+        expect(() => tick.runIfDue()).not.toThrow()
+        expect(tick.runIfDue()).toBeNull()
       } finally { instance.close() }
     })
   })

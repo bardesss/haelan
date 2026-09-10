@@ -1,4 +1,4 @@
-import { listBackups, pruneBackups, runBackup } from '@haelan/core'
+import { backupDecision, listBackups, pruneBackups, runBackup } from '@haelan/core'
 import type { BackupFile, Instance } from '@haelan/core'
 
 export interface MaintenanceTickDeps {
@@ -34,15 +34,47 @@ export class MaintenanceTick {
     return this.#deps.now() - newest.takenAtMs >= this.#deps.intervalHours * 3_600_000
   }
 
+  /**
+   * A failed backup must leave the instance running. `runBackup` is fully synchronous and throws
+   * on a verification failure, an `ENOSPC` from `VACUUM INTO` or `renameSync`, or `SQLITE_FULL` -
+   * and this is called from inside a bare `setInterval` callback, with no
+   * `process.on('uncaughtException')` anywhere in this app to catch what escapes one. Uncaught,
+   * that throw does not stay a failed backup; it takes the whole process down, the same hazard
+   * SyncRunner guards on purpose (runner.ts's own `tryStart`, `.catch(() => undefined)`). Caught
+   * here instead: logged where an operator can see it, and the timer - and the next attempt -
+   * survive it.
+   */
   runIfDue(): BackupFile | null {
     if (!this.dueNow()) return null
-    const file = runBackup({ db: this.#deps.instance.db, dir: this.#deps.dir, nowMs: this.#deps.now() })
-    pruneBackups(this.#deps.dir, this.#deps.keep)
-    return file
+    // Spec section 1's reason B and C are one unit: this is the same disk-margin comparison the
+    // vacuum uses, asked through the one function both the tick and the manual route call rather
+    // than each carrying its own copy of it (see backupDecision's own comment). keep <= 0 never
+    // reaches this branch in practice - dueNow() above already declined for it - but backupDecision
+    // checks it too, since the manual route reaches this same gate with no dueNow() in front of it.
+    const decision = backupDecision(this.#deps.instance.db, this.#deps.dir, this.#deps.keep)
+    if (!decision.run) {
+      console.log(`maintenance: backup due, but declined - ${decision.reason}`)
+      return null
+    }
+    try {
+      const file = runBackup({ db: this.#deps.instance.db, dir: this.#deps.dir, nowMs: this.#deps.now() })
+      pruneBackups(this.#deps.dir, this.#deps.keep)
+      return file
+    } catch (error) {
+      console.error(`maintenance: backup failed, ${error instanceof Error ? error.message : String(error)}`)
+      return null
+    }
   }
 
   start(): void {
     if (this.#timer) return
+    // setInterval waits a whole interval before its first tick, so an instance restarted more
+    // often than its interval would never back up at all - the exact hazard SyncRunner.start()
+    // documents and avoids for the same reason (sync/runner.ts). dueNow() asks the files rather
+    // than a timer, so taking a tick right here is safe on an ordinary boot (yesterday's backup
+    // already satisfies it) and idempotent for the same reason a second call inside one interval
+    // would be.
+    this.runIfDue()
     // Hourly, like the sync scheduler, because the question is cheap - it reads one directory -
     // and asking it often is what lets a daily backup happen soon after an instance comes back up
     // rather than at whatever hour the process happened to start.

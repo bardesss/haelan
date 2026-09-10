@@ -6,7 +6,7 @@ import { formatNumber } from '../../format.js'
 import {
   maintenanceKey, useBackupNow, useMaintenanceStatus, useReclaimSpace,
 } from '../../data/useMaintenance.js'
-import type { VacuumDeclineReason } from '../../data/useMaintenance.js'
+import type { BackupDeclineReason, VacuumDeclineReason } from '../../data/useMaintenance.js'
 
 // Decimal, not the binary 1024*1024 an OS "MB" usually means: nothing else in this app's own
 // unit conversions (Activity.tsx's millimeters-to-kilometers, Weight.tsx's grams-to-kilograms)
@@ -20,17 +20,32 @@ function toMb(bytes: number, language: string): string {
 
 /**
  * Why a reclaim declined, in words a person can act on rather than the bare reason the route
- * answers with. A Record rather than a switch with a default: a fourth reason the route started
+ * answers with. A Record rather than a switch with a default: a fifth reason the route started
  * sending would fail typechecking here rather than silently falling through to whatever a
  * default case happened to render -- see vacuumDecision's own comment in
- * packages/core/src/db/vacuum.ts for what the three mean. below_fraction and below_floor both
- * say there is nothing worth reclaiming yet; not_enough_disk is the one this household can act
- * on, so it is also the only one that names what would fix it.
+ * packages/core/src/db/vacuum.ts for what below_fraction/below_floor/not_enough_disk mean.
+ * below_fraction and below_floor both say there is nothing worth reclaiming yet; not_enough_disk
+ * is the one this household can act on, so it is also the only one that names what would fix it.
+ * rebuild_in_progress is routes/maintenance.ts's own reason, not core's -- see
+ * ServerDeps.rebuildInFlight -- and needs no action beyond waiting the few seconds boot takes.
  */
-const DECLINE_KEY: Record<VacuumDeclineReason, string> = {
+const RECLAIM_DECLINE_KEY: Record<VacuumDeclineReason, string> = {
   below_fraction: 'settings.maintenance.declined.belowFraction',
   below_floor: 'settings.maintenance.declined.belowFloor',
   not_enough_disk: 'settings.maintenance.declined.notEnoughDisk',
+  rebuild_in_progress: 'settings.maintenance.declined.rebuildInProgress',
+}
+
+/**
+ * The backup route's own three reasons. not_enough_disk and rebuild_in_progress share their
+ * sentence with the reclaim table above -- the same fact, whichever button asked -- and
+ * backups_disabled is the one specific to this button: HAELAN_BACKUP_KEEP=0, which README and
+ * config.ts both say turns backups off.
+ */
+const BACKUP_DECLINE_KEY: Record<BackupDeclineReason, string> = {
+  backups_disabled: 'settings.maintenance.declined.backupsDisabled',
+  not_enough_disk: 'settings.maintenance.declined.notEnoughDisk',
+  rebuild_in_progress: 'settings.maintenance.declined.rebuildInProgress',
 }
 
 /**
@@ -91,7 +106,7 @@ export function Maintenance() {
           copy the post-click decline below uses for that same reason rather than inventing a
           second sentence that could drift from it. */}
       {vacuumBlocked && (
-        <p className="maintenance-blocked">{t(DECLINE_KEY.not_enough_disk)}</p>
+        <p className="maintenance-blocked">{t(RECLAIM_DECLINE_KEY.not_enough_disk)}</p>
       )}
 
       <div className="form-actions">
@@ -108,9 +123,11 @@ export function Maintenance() {
       )}
       {backup.isSuccess && (
         <p className="maintenance-backup-result">
-          {t('settings.maintenance.backupResult', {
-            name: backup.data.name, size: toMb(backup.data.bytes, i18n.language),
-          })}
+          {backup.data.ran
+            ? t('settings.maintenance.backupResult', {
+              name: backup.data.name, size: toMb(backup.data.bytes, i18n.language),
+            })
+            : t(BACKUP_DECLINE_KEY[backup.data.reason])}
         </p>
       )}
 
@@ -121,7 +138,7 @@ export function Maintenance() {
         <p className="maintenance-reclaim-result">
           {reclaim.data.ran
             ? t('settings.maintenance.reclaimedResult', { mb: toMb(reclaim.data.reclaimedBytes, i18n.language) })
-            : t(DECLINE_KEY[reclaim.data.reason])}
+            : t(RECLAIM_DECLINE_KEY[reclaim.data.reason])}
         </p>
       )}
     </div>

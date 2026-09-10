@@ -180,5 +180,5 @@ export { SampleKeys } from './db/keys.ts'
 export type { SampleText } from './db/keys.ts'
 
 // M5d-c. A daily compacted copy, verified before it is ever called a backup.
-export { runBackup, listBackups, pruneBackups, BACKUP_DIR_NAME } from './backup/runBackup.ts'
-export type { BackupFile } from './backup/runBackup.ts'
+export { runBackup, listBackups, pruneBackups, backupDecision, BACKUP_DIR_NAME } from './backup/runBackup.ts'
+export type { BackupFile, BackupDecision } from './backup/runBackup.ts'

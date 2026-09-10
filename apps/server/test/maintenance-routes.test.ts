@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
 import { CredentialStore, listBackups, SCOPES } from '@haelan/core'
 import { withServer } from './harness.ts'
@@ -58,6 +60,7 @@ describe('POST /api/settings/maintenance/backup', () => {
     })
     expect(response.statusCode).toBe(200)
     const body = response.json()
+    expect(body.ran).toBe(true)
     expect(body.name).toMatch(/^haelan-.*\.sqlite$/)
     expect(body.bytes).toBeGreaterThan(0)
     // Same disclosure the GET handler eleven lines above already refuses: the server's absolute
@@ -87,6 +90,62 @@ describe('POST /api/settings/maintenance/backup', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(403)
+  })
+
+  // README and config.ts both say HAELAN_BACKUP_KEEP=0 turns backups off; the tick already reads
+  // it that way (maintenance-tick.test.ts). Before this fix the button ignored the setting
+  // entirely, took a copy anyway, and pruneBackups(dir, 0) - which deletes nothing - left an
+  // operator who set this specifically to avoid unbounded growth with exactly that.
+  it('declines rather than writes a copy when retention is zero', async () => {
+    harness = await withServer({ backupKeep: 0 })
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/settings/maintenance/backup',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ ran: false, reason: 'backups_disabled' })
+    expect(listBackups(harness.app.haelan.dataDir)).toHaveLength(0)
+  })
+
+  // The boot rebuild worker is a real second writer on its own thread, and both maintenance
+  // routes are reachable from listen(), which precedes the rebuild - index.ts's own comment used
+  // to claim a vacuum could never begin while that worker holds its connection, true only of the
+  // boot path. rebuildInFlight is how the route learns the worker might still be running.
+  it('declines rather than writes a copy while the boot rebuild worker might still hold the file', async () => {
+    harness = await withServer({ rebuildInFlight: () => true })
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/settings/maintenance/backup',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ ran: false, reason: 'rebuild_in_progress' })
+    expect(listBackups(harness.app.haelan.dataDir)).toHaveLength(0)
+  })
+
+  // The error path this route used to leave to Fastify's default handler, which sends
+  // err.message straight back - and a Node fs failure here carries the backup folder's own
+  // absolute path. Reproduced by putting a plain file where runBackup's mkdirSync expects to
+  // create the backups directory, which is what a corrupted volume or a permissions mistake
+  // would also produce: a real, undoctored throw, not a stub told to say something.
+  it('answers a bare 500 rather than a filesystem error containing the server\'s own path', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    writeFileSync(join(harness.dir, 'backups'), 'not a directory')
+
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/settings/maintenance/backup',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(500)
+    const raw = response.payload
+    expect(raw).not.toContain(harness.dir)
+    expect(raw).not.toContain('ENOTDIR')
+    expect(raw).not.toContain('EEXIST')
+    expect(response.json()).toMatchObject({ error: { kind: 'internal' } })
   })
 })
 
@@ -118,6 +177,22 @@ describe('POST /api/settings/maintenance/reclaim', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(403)
+  })
+
+  // See the identical test on the backup route: both are reachable from listen(), which precedes
+  // the boot rebuild, so both have to ask rather than assume the worker has finished.
+  it('declines rather than vacuum while the boot rebuild worker might still hold the file', async () => {
+    harness = await withServer({ rebuildInFlight: () => true })
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/settings/maintenance/reclaim',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body).toMatchObject({ ran: false, reason: 'rebuild_in_progress' })
+    expect(body.bloat).toBeDefined()
   })
 })
 

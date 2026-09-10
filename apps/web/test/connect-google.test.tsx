@@ -105,7 +105,7 @@ describe('the connect control', () => {
     mountWith({ connected: false, credentialsUnreadable: true, baseUrl: window.location.origin })
     const detail = container!.querySelector('.connect-detail')!.textContent
     expect(detail).toBe(
-      "Your health data is safe and still here. This instance just can't read the Google credentials it has on file - that's what happens when a database is restored without the instance.key file that encrypted them. Connect again to fix it; nothing else is affected.",
+      "Your health data is safe and still here. This instance just can't read the Google credentials it has on file - that's what happens when a database is restored without the instance.key file that encrypted them. It also cost the household's Google client secret, and the instance has already written itself a new instance.key. Connect again to fix it.",
     )
     expect(detail).not.toBe('haelan reads your health data from Google. Nothing appears here until you connect.')
     expect(link()!.getAttribute('href')).toBe('/oauth/start')

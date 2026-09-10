@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { Settings } from '../src/pages/Settings.js'
 import { Maintenance } from '../src/pages/settings/Maintenance.js'
 import { maintenanceKey } from '../src/data/useMaintenance.js'
-import type { CompletedBackup, MaintenanceStatus, VacuumOutcome } from '../src/data/useMaintenance.js'
+import type { BackupOutcome, MaintenanceStatus, VacuumOutcome } from '../src/data/useMaintenance.js'
 import { sourceNamesKey } from '../src/data/useSourceNames.js'
 import { membersKey } from '../src/data/useMembers.js'
 import { flush } from './flush.js'
@@ -106,7 +106,7 @@ const buttonLabels = (): string[] =>
  * request body, so unlike mockSourcesApi/mockMembersApi there is no body to branch on -- only the
  * path tells the two apart.
  */
-function mockMaintenanceApi(backupResult: CompletedBackup, reclaimResult: VacuumOutcome): {
+function mockMaintenanceApi(backupResult: BackupOutcome, reclaimResult: VacuumOutcome): {
   restore: () => void
   requests: { method: string, url: string }[]
 } {
@@ -182,7 +182,7 @@ describe('the maintenance section', () => {
 
   it('reports the filename and size once a backup finishes', async () => {
     const api = mockMaintenanceApi(
-      { name: 'haelan-2026-03-01T00-00-00-000Z.sqlite', takenAtMs: Date.UTC(2026, 2, 1), bytes: 8_200_000 },
+      { ran: true, name: 'haelan-2026-03-01T00-00-00-000Z.sqlite', takenAtMs: Date.UTC(2026, 2, 1), bytes: 8_200_000 },
       { ran: false, reason: 'below_fraction', bloat: status({}).bloat },
     )
     const client = mountSection(status({}))
@@ -197,13 +197,14 @@ describe('the maintenance section', () => {
 
   it('reports how much was reclaimed when the vacuum ran', async () => {
     const api = mockMaintenanceApi(
-      { name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
+      { ran: true, name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
       {
         ran: true,
         before: status({}).bloat,
         after: { fileBytes: 150_000_000, liveBytes: 150_000_000, freeBytes: 0, freeFraction: 0 },
         reclaimedBytes: 50_300_000,
         ms: 1500,
+        checkpointed: true,
       },
     )
     const client = mountSection(status({}))
@@ -222,7 +223,7 @@ describe('the maintenance section', () => {
   // turn into a sentence rather than pass through.
   it('shows an actionable sentence, not the bare enum, when a reclaim is declined for lack of disk', async () => {
     const api = mockMaintenanceApi(
-      { name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
+      { ran: true, name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
       { ran: false, reason: 'not_enough_disk', bloat: status({}).bloat },
     )
     const client = mountSection(status({}))
@@ -245,5 +246,25 @@ describe('the maintenance section', () => {
     expect(text('.maintenance-blocked')).toBe(
       'There is not enough free disk to safely reclaim space right now. Free up some disk space and try again.',
     )
+  })
+
+  // The backup button's own decline, now that the route can answer one (HAELAN_BACKUP_KEEP=0):
+  // an actionable sentence rather than the bare enum, the same standard the reclaim decline above
+  // is held to.
+  it('shows an actionable sentence, not the bare enum, when a backup is declined because retention is off', async () => {
+    const api = mockMaintenanceApi(
+      { ran: false, reason: 'backups_disabled' },
+      { ran: false, reason: 'below_fraction', bloat: status({}).bloat },
+    )
+    const client = mountSection(status({}))
+
+    click(container!.querySelector('.form-actions button')!)
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    const message = text('.maintenance-backup-result')
+    expect(message).not.toBe('backups_disabled')
+    expect(message).not.toContain('backups_disabled')
+    expect(message).toBe('Backups are turned off for this instance.')
   })
 })

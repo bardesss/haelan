@@ -47,6 +47,21 @@ export interface ServerDeps {
   /** Reported by `GET .../maintenance` alongside `backupKeep`. Mirrors `config.backupIntervalHours`. */
   backupIntervalHours: number
   /**
+   * True while a second connection to the database file might still exist - specifically, while
+   * index.ts's boot rebuild worker holds its own. `routes/maintenance.ts` reads this before either
+   * POST route touches the file: a `VACUUM` against a live write transaction the worker holds
+   * blocks the event loop for the full `busy_timeout` and then 500s, and a `VACUUM INTO` can
+   * succeed but get rejected by `verifyBackup` because the worker advanced the live database in
+   * between the copy and the comparison. Both routes are reachable from `listen()`, which precedes
+   * the rebuild, so this is not the theoretical case index.ts's own comment on the boot vacuum used
+   * to claim it was.
+   *
+   * Unset (and so always false, via the `?.()` at each call site) in every test that never
+   * rebuilds anyone, which is everything but index.ts's own production wiring - see
+   * WithServerOptions.rebuildInFlight in harness.ts for the one test that sets it.
+   */
+  rebuildInFlight?: () => boolean
+  /**
    * Overrides the runner's token bucket. Production leaves it unset and gets the real one; a
    * test that drove hundreds of stubbed windows through the real bucket would spend minutes
    * waiting on a refill that has nothing to do with what it is asserting.

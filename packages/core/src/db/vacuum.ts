@@ -1,9 +1,10 @@
 import type { Database } from './open.ts'
+import { checkpointTruncate } from './open.ts'
 import type { DatabaseBloat } from './maintenance.ts'
 import { BLOAT_FLOOR_BYTES, BLOAT_FRACTION, DISK_MARGIN, databaseBloat, freeDiskBytes } from './maintenance.ts'
 
 export type VacuumOutcome =
-  | { ran: true, before: DatabaseBloat, after: DatabaseBloat, reclaimedBytes: number, ms: number }
+  | { ran: true, before: DatabaseBloat, after: DatabaseBloat, reclaimedBytes: number, ms: number, checkpointed: boolean }
   | { ran: false, reason: 'below_fraction' | 'below_floor' | 'not_enough_disk', bloat: DatabaseBloat }
 
 export type VacuumDecision =
@@ -50,6 +51,15 @@ export function vacuumDecision(
  * A refusal is an outcome and not an exception. `not_enough_disk` especially: it is the state an
  * operator most needs told, and a caller that had to catch it would be catching a correct
  * decision.
+ *
+ * `VACUUM` in WAL mode writes its compacted pages into the write-ahead log; SQLite does not
+ * truncate the main file at that commit, only at a checkpoint that shrinks it, which in the
+ * ordinary run of things is whenever the last connection closes. Left there, this function would
+ * report `reclaimedBytes` in the hundreds of megabytes while `ls`, `df` and the operator's own
+ * disk usage graph kept showing the file at its old size for as long as the process stayed up -
+ * which is the normal state, not an edge case. `checkpointTruncate` (open.ts) is the same call
+ * `runRebuild` already makes for the identical reason, so `after` is measured once the bytes are
+ * actually gone rather than once SQLite merely knows they could be.
  */
 export function vacuumIfBloated(
   db: Database,
@@ -61,6 +71,11 @@ export function vacuumIfBloated(
 
   const started = Date.now()
   db.$client.exec('VACUUM')
+  // Busy (another connection mid-read) is not a failure worth propagating here either, for the
+  // same reason checkpointTruncate's own comment gives: the vacuum itself already committed, the
+  // next checkpoint reclaims the space, and a vacuum that succeeded must never be reported as
+  // failed because a truncate was blocked behind a reader.
+  const checkpointed = checkpointTruncate(db)
   const after = databaseBloat(db)
   return {
     ran: true,
@@ -68,5 +83,6 @@ export function vacuumIfBloated(
     after,
     reclaimedBytes: decision.bloat.fileBytes - after.fileBytes,
     ms: Date.now() - started,
+    checkpointed,
   }
 }

@@ -48,6 +48,12 @@ export interface WithServerOptions {
   v1TestExtra?: (app: FastifyInstance) => void
   /** See ServerDeps.onRouteForTest. Unset by every test but the isolation suite's route-coverage guard. */
   onRouteForTest?: (route: { method: string, url: string }) => void
+  /** See ServerDeps.backupKeep. Defaults to 7, the production default, below; a test about
+   * retention itself (HAELAN_BACKUP_KEEP=0 disabling the manual backup route) overrides it. */
+  backupKeep?: number
+  /** See ServerDeps.rebuildInFlight. Unset by every test but the one that exercises the two
+   * maintenance routes declining while it is true. */
+  rebuildInFlight?: () => boolean
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -138,8 +144,9 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // HAELAN_DATA_DIR itself. keep and intervalHours are config.ts's own defaults; no test here
     // is about either number, so nothing narrows them further.
     dataDir: dir,
-    backupKeep: 7,
+    backupKeep: options.backupKeep ?? 7,
     backupIntervalHours: 24,
+    rebuildInFlight: options.rebuildInFlight,
     // One window per type, not fourteen, by default. Enough to prove the walk moved and
     // recorded a cursor, which is all most server tests assert; the ordering of a longer walk
     // is run-backfill's own test. A real batch is eighteen types of gzip per trigger and turns

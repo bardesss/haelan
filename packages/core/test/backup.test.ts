@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
-import { BACKUP_DIR_NAME, listBackups, pruneBackups, runBackup, verifyBackup } from '../src/backup/runBackup.ts'
+import { databaseBloat } from '../src/db/maintenance.ts'
+import {
+  BACKUP_DIR_NAME, backupDecision, listBackups, pruneBackups, runBackup, verifyBackup,
+} from '../src/backup/runBackup.ts'
 
 describe('runBackup', () => {
   it('writes a file that opens, passes integrity_check and holds the same rows', () => {
@@ -137,12 +140,79 @@ describe('pruneBackups', () => {
       const kept = runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 })
       const dir = join(test.dir, BACKUP_DIR_NAME)
       for (const day of [1, 2, 3]) {
-        writeFileSync(join(dir, `haelan-2027-01-0${day}T00-00-00Z.sqlite.part`), '')
+        writeFileSync(join(dir, `haelan-2025-01-0${day}T00-00-00Z.sqlite.part`), '')
       }
 
       pruneBackups(test.dir, 1)
 
       expect(listBackups(test.dir).map((b) => b.name)).toEqual([kept.name])
+    } finally { test.cleanup() }
+  })
+
+  // The other half of pruneBackups' own comment: a .part is removed only once a later backup has
+  // succeeded, and only if it is genuinely stale. The test above proved a .part never evicts a
+  // completed backup from the retention count, which held even when its own delete loop deleted
+  // nothing - all three of its `.part` files sorted after `kept` by name (2027 against 2026), so
+  // `name < newest` was false every time and the loop was a no-op that a passing suite never
+  // noticed. Genuinely older names here exercise the branch: the 2025 `.part` from an old,
+  // abandoned attempt is gone once a real backup has landed, and one sharing a name close to the
+  // newest backup - the case the comment on the loop's `<` comparison is about - survives.
+  it('removes a .part left by a failed run once a newer backup has landed, and leaves one that is not stale', () => {
+    const test = createTestDatabase()
+    try {
+      const dir = join(test.dir, BACKUP_DIR_NAME)
+      mkdirSync(dir, { recursive: true })
+      const stale = join(dir, 'haelan-2025-01-01T00-00-00-000Z.sqlite.part')
+      writeFileSync(stale, '')
+
+      const kept = runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 })
+      const notStale = join(dir, 'haelan-2027-01-01T00-00-00-000Z.sqlite.part')
+      writeFileSync(notStale, '')
+
+      pruneBackups(test.dir, 1)
+
+      expect(existsSync(stale)).toBe(false)
+      expect(existsSync(notStale)).toBe(true)
+      expect(listBackups(test.dir).map((b) => b.name)).toEqual([kept.name])
+    } finally { test.cleanup() }
+  })
+})
+
+describe('backupDecision', () => {
+  // The exact outcome an operator who set HAELAN_BACKUP_KEEP=0 to turn backups off is owed -
+  // README and config.ts both say zero means off, and the tick already reads it that way
+  // (apps/server/test/maintenance-tick.test.ts, 'takes no backup at all when retention is
+  // zero'). Declining here is what makes the manual "back up now" button agree with the
+  // schedule instead of writing a copy retention would then have nothing to prune.
+  it('declines when retention is zero, before ever looking at the disk', () => {
+    const test = createTestDatabase()
+    try {
+      const decision = backupDecision(test.db, test.dir, 0, () => 0)
+      expect(decision.run).toBe(false)
+      if (decision.run) return
+      expect(decision.reason).toBe('backups_disabled')
+    } finally { test.cleanup() }
+  })
+
+  it('declines when the disk cannot hold a second copy', () => {
+    const test = createTestDatabase()
+    try {
+      seedPerson(test.db, 'p1')
+      const live = databaseBloat(test.db).liveBytes
+      const readFreeDisk = (): number => Math.floor(live * 1.2) - 1
+
+      const decision = backupDecision(test.db, test.dir, 7, readFreeDisk)
+      expect(decision.run).toBe(false)
+      if (decision.run) return
+      expect(decision.reason).toBe('not_enough_disk')
+    } finally { test.cleanup() }
+  })
+
+  it('runs when retention allows it and the disk has room', () => {
+    const test = createTestDatabase()
+    try {
+      const decision = backupDecision(test.db, test.dir, 7)
+      expect(decision.run).toBe(true)
     } finally { test.cleanup() }
   })
 })

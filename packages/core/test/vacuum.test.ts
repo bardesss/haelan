@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { statSync } from 'node:fs'
+import { join } from 'node:path'
 import { sql } from 'drizzle-orm'
 import { createTestDatabase } from '../src/testing/fixtures.ts'
 import { databaseBloat } from '../src/db/maintenance.ts'
+import { DATABASE_FILENAME } from '../src/db/open.ts'
 import { vacuumDecision, vacuumIfBloated } from '../src/db/vacuum.ts'
+
+// The property spec section 8 actually asked for: bytes on disk, not the page_size * page_count
+// pragma databaseBloat reads. The pragma changes the instant VACUUM commits, whether or not the
+// operating system has truncated the file yet, so asserting outcome.after.fileBytes against
+// outcome.before.fileBytes (both pragma figures) would stay green even if vacuumIfBloated stopped
+// checkpointing entirely - the file on disk would be exactly the size it started at, and this
+// test would not notice.
+const fileBytes = (dir: string): number => statSync(join(dir, DATABASE_FILENAME)).size
 
 // Bloats a database past both thresholds the way production does: write a lot, delete it, and
 // leave the freed pages on the freelist.
@@ -28,11 +39,12 @@ function bloated(): ReturnType<typeof createTestDatabase> {
 }
 
 describe('vacuumIfBloated', () => {
-  it('reclaims the free pages and makes the file smaller, in bytes', () => {
+  it('reclaims the free pages and makes the file smaller, in bytes actually on disk', () => {
     const test = bloated()
     try {
       const before = databaseBloat(test.db)
       expect(before.freeFraction).toBeGreaterThan(0.2)
+      const beforeOnDisk = fileBytes(test.dir)
 
       const outcome = vacuumIfBloated(test.db, test.dir)
 
@@ -41,6 +53,14 @@ describe('vacuumIfBloated', () => {
       expect(outcome.after.fileBytes).toBeLessThan(before.fileBytes)
       expect(outcome.after.freeBytes).toBe(0)
       expect(outcome.reclaimedBytes).toBe(before.fileBytes - outcome.after.fileBytes)
+      // The checkpoint this function now runs after VACUUM, asserted the way the operator
+      // actually experiences it: statSync on the real file, not the page_size * page_count
+      // pragma, which reports the smaller size immediately whether or not the bytes on disk
+      // ever move. Without checkpointTruncate this stays equal to beforeOnDisk forever.
+      expect(outcome.checkpointed).toBe(true)
+      const afterOnDisk = fileBytes(test.dir)
+      expect(afterOnDisk).toBeLessThan(beforeOnDisk)
+      expect(afterOnDisk).toBe(outcome.after.fileBytes)
     } finally { test.cleanup() }
   })
 

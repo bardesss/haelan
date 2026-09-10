@@ -2,6 +2,7 @@ import { mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import type { Database } from '../db/open.ts'
+import { DISK_MARGIN, databaseBloat, freeDiskBytes } from '../db/maintenance.ts'
 
 export const BACKUP_DIR_NAME = 'backups'
 const PREFIX = 'haelan-'
@@ -91,6 +92,45 @@ export function verifyBackup(partPath: string, db: Database): void {
       throw new Error(`the backup written to ${name} does not hold the same rows as the database`)
     }
   } finally { copy.close() }
+}
+
+export type BackupDecision =
+  | { run: true }
+  | { run: false, reason: 'backups_disabled' | 'not_enough_disk' }
+
+/**
+ * The one place both the nightly tick and the "back up now" button ask whether a backup should
+ * run at all, for the same reason `vacuumDecision` is the one place a vacuum asks it - spec
+ * section 1 makes B and C one unit precisely so there is a single disk-margin comparison to
+ * disagree with itself.
+ *
+ * `keep <= 0` is decided here rather than left to `pruneBackups`: an operator who sets
+ * `HAELAN_BACKUP_KEEP=0` to turn backups off, the way the README and config.ts's own floor say
+ * they can, would otherwise still get a full compacted copy written on every tick and every
+ * click, with only retention - which deletes nothing at `keep` 0 - standing between them and an
+ * unbounded folder. That is the exact growth the button's own prune call exists to prevent; this
+ * is what makes the setting mean what it says everywhere it is read, not only on the schedule.
+ *
+ * `VACUUM INTO` writes its compacted copy onto the same volume the live database and every kept
+ * backup already sit on, so the size worth clearing is the live file's own bytes - what the new
+ * copy will actually hold - with the same margin the boot vacuum uses for the same reason:
+ * VACUUM builds a second copy before anything old is freed. `pruneBackups` only removes the
+ * oldest kept backup after this one has already landed, so the instant after a successful write
+ * is the peak, `keep + 1` copies sitting in the folder - but that peak is already the state the
+ * free-space reading below measures: the `keep` already on disk are already spent against it, so
+ * nothing here has to add them back in. This only has to clear the one copy this call is about
+ * to add on top of what is already there.
+ */
+export function backupDecision(
+  db: Database,
+  dir: string,
+  keep: number,
+  readFreeDisk: (path: string) => number = freeDiskBytes,
+): BackupDecision {
+  if (keep <= 0) return { run: false, reason: 'backups_disabled' }
+  const liveBytes = databaseBloat(db).liveBytes
+  if (readFreeDisk(dir) < liveBytes * DISK_MARGIN) return { run: false, reason: 'not_enough_disk' }
+  return { run: true }
 }
 
 /**

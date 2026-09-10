@@ -722,7 +722,7 @@
   "connect": {
     "title": "Verbind je Google-account",
     "detail": "haelan leest je gezondheidsgegevens uit Google. Hier verschijnt niets totdat je verbinding maakt.",
-    "restoreDetail": "Je gezondheidsgegevens zijn veilig en nog steeds aanwezig. Deze instantie kan alleen de opgeslagen Google-gegevens niet lezen - dat gebeurt wanneer een database wordt hersteld zonder het instance.key-bestand waarmee ze versleuteld waren. Maak opnieuw verbinding om dit op te lossen; verder is er niets aan de hand.",
+    "restoreDetail": "Je gezondheidsgegevens zijn veilig en nog steeds aanwezig. Deze instantie kan alleen de opgeslagen Google-gegevens niet lezen - dat gebeurt wanneer een database wordt hersteld zonder het instance.key-bestand waarmee ze versleuteld waren. Daarbij is ook het clientgeheim van het huishouden verloren gegaan, en heeft deze instantie zelf al een nieuw instance.key-bestand aangemaakt. Maak opnieuw verbinding om dit op te lossen.",
     "action": "Verbinden",
     "wrongAddress": "Google stuurt je na het geven van toestemming terug naar {{baseUrl}}, en dat is niet het adres dat je nu gebruikt, waardoor het geven van toestemming mislukt. Open haelan op {{baseUrl}}, of vraag degene die dit heeft ingesteld om een Tailscale- of proxyadres."
   },
@@ -865,7 +865,9 @@
       "declined": {
         "belowFraction": "Er is nog niet genoeg dode ruimte om het vrijmaken waard te zijn.",
         "belowFloor": "De dode ruimte is er wel, maar te klein om er een pauze voor in te lassen.",
-        "notEnoughDisk": "Er is nu niet genoeg vrije schijfruimte om veilig ruimte vrij te maken. Maak wat schijfruimte vrij en probeer het opnieuw."
+        "notEnoughDisk": "Er is nu niet genoeg vrije schijfruimte om veilig ruimte vrij te maken. Maak wat schijfruimte vrij en probeer het opnieuw.",
+        "backupsDisabled": "Back-ups staan uit voor deze instantie.",
+        "rebuildInProgress": "De database is nog aan het bijkomen van een herstart. Probeer het zo weer."
       }
     }
   }

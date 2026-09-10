@@ -37,13 +37,27 @@ export interface MaintenanceStatus {
   vacuumBlocked: boolean
 }
 
-// Mirrors VacuumDecision/VacuumOutcome's own reason union in packages/core/src/db/vacuum.ts.
-export type VacuumDeclineReason = 'below_fraction' | 'below_floor' | 'not_enough_disk'
+// Mirrors VacuumDecision/VacuumOutcome's own reason union in packages/core/src/db/vacuum.ts, plus
+// 'rebuild_in_progress' -- routes/maintenance.ts's own reason, not core's, for declining while
+// the boot rebuild worker might still hold the file (see ServerDeps.rebuildInFlight).
+export type VacuumDeclineReason = 'below_fraction' | 'below_floor' | 'not_enough_disk' | 'rebuild_in_progress'
 
 // Mirrors VacuumOutcome in packages/core/src/db/vacuum.ts.
 export type VacuumOutcome =
-  | { ran: true, before: DatabaseBloat, after: DatabaseBloat, reclaimedBytes: number, ms: number }
+  | { ran: true, before: DatabaseBloat, after: DatabaseBloat, reclaimedBytes: number, ms: number, checkpointed: boolean }
   | { ran: false, reason: VacuumDeclineReason, bloat: DatabaseBloat }
+
+// Mirrors BackupDecision's own reason union in packages/core/src/backup/runBackup.ts, plus
+// 'rebuild_in_progress' for the same reason VacuumDeclineReason carries it.
+export type BackupDeclineReason = 'backups_disabled' | 'not_enough_disk' | 'rebuild_in_progress'
+
+// What POST /api/settings/maintenance/backup answers: the completed file, or -- since this fix --
+// a reported decline rather than a copy nothing was ready for. `ran: false` carries no bloat,
+// unlike VacuumOutcome's: none of its three reasons are about bloat, and inventing one here
+// would only be a figure nothing on this screen reads.
+export type BackupOutcome =
+  | ({ ran: true } & CompletedBackup)
+  | { ran: false, reason: BackupDeclineReason }
 
 /**
  * Shared by the query and both mutations' invalidation, so all three agree on one cache entry.
@@ -70,11 +84,18 @@ export function useMaintenanceStatus(): UseQueryResult<MaintenanceStatus, ApiErr
   })
 }
 
-/** A backup taken by hand, outside the nightly schedule. Invalidates the status so the new file counts toward `keep` and `backups` on screen without a manual refresh. */
-export function useBackupNow(): UseMutationResult<CompletedBackup, ApiError, void> {
+/**
+ * A backup taken by hand, outside the nightly schedule. Invalidates the status so the new file
+ * counts toward `keep` and `backups` on screen without a manual refresh.
+ *
+ * Always resolves, the same contract useReclaimSpace documents below: a declined backup is a 200
+ * with `ran: false` (retention set to zero, not enough disk, or a rebuild still in flight), never
+ * a thrown ApiError. `backup.isError` means the request itself failed, not that it declined.
+ */
+export function useBackupNow(): UseMutationResult<BackupOutcome, ApiError, void> {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => apiSend<CompletedBackup>('POST', '/api/settings/maintenance/backup'),
+    mutationFn: () => apiSend<BackupOutcome>('POST', '/api/settings/maintenance/backup'),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: maintenanceKey() })
     },
