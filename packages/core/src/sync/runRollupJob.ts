@@ -3,6 +3,7 @@ import type { DataType } from '../api/catalogue.ts'
 import type { RateLimiter } from './runJob.ts'
 import { daily } from '../db/schema/index.ts'
 import { mapRollups } from '../api/mapRollups.ts'
+import { localDateOf } from './localDate.ts'
 
 const DAY_MS = 86_400_000
 
@@ -50,13 +51,12 @@ export interface RollupJobInput {
   deps: RollupJobDeps
 }
 
-// en-CA yields ISO ordered parts, matching windows.ts's localDateOf. A rollup window has to
-// land on the person's own local day, not the UTC one: two people in different zones asking
-// for "the same" absolute range must get different civil dates, the same way dayWindows does
-// for list jobs, or the archive's day-aligned dedup key stops meaning anything per person.
-const localDate = (ms: number, timeZone: string): string =>
-  new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    .format(new Date(ms))
+// A rollup window has to land on the person's own local day, not the UTC one: two people in
+// different zones asking for "the same" absolute range must get different civil dates, the same
+// way dayWindows does for list jobs, or the archive's day-aligned dedup key stops meaning
+// anything per person. Shared with windows.ts rather than written out again here, which is also
+// what keeps the two from drifting apart in locale or options.
+const localDate = localDateOf
 
 // A local date string carries no zone, so once fromMs/toMs have been converted to dates above,
 // stepping the walk here is pure calendar arithmetic: parsing a date as a UTC midnight and
