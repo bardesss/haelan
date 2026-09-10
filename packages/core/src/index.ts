@@ -78,6 +78,10 @@ export type { SyncProgress } from './sync/runJob.ts'
 // the file they come from invents every value it emits: nothing here reads real health data.
 export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body, dailyRollupBody } from './testing/payloads.ts'
 export type { RollupWindow } from './testing/payloads.ts'
+// The demo data generator. A later milestone's rehearsal and its README screenshots both drive
+// it from outside this package, through this export rather than a deep import into testing/.
+export { seedArchive } from './testing/seed.ts'
+export type { SeedArchiveInput, SeedArchiveResult } from './testing/seed.ts'
 
 // M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
 // ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
