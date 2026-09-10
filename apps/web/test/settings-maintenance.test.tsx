@@ -95,6 +95,8 @@ function mountSettingsAs(overrides: Partial<Session>): void {
   })
 }
 
+const RESTORE_DETAIL = "Your health data is safe and still here. This instance just can't read the Google credentials it has on file - that's what happens when a database is restored without the instance.key file that encrypted them. It also cost the household's Google client secret, and the instance has already written itself a new instance.key. Connect again to fix it."
+
 const text = (selector: string): string => container!.querySelector(selector)?.textContent ?? ''
 
 const buttonLabels = (): string[] =>
@@ -307,5 +309,24 @@ describe('the maintenance section', () => {
     expect(message).not.toBe('backups_disabled')
     expect(message).not.toContain('backups_disabled')
     expect(message).toBe('Backups are turned off for this instance.')
+  })
+  // The spec's second half: M5d-B/C put this explanation on the connect card, and someone who
+  // restored a backup without their instance.key is most likely in Settings - on the section about
+  // backups - when they find out. It shipped with nothing rendering it in a test.
+  //
+  // Asserted against the wording itself rather than against t('connect.restoreDetail'), which would
+  // compare i18next to itself and pass just as happily if the referenced key vanished and both
+  // sides resolved to the raw key. The literal below is a second, independent record of what the
+  // reader sees, and it is what proves the $t() nesting resolved rather than rendering its own
+  // source. If this fails because the copy changed on purpose, update it; if it fails showing
+  // "$t(connect.restoreDetail)", the nesting broke.
+  it('says the credentials cannot be read, in the same words the connect card uses', () => {
+    mountSettingsAs({ credentialsUnreadable: true })
+    expect(text('.maintenance-credentials')).toBe(RESTORE_DETAIL)
+  })
+
+  it('says nothing about credentials when they can be read', () => {
+    mountSettingsAs({ credentialsUnreadable: false })
+    expect(text('.maintenance-credentials')).toBe('')
   })
 })

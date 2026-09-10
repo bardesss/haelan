@@ -63,9 +63,9 @@ describe('settings routes', () => {
 
   // Instance-wide, not the caller's own: a raise loops every person in the household clearing
   // their backfill-complete marks, which is exactly what requireAdmin's own comment says it
-  // exists to gate. requireAdmin answers the {kind,code,message} envelope, not this family's own
-  // flat {error} shape - asserted as the guard actually sends it, not as this file's neighbours
-  // otherwise answer.
+  // exists to gate. The assertion below is on the envelope because that is the one shape now;
+  // it used to be here to record that this guard answered differently from the family around it,
+  // which M5e-1 made untrue by moving the family.
   it('refuses a non-admin caller', async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()

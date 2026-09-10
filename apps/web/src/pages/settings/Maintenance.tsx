@@ -90,7 +90,7 @@ export function Maintenance() {
           connect.restoreDetail rather than a second copy of its wording, so the two places that
           explain this state cannot drift apart the way two independently written accounts would. */}
       {session.data?.credentialsUnreadable === true && (
-        <p className="maintenance-backups">{t('settings.maintenance.credentialsUnreadable')}</p>
+        <p className="maintenance-credentials">{t('settings.maintenance.credentialsUnreadable')}</p>
       )}
       <p className="maintenance-bloat">
         {t('settings.maintenance.bloat', { mb: toMb(bloat.freeBytes, i18n.language) })}

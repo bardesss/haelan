@@ -12,7 +12,9 @@ import { registerDataTypeRoutes } from './dataTypes.ts'
 /**
  * Registers the versioned surface. Called through app.register with the /api/v1 prefix (see
  * app.ts), so this plugin's own encapsulation is what keeps the isolation rule and the error
- * handler both scoped here rather than leaking onto the older, flat-shaped routes.
+ * handler both scoped here rather than leaking onto the routes outside it. Those answer the same
+ * error shape now - M5e-1 saw to that - but the isolation rule and this handler are still this
+ * surface's alone.
  *
  * The error handler is registered once, here, rather than each route calling the serialiser
  * itself: a route inside this file can let a core call's throw propagate instead of wrapping it,
