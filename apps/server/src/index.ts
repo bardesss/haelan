@@ -41,7 +41,12 @@ let rebuilding: Promise<unknown> = Promise.resolve()
 const shutdown = async () => {
   // Stop scheduling first so nothing new begins, then wait for whatever is already running.
   // Closing SQLite under a backfill mid-window is how a shutdown turns into a stack trace.
+  //
+  // Both schedulers, not just the sync one. The maintenance timer is hourly and unref'd, so the
+  // window is narrow and the consequence would be a backup starting against a database this
+  // function is about to close - the same stack trace, from the other timer.
   app.haelan.runner.stop()
+  maintenance.stop()
   await app.haelan.runner.settle()
   await rebuilding.catch(() => {})
   await app.close()
