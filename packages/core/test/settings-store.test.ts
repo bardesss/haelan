@@ -54,6 +54,23 @@ describe('setupStep', () => {
     expect(setupStep({ accounts, settings, credentials })).toBe('done')
   })
 
+  // A backup restored without instance.key, at the point it is decided. The client secret is
+  // sealed with the same key the refresh tokens are, so the household client goes unreadable
+  // too - and this function runs in a preHandler on every request, so a throw here used to take
+  // the whole app down rather than name a state. A second store over the same database with a
+  // different key builds it, so the ciphertext is real and so is the failure to open it.
+  it('sends a finished instance back to the Google client step when the key cannot read it', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 1 })
+    credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 1 })
+    settings.markSetupComplete(2)
+    expect(setupStep({ accounts, settings, credentials })).toBe('done')
+
+    const restored = new CredentialStore(fixture.db, Buffer.alloc(32, 7))
+    expect(setupStep({ accounts, settings, credentials: restored })).toBe('google-client')
+  })
+
   it('keeps the settings row single, so a second put updates rather than duplicates', () => {
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
     settings.put({ baseUrl: 'https://box.tail1234.ts.net', consentPath: 'tailscale', nowMs: 2 })

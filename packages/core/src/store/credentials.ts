@@ -34,10 +34,34 @@ export class CredentialStore {
     }).run()
   }
 
+  // Throws CredentialsUnreadableError for the same reason getRefreshToken does, and the reason
+  // matters more here: the household client secret is sealed with the very same key, so a
+  // database restored without instance.key has an unreadable client as well as unreadable
+  // tokens. This used to let unseal's own error escape, and every caller of this method is on a
+  // path that must not fault - setupStep runs in a preHandler on every request. Callers that
+  // can act on the state ask isClientUnreadable first; this class is for the ones that cannot.
   getClient(): ClientCredentials | null {
     const row = this.#db.select().from(oauthClient).where(eq(oauthClient.id, CLIENT_ROW_ID)).get()
     if (!row) return null
-    return { clientId: row.clientId, clientSecret: unseal(this.#key, row.clientSecretEncrypted) }
+    let clientSecret: string
+    try {
+      clientSecret = unseal(this.#key, row.clientSecretEncrypted)
+    } catch (error) {
+      throw new CredentialsUnreadableError(null, { cause: error })
+    }
+    return { clientId: row.clientId, clientSecret }
+  }
+
+  // The household half of isCredentialsUnreadable, and the predicate that keeps setupStep total.
+  // A configured client this key cannot open is reported rather than thrown because there is a
+  // real answer to it: the operator still has the client id and secret in their Google console,
+  // and the wizard already exists to take them. Nothing is rewritten or deleted by asking - the
+  // sealed row stays exactly as putClient wrote it, so an instance.key that turns up later
+  // opens it again.
+  isClientUnreadable(): boolean {
+    const row = this.#db.select().from(oauthClient).where(eq(oauthClient.id, CLIENT_ROW_ID)).get()
+    if (!row) return false
+    return !this.#readable(row.clientSecretEncrypted)
   }
 
   putRefreshToken(input: { personId: string, refreshToken: string, scopes: string[], nowMs: number }): void {
@@ -95,10 +119,17 @@ export class CredentialStore {
   getClientFor(personId: string): ClientCredentials {
     const row = this.#db.select().from(credentials).where(eq(credentials.personId, personId)).get()
     if (row?.clientIdOverride && row.clientSecretOverrideEncrypted) {
-      return {
-        clientId: row.clientIdOverride,
-        clientSecret: unseal(this.#key, row.clientSecretOverrideEncrypted),
+      // Named rather than left as a decipher error, and reachable rather than defensive:
+      // putRefreshToken deliberately does not touch the override columns, so a person who had
+      // one and re-consents after a restore without instance.key ends up with a token this key
+      // sealed and an override the old one did. Every refresh for them reads this line.
+      let clientSecret: string
+      try {
+        clientSecret = unseal(this.#key, row.clientSecretOverrideEncrypted)
+      } catch (error) {
+        throw new CredentialsUnreadableError(personId, { cause: error })
       }
+      return { clientId: row.clientIdOverride, clientSecret }
     }
     const household = this.getClient()
     if (!household) throw new ConfigError(`no OAuth client configured for person ${personId}`)

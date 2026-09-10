@@ -199,10 +199,20 @@ To restore, with the container stopped:
 4. start the container
 
 Restoring onto a machine that still has its original `instance.key` needs nothing further.
-Restoring onto one that does not is supported and lands somewhere known rather than broken: the
-health data is intact, the stored Google credentials cannot be read, and the app says so and offers
-to connect again. Consent once and syncing resumes. Nothing is deleted in the meantime, so a key
-found later still opens what is already there.
+
+Restoring onto one that does not is supported, and it costs exactly what that key was holding: the
+household's Google client secret and every person's stored refresh token. The health data is
+intact. The instance writes itself a fresh `instance.key` on that first boot and comes up asking
+for the Google client again, because a client secret nobody can decrypt is a client that has to be
+set up again. Sign in, paste the client ID and secret back in from your Google Cloud console -
+which is where they still are - and then connect each person once, the way setup did the first
+time.
+
+Nothing is deleted along the way. Every sealed row is still exactly what wrote it, so if the
+original key turns up later you can stop the container and put it back over the one the instance
+generated, and every stored connection opens again without anybody consenting. You will be asked
+for the Google client once more if you have already re-entered it, since doing that sealed it under
+the new key.
 
 Worth doing once, on a copy, before you need it: the procedure is four steps and the day you first
 run it should not be the day it matters.

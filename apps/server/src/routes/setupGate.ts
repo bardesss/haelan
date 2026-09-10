@@ -21,8 +21,18 @@ export function registerSetupGate(app: FastifyInstance): void {
     const step = currentStep(app)
     const isConsentRoute = path.startsWith('/oauth/')
     const isSetupRoute = path.startsWith('/api/setup/') || isConsentRoute
+    // Signing in is part of the wizard from the account step onwards. That step mints a session
+    // as a side effect, so a wizard walked in one sitting never notices; every other way of
+    // arriving at an unfinished one does. A reload after the cookie expired, a second admin
+    // picking it up, and - the case this was found through - a database restored without its
+    // instance.key, which lands a finished instance back on 'google-client' with accounts that
+    // already exist and no session anywhere. Every remaining step requires a session, and
+    // /api/setup/account answers 'account_exists', so closing this left the wizard behind a
+    // session with no way left to obtain one. /api/auth/me stays closed: its 409 is what tells
+    // the browser to show the wizard rather than the dashboard at all.
+    const isSignIn = path === '/api/auth/login'
 
-    if (step !== 'done' && !isSetupRoute) {
+    if (step !== 'done' && !isSetupRoute && !isSignIn) {
       // The versioned surface answers this gate in the envelope like every other status it can
       // return. It is reached before any session check, so on a fresh instance it is the very
       // first thing a client sees, and a client narrowing on body.error.kind cannot read a flat

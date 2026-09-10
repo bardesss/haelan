@@ -53,10 +53,16 @@ export function listBackups(dir: string): BackupFile[] {
     .sort((a, b) => b.name.localeCompare(a.name))
 }
 
-// Every table a rebuild cannot regenerate, plus the largest derived one. Tier 1 is the part a
-// backup exists for; samples is here because a copy that silently lost 1.6 million rows while
-// keeping every override would still pass a tier 1 only check.
-const COUNTED = ['people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events', 'samples']
+// Every table a rebuild cannot regenerate, plus the derived ones a reader actually looks at.
+// Tier 1 is the part a backup exists for; samples, daily and sessions are here because a copy
+// that silently lost 1.6 million rows while keeping every override would still pass a tier 1
+// only check. daily and sessions are named by the spec and were missing: a copy that lost every
+// derived day is a copy that opens to an empty dashboard, and it used to verify clean. people
+// and sources are ours rather than the spec's, and stay - they are the rows every other table
+// hangs off.
+const COUNTED = [
+  'people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events', 'samples', 'daily', 'sessions',
+]
 
 /**
  * Opens a `.part` file read only and throws unless it is a well formed database holding the same

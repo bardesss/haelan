@@ -8,6 +8,7 @@ import { migrateToLatest } from '../src/db/migrate.ts'
 import { people } from '../src/db/schema/index.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
 import { unseal } from '../src/crypto/secretBox.ts'
+import { CredentialsUnreadableError } from '../src/errors.ts'
 import { loadOrCreateKey } from '../src/crypto/key.ts'
 import type { Database } from '../src/db/open.ts'
 
@@ -126,6 +127,39 @@ describe('CredentialStore', () => {
     store.putRefreshToken({ personId: 'p2', refreshToken: 'b', scopes: [], nowMs: 1 })
     store.markRevoked('p2', 50)
     expect(store.listConnectedPeople()).toEqual(['p1'])
+  })
+
+  // The household half of the unreadable state. A second store over the same database with a
+  // different key, rather than a stub: the row is genuinely the one putClient wrote and the key
+  // genuinely cannot open it, which is what a restore without instance.key produces.
+  it('reports a client secret it cannot decrypt instead of letting a decipher error escape', () => {
+    store.putClient({ clientId: 'cid', clientSecret: 'shh', nowMs: 1 })
+    const other = new CredentialStore(db, Buffer.alloc(32, 4))
+
+    expect(other.isClientUnreadable()).toBe(true)
+    expect(() => other.getClient()).toThrow(CredentialsUnreadableError)
+    // Nothing about asking rewrote the row, so the key that sealed it still opens it.
+    expect(store.getClient()).toEqual({ clientId: 'cid', clientSecret: 'shh' })
+  })
+
+  // The one place a restored instance can hold a readable token beside an unreadable secret:
+  // putRefreshToken rewrites the token columns and deliberately leaves the override columns
+  // alone, so re-consenting after a restore without instance.key leaves the two sealed under
+  // different keys. Every refresh for that person reads the override.
+  it('reports an override secret it cannot decrypt, rather than failing the refresh as a decipher error', () => {
+    store.putRefreshToken({ personId: 'p1', refreshToken: 'rt', scopes: [], nowMs: 1 })
+    store.putClientOverride({ personId: 'p1', clientId: 'own', clientSecret: 'own-secret' })
+    const other = new CredentialStore(db, Buffer.alloc(32, 4))
+    other.putRefreshToken({ personId: 'p1', refreshToken: 'rt-again', scopes: [], nowMs: 2 })
+
+    expect(other.getRefreshToken('p1')?.refreshToken).toBe('rt-again')
+    expect(() => other.getClientFor('p1')).toThrow(CredentialsUnreadableError)
+  })
+
+  it('does not call an absent client unreadable, because there is nothing to read', () => {
+    expect(store.isClientUnreadable()).toBe(false)
+    store.putClient({ clientId: 'cid', clientSecret: 'shh', nowMs: 1 })
+    expect(store.isClientUnreadable()).toBe(false)
   })
 })
 

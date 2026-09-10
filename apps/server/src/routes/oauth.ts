@@ -32,7 +32,7 @@ export function registerOauth(app: FastifyInstance): void {
 
   app.get('/oauth/start', { preHandler: [app.requireSession] }, async (request, reply) => {
     const account = request.accountId ? stores().accounts.getById(request.accountId) : null
-    const client = stores().credentials.getClient()
+    const client = readableClient()
     const settings = stores().settings.get()
     if (!account || !client || !settings) return reply.code(409).send({ error: 'wrong_step', step: currentStep() })
 
@@ -64,7 +64,7 @@ export function registerOauth(app: FastifyInstance): void {
       return fail('no_code', 'Google returned no authorization code.')
     }
 
-    const client = stores().credentials.getClient()
+    const client = readableClient()
     const settings = stores().settings.get()
     if (!client || !settings) return fail('wrong_step', 'The OAuth client is no longer configured.')
 
@@ -115,6 +115,15 @@ export function registerOauth(app: FastifyInstance): void {
       return fail('exchange_failed', error instanceof Error ? error.message : 'the exchange failed')
     }
   })
+
+  // A client sealed with a key this instance no longer holds is a client neither of these two
+  // routes can spend: consent would be started with a secret the callback cannot read back to
+  // exchange the code with. It reads as "not configured" here, which is the branch both routes
+  // already have and which sends the caller to the step setupStep is already reporting, rather
+  // than as a throw out of a handler that has a perfectly good 409 to give.
+  function readableClient() {
+    return stores().credentials.isClientUnreadable() ? null : stores().credentials.getClient()
+  }
 
   function currentStep() {
     return setupStep({ accounts: stores().accounts, settings: stores().settings, credentials: stores().credentials })

@@ -76,6 +76,26 @@ describe('runBackup', () => {
     } finally { test.cleanup() }
   })
 
+  // The same comparison again, against the derived half. daily and sessions are named by spec
+  // section 5 and were absent from the counted list, so a copy that had lost every derived day
+  // verified clean - and a restored database that opens to an empty dashboard is exactly the
+  // discovery-on-the-day-it-is-needed this contract exists to prevent. That a rebuild can
+  // regenerate these rows is why they were left out; it is not a reason to call a copy missing
+  // them the same database.
+  it('rejects a backup that no longer holds the same derived rows', () => {
+    const test = createTestDatabase()
+    try {
+      seedPerson(test.db, 'p1')
+      const file = runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 })
+      test.db.$client.prepare(
+        `insert into daily (person_id, local_date, metric, agg, source, value, derivation_version)
+         values ('p1', '2026-09-10', 'steps', 'sum', 'provider', 1200, 1)`,
+      ).run()
+
+      expect(() => verifyBackup(file.path, test.db)).toThrow('does not hold the same rows')
+    } finally { test.cleanup() }
+  })
+
   // The other half of the contract: when verify rejects a copy, nothing renamed, the evidence
   // stays on disk, and the caller hears about it. A stub stands in for verifyBackup here because
   // this test is about what runBackup does with a failure, not about producing one for real -

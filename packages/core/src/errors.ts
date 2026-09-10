@@ -51,11 +51,20 @@ export class ConfigError extends HaelanError {
 // restored onto a different machine takes, since a backup deliberately carries no key of its
 // own. From this process's point of view the person is neither connected nor never-connected,
 // so it gets a kind of its own rather than folding into either.
+//
+// `personId` is null for the household OAuth client secret, which the same key seals and which
+// therefore goes unreadable in exactly the same breath as every token. It belongs to the
+// household rather than to a person, so there is nobody to name; it is not a second error class
+// because it is not a second condition - one key stopped opening what it sealed, and a caller
+// that has learned to treat this class as "the key cannot open this" would gain nothing from
+// having to learn a second name for the same sentence.
 export class CredentialsUnreadableError extends AuthError {
-  readonly personId: string
+  readonly personId: string | null
 
-  constructor(personId: string, options?: { cause?: unknown }) {
-    super(`refresh token for person ${personId} cannot be decrypted`, options)
+  constructor(personId: string | null, options?: { cause?: unknown }) {
+    super(personId === null
+      ? 'the household OAuth client secret cannot be decrypted'
+      : `refresh token for person ${personId} cannot be decrypted`, options)
     this.personId = personId
   }
 }

@@ -107,7 +107,14 @@ export function setupStep(deps: SetupDeps): SetupStep {
   if (deps.accounts.count() === 0) return 'account'
   const settings = deps.settings.get()
   if (!settings) return 'instance-url'
-  if (!deps.credentials.getClient()) return 'google-client'
+  // Unreadable counts as not configured, and is asked first so this function stays total -
+  // getClient throws on a secret this key cannot open, and setupStep runs in a preHandler on
+  // every request. A client sealed with a key this instance no longer has is a client nobody can
+  // use to refresh a token or start a consent, which is what 'google-client' already means;
+  // sending it anywhere else would be inventing a step for a state the wizard already knows how
+  // to end. That is the whole of the restore-without-instance.key story: the operator re-enters
+  // the client from their Google console, then each person consents once.
+  if (deps.credentials.isClientUnreadable() || !deps.credentials.getClient()) return 'google-client'
   if (settings.setupCompletedAtMs === null) return 'consent'
   return 'done'
 }
