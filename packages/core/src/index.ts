@@ -175,3 +175,7 @@ export type { ChangedPair, ChangesResult } from './query/changes.ts'
 // the table's five identifier columns are integers, and a ref means nothing without it.
 export { SampleKeys } from './db/keys.ts'
 export type { SampleText } from './db/keys.ts'
+
+// M5d-c. A daily compacted copy, verified before it is ever called a backup.
+export { runBackup, listBackups, pruneBackups, BACKUP_DIR_NAME } from './backup/runBackup.ts'
+export type { BackupFile } from './backup/runBackup.ts'
