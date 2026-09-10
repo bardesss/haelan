@@ -66,7 +66,7 @@ describe('Hypnogram', () => {
         startLabel="Bed 23:20" label="Sleep stages through the night of 2026-08-15"
       />,
     )
-    expect(totalsRowText(html)).toBe('sleep.stage.deep 0h 20m, sleep.stage.light 0h 40m')
+    expect(totalsRowText(html)).toBe('sleep.stage.deep 0h 20m, sleep.stage.light 0h 40m.')
   })
 
   // The Awake tile and this row describe one night and can legitimately disagree:
@@ -86,7 +86,7 @@ describe('Hypnogram', () => {
       />,
     )
     expect(totalsRowText(html)).toBe(
-      'sleep.stage.light 0h 30m, sleep.stage.awake 0h 15m charts.hypnogram.awakeNote',
+      'sleep.stage.light 0h 30m, sleep.stage.awake 0h 15m. charts.hypnogram.awakeNote',
     )
   })
 
@@ -100,7 +100,7 @@ describe('Hypnogram', () => {
         startLabel="Bed 23:20" label="Sleep stages through the night of 2026-08-15"
       />,
     )
-    expect(totalsRowText(html)).toBe('sleep.stage.light 0h 30m')
+    expect(totalsRowText(html)).toBe('sleep.stage.light 0h 30m.')
   })
 
   // Review round 1's own Critical: Sleep.tsx and Dashboard.tsx used to round each segment
@@ -130,6 +130,6 @@ describe('Hypnogram', () => {
     const html = renderToStaticMarkup(
       <Hypnogram segments={segments} startLabel="Bed 23:20" label="Sleep stages through the night of 2026-08-15" />,
     )
-    expect(totalsRowText(html)).toBe('sleep.stage.deep 0h 08m, sleep.stage.light 0h 08m')
+    expect(totalsRowText(html)).toBe('sleep.stage.deep 0h 08m, sleep.stage.light 0h 08m.')
   })
 })

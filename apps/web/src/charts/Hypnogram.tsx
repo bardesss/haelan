@@ -152,7 +152,7 @@ export function Hypnogram({ segments, startLabel, label }: {
           invented zeros would claim a measurement that was never taken, so this states the
           absence instead. */}
       <p className="hypnogram-totals">
-        {totals.length === 0 ? t('charts.absence.notStaged') : `${totalsRow}${awakeNote}`}
+        {totals.length === 0 ? t('charts.absence.notStaged') : `${totalsRow}.${awakeNote}`}
       </p>
     </>
   )

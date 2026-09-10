@@ -502,7 +502,7 @@ describe('the Sleep page', () => {
     // whole text would flag those true, unrelated cells as if they were the totals row's own bug.
     const totalsRow = container!.querySelector('.hypnogram-totals')
     expect(totalsRow, container!.innerHTML).not.toBeNull()
-    expect(totalsRow!.textContent).toBe('Deep 0h 08m, Light 0h 08m')
+    expect(totalsRow!.textContent).toBe('Deep 0h 08m, Light 0h 08m.')
     restore()
   })
 
