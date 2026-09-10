@@ -58,7 +58,10 @@ export interface RollupWindow {
   value: Record<string, unknown>
 }
 
-const nextDay = (d: { year: number, month: number, day: number }) => {
+// Exported for seed.ts, which needs the same "one civil day later" arithmetic to close a rollup
+// request's own range on the day after its last window, the way client.ts's dailyRollUpDataPoints
+// closes its own toLocalDate.
+export const nextDay = (d: { year: number, month: number, day: number }) => {
   const ms = Date.UTC(d.year, d.month - 1, d.day) + 86_400_000
   const next = new Date(ms)
   return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() }
