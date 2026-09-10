@@ -78,6 +78,13 @@ export type { SyncProgress } from './sync/runJob.ts'
 // the file they come from invents every value it emits: nothing here reads real health data.
 export { samplePoint, intervalPoint, dailyPoint, sleepPoint, body, dailyRollupBody } from './testing/payloads.ts'
 export type { RollupWindow } from './testing/payloads.ts'
+// The demo data generator. The upgrade rehearsal drives it from outside this package through
+// this export. `scripts/seed-demo.mjs`, which writes the README screenshots' data, does not: it
+// deep-imports `testing/seed.ts` directly, the same way `check-enum-drift.mjs` deep-imports its
+// own catalogue module, because `@haelan/core` does not resolve from a script run at the repo
+// root - only a package that declares it as a dependency gets that resolution.
+export { seedArchive } from './testing/seed.ts'
+export type { SeedArchiveInput, SeedArchiveResult } from './testing/seed.ts'
 
 // M2a. The derivation layer: tier 3 from tier 2, and the two types that have no tier 2 at all.
 // ACTIONS, supports, DeriveQueue and QueueEntry are exported above already, added when earlier
