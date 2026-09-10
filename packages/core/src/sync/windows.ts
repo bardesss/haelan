@@ -1,13 +1,10 @@
 import { ConfigError } from '../errors.ts'
+import { localDateOf } from './localDate.ts'
 
 export interface Window { startMs: number, endMs: number, localDate: string }
 
 const MAX_WINDOWS = 4000
 const HOUR_MS = 3_600_000
-
-const localDateOf = (ms: number, timeZone: string) =>
-  new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    .format(new Date(ms))
 
 // Walking back an hour at a time from a known instant inside the day, until the local date
 // changes, finds local midnight without needing the offset. That matters because the offset is
