@@ -129,17 +129,12 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   },
   { route: 'PUT /api/settings/backfill-horizon', auth: 'admin' },
 
-  {
-    route: 'GET /api/settings/maintenance',
-    auth: 'admin',
-    why: 'reports what the database is costing and what backups exist, which is the shape of the instance rather than anybody\'s data',
-  },
+  // The instance's own housekeeping: what the database is costing, what backups exist, and the two
+  // buttons that change either. Admin like the rest of /api/settings, and no `why` because the type
+  // only asks for one where the answer is less than admin.
+  { route: 'GET /api/settings/maintenance', auth: 'admin' },
   { route: 'POST /api/settings/maintenance/backup', auth: 'admin' },
-  {
-    route: 'POST /api/settings/maintenance/reclaim',
-    auth: 'admin',
-    why: 'rewrites the whole database file and stalls every request while it runs',
-  },
+  { route: 'POST /api/settings/maintenance/reclaim', auth: 'admin' },
 
   { route: 'GET /api/members', auth: 'admin' },
   { route: 'POST /api/members', auth: 'admin' },
