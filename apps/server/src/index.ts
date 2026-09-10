@@ -112,8 +112,17 @@ rebuilding = runBootSequence({
 rebuilding = rebuilding.then(() => {
   try {
     const outcome = vacuumIfBloated(instance.db, dataDir)
-    if (outcome.ran) {
+    if (outcome.ran && outcome.checkpointed) {
       console.log(`reclaimed ${Math.round(outcome.reclaimedBytes / 1_000_000)} MB in ${outcome.ms} ms`)
+    } else if (outcome.ran) {
+      // checkpointed: false means SQLite answered busy on the truncate - some other connection
+      // was mid-read at that instant. The VACUUM itself already committed, so this is not a
+      // failure: the freed pages are real, they are just still sitting in the file until the next
+      // checkpoint (WAL's own, or this process's next boot) truncates it. Saying "reclaimed" here
+      // the same way the checkpointed branch does would tell an operator the disk usage graph
+      // should already show it, and it will not for a while yet.
+      console.log(`${Math.round(outcome.reclaimedBytes / 1_000_000)} MB reclaimed in ${outcome.ms} ms, `
+        + `but a checkpoint was busy - the file will not shrink until the next one runs`)
     } else if (outcome.reason === 'not_enough_disk') {
       // Logged rather than thrown: it is a correct decision about the machine's state, and it is
       // the one an operator most needs to hear, since the space stays spent until they act.

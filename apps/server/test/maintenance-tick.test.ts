@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -74,23 +74,34 @@ describe('MaintenanceTick', () => {
     })
   })
 
-  // setInterval waits a whole interval before its first call, so without this an instance
+  // setInterval waits a whole interval before its first call, so without a first tick an instance
   // restarted more often than its interval would never back up at all - the same hazard
-  // SyncRunner.start() documents and avoids (sync/runner.ts). start() itself is what has to take
-  // the first tick; dueNow()/runIfDue() alone, called directly the way every test above does,
-  // would never catch a start() that forgot to.
-  it('takes a backup immediately on start rather than waiting a full interval', () => {
+  // SyncRunner.start() documents and avoids (sync/runner.ts). Delayed a minute rather than run
+  // synchronously in start(), though: a first tick can mean a full VACUUM INTO plus an
+  // integrity_check on the main thread, on top of the boot vacuum's own stall, and that must not
+  // run before the app has answered a single request. dueNow()/runIfDue() alone, called directly
+  // the way every test above does, would never catch a start() that forgot to schedule it at all.
+  it('takes a backup a minute after start, not immediately and not a full interval later', () => {
     withDir((dir) => {
       const instance = openHaelan(dir, {})
       try {
         const tick = new MaintenanceTick({
           instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
         })
-        expect(listBackups(dir)).toHaveLength(0)
-        tick.start()
+        vi.useFakeTimers()
         try {
+          expect(listBackups(dir)).toHaveLength(0)
+          tick.start()
+          // Not yet: the app should be up and serving before this pays its own cost.
+          expect(listBackups(dir)).toHaveLength(0)
+          vi.advanceTimersByTime(59_999)
+          expect(listBackups(dir)).toHaveLength(0)
+          vi.advanceTimersByTime(1)
           expect(listBackups(dir)).toHaveLength(1)
-        } finally { tick.stop() }
+        } finally {
+          tick.stop()
+          vi.useRealTimers()
+        }
       } finally { instance.close() }
     })
   })
@@ -112,6 +123,41 @@ describe('MaintenanceTick', () => {
         expect(() => tick.runIfDue()).not.toThrow()
         expect(tick.runIfDue()).toBeNull()
       } finally { instance.close() }
+    })
+  })
+
+  // backupDecision reads three pragmas and calls statfsSync - a stale mount or an IO error there
+  // used to escape runIfDue uncaught, because the call sat outside its try. Reproduced with a
+  // real throw, not a stub: closing the database connection out from under the tick makes every
+  // pragma call throw "The database connection is not open", the same way a removed mount would.
+  // Also proves start()'s own reordering: the hourly interval and the delayed first tick are both
+  // armed before either has ever run, so a throw from the first tick can never leave an instance
+  // with no timer at all - the silent-never-backs-up failure this unit exists to prevent.
+  it('arms both timers before the first tick runs, and survives that tick throwing', () => {
+    withDir((dir) => {
+      // No instance.close() in a finally here, on purpose: the connection is closed by hand
+      // below to produce the throw, and closing it twice is not this test's business - withDir's
+      // own finally still removes the directory either way.
+      const instance = openHaelan(dir, {})
+      instance.db.$client.close()
+      const tick = new MaintenanceTick({
+        instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+      })
+      vi.useFakeTimers()
+      try {
+        tick.start()
+        // Both timers exist immediately, before the delayed first tick has ever had a chance
+        // to run (and throw): the hourly interval and the one-shot delay.
+        expect(vi.getTimerCount()).toBe(2)
+
+        expect(() => vi.advanceTimersByTime(60_000)).not.toThrow()
+        // The one-shot timer fired (and its throw was caught inside runIfDue) and is gone; the
+        // recurring interval it was armed alongside is still here and still alive.
+        expect(vi.getTimerCount()).toBe(1)
+      } finally {
+        tick.stop()
+        vi.useRealTimers()
+      }
     })
   })
 })

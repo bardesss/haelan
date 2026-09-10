@@ -852,7 +852,8 @@
       "backups": {
         "none": "No backups yet.",
         "latest": "Last backup {{date}} ({{size}} MB).",
-        "retention": "Keeps the last {{keep}}, taken every {{hours}} hours."
+        "retention": "Keeps the last {{keep}}, taken every {{hours}} hours.",
+        "off": "Backups are switched off for this instance."
       },
       "backupNow": "Back up now",
       "backingUp": "Backing up…",
@@ -861,6 +862,7 @@
       "reclaim": "Reclaim space",
       "reclaiming": "Reclaiming…",
       "reclaimedResult": "Reclaimed {{mb}} MB.",
+      "reclaimedPendingResult": "Reclaimed {{mb}} MB, but another connection was mid-read; it will leave the file once the next checkpoint can run.",
       "reclaimFailed": "That did not work. Try again.",
       "declined": {
         "belowFraction": "There isn't enough dead space yet to be worth reclaiming.",

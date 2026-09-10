@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
 import { sql } from 'drizzle-orm'
 import { createTestDatabase } from '../src/testing/fixtures.ts'
 import { databaseBloat } from '../src/db/maintenance.ts'
@@ -71,6 +72,42 @@ describe('vacuumIfBloated', () => {
       expect(outcome.ran).toBe(false)
       if (outcome.ran) return
       expect(['below_fraction', 'below_floor']).toContain(outcome.reason)
+    } finally { test.cleanup() }
+  })
+
+  // Finding 1's exact shape surviving in the one branch its fix did not cover: checkpointed was
+  // added to the outcome and nothing ever read it, so a busy truncate still reported "reclaimed
+  // N MB" while the bytes stayed on disk. Reproduced with a real busy condition, not a stub: a
+  // second connection to the same file holds a genuine read transaction open, so
+  // wal_checkpoint(TRUNCATE) cannot reclaim the log out from under it.
+  it('reports checkpointed: false, not a failure, when the truncate is genuinely busy behind a reader', () => {
+    const test = bloated()
+    try {
+      // busy_timeout defaults to 5000ms in production (open.ts's own openDatabase); zeroed here
+      // only so the busy reader below is answered at once rather than after SQLite's own
+      // five-second retry window - the busy condition itself is real, produced by a second live
+      // connection, not shortened or stubbed away.
+      test.db.$client.pragma('busy_timeout = 0')
+
+      const reader = new BetterSqlite3(join(test.dir, DATABASE_FILENAME))
+      reader.exec('BEGIN')
+      reader.prepare('select count(*) as c from metrics').get()
+      try {
+        const outcome = vacuumIfBloated(test.db, test.dir)
+        expect(outcome.ran).toBe(true)
+        if (!outcome.ran) return
+        // The vacuum itself is unaffected by the busy reader: it already committed and the
+        // pragma figures already reflect it, so reclaimedBytes is correct either way - this is
+        // not the failure finding 1 was about.
+        expect(outcome.after.freeBytes).toBe(0)
+        // But the truncate genuinely could not run, and that has to reach a caller rather than
+        // be folded into the same ran: true a clean reclaim reports - see index.ts's boot log and
+        // Maintenance.tsx, which now read this field to say something different in this case.
+        expect(outcome.checkpointed).toBe(false)
+      } finally {
+        reader.exec('COMMIT')
+        reader.close()
+      }
     } finally { test.cleanup() }
   })
 

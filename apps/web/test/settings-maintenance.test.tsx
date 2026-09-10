@@ -168,6 +168,17 @@ describe('the maintenance section', () => {
     expect(buttonLabels()).toEqual(['Back up now', 'Reclaim space'])
   })
 
+  // HAELAN_BACKUP_KEEP=0 means backups are off everywhere in the code (backupDecision declines
+  // every write); the screen used to render "Keeps the last 0, taken every 24 hours" -- a
+  // schedule that does not exist -- and leave Back up now enabled, so the only way to learn
+  // backups were off was to press it and read the decline.
+  it('says backups are switched off, and does not offer a button that will decline, when retention is zero', () => {
+    mountSection(status({ keep: 0, intervalHours: 24 }))
+    expect(text('.maintenance-retention')).toBe('Backups are switched off for this instance.')
+    expect(text('.maintenance-retention')).not.toContain('Keeps the last 0')
+    expect(buttonLabels()).toEqual(['Reclaim space'])
+  })
+
   it('is not rendered at all, buttons included, for a non-admin', () => {
     mountSettingsAs({ isAdmin: false })
     expect(container!.querySelector('.maintenance')).toBeNull()
@@ -215,6 +226,36 @@ describe('the maintenance section', () => {
     api.restore()
 
     expect(text('.maintenance-reclaim-result')).toBe('Reclaimed 50.3 MB.')
+  })
+
+  // checkpointed: false means the truncate that would actually shrink the file was busy behind a
+  // reader -- the vacuum itself still committed, so this must not read the same as a clean
+  // reclaim (finding 1's own shape: something reporting success while the bytes are still on
+  // disk) or as a failure (the pages are genuinely free; the next checkpoint takes them).
+  it('says the reclaim has not left the file yet when the checkpoint was busy, rather than reporting it as done', async () => {
+    const api = mockMaintenanceApi(
+      { ran: true, name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
+      {
+        ran: true,
+        before: status({}).bloat,
+        after: { fileBytes: 200_000_000, liveBytes: 150_000_000, freeBytes: 0, freeFraction: 0 },
+        reclaimedBytes: 50_300_000,
+        ms: 1500,
+        checkpointed: false,
+      },
+    )
+    const client = mountSection(status({}))
+
+    const reclaimButton = [...container!.querySelectorAll('.form-actions button')][1]!
+    click(reclaimButton)
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    const message = text('.maintenance-reclaim-result')
+    expect(message).not.toBe('Reclaimed 50.3 MB.')
+    expect(message).toBe(
+      'Reclaimed 50.3 MB, but another connection was mid-read; it will leave the file once the next checkpoint can run.',
+    )
   })
 
   // The one behaviour this whole task exists to get right: not_enough_disk is the reason a

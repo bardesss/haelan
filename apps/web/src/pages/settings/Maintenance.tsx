@@ -97,8 +97,15 @@ export function Maintenance() {
           })}
         </p>
       )}
+      {/* keep === 0 is HAELAN_BACKUP_KEEP=0, README's and config.ts's own "turn backups off" --
+          backupDecision declines every write this instance would otherwise make, so
+          "Keeps the last 0, taken every N hours" described a schedule that does not exist and a
+          household had no way to learn backups were off short of pressing the button below and
+          reading the decline. */}
       <p className="maintenance-retention">
-        {t('settings.maintenance.backups.retention', { keep, hours: intervalHours })}
+        {keep === 0
+          ? t('settings.maintenance.backups.off')
+          : t('settings.maintenance.backups.retention', { keep, hours: intervalHours })}
       </p>
 
       {/* The one reason worth telling a household before they click, not after: the route's own
@@ -110,9 +117,14 @@ export function Maintenance() {
       )}
 
       <div className="form-actions">
-        <button type="button" className="button" disabled={backup.isPending} onClick={() => backup.mutate()}>
-          {backup.isPending ? t('settings.maintenance.backingUp') : t('settings.maintenance.backupNow')}
-        </button>
+        {/* Not merely disabled: a button that is always going to answer backups_disabled is not
+            a control, it is a decline waiting to happen, and disabled-but-visible still invites
+            the click that finds that out the hard way. */}
+        {keep > 0 && (
+          <button type="button" className="button" disabled={backup.isPending} onClick={() => backup.mutate()}>
+            {backup.isPending ? t('settings.maintenance.backingUp') : t('settings.maintenance.backupNow')}
+          </button>
+        )}
         <button type="button" className="button" disabled={reclaim.isPending} onClick={() => reclaim.mutate()}>
           {reclaim.isPending ? t('settings.maintenance.reclaiming') : t('settings.maintenance.reclaim')}
         </button>
@@ -137,7 +149,18 @@ export function Maintenance() {
       {reclaim.isSuccess && (
         <p className="maintenance-reclaim-result">
           {reclaim.data.ran
-            ? t('settings.maintenance.reclaimedResult', { mb: toMb(reclaim.data.reclaimedBytes, i18n.language) })
+            ? t(
+              // checkpointed: false means the VACUUM committed but the truncate that would
+              // actually shrink the file found another connection mid-read and backed off -- see
+              // vacuumIfBloated's own comment in packages/core/src/db/vacuum.ts. That is not a
+              // failure, but it is not what reclaimedResult says either: the file has not
+              // shrunk yet, and telling a household it has is exactly the shape finding 1 on
+              // this branch was blocked for.
+              reclaim.data.checkpointed
+                ? 'settings.maintenance.reclaimedResult'
+                : 'settings.maintenance.reclaimedPendingResult',
+              { mb: toMb(reclaim.data.reclaimedBytes, i18n.language) },
+            )
             : t(RECLAIM_DECLINE_KEY[reclaim.data.reason])}
         </p>
       )}
