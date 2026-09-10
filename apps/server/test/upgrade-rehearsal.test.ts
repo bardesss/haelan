@@ -267,18 +267,21 @@ describe('the upgrade path', () => {
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 1694, daily: 552, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 1736, daily: 636, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 1694, dailyRows: 552, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 1736, dailyRows: 636, sessions: 19, observations: 14 })
 
       // Counts alone would let a rebuild that dropped one data type and over-produced another
-      // pass, so name what came back. Every seeded type is here: steps, heart rate and weight as
-      // samples, sleep and exercise as sessions, moods as observations.
+      // pass, so name what came back. Every seeded type is here: steps, heart rate, weight and
+      // the three daily recovery metrics (resting heart rate, HRV, respiratory rate) as samples,
+      // sleep and exercise as sessions, moods as observations.
       expect(namesOf(db, 'select distinct m.name as name from samples s'
-        + ' join metrics m on m.ref = s.metric_ref')).toEqual(['heart_rate', 'steps', 'weight'])
+        + ' join metrics m on m.ref = s.metric_ref')).toEqual([
+        'daily_hrv', 'heart_rate', 'respiratory_rate', 'resting_heart_rate', 'steps', 'weight',
+      ])
       expect(namesOf(db, 'select distinct kind as name from sessions'))
         .toEqual(['exercise', 'sleep'])
       expect(namesOf(db, 'select distinct kind as name from observations')).toEqual(['mood'])
@@ -342,8 +345,8 @@ describe('the upgrade path', () => {
       // empty database that also happens not to hold the marker.
       expect(restored.overrides.get(PERSON, overrideId)?.targetKey).toBe(targetKey)
       expect(restored.events.listFor(PERSON, '2026-01-01', '2026-12-31')).toHaveLength(1)
-      expect(countOf(restored.db, 'samples')).toBe(1694)
-      expect(countOf(restored.db, 'raw_payloads')).toBe(75)
+      expect(countOf(restored.db, 'samples')).toBe(1736)
+      expect(countOf(restored.db, 'raw_payloads')).toBe(117)
       closeRestored()
     } finally {
       for (const close of [...openHandles]) close()
