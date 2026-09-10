@@ -208,11 +208,15 @@ set up again. Sign in, paste the client ID and secret back in from your Google C
 which is where they still are - and then connect each person once, the way setup did the first
 time.
 
-Nothing is deleted along the way. Every sealed row is still exactly what wrote it, so if the
-original key turns up later you can stop the container and put it back over the one the instance
-generated, and every stored connection opens again without anybody consenting. You will be asked
-for the Google client once more if you have already re-entered it, since doing that sealed it under
-the new key.
+Nothing is deleted along the way, so the old key is worth keeping even after you have given up on
+it. Put it back - container stopped, over the key the instance generated - and every row that was
+sealed under it opens again.
+
+But only those rows, and that is the catch worth reading twice. Anything you re-entered or
+re-consented in the meantime was sealed under the *new* key, and restoring the old one takes it
+straight back off you: the Google client if you pasted it in again, and every person who
+reconnected. So putting the original key back is worth doing **before** you repair anything, and a
+poor trade afterwards - by then the repair is the thing that works, and the old key undoes it.
 
 Worth doing once, on a copy, before you need it: the procedure is four steps and the day you first
 run it should not be the day it matters.
