@@ -349,12 +349,12 @@ describe('the upgrade path', () => {
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 1736, daily: 636, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 1736, daily: 648, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 1736, dailyRows: 636, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 1736, dailyRows: 648, sessions: 19, observations: 14 })
 
       // Broken down per metric, so a regression that lost 300 steps samples while a mapper
       // started emitting 300 spurious weight rows - invisible to the bare total above, which
@@ -391,7 +391,15 @@ describe('the upgrade path', () => {
       expect(countsByKey(db, 'select metric as key, count(*) as n from daily group by metric'))
         .toEqual({
           daily_hrv: 2 * SEED_DAYS,
-          heart_rate: 10 * SEED_DAYS,
+          // +10 over the flat 10-per-day rate: Amsterdam's real offset ('3600s' across this
+          // whole span - see amsterdamOffset in seed.ts, and the span never crosses a DST
+          // boundary) shifts each day's last UTC hour one hour later in local time, so the
+          // seeded span's final local day picks up a 24th hour that belongs to the calendar
+          // date just past SEED_END. That extra local date gets one full day's worth of
+          // heart_rate daily rows the same as any other; the UTC-only '0s' payloads this file
+          // used to write could never produce it, because under a zero offset a local day and a
+          // UTC day are always the same day.
+          heart_rate: 10 * SEED_DAYS + 10,
           respiratory_rate: 2 * SEED_DAYS,
           resting_heart_rate: 2 * SEED_DAYS,
           sleep_asleep_minutes: 2 * SEED_DAYS,
@@ -405,7 +413,9 @@ describe('the upgrade path', () => {
           sleep_nap_minutes: 2 * SEED_DAYS,
           sleep_rem_minutes: 2 * SEED_DAYS,
           sleep_waketime_minutes: 2 * SEED_DAYS,
-          steps: 2 * SEED_DAYS,
+          // Same spillover as heart_rate above, one metric's worth: +2 for the same extra local
+          // date.
+          steps: 2 * SEED_DAYS + 2,
           weight: 4 * SEED_DAYS,
           workout_count: 10,
           workout_minutes: 10,
@@ -417,24 +427,44 @@ describe('the upgrade path', () => {
       // against, see the fix report - so these three pin actual magnitudes, chosen so a change in
       // a mapper, a unit or an aggregate moves at least one of them.
       const sourceSamples = readSamples(db, PERSON)
-      // A day's weight: one raw sample, the last day the seed writes.
+      // A day's weight: one raw sample, the last day the seed writes. The magnitude moved from a
+      // prior round's 69900 to 63258 not because the weight formula changed - it did not - but
+      // because the shared PRNG stream did: the short-night flag seed.ts now draws once per
+      // night and the workout step-spike it draws once per workout day both land earlier in the
+      // sequence than weightGrams's own draws, so every later draw, weight included, comes off a
+      // different mulberry32 output than before. The magnitude is read back from a real rebuild,
+      // not computed by hand.
       const lastDayStart = SEED_END - 1 * 86_400_000
       expect(sampleValue(sourceSamples, {
         sourceId, metric: 'weight', utcMs: lastDayStart + 7 * 3_600_000, agg: 'raw',
-      })).toBe(69_900)
+      })).toBe(63_258)
       // A known heart-rate hour's mean and its sample count: the same instant OVERRIDDEN_AT_MS
       // names, which is a real seeded reading (noon, seven days before the end) rather than a
       // second instant invented for this assertion alone. One reading a minute means mean, min
       // and max all equal the reading and count is 1; asserting mean and count is enough to catch
       // a downsample that started averaging across more than the one point it should have.
+      //
+      // 164, not the prior round's 76: day i=7 (seven days before SEED_END) is a scheduled
+      // workout day (i % 3 === 1 in seed.ts), and under the reordered PRNG stream this run's
+      // workout for that day lands on the 12:00 hour - the same hour OVERRIDDEN_AT_MS names. So
+      // this instant now falls inside the workout window and reads the elevated exercise heart
+      // rate (seed.ts's 128-168 range) rather than the ambient midday curve; 164 is well inside
+      // that range. This is exactly Finding 2's fix taking effect on the one instant this file
+      // happens to pin - the ambient formula alone could never reach past 85.
       expect(sampleValue(sourceSamples, {
         sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS, agg: 'mean',
-      })).toBe(76)
+      })).toBe(164)
       expect(sampleValue(sourceSamples, {
         sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS, agg: 'count',
       })).toBe(1)
       // One sleep night's asleep minutes, summed from its segments the same way deriveSleepDay
-      // does (ASLEEP_STAGES), for the same last night the weight reading above belongs to.
+      // does (ASLEEP_STAGES), for the same last night the weight reading above belongs to. This
+      // last night (2026-02-27 to -28) is not one of Finding 5's occasional short ones - its own
+      // interval runs a normal 420 minutes - so 401, not the prior round's 417, is the same PRNG
+      // cascade the weight figure above describes: the stage-share jitter stagesFor draws for
+      // every night sits downstream of the extra rand() calls this round added (the restless
+      // flag once a night, the workout step-spike once a workout day), so every night's shares
+      // land on different mulberry32 output even where the night itself is unremarkable.
       const lastNightId = (db.$client.prepare(
         "select id from sessions where person_id = ? and kind = 'sleep' order by end_ms desc limit 1",
       ).get(PERSON) as { id: string }).id
@@ -442,7 +472,7 @@ describe('the upgrade path', () => {
         `select coalesce(sum(end_ms - start_ms), 0) as ms from session_segments`
         + ` where session_id = ? and stage in (${ASLEEP_STAGES.map(() => '?').join(',')})`,
       ).get(lastNightId, ...ASLEEP_STAGES) as { ms: number }).ms
-      expect(Math.round(asleepMs / 60_000)).toBe(417)
+      expect(Math.round(asleepMs / 60_000)).toBe(401)
 
       // The stale rows written into the old database before the upgrade: gone, not merely
       // outnumbered. A rebuild that stopped clearing a person's tier 2 before replaying it would

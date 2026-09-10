@@ -48,10 +48,14 @@ const { PeopleStore } = await import('../packages/core/src/store/people.ts')
 
 const PERSON_ID = 'demo'
 
-// Midnight UTC today, exclusive - the same convention seedArchive's own endMs carries. The most
-// recently generated day is therefore yesterday, so the seed always looks current instead of
-// anchoring to a fixed date that recedes further from "now" every time somebody runs this.
-const endMs = Date.parse(new Date().toISOString().slice(0, 10))
+// Anchored, not "today". Spec section 3 requires a screenshot regenerated next month to show the
+// same chart, and the fixed PRNG below only guarantees that if the calendar window it draws over
+// is fixed too - weekday alignment (isSunday in seed.ts) moves against a fixed draw sequence
+// whenever the end date moves, so "always looks current" and "reproducible" cannot both hold.
+// This is the ruling: reproducible wins, since it is what the spec actually asked for. Midnight
+// UTC, exclusive, the same convention seedArchive's own endMs carries.
+const DEMO_END_DATE = '2026-09-07'
+const endMs = Date.parse(`${DEMO_END_DATE}T00:00:00Z`)
 
 const instance = openHaelan(dir)
 try {

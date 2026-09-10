@@ -6,20 +6,34 @@
 // draw a chart no real household could ever produce.
 //
 // Shaped, not modelled. Steps rise through the morning and fall after evening, and run lower on
-// Sundays. Heart rate troughs overnight and otherwise tracks the step curve. Sleep lands in a
-// plausible window with realistic stage proportions and drifts by tens of minutes a night.
-// Weight drifts rather than walks - one slow trend held for the whole span, not a meander that
-// could wander anywhere. Workouts land a few times a week, on a fixed schedule rather than a
-// coin flip, so the exercise type always shows up regardless of which seed a caller passes.
-// Recovery's three daily figures each get a different kind of noise instead of one formula
-// reused three times: resting heart rate drifts like weight, HRV swings around a fixed baseline
-// day to day, and respiratory rate barely moves at all - the same spread a real week of each
-// actually has, and the reason the Recovery page (and its Dashboard card) draws anything once
-// the app rebuilds from this. Moods is the one categorical type here, seeded so `observations`
-// is not empty once the app rebuilds; see the ruling in this unit's plan for why `moods` and not
-// one of the reproductive health types. None of this computes anything about the body it is
-// shaped after - no metabolic model, no calorie balance, nothing that would make a claim about
-// physiology it has no business making.
+// Sundays. Heart rate troughs overnight and otherwise tracks the step curve, except for the one
+// hour a workout lands: that hour's steps and heart rate both spike together, the way a moving
+// person's actually do, and the exercise session written for the day names the same window
+// rather than a second, disagreeing one. Overnight heart rate is drawn a few beats below the
+// day's own resting figure rather than from an unrelated absolute band, since "resting heart
+// rate" is by definition close to a night's lowest sustained reading, not routinely ten-plus
+// beats above it. Sleep lands in a plausible window with realistic stage proportions and drifts
+// by tens of minutes a night, except for the occasional short, restless one - a real span of
+// nights is not uniform, and a chart where every bar is the same height reads as generated
+// rather than lived. Weight drifts rather than walks - one slow trend held for the whole span,
+// not a meander that could wander anywhere. Workouts land a few times a week, on a fixed
+// schedule rather than a coin flip, so the exercise type always shows up regardless of which
+// seed a caller passes, and the type is always one the Google Health API actually emits: drawn
+// from the repository's own drift-checked `EXERCISE_TYPES`, not a private list that could invent
+// a value the API has never sent. Recovery's three daily figures each get a different kind of
+// noise instead of one formula reused three times: resting heart rate drifts like weight, HRV
+// swings around a fixed baseline day to day, and respiratory rate barely moves at all - the same
+// spread a real week of each actually has, and the reason the Recovery page (and its Dashboard
+// card) draws anything once the app rebuilds from this. Moods is the one categorical type here,
+// seeded so `observations` is not empty once the app rebuilds; see the ruling in this unit's plan
+// for why `moods` and not one of the reproductive health types. Every payload carries the offset
+// Europe/Amsterdam actually had in force at that instant - CET or CEST, never a flat UTC - since
+// this app's whole premise is local days and a demo that never disagreed with UTC would be
+// demonstrating the one case it does not need to get right. None of this computes anything about
+// the body it is shaped after - no metabolic model, no calorie balance, nothing that would make
+// a claim about physiology it has no business making. What it does do is agree with itself: a
+// workout raises both curves for its own hour, a resting figure sits near the night it is
+// resting from, and a bad night is actually short.
 //
 // Deterministic by construction: a mulberry32 PRNG seeded once, consumed in a fixed order, and
 // nothing here ever reaches for Math.random. The same seed produces the same bytes today and a
@@ -29,6 +43,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DataType } from '../api/catalogue.ts'
 import { dataTypeById } from '../api/catalogue.ts'
+import { EXERCISE_TYPES } from '../api/enums.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { SleepStage } from './payloads.ts'
 import { body, dailyPoint, intervalPoint, samplePoint, sleepPoint } from './payloads.ts'
@@ -88,11 +103,47 @@ function listRequestParams(t: DataType, startMs: number, endMs: number): Record<
   return { filter: `${member} >= "${fmt(startMs)}" AND ${member} < "${fmt(endMs)}"`, pageSize: 10_000, pageToken: null }
 }
 
+// The offset Europe/Amsterdam actually had in force at `ms`: '3600s' (CET) outside daylight
+// saving, '7200s' (CEST) inside it. The seeded person's timezone (seedPerson's own default) is
+// Europe/Amsterdam, so a payload claiming '0s' regardless of date was demonstrating the one case
+// this app's local-day arithmetic does not need - see startOfLocalDay's own comment for why a
+// day boundary is never a UTC boundary here. The Netherlands follows the EU-wide rule - clocks
+// move at 01:00 UTC on the last Sunday of March and October - so this is arithmetic rather than a
+// timezone database, and it changes across the boundary on its own whenever a span crosses one.
+function lastSundayUtcMs(year: number, monthIndex0: number): number {
+  const lastOfMonth = new Date(Date.UTC(year, monthIndex0 + 1, 0))
+  const sunday = lastOfMonth.getUTCDate() - lastOfMonth.getUTCDay()
+  return Date.UTC(year, monthIndex0, sunday, 1, 0, 0)
+}
+function amsterdamOffset(ms: number): string {
+  const year = new Date(ms).getUTCFullYear()
+  const dstStarts = lastSundayUtcMs(year, 2) // March
+  const dstEnds = lastSundayUtcMs(year, 9) // October
+  return ms >= dstStarts && ms < dstEnds ? '7200s' : '3600s'
+}
+
 // Rises from nothing at 6am to a midday peak and back to nothing by 10pm. Reused for the heart
 // rate curve below so the two stay visibly related without either being derived from the other.
 const stepCurve = (hour: number): number => Math.max(0, Math.sin(((hour - 6) / 16) * Math.PI))
 
-const EXERCISE_TYPES = ['RUNNING', 'CYCLING', 'WALKING', 'STRENGTH_TRAINING', 'SWIMMING'] as const
+// A curated slice of the API's 182 real exercise types (packages/core/src/api/enums.ts,
+// drift-checked against the live discovery document), not a private list of this file's own -
+// that private list is what let `CYCLING`, a value the API has never sent, sit here unnoticed
+// under a name that shadowed the checked constant. Every value below also has a real translation
+// in apps/web's SEEDED_EXERCISE_TYPES, so a session this generator writes always has something to
+// call itself on the Dutch screenshots the next unit takes rather than falling back to raw
+// English. Checked against EXERCISE_TYPES here, at generation time, rather than copied outright:
+// a value the API retires stops this file with a thrown error the next time anything seeds,
+// instead of quietly seeding a string nothing can ever map again - requireType above does the
+// same thing for a data type id, for the same reason.
+const SEED_EXERCISE_TYPES = (['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL'] as const)
+  .map((type) => {
+    if (!EXERCISE_TYPES.includes(type)) {
+      throw new Error(`seedArchive: '${type}' is no longer an exercise type this catalogue knows about`)
+    }
+    return type
+  })
+
 const MOOD_LABELS = ['CALM', 'CONTENT', 'ENERGETIC', 'TIRED', 'STRESSED', 'HAPPY', 'ANXIOUS'] as const
 
 // One night's sleep stage timeline, tiled to fill the interval exactly. The pattern is a
@@ -107,8 +158,15 @@ const STAGE_PATTERN: ReadonlyArray<{ stage: string, share: number }> = [
   { stage: 'LIGHT', share: 0.15 },
 ]
 
-function stagesFor(rand: () => number, startMs: number, endMs: number): SleepStage[] {
-  const shares = STAGE_PATTERN.map((s) => s.share * range(rand, 0.8, 1.2))
+function stagesFor(rand: () => number, startMs: number, endMs: number, restless: boolean): SleepStage[] {
+  const shares = STAGE_PATTERN.map((s) => {
+    // A restless night widens only the AWAKE slice's own jitter, so a bad night reads as more
+    // time lying awake inside the usual shape rather than a different pattern altogether. Every
+    // stage still draws exactly one range() call regardless, so this never changes how many
+    // draws a night costs - only what the draw for AWAKE is allowed to reach.
+    const jitterMax = restless && s.stage === 'AWAKE' ? 3.2 : 1.2
+    return s.share * range(rand, 0.8, jitterMax)
+  })
   const total = shares.reduce((a, b) => a + b, 0)
   const stages: SleepStage[] = []
   let cursor = startMs
@@ -206,9 +264,16 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const nights = Array.from({ length: input.days }, (_, i) => {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
     const wakeOffsetMs = range(rand, 6 * HOUR_MS, 8 * HOUR_MS)
-    const durationMs = range(rand, 6.5 * HOUR_MS, 8.5 * HOUR_MS) // tens of minutes of night-to-night variation
+    // Roughly one night in seven runs short and restless instead of the usual span - spec's "the
+    // occasional short night". Decided once per night, here, so the shorter duration below and
+    // stagesFor's wider AWAKE share (further down) both read the same event rather than two dice
+    // that could disagree about which night was the bad one.
+    const restless = rand() < 0.15
+    const durationMs = restless
+      ? range(rand, 4 * HOUR_MS, 5.5 * HOUR_MS)
+      : range(rand, 6.5 * HOUR_MS, 8.5 * HOUR_MS) // tens of minutes of night-to-night variation
     const endMs = dayStart + wakeOffsetMs
-    return { startMs: endMs - durationMs, endMs }
+    return { startMs: endMs - durationMs, endMs, restless }
   })
 
   // One slow trend for the whole span, decided once - "drifts" as opposed to a day-by-day walk
@@ -232,14 +297,36 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const dayEnd = dayStart + DAY_MS
     const isSunday = new Date(dayStart).getUTCDay() === 0
 
+    // A few times a week, on a fixed schedule rather than a coin flip: the type has to show up
+    // in any span this generator is asked for, not merely on average across many seeds. Decided
+    // before the step and heart-rate curves below, which is new: they need to know the workout's
+    // hour to show it happening rather than run beside it unaware, the same way a real watch's
+    // step count and pulse both move for the minutes someone is actually exercising.
+    const workout = i % 3 === 1 ? (() => {
+      const hour = pick(rand, [7, 12, 18])
+      const startMs = dayStart + hour * HOUR_MS
+      const endMs = startMs + range(rand, 25, 55) * 60_000
+      return { hour, startMs, endMs, exerciseType: pick(rand, SEED_EXERCISE_TYPES) }
+    })() : null
+
+    // Moved ahead of the heart-rate curve below, which reads this same trend for its overnight
+    // baseline: resting heart rate is by definition close to a night's lowest sustained reading,
+    // so the two have to be computed from the same number rather than two independent draws that
+    // could land anywhere relative to each other.
+    restingHrBpm += restingHrTrendPerDay + range(rand, -0.6, 0.6)
+
     const stepsPoints = Array.from({ length: 24 }, (_, h) => {
       const hourStart = dayStart + h * HOUR_MS
       const intensity = stepCurve(h) * (isSunday ? 0.6 : 1) * range(rand, 0.85, 1.15)
+      // The workout's own hour gets the steps its minutes actually took, laid on top of the
+      // ambient curve, instead of a session the step chart shows no sign of at all.
+      const workoutMinutes = workout && workout.hour === h ? (workout.endMs - workout.startMs) / 60_000 : 0
+      const workoutSteps = workoutMinutes > 0 ? Math.round(workoutMinutes * range(rand, 120, 160)) : 0
       return intervalPoint({
-        payloadKey: STEPS.payloadKey, valuePath: STEPS.valuePath, value: Math.round(700 * intensity),
+        payloadKey: STEPS.payloadKey, valuePath: STEPS.valuePath, value: Math.round(700 * intensity) + workoutSteps,
         physicalTime: new Date(hourStart).toISOString(),
         endTime: new Date(hourStart + HOUR_MS).toISOString(),
-        utcOffset: '0s',
+        utcOffset: amsterdamOffset(hourStart),
       })
     })
     put(STEPS, dayStart, dayEnd, stepsPoints)
@@ -247,10 +334,19 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     const hrPoints = Array.from({ length: 24 }, (_, h) => {
       const atMs = dayStart + h * HOUR_MS
       const overnight = h < 6 || h >= 23
-      const bpm = overnight ? range(rand, 50, 58) : 60 + stepCurve(h) * range(rand, 15, 25)
+      const bpm = workout && workout.hour === h
+        // A moving workout, not a stroll: a run or a lift raises the pulse well past the
+        // ambient daytime peak, which is what makes "84 bpm on a 51-minute run" a contradiction
+        // in the first place.
+        ? range(rand, 128, 168)
+        : overnight
+          // A few beats below the day's own resting figure rather than an unrelated absolute
+          // band - see the comment above restingHrBpm's update for why the two must agree.
+          ? range(rand, restingHrBpm - 6, restingHrBpm - 1)
+          : 60 + stepCurve(h) * range(rand, 15, 25)
       return samplePoint({
         payloadKey: HEART_RATE.payloadKey, valuePath: HEART_RATE.valuePath, value: String(Math.round(bpm)),
-        physicalTime: new Date(atMs).toISOString(), utcOffset: '0s',
+        physicalTime: new Date(atMs).toISOString(), utcOffset: amsterdamOffset(atMs),
       })
     })
     put(HEART_RATE, dayStart, dayEnd, hrPoints)
@@ -258,14 +354,15 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     weightGrams += weightTrendPerDay + range(rand, -80, 80)
     put(WEIGHT, dayStart, dayEnd, [samplePoint({
       payloadKey: WEIGHT.payloadKey, valuePath: WEIGHT.valuePath, value: String(Math.round(weightGrams)),
-      physicalTime: new Date(dayStart + 7 * HOUR_MS).toISOString(), utcOffset: '0s',
+      physicalTime: new Date(dayStart + 7 * HOUR_MS).toISOString(), utcOffset: amsterdamOffset(dayStart + 7 * HOUR_MS),
     })])
 
     const civilDate = civilDateOf(dayStart)
 
-    restingHrBpm += restingHrTrendPerDay + range(rand, -0.6, 0.6)
-    // A bad night nudges that one day's reading up without moving the underlying trend - the
-    // point of "the odd bad night" is that it does not carry into tomorrow the way the drift does.
+    // A bad day nudges that one day's reading up without moving the underlying trend - the
+    // point of "the odd bad day" is that it does not carry into tomorrow the way the drift does.
+    // Distinct from a night's own restless flag above: this is a day resting heart rate reads
+    // high (illness, stress, a hard effort the day before), not a short night specifically.
     const restingHrToday = restingHrBpm + (rand() < 0.12 ? range(rand, 4, 10) : 0)
     put(DAILY_RESTING_HR, dayStart, dayEnd, [dailyPoint({
       payloadKey: DAILY_RESTING_HR.payloadKey, valuePath: DAILY_RESTING_HR.valuePath,
@@ -289,26 +386,22 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       name: `users/me/dataTypes/sleep/dataPoints/seed-${i}`,
       startTime: new Date(night.startMs).toISOString(),
       endTime: new Date(night.endMs).toISOString(),
-      utcOffset: '0s',
-      stages: stagesFor(rand, night.startMs, night.endMs),
+      utcOffset: amsterdamOffset(night.startMs),
+      stages: stagesFor(rand, night.startMs, night.endMs, night.restless),
     })])
 
-    // A few times a week, on a fixed schedule rather than a coin flip: the type has to show up
-    // in any span this generator is asked for, not merely on average across many seeds.
-    if (i % 3 === 1) {
-      const startMs = dayStart + pick(rand, [7, 12, 18]) * HOUR_MS
-      const endMs = startMs + range(rand, 25, 55) * 60_000
+    if (workout) {
       put(EXERCISE, dayStart, dayEnd, [exercisePoint({
         name: `users/me/dataTypes/exercise/dataPoints/seed-${i}`,
-        startTime: new Date(startMs).toISOString(),
-        endTime: new Date(endMs).toISOString(),
-        utcOffset: '0s',
-        exerciseType: pick(rand, EXERCISE_TYPES),
+        startTime: new Date(workout.startMs).toISOString(),
+        endTime: new Date(workout.endMs).toISOString(),
+        utcOffset: amsterdamOffset(workout.startMs),
+        exerciseType: workout.exerciseType,
       })])
     }
 
     put(MOODS, dayStart, dayEnd, [moodPoint({
-      atMs: dayStart + 20 * HOUR_MS, utcOffset: '0s', moods: [pick(rand, MOOD_LABELS)],
+      atMs: dayStart + 20 * HOUR_MS, utcOffset: amsterdamOffset(dayStart + 20 * HOUR_MS), moods: [pick(rand, MOOD_LABELS)],
     })])
   }
 
