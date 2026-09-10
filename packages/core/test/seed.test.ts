@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { seedArchive } from '../src/testing/seed.ts'
-import { rawPayloads, samples, daily, sessions } from '../src/db/schema/index.ts'
+import {
+  rawPayloads, samples, daily, sessions, sessionSegments, observations,
+} from '../src/db/schema/index.ts'
 
 const END = Date.parse('2026-03-01T00:00:00Z')
 
@@ -16,9 +18,15 @@ describe('seedArchive', () => {
       expect(test.db.select().from(rawPayloads).all().length).toBeGreaterThan(0)
       // The whole premise: everything a chart shows is derived by the app from these bodies. A
       // seed that wrote a derived row could draw a chart no real instance could ever produce.
+      // All five of the unit's derived tables, not the three the assertion here used to name:
+      // observations and session_segments are as much a rebuild's output as samples, daily and
+      // sessions are, and a seed that inserted a mood or a sleep stage directly would be exactly
+      // the same defect this test exists to catch.
       expect(test.db.select().from(samples).all()).toEqual([])
       expect(test.db.select().from(daily).all()).toEqual([])
       expect(test.db.select().from(sessions).all()).toEqual([])
+      expect(test.db.select().from(sessionSegments).all()).toEqual([])
+      expect(test.db.select().from(observations).all()).toEqual([])
     } finally { test.cleanup() }
   })
 

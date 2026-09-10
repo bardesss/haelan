@@ -24,11 +24,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
-  DATABASE_FILENAME, DeriveQueue, EventStore, NoteStore, OverrideStore, PeopleStore, RawArchive,
-  SourceRegistry, closeDatabase, listBackups, openDatabase, openHaelan, runBackup, runRebuild,
-  seedArchive, seedPerson, vacuumIfBloated,
+  ASLEEP_STAGES, DATABASE_FILENAME, DeriveQueue, EventStore, NoteStore, OverrideStore,
+  PeopleStore, RawArchive, SourceRegistry, closeDatabase, listBackups, openDatabase, openHaelan,
+  readSamples, runBackup, runRebuild, seedArchive, seedPerson, vacuumIfBloated,
 } from '@haelan/core'
-import type { Database } from '@haelan/core'
+import type { Database, SampleText } from '@haelan/core'
 import { sampleTarget } from '@haelan/core/target-key'
 
 const PERSON = 'p1'
@@ -64,6 +64,23 @@ const TIER_1 = ['people', 'sources', 'raw_payloads', 'overrides', 'notes', 'even
 // list above has to come through both the migration and the rebuild untouched.
 const UNTOUCHED_BY_A_REBUILD = ['raw_payloads', 'overrides', 'notes', 'events'] as const
 
+// A name the household member typed on the heart-rate source before the upgrade. Tier-1 by any
+// definition - nobody can regenerate a name somebody typed - even though no table in TIER_1
+// holds it: aliases and rankings live beside sources, not inside the list above, and
+// runRebuild's own dropUnreferencedSources deletes both for a source it decides went stale.
+// Named on SEED_HEART_RATE_SOURCE's source specifically because that source stays referenced by
+// real samples after step 3, so a rebuild that dropped it anyway - the false positive this
+// guards against - is the thing this constant exists to catch.
+const SOURCE_ALIAS = 'The good watch'
+
+// A row in each of `daily`, `sessions` and `observations` from before the upgrade, so "the
+// rebuild replaced what was there" in step 3 is tested against something rather than an empty
+// table. The local date is outside any year the seed or the fixture ever writes, so its
+// continued presence after step 3 could not be mistaken for a row the rebuild produced.
+const STALE_LOCAL_DATE = '1999-12-31'
+const STALE_SESSION_ID = 'stale-pre-upgrade-session'
+const STALE_OBSERVATION_ID = 'stale-pre-upgrade-observation'
+
 type Rows = Record<string, unknown[]>
 
 const rowsOf = (db: Database, tables: readonly string[]): Rows => Object.fromEntries(
@@ -73,10 +90,32 @@ const rowsOf = (db: Database, tables: readonly string[]): Rows => Object.fromEnt
 const countOf = (db: Database, table: string): number =>
   (db.$client.prepare(`select count(*) as n from ${table}`).get() as { n: number }).n
 
+const countWhere = (db: Database, table: string, where: string, ...params: unknown[]): number =>
+  (db.$client.prepare(`select count(*) as n from ${table} where ${where}`).get(...params) as { n: number }).n
+
 // Sorted, so an assertion is about which values are present and never about however sqlite
 // happened to return them.
 const namesOf = (db: Database, query: string): string[] =>
   (db.$client.prepare(query).all() as { name: string }[]).map((r) => r.name).sort()
+
+// A grouped count, for the samples-per-metric and daily-rows-per-metric breakdowns below: a
+// total moving is a question, and a total that moved because one metric grew while another
+// shrank by the same amount would leave the question unanswerable from the total alone.
+const countsByKey = (db: Database, query: string): Record<string, number> => Object.fromEntries(
+  (db.$client.prepare(query).all() as { key: string, n: number }[]).map((r) => [r.key, r.n]),
+)
+
+// One sample's value, read back through the same text-keyed shape the mapper produced it in
+// (readSamples, via SampleKeys) rather than a raw join against the ref columns this file would
+// otherwise have to reimplement by hand.
+const sampleValue = (rows: readonly SampleText[], input: {
+  sourceId: string, metric: string, utcMs: number, agg: SampleText['agg'],
+}): number | null => {
+  const row = rows.find((r) => r.sourceId === input.sourceId && r.metric === input.metric
+    && r.utcMs === input.utcMs && r.agg === input.agg)
+  if (!row) throw new Error(`no ${input.metric}/${input.agg} sample at ${input.utcMs}`)
+  return row.value
+}
 
 /**
  * A database at migration `throughTag`, built by replaying the repository's own migration files.
@@ -197,13 +236,35 @@ describe('the upgrade path', () => {
       }
       expect(countOf(old, 'samples')).toBe(3)
 
+      // One row in each of daily, sessions and observations from before the upgrade - written
+      // straight into the old, text-keyed schema the same way oldSamples above is, since these
+      // three tables are untouched between LAST_OLD_TAG and head. "The rebuild replaced what was
+      // there" in step 3 means nothing against a table that started empty; this gives it
+      // something to replace. STALE_LOCAL_DATE is outside any year this file writes, so the row
+      // surviving the rebuild could not be mistaken for one the seed produced.
+      old.$client.prepare(
+        'insert into daily (person_id, local_date, metric, agg, source, value, coverage,'
+        + ' source_mix, derivation_version, updated_at_ms) values (?, ?, ?, ?, ?, ?, ?, null, 0, ?)',
+      ).run(PERSON, STALE_LOCAL_DATE, 'weight', 'raw', sourceId, 999_999, 1, NOW)
+      old.$client.prepare(
+        'insert into sessions (id, person_id, source_id, kind, external_id, start_ms,'
+        + ' start_offset_minutes, end_ms, end_offset_minutes, local_date, attrs, raw_payload_id)'
+        + ' values (?, ?, ?, ?, ?, 0, 0, ?, 0, ?, ?, null)',
+      ).run(STALE_SESSION_ID, PERSON, sourceId, 'sleep', STALE_SESSION_ID, 3_600_000, STALE_LOCAL_DATE, '{}')
+      old.$client.prepare(
+        'insert into observations (id, person_id, source_id, kind, started_at_ms,'
+        + ' started_at_offset_minutes, ended_at_ms, ended_at_offset_minutes, local_date, value,'
+        + ' raw_payload_id) values (?, ?, ?, ?, 0, 0, null, null, ?, ?, null)',
+      ).run(STALE_OBSERVATION_ID, PERSON, sourceId, 'mood', STALE_LOCAL_DATE, 'STALE')
+
       // The three rows a rebuild cannot put back. Written through their own stores, because a
       // real instance has no other door onto them, and an override in particular is validated and
       // queued on the way in.
       const targetKey = sampleTarget({
         source: sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS,
       })
-      const overrideId = new OverrideStore(old, new DeriveQueue(old)).put({
+      const deriveQueue = new DeriveQueue(old)
+      const overrideId = new OverrideStore(old, deriveQueue).put({
         personId: PERSON, scope: 'sample', targetKey, action: 'exclude',
         reason: 'the strap was loose', nowMs: NOW,
       })
@@ -214,6 +275,25 @@ describe('the upgrade path', () => {
         personId: PERSON, kind: 'illness', startedAtMs: OVERRIDDEN_AT_MS,
         startedAtOffsetMinutes: 0, note: 'a cold',
       })
+
+      // A name and a ranking the household typed onto the heart-rate source before the upgrade.
+      // Neither lives in a TIER_1 table, and both are exactly as unrecoverable as the rows that
+      // do: nobody can regenerate a name somebody typed, and runRebuild's own
+      // dropUnreferencedSources deletes both for a source it decides went stale. This source
+      // stays referenced by real samples after step 3, so it must not be one of them.
+      //
+      // Written straight into the old schema's tables rather than through SourcePriorityStore or
+      // SourceAliasStore: both stores are built against the current, integer-keyed `samples`
+      // table (SourcePriorityStore.put reads it to mark days dirty), which does not exist yet on
+      // this side of the migration. `source_priority` and `source_aliases` themselves are
+      // untouched between LAST_OLD_TAG and head, the same as daily, sessions and observations
+      // above, so a raw insert is what oldSamples already does for exactly this reason.
+      old.$client.prepare(
+        'insert into source_priority (person_id, metric, source_id, rank) values (?, ?, ?, 0)',
+      ).run(PERSON, 'heart_rate', sourceId)
+      old.$client.prepare(
+        'insert into source_aliases (person_id, source_id, alias, updated_at_ms) values (?, ?, ?, ?)',
+      ).run(PERSON, sourceId, SOURCE_ALIAS, NOW)
 
       const tier1Before = rowsOf(old, TIER_1)
       closeOld()
@@ -260,8 +340,10 @@ describe('the upgrade path', () => {
       // old database, because the old database could not hold them: `samples` there is the
       // text-keyed table 0016 replaces, and nothing in this repository can derive `daily`,
       // `sessions` or `observations` against that shape. The seed is deterministic, so these are
-      // a measurement of the composition, and they move only when a mapping or the derivation
-      // does.
+      // a measurement of the composition - but that composition is the seed's as much as the
+      // mapper's, and both moved these figures on this branch already. A number below failing is
+      // therefore a question, not an instruction: check what changed in seed.ts before assuming
+      // the regression is in the derivation.
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),
@@ -273,6 +355,115 @@ describe('the upgrade path', () => {
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
       }).toEqual({ samples: 1736, dailyRows: 636, sessions: 19, observations: 14 })
+
+      // Broken down per metric, so a regression that lost 300 steps samples while a mapper
+      // started emitting 300 spurious weight rows - invisible to the bare total above, which
+      // would still read 1736 - names what moved. Four of the six are one raw sample a day, exact
+      // against SEED_DAYS; heart_rate is downsampled to the minute, so its one reading an hour
+      // becomes four rows (mean, min, max, count), and steps has no downsampling but reports
+      // every one of its twenty-four hourly points.
+      expect(countsByKey(db, 'select m.name as key, count(*) as n from samples s'
+        + ' join metrics m on m.ref = s.metric_ref group by m.name')).toEqual({
+        steps: 24 * SEED_DAYS,
+        heart_rate: 4 * 24 * SEED_DAYS,
+        weight: SEED_DAYS,
+        daily_hrv: SEED_DAYS,
+        respiratory_rate: SEED_DAYS,
+        resting_heart_rate: SEED_DAYS,
+      })
+      // Sleep is one session a night, exact against SEED_DAYS. Exercise is not: seed.ts schedules
+      // a workout every third day (`i % 3 === 1`) rather than every day, which over fourteen days
+      // lands on five of them (days 1, 4, 7, 10 and 13) - a fixed count for this span rather than
+      // a fraction of SEED_DAYS, because the schedule is a modulus and not a rate.
+      expect(countsByKey(db, 'select kind as key, count(*) as n from sessions group by kind'))
+        .toEqual({ sleep: SEED_DAYS, exercise: 5 })
+      // Moods is the one categorical type this seed writes: one point a day, one kind.
+      expect(countsByKey(db, 'select kind as key, count(*) as n from observations group by kind'))
+        .toEqual({ mood: SEED_DAYS })
+      // `daily` carries more metrics than `samples` does: deriveSleepDay expands one sleep
+      // session into a dozen figures (time asleep, time in each stage, efficiency, nap count...),
+      // and deriveDay writes a per-source row and, on top of it, a merged row for every metric -
+      // one row each for most, and more where a metric also carries more than one aggregate
+      // (heart_rate: five aggregates; weight: two). There is no comparably exact formula for the
+      // total the way there is for samples above, which is why this is measured rather than
+      // derived; writing it out per metric rather than trusting the bare total guards against the
+      // same regression the samples breakdown above does.
+      expect(countsByKey(db, 'select metric as key, count(*) as n from daily group by metric'))
+        .toEqual({
+          daily_hrv: 2 * SEED_DAYS,
+          heart_rate: 10 * SEED_DAYS,
+          respiratory_rate: 2 * SEED_DAYS,
+          resting_heart_rate: 2 * SEED_DAYS,
+          sleep_asleep_minutes: 2 * SEED_DAYS,
+          sleep_awake_minutes: 2 * SEED_DAYS,
+          sleep_bedtime_minutes: 2 * SEED_DAYS,
+          sleep_deep_minutes: 2 * SEED_DAYS,
+          sleep_efficiency: 2 * SEED_DAYS,
+          sleep_in_bed_minutes: 2 * SEED_DAYS,
+          sleep_light_minutes: 2 * SEED_DAYS,
+          sleep_nap_count: 2 * SEED_DAYS,
+          sleep_nap_minutes: 2 * SEED_DAYS,
+          sleep_rem_minutes: 2 * SEED_DAYS,
+          sleep_waketime_minutes: 2 * SEED_DAYS,
+          steps: 2 * SEED_DAYS,
+          weight: 4 * SEED_DAYS,
+          workout_count: 10,
+          workout_minutes: 10,
+        })
+
+      // The single worst thing a rebuild can do: produce exactly the right number of rows with
+      // the wrong numbers in them. Every assertion above this line would stay green if
+      // mapSamples doubled every value on the way in - a real mutation this file has been run
+      // against, see the fix report - so these three pin actual magnitudes, chosen so a change in
+      // a mapper, a unit or an aggregate moves at least one of them.
+      const sourceSamples = readSamples(db, PERSON)
+      // A day's weight: one raw sample, the last day the seed writes.
+      const lastDayStart = SEED_END - 1 * 86_400_000
+      expect(sampleValue(sourceSamples, {
+        sourceId, metric: 'weight', utcMs: lastDayStart + 7 * 3_600_000, agg: 'raw',
+      })).toBe(69_900)
+      // A known heart-rate hour's mean and its sample count: the same instant OVERRIDDEN_AT_MS
+      // names, which is a real seeded reading (noon, seven days before the end) rather than a
+      // second instant invented for this assertion alone. One reading a minute means mean, min
+      // and max all equal the reading and count is 1; asserting mean and count is enough to catch
+      // a downsample that started averaging across more than the one point it should have.
+      expect(sampleValue(sourceSamples, {
+        sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS, agg: 'mean',
+      })).toBe(76)
+      expect(sampleValue(sourceSamples, {
+        sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS, agg: 'count',
+      })).toBe(1)
+      // One sleep night's asleep minutes, summed from its segments the same way deriveSleepDay
+      // does (ASLEEP_STAGES), for the same last night the weight reading above belongs to.
+      const lastNightId = (db.$client.prepare(
+        "select id from sessions where person_id = ? and kind = 'sleep' order by end_ms desc limit 1",
+      ).get(PERSON) as { id: string }).id
+      const asleepMs = (db.$client.prepare(
+        `select coalesce(sum(end_ms - start_ms), 0) as ms from session_segments`
+        + ` where session_id = ? and stage in (${ASLEEP_STAGES.map(() => '?').join(',')})`,
+      ).get(lastNightId, ...ASLEEP_STAGES) as { ms: number }).ms
+      expect(Math.round(asleepMs / 60_000)).toBe(417)
+
+      // The stale rows written into the old database before the upgrade: gone, not merely
+      // outnumbered. A rebuild that stopped clearing a person's tier 2 before replaying it would
+      // leave these sitting beside the real ones, and every assertion above this block would
+      // still pass - counts, names and now magnitudes all come from the *new* rows, and none of
+      // them looks at whether an old one is still there.
+      expect(countWhere(db, 'daily', 'local_date = ?', STALE_LOCAL_DATE)).toBe(0)
+      expect(countWhere(db, 'sessions', 'id = ?', STALE_SESSION_ID)).toBe(0)
+      expect(countWhere(db, 'observations', 'id = ?', STALE_OBSERVATION_ID)).toBe(0)
+
+      // The name and the ranking the household typed before the upgrade, on a source the rebuild
+      // has every reason to keep: real samples reference it after step 3, so dropUnreferencedSources
+      // must not have called it stale. Both counts on the report say so independently of the rows
+      // themselves - a rebuild could in principle restore the rows here and still have reported a
+      // false removal, which is what an operator's log actually shows them.
+      expect(rebuilt.rankingsRemoved).toBe(0)
+      expect(rebuilt.aliasesRemoved).toBe(0)
+      expect(instance.sourcePriority.lists(PERSON))
+        .toContainEqual({ metric: 'heart_rate', sourceIds: [sourceId] })
+      expect(instance.sourceAliases.listNamed(PERSON).find((s) => s.id === sourceId)?.alias)
+        .toBe(SOURCE_ALIAS)
 
       // Counts alone would let a rebuild that dropped one data type and over-produced another
       // pass, so name what came back. Every seeded type is here: steps, heart rate, weight and
