@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type { SyncProgress } from '@haelan/core'
+import { errorBody } from '../api/envelope.ts'
 
 const KEEPALIVE_MS = 15_000
 
@@ -17,7 +18,7 @@ function personIdFor(app: FastifyInstance, request: FastifyRequest, reply: Fasti
   const accountId = request.accountId
   const account = accountId ? app.haelan.stores.accounts.getById(accountId) : null
   if (!account) {
-    void reply.code(401).send({ error: 'no_session' })
+    void reply.code(401).send(errorBody('unauthorized', 'no_session', 'sign in required'))
     return null
   }
   return account.personId
@@ -49,9 +50,16 @@ export function registerSync(app: FastifyInstance): void {
     // now. It takes the mutex synchronously and leaves the run going, so the refusal is a real
     // answer rather than a race, and the stream and the status route carry the rest.
     const outcome = app.haelan.runner.tryStart('manual')
-    return outcome.started
-      ? reply.code(202).send({ started: true })
-      : reply.code(409).send({ error: outcome.reason })
+    if (outcome.started) return reply.code(202).send({ started: true })
+    // No kind in ErrorKind means "a sync is already running" specifically - 'setup_incomplete' is
+    // the only one this app ever pairs with 409, and the web client's own status map already
+    // treats every 409 as that family (apps/web/src/api/client.ts). The code carries which
+    // refusal this one actually was.
+    return reply.code(409).send(errorBody(
+      'setup_incomplete',
+      outcome.reason ?? 'busy',
+      outcome.reason === 'shutting_down' ? 'the instance is shutting down' : 'a sync is already running',
+    ))
   })
 
   app.get('/api/sync/events', { preHandler: [app.requireSession] }, async (request, reply) => {

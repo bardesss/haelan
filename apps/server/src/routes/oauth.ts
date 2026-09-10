@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { buildConsentUrl, exchangeAuthorizationCode, probeAccess, setupStep } from '@haelan/core'
 import { redirectUriFor } from '../oauth/redirectUri.ts'
 import { signState, verifyState } from '../oauth/state.ts'
+import { errorBody } from '../api/envelope.ts'
 
 interface ClientBody { clientId?: unknown, clientSecret?: unknown }
 
@@ -15,12 +16,12 @@ export function registerOauth(app: FastifyInstance): void {
     const { clientId, clientSecret } = request.body ?? {}
     if (typeof clientId !== 'string' || typeof clientSecret !== 'string'
       || clientId.trim() === '' || clientSecret.trim() === '') {
-      return reply.code(400).send({ error: 'clientId and clientSecret are required' })
+      return reply.code(400).send(errorBody('config', 'config', 'clientId and clientSecret are required'))
     }
     if (!clientId.trim().endsWith('.apps.googleusercontent.com')) {
       // A cheap check that catches the commonest paste error while the owner is still in the
       // console. It is not validation: only the exchange can validate.
-      return reply.code(400).send({ error: 'that does not look like a client ID. It ends in .apps.googleusercontent.com' })
+      return reply.code(400).send(errorBody('config', 'config', 'that does not look like a client ID. It ends in .apps.googleusercontent.com'))
     }
     stores().credentials.putClient({
       clientId: clientId.trim(), clientSecret: clientSecret.trim(), nowMs: app.haelan.now(),
@@ -34,7 +35,10 @@ export function registerOauth(app: FastifyInstance): void {
     const account = request.accountId ? stores().accounts.getById(request.accountId) : null
     const client = readableClient()
     const settings = stores().settings.get()
-    if (!account || !client || !settings) return reply.code(409).send({ error: 'wrong_step', step: currentStep() })
+    if (!account || !client || !settings) {
+      const step = currentStep()
+      return reply.code(409).send({ ...errorBody('setup_incomplete', 'wrong_step', `setup is at the ${step} step`), step })
+    }
 
     const state = signState(app.haelan.instance.key, {
       personId: account.personId, issuedAtMs: app.haelan.now(),

@@ -59,13 +59,16 @@ export function registerAuth(app: FastifyInstance): void {
   app.post<{ Body: { username?: unknown, password?: unknown } }>('/api/auth/login', async (request, reply) => {
     const { username, password } = request.body ?? {}
     if (typeof username !== 'string' || typeof password !== 'string') {
-      return reply.code(400).send({ error: 'username and password are required' })
+      return reply.code(400).send(errorBody('config', 'config', 'username and password are required'))
     }
     const result = await app.haelan.stores.accounts.login({ username, password, nowMs: app.haelan.now() })
     if (!result.ok) {
+      // 423 is not in STATUS_BY_KIND - there is no kind for "locked", only a status. The kind
+      // stays 'unauthorized' because that is the family this refusal belongs to; the code says
+      // which member of it.
       return result.reason === 'locked'
-        ? reply.code(423).send({ error: 'locked' })
-        : reply.code(401).send({ error: 'invalid_credentials' })
+        ? reply.code(423).send(errorBody('unauthorized', 'locked', 'this account is locked'))
+        : reply.code(401).send(errorBody('unauthorized', 'invalid_credentials', 'invalid username or password'))
     }
     setSessionCookie(request, reply, app.haelan.stores.sessions.create(result.account.id, app.haelan.now()))
     return reply.send({ personId: result.account.personId, username: result.account.username })
@@ -80,7 +83,7 @@ export function registerAuth(app: FastifyInstance): void {
 
   app.get('/api/auth/me', { preHandler: [app.requireSession] }, async (request, reply) => {
     const account = request.accountId ? app.haelan.stores.accounts.getById(request.accountId) : null
-    if (!account) return reply.code(401).send({ error: 'no_session' })
+    if (!account) return reply.code(401).send(errorBody('unauthorized', 'no_session', 'sign in required'))
     const person = app.haelan.stores.people.get(account.personId)
     return reply.send({
       personId: account.personId,

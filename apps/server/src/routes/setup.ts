@@ -4,6 +4,7 @@ import { setupStep, CONSENT_PATHS, SCOPES } from '@haelan/core'
 import type { ConsentPath } from '@haelan/core'
 import { setSessionCookie } from '../auth/cookie.ts'
 import { candidateFor, loopbackCandidates, redirectUriFor } from '../oauth/redirectUri.ts'
+import { errorBody } from '../api/envelope.ts'
 
 interface AccountBody { username?: unknown, password?: unknown, displayName?: unknown, timezone?: unknown }
 interface InstanceUrlBody { baseUrl?: unknown, consentPath?: unknown }
@@ -18,14 +19,14 @@ export function registerSetup(app: FastifyInstance): void {
   // presents. Leaving the rest open let an unauthenticated caller set the base URL that consent
   // is then required to match.
   app.post<{ Body: AccountBody }>('/api/setup/account', async (request, reply) => {
-    if (step() !== 'account') return reply.code(409).send({ error: 'account_exists' })
+    if (step() !== 'account') return reply.code(409).send(errorBody('setup_incomplete', 'account_exists', 'an account already exists'))
     const { username, password, displayName, timezone } = request.body ?? {}
     if (typeof username !== 'string' || typeof password !== 'string'
       || typeof displayName !== 'string' || typeof timezone !== 'string') {
-      return reply.code(400).send({ error: 'username, password, displayName and timezone are required' })
+      return reply.code(400).send(errorBody('config', 'config', 'username, password, displayName and timezone are required'))
     }
-    if (password.length < 8) return reply.code(400).send({ error: 'password must be at least 8 characters' })
-    if (!isKnownTimezone(timezone)) return reply.code(400).send({ error: `unknown timezone ${timezone}` })
+    if (password.length < 8) return reply.code(400).send(errorBody('config', 'config', 'password must be at least 8 characters'))
+    if (!isKnownTimezone(timezone)) return reply.code(400).send(errorBody('config', 'config', `unknown timezone ${timezone}`))
 
     const personId = randomUUID()
     const nowMs = app.haelan.now()
@@ -41,20 +42,23 @@ export function registerSetup(app: FastifyInstance): void {
       return reply.code(201).send({ personId, step: step() })
     } catch (error) {
       stores().people.remove(personId)
-      return reply.code(400).send({ error: error instanceof Error ? error.message : 'could not create the account' })
+      return reply.code(400).send(errorBody('config', 'config', error instanceof Error ? error.message : 'could not create the account'))
     }
   })
 
   app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession] }, async (request, reply) => {
-    if (step() !== 'instance-url') return reply.code(409).send({ error: 'wrong_step', step: step() })
+    if (step() !== 'instance-url') {
+      const current = step()
+      return reply.code(409).send({ ...errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`), step: current })
+    }
     const { baseUrl, consentPath } = request.body ?? {}
     if (typeof baseUrl !== 'string' || typeof consentPath !== 'string'
       || !(CONSENT_PATHS as readonly string[]).includes(consentPath)) {
-      return reply.code(400).send({ error: 'baseUrl and a known consentPath are required' })
+      return reply.code(400).send(errorBody('config', 'config', 'baseUrl and a known consentPath are required'))
     }
     const candidate = candidateFor(baseUrl)
     if (!candidate.registrable) {
-      return reply.code(400).send({ error: candidate.reason ?? 'that URL cannot be registered with Google' })
+      return reply.code(400).send(errorBody('config', 'config', candidate.reason ?? 'that URL cannot be registered with Google'))
     }
     const normalized = baseUrl.replace(/\/+$/, '')
     stores().settings.put({ baseUrl: normalized, consentPath: consentPath as ConsentPath, nowMs: app.haelan.now() })

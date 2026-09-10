@@ -41,7 +41,8 @@ describe('setup routes', () => {
     harness = await withServer()
     const response = await createAccount(harness, { timezone: 'Mars/Olympus' })
     expect(response.statusCode).toBe(400)
-    expect(String(response.json().error)).toContain('timezone')
+    expect(response.json().error.kind).toBe('config')
+    expect(response.json().error.message).toContain('timezone')
     // Spec invariant 3 computes every day boundary in this zone, so a bad value here is wrong
     // data forever rather than a cosmetic error.
     expect(harness.app.haelan.stores.accounts.count()).toBe(0)
@@ -86,7 +87,8 @@ describe('setup routes', () => {
       payload: { baseUrl: 'http://192.168.178.82:4235', consentPath: 'proxy' },
     })
     expect(response.statusCode).toBe(400)
-    expect(String(response.json().error)).toContain('raw IP addresses')
+    expect(response.json().error.kind).toBe('config')
+    expect(response.json().error.message).toContain('raw IP addresses')
   })
 
   it('lists concrete candidates and never a placeholder', async () => {

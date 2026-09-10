@@ -66,7 +66,9 @@ describe('sync routes', () => {
       method: 'POST', url: '/api/sync/run', headers, cookies: { haelan_session: cookie },
     })
     expect(response.statusCode).toBe(409)
-    expect(response.json()).toEqual({ error: 'already_running' })
+    expect(response.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'already_running', message: expect.any(String) },
+    })
     await inFlight
   })
 
