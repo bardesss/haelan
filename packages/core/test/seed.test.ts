@@ -46,7 +46,10 @@ describe('seedArchive', () => {
       seedPerson(test.db, 'p1')
       seedArchive({ archive: new RawArchive(test.db), personId: 'p1', days: 14, endMs: END })
       const types = new Set(test.db.select().from(rawPayloads).all().map((r) => r.dataType))
-      for (const id of ['steps', 'heart-rate', 'weight', 'sleep', 'exercise']) {
+      for (const id of [
+        'steps', 'heart-rate', 'weight', 'sleep', 'exercise',
+        'daily-resting-heart-rate', 'daily-heart-rate-variability', 'daily-respiratory-rate',
+      ]) {
         expect(types.has(id), id).toBe(true)
       }
     } finally { test.cleanup() }

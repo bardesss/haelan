@@ -11,11 +11,15 @@
 // Weight drifts rather than walks - one slow trend held for the whole span, not a meander that
 // could wander anywhere. Workouts land a few times a week, on a fixed schedule rather than a
 // coin flip, so the exercise type always shows up regardless of which seed a caller passes.
-// Moods is the one categorical type here, seeded so `observations` is not empty once the app
-// rebuilds; see the ruling in this unit's plan for why `moods` and not one of the reproductive
-// health types. None of this computes anything about the body it is shaped after - no metabolic
-// model, no calorie balance, nothing that would make a claim about physiology it has no business
-// making.
+// Recovery's three daily figures each get a different kind of noise instead of one formula
+// reused three times: resting heart rate drifts like weight, HRV swings around a fixed baseline
+// day to day, and respiratory rate barely moves at all - the same spread a real week of each
+// actually has, and the reason the Recovery page (and its Dashboard card) draws anything once
+// the app rebuilds from this. Moods is the one categorical type here, seeded so `observations`
+// is not empty once the app rebuilds; see the ruling in this unit's plan for why `moods` and not
+// one of the reproductive health types. None of this computes anything about the body it is
+// shaped after - no metabolic model, no calorie balance, nothing that would make a claim about
+// physiology it has no business making.
 //
 // Deterministic by construction: a mulberry32 PRNG seeded once, consumed in a fixed order, and
 // nothing here ever reaches for Math.random. The same seed produces the same bytes today and a
@@ -27,7 +31,7 @@ import type { DataType } from '../api/catalogue.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { SleepStage } from './payloads.ts'
-import { body, intervalPoint, samplePoint, sleepPoint } from './payloads.ts'
+import { body, dailyPoint, intervalPoint, samplePoint, sleepPoint } from './payloads.ts'
 
 const DAY_MS = 86_400_000
 const HOUR_MS = 3_600_000
@@ -50,6 +54,14 @@ function mulberry32(seed: number): () => number {
 
 const range = (rand: () => number, min: number, max: number): number => min + rand() * (max - min)
 const pick = <T>(rand: () => number, items: readonly T[]): T => items[Math.floor(rand() * items.length)]!
+
+// The three daily-summary metrics below key off the civil date dailyPoint expects, not the
+// millisecond instant the rest of this file passes around. Read back with getUTC*, matching the
+// UTC approximation listRequestParams already makes for this generator's person-less timezone.
+const civilDateOf = (ms: number): { year: number, month: number, day: number } => {
+  const d = new Date(ms)
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }
+}
 
 // The catalogue has grown twice this month, and a wrong id here is a payload nothing maps: the
 // rebuild yields zero rows for it and every test in this plan still passes. Resolving through
@@ -162,6 +174,9 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const SLEEP = requireType('sleep')
   const EXERCISE = requireType('exercise')
   const MOODS = requireType('moods')
+  const DAILY_RESTING_HR = requireType('daily-resting-heart-rate')
+  const DAILY_HRV = requireType('daily-heart-rate-variability')
+  const DAILY_RESPIRATORY_RATE = requireType('daily-respiratory-rate')
 
   const rand = mulberry32(input.seed ?? DEFAULT_SEED)
   let payloads = 0
@@ -201,6 +216,17 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   let weightGrams = range(rand, 62_000, 85_000)
   const weightTrendPerDay = range(rand, -25, 15)
 
+  // Recovery's three figures, decided the same way weight's trend is: state fixed once before
+  // the loop, not redrawn each morning, so the run reads like one body rather than three
+  // independent dice. Resting heart rate gets a trend like weight's because a person's resting
+  // rate does drift over a span this long; HRV and respiratory rate do not - HRV swings around a
+  // fixed baseline day to day, and respiratory rate barely moves at all, so neither carries a
+  // per-day increment forward.
+  let restingHrBpm = range(rand, 54, 64)
+  const restingHrTrendPerDay = range(rand, -0.06, 0.04)
+  const hrvBaselineMs = range(rand, 45, 70)
+  const respiratoryRateBpm = range(rand, 13.5, 15.5)
+
   for (let i = 0; i < input.days; i++) {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
     const dayEnd = dayStart + DAY_MS
@@ -233,6 +259,29 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     put(WEIGHT, dayStart, dayEnd, [samplePoint({
       payloadKey: WEIGHT.payloadKey, valuePath: WEIGHT.valuePath, value: String(Math.round(weightGrams)),
       physicalTime: new Date(dayStart + 7 * HOUR_MS).toISOString(), utcOffset: '0s',
+    })])
+
+    const civilDate = civilDateOf(dayStart)
+
+    restingHrBpm += restingHrTrendPerDay + range(rand, -0.6, 0.6)
+    // A bad night nudges that one day's reading up without moving the underlying trend - the
+    // point of "the odd bad night" is that it does not carry into tomorrow the way the drift does.
+    const restingHrToday = restingHrBpm + (rand() < 0.12 ? range(rand, 4, 10) : 0)
+    put(DAILY_RESTING_HR, dayStart, dayEnd, [dailyPoint({
+      payloadKey: DAILY_RESTING_HR.payloadKey, valuePath: DAILY_RESTING_HR.valuePath,
+      value: String(Math.round(restingHrToday)), date: civilDate,
+    })])
+
+    const hrvToday = Math.max(15, hrvBaselineMs + range(rand, -18, 18))
+    put(DAILY_HRV, dayStart, dayEnd, [dailyPoint({
+      payloadKey: DAILY_HRV.payloadKey, valuePath: DAILY_HRV.valuePath,
+      value: String(Math.round(hrvToday)), date: civilDate,
+    })])
+
+    const respiratoryRateToday = respiratoryRateBpm + range(rand, -0.4, 0.4)
+    put(DAILY_RESPIRATORY_RATE, dayStart, dayEnd, [dailyPoint({
+      payloadKey: DAILY_RESPIRATORY_RATE.payloadKey, valuePath: DAILY_RESPIRATORY_RATE.valuePath,
+      value: respiratoryRateToday.toFixed(1), date: civilDate,
     })])
 
     const night = nights[i]!
