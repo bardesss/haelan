@@ -96,7 +96,7 @@ rebuilding = runBootSequence({
 // immediately in the no-rebuild case too, so one chain covers both and a vacuum can never begin
 // while the rebuild worker still holds its own connection to the file. That means it runs while
 // the server is already serving - accepted, because better-sqlite3 is synchronous and this
-// process holds one connection, so it is a stall (about 1.5s on an 891 MB database) rather than a
+// process holds one connection, so it is a stall (measured at 21s reclaiming 645 MB) rather than a
 // lock conflict. The maintenance tick starts here too, once, for the same reason: it must not
 // take its first tick until the file it is about to back up is settled.
 //

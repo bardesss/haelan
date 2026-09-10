@@ -169,7 +169,9 @@ The database file does not shrink: live content falls from 632.4 MB to 246.8 MB 
 like, but SQLite keeps the freed pages on its freelist - about 595 MB - and returns them to the
 operating system only on a `VACUUM`. **M5d-B/C now runs one**, once per boot, when more than a
 fifth of the file and more than 64 MiB of it are dead and the disk can hold a second copy while it
-works - about 1.5 seconds on this database, during which the app stalls rather than stops.
+works. Measured on the author's database, upgrading from the pre-M5d schema: **21 seconds, and 645
+MB handed back**, taking the file from 891 MB to 247 MB. The app stalls for those 21 seconds rather
+than stopping, and it happens once - the boots after it find too little dead space to bother.
 
 ## Backups, and restoring one
 

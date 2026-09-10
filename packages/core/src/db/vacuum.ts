@@ -44,7 +44,11 @@ export function vacuumDecision(
  * and enough disk to do it safely.
  *
  * Synchronous, and that is the cost: better-sqlite3 blocks, so a vacuum is a pause on every
- * request for as long as it runs - measured at about 1.5 seconds on an 891 MB database. It runs
+ * request for as long as it runs - measured at 21 seconds reclaiming 645 MB from an 891 MB
+ * database, on a fast desktop, in a full upgrade rehearsal. An earlier note here said 1.5 seconds,
+ * which was this same call timed against an already-narrow file: the cost is in the pages moved,
+ * not in the pages kept, so the number that matters is the one from the boot that has work to do.
+ * It runs
  * once per boot, after the rebuild has settled, which is the only moment this process is sure no
  * second connection is open on the file.
  *
