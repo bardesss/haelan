@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
 import { DERIVATION_VERSION, dayMetricTarget, insertSample, schema } from '@haelan/core'
-import { withServer } from './harness.ts'
+import { registeredRoutes, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
 let harness: Harness | null = null
@@ -994,48 +994,30 @@ describe('the versioned surface, beyond the per-route table', () => {
   // Empty today: every route registerV1 wires up is under /p/.
   const NOT_PERSON_SCOPED: readonly string[] = []
 
-  // R19: its own harness, not the outer describe's shared variable, since this test has to run on
-  // its own regardless of which per-route case ran last.
-  //
-  // Not printRoutes: it merges several methods on one path onto a single line, so a second method
-  // added to an existing path is invisible to a line count, and it nests a route whose path
-  // extends another registered route's path under that route's line instead of printing it in
-  // full, so a route added under an existing one is invisible too. Both were confirmed against
-  // this exact route set before ruling printRoutes out. onRouteForTest instead observes fastify's
-  // own onRoute hook, wired in by app.ts before any route is registered, which fires once per
-  // (method, url) pair exactly as fastify's router sees it: no merging, no nesting. Every HEAD
-  // event is dropped, not only fastify's own auto-added ones (it re-enters route registration to
-  // add one for every GET, which is what would otherwise show up as an entry nobody in this table
-  // declared): no route under /api/v1 is HEAD only today, but a deliberately HEAD only route
-  // would be invisible to this guard the same way, and this filter does not tell the two apart.
+  // R19: registeredRoutes builds and tears down a server of its own rather than reusing the outer
+  // describe's shared variable, since this test has to run the same regardless of which per-route
+  // case ran last. It is also what handles fastify's two printRoutes distortions and the HEAD
+  // events; see its comment in harness.ts. flat-surface-auth.test.ts runs the same machinery over
+  // everything outside this prefix.
   //
   // Compared as a set in both directions, not a count, so a mismatch names the offending route
   // rather than failing with an opaque "expected 10 to be 9" that means nothing to whoever trips
   // it next.
   it('covers every route the versioned surface registers', async () => {
-    const registered = new Set<string>()
-    const isolatedHarness = await withServer({
-      onRouteForTest: (route) => {
-        if (route.method === 'HEAD') return
-        if (route.url.startsWith('/api/v1')) registered.add(`${route.method} ${route.url}`)
-      },
-    })
-    try {
-      // Safe today only because `covered` below is hand written from three separate lists; if it
-      // and `registered` were ever both built from one source, both could be empty at once and the
-      // set comparison below would pass on nothing. Asserted directly rather than left to that
-      // coincidence, since this project has shipped a vacuous guard once already.
-      expect(registered.size).toBeGreaterThan(0)
+    const registered = await registeredRoutes((url) => url.startsWith('/api/v1'))
 
-      const covered = new Set([
-        ...ROUTES.map((route) => `GET ${route.template}`), ...WRITE_ROUTES, ...NOT_PERSON_SCOPED,
-      ])
-      const missing = [...registered].filter((entry) => !covered.has(entry))
-      const stale = [...covered].filter((entry) => !registered.has(entry))
-      expect({ missing, stale }).toEqual({ missing: [], stale: [] })
-    } finally {
-      await isolatedHarness.cleanup()
-    }
+    // Safe today only because `covered` below is hand written from three separate lists; if it
+    // and `registered` were ever both built from one source, both could be empty at once and the
+    // set comparison below would pass on nothing. Asserted directly rather than left to that
+    // coincidence, since this project has shipped a vacuous guard once already.
+    expect(registered.size).toBeGreaterThan(0)
+
+    const covered = new Set([
+      ...ROUTES.map((route) => `GET ${route.template}`), ...WRITE_ROUTES, ...NOT_PERSON_SCOPED,
+    ])
+    const missing = [...registered].filter((entry) => !covered.has(entry))
+    const stale = [...covered].filter((entry) => !registered.has(entry))
+    expect({ missing, stale }).toEqual({ missing: [], stale: [] })
   })
 })
 

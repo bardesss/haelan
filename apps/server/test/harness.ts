@@ -46,7 +46,7 @@ export interface WithServerOptions {
   dataTypes?: readonly string[]
   /** See ServerDeps.v1TestExtra. Unset by every test but the one that exercises it. */
   v1TestExtra?: (app: FastifyInstance) => void
-  /** See ServerDeps.onRouteForTest. Unset by every test but the isolation suite's route-coverage guard. */
+  /** See ServerDeps.onRouteForTest. Unset by every test but registeredRoutes below. */
   onRouteForTest?: (route: { method: string, url: string }) => void
 }
 
@@ -238,4 +238,43 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
       rmSync(dir, { recursive: true, force: true })
     },
   }
+}
+
+/**
+ * Every (method, url) pair this app registers whose url `matches`, as `${method} ${url}`. The
+ * input to the route-coverage guards, which assert that no route was added without some test
+ * noticing: v1-isolation.test.ts over the versioned surface, flat-surface-auth.test.ts over
+ * everything outside it.
+ *
+ * Not printRoutes: it merges several methods on the same path onto one line, so a second method
+ * added to an existing path is invisible to a line count, and it nests a route whose path extends
+ * another registered route's path under that route's line rather than printing it in full, so a
+ * route added under an existing one is invisible too. Both were confirmed against this exact route
+ * set before ruling printRoutes out. ServerDeps.onRouteForTest instead observes fastify's own
+ * onRoute hook, wired in by app.ts before any route is registered, which fires once per
+ * (method, url) pair exactly as fastify's router sees it: no merging, no nesting.
+ *
+ * Every HEAD event is dropped, not only fastify's own auto-added ones (it re-enters route
+ * registration to add one for every GET, which is what would otherwise show up as an entry nobody
+ * declared): no route is HEAD only today, but a deliberately HEAD only route would be invisible to
+ * the guards the same way, and this filter does not tell the two apart.
+ *
+ * webRoot is left unset, so the SPA's static handler is not in this set. It answers document
+ * requests for the browser rather than the API, and the setup gate deliberately lets those past
+ * (see setupGate.ts); a guard over it would be a guard over @fastify/static.
+ *
+ * Its own server, built and torn down before this returns, so a guard leaning on it runs the same
+ * regardless of which test ran last. Registration is all it needs: the routes are declared during
+ * ready(), which withServer has already awaited by the time it hands the harness back.
+ */
+export async function registeredRoutes(matches: (url: string) => boolean): Promise<Set<string>> {
+  const routes = new Set<string>()
+  const harness = await withServer({
+    onRouteForTest: (route) => {
+      if (route.method === 'HEAD') return
+      if (matches(route.url)) routes.add(`${route.method} ${route.url}`)
+    },
+  })
+  await harness.cleanup()
+  return routes
 }
