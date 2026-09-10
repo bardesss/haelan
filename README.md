@@ -116,8 +116,9 @@ None yet. The reference pages exist and are built on fixtures; real screenshots 
 | **M5c** Packaging | The image that runs the TypeScript it was tested as, booted twice over one volume on both architectures | Done, [#104](https://github.com/bardesss/haelan/pull/104) |
 | **M5d-D** Cheaper sync tests | A test's data types bounded the way its depth already was, after the catalogue took every sprint test from twenty types to forty-two | Done, [#106](https://github.com/bardesss/haelan/pull/106) |
 | **The catalogue catches up** | Twenty-two data types the app fetched nothing for, measured off the API's own envelope rather than its release notes; food is recorded unfetchable because a Food carries no clock | Done, [#101](https://github.com/bardesss/haelan/pull/101) |
-| **M5d-A** Narrow sample keys | The five identifiers every one of 1.6 million sample rows wrote out in full become integer references; measured 632 MB down to 247 MB | In review |
-| **M5** Packaging | Cut into six units, a, b, c, d and f as listed here plus M5e for documentation and the envelope migration, with M5d itself cut into four strands - D cheaper tests, A narrow keys, B reclaiming the space a rebuild frees but never returns, C backup and restore - and the catalogue work and the image both landing before the v1.0.0 tag | In progress |
+| **M5d-A** Narrow sample keys | The five identifiers every one of 1.6 million sample rows wrote out in full become integer references; measured 632 MB down to 247 MB | Done, [#108](https://github.com/bardesss/haelan/pull/108) |
+| **M5d-B/C** Reclaiming and backup | The 595 MB a rebuild frees and never hands back, reclaimed once a boot, and a daily compacted copy that is integrity-checked and row-counted before it is called a backup | In review |
+| **M5** Packaging | Cut into six units, a, b, c, d and f as listed here plus M5e for documentation and the envelope migration, with M5d itself cut into four strands - D cheaper tests, A narrow keys, then B reclaiming the space a rebuild frees but never returns and C backup and restore, which shipped together because a vacuum and a backup are one SQLite operation writing to two places - and the catalogue work and the image both landing before the v1.0.0 tag | In progress |
 
 **M3d comes before M3c in this table**, out of milestone letter order: section 6's creation flow is a click on a plotted point, and the pages that plot real points are M3d's, so building the annotation panel first would mean targeting fixture points that correspond to no row an override could name.
 
@@ -166,7 +167,45 @@ it, so the first boot after this release rebuilds tier 2 from the archive; measu
 intraday charts are empty for the duration, which is not distinguishable from a day with no data.
 The database file does not shrink: live content falls from 632.4 MB to 246.8 MB measured like for
 like, but SQLite keeps the freed pages on its freelist - about 595 MB - and returns them to the
-operating system only on a `VACUUM`, which nothing in this project runs yet. That is M5d-B.
+operating system only on a `VACUUM`. **M5d-B/C now runs one**, once per boot, when more than a
+fifth of the file and more than 64 MiB of it are dead and the disk can hold a second copy while it
+works - about 1.5 seconds on this database, during which the app stalls rather than stops.
+
+## Backups, and restoring one
+
+An instance takes a compacted copy of its database once a day into `backups/` inside the data
+directory, keeps the newest seven, and does it while the app is running. `HAELAN_BACKUP_KEEP` and
+`HAELAN_BACKUP_INTERVAL_HOURS` change that; `HAELAN_BACKUP_KEEP=0` turns it off for an operator who
+backs the volume up by other means. Settings shows when the last one was taken and can take one now.
+
+A file appears in `backups/` only after it has been written, opened, integrity-checked and
+row-counted against the live database. A copy that fails any of those keeps a `.part` extension,
+which nothing restores, nothing counts, and no schedule accepts - so a failed backup is visible as
+a symptom and can never be mistaken for a good one. The most recent failure is kept until a later
+backup succeeds, so there is always something to look at.
+
+**A backup does not contain `instance.key`.** That file, beside the database, encrypts the stored
+Google credentials, and a backup that carried it would itself be a credential - and backups are
+exactly the files people copy to a NAS, a cloud folder, or a support thread. Keep a copy of the key
+somewhere separate. It is 44 bytes.
+
+To restore, with the container stopped:
+
+1. move the chosen file from `backups/` over `haelan.sqlite`
+2. **delete any `haelan.sqlite-wal` and `haelan.sqlite-shm` beside it.** They belong to the database
+   you just replaced, and SQLite applying a stale write-ahead log to a restored file is the one way
+   this procedure corrupts the thing it is repairing
+3. leave `instance.key` where it is - it is not in the backup and is not replaced
+4. start the container
+
+Restoring onto a machine that still has its original `instance.key` needs nothing further.
+Restoring onto one that does not is supported and lands somewhere known rather than broken: the
+health data is intact, the stored Google credentials cannot be read, and the app says so and offers
+to connect again. Consent once and syncing resumes. Nothing is deleted in the meantime, so a key
+found later still opens what is already there.
+
+Worth doing once, on a copy, before you need it: the procedure is four steps and the day you first
+run it should not be the day it matters.
 
 ## Layout
 
