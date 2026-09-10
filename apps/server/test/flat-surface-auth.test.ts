@@ -203,15 +203,12 @@ function errorOf(response: { body: string }): unknown {
 }
 
 /**
- * Both shapes a refused session comes back as. The older flat families answer { error: 'no_session' }
- * and the newer ones answer the envelope's { error: { kind, code } } - see UnauthorizedResponder in
- * auth.ts for why the two coexist. A check that knew only one shape would read every route in the
- * other family as unguarded, which is the failure this file exists to prevent rather than cause.
+ * A refused session, in the one shape it comes back as: the envelope's { error: { kind, code } },
+ * from app.requireSession itself now that no caller on this surface picks its own responder.
  */
 function refusedForNoSession(response: { statusCode: number, body: string }): boolean {
   if (response.statusCode !== 401) return false
   const error = errorOf(response)
-  if (error === 'no_session') return true
   return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'no_session'
 }
 

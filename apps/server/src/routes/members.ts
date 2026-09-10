@@ -31,14 +31,7 @@ interface MemberRow {
 export function registerMemberRoutes(app: FastifyInstance): void {
   const stores = () => app.haelan.stores
 
-  // app.requireSession answers a missing session with settings.ts's flat { error: 'no_session' }.
-  // Resolving the session through app.sessionGuard with this file's own responder instead is what
-  // keeps that failure in the same envelope as everything else this file answers - the flat
-  // default would otherwise be the one shape here that does not match its own comment above.
-  const requireSession = app.sessionGuard((reply) => {
-    reply.code(statusFor('unauthorized')).send(errorBody('unauthorized', 'no_session', 'sign in required'))
-  })
-  const guard = [requireSession, app.requireAdmin]
+  const guard = [app.requireSession, app.requireAdmin]
 
   app.get('/api/members', { preHandler: guard }, async (_request, reply) => {
     const now = app.haelan.now()

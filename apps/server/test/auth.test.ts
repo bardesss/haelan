@@ -155,6 +155,8 @@ describe('auth', () => {
       payload: { username: 'bartus', password: 'a good long password' },
     })
     expect(response.statusCode).toBe(403)
-    expect(response.json()).toEqual({ error: 'bad_origin' })
+    expect(response.json()).toEqual({
+      error: { kind: 'forbidden', code: 'bad_origin', message: 'the origin header does not match this instance' },
+    })
   })
 })

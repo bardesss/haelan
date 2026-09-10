@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { errorBody, sendCoreError, statusFor } from '../../api/envelope.ts'
+import { sendCoreError } from '../../api/envelope.ts'
 import { registerRequirePerson } from '../../api/requirePerson.ts'
 import { registerSeriesRoutes } from './series.ts'
 import { registerTier2Routes } from './tier2.ts'
@@ -30,17 +30,8 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
   // property of this file, not of a list every route author has to remember to update. Five more
   // tasks add routes here; a forgotten array is a silent, fully unauthenticated endpoint, and a
   // hook at this level guards a route whether or not its author thought about it.
-  // The envelope responder, not app.requireSession's flat default: every other status this surface
-  // answers carries { error: { kind, code, message } }, and an expired session is the status a
-  // dashboard client sees most often, so it is the worst one to make that client narrow
-  // differently on. The older route families keep the flat shape deliberately (the setup wizard's
-  // client reads it), which is why the shape is chosen here rather than changed in auth.ts.
-  const requireV1Session = app.sessionGuard((reply) => {
-    reply.code(statusFor('unauthorized')).send(errorBody('unauthorized', 'no_session', 'sign in required'))
-  })
-
   app.addHook('preHandler', async (request, reply) => {
-    await requireV1Session(request, reply)
+    await app.requireSession(request, reply)
     if (reply.sent) return
     await app.requirePerson(request, reply)
   })

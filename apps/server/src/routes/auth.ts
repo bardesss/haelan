@@ -1,37 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { SESSION_COOKIE, setSessionCookie, clearSessionCookie } from '../auth/cookie.ts'
 import { bearerToken } from '../auth/bearer.ts'
+import { errorBody } from '../api/envelope.ts'
 
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-
-/**
- * How a failed session check answers. Injectable because /api/v1 answers a different error shape
- * from every older route family: the versioned surface's envelope narrows on error.kind, and a
- * client typed against it reads undefined off the flat { error: 'no_session' } string and falls
- * through in silence. The flat shape is not a bug to migrate away from here, it is what the setup
- * wizard's own client reads, so the two shapes coexist and the caller picks.
- */
-export type UnauthorizedResponder = (reply: FastifyReply) => void
 
 declare module 'fastify' {
   interface FastifyRequest { accountId: string | null }
   interface FastifyInstance {
-    /** The flat shaped guard, for every route family outside /api/v1. */
+    /** The one session guard, for every route family including /api/v1. */
     requireSession: (request: FastifyRequest, reply: FastifyReply) => Promise<void>
-    /**
-     * The same check with the caller's own refusal. A factory rather than a third parameter on
-     * requireSession, because fastify hands every hook its own `done` callback as a third
-     * argument regardless of the function's arity: a responder parameter in that position gets
-     * `done` passed into it and the refusal turns into a 500.
-     */
-    sessionGuard: (onUnauthorized: UnauthorizedResponder) =>
-      (request: FastifyRequest, reply: FastifyReply) => Promise<void>
   }
-}
-
-/** The flat shape every route family outside /api/v1 has always answered. */
-const sendFlatUnauthorized: UnauthorizedResponder = (reply) => {
-  reply.code(401).send({ error: 'no_session' })
 }
 
 export function registerAuth(app: FastifyInstance): void {
@@ -47,15 +26,14 @@ export function registerAuth(app: FastifyInstance): void {
     try {
       originHost = new URL(origin).host
     } catch {
-      return reply.code(403).send({ error: 'bad_origin' })
+      return reply.code(403).send(errorBody('forbidden', 'bad_origin', 'the origin header does not match this instance'))
     }
-    if (originHost !== request.headers.host) return reply.code(403).send({ error: 'bad_origin' })
+    if (originHost !== request.headers.host) {
+      return reply.code(403).send(errorBody('forbidden', 'bad_origin', 'the origin header does not match this instance'))
+    }
   })
 
-  const sessionGuard = (onUnauthorized: UnauthorizedResponder) => async (
-    request: FastifyRequest,
-    reply: FastifyReply,
-  ): Promise<void> => {
+  app.decorate('requireSession', async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     // The header wins when present: a native client that sent one meant it, and a stale cookie
     // riding along on the same connection must not silently decide who the caller is. Only a
     // cookie failure clears the cookie, so a bearer caller never logs out a browser session that
@@ -63,7 +41,9 @@ export function registerAuth(app: FastifyInstance): void {
     const bearer = bearerToken(request.headers.authorization)
     if (bearer !== null) {
       const accountId = app.haelan.stores.sessions.resolve(bearer, app.haelan.now())
-      if (!accountId) return onUnauthorized(reply)
+      if (!accountId) {
+        return reply.code(401).send(errorBody('unauthorized', 'no_session', 'sign in required'))
+      }
       request.accountId = accountId
       return
     }
@@ -71,13 +51,10 @@ export function registerAuth(app: FastifyInstance): void {
     const accountId = raw ? app.haelan.stores.sessions.resolve(raw, app.haelan.now()) : null
     if (!accountId) {
       clearSessionCookie(reply)
-      return onUnauthorized(reply)
+      return reply.code(401).send(errorBody('unauthorized', 'no_session', 'sign in required'))
     }
     request.accountId = accountId
-  }
-
-  app.decorate('sessionGuard', sessionGuard)
-  app.decorate('requireSession', sessionGuard(sendFlatUnauthorized))
+  })
 
   app.post<{ Body: { username?: unknown, password?: unknown } }>('/api/auth/login', async (request, reply) => {
     const { username, password } = request.body ?? {}
