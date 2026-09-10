@@ -129,6 +129,18 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   },
   { route: 'PUT /api/settings/backfill-horizon', auth: 'admin' },
 
+  {
+    route: 'GET /api/settings/maintenance',
+    auth: 'admin',
+    why: 'reports what the database is costing and what backups exist, which is the shape of the instance rather than anybody\'s data',
+  },
+  { route: 'POST /api/settings/maintenance/backup', auth: 'admin' },
+  {
+    route: 'POST /api/settings/maintenance/reclaim',
+    auth: 'admin',
+    why: 'rewrites the whole database file and stalls every request while it runs',
+  },
+
   { route: 'GET /api/members', auth: 'admin' },
   { route: 'POST /api/members', auth: 'admin' },
   { route: 'POST /api/members/:accountId/disable', auth: 'admin' },
