@@ -80,10 +80,14 @@ describe('a database restored without its instance.key', () => {
     expect(state.statusCode).toBe(200)
     expect(state.json()).toEqual({ step: 'google-client' })
 
-    // What the browser asks first. 409 is the wizard's cue; a 500 was nothing's cue.
+    // What the browser asks first. 409 is the wizard's cue; a 500 was nothing's cue. The step
+    // itself was already asserted above through /api/setup/state, the endpoint whose entire job
+    // is answering that question - not a substring pulled out of this message.
     const me = await app.inject({ method: 'GET', url: '/api/auth/me' })
     expect(me.statusCode).toBe(409)
-    expect(me.json()).toEqual({ error: 'setup_incomplete', step: 'google-client' })
+    expect(me.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_incomplete', message: expect.any(String) },
+    })
 
     // The operator's session. The account step is long past, so signing in is the only way to
     // hold one, and the wizard's remaining steps all require it.

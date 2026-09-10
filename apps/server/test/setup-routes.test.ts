@@ -154,6 +154,8 @@ describe('setup routes', () => {
     await harness.completeSetup()
     const response = await createAccount(harness)
     expect(response.statusCode).toBe(409)
-    expect(response.json()).toEqual({ error: 'setup_complete' })
+    expect(response.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_complete', message: expect.any(String) },
+    })
   })
 })
