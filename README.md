@@ -314,7 +314,8 @@ localhost.
 
 ## License
 
-Not yet chosen. It will be an OSI approved open source license before the first release.
+AGPL-3.0-only. Full text in `LICENSE`. If you fork haelan and run a modified version as a network
+service, the AGPL requires you to publish your changes to the people using that service.
 
 ## Contributing
 
