@@ -132,17 +132,24 @@ const stepCurve = (hour: number): number => Math.max(0, Math.sin(((hour - 6) / 1
 // under a name that shadowed the checked constant. Every value below also has a real translation
 // in apps/web's SEEDED_EXERCISE_TYPES, so a session this generator writes always has something to
 // call itself on the Dutch screenshots the next unit takes rather than falling back to raw
-// English. Checked against EXERCISE_TYPES here, at generation time, rather than copied outright:
-// a value the API retires stops this file with a thrown error the next time anything seeds,
-// instead of quietly seeding a string nothing can ever map again - requireType above does the
-// same thing for a data type id, for the same reason.
-const SEED_EXERCISE_TYPES = (['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL'] as const)
-  .map((type) => {
+// English. Checked against EXERCISE_TYPES rather than copied outright: a value the API retires
+// should stop a seed with a thrown error instead of quietly writing a string nothing can ever map.
+//
+// Checked inside `requireExerciseTypes` rather than at module scope, and that distinction is not
+// style. This module is re-exported from the package root, which the server imports at boot - a
+// module-scope check would turn a retired exercise type into an instance that will not start,
+// which is demo-data drift stopping somebody's dashboard. `requireType` above is a function for
+// the same reason; this used to be the one that was not.
+const SEED_EXERCISE_TYPES = ['RUNNING', 'BIKING', 'WALKING', 'WEIGHTLIFTING', 'SWIMMING_POOL'] as const
+
+function requireExerciseTypes(): readonly string[] {
+  for (const type of SEED_EXERCISE_TYPES) {
     if (!EXERCISE_TYPES.includes(type)) {
       throw new Error(`seedArchive: '${type}' is no longer an exercise type this catalogue knows about`)
     }
-    return type
-  })
+  }
+  return SEED_EXERCISE_TYPES
+}
 
 const MOOD_LABELS = ['CALM', 'CONTENT', 'ENERGETIC', 'TIRED', 'STRESSED', 'HAPPY', 'ANXIOUS'] as const
 
@@ -226,6 +233,7 @@ export interface SeedArchiveInput {
 export interface SeedArchiveResult { payloads: number }
 
 export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
+  const exerciseTypes = requireExerciseTypes()
   const STEPS = requireType('steps')
   const HEART_RATE = requireType('heart-rate')
   const WEIGHT = requireType('weight')
@@ -306,7 +314,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       const hour = pick(rand, [7, 12, 18])
       const startMs = dayStart + hour * HOUR_MS
       const endMs = startMs + range(rand, 25, 55) * 60_000
-      return { hour, startMs, endMs, exerciseType: pick(rand, SEED_EXERCISE_TYPES) }
+      return { hour, startMs, endMs, exerciseType: pick(rand, exerciseTypes) }
     })() : null
 
     // Moved ahead of the heart-rate curve below, which reads this same trend for its overnight
