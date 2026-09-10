@@ -6,6 +6,7 @@ import { OverrideList } from './settings/OverrideList.js'
 import { SourceNames } from './settings/SourceNames.js'
 import { DataTypes } from './settings/DataTypes.js'
 import { Members } from './settings/Members.js'
+import { Maintenance } from './settings/Maintenance.js'
 
 // The settings page: no sections existed before this one, so pages/settings/ holds each section's
 // own component (OverrideList.tsx is the first) and this file is the shell that gives them a
@@ -38,6 +39,14 @@ export function Settings() {
         {session.data?.isAdmin === true && (
           <Card span={12} label={t('settings.members.title')}>
             <Members />
+          </Card>
+        )}
+        {/* Admin only, and gated here for the same reason Members is: the three routes it calls
+            already answer 'forbidden' to anyone else, but mounting a card whose only content is
+            two buttons a member could never press would be pure noise on their own screen. */}
+        {session.data?.isAdmin === true && (
+          <Card span={12} label={t('settings.maintenance.title')}>
+            <Maintenance />
           </Card>
         )}
       </div>

@@ -844,6 +844,28 @@
         "detail": "Invite someone to give them their own account and their own data."
       },
       "failed": "That did not work. Try again."
+    },
+    "maintenance": {
+      "title": "Database maintenance",
+      "bloat": "{{mb}} MB of dead space in the database file.",
+      "backups": {
+        "none": "No backups yet.",
+        "latest": "Last backup {{date}} ({{size}} MB).",
+        "retention": "Keeps the last {{keep}}, taken every {{hours}} hours."
+      },
+      "backupNow": "Back up now",
+      "backingUp": "Backing up…",
+      "backupResult": "Saved {{name}} ({{size}} MB).",
+      "backupFailed": "That did not save. Try again.",
+      "reclaim": "Reclaim space",
+      "reclaiming": "Reclaiming…",
+      "reclaimedResult": "Reclaimed {{mb}} MB.",
+      "reclaimFailed": "That did not work. Try again.",
+      "declined": {
+        "belowFraction": "There isn't enough dead space yet to be worth reclaiming.",
+        "belowFloor": "The dead space is real, but too small to be worth pausing for.",
+        "notEnoughDisk": "There is not enough free disk to safely reclaim space right now. Free up some disk space and try again."
+      }
     }
   }
 }

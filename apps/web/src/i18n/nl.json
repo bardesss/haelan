@@ -844,6 +844,28 @@
         "detail": "Nodig iemand uit om diegene een eigen account en eigen gegevens te geven."
       },
       "failed": "Dat is niet gelukt. Probeer het opnieuw."
+    },
+    "maintenance": {
+      "title": "Databaseonderhoud",
+      "bloat": "{{mb}} MB aan dode ruimte in het databasebestand.",
+      "backups": {
+        "none": "Nog geen back-ups.",
+        "latest": "Laatste back-up {{date}} ({{size}} MB).",
+        "retention": "Bewaart de laatste {{keep}}, elke {{hours}} uur gemaakt."
+      },
+      "backupNow": "Nu back-uppen",
+      "backingUp": "Bezig met back-uppen…",
+      "backupResult": "{{name}} opgeslagen ({{size}} MB).",
+      "backupFailed": "Dat is niet opgeslagen. Probeer het opnieuw.",
+      "reclaim": "Ruimte vrijmaken",
+      "reclaiming": "Bezig met vrijmaken…",
+      "reclaimedResult": "{{mb}} MB vrijgemaakt.",
+      "reclaimFailed": "Dat is niet gelukt. Probeer het opnieuw.",
+      "declined": {
+        "belowFraction": "Er is nog niet genoeg dode ruimte om het vrijmaken waard te zijn.",
+        "belowFloor": "De dode ruimte is er wel, maar te klein om er een pauze voor in te lassen.",
+        "notEnoughDisk": "Er is nu niet genoeg vrije schijfruimte om veilig ruimte vrij te maken. Maak wat schijfruimte vrij en probeer het opnieuw."
+      }
     }
   }
 }

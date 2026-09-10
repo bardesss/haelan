@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 const ADMIN: Session = {
-  personId: 'admin-1', displayName: 'Admin', username: 'admin', isAdmin: true, timezone: 'Europe/Amsterdam', connected: true, baseUrl: 'http://localhost:4235',
+  personId: 'admin-1', displayName: 'Admin', username: 'admin', isAdmin: true, timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 // Every field MemberRow needs, defaulted so a test only names what it is actually asserting on.

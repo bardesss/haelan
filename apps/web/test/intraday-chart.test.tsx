@@ -76,7 +76,7 @@ afterEach(() => {
  */
 function optionForPoints(points: IntradayPoint[], namedSources: NamedSource[]): EChartsOption {
   const session: Session = {
-    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', connected: true, baseUrl: 'http://localhost:4235',
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), session)
@@ -171,7 +171,7 @@ describe('intradayBasis', () => {
 
 describe('IntradayHeartRate time of day', () => {
   const SESSION: Session = {
-    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', connected: true, baseUrl: 'http://localhost:4235',
+    personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
   }
   // 20:00 UTC on an August day is 22:00 in Europe/Amsterdam (CEST, UTC+2). Picked to match the
   // exact case a UTC axis gets wrong: a two hour shift on a chart whose whole purpose is showing

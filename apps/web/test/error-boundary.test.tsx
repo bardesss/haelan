@@ -178,6 +178,7 @@ describe('ErrorBoundary', () => {
       isAdmin: false,
       timezone: 'Europe/Amsterdam',
       connected: true,
+      credentialsUnreadable: false,
       baseUrl: 'http://localhost:4235',
     }
     client.setQueryData(queryKeys.session(), session)

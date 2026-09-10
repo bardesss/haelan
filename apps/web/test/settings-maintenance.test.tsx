@@ -1,0 +1,249 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { I18nProvider } from '../src/i18n/index.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
+import { Settings } from '../src/pages/Settings.js'
+import { Maintenance } from '../src/pages/settings/Maintenance.js'
+import { maintenanceKey } from '../src/data/useMaintenance.js'
+import type { CompletedBackup, MaintenanceStatus, VacuumOutcome } from '../src/data/useMaintenance.js'
+import { sourceNamesKey } from '../src/data/useSourceNames.js'
+import { membersKey } from '../src/data/useMembers.js'
+import { flush } from './flush.js'
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+const ADMIN: Session = {
+  personId: 'admin-1', displayName: 'Admin', username: 'admin', isAdmin: true, timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+}
+
+// Every field MaintenanceStatus needs, defaulted so a test only names what it is actually
+// asserting on -- the same reason settings-members.test.tsx's own member() helper takes overrides
+// rather than every test spelling out the whole shape.
+function status(overrides: Partial<MaintenanceStatus>): MaintenanceStatus {
+  return {
+    bloat: { fileBytes: 200_000_000, liveBytes: 150_000_000, freeBytes: 50_000_000, freeFraction: 0.25 },
+    backups: [],
+    keep: 7,
+    intervalHours: 24,
+    vacuumBlocked: false,
+    ...overrides,
+  }
+}
+
+/**
+ * Mounts the Maintenance section alone, with the status pre-seeded under the same key
+ * useMaintenanceStatus and both mutations' own invalidation share (maintenanceKey). An unseeded
+ * query would reach the real network in this environment rather than merely running slow -- see
+ * apps/web/test/control-row.test.tsx's own comment on withQuery -- so every test here seeds it.
+ */
+function mountSection(data: MaintenanceStatus): QueryClient {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
+  })
+  client.setQueryData(queryKeys.session(), ADMIN)
+  client.setQueryData(maintenanceKey(), data)
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en"><Maintenance /></I18nProvider>
+      </QueryClientProvider>,
+    )
+  })
+  return client
+}
+
+/**
+ * Mounts the whole Settings page as a given session, the way a real admin or a real non-admin
+ * member would see it -- settings-members.test.tsx's own mountSettingsAs, extended with the one
+ * key Maintenance.tsx also reads. OverrideList, SourceNames and Members mount alongside it here
+ * regardless of which section this test cares about, so all three need seeding too or they reach
+ * the real network the same way an unseeded maintenance query would.
+ */
+function mountSettingsAs(overrides: Partial<Session>): void {
+  const session: Session = { ...ADMIN, ...overrides }
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), session)
+  client.setQueryData(sourceNamesKey(session.personId), { items: [] })
+  client.setQueryData(queryKeys.resource(session.personId, 'overrides'), { items: [] })
+  client.setQueryData(membersKey(), { items: [] })
+  client.setQueryData(maintenanceKey(), status({}))
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en"><Settings /></I18nProvider>
+      </QueryClientProvider>,
+    )
+  })
+}
+
+const text = (selector: string): string => container!.querySelector(selector)?.textContent ?? ''
+
+const buttonLabels = (): string[] =>
+  [...container!.querySelectorAll('.form-actions button')].map((b) => b.textContent ?? '')
+
+/**
+ * Stands in for the two POST routes (apps/server/src/routes/maintenance.ts): backup answers
+ * whatever `backupResult` names, reclaim answers whatever `reclaimResult` names. Neither takes a
+ * request body, so unlike mockSourcesApi/mockMembersApi there is no body to branch on -- only the
+ * path tells the two apart.
+ */
+function mockMaintenanceApi(backupResult: CompletedBackup, reclaimResult: VacuumOutcome): {
+  restore: () => void
+  requests: { method: string, url: string }[]
+} {
+  const requests: { method: string, url: string }[] = []
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    const method = init?.method ?? 'GET'
+    requests.push({ method, url })
+    const json = (payload: unknown) =>
+      new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (method === 'POST' && url.endsWith('/api/settings/maintenance/backup')) return json(backupResult)
+    if (method === 'POST' && url.endsWith('/api/settings/maintenance/reclaim')) return json(reclaimResult)
+    if (method === 'GET' && url.endsWith('/api/settings/maintenance')) return json(status({}))
+    throw new Error(`unexpected request: ${method} ${url}`)
+  }) as typeof fetch
+  return { restore: () => { globalThis.fetch = original }, requests }
+}
+
+function click(el: Element): void {
+  act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+}
+
+describe('the maintenance section', () => {
+  it('shows the dead space in MB, not the raw byte count', () => {
+    mountSection(status({ bloat: { fileBytes: 210_000_000, liveBytes: 157_700_000, freeBytes: 52_300_000, freeFraction: 0.249 } }))
+    // The exact string, not a substring: toContain('52.3') would also pass on a regression that
+    // dropped the trailing zero a different figure happens to need, the same gap
+    // substring-assertions-hide-format-regressions calls out.
+    expect(text('.maintenance-bloat')).toBe('52.3 MB of dead space in the database file.')
+    expect(text('.maintenance-bloat')).not.toContain('52300000')
+  })
+
+  it('shows the last backup as a date a person recognises, not its raw timestamp', () => {
+    const takenAtMs = Date.UTC(2026, 0, 2, 3, 4, 5)
+    mountSection(status({
+      backups: [{ name: 'haelan-2026-01-02T03-04-05-000Z.sqlite', takenAtMs, bytes: 10_500_000 }],
+    }))
+    // The exact same Intl call the component makes, not a hand rolled expectation: locale
+    // formatting is an ICU detail this test has no business re-implementing (override-list.test.tsx's
+    // own comment on its date assertion says the same).
+    const expectedDate = new Date(takenAtMs).toLocaleString('en', { dateStyle: 'medium' })
+    expect(text('.maintenance-backups')).toBe(`Last backup ${expectedDate} (10.5 MB).`)
+    expect(text('.maintenance-backups')).not.toContain(String(takenAtMs))
+  })
+
+  it('says so when there are no backups yet', () => {
+    mountSection(status({ backups: [] }))
+    expect(text('.maintenance-backups')).toBe('No backups yet.')
+  })
+
+  it('states the retention settings', () => {
+    mountSection(status({ keep: 5, intervalHours: 12 }))
+    expect(text('.maintenance-retention')).toBe('Keeps the last 5, taken every 12 hours.')
+  })
+
+  it('offers both buttons to an admin', () => {
+    mountSection(status({}))
+    expect(buttonLabels()).toEqual(['Back up now', 'Reclaim space'])
+  })
+
+  it('is not rendered at all, buttons included, for a non-admin', () => {
+    mountSettingsAs({ isAdmin: false })
+    expect(container!.querySelector('.maintenance')).toBeNull()
+    expect(container!.textContent).not.toContain('Back up now')
+    expect(container!.textContent).not.toContain('Reclaim space')
+  })
+
+  it('is rendered for an admin', () => {
+    mountSettingsAs({ isAdmin: true })
+    expect(container!.querySelector('.maintenance')).not.toBeNull()
+  })
+
+  it('reports the filename and size once a backup finishes', async () => {
+    const api = mockMaintenanceApi(
+      { name: 'haelan-2026-03-01T00-00-00-000Z.sqlite', takenAtMs: Date.UTC(2026, 2, 1), bytes: 8_200_000 },
+      { ran: false, reason: 'below_fraction', bloat: status({}).bloat },
+    )
+    const client = mountSection(status({}))
+
+    click(container!.querySelector('.form-actions button')!)
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests.some((r) => r.method === 'POST' && r.url.endsWith('/backup'))).toBe(true)
+    expect(text('.maintenance-backup-result')).toBe('Saved haelan-2026-03-01T00-00-00-000Z.sqlite (8.2 MB).')
+  })
+
+  it('reports how much was reclaimed when the vacuum ran', async () => {
+    const api = mockMaintenanceApi(
+      { name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
+      {
+        ran: true,
+        before: status({}).bloat,
+        after: { fileBytes: 150_000_000, liveBytes: 150_000_000, freeBytes: 0, freeFraction: 0 },
+        reclaimedBytes: 50_300_000,
+        ms: 1500,
+      },
+    )
+    const client = mountSection(status({}))
+
+    const reclaimButton = [...container!.querySelectorAll('.form-actions button')][1]!
+    click(reclaimButton)
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(text('.maintenance-reclaim-result')).toBe('Reclaimed 50.3 MB.')
+  })
+
+  // The one behaviour this whole task exists to get right: not_enough_disk is the reason a
+  // household can actually do something about, so it is the one the route hands back raw
+  // (maintenance-routes.test.ts's own body.reason assertions) and the one this component must
+  // turn into a sentence rather than pass through.
+  it('shows an actionable sentence, not the bare enum, when a reclaim is declined for lack of disk', async () => {
+    const api = mockMaintenanceApi(
+      { name: 'unused.sqlite', takenAtMs: 0, bytes: 0 },
+      { ran: false, reason: 'not_enough_disk', bloat: status({}).bloat },
+    )
+    const client = mountSection(status({}))
+
+    const reclaimButton = [...container!.querySelectorAll('.form-actions button')][1]!
+    click(reclaimButton)
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    const message = text('.maintenance-reclaim-result')
+    expect(message).not.toBe('not_enough_disk')
+    expect(message).not.toContain('not_enough_disk')
+    expect(message).toBe(
+      'There is not enough free disk to safely reclaim space right now. Free up some disk space and try again.',
+    )
+  })
+
+  it('names the same lack-of-disk sentence up front when the status already says a vacuum would decline', () => {
+    mountSection(status({ vacuumBlocked: true }))
+    expect(text('.maintenance-blocked')).toBe(
+      'There is not enough free disk to safely reclaim space right now. Free up some disk space and try again.',
+    )
+  })
+})
