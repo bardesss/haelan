@@ -3,7 +3,7 @@ import { existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
-import { BACKUP_DIR_NAME, listBackups, pruneBackups, runBackup } from '../src/backup/runBackup.ts'
+import { BACKUP_DIR_NAME, listBackups, pruneBackups, runBackup, verifyBackup } from '../src/backup/runBackup.ts'
 
 describe('runBackup', () => {
   it('writes a file that opens, passes integrity_check and holds the same rows', () => {
@@ -58,6 +58,40 @@ describe('runBackup', () => {
       const second = runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 + 86_400_000 })
       expect(second.name > first.name).toBe(true)
       expect(listBackups(test.dir).map((b) => b.name)).toEqual([second.name, first.name])
+    } finally { test.cleanup() }
+  })
+
+  // The stub tests below prove the contract around a failure; this one proves the comparison
+  // itself, against a copy that is genuinely wrong rather than one told to lie. The backup is
+  // taken first and only then does the source gain a row the copy never saw, so the mismatch is
+  // real: two counts that actually differ, not a rigged inequality.
+  it('rejects a backup that no longer holds the same rows as the source it was taken from', () => {
+    const test = createTestDatabase()
+    try {
+      seedPerson(test.db, 'p1')
+      const file = runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 })
+      seedPerson(test.db, 'p2')
+
+      expect(() => verifyBackup(file.path, test.db)).toThrow('does not hold the same rows')
+    } finally { test.cleanup() }
+  })
+
+  // The other half of the contract: when verify rejects a copy, nothing renamed, the evidence
+  // stays on disk, and the caller hears about it. A stub stands in for verifyBackup here because
+  // this test is about what runBackup does with a failure, not about producing one for real -
+  // that half is proven above.
+  it('renames nothing and keeps the .part when verify rejects the copy', () => {
+    const test = createTestDatabase()
+    try {
+      const verify = (): void => { throw new Error('stub says no') }
+
+      expect(() => runBackup({ db: test.db, dir: test.dir, nowMs: 1_770_000_000_000 }, verify))
+        .toThrow('stub says no')
+
+      const dir = join(test.dir, BACKUP_DIR_NAME)
+      const files = readdirSync(dir)
+      expect(files.some((f) => f.endsWith('.sqlite'))).toBe(false)
+      expect(files.some((f) => f.endsWith('.part'))).toBe(true)
     } finally { test.cleanup() }
   })
 })

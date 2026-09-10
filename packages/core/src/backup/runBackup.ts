@@ -1,5 +1,5 @@
 import { mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import type { Database } from '../db/open.ts'
 
@@ -59,20 +59,56 @@ export function listBackups(dir: string): BackupFile[] {
 const COUNTED = ['people', 'sources', 'raw_payloads', 'overrides', 'notes', 'events', 'samples']
 
 /**
+ * Opens a `.part` file read only and throws unless it is a well formed database holding the same
+ * rows as `db`.
+ *
+ * The proof is an integrity check plus row counts, not a checksum. `VACUUM INTO` legitimately
+ * produces different bytes from its source - that is what it is for - so the only honest question
+ * is whether the copy is a well formed database holding the same rows.
+ *
+ * Exported, and taking a path rather than an open handle, so a test can call it directly against
+ * a copy that is genuinely wrong - a live comparison, not a stub standing in for one - and so
+ * runBackup can hand this same function to a caller as a default while still letting a test
+ * replace it with one that fails on command. See runBackup below for why that seam exists.
+ */
+export function verifyBackup(partPath: string, db: Database): void {
+  const name = basename(partPath).replace(/\.part$/, '')
+  const counts = (run: (q: string) => unknown) => COUNTED.map((t) => run(`select count(*) c from ${t}`))
+  const copy = new BetterSqlite3(partPath, { readonly: true })
+  try {
+    if (copy.pragma('integrity_check', { simple: true }) !== 'ok') {
+      throw new Error(`the backup written to ${name} did not pass an integrity check`)
+    }
+    const theirs = counts((q) => copy.prepare(q).get())
+    const ours = counts((q) => db.$client.prepare(q).get())
+    if (JSON.stringify(theirs) !== JSON.stringify(ours)) {
+      throw new Error(`the backup written to ${name} does not hold the same rows as the database`)
+    }
+  } finally { copy.close() }
+}
+
+/**
  * Writes a compacted copy, proves it, and only then gives it the name of a backup.
  *
  * `VACUUM INTO` rather than a file copy: it takes a read lock only, so this runs while the app is
  * live and while a sync is in flight, and the result is compacted rather than carrying the same
  * dead space the live file carries.
  *
- * The proof is an integrity check plus row counts, not a checksum. `VACUUM INTO` legitimately
- * produces different bytes from its source - that is what it is for - so the only honest question
- * is whether the copy is a well formed database holding the same rows. The rename to the file's
- * real name happens last, after both checks pass: until then the only thing on disk is a `.part`,
- * which listBackups and pruneBackups both refuse to look at. That ordering is the entire point of
- * this function - see backup.test.ts for what breaks when it is not honored.
+ * The rename to the file's real name happens last, after `verify` passes: until then the only
+ * thing on disk is a `.part`, which listBackups and pruneBackups both refuse to look at. That
+ * ordering is the entire point of this function - see backup.test.ts for what breaks when it is
+ * not honored.
+ *
+ * `verify` defaults to `verifyBackup` and exists as a parameter only so a test can hand in a stub
+ * that fails on command - the same reason `vacuumIfBloated` takes `readFreeDisk`. Driving the real
+ * `verifyBackup` into a genuine failure is exercised separately, directly, in backup.test.ts;
+ * what a stub here proves is the contract around a failure, not the comparison itself: nothing
+ * renamed, the `.part` still on disk, the error reaching the caller.
  */
-export function runBackup(input: { db: Database, dir: string, nowMs: number }): BackupFile {
+export function runBackup(
+  input: { db: Database, dir: string, nowMs: number },
+  verify: (partPath: string, db: Database) => void = verifyBackup,
+): BackupFile {
   const at = backupDir(input.dir)
   mkdirSync(at, { recursive: true })
   const name = nameFor(input.nowMs)
@@ -82,18 +118,7 @@ export function runBackup(input: { db: Database, dir: string, nowMs: number }): 
   rmSync(part, { force: true })
   input.db.$client.exec(`VACUUM INTO '${part.replace(/'/g, "''")}'`)
 
-  const counts = (run: (q: string) => unknown) => COUNTED.map((t) => run(`select count(*) c from ${t}`))
-  const copy = new BetterSqlite3(part, { readonly: true })
-  try {
-    if (copy.pragma('integrity_check', { simple: true }) !== 'ok') {
-      throw new Error(`the backup written to ${name} did not pass an integrity check`)
-    }
-    const theirs = counts((q) => copy.prepare(q).get())
-    const ours = counts((q) => input.db.$client.prepare(q).get())
-    if (JSON.stringify(theirs) !== JSON.stringify(ours)) {
-      throw new Error(`the backup written to ${name} does not hold the same rows as the database`)
-    }
-  } finally { copy.close() }
+  verify(part, input.db)
 
   renameSync(part, finished)
   return { name, path: finished, takenAtMs: input.nowMs, bytes: statSync(finished).size }
