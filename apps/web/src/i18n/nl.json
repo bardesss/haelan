@@ -848,6 +848,7 @@
     },
     "maintenance": {
       "title": "Databaseonderhoud",
+      "credentialsUnreadable": "$t(connect.restoreDetail)",
       "bloat": "{{mb}} MB aan dode ruimte in het databasebestand.",
       "backups": {
         "none": "Nog geen back-ups.",

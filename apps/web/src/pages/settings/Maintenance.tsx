@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from '../../i18n/index.js'
+import { useSession } from '../../auth/session.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { formatNumber } from '../../format.js'
@@ -62,6 +63,7 @@ const BACKUP_DECLINE_KEY: Record<BackupDeclineReason, string> = {
 export function Maintenance() {
   const { t, i18n } = useTranslation()
   const queryClient = useQueryClient()
+  const session = useSession()
   const status = useMaintenanceStatus()
   const backup = useBackupNow()
   const reclaim = useReclaimSpace()
@@ -80,6 +82,16 @@ export function Maintenance() {
 
   return (
     <div className="maintenance">
+      {/* ConnectGoogle.tsx already carries this - ConnectGoogle sits at the top of Settings.tsx,
+          above this card, and ConnectGoogle.tsx's own doc comment explains what credentialsUnreadable
+          means. But someone who restored a backup without instance.key is reading *this* section
+          when they notice their data looks gone, not the card above it, and this section said
+          nothing. settings.maintenance.credentialsUnreadable is a $t() reference to
+          connect.restoreDetail rather than a second copy of its wording, so the two places that
+          explain this state cannot drift apart the way two independently written accounts would. */}
+      {session.data?.credentialsUnreadable === true && (
+        <p className="maintenance-backups">{t('settings.maintenance.credentialsUnreadable')}</p>
+      )}
       <p className="maintenance-bloat">
         {t('settings.maintenance.bloat', { mb: toMb(bloat.freeBytes, i18n.language) })}
       </p>

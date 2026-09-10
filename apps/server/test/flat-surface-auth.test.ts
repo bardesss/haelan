@@ -203,20 +203,36 @@ function errorOf(response: { body: string }): unknown {
 }
 
 /**
- * A refused session, in the one shape it comes back as: the envelope's { error: { kind, code } },
- * from app.requireSession itself now that no caller on this surface picks its own responder.
+ * The whole envelope, not only the field this file used to key off: kind, code and message, and
+ * nothing beside them. A route still answering the flat `{ error: 'a string' }` shape this unit
+ * deleted the second responder for fails already at the `typeof error !== 'object'` check; the
+ * key check beside it is what would also catch a route that wraps the right two fields in an
+ * envelope-shaped object but leaves a stray third one in, or ships with no message because no
+ * caller has needed to read one yet. That is the whole reason this table exists: the status and
+ * the code were never what a future route from an old example would get wrong.
+ */
+function isEnvelope(error: unknown, kind: string, code: string): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  if (Object.keys(error).sort().join(',') !== 'code,kind,message') return false
+  const body = error as { kind: unknown, code: unknown, message: unknown }
+  return body.kind === kind && body.code === code
+    && typeof body.message === 'string' && body.message.length > 0
+}
+
+/**
+ * A refused session, in the one shape it comes back as: the envelope's { error: { kind, code,
+ * message } }, from app.requireSession itself now that no caller on this surface picks its own
+ * responder.
  */
 function refusedForNoSession(response: { statusCode: number, body: string }): boolean {
   if (response.statusCode !== 401) return false
-  const error = errorOf(response)
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'no_session'
+  return isEnvelope(errorOf(response), 'unauthorized', 'no_session')
 }
 
 /** requireAdmin's one refusal: a resolved session whose account is not an admin. */
 function refusedForNotAdmin(response: { statusCode: number, body: string }): boolean {
   if (response.statusCode !== 403) return false
-  const error = errorOf(response)
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'not_admin'
+  return isEnvelope(errorOf(response), 'forbidden', 'not_admin')
 }
 
 describe('the flat surface outside /api/v1 is guarded', () => {

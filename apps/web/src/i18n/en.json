@@ -848,6 +848,7 @@
     },
     "maintenance": {
       "title": "Database maintenance",
+      "credentialsUnreadable": "$t(connect.restoreDetail)",
       "bloat": "{{mb}} MB of dead space in the database file.",
       "backups": {
         "none": "No backups yet.",
