@@ -1,9 +1,16 @@
 import type { FastifyReply } from 'fastify'
 import { ConfigError, TransientError } from '@haelan/core'
 
-// Second style, /api/v1 only. Every older route answers { error: 'a string' }, occasionally with
-// a sibling field, and the setup wizard's own client reads that flat shape; migrating it is a
-// later milestone's job, not this one's.
+// The shape, everywhere. There used to be a second one - every route outside /api/v1 answered
+// { error: 'a string' }, sometimes with a sibling field beside it - and the cost was not the
+// duplication but the silence: a client narrowing on error.kind read undefined off the string and
+// fell through without saying anything. M5e-1 migrated the last of them and deleted what had grown
+// to bridge the two, which was an injectable refusal in the session guard, a path-prefix branch in
+// the setup gate, and a second HTTP client in the web app.
+//
+// `{ error: { ... } }` and nothing else. A sibling field beside `error` is how the old shape came
+// back the first time; flat-surface-auth.test.ts asserts exactly these three keys on every route
+// outside /api/v1, which is what stops a new route written from an old example reintroducing it.
 export type ErrorKind = 'unauthorized' | 'forbidden' | 'not_found' | 'setup_incomplete' | 'config' | 'transient' | 'internal'
 
 export interface ApiErrorBody {
