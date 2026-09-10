@@ -722,6 +722,7 @@
   "connect": {
     "title": "Verbind je Google-account",
     "detail": "haelan leest je gezondheidsgegevens uit Google. Hier verschijnt niets totdat je verbinding maakt.",
+    "restoreDetail": "Je gezondheidsgegevens zijn veilig en nog steeds aanwezig. Deze instantie kan alleen de opgeslagen Google-gegevens niet lezen - dat gebeurt wanneer een database wordt hersteld zonder het instance.key-bestand waarmee ze versleuteld waren. Maak opnieuw verbinding om dit op te lossen; verder is er niets aan de hand.",
     "action": "Verbinden",
     "wrongAddress": "Google stuurt je na het geven van toestemming terug naar {{baseUrl}}, en dat is niet het adres dat je nu gebruikt, waardoor het geven van toestemming mislukt. Open haelan op {{baseUrl}}, of vraag degene die dit heeft ingesteld om een Tailscale- of proxyadres."
   },

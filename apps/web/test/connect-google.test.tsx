@@ -97,4 +97,23 @@ describe('the connect control', () => {
     expect(warningText()).not.toBeNull()
     expect(link()!.getAttribute('href')).toBe('/oauth/start')
   })
+
+  // A restored backup leaves this exact shape: never revoked, never re-connected, just unreadable
+  // - so the card owes this person the restore explanation, not the generic invitation that tells
+  // them nothing about what happened.
+  it('explains a restore instead of inviting a first connection when credentials are unreadable', () => {
+    mountWith({ connected: false, credentialsUnreadable: true, baseUrl: window.location.origin })
+    const detail = container!.querySelector('.connect-detail')!.textContent
+    expect(detail).toBe(
+      "Your health data is safe and still here. This instance just can't read the Google credentials it has on file - that's what happens when a database is restored without the instance.key file that encrypted them. Connect again to fix it; nothing else is affected.",
+    )
+    expect(detail).not.toBe('haelan reads your health data from Google. Nothing appears here until you connect.')
+    expect(link()!.getAttribute('href')).toBe('/oauth/start')
+  })
+
+  it('still shows the generic invitation for an ordinary never-connected person', () => {
+    mountWith({ connected: false, credentialsUnreadable: false, baseUrl: window.location.origin })
+    expect(container!.querySelector('.connect-detail')!.textContent)
+      .toBe('haelan reads your health data from Google. Nothing appears here until you connect.')
+  })
 })

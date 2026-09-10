@@ -722,6 +722,7 @@
   "connect": {
     "title": "Connect your Google account",
     "detail": "haelan reads your health data from Google. Nothing appears here until you connect.",
+    "restoreDetail": "Your health data is safe and still here. This instance just can't read the Google credentials it has on file - that's what happens when a database is restored without the instance.key file that encrypted them. Connect again to fix it; nothing else is affected.",
     "action": "Connect",
     "wrongAddress": "Google will send you back to {{baseUrl}}, which is not the address you are using. Consent will fail. Open haelan at {{baseUrl}}, or ask whoever set this up for a Tailscale or proxy address."
   },

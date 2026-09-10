@@ -27,9 +27,15 @@ function addressMismatch(baseUrl: string): boolean {
  * reads the session directly rather than taking props, so it drops into the Dashboard and Settings
  * alike with nothing threaded through either page.
  *
- * Renders nothing once connected: the session's own comment on `connected` covers a revoked
- * credentials row the same as a person who never connected, one boolean for both, so there is
- * nothing else this component needs to check.
+ * Renders nothing once connected, but "not connected" is not one state to explain - it is two.
+ * A revoked credential was refused by Google: the row on file is no good to anyone, and the
+ * generic invitation is the whole truth. An unreadable credential is different - the row is
+ * intact and Google never refused it, but instance.key cannot open it, the shape a database
+ * restore leaves behind when the key file did not travel with it. Nothing was lost there except
+ * the ability to read what is already stored, and a person in that state deserves to be told
+ * that, not handed the same "nothing appears here until you connect" line as someone who has
+ * never touched this instance. Only `credentialsUnreadable` distinguishes the two; `connected`
+ * alone cannot, which is why this component now checks it before picking which detail to show.
  *
  * The link renders even when the address looks wrong. A blocked control teaches a reader nothing;
  * the address on screen right now may not be the one they are about to open this same page from.
@@ -43,10 +49,11 @@ export function ConnectGoogle() {
   if (session.data === undefined || session.data.connected) return null
 
   const mismatch = addressMismatch(session.data.baseUrl)
+  const detail = session.data.credentialsUnreadable ? t('connect.restoreDetail') : t('connect.detail')
 
   return (
     <Card span={12} label={t('connect.title')}>
-      <p className="connect-detail">{t('connect.detail')}</p>
+      <p className="connect-detail">{detail}</p>
       {mismatch && (
         <p className="connect-warning">{t('connect.wrongAddress', { baseUrl: session.data.baseUrl })}</p>
       )}
