@@ -25,6 +25,25 @@ export interface SyncStatus {
   backfill: BackfillSummary[]
 }
 
+/**
+ * A failed setup request, carrying the status alongside the message.
+ *
+ * One status is not a message to show at all: 401 means this wizard is being walked without a
+ * session, which is a screen rather than a line of red text. Everything else stays exactly as it
+ * was - callers read `.message`, and an Error is what they already catch.
+ */
+export class SetupRequestError extends Error {
+  // Declared and assigned rather than a constructor parameter property: Node's type stripping
+  // rejects those outright. Same rule HaelanError follows on the server.
+  readonly status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+    this.name = 'SetupRequestError'
+  }
+}
+
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -39,7 +58,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
     const message = typeof (parsed as { error?: unknown }).error === 'string'
       ? (parsed as { error: string }).error
       : `request failed with ${response.status}`
-    throw new Error(message)
+    throw new SetupRequestError(response.status, message)
   }
   return parsed as T
 }

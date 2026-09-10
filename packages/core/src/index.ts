@@ -1,6 +1,10 @@
 export { openDatabase, closeDatabase, tableExists, DATABASE_FILENAME } from './db/open.ts'
 export type { Database, DbOrTx } from './db/open.ts'
 export { migrateToLatest } from './db/migrate.ts'
+export { databaseBloat, freeDiskBytes, BLOAT_FRACTION, BLOAT_FLOOR_BYTES, DISK_MARGIN } from './db/maintenance.ts'
+export type { DatabaseBloat } from './db/maintenance.ts'
+export { vacuumIfBloated, vacuumDecision } from './db/vacuum.ts'
+export type { VacuumOutcome, VacuumDecision } from './db/vacuum.ts'
 export * as schema from './db/schema/index.ts'
 export { loadOrCreateKey, KEY_FILENAME, KEY_ENV_VAR } from './crypto/key.ts'
 export { seal, unseal } from './crypto/secretBox.ts'
@@ -31,7 +35,10 @@ export { mapSessions } from './api/mapSessions.ts'
 export type { SessionRow, SegmentRow } from './api/mapSessions.ts'
 export { mapObservations } from './api/mapObservations.ts'
 export type { MapObservationsInput } from './api/mapObservations.ts'
-export { HaelanError, AuthError, TransientError, SchemaDriftError, DataQualityError, ConfigError, classifyHttp } from './errors.ts'
+export {
+  HaelanError, AuthError, TransientError, SchemaDriftError, DataQualityError, ConfigError,
+  CredentialsUnreadableError, classifyHttp,
+} from './errors.ts'
 export type { ErrorKind } from './errors.ts'
 export { openHaelan } from './instance.ts'
 export type { Instance } from './instance.ts'
@@ -171,3 +178,7 @@ export type { ChangedPair, ChangesResult } from './query/changes.ts'
 // the table's five identifier columns are integers, and a ref means nothing without it.
 export { SampleKeys } from './db/keys.ts'
 export type { SampleText } from './db/keys.ts'
+
+// M5d-c. A daily compacted copy, verified before it is ever called a backup.
+export { runBackup, listBackups, pruneBackups, backupDecision, BACKUP_DIR_NAME } from './backup/runBackup.ts'
+export type { BackupFile, BackupDecision } from './backup/runBackup.ts'

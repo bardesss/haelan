@@ -1,6 +1,7 @@
 ﻿import {
-  DATA_TYPES, RevokedError, TokenBucket, HealthClient, TokenProvider, peopleNeedingRebuild,
-  runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS, supports,
+  DATA_TYPES, RevokedError, CredentialsUnreadableError, TokenBucket, HealthClient, TokenProvider,
+  peopleNeedingRebuild, runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
+  supports,
 } from '@haelan/core'
 import type { DataType, JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -521,11 +522,15 @@ export class SyncRunner {
           // treating real progress as "no advance" only costs one extra pass over a type that was
           // going to need one anyway. Conservative in the safe direction, and it stays that way.
           if (result.windowsFetched > 0
-            && result.stoppedBecause !== 'error' && result.stoppedBecause !== 'revoked') {
+            && result.stoppedBecause !== 'error' && result.stoppedBecause !== 'revoked'
+            && result.stoppedBecause !== 'credentials_unreadable') {
             cursorAdvanced = true
           }
         } catch (error) {
-          if (error instanceof RevokedError) break
+          // Symmetric with runJob's own catch, which is where each of these is actually
+          // resolved into a stoppedBecause today rather than thrown this far - kept here too in
+          // case a future caller of runBackfill ever bypasses that translation.
+          if (error instanceof RevokedError || error instanceof CredentialsUnreadableError) break
           // runBackfill records the failures it expects through runJob, so anything arriving
           // here is unexpected. Recording it rather than swallowing it is what stops a whole
           // backfill from silently doing nothing: the first version of this catch was silent,

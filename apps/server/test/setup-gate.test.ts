@@ -51,6 +51,33 @@ describe('the setup gate', () => {
     expect(response.statusCode).not.toBe(409)
   })
 
+  // The account step hands back a session cookie, so a wizard walked in one sitting never signs
+  // in and this hole stayed shut for as long as nothing else could reach an unfinished wizard
+  // with accounts in it. A database restored without instance.key does exactly that: setup is
+  // 'google-client' again, /api/setup/account answers account_exists, and every remaining step
+  // wants a session. Refusing sign-in here left no way to obtain one.
+  it('lets an account that already exists sign in while the wizard is unfinished', async () => {
+    harness = await withServer()
+    const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
+    await harness.app.inject({
+      method: 'POST', url: '/api/setup/account', headers,
+      payload: {
+        username: 'bartus', password: 'a good long password',
+        displayName: 'Bartus', timezone: 'Europe/Amsterdam',
+      },
+    })
+    // The cookie that step minted, thrown away - a reload, a second browser, or a restore.
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/auth/login', headers,
+      payload: { username: 'bartus', password: 'a good long password' },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.cookies.some((c) => c.name === 'haelan_session')).toBe(true)
+    // And nothing else opened with it: the gate still holds the API shut at this step.
+    expect((await harness.app.inject({ method: 'GET', url: '/api/auth/me' })).statusCode).toBe(409)
+  })
+
   // Spec section 13 pauses a revoked person and the reconnect banner tells them so, but consent
   // is the only thing that can un-revoke them: putRefreshToken clears revoked_at_ms and nothing
   // else does. Closing /oauth/* once setup is done left the sole recovery path as hand-editing

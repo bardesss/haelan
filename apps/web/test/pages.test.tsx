@@ -86,7 +86,7 @@ function clickHandlerOf(entry: CapturedChart): (event: unknown) => void {
 }
 
 const PERSON: Session = {
-  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', connected: true, baseUrl: 'http://localhost:4235',
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
 const RANGE = '/dashboard?range=week&on=2026-08-12'

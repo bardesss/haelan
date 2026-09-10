@@ -38,6 +38,11 @@ async function listeningServer(options: { webRoot?: string } = {}): Promise<{
       authEndpoint: `${google.origin}/auth`,
     },
     limiter: { take: async () => {} },
+    // The same directory openHaelan just opened above, matching what index.ts hands buildServer
+    // in production. This suite is not about backups; the defaults are config.ts's own.
+    dataDir: dir,
+    backupKeep: 7,
+    backupIntervalHours: 24,
     backfillBatchDays: 2,
     // This suite builds the server directly rather than through harness.ts, so without this it
     // runs at the production SPRINT_DAYS (90) against a batch of 2 - 45 passes needed against

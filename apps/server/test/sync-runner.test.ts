@@ -1,5 +1,6 @@
+import { randomBytes } from 'node:crypto'
 import { describe, it, expect, afterEach, vi } from 'vitest'
-import { DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, SCOPES, supports } from '@haelan/core'
+import { CredentialStore, DATA_TYPES, DERIVATION_VERSION, MAPPING_VERSION, SCOPES, supports } from '@haelan/core'
 import { LIST_FAILS_TYPE, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { MAX_SPRINT_PASSES } from '../src/sync/runner.ts'
@@ -465,5 +466,48 @@ describe('the sync runner', { timeout: SPRINT_BUDGET_MS }, () => {
     const brokenType = harness.app.haelan.runner.status('p1').backfill
       .find((s) => s.dataType === LIST_FAILS_TYPE)
     expect(brokenType?.complete).toBe(false)
+  })
+
+  it('does not record a per type sync failure for a credential the instance key cannot decrypt, and does not spin the sprint chasing it', async () => {
+    // The runner's own share of the five sites this state's commit widened outside its brief -
+    // see credentials-unreadable-sync.test.ts (packages/core) for runJob, runBackfill and
+    // runSync's rollup catch, which this test does not repeat. This one is #backfillPass's own:
+    // the cursorAdvanced exclusion at the end of the sprint loop's per-type try. Built the way
+    // maintenance-routes.test.ts's "connected: false, credentialsUnreadable: true" test builds
+    // it - a second CredentialStore over the same database, sealing the row under a key this
+    // process never held - rather than a stub that throws the error class by hand, so
+    // credentials.ts's own decrypt failure is what drives the walk.
+    //
+    // One type, so a sprint pending forever on it is the only thing that can keep the loop
+    // going. Without the exclusion, windowsFetched > 0 on every pass - the failing window still
+    // counts as fetched - would read as progress, and the sprint would spend every one of
+    // MAX_SPRINT_PASSES chasing a cursor that can never move, logging "sprint used all N passes
+    // without converging", instead of the one pass it takes to notice nothing did.
+    const dataTypeId = 'weight'
+    harness = await withServer({
+      google: 'ok', dataTypes: [dataTypeId], sprintDays: 90, backfillBatchDays: 14,
+    })
+    await harness.connectPerson()
+
+    const { db } = harness.app.haelan.instance
+    new CredentialStore(db, randomBytes(32)).putRefreshToken({
+      personId: 'p1', refreshToken: 'sealed-under-a-key-this-process-does-not-have',
+      scopes: [...SCOPES], nowMs: harness.clock.nowMs,
+    })
+
+    const lines: string[] = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+      lines.push(args.map((a) => String(a)).join(' '))
+    })
+    try {
+      await harness.app.haelan.runner.trigger('manual')
+    } finally {
+      spy.mockRestore()
+    }
+
+    // Nothing in sync_state at all: neither the trailing sync nor either backfill pass ever
+    // called recordFailure, recordSchemaDrift or recordSuccess for this person and type.
+    expect(harness.app.haelan.stores.syncState.get('p1', dataTypeId)).toBeNull()
+    expect(lines.some((l) => l.includes('sprint used all'))).toBe(false)
   })
 })

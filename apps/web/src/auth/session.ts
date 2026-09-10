@@ -9,12 +9,18 @@ export interface Session {
   isAdmin: boolean
   timezone: string
   // Whether this person has a usable Google connection right now - a non-revoked refresh token,
-  // not merely a credentials row. A revoked person and a never-connected person are different
-  // stories, but the same boolean value is correct for both: neither can sync, and both need the
-  // same connect control to get moving again. One field is enough because there is only one
-  // action on the other side of it - a second flag distinguishing "revoked" from "never
-  // connected" would just be recombined back into this same boolean by every caller.
+  // not merely a credentials row. A revoked person and a never-connected person both need the
+  // same connect control to get moving again, so this one boolean is correct for both.
   connected: boolean
+  // A row exists, was never revoked, and instance.key still cannot open it - the state a
+  // restored backup leaves behind (runBackup copies the database and nothing else, so a key
+  // generated on the machine that restores it is never the key that sealed this row). This was
+  // argued unnecessary on the belief that every caller would recombine it back into `connected`
+  // regardless, but `connected` is already correctly false for this person, and recombining loses
+  // exactly the distinction a reconnect control needs to say why: "reconnect" is not the same
+  // instruction as "reconnect, because the credentials a backup could not carry over need to be
+  // re-consented once."
+  credentialsUnreadable: boolean
   // The instance's own address. Compared against the browser's own origin before consent starts,
   // because a mismatch discovered mid consent has already handed Google an approval to revoke.
   baseUrl: string

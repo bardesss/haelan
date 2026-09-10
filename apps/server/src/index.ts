@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { openHaelan } from '@haelan/core'
+import { openHaelan, vacuumIfBloated } from '@haelan/core'
 import { readConfig } from './config.ts'
 import { buildServer } from './app.ts'
 import { runBootSequence } from './rebuild.ts'
 import { rebuildInWorkerIfNeeded } from './rebuildInWorker.ts'
+import { MaintenanceTick } from './maintenance/tick.ts'
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working
@@ -18,11 +19,30 @@ const instance = openHaelan(dataDir)
 // server only dev run, where Vite serves the app on its own port and proxies back here, so a
 // missing dist is a normal state rather than a failure.
 const webRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), '../../web/dist'))
+// True from before the boot rebuild starts until rebuildInWorkerIfNeeded settles, which is the
+// only window in which a second connection - the worker thread, on rebuildWorker.ts's own thread
+// - might actually be open on haelan.sqlite. The reclaim and backup routes read it through
+// ServerDeps.rebuildInFlight to decline rather than run against a file a second writer might
+// still be advancing; see routes/maintenance.ts for why declining beats correcting the comment
+// that used to claim this could never happen.
+let rebuildInFlight = true
 const app = buildServer({
   instance,
   now: Date.now,
   fetch: globalThis.fetch,
+  dataDir,
+  backupKeep: config.backupKeep,
+  backupIntervalHours: config.backupIntervalHours,
+  rebuildInFlight: () => rebuildInFlight,
   ...(existsSync(join(webRoot, 'index.html')) ? { webRoot } : {}),
+})
+
+// Constructed here, beside the rest of the boot wiring, and started once the rebuild has settled
+// below - a vacuum and a backup both open their own connection to the same file, and only the
+// rebuild worker's own completion says that file is free of a second writer.
+const maintenance = new MaintenanceTick({
+  instance, dir: dataDir, keep: config.backupKeep, intervalHours: config.backupIntervalHours,
+  now: Date.now,
 })
 
 // Assigned after listen. Declared here so shutdown can wait on it: a rebuild holds a write
@@ -32,7 +52,12 @@ let rebuilding: Promise<unknown> = Promise.resolve()
 const shutdown = async () => {
   // Stop scheduling first so nothing new begins, then wait for whatever is already running.
   // Closing SQLite under a backfill mid-window is how a shutdown turns into a stack trace.
+  //
+  // Both schedulers, not just the sync one. The maintenance timer is hourly and unref'd, so the
+  // window is narrow and the consequence would be a backup starting against a database this
+  // function is about to close - the same stack trace, from the other timer.
   app.haelan.runner.stop()
+  maintenance.stop()
   await app.haelan.runner.settle()
   await rebuilding.catch(() => {})
   await app.close()
@@ -60,8 +85,51 @@ console.log(`data directory ${dataDir}`)
 // runBootSequence itself, in rebuild.ts, where a test can hold a mutation against it; this is
 // wiring only.
 rebuilding = runBootSequence({
-  rebuild: () => rebuildInWorkerIfNeeded({ instance, dataDir, log: (line) => { console.log(line) } }),
+  rebuild: () => rebuildInWorkerIfNeeded({ instance, dataDir, log: (line) => { console.log(line) } })
+    .finally(() => { rebuildInFlight = false }),
   startSync: () => { app.haelan.runner.start() },
   log: (line) => { console.log(line) },
   logError: (message, error) => { console.error(message, error) },
+})
+
+// Hung off the same promise, not branched on whether a rebuild actually ran: rebuilding resolves
+// immediately in the no-rebuild case too, so one chain covers both and a vacuum can never begin
+// while the rebuild worker still holds its own connection to the file. That means it runs while
+// the server is already serving - accepted, because better-sqlite3 is synchronous and this
+// process holds one connection, so it is a stall (about 1.5s on an 891 MB database) rather than a
+// lock conflict. The maintenance tick starts here too, once, for the same reason: it must not
+// take its first tick until the file it is about to back up is settled.
+//
+// The vacuum and the tick start do not share a fate, on purpose - a `.then` with no `.catch`
+// producing a *new* promise was exactly the bug here before: `rebuilding` is what `shutdown`
+// awaits with its own `.catch(() => {})`, but that guard does not run until SIGTERM, so a throw
+// from `VACUUM` (SQLITE_FULL, or SQLITE_BUSY against a slow-booting rebuild worker) was an
+// unhandled rejection in the meantime, which Node terminates on by default. And a version that
+// merely survived that would still have skipped `maintenance.start()` below it, which is an
+// instance that silently never takes a backup - the exact failure this unit exists to prevent.
+// So the vacuum is caught right here, never allowed to reject this chain, and the scheduler start
+// is unconditional rather than downstream of whether the vacuum happened to succeed.
+rebuilding = rebuilding.then(() => {
+  try {
+    const outcome = vacuumIfBloated(instance.db, dataDir)
+    if (outcome.ran && outcome.checkpointed) {
+      console.log(`reclaimed ${Math.round(outcome.reclaimedBytes / 1_000_000)} MB in ${outcome.ms} ms`)
+    } else if (outcome.ran) {
+      // checkpointed: false means SQLite answered busy on the truncate - some other connection
+      // was mid-read at that instant. The VACUUM itself already committed, so this is not a
+      // failure: the freed pages are real, they are just still sitting in the file until the next
+      // checkpoint (WAL's own, or this process's next boot) truncates it. Saying "reclaimed" here
+      // the same way the checkpointed branch does would tell an operator the disk usage graph
+      // should already show it, and it will not for a while yet.
+      console.log(`${Math.round(outcome.reclaimedBytes / 1_000_000)} MB reclaimed in ${outcome.ms} ms, `
+        + `but a checkpoint was busy - the file will not shrink until the next one runs`)
+    } else if (outcome.reason === 'not_enough_disk') {
+      // Logged rather than thrown: it is a correct decision about the machine's state, and it is
+      // the one an operator most needs to hear, since the space stays spent until they act.
+      console.log(`${Math.round(outcome.bloat.freeBytes / 1_000_000)} MB is reclaimable, but the disk cannot hold a second copy`)
+    }
+  } catch (error) {
+    console.error('boot vacuum failed', error)
+  }
+  maintenance.start()
 })

@@ -46,6 +46,29 @@ export class ConfigError extends HaelanError {
   constructor(message: string, options?: { cause?: unknown }) { super('config', message, options) }
 }
 
+// Distinct from RevokedError (api/tokens.ts): nobody revoked anything, and the row on disk is
+// exactly what putRefreshToken wrote. instance.key just cannot open it - the shape a backup
+// restored onto a different machine takes, since a backup deliberately carries no key of its
+// own. From this process's point of view the person is neither connected nor never-connected,
+// so it gets a kind of its own rather than folding into either.
+//
+// `personId` is null for the household OAuth client secret, which the same key seals and which
+// therefore goes unreadable in exactly the same breath as every token. It belongs to the
+// household rather than to a person, so there is nobody to name; it is not a second error class
+// because it is not a second condition - one key stopped opening what it sealed, and a caller
+// that has learned to treat this class as "the key cannot open this" would gain nothing from
+// having to learn a second name for the same sentence.
+export class CredentialsUnreadableError extends AuthError {
+  readonly personId: string | null
+
+  constructor(personId: string | null, options?: { cause?: unknown }) {
+    super(personId === null
+      ? 'the household OAuth client secret cannot be decrypted'
+      : `refresh token for person ${personId} cannot be decrypted`, options)
+    this.personId = personId
+  }
+}
+
 // A 4xx that is not 429 means the request was wrong, which retrying cannot fix. Treating it as
 // schema drift is what puts the archived payload in front of a human instead of in a retry loop.
 export function classifyHttp(status: number): 'transient' | 'schema_drift' {

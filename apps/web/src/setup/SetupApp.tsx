@@ -6,8 +6,10 @@ import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
 import { DataTypeStep } from './DataTypeStep.js'
+import { SignIn } from '../auth/SignIn.js'
 import {
-  getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus, putBackfillHorizon,
+  SetupRequestError, getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus,
+  putBackfillHorizon,
 } from './api.js'
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 
@@ -72,6 +74,25 @@ export function SetupApp() {
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(DATA_TYPES_DONE_KEY, String(done))
   }
 
+  // Every step but the first needs a session, and the first one mints one as it goes - so a
+  // wizard walked in one sitting never sees this. Something else has to have brought the reader
+  // to an unfinished wizard: a reload after the cookie expired, another browser, or a database
+  // restored without its instance.key, which cannot decrypt the Google client and so puts a
+  // finished instance back on this very step with nobody signed in. A 401 there is not a red
+  // line under a form, it is the sign-in screen; the server leaves /api/auth/login open during
+  // setup for exactly this (apps/server/src/routes/setupGate.ts).
+  const [needsSignIn, setNeedsSignIn] = useState(false)
+  const orSignIn = (cause: unknown): void => {
+    if (cause instanceof SetupRequestError && cause.status === 401) {
+      setNeedsSignIn(true)
+      return
+    }
+    // Anything else is not this handler's to eat. Rethrowing leaves it exactly the rejection it
+    // was before this catch existed, rather than turning a 500 into a screen that quietly shows
+    // an empty list and never says why.
+    throw cause
+  }
+
   // The server owns which step is due, so the browser asks rather than remembers. A reload
   // mid wizard, or a callback that landed on the wrong path, both resolve here.
   const refresh = () => {
@@ -85,13 +106,13 @@ export function SetupApp() {
 
   const onGoogleRoute = route.startsWith('/setup/google')
   useEffect(() => {
-    if (!onGoogleRoute) return
-    void getRedirectUris(window.location.hostname).then((r) => setCandidates(r.candidates))
-    void getScopes().then((r) => setScopes(r.scopes))
+    if (!onGoogleRoute || needsSignIn) return
+    void getRedirectUris(window.location.hostname).then((r) => setCandidates(r.candidates)).catch(orSignIn)
+    void getScopes().then((r) => setScopes(r.scopes)).catch(orSignIn)
     // The callback redirects here with an error code in the query, and the message that goes
     // with it lives on the server. Fetching it is what puts the console fix on screen.
-    if (route.includes('error=')) void getLastError().then(setCallbackError)
-  }, [onGoogleRoute, route])
+    if (route.includes('error=')) void getLastError().then(setCallbackError).catch(orSignIn)
+  }, [onGoogleRoute, route, needsSignIn])
 
   const onBackfill = route.startsWith('/setup/backfill')
   // Gated on dataTypesDone as well as the route: fetching progress and opening the live stream
@@ -116,6 +137,14 @@ export function SetupApp() {
     const poll = setInterval(() => { void getSyncStatus().then(setStatus) }, 5000)
     return () => { stream.close(); clearInterval(poll) }
   }, [showBackfill])
+
+  // On its own, the way Shell renders it, rather than inside the wizard's column: the rail is a
+  // claim about progress through steps this reader cannot take a single one of until they are
+  // signed in. The step may also have moved while nobody was, which is exactly what a restore
+  // does, so signing in asks the server where it is now rather than resuming this screen.
+  if (needsSignIn) {
+    return <SignIn onSignedIn={() => { setNeedsSignIn(false); refresh() }} />
+  }
 
   return (
     <div className="setup-shell">
