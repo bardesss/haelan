@@ -122,6 +122,20 @@ function amsterdamOffset(ms: number): string {
   return ms >= dstStarts && ms < dstEnds ? '7200s' : '3600s'
 }
 
+// The Amsterdam local-midnight instant that opens civil date `dateStr` (YYYY-MM-DD), in UTC
+// milliseconds - exported for scripts/seed-demo.mjs to anchor a span's exclusive end on. An
+// anchor at UTC midnight instead lets the last day this file generates, which is one UTC-day
+// chunk wide, straddle a local-day boundary: the couple of hours (one outside CEST) on the far
+// side of that boundary land in a new local day that nothing generated after endMs ever fills
+// back in, so it reads as the demo's own final day and reads nearly empty. Anchoring here instead
+// means the last chunk's own local day is the one that closes exactly on endMs, so there is
+// nothing left on the far side of it to spill into.
+export function localMidnightMs(dateStr: string): number {
+  const utcMidnight = Date.parse(`${dateStr}T00:00:00Z`)
+  const offsetSeconds = Number(amsterdamOffset(utcMidnight).slice(0, -1))
+  return utcMidnight - offsetSeconds * 1000
+}
+
 // Rises from nothing at 6am to a midday peak and back to nothing by 10pm. Reused for the heart
 // rate curve below so the two stay visibly related without either being derived from the other.
 const stepCurve = (hour: number): number => Math.max(0, Math.sin(((hour - 6) / 16) * Math.PI))

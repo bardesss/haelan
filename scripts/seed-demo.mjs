@@ -42,7 +42,7 @@ if (existsSync(dbPath)) {
 
 const { openHaelan } = await import('../packages/core/src/instance.ts')
 const { seedPerson } = await import('../packages/core/src/testing/fixtures.ts')
-const { seedArchive } = await import('../packages/core/src/testing/seed.ts')
+const { seedArchive, localMidnightMs } = await import('../packages/core/src/testing/seed.ts')
 const { runRebuild } = await import('../packages/core/src/rebuild/runRebuild.ts')
 const { PeopleStore } = await import('../packages/core/src/store/people.ts')
 
@@ -52,10 +52,15 @@ const PERSON_ID = 'demo'
 // same chart, and the fixed PRNG below only guarantees that if the calendar window it draws over
 // is fixed too - weekday alignment (isSunday in seed.ts) moves against a fixed draw sequence
 // whenever the end date moves, so "always looks current" and "reproducible" cannot both hold.
-// This is the ruling: reproducible wins, since it is what the spec actually asked for. Midnight
-// UTC, exclusive, the same convention seedArchive's own endMs carries.
+// This is the ruling: reproducible wins, since it is what the spec actually asked for.
 const DEMO_END_DATE = '2026-09-07'
-const endMs = Date.parse(`${DEMO_END_DATE}T00:00:00Z`)
+// Local midnight, not UTC midnight: seedArchive generates in UTC-day chunks, and a UTC-midnight
+// endMs lets the last chunk straddle Amsterdam's own day boundary, spilling an hour or two past it
+// into a new local day that nothing after endMs ever fills back in - the demo's most recent bar,
+// reading nearly empty on Activity and the Dashboard, which is exactly the right-hand edge a
+// stranger's eye lands on first. localMidnightMs closes the span on a completed local day instead,
+// so there is nothing left on the far side of it to spill into. See its own comment in seed.ts.
+const endMs = localMidnightMs(DEMO_END_DATE)
 
 const instance = openHaelan(dir)
 try {
