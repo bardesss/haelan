@@ -127,7 +127,11 @@ try {
     id: `${PERSON_ID}-account`, personId: PERSON_ID, username: USERNAME, password: PASSWORD,
     isAdmin: true, nowMs,
   })
-  instance.settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs })
+  // The operator's own port, not this script's guess at it. A baseUrl naming a port the server is
+  // not listening on is the redirect-URI mismatch the wizard exists to warn about, arriving by way
+  // of the demo instead.
+  const port = process.env.HAELAN_PORT ?? '4235'
+  instance.settings.put({ baseUrl: `http://localhost:${port}`, consentPath: 'localhost', nowMs })
   // A client nobody at Google issued. setupStep only checks that a client is on file, not that
   // Google accepts it (see its own comment in settings.ts), and this script's whole point is an
   // instance nobody needs a Google Cloud project to look at.
@@ -146,7 +150,7 @@ try {
   })
   instance.settings.markSetupComplete(nowMs)
 
-  console.log(`setup complete: sign in at http://localhost:4235 with username '${USERNAME}' and `
+  console.log(`setup complete: sign in at http://localhost:${port} with username '${USERNAME}' and `
     + `password '${PASSWORD}' - a known password, correct for this throwaway directory and wrong `
     + 'for any other.')
 } finally {

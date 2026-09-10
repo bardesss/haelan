@@ -158,7 +158,10 @@ HAELAN_DATA_DIR=./demo-data pnpm start
 Sign in as `demo` with the password `haelan-demo`. That password is printed by the script and
 written down here on purpose: it is correct for a throwaway directory and wrong for anything else,
 and the script refuses to run against a directory that already holds a database. The data comes
-from a fixed seed, which is why the screenshots above can be regenerated identically.
+from a fixed seed, so the data behind the screenshots above regenerates identically. The images
+themselves were taken on the week ending 2026-09-06, which is where the demo's data ends; a fresh
+boot opens on the current month instead, and you would have to walk back to that week to frame the
+same pictures.
 
 ## Backups, and restoring one
 
