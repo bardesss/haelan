@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { openHaelan } from '@haelan/core'
+import { openHaelan, vacuumIfBloated } from '@haelan/core'
 import { readConfig } from './config.ts'
 import { buildServer } from './app.ts'
 import { runBootSequence } from './rebuild.ts'
 import { rebuildInWorkerIfNeeded } from './rebuildInWorker.ts'
+import { MaintenanceTick } from './maintenance/tick.ts'
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working
@@ -23,6 +24,14 @@ const app = buildServer({
   now: Date.now,
   fetch: globalThis.fetch,
   ...(existsSync(join(webRoot, 'index.html')) ? { webRoot } : {}),
+})
+
+// Constructed here, beside the rest of the boot wiring, and started once the rebuild has settled
+// below - a vacuum and a backup both open their own connection to the same file, and only the
+// rebuild worker's own completion says that file is free of a second writer.
+const maintenance = new MaintenanceTick({
+  instance, dir: dataDir, keep: config.backupKeep, intervalHours: config.backupIntervalHours,
+  now: Date.now,
 })
 
 // Assigned after listen. Declared here so shutdown can wait on it: a rebuild holds a write
@@ -64,4 +73,23 @@ rebuilding = runBootSequence({
   startSync: () => { app.haelan.runner.start() },
   log: (line) => { console.log(line) },
   logError: (message, error) => { console.error(message, error) },
+})
+
+// Hung off the same promise, not branched on whether a rebuild actually ran: rebuilding resolves
+// immediately in the no-rebuild case too, so one chain covers both and a vacuum can never begin
+// while the rebuild worker still holds its own connection to the file. That means it runs while
+// the server is already serving - accepted, because better-sqlite3 is synchronous and this
+// process holds one connection, so it is a stall (about 1.5s on an 891 MB database) rather than a
+// lock conflict. The maintenance tick starts here too, once, for the same reason: it must not
+// take its first tick until the file it is about to back up is settled.
+rebuilding = rebuilding.then(() => {
+  const outcome = vacuumIfBloated(instance.db, dataDir)
+  if (outcome.ran) {
+    console.log(`reclaimed ${Math.round(outcome.reclaimedBytes / 1_000_000)} MB in ${outcome.ms} ms`)
+  } else if (outcome.reason === 'not_enough_disk') {
+    // Logged rather than thrown: it is a correct decision about the machine's state, and it is
+    // the one an operator most needs to hear, since the space stays spent until they act.
+    console.log(`${Math.round(outcome.bloat.freeBytes / 1_000_000)} MB is reclaimable, but the disk cannot hold a second copy`)
+  }
+  maintenance.start()
 })
