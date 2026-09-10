@@ -66,6 +66,7 @@ import { randomUUID } from 'node:crypto'
 import type { DataType } from '../api/catalogue.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
+import { localDateOf } from '../derive/localDay.ts'
 import { rollupRangeCapDays } from '../sync/runRollupJob.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
 import type { RollupWindow, SleepStage } from './payloads.ts'
@@ -93,12 +94,25 @@ function mulberry32(seed: number): () => number {
 const range = (rand: () => number, min: number, max: number): number => min + rand() * (max - min)
 const pick = <T>(rand: () => number, items: readonly T[]): T => items[Math.floor(rand() * items.length)]!
 
-// The three daily-summary metrics below key off the civil date dailyPoint expects, not the
-// millisecond instant the rest of this file passes around. Read back with getUTC*, matching the
-// UTC approximation listRequestParams already makes for this generator's person-less timezone.
+// The daily-summary metrics below (resting heart rate, HRV, respiratory rate, and - via
+// floorsWindows/totalCaloriesWindows further down - floors and total calories) key off the civil
+// date dailyPoint and putRollups expect, not the millisecond instant the rest of this file passes
+// around. `dayStart` sits at Amsterdam local midnight (localMidnightMs's own comment, and every
+// day back from it is one more 24-hour chunk), which is a UTC instant late in the *previous* UTC
+// day whenever Amsterdam is ahead of UTC - which it always is, CET or CEST, never behind. Reading
+// getUTCFullYear/Month/Date straight off that instant, as an earlier version of this function did,
+// therefore names the day before the one this chunk was generated for, on every one of these five
+// metrics, every day of the span. steps, heart rate and the rest of this file never went through
+// this function - the rebuild works their civil date out from the timestamps and offsets each
+// payload already carries - which is why the earlier bug was invisible everywhere except these
+// five: they are the ones that hand the API a pre-computed date rather than an instant, and the
+// only caller of this function. Fixed by asking derive/localDay.ts's own `localDateOf`, the one
+// place this codebase already computes a local day boundary, rather than re-approximating it a
+// second time with a mistake the first approximation did not have.
 const civilDateOf = (ms: number): { year: number, month: number, day: number } => {
-  const d = new Date(ms)
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }
+  const offsetMinutes = Number(amsterdamOffset(ms).slice(0, -1)) / 60
+  const [year, month, day] = localDateOf(ms, offsetMinutes).split('-').map(Number) as [number, number, number]
+  return { year, month, day }
 }
 
 // The catalogue has grown twice this month, and a wrong id here is a payload nothing maps: the

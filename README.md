@@ -143,7 +143,10 @@ credentials, and it is deliberately **not** in a backup, so keep a copy of it so
 ## Try it without a Google account
 
 `scripts/seed-demo.mjs` writes a year of generated data into an empty directory and leaves the
-setup wizard already finished, so an instance boots straight to a populated dashboard.
+setup wizard already finished, so an instance boots straight past it, signed in, with a year of
+history to browse. The seed's own span is fixed rather than tied to today - reproducibility over
+currency, `DEMO_END_DATE` in the script says why - so the default landing view can read thin once
+real time drifts past it even though the year behind it has not gone anywhere.
 
 ```
 pnpm install

@@ -12,6 +12,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
+import { axisTickInterval, WIDE_WINDOW } from '../src/charts/schedule.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Insight } from '../src/data/useInsight.js'
 import { flush, pumpUntil } from './flush.js'
@@ -441,6 +442,32 @@ describe('the Sleep page', () => {
     const scatter = (option?.series ?? []).find((series) => series.type === 'scatter')
     expect(scatter, JSON.stringify(option?.series?.map((s) => s.type))).toBeDefined()
     expect(scatter!.data).toEqual([[0, 2310]])
+    restore()
+  })
+
+  // final-review.md finding 4: the schedule y-axis read 12:00|16:00|01:00|09:00|17:00|00:00
+  // bottom to top, not monotonic, with the bottom two labels overlapping - reproduced live, and
+  // the second image a public README shows. schedule.test.ts pins axisTickInterval's own
+  // arithmetic against both windows this app builds; this is the test that would have caught the
+  // regression at the layer the screenshot actually showed it, by reading the real chart's own
+  // built option (echarts draws to an SVG host happy-dom applies no stylesheet to, so a wrong
+  // axis renders silently otherwise) rather than trusting that wiring the pure function in was
+  // enough on its own. Sleep.tsx passes WIDE_WINDOW, not SleepSchedule's own DEFAULT_WINDOW
+  // default, so this also pins that the six-hour interval - not the default's four-hour one -
+  // reaches the chart this page actually renders.
+  it('wires the wide window\'s own tick interval into the schedule chart, not ECharts\'s automatic one', async () => {
+    const restore = stubSleep([])
+    const { client, tree } = withQuery(<Sleep />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const host = container!.querySelector<HTMLDivElement>('div[role="img"][aria-label="common.bedWakeChartLabel"]')
+    expect(host, container!.innerHTML).not.toBeNull()
+    const option = echarts.getInstanceByDom(host!)?.getOption() as
+      { yAxis?: { min?: number, max?: number, interval?: number }[] } | undefined
+    const yAxis = option?.yAxis?.[0]
+    expect(yAxis?.min).toBe(WIDE_WINDOW.min)
+    expect(yAxis?.max).toBe(WIDE_WINDOW.max)
+    expect(yAxis?.interval).toBe(axisTickInterval(WIDE_WINDOW))
     restore()
   })
 

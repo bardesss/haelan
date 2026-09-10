@@ -104,18 +104,55 @@ describe('seedArchive', () => {
       // this test exists to catch. The day the anchor actually decides is whichever one comes out
       // latest: 2026-09-06 and nothing beyond it when endMs is local midnight, or a second,
       // 2026-09-07 row - the couple of hours spilled past that boundary - when it is not.
-      const rows = instance.db.select().from(daily).where(and(
-        eq(daily.personId, 'p1'),
-        eq(daily.metric, 'steps'),
-        eq(daily.agg, 'sum'),
-        eq(daily.source, MERGED_SOURCE),
-      )).all()
-      const lastRow = rows.reduce((latest, row) => (
+      const allRows = instance.db.select().from(daily).where(eq(daily.personId, 'p1')).all()
+      const stepsRows = allRows.filter((r) => r.metric === 'steps' && r.agg === 'sum' && r.source === MERGED_SOURCE)
+      const lastStepsRow = stepsRows.reduce((latest, row) => (
         latest === null || row.localDate > latest.localDate ? row : latest
-      ), null as (typeof rows)[number] | null)
+      ), null as (typeof stepsRows)[number] | null)
       // 1 means all 24 of that day's local hours carry a sample - a whole day generated, not a
       // couple of hours' spillover from the UTC chunk after it.
-      expect(lastRow?.coverage).toBe(1)
+      expect(lastStepsRow?.coverage).toBe(1)
+
+      // steps is the reference, not because it is special, but because it is the one metric this
+      // suite already trusted before this test existed: it is derived from real per-hour
+      // timestamps during the rebuild, never from this file's own civilDateOf, so a bug in
+      // civilDateOf has no way to reach it. Anchoring the rest of the check on it, rather than on
+      // a second hardcoded date, is what makes this a check of every OTHER metric agreeing with
+      // steps rather than two independently-guessed dates agreeing with each other.
+      const referenceDate = lastStepsRow!.localDate
+
+      // Every metric this run produced a `daily` row for, steps included, regardless of agg or
+      // source: the newest-day regression this test exists to catch (civilDateOf reading a UTC
+      // calendar date off an Amsterdam-local-midnight instant, one day early) does not care which
+      // aggregate or which source a metric's row carries, only which civil date it landed on.
+      // workout_count/workout_minutes are excluded on purpose, not overlooked: deriveExerciseDay
+      // writes no row at all for a day with no session (its own comment: "absence is the whole
+      // answer"), and this seed's workouts land on a fixed i % 3 === 1 schedule that need not
+      // include this run's own last day - a day 3 span here never does. That is ordinary
+      // sparseness, not the stamping bug, and asserting it away would make this test's pass
+      // depend on `days` and the workout schedule lining up rather than on civilDateOf being
+      // correct.
+      const EXCLUDED_SPARSE_METRICS = new Set(['workout_count', 'workout_minutes'])
+      const newestByMetric = new Map<string, string>()
+      for (const row of allRows) {
+        if (EXCLUDED_SPARSE_METRICS.has(row.metric)) continue
+        const seen = newestByMetric.get(row.metric)
+        if (seen === undefined || row.localDate > seen) newestByMetric.set(row.metric, row.localDate)
+      }
+      // Not vacuous: a query that matched nothing (a metric name typo'd out of existence, or a
+      // rebuild that silently produced no daily rows at all) would otherwise pass this loop by
+      // running zero iterations of it. 20 is comfortably under the ~30 metrics a 3 day run of
+      // every data type this generator writes actually produces, so it is a floor against an empty
+      // result, not a count this test is pinning.
+      expect(newestByMetric.size).toBeGreaterThan(20)
+      for (const [metric, newest] of newestByMetric) {
+        // This is what the earlier, steps-only pin could not see: resting_heart_rate, daily_hrv,
+        // respiratory_rate, floors and total_calories all filed their newest row under
+        // referenceDate minus one day, because civilDateOf read dayStart's UTC calendar date
+        // instead of its Amsterdam one. Naming the metric in the assertion message is what makes
+        // a broken run's failure legible rather than a bare boolean.
+        expect(newest, metric).toBe(referenceDate)
+      }
     } finally {
       // Handles closed before the directory comes down: an open SQLite handle on Windows turns
       // rmSync's EPERM into the error a failing coverage assertion would otherwise report.
