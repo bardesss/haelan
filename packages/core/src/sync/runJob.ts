@@ -8,7 +8,7 @@ import type { SourceRegistry } from '../store/sources.ts'
 import type { SyncStateStore } from '../store/syncState.ts'
 import type { DeriveQueue } from '../store/deriveQueue.ts'
 import { RevokedError } from '../api/tokens.ts'
-import { HaelanError, TransientError } from '../errors.ts'
+import { CredentialsUnreadableError, HaelanError, TransientError } from '../errors.ts'
 import { dayWindows } from './windows.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
 import { localDateOf } from '../derive/localDay.ts'
@@ -75,7 +75,7 @@ export interface JobResult {
   /** Windows whose body was not a shape this code knows. Non-zero withholds the mark. */
   unreadableWindows: number
   rowsWritten: number
-  skipped: 'revoked' | 'unsupported' | null
+  skipped: 'revoked' | 'credentials_unreadable' | 'unsupported' | null
 }
 
 export async function runJob(input: JobInput): Promise<JobResult> {
@@ -193,6 +193,13 @@ export async function runJob(input: JobInput): Promise<JobResult> {
       // A revoked person pauses alone. Every other failure stops this job and lets the rest of
       // the household keep syncing, because a failed sync must never block a dashboard read.
       if (error instanceof RevokedError) return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'revoked' })
+      // Same treatment, for the same reason: a key that cannot open this person's token is not
+      // this window failing, or this type, or this run - it is every window for this person
+      // until they reconsent, and recording it as a failure would write that story to every
+      // data type, every day, for a state that already has its own name.
+      if (error instanceof CredentialsUnreadableError) {
+        return finish({ windows: windows.length, points, rowsWritten, unreadableWindows, skipped: 'credentials_unreadable' })
+      }
       deps.syncState.recordFailure({
         personId: input.personId, dataType: t.id,
         error: classify(error),

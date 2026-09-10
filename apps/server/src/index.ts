@@ -23,6 +23,9 @@ const app = buildServer({
   instance,
   now: Date.now,
   fetch: globalThis.fetch,
+  dataDir,
+  backupKeep: config.backupKeep,
+  backupIntervalHours: config.backupIntervalHours,
   ...(existsSync(join(webRoot, 'index.html')) ? { webRoot } : {}),
 })
 

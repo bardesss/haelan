@@ -2,7 +2,7 @@
 import type { DbOrTx } from '../db/open.ts'
 import { oauthClient, credentials } from '../db/schema/index.ts'
 import { seal, unseal } from '../crypto/secretBox.ts'
-import { ConfigError } from '../errors.ts'
+import { ConfigError, CredentialsUnreadableError } from '../errors.ts'
 
 const CLIENT_ROW_ID = 'default'
 
@@ -55,11 +55,22 @@ export class CredentialStore {
     }).run()
   }
 
+  // Throws CredentialsUnreadableError rather than letting unseal's own error escape: a caller
+  // catching that has to know it means "the wrong key", not "the wrong shape" or "the wrong
+  // tag" - the two things AES-GCM's own failure actually reports. Every caller of this method
+  // wants the same distinction TokenProvider.accessTokenFor wants, so it is made once, here,
+  // rather than by every caller re-deriving it from a decipher exception.
   getRefreshToken(personId: string): StoredRefreshToken | null {
     const row = this.#db.select().from(credentials).where(eq(credentials.personId, personId)).get()
     if (!row) return null
+    let refreshToken: string
+    try {
+      refreshToken = unseal(this.#key, row.refreshTokenEncrypted)
+    } catch (error) {
+      throw new CredentialsUnreadableError(personId, { cause: error })
+    }
     return {
-      refreshToken: unseal(this.#key, row.refreshTokenEncrypted),
+      refreshToken,
       scopes: row.grantedScopes === '' ? [] : row.grantedScopes.split(' '),
       revokedAtMs: row.revokedAtMs ?? null,
     }
@@ -111,12 +122,40 @@ export class CredentialStore {
       .where(isNull(credentials.revokedAtMs)).all().map((r) => r.personId)
   }
 
-  // The single-person form of listConnectedPeople's own predicate: a credentials row exists and
-  // its token was never revoked. Anything that wants to know "does this person have a usable
-  // connection" - the session payload included - calls this rather than re-deriving the
-  // revocation check, so there is exactly one place that decides what "connected" means.
+  // Deliberately not listConnectedPeople's predicate (row exists, never revoked) plus a decrypt
+  // attempt bolted on: this is the one place that decides what "connected" means for a single
+  // person, and #readable below is the single place that decides whether the key can still open
+  // what putRefreshToken wrote. Anything that wants to know "does this person have a usable
+  // connection right now" - the session payload included - calls this.
+  //
+  // listConnectedPeople stays cheap and decrypt-free on purpose: it drives the scheduler's own
+  // eligibility check on every run, and a row whose key has gone bad is still worth one attempt
+  // - the failure surfaces through getRefreshToken instead, at the point that actually needs the
+  // plaintext, rather than by decrypting every household's tokens once an hour just to ask.
   isConnected(personId: string): boolean {
-    return this.#db.select({ personId: credentials.personId }).from(credentials)
-      .where(and(eq(credentials.personId, personId), isNull(credentials.revokedAtMs))).get() !== undefined
+    const row = this.#db.select().from(credentials).where(eq(credentials.personId, personId)).get()
+    if (!row || row.revokedAtMs !== null) return false
+    return this.#readable(row.refreshTokenEncrypted)
+  }
+
+  // The state this codebase had no name for until backups existed: a row that is neither absent
+  // nor revoked, whose token instance.key simply cannot open. Reported separately from
+  // isConnected rather than folded into a wider status - the person's own comment on `connected`
+  // in apps/web/src/auth/session.ts is right that one action (reconsent) covers both this and
+  // "never connected", but an operator asking why a member who was clearly connected yesterday
+  // now shows the connect button again deserves the real answer, not just the same boolean.
+  isCredentialsUnreadable(personId: string): boolean {
+    const row = this.#db.select().from(credentials).where(eq(credentials.personId, personId)).get()
+    if (!row || row.revokedAtMs !== null) return false
+    return !this.#readable(row.refreshTokenEncrypted)
+  }
+
+  #readable(encrypted: string): boolean {
+    try {
+      unseal(this.#key, encrypted)
+      return true
+    } catch {
+      return false
+    }
   }
 }

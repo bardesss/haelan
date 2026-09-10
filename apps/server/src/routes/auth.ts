@@ -120,6 +120,14 @@ export function registerAuth(app: FastifyInstance): void {
       // render anything: until M5f nothing in the app linked to /oauth/start except the setup
       // wizard.
       connected: app.haelan.stores.credentials.isConnected(account.personId),
+      // A row exists, was never revoked, and instance.key still cannot open it - the state a
+      // restored backup leaves behind, since runBackup copies the database and nothing else,
+      // and a key generated on the machine that restores it will not be the key that sealed
+      // this row. `connected` above is already correctly false for this person and drives the
+      // same reconnect control a never-connected person sees; this field exists only so that
+      // control, or an operator looking at it, can say why rather than leaving "why do I have
+      // to reconnect" unanswered.
+      credentialsUnreadable: app.haelan.stores.credentials.isCredentialsUnreadable(account.personId),
       // The address Google will send anyone back to. The client compares it against its own
       // origin, which is the only reliable way to tell before consent that the redirect cannot
       // land - and after consent is far too late, because access has already been granted.

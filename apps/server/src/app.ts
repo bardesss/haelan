@@ -12,6 +12,7 @@ import { registerSetup } from './routes/setup.ts'
 import { registerOauth } from './routes/oauth.ts'
 import { registerSync } from './routes/sync.ts'
 import { registerSettings } from './routes/settings.ts'
+import { registerMaintenance } from './routes/maintenance.ts'
 import { registerMemberRoutes } from './routes/members.ts'
 import { registerInviteRoutes } from './routes/invite.ts'
 import { registerV1 } from './routes/v1/index.ts'
@@ -33,6 +34,18 @@ export interface ServerDeps {
   endpoints?: EndpointOverrides
   /** Absolute path to the built web bundle. Unset in tests, which serve no static files. */
   webRoot?: string
+  /**
+   * The directory `openHaelan` was given. `Instance` does not expose it and `config.*` reaches
+   * only `index.ts`, so the maintenance routes - which need it for `listBackups` and for the
+   * vacuum's disk check - would otherwise have no honest way to learn it short of reading
+   * `process.env` themselves, which would work in production and leave them with nothing a test
+   * built from this file's own harness could ever point somewhere else.
+   */
+  dataDir: string
+  /** How many completed backups `POST .../backup` keeps after pruning. Mirrors `config.backupKeep`. */
+  backupKeep: number
+  /** Reported by `GET .../maintenance` alongside `backupKeep`. Mirrors `config.backupIntervalHours`. */
+  backupIntervalHours: number
   /**
    * Overrides the runner's token bucket. Production leaves it unset and gets the real one; a
    * test that drove hundreds of stubbed windows through the real bucket would spend minutes
@@ -151,6 +164,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerOauth(app)
   registerSync(app)
   registerSettings(app)
+  registerMaintenance(app)
   registerMemberRoutes(app)
   registerInviteRoutes(app)
   registerSetupGate(app)

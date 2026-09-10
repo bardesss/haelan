@@ -35,7 +35,10 @@ export { mapSessions } from './api/mapSessions.ts'
 export type { SessionRow, SegmentRow } from './api/mapSessions.ts'
 export { mapObservations } from './api/mapObservations.ts'
 export type { MapObservationsInput } from './api/mapObservations.ts'
-export { HaelanError, AuthError, TransientError, SchemaDriftError, DataQualityError, ConfigError, classifyHttp } from './errors.ts'
+export {
+  HaelanError, AuthError, TransientError, SchemaDriftError, DataQualityError, ConfigError,
+  CredentialsUnreadableError, classifyHttp,
+} from './errors.ts'
 export type { ErrorKind } from './errors.ts'
 export { openHaelan } from './instance.ts'
 export type { Instance } from './instance.ts'

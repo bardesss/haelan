@@ -26,7 +26,7 @@ export interface BackfillResult {
   windowsFetched: number
   rowsWritten: number
   complete: boolean
-  stoppedBecause: 'horizon' | 'batch' | 'error' | 'revoked'
+  stoppedBecause: 'horizon' | 'batch' | 'error' | 'revoked' | 'credentials_unreadable'
 }
 
 /**
@@ -82,6 +82,9 @@ export async function runBackfill(input: BackfillInput): Promise<BackfillResult>
     windowsFetched++
 
     if (result.skipped === 'revoked') return done('revoked', false, windowsFetched, rowsWritten)
+    if (result.skipped === 'credentials_unreadable') {
+      return done('credentials_unreadable', false, windowsFetched, rowsWritten)
+    }
     // runJob swallows its own failures and records them, so the failure counter moving is the
     // only signal that this window did not land. Marching on to the horizon after it would
     // mean walking five years of days against an API that is refusing every one of them.

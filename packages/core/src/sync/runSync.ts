@@ -5,6 +5,7 @@ import { runJob, classify } from './runJob.ts'
 import type { JobDeps } from './runJob.ts'
 import { runRollupJob } from './runRollupJob.ts'
 import { RevokedError } from '../api/tokens.ts'
+import { CredentialsUnreadableError } from '../errors.ts'
 
 export interface SyncReport {
   jobs: number
@@ -123,7 +124,10 @@ export async function runSync(input: SyncInput): Promise<SyncReport> {
         } catch (error) {
           // A rolled-back window's stale sources cache is runJob's problem, not this one: a
           // rollup writes only to daily, which carries no source foreign key to go stale.
-          if (error instanceof RevokedError) { report.skipped++; continue }
+          if (error instanceof RevokedError || error instanceof CredentialsUnreadableError) {
+            report.skipped++
+            continue
+          }
           input.deps.syncState.recordFailure({
             personId, dataType: job.dataType, error: classify(error), nowMs: toMs,
           })

@@ -133,6 +133,13 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // bucket refills against the wall clock. Rate limiting is exercised by TokenBucket's own
     // tests; making every server test wait on it would only make them slow.
     limiter: options.limiter ?? { take: async () => {} },
+    // The same temp directory openHaelan just opened below, matching what index.ts hands
+    // buildServer in production - see ServerDeps.dataDir for why a route cannot read
+    // HAELAN_DATA_DIR itself. keep and intervalHours are config.ts's own defaults; no test here
+    // is about either number, so nothing narrows them further.
+    dataDir: dir,
+    backupKeep: 7,
+    backupIntervalHours: 24,
     // One window per type, not fourteen, by default. Enough to prove the walk moved and
     // recorded a cursor, which is all most server tests assert; the ordering of a longer walk
     // is run-backfill's own test. A real batch is eighteen types of gzip per trigger and turns

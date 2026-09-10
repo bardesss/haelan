@@ -84,7 +84,8 @@ describe('auth', () => {
     })
     expect(response.json()).toEqual({
       personId: 'p1', displayName: 'Bartus', username: 'bartus', isAdmin: true,
-      timezone: 'Europe/Amsterdam', connected: false, baseUrl: 'http://localhost:4235',
+      timezone: 'Europe/Amsterdam', connected: false, credentialsUnreadable: false,
+      baseUrl: 'http://localhost:4235',
     })
   })
 
