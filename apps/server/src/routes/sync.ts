@@ -51,12 +51,11 @@ export function registerSync(app: FastifyInstance): void {
     // answer rather than a race, and the stream and the status route carry the rest.
     const outcome = app.haelan.runner.tryStart('manual')
     if (outcome.started) return reply.code(202).send({ started: true })
-    // No kind in ErrorKind means "a sync is already running" specifically - 'setup_incomplete' is
-    // the only one this app ever pairs with 409, and the web client's own status map already
-    // treats every 409 as that family (apps/web/src/api/client.ts). The code carries which
-    // refusal this one actually was.
+    // Neither refusal means setup is incomplete: a run is already going, or the instance is on
+    // its way down, and in both cases the honest answer is to try again shortly - which is what
+    // 'transient' means. The code still carries which of the two it was.
     return reply.code(409).send(errorBody(
-      'setup_incomplete',
+      'transient',
       outcome.reason ?? 'busy',
       outcome.reason === 'shutting_down' ? 'the instance is shutting down' : 'a sync is already running',
     ))

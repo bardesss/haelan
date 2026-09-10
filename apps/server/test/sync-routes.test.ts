@@ -67,7 +67,7 @@ describe('sync routes', () => {
     })
     expect(response.statusCode).toBe(409)
     expect(response.json()).toEqual({
-      error: { kind: 'setup_incomplete', code: 'already_running', message: expect.any(String) },
+      error: { kind: 'transient', code: 'already_running', message: expect.any(String) },
     })
     await inFlight
   })

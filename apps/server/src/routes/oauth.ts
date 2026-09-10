@@ -37,7 +37,7 @@ export function registerOauth(app: FastifyInstance): void {
     const settings = stores().settings.get()
     if (!account || !client || !settings) {
       const step = currentStep()
-      return reply.code(409).send({ ...errorBody('setup_incomplete', 'wrong_step', `setup is at the ${step} step`), step })
+      return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${step} step`))
     }
 
     const state = signState(app.haelan.instance.key, {

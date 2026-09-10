@@ -49,7 +49,7 @@ export function registerSetup(app: FastifyInstance): void {
   app.post<{ Body: InstanceUrlBody }>('/api/setup/instance-url', { preHandler: [app.requireSession] }, async (request, reply) => {
     if (step() !== 'instance-url') {
       const current = step()
-      return reply.code(409).send({ ...errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`), step: current })
+      return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`))
     }
     const { baseUrl, consentPath } = request.body ?? {}
     if (typeof baseUrl !== 'string' || typeof consentPath !== 'string'
