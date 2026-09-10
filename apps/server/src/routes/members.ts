@@ -23,22 +23,16 @@ interface MemberRow {
   inviteId: string | null
 }
 
-// This family answers { error: { kind, code, message } } like /api/v1, not the flat { error:
-// 'a string' } settings.ts and its neighbours use. There is no existing client reading these
-// routes yet - the admin screen that calls them is built alongside - so there is nothing to
-// break by starting on the newer shape, and M5e's migration then has three old families left to
-// move rather than four.
+// This family answered { error: { kind, code, message } } from the day it was written, while
+// every route outside /api/v1 still answered a flat string. That is no longer a distinction: M5e-1
+// migrated the last of them, so there is one shape and this file is not special for using it.
+// Kept as a note rather than deleted because it explains why these routes never needed migrating,
+// and because a bespoke session guard used to live below for exactly that reason - do not add
+// another. flat-surface-auth.test.ts asserts the shape on every route here.
 export function registerMemberRoutes(app: FastifyInstance): void {
   const stores = () => app.haelan.stores
 
-  // app.requireSession answers a missing session with settings.ts's flat { error: 'no_session' }.
-  // Resolving the session through app.sessionGuard with this file's own responder instead is what
-  // keeps that failure in the same envelope as everything else this file answers - the flat
-  // default would otherwise be the one shape here that does not match its own comment above.
-  const requireSession = app.sessionGuard((reply) => {
-    reply.code(statusFor('unauthorized')).send(errorBody('unauthorized', 'no_session', 'sign in required'))
-  })
-  const guard = [requireSession, app.requireAdmin]
+  const guard = [app.requireSession, app.requireAdmin]
 
   app.get('/api/members', { preHandler: guard }, async (_request, reply) => {
     const now = app.haelan.now()

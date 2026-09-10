@@ -60,9 +60,9 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
       ? t('controlRow.neverSynced')
       : t('controlRow.syncedAgo', { count: syncedMinutesAgo })
 
-  // /api/sync/run answers 409 when a run is already going, which apiSend maps to the
-  // setup_incomplete kind along with every other 409 on the surface, so the status is what tells
-  // the two apart. Without this a refused click did nothing and said nothing.
+  // /api/sync/run answers 409 for both a run already going and the instance shutting down, kind
+  // 'transient' either way, so the status is what tells this apart from every other error rather
+  // than the kind. Without this a refused click did nothing and said nothing.
   const syncErrorLabel = runSync.error instanceof ApiError && runSync.error.status === 409
     ? t('controlRow.syncAlreadyRunning')
     : t('controlRow.syncFailed')

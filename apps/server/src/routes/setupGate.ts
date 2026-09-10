@@ -33,17 +33,11 @@ export function registerSetupGate(app: FastifyInstance): void {
     const isSignIn = path === '/api/auth/login'
 
     if (step !== 'done' && !isSetupRoute && !isSignIn) {
-      // The versioned surface answers this gate in the envelope like every other status it can
-      // return. It is reached before any session check, so on a fresh instance it is the very
-      // first thing a client sees, and a client narrowing on body.error.kind cannot read a flat
-      // string. The older families keep the flat shape the wizard's own client reads.
-      if (path.startsWith('/api/v1/')) {
-        return reply.code(409).send({
-          ...errorBody('setup_incomplete', 'setup_incomplete', `setup is at the ${step} step`),
-          step,
-        })
-      }
-      return reply.code(409).send({ error: 'setup_incomplete', step })
+      // One shape for every family. This used to branch on whether the path was versioned, because
+      // the older families answered a flat string and a client narrowing on error.kind could not read
+      // it. With one shape there is nothing to choose between, and the first thing a client ever sees
+      // on a fresh instance is the same thing every later refusal will be.
+      return reply.code(409).send(errorBody('setup_incomplete', 'setup_incomplete', `setup is at the ${step} step`))
     }
     // Consent outlives setup; the rest of the wizard does not. A grant can die after setup is
     // long finished - the owner revokes haelan in their Google account, or Google invalidates it
@@ -56,7 +50,10 @@ export function registerSetupGate(app: FastifyInstance): void {
     // session, and /oauth/callback only accepts state this instance signed, for the person named
     // inside it.
     if (step === 'done' && isSetupRoute && !isConsentRoute) {
-      return reply.code(409).send({ error: 'setup_complete' })
+      // `setup_incomplete` as the kind for a refusal that means the opposite, because the kind is
+      // the family a client branches on and both 409s here mean the same thing to it: this is a
+      // wizard route and the wizard is not where you are. The code carries which of the two it was.
+      return reply.code(409).send(errorBody('setup_incomplete', 'setup_complete', 'setup is already finished'))
     }
   })
 }

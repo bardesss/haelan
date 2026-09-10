@@ -215,7 +215,9 @@ describe('empty volume to syncing instance', () => {
     // HTML where it expected an error object.
     const missing = await fetch(`${base}/api/nope`)
     expect(missing.status).toBe(404)
-    expect(await missing.json()).toEqual({ error: 'not_found' })
+    expect(await missing.json()).toEqual({
+      error: { kind: 'not_found', code: 'not_found', message: expect.any(String) },
+    })
 
     // And a client routed path still gets the shell afterwards, so the dashboard survives a
     // reload the same way the wizard did.

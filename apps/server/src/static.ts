@@ -1,5 +1,6 @@
 import fastifyStatic from '@fastify/static'
 import type { FastifyInstance } from 'fastify'
+import { errorBody } from './api/envelope.ts'
 
 // A path that names a file: an asset directory, or anything ending in an extension. The shell
 // is never the right answer for one of these, whether or not the file is there.
@@ -15,13 +16,13 @@ export function registerStatic(app: FastifyInstance, webRoot: string): void {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? ''
     if (path.startsWith('/api/') || path.startsWith('/oauth/')) {
-      return reply.code(404).send({ error: 'not_found' })
+      return reply.code(404).send(errorBody('not_found', 'not_found', `no route answers '${path}'`))
     }
     // A missing file is a missing file. Handing index.html to a <script type="module"> answers
     // it with HTML, and the browser reports a MIME type error that names neither the file that
     // was missing nor the reason, which is a genuinely hard thing to diagnose from.
     if (LOOKS_LIKE_A_FILE.test(path)) {
-      return reply.code(404).send({ error: 'not_found' })
+      return reply.code(404).send(errorBody('not_found', 'not_found', `no file answers '${path}'`))
     }
     // Client routed paths such as /setup/google have no file behind them, so they get the
     // shell and the router sorts it out.

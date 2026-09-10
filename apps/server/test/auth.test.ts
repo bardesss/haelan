@@ -57,7 +57,9 @@ describe('auth', () => {
     await harness.completeSetup()
     const response = await login(harness, 'wrong')
     expect(response.statusCode).toBe(401)
-    expect(response.json()).toEqual({ error: 'invalid_credentials' })
+    expect(response.json()).toEqual({
+      error: { kind: 'unauthorized', code: 'invalid_credentials', message: expect.any(String) },
+    })
   })
 
   it('answers 423 once locked, which is a different fact from a wrong password', async () => {
@@ -66,7 +68,9 @@ describe('auth', () => {
     for (let i = 0; i < 10; i++) await login(harness, 'wrong')
     const response = await login(harness)
     expect(response.statusCode).toBe(423)
-    expect(response.json()).toEqual({ error: 'locked' })
+    expect(response.json()).toEqual({
+      error: { kind: 'unauthorized', code: 'locked', message: expect.any(String) },
+    })
   })
 
   it('refuses /api/auth/me without a session', async () => {
@@ -155,6 +159,8 @@ describe('auth', () => {
       payload: { username: 'bartus', password: 'a good long password' },
     })
     expect(response.statusCode).toBe(403)
-    expect(response.json()).toEqual({ error: 'bad_origin' })
+    expect(response.json()).toEqual({
+      error: { kind: 'forbidden', code: 'bad_origin', message: 'the origin header does not match this instance' },
+    })
   })
 })

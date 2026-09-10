@@ -8,10 +8,10 @@ import { BackfillStep } from './BackfillStep.js'
 import { DataTypeStep } from './DataTypeStep.js'
 import { SignIn } from '../auth/SignIn.js'
 import {
-  SetupRequestError, getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus,
-  putBackfillHorizon,
+  getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus, putBackfillHorizon,
 } from './api.js'
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
+import { ApiError } from '../api/client.js'
 
 const STEPS = [
   { step: 'account', path: '/setup/account', titleKey: 'setup.app.steps.account' },
@@ -83,7 +83,7 @@ export function SetupApp() {
   // setup for exactly this (apps/server/src/routes/setupGate.ts).
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const orSignIn = (cause: unknown): void => {
-    if (cause instanceof SetupRequestError && cause.status === 401) {
+    if (cause instanceof ApiError && cause.status === 401) {
       setNeedsSignIn(true)
       return
     }

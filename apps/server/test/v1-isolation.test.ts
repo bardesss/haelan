@@ -332,8 +332,8 @@ describe.each(ROUTES)('the versioned surface is isolated per person: $name', (ro
 
   // The body, not only the status: an expired session is the most common error any client of this
   // surface will ever see, and the one shape a client narrowing on body.error.kind has to be able
-  // to read. A status-only assertion here is what let ten route entries agree on 401 while
-  // answering the older families' flat { error: 'no_session' } instead of the envelope.
+  // to read. A status-only assertion here would pass even if this route answered the right status
+  // with the wrong code.
   it('answers 401 with no session at all, in the envelope shape', async () => {
     const response = await routeHarness.app.inject({ method: 'GET', url: route.path('p1') })
     expect(response.statusCode).toBe(401)
@@ -508,10 +508,10 @@ describe('the versioned surface, beyond the per-route table', () => {
         },
       })
       expect(written.statusCode).toBe(403)
-      // The envelope, not only the status: auth.ts's origin hook also answers a bare 403 (a flat
-      // { error: 'bad_origin' }), on any mutating request whose Origin and Host disagree. Dropping
-      // ORIGIN's `host` by accident would make this case a same-status, wrong-reason pass; the
-      // code below is what tells the two apart.
+      // The code, not only the status: auth.ts's origin hook also answers a bare 403 (code
+      // 'bad_origin'), on any mutating request whose Origin and Host disagree. Dropping ORIGIN's
+      // `host` by accident would make this case a same-status, wrong-reason pass; the code below
+      // is what tells the two apart.
       expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
 
       const removed = await harness.app.inject({

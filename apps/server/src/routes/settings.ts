@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS, DATA_TYPES, supports } from '@haelan/core'
+import { errorBody } from '../api/envelope.ts'
 
 interface HorizonBody { days?: unknown }
 
@@ -28,7 +29,7 @@ export function registerSettings(app: FastifyInstance): void {
   app.put<{ Body: HorizonBody }>('/api/settings/backfill-horizon', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
     const { days } = request.body ?? {}
     if (typeof days !== 'number' || !(USER_HORIZON_CHOICES as readonly number[]).includes(days)) {
-      return reply.code(400).send({ error: `days must be one of ${USER_HORIZON_CHOICES.join(', ')}` })
+      return reply.code(400).send(errorBody('config', 'config', `days must be one of ${USER_HORIZON_CHOICES.join(', ')}`))
     }
     const previousDays = stores().settings.get()?.backfillHorizonDays ?? DEFAULT_USER_HORIZON_DAYS
     stores().settings.putBackfillHorizon(days, app.haelan.now())

@@ -17,24 +17,38 @@ describe('the setup gate', () => {
     harness = await withServer()
     const response = await harness.app.inject({ method: 'GET', url: '/api/auth/me' })
     expect(response.statusCode).toBe(409)
-    expect(response.json()).toEqual({ error: 'setup_incomplete', step: 'account' })
+    expect(response.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_incomplete', message: 'setup is at the account step' },
+    })
   })
 
-  // The same refusal, in the versioned surface's own shape. On a fresh instance this gate is
-  // reached before any session check, so it is the first thing a v1 client ever sees, and a
-  // client narrowing on body.error.kind cannot read the flat string the older families use.
-  // Found by curling a real server rather than by app.inject, which is why it survived the
-  // round that fixed the 401 on the same surface.
-  it('refuses a v1 route in the envelope shape, not the flat one', async () => {
+  // The same refusal, on the versioned surface. On a fresh instance this gate is reached before
+  // any session check, so it is the first thing a v1 client ever sees. Found by curling a real
+  // server rather than by app.inject, which is why it survived the round that fixed the 401 on
+  // the same surface.
+  it('refuses a v1 route the same way', async () => {
     harness = await withServer()
     const response = await harness.app.inject({
       method: 'GET', url: '/api/v1/p/p1/series?metric=steps&agg=sum&from=2026-08-01&to=2026-08-02',
     })
     expect(response.statusCode).toBe(409)
-    expect(response.json()).toMatchObject({
-      error: { kind: 'setup_incomplete', code: 'setup_incomplete' },
-      step: 'account',
+    expect(response.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_incomplete', message: 'setup is at the account step' },
     })
+  })
+
+  it('answers one shape, whatever the path family', async () => {
+    harness = await withServer()
+    const flat = await harness.app.inject({ method: 'GET', url: '/api/sync/status' })
+    const versioned = await harness.app.inject({ method: 'GET', url: '/api/v1/daily' })
+
+    expect(flat.statusCode).toBe(409)
+    expect(versioned.statusCode).toBe(409)
+    // Same body shape from both families - the branch this replaces is the seam the unit removes.
+    expect(flat.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_incomplete', message: expect.any(String) },
+    })
+    expect(versioned.json()).toEqual(flat.json())
   })
 
   it('leaves the health check open, so a container probe works during setup', async () => {
@@ -98,7 +112,9 @@ describe('the setup gate', () => {
       payload: { baseUrl: 'http://elsewhere.invalid', consentPath: 'elsewhere.invalid' },
     })
     expect(response.statusCode).toBe(409)
-    expect(response.json()).toEqual({ error: 'setup_complete' })
+    expect(response.json()).toEqual({
+      error: { kind: 'setup_incomplete', code: 'setup_complete', message: expect.any(String) },
+    })
   })
 
   it('still reports the step after setup is finished, because the SPA asks on every load', async () => {

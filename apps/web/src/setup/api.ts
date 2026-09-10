@@ -1,3 +1,5 @@
+import { apiGet, apiSend } from '../api/client.js'
+
 export interface RedirectCandidate {
   uri: string
   labelKey: string
@@ -25,65 +27,27 @@ export interface SyncStatus {
   backfill: BackfillSummary[]
 }
 
-/**
- * A failed setup request, carrying the status alongside the message.
- *
- * One status is not a message to show at all: 401 means this wizard is being walked without a
- * session, which is a screen rather than a line of red text. Everything else stays exactly as it
- * was - callers read `.message`, and an Error is what they already catch.
- */
-export class SetupRequestError extends Error {
-  // Declared and assigned rather than a constructor parameter property: Node's type stripping
-  // rejects those outright. Same rule HaelanError follows on the server.
-  readonly status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-    this.name = 'SetupRequestError'
-  }
-}
-
-async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const response = await fetch(path, {
-    method,
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  const text = await response.text()
-  const parsed: unknown = text === '' ? {} : JSON.parse(text)
-  if (!response.ok) {
-    // The server's messages name the console fix, so the message is the useful thing to
-    // surface. A status code would send the reader looking for it.
-    const message = typeof (parsed as { error?: unknown }).error === 'string'
-      ? (parsed as { error: string }).error
-      : `request failed with ${response.status}`
-    throw new SetupRequestError(response.status, message)
-  }
-  return parsed as T
-}
-
-export const getSetupState = () => send<{ step: string }>('GET', '/api/setup/state')
-export const getLastError = () => send<SetupError>('GET', '/api/setup/last-error')
-export const getSyncStatus = () => send<SyncStatus>('GET', '/api/sync/status')
+export const getSetupState = () => apiGet<{ step: string }>('/api/setup/state')
+export const getLastError = () => apiGet<SetupError>('/api/setup/last-error')
+export const getSyncStatus = () => apiGet<SyncStatus>('/api/sync/status')
 export const getRedirectUris = (host: string) =>
-  send<{ candidates: RedirectCandidate[] }>('GET', `/api/setup/redirect-uris?host=${encodeURIComponent(host)}`)
+  apiGet<{ candidates: RedirectCandidate[] }>(`/api/setup/redirect-uris?host=${encodeURIComponent(host)}`)
 
 // Fetched rather than hard coded in this bundle, so the list on screen is the list the server
 // will actually request at consent.
-export const getScopes = () => send<{ scopes: string[] }>('GET', '/api/setup/scopes')
+export const getScopes = () => apiGet<{ scopes: string[] }>('/api/setup/scopes')
 
 export const createAccount = (body: {
   username: string, password: string, displayName: string, timezone: string
-}) => send<{ personId: string, step: string }>('POST', '/api/setup/account', body)
+}) => apiSend<{ personId: string, step: string }>('POST', '/api/setup/account', body)
 
 export const putInstanceUrl = (body: { baseUrl: string, consentPath: string }) =>
-  send<{ step: string, redirectUri: string }>('POST', '/api/setup/instance-url', body)
+  apiSend<{ step: string, redirectUri: string }>('POST', '/api/setup/instance-url', body)
 
 export const putGoogleClient = (body: { clientId: string, clientSecret: string }) =>
-  send<{ step: string }>('POST', '/api/setup/google-client', body)
+  apiSend<{ step: string }>('POST', '/api/setup/google-client', body)
 
 // Under /api/settings/, not /api/setup/: the backfill screen is the step after setup is
 // 'done', and the setup gate answers every /api/setup/* path with 409 once it is.
 export const putBackfillHorizon = (days: number) =>
-  send<{ backfillHorizonDays: number }>('PUT', '/api/settings/backfill-horizon', { days })
+  apiSend<{ backfillHorizonDays: number }>('PUT', '/api/settings/backfill-horizon', { days })
