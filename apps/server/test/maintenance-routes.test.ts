@@ -60,6 +60,9 @@ describe('POST /api/settings/maintenance/backup', () => {
     const body = response.json()
     expect(body.name).toMatch(/^haelan-.*\.sqlite$/)
     expect(body.bytes).toBeGreaterThan(0)
+    // Same disclosure the GET handler eleven lines above already refuses: the server's absolute
+    // filesystem path has no use on a household dashboard and no business leaving this process.
+    expect(body.path).toBeUndefined()
 
     const onDisk = listBackups(harness.app.haelan.dataDir)
     expect(onDisk).toHaveLength(1)

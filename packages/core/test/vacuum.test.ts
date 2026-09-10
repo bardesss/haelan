@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { sql } from 'drizzle-orm'
 import { createTestDatabase } from '../src/testing/fixtures.ts'
 import { databaseBloat } from '../src/db/maintenance.ts'
-import { vacuumIfBloated } from '../src/db/vacuum.ts'
+import { vacuumDecision, vacuumIfBloated } from '../src/db/vacuum.ts'
 
 // Bloats a database past both thresholds the way production does: write a lot, delete it, and
 // leave the freed pages on the freelist.
@@ -72,6 +72,42 @@ describe('vacuumIfBloated', () => {
       if (outcome.ran) return
       expect(outcome.reason).toBe('not_enough_disk')
       expect(databaseBloat(test.db).fileBytes).toBe(before.fileBytes)
+    } finally { test.cleanup() }
+  })
+})
+
+describe('vacuumDecision', () => {
+  it('declines on the bloat gates before ever consulting disk, so a fresh database is never reported blocked on account of it', () => {
+    // The route bug this guards: apps/server/src/routes/maintenance.ts used to compute the
+    // disk-margin comparison on its own, with nothing stopping it from reporting "blocked" on a
+    // database below_fraction would have declined for anyway. Failing this disk reader for any
+    // size at all proves the gate order, not a number picked far below some real margin.
+    const test = createTestDatabase()
+    try {
+      const decision = vacuumDecision(test.db, test.dir, () => 0)
+      expect(decision.run).toBe(false)
+      if (decision.run) return
+      expect(decision.reason).not.toBe('not_enough_disk')
+      expect(['below_fraction', 'below_floor']).toContain(decision.reason)
+    } finally { test.cleanup() }
+  })
+
+  it('is what vacuumIfBloated itself declines with, not a second copy that could disagree', () => {
+    const test = bloated()
+    try {
+      // One byte short of the margin, same as vacuumIfBloated's own "declines when the disk
+      // cannot hold a second copy" test above - the gate both functions have to land on.
+      const live = databaseBloat(test.db).liveBytes
+      const readFreeDisk = (): number => Math.floor(live * 1.2) - 1
+
+      const decision = vacuumDecision(test.db, test.dir, readFreeDisk)
+      const outcome = vacuumIfBloated(test.db, test.dir, readFreeDisk)
+
+      expect(decision.run).toBe(false)
+      expect(outcome.ran).toBe(false)
+      if (decision.run || outcome.ran) return
+      expect(outcome.reason).toBe(decision.reason)
+      expect(outcome.bloat).toEqual(decision.bloat)
     } finally { test.cleanup() }
   })
 })

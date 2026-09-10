@@ -1,7 +1,18 @@
 import type { FastifyInstance } from 'fastify'
 import {
-  databaseBloat, freeDiskBytes, DISK_MARGIN, vacuumIfBloated, runBackup, listBackups, pruneBackups,
+  vacuumDecision, vacuumIfBloated, runBackup, listBackups, pruneBackups,
 } from '@haelan/core'
+import type { BackupFile } from '@haelan/core'
+
+// path stays server side. Nothing here needs the filesystem location of another household's
+// backup folder, and nothing should be able to ask the browser to send it back. One function
+// rather than one strip per handler: a comment on a single GET route did not stop a POST route
+// eleven lines below it from sending the whole object, so the shape that cannot disagree with
+// itself is the one written once and called from both.
+function withoutPath(file: BackupFile): Omit<BackupFile, 'path'> {
+  const { name, takenAtMs, bytes } = file
+  return { name, takenAtMs, bytes }
+}
 
 /**
  * The household's view of the two M5d units: how bloated the live file is, what backups exist,
@@ -17,20 +28,21 @@ export function registerMaintenance(app: FastifyInstance): void {
 
   app.get('/api/settings/maintenance', { preHandler: guard }, async (_request, reply) => {
     const { instance, dataDir, backupKeep, backupIntervalHours } = app.haelan
-    const bloat = databaseBloat(instance.db)
-    // name, takenAtMs and bytes only - path stays server side. Nothing here needs the
-    // filesystem location of another household's backup folder, and nothing should be able to
-    // ask the browser to send it back.
-    const backups = listBackups(dataDir).map(({ name, takenAtMs, bytes }) => ({ name, takenAtMs, bytes }))
-    // The same comparison vacuumIfBloated makes before it ever touches the file, read only: a
-    // GET must not decide whether to vacuum, only preview the one branch of that decision an
-    // operator cannot already read off the bloat figures above. below_fraction and below_floor
-    // both mean there is nothing worth reclaiming yet, which freeFraction and freeBytes already
-    // say for themselves; not_enough_disk is the one an operator has to be told, because it
-    // stays true until they free space, and the reclaim button alone would only report it after
-    // being clicked.
-    const vacuumBlocked = freeDiskBytes(dataDir) < bloat.liveBytes * DISK_MARGIN
-    return reply.send({ bloat, backups, keep: backupKeep, intervalHours: backupIntervalHours, vacuumBlocked })
+    const backups = listBackups(dataDir).map(withoutPath)
+    // Read only, through the same three-gate decision vacuumIfBloated itself uses rather than a
+    // second copy of its disk-margin comparison: a GET must not decide whether to vacuum, only
+    // preview the one branch of that decision an operator cannot already read off the bloat
+    // figures below. below_fraction and below_floor both mean there is nothing worth reclaiming
+    // yet, which freeFraction and freeBytes already say for themselves; not_enough_disk is the
+    // one an operator has to be told, because it stays true until they free space, and the
+    // reclaim button alone would only report it after being clicked. Routing both through
+    // vacuumDecision means this can never call it "blocked" for a database reclaim would decline
+    // for an unrelated, much less alarming reason.
+    const decision = vacuumDecision(instance.db, dataDir)
+    const vacuumBlocked = !decision.run && decision.reason === 'not_enough_disk'
+    return reply.send({
+      bloat: decision.bloat, backups, keep: backupKeep, intervalHours: backupIntervalHours, vacuumBlocked,
+    })
   })
 
   app.post('/api/settings/maintenance/backup', { preHandler: guard }, async (_request, reply) => {
@@ -40,7 +52,7 @@ export function registerMaintenance(app: FastifyInstance): void {
     // against keep, or a person clicking the button ten times in a row would grow the folder
     // without bound while the schedule's own backups stay capped.
     pruneBackups(dataDir, backupKeep)
-    return reply.send(file)
+    return reply.send(withoutPath(file))
   })
 
   app.post('/api/settings/maintenance/reclaim', { preHandler: guard }, async (_request, reply) => {
