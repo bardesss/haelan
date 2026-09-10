@@ -39,7 +39,24 @@ function bloated(): ReturnType<typeof createTestDatabase> {
   return test
 }
 
-describe('vacuumIfBloated', () => {
+// A file level budget, the way apps/server/test/sync-runner.test.ts has one, and for the reason
+// that file records: this suite runs on hardware it does not choose, and the global 20s testTimeout
+// is a hang detector rather than a cost ceiling.
+//
+// Four tests here build a database past the 64 MiB floor and then vacuum it, measured at 2.4s to
+// 4.3s each when the file runs alone. That is comfortable solo and is not the number that matters:
+// this project has measured contention stretching one test 3x in a full run, and a CI runner
+// stretching another 12.9x. At 12.9x the slowest of these is 55s, which the global timeout would
+// fail while the code was perfectly correct - and a full run on this machine has already failed two
+// tests it did not name, at a wall clock of 311s against a usual 190s.
+//
+// 60s rather than a smaller number: it is above what contention plausibly costs and far below what
+// a genuine hang looks like, which is the only job a per-test timeout has here. The cost itself is
+// not reducible without giving up the thresholds - a test of a 64 MiB floor must build more than
+// 64 MiB and vacuum it.
+const VACUUM_BUDGET_MS = 60_000
+
+describe('vacuumIfBloated', { timeout: VACUUM_BUDGET_MS }, () => {
   it('reclaims the free pages and makes the file smaller, in bytes actually on disk', () => {
     const test = bloated()
     try {
@@ -133,7 +150,7 @@ describe('vacuumIfBloated', () => {
   })
 })
 
-describe('vacuumDecision', () => {
+describe('vacuumDecision', { timeout: VACUUM_BUDGET_MS }, () => {
   it('declines on the bloat gates before ever consulting disk, so a fresh database is never reported blocked on account of it', () => {
     // The route bug this guards: apps/server/src/routes/maintenance.ts used to compute the
     // disk-margin comparison on its own, with nothing stopping it from reporting "blocked" on a
