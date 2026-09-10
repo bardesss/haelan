@@ -1,6 +1,8 @@
 export { openDatabase, closeDatabase, tableExists, DATABASE_FILENAME } from './db/open.ts'
 export type { Database, DbOrTx } from './db/open.ts'
 export { migrateToLatest } from './db/migrate.ts'
+export { databaseBloat, freeDiskBytes, BLOAT_FRACTION, BLOAT_FLOOR_BYTES, DISK_MARGIN } from './db/maintenance.ts'
+export type { DatabaseBloat } from './db/maintenance.ts'
 export * as schema from './db/schema/index.ts'
 export { loadOrCreateKey, KEY_FILENAME, KEY_ENV_VAR } from './crypto/key.ts'
 export { seal, unseal } from './crypto/secretBox.ts'
