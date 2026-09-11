@@ -136,18 +136,19 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # release-please writes the release as a draft, and a draft carries no git tag: GitHub
-      # creates the tag at the moment it is published. So this step is what makes the release and
-      # its tag exist at all, and it runs only once the image both architectures were booted from
-      # is in the registry.
+      # There used to be a step here that published a draft release once the image was in the
+      # registry, so a release page could never point at an image that failed to publish. It is
+      # gone, and the reason is worth keeping rather than quietly dropping.
       #
-      # That ordering is the reason for the draft. A release pointing at an image that failed to
-      # publish is worse than no release at all, because it looks like the tag succeeded, and
-      # somebody following the README's one command gets a 404 from the thing the release page
-      # says is ready. If this workflow fails before here, what is left behind is an unpublished
-      # draft and no tag, which is a state a rerun can reach the same way it reached it first.
-      - name: Publish the release the image is now behind
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.release-please.outputs.tag }}
-        run: gh release edit "$TAG" --draft=false --latest
+      # A draft release carries no git tag, and release-please finds its own previous releases by
+      # tag. With `draft: true` it never found one: every run reported "No latest release found"
+      # and recomputed the version by walking all 217 commits in this repository's history. That
+      # history always contains a `feat:`, so every run proposed at least a minor bump, and
+      # merging a release opened another release for no changes. 1.2.0, 1.3.0 and a proposed
+      # 1.4.0 were produced that way, each containing only its own release commit.
+      #
+      # So the ordering guarantee was real and the mechanism that bought it made the version
+      # number fiction, which is the worse of the two. What is left is a window of about seven
+      # minutes between the release existing and the image reaching the registry. A failure in it
+      # is loud, a red run, and recoverable by rerunning or deleting the release, where a version
+      # computed from the wrong base is neither.
