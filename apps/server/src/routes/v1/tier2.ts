@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
+import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
   optionalPositiveInt, personQueryOf, requireBoundedRange, requireString, roundMetricValueOrNull, sendHashed,
 } from './shared.ts'
 
 interface PersonParams { personId: string }
+interface SessionParams { personId: string, sessionId: string }
 
 interface IntradayQuery {
   metric?: string
@@ -145,5 +147,28 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
     return sendHashed(reply, request, page)
+  })
+
+  /**
+   * One session by id. Registered after the list route; fastify's router is not order sensitive
+   * between a static segment and a parameter at the same depth, but keeping them adjacent keeps
+   * the two shapes of the same resource in one place.
+   *
+   * Answers the session object directly rather than a one-item list, because a detail read has
+   * exactly one answer and wrapping it would make every caller index into it first.
+   */
+  app.get<{ Params: SessionParams }>('/p/:personId/sessions/:sessionId', async (request, reply) => {
+    const personQuery = personQueryOf(request)
+    const sessionId = request.params.sessionId
+
+    const session: WorkoutSession | null = personQuery.sessionById({ sessionId })
+    // 404 for an id that names nothing and for one belonging to somebody else alike. readSession
+    // is scoped by person, so this handler never learns which of the two it is, and therefore
+    // cannot leak the difference: a 403 would confirm the id exists.
+    if (session === null) {
+      return reply.code(statusFor('not_found'))
+        .send(errorBody('not_found', 'no_such_session', `no session '${sessionId}'`))
+    }
+    return sendHashed(reply, request, session)
   })
 }

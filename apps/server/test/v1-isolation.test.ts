@@ -195,6 +195,19 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-source-999999',
   },
   {
+    name: 'sessions/:sessionId',
+    template: '/api/v1/p/:personId/sessions/:sessionId',
+    // seedSession derives its id as `${personId}-${kind}-session`, so each person's path names
+    // their own row. The cross-person case, p1's own path carrying p2's session id, cannot be
+    // expressed by a table whose path() takes one personId; it has its own test in
+    // v1-session-by-id.test.ts.
+    path: (p) => `/api/v1/p/${p}/sessions/${p}-exercise-session`,
+    seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise' }),
+    seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
     name: 'changes',
     template: '/api/v1/p/:personId/changes',
     // changes has no metric parameter; the metric name written to the row is the marker instead.
