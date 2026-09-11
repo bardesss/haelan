@@ -63,6 +63,29 @@ describe('openReadOnly', () => {
     expect(() => openReadOnly(test.dir)).toThrow(/newer than this build/i)
   })
 
+  it('names the rebuild when the write lock will not come free, rather than saying "locked"', () => {
+    // The third failure mode the design lists, and the only one a caller should respond to by
+    // waiting. Provoked with locking_mode = EXCLUSIVE on the fixture's own connection, which is
+    // what makes a writer's lock outlast its transaction and reach a reader at all: under plain
+    // WAL a reader never blocks on a writer, so a real rebuild is the rare shape that does.
+    //
+    // The call costs about five seconds of wall clock, which is openReadOnly's own busy_timeout
+    // running out: the refusal is what the wait ends in. Called once and the error kept, rather
+    // than the three toThrow calls the tests above use, because three would cost fifteen.
+    test.db.$client.pragma('locking_mode = EXCLUSIVE')
+    test.db.run(sql`insert into __drizzle_migrations (hash, created_at) values ('holds-the-lock', 1)`)
+
+    let thrown: unknown
+    try {
+      openReadOnly(test.dir)
+    } catch (err) {
+      thrown = err
+    }
+    expect(thrown).toBeInstanceOf(ConfigError)
+    expect((thrown as Error).message).toMatch(/busy and did not come free/i)
+    expect((thrown as Error).message).toMatch(/rebuild/i)
+  }, 20_000)
+
   it('refuses a database that exists but was never migrated', () => {
     // openDatabase creates the physical file before migrateToLatest runs, so a migration that
     // fails leaves exactly this: a file with no __drizzle_migrations table at all, not just one
