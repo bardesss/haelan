@@ -363,3 +363,10 @@ a network service, the AGPL requires you to publish your changes to the people u
 
 Not open to contributions yet; the interfaces are still moving weekly. Issues describing what you
 would want from a self-hosted health dashboard are welcome once the repository is public.
+
+**Every user-visible change updates [CHANGELOG.md](CHANGELOG.md)'s `Unreleased` section, in the
+same pull request rather than afterwards.** A dependency bump or an internal refactor nobody using
+the dashboard would notice has no entry to add. At release, `Unreleased` is renamed to the new
+version and an empty `Unreleased` goes back above it. The release workflow reads that section
+straight out of the file for the GitHub Release it creates, so a tag whose version has no section
+there fails the job instead of publishing a page with no notes on it.
