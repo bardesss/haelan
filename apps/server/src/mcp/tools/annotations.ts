@@ -1,14 +1,6 @@
 import { z } from 'zod'
 import type { Tool } from '../contract.ts'
-import { untrusted } from '../contract.ts'
-
-// See series.ts for why every tool with a real input schema is routed through this identity
-// function rather than given a bare `: Tool` annotation.
-function defineTool<I extends z.ZodRawShape, O extends z.ZodRawShape>(tool: Tool<I, O>): Tool<I, O> {
-  return tool
-}
-
-const UNTRUSTED = z.object({ untrustedText: z.string().nullable(), truncated: z.boolean() })
+import { defineTool, untrusted, UNTRUSTED } from '../contract.ts'
 
 export const searchNotes = defineTool({
   name: 'search_notes',

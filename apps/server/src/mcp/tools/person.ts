@@ -1,9 +1,7 @@
 import { z } from 'zod'
 import { METRICS } from '@haelan/core/metrics'
 import type { Tool } from '../contract.ts'
-import { untrusted } from '../contract.ts'
-
-const UNTRUSTED = z.object({ untrustedText: z.string().nullable(), truncated: z.boolean() })
+import { untrusted, UNTRUSTED } from '../contract.ts'
 
 export const describePerson: Tool = {
   name: 'describe_person',

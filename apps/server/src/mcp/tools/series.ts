@@ -1,32 +1,6 @@
 import { z } from 'zod'
 import type { Tool } from '../contract.ts'
-import { budgetFor, summaryOf, DEFAULT_DAILY_POINTS } from '../contract.ts'
-
-// A plain `: Tool` annotation on an object literal (no type arguments given) instantiates the
-// interface at its own declared defaults, `Tool<z.ZodRawShape, z.ZodRawShape>` — TypeScript does
-// not back-infer `I`/`O` from the initializer for a variable type annotation the way it infers a
-// generic function's type parameters from the arguments of a call. Left that way, `z.infer` over
-// the defaulted `I` has no concrete keys, so every field of `args` inside `run` is `unknown`,
-// caught only by `pnpm typecheck`, never by any test that calls `run` with a plain object literal.
-// Routing each tool through this generic identity function instead gives TypeScript an actual call
-// to infer `I`/`O` from, the same mechanism any other generic function uses, so `run`'s `args` and
-// return value are checked against this tool's own schemas. This is unrelated to why `Tool.run` in
-// contract.ts is method shorthand: that fix is what lets `Tool<I, O>` values with different,
-// narrower `I`/`O` collapse into one `Tool[]` below with no cast; this function is what gives each
-// of them a real `I`/`O` to narrow from in the first place.
-function defineTool<I extends z.ZodRawShape, O extends z.ZodRawShape>(tool: Tool<I, O>): Tool<I, O> {
-  return tool
-}
-
-const REDUCTION = z.object({
-  method: z.string(), from: z.number(), to: z.number(),
-}).nullable()
-
-const SUMMARY = z.object({
-  n: z.number(), min: z.number().nullable(), max: z.number().nullable(),
-  mean: z.number().nullable(), median: z.number().nullable(),
-  first: z.number().nullable(), last: z.number().nullable(),
-})
+import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
 export const querySeries = defineTool({
   name: 'query_series',

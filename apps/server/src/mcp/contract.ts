@@ -1,4 +1,4 @@
-import type { z } from 'zod'
+import { z } from 'zod'
 import type { PersonQuery } from '@haelan/core'
 
 /**
@@ -31,6 +31,48 @@ export interface Tool<I extends z.ZodRawShape = z.ZodRawShape, O extends z.ZodRa
   // Do not "tidy" this back into an arrow-typed property: every tool file breaks at once.
   run(q: PersonQuery, args: z.infer<z.ZodObject<I>>): z.infer<z.ZodObject<O>>
 }
+
+/**
+ * The identity function every tool literal is routed through.
+ *
+ * A plain `: Tool` annotation on an object literal (no type arguments given) instantiates the
+ * interface at its own declared defaults, `Tool<z.ZodRawShape, z.ZodRawShape>` — TypeScript does
+ * not back-infer `I`/`O` from the initializer for a variable type annotation the way it infers a
+ * generic function's type parameters from the arguments of a call. Left that way, `z.infer` over
+ * the defaulted `I` has no concrete keys, so every field of `args` inside `run` is `unknown`,
+ * caught only by `pnpm typecheck`, never by any test that calls `run` with a plain object literal.
+ * Routing each tool through this generic identity function instead gives TypeScript an actual call
+ * to infer `I`/`O` from, the same mechanism any other generic function uses, so `run`'s `args` and
+ * return value are checked against this tool's own schemas. This is unrelated to why `Tool.run`
+ * above is method shorthand: that fix is what lets `Tool<I, O>` values with different, narrower
+ * `I`/`O` collapse into one `Tool[]` with no cast; this function is what gives each of them a real
+ * `I`/`O` to narrow from in the first place.
+ *
+ * One copy, here, rather than one per family file. Four identical copies is four things that can
+ * drift, and the drift test cannot see it: each tool documents its own copy, so a family whose
+ * copy grew a difference would still render a TOOLS.md that matches itself.
+ */
+export function defineTool<I extends z.ZodRawShape, O extends z.ZodRawShape>(tool: Tool<I, O>): Tool<I, O> {
+  return tool
+}
+
+/**
+ * The three output shapes more than one family returns, for the same reason `defineTool` is here:
+ * a second copy of a shape is a second thing to keep in step, and nothing in the suite compares
+ * them. `SUMMARY` mirrors `Summary` below, `UNTRUSTED` mirrors `Untrusted`, and `REDUCTION`
+ * mirrors what the query layer's readers put in their `reduction` field.
+ */
+export const REDUCTION = z.object({
+  method: z.string(), from: z.number(), to: z.number(),
+}).nullable()
+
+export const SUMMARY = z.object({
+  n: z.number(), min: z.number().nullable(), max: z.number().nullable(),
+  mean: z.number().nullable(), median: z.number().nullable(),
+  first: z.number().nullable(), last: z.number().nullable(),
+})
+
+export const UNTRUSTED = z.object({ untrustedText: z.string().nullable(), truncated: z.boolean() })
 
 /**
  * Budgets are the server's to set, not the caller's to request.

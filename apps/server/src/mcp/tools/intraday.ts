@@ -1,22 +1,6 @@
 import { z } from 'zod'
 import type { Tool } from '../contract.ts'
-import { budgetFor, summaryOf, DEFAULT_INTRADAY_POINTS } from '../contract.ts'
-
-// See series.ts for why every tool with a real input schema is routed through this identity
-// function rather than given a bare `: Tool` annotation.
-function defineTool<I extends z.ZodRawShape, O extends z.ZodRawShape>(tool: Tool<I, O>): Tool<I, O> {
-  return tool
-}
-
-const REDUCTION = z.object({
-  method: z.string(), from: z.number(), to: z.number(),
-}).nullable()
-
-const SUMMARY = z.object({
-  n: z.number(), min: z.number().nullable(), max: z.number().nullable(),
-  mean: z.number().nullable(), median: z.number().nullable(),
-  first: z.number().nullable(), last: z.number().nullable(),
-})
+import { budgetFor, defineTool, summaryOf, DEFAULT_INTRADAY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
 export const getIntraday = defineTool({
   name: 'get_intraday',
