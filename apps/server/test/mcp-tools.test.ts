@@ -1,5 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION } from '@haelan/core'
+import {
+  PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
+} from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
 
@@ -114,6 +116,60 @@ describe('query_series', () => {
     expect(out.points.length).toBeLessThanOrEqual(50)
     expect(out.reduction).not.toBeNull()
     expect(out.reduction!.from).toBe(400)
+  })
+})
+
+describe('get_intraday', () => {
+  it('returns a day of samples with a summary and no reduction at the default budget', () => {
+    const nineAm = Date.UTC(2026, 7, 10, 7, 0) // 09:00 local at +120 on 2026-08-10.
+    for (let i = 0; i < 90; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, {
+          personId: 'robin', sourceId: 'watch', metric: 'heart_rate',
+          utcMs: nineAm + i * 60_000, tzOffsetMinutes: 120, agg, value: 100 + i,
+        })
+      }
+    }
+
+    const out = tool('get_intraday').run(q(), {
+      metric: 'heart_rate', localDate: '2026-08-10',
+    }) as {
+      points: { utcMs: number, mean: number | null }[]
+      reduction: unknown
+      summary: { n: number }
+    }
+
+    expect(out.points).toHaveLength(90)
+    expect(out.points[0]!.mean).toBe(100)
+    expect(out.summary.n).toBe(90)
+    expect(out.reduction).toBeNull()
+  })
+})
+
+describe('get_sleep', () => {
+  const H = 3_600_000
+  // 23:00 local on 2026-08-09 at +120 is 21:00Z, so the night starts before the date it belongs to.
+  const BEDTIME = Date.UTC(2026, 7, 9, 21, 0)
+
+  it('returns the night filed under the morning it ends on, with its stage segments', () => {
+    test.db.insert(schema.sessions).values({
+      id: 'night-1', personId: 'robin', sourceId: 'watch', kind: 'sleep', externalId: 'night-1',
+      startMs: BEDTIME, startOffsetMinutes: 120, endMs: BEDTIME + 8 * H, endOffsetMinutes: 120,
+      localDate: '2026-08-10', rawPayloadId: null,
+      attrs: JSON.stringify({ mainSleep: true }),
+    }).run()
+    test.db.insert(schema.sessionSegments).values([
+      { id: 'seg-1', sessionId: 'night-1', stage: 'LIGHT', startMs: BEDTIME, endMs: BEDTIME + 5 * H },
+      { id: 'seg-2', sessionId: 'night-1', stage: 'DEEP', startMs: BEDTIME + 5 * H, endMs: BEDTIME + 8 * H },
+    ]).run()
+
+    const out = tool('get_sleep').run(q(), { from: '2026-08-10', to: '2026-08-10' }) as {
+      nights: { localDate: string, segments: { stage: string, startMs: number, endMs: number }[] }[]
+    }
+
+    expect(out.nights).toHaveLength(1)
+    expect(out.nights[0]!.localDate).toBe('2026-08-10')
+    expect(out.nights[0]!.segments.map((s) => s.stage)).toEqual(['LIGHT', 'DEEP'])
   })
 })
 
