@@ -6,6 +6,7 @@ import { OverrideList } from './settings/OverrideList.js'
 import { SourceNames } from './settings/SourceNames.js'
 import { DataTypes } from './settings/DataTypes.js'
 import { Members } from './settings/Members.js'
+import { InstanceUrl } from './settings/InstanceUrl.js'
 import { Maintenance } from './settings/Maintenance.js'
 
 // The settings page: no sections existed before this one, so pages/settings/ holds each section's
@@ -39,6 +40,15 @@ export function Settings() {
         {session.data?.isAdmin === true && (
           <Card span={12} label={t('settings.members.title')}>
             <Members />
+          </Card>
+        )}
+        {/* Admin only, and gated here for the same reason Members is: the PUT it calls already
+            answers 'forbidden' to anyone else, and the address on show is one nobody but an admin
+            can act on. Placed above Maintenance because moving an instance is a thing a household
+            does once and needs to find, not a figure they watch. */}
+        {session.data?.isAdmin === true && (
+          <Card span={12} label={t('settings.instanceUrl.title')}>
+            <InstanceUrl />
           </Card>
         )}
         {/* Admin only, and gated here for the same reason Members is: the three routes it calls

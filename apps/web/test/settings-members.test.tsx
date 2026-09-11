@@ -9,6 +9,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Settings } from '../src/pages/Settings.js'
 import { Members } from '../src/pages/settings/Members.js'
+import { instanceUrlKey } from '../src/data/useInstanceUrl.js'
 import { membersKey } from '../src/data/useMembers.js'
 import type { MemberRow } from '../src/data/useMembers.js'
 import { sourceNamesKey } from '../src/data/useSourceNames.js'
@@ -79,9 +80,9 @@ function mountSection(items: MemberRow[]): QueryClient {
 
 /**
  * Mounts the whole Settings page as a given session, the way a real admin or a real non-admin
- * member would see it. OverrideList and SourceNames mount alongside Members here regardless of
- * which this test cares about, so both of their own queries need seeding too, or they reach the
- * real network the same way an unseeded members query would.
+ * member would see it. OverrideList, SourceNames and InstanceUrl mount alongside Members here
+ * regardless of which this test cares about, so each of their own queries needs seeding too, or
+ * they reach the real network the same way an unseeded members query would.
  */
 function mountSettingsAs(overrides: Partial<Session>): void {
   const session: Session = { ...ADMIN, ...overrides }
@@ -90,6 +91,7 @@ function mountSettingsAs(overrides: Partial<Session>): void {
   client.setQueryData(sourceNamesKey(session.personId), { items: [] })
   client.setQueryData(queryKeys.resource(session.personId, 'overrides'), { items: [] })
   client.setQueryData(membersKey(), { items: [] })
+  client.setQueryData(instanceUrlKey(), { baseUrl: 'http://localhost:4235', redirectUri: 'http://localhost:4235/oauth/callback' })
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>

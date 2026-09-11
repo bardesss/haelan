@@ -66,6 +66,15 @@ export class SettingsStore {
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 
+  // Not put(): that takes the consent path alongside the URL, so a caller who only has a new
+  // address would have to supply a consent path it never asked anybody about and would rewrite
+  // the one chosen during setup. Same hazard put()'s own comment names one field up, a level
+  // down: the update touches the two columns it is named for and no others.
+  putBaseUrl(baseUrl: string, nowMs: number): void {
+    this.#db.update(instanceSettings).set({ baseUrl, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
   putBackfillHorizon(days: number, nowMs: number): void {
     this.#db.update(instanceSettings).set({ backfillHorizonDays: days, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()

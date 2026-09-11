@@ -129,6 +129,13 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   },
   { route: 'PUT /api/settings/backfill-horizon', auth: 'admin' },
 
+  {
+    route: 'GET /api/settings/instance-url',
+    auth: 'session',
+    why: 'it reports the address the member already typed into their browser and the public OAuth redirect built from it',
+  },
+  { route: 'PUT /api/settings/instance-url', auth: 'admin' },
+
   // The instance's own housekeeping: what the database is costing, what backups exist, and the two
   // buttons that change either. Admin like the rest of /api/settings, and no `why` because the type
   // only asks for one where the answer is less than admin.

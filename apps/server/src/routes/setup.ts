@@ -60,7 +60,10 @@ export function registerSetup(app: FastifyInstance): void {
     if (!candidate.registrable) {
       return reply.code(400).send(errorBody('config', 'config', candidate.reason ?? 'that URL cannot be registered with Google'))
     }
-    const normalized = baseUrl.replace(/\/+$/, '')
+    // The validated origin rather than the trimmed input, for the reason the settings route's
+    // twin gives: a bare host is accepted as https and must be stored that way, or every consent
+    // built from this row carries a redirect with no scheme.
+    const normalized = candidate.origin
     stores().settings.put({ baseUrl: normalized, consentPath: consentPath as ConsentPath, nowMs: app.haelan.now() })
     return reply.send({ step: step(), redirectUri: redirectUriFor(normalized) })
   })

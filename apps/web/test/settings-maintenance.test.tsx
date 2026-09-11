@@ -13,6 +13,7 @@ import { maintenanceKey } from '../src/data/useMaintenance.js'
 import type { BackupOutcome, MaintenanceStatus, VacuumOutcome } from '../src/data/useMaintenance.js'
 import { sourceNamesKey } from '../src/data/useSourceNames.js'
 import { membersKey } from '../src/data/useMembers.js'
+import { instanceUrlKey } from '../src/data/useInstanceUrl.js'
 import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
@@ -73,10 +74,11 @@ function mountSection(data: MaintenanceStatus): QueryClient {
 
 /**
  * Mounts the whole Settings page as a given session, the way a real admin or a real non-admin
- * member would see it -- settings-members.test.tsx's own mountSettingsAs, extended with the one
- * key Maintenance.tsx also reads. OverrideList, SourceNames and Members mount alongside it here
- * regardless of which section this test cares about, so all three need seeding too or they reach
- * the real network the same way an unseeded maintenance query would.
+ * member would see it -- settings-members.test.tsx's own mountSettingsAs, extended with the keys
+ * Maintenance.tsx and InstanceUrl.tsx also read. OverrideList, SourceNames, Members and
+ * InstanceUrl mount alongside it here regardless of which section this test cares about, so every
+ * one of their queries needs seeding too or they reach the real network the same way an unseeded
+ * maintenance query would.
  */
 function mountSettingsAs(overrides: Partial<Session>): void {
   const session: Session = { ...ADMIN, ...overrides }
@@ -86,6 +88,7 @@ function mountSettingsAs(overrides: Partial<Session>): void {
   client.setQueryData(queryKeys.resource(session.personId, 'overrides'), { items: [] })
   client.setQueryData(membersKey(), { items: [] })
   client.setQueryData(maintenanceKey(), status({}))
+  client.setQueryData(instanceUrlKey(), { baseUrl: 'http://localhost:4235', redirectUri: 'http://localhost:4235/oauth/callback' })
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>

@@ -846,6 +846,21 @@
       },
       "failed": "Dat is niet gelukt. Probeer het opnieuw."
     },
+    "instanceUrl": {
+      "title": "Adres van deze instantie",
+      "current": "Huidig adres",
+      "syncUnaffected": "Dit wijzigen onderbreekt het synchroniseren niet. Het verandert waar Google iemand naartoe terugstuurt nadat die toestemming heeft gegeven.",
+      "newLabel": "Nieuw adres",
+      "newHint": "Het adres waarop deze instantie bereikbaar is, zonder pad erachter.",
+      "placeholder": "https://haelan.example.com",
+      "redirectLabel": "Redirect-URI",
+      "copy": "Kopiëren",
+      "registerFirst": "Voeg deze redirect-URI toe in de Google Cloud-console voordat je opslaat. Zolang die niet geregistreerd is, blijft het synchroniseren gewoon werken en lijkt er niets mis, maar mislukt elke toestemming: een huisgenoot toevoegen, en een account opnieuw verbinden waarvan de toegang is ingetrokken.",
+      "save": "Adres opslaan",
+      "saving": "Opslaan…",
+      "saved": "Opgeslagen. Deze instantie staat nu ingesteld op {{url}}.",
+      "failed": "Dit adres is niet opgeslagen: {{reason}}"
+    },
     "maintenance": {
       "title": "Databaseonderhoud",
       "credentialsUnreadable": "$t(connect.restoreDetail)",
