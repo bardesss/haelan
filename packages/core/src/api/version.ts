@@ -26,5 +26,12 @@
  *    rows inside a migration transaction, which means a person stamped 3 has no samples at all
  *    rather than samples in the older shape, and this bump is the whole of what refills them from
  *    the archive on the first boot after the upgrade.
+ * 5: M8a widens a session's `attrs` from seven keys to fourteen. Laps, automatic splits, pause and
+ *    resume events, moving time, the workout's own name, its notes and its GPS flag were all in
+ *    the Exercise payload and none of them reached tier 2, so a session row built under 4 cannot
+ *    answer a detail page at all. The archive holds every payload they are re-mapped from, which
+ *    is what makes this a bump rather than a re-fetch: history becomes detailed, not only future
+ *    workouts. Sessions are a rounding error against `samples`, so the disk cost is not
+ *    measurable next to the rebuild the bump triggers.
  */
-export const MAPPING_VERSION = 4
+export const MAPPING_VERSION = 5
