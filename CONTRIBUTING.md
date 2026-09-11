@@ -1,0 +1,104 @@
+# Contributing
+
+## The bar, written down in advance
+
+This is one household's instance, not a platform, so what would be accepted is decided here rather
+than per pull request.
+
+**Accepted:** a fix. A feature that makes sense for one household running its own copy. A new
+translation. Documentation that corrects itself against the code.
+
+**Not accepted:** anything serving a different shape of deployment. Hosting for others, public
+internet exposure, writing data back to Google. The [Non-goals](README.md#non-goals) section says
+why, and it is linked rather than restated.
+
+If you are unsure which side of that line something falls on, open an issue before building it.
+A rejected pull request costs you more than a rejected idea does.
+
+## Before you open a pull request
+
+```
+pnpm typecheck
+pnpm test
+```
+
+CI runs both again, plus `pnpm build`, a check that the generated stylesheet is not tracked, and
+the commit message rule below. Nothing in CI is unavailable to you locally.
+
+**A change touching derivation or mapping needs a version bump.** Rows built under the old rules
+sitting beside rows built under the new ones is exactly what `DERIVATION_VERSION` and
+`MAPPING_VERSION` exist to prevent. Moving either one rebuilds every derived row from the archive
+on the next boot, which is not free: see [Upgrading](README.md#upgrading) for what the largest one
+so far actually cost. Bumping when you did not need to wastes a user's eleven minutes. Not bumping
+when you should have leaves them with two generations of rows in one table and no error to tell
+them.
+
+## Conventions
+
+- **No em dashes anywhere:** prose, documentation, UI copy, code comments, commit messages.
+- **No agent session links in commit messages or pull request bodies.** `Co-Authored-By` trailers
+  are attribution and are welcome; a session URL is meaningless to everyone but the account that
+  created it. Enforced by `.githooks/commit-msg` and by CI.
+- **Comments are sparse and record why, not what.**
+- **Real health data never gets committed.** Archived payloads stay gitignored and every test
+  fixture is synthetic. `packages/core/src/testing/seed.ts` generates realistic data
+  deterministically, and it exists so that nobody is ever tempted to paste in a real day.
+- **No parameter properties, enums or decorators.** The server runs under Node's type stripping,
+  which does not implement them. `pnpm typecheck` catches it.
+- **Every change reaches `master` through a pull request, and nothing is ever force pushed.**
+
+That last rule has exactly one exception, recorded here rather than quietly. On 2026-08-22,
+`master` was rewritten once to strip agent session links from 22 commit messages, before the
+repository was public and while nothing else had cloned it. Content was untouched, verified by the
+rewritten tree being byte-identical to the original and by the commit count and every
+`Co-Authored-By` line surviving. The merge references on pull requests #30 through #38 point at
+commits that rewrite left unreachable. There is no second exception.
+
+## The changelog
+
+**Every user-visible change updates [CHANGELOG.md](CHANGELOG.md)'s `Unreleased` section, in the
+same pull request rather than afterwards.** A dependency bump or an internal refactor nobody using
+the dashboard would notice has no entry to add.
+
+At release, `Unreleased` is renamed to the new version and an empty `Unreleased` goes back above
+it. The release workflow reads that section straight out of the file, so a tag whose version has no
+section fails the job before anything is published.
+
+## If you are working with a coding agent
+
+Welcome, and held to the same bar. Not a lower one, and not a separate one. haelan is itself built
+with one. A change is judged by whether it holds up, so there is no separate review track and
+nothing to disclose beyond being straight about what was actually verified.
+
+This section is written to be read by an agent, and all of it applies.
+
+**The bar here is measurement rather than assertion.** That is a higher bar than the tests passing,
+and it is the one thing most likely to be missed, because a change can satisfy every instruction it
+was given and still be wrong. Five failure modes have actually produced work in this repository
+that *looked* finished:
+
+- **A green test proves nothing until you have seen it fail for the right reason.** Break the code
+  the test names, watch it go red, restore it, and say in the pull request what it printed. A pin
+  written here once asserted step coverage only, and ratified the exact regression it had been
+  written to prevent. Tests that have never been red are decoration.
+
+- **Assert the value, not a substring of it.** `toContain('412')` stays green when the precision
+  breaks and the cell reads `412.0`. Assert the cell.
+
+- **A number in a commit message or a pull request came from running something.** Not from what
+  running it was expected to produce. A timing claim in this README was once fourteen times out
+  because it was reasoned about instead of measured.
+
+- **Read the whole diff, not each change in isolation.** Reviewing a change against the
+  instructions it was given confirms it matched them. It cannot tell you the instructions were
+  wrong, and repeatedly here they were. Whole-branch review caught what per-change review could
+  not, every time.
+
+- **Open the artefact, not the page.** A screenshot captured mid-animation, a chart with a broken
+  axis, a navigation rail with its last item cut off: each of those passed every check that looked
+  at the running app, and was obvious the moment somebody opened the file that shipped.
+
+And one hard rule, because breaking it is worse than any broken feature: **never hand-write a test
+fixture that looks like real health data, and never paste in a real one.** Use the seed generator.
+A plausible fabricated day is worse than no fixture, because the test passes and the shape was
+never the API's; a real one is somebody's medical history in a public git history, permanently.
