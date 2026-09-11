@@ -1,10 +1,12 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import fc from 'fast-check'
 import {
   PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
   NoteStore, EventStore, ConfigError,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
+import { budgetFor, MAX_POINTS, DEFAULT_DAILY_POINTS } from '../src/mcp/contract.ts'
 
 let test: TestDatabase
 beforeEach(() => {
@@ -133,6 +135,42 @@ describe('query_series', () => {
     expect(out.points.length).toBeLessThanOrEqual(50)
     expect(out.reduction).not.toBeNull()
     expect(out.reduction!.from).toBe(400)
+  })
+
+  // The budget property. query_series clamps whatever `points` asks for through budgetFor before
+  // handing it to PersonQuery.series, which thins with 'lttb' — and `thin`'s own property file
+  // (query-downsample-properties.test.ts) already pins that lttb keeps at most
+  // `Math.max(target, Math.min(seriesLength, 2))` points, not `target` itself: a target of 1 or
+  // 2 still returns the first and last point, because lttb always keeps both endpoints. That is
+  // the bound this checks at the tool layer, over the budget this tool actually applies, rather
+  // than the flatter "never exceeds the requested budget" a caller might assume from the budget's
+  // name alone.
+  it('never returns more points than the ceiling or the effective budget, and reduction is null exactly when nothing was thinned', () => {
+    fc.assert(fc.property(
+      fc.integer({ min: 0, max: 400 }),
+      fc.integer({ min: 1, max: 1200 }),
+      (seriesLength, requestedPoints) => {
+        test.db.delete(schema.daily).run()
+        if (seriesLength > 0) {
+          test.db.insert(schema.daily).values(
+            Array.from({ length: seriesLength }, (_, i) => ({
+              personId: 'robin', localDate: dateOf(i), metric: 'steps', agg: 'sum',
+              source: 'merged', value: i, coverage: null, sourceMix: null,
+              derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+            })),
+          ).run()
+        }
+
+        const budget = budgetFor(requestedPoints, DEFAULT_DAILY_POINTS)
+        const out = tool('query_series').run(q(), {
+          metric: 'steps', agg: 'sum', from: dateOf(0), to: dateOf(450), points: requestedPoints,
+        }) as { points: unknown[], reduction: { from: number, to: number } | null }
+
+        expect(out.points.length).toBeLessThanOrEqual(MAX_POINTS)
+        expect(out.points.length).toBeLessThanOrEqual(Math.max(budget, Math.min(seriesLength, 2)))
+        expect(out.reduction === null).toBe(out.points.length === seriesLength)
+      },
+    ), { numRuns: 40 })
   })
 })
 
