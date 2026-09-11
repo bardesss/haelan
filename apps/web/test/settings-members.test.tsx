@@ -239,6 +239,10 @@ describe('the members section', () => {
     // is nothing here to guess on their behalf any more.
     const inputs = [...container!.querySelectorAll('input')] as HTMLInputElement[]
     expect(inputs).toHaveLength(1)
+    // Copy, not a raw key: the caption that replaced the field is the one thing telling the admin
+    // where the new member's day boundary is about to come from.
+    expect(container!.textContent).toContain('starts in your own time zone')
+    expect(container!.innerHTML).not.toMatch(/\bsettings\.[a-zA-Z][a-zA-Z.]*\b/)
     type(inputs[0]!, 'New Person')
     click(container!.querySelector('button[type="submit"]')!)
 

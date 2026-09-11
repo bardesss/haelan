@@ -119,6 +119,16 @@ describe('the profile section', () => {
     expect(fields().map((f) => f.value)).toEqual(['Bartus', 'bartus', 'Europe/Amsterdam', '', ''])
   })
 
+  // Written after a catalogue key landed under the wrong section and this panel rendered
+  // 'settings.profile.timezone' as its own label. Every assertion above passed while it did,
+  // because they all read input values and none of them read a word of copy.
+  it('renders every label as copy rather than as its own key', () => {
+    mountSection()
+    expect(container!.innerHTML).not.toMatch(/\bsettings\.[a-zA-Z][a-zA-Z.]*\b/)
+    expect([...container!.querySelectorAll('.field .label')].map((n) => n.textContent))
+      .toEqual(['Name', 'Username', 'Time zone', 'Current password', 'New password'])
+  })
+
   it('offers nothing to save until something is actually different', () => {
     mountSection()
     expect(saveButton().disabled).toBe(true)
