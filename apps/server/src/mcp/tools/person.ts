@@ -19,7 +19,13 @@ export const describePerson: Tool = {
     personId: z.string(),
     displayName: UNTRUSTED,
     timezone: z.string(),
-    sources: z.array(z.object({ id: z.string(), name: UNTRUSTED, kind: z.string() })),
+    // An enum, not a string: core types `DescribedPerson.sources[].kind` as this exact
+    // three-value union, so `z.string()` gave an agent a field it could only learn the values of
+    // by seeing them. TOOLS.md renders an enum as its members, which is the document saying what
+    // the answer can be rather than that it is text.
+    sources: z.array(z.object({
+      id: z.string(), name: UNTRUSTED, kind: z.enum(['device', 'app', 'manual']),
+    })),
   },
   run: (q) => {
     const person = q.describe()

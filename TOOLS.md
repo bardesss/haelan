@@ -42,7 +42,7 @@ None.
   - **name** (object)
     - **untrustedText** (string, nullable)
     - **truncated** (boolean)
-  - **kind** (string)
+  - **kind** ('device' | 'app' | 'manual')
 
 ### list_metrics
 

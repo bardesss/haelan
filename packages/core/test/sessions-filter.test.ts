@@ -52,12 +52,12 @@ describe('readSessions filters', () => {
       .toEqual(['run-1', 'run-2'])
   })
 
-  it('latest answers the most recent one, after the type filter', () => {
+  it('last 1 answers the most recent one, after the type filter', () => {
     expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'RUNNING', last: 1 }).map((s) => s.id))
       .toEqual(['run-2'])
   })
 
-  it('latest with no match answers nothing rather than the wrong session', () => {
+  it('last 1 with no match answers nothing rather than the wrong session', () => {
     expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'SWIMMING', last: 1 })).toEqual([])
   })
 

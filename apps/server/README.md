@@ -14,10 +14,12 @@ no edited files; the variables exist for people who disagree.
 Setup, auth, sync and one settings control are not the whole API surface any more. The metric
 routes spec section 11 describes — daily series, baselines, insights, trend, intraday, sleep
 nights, sessions and session detail — plus annotations, sources, data type exclusions, change
-tracking and export, are versioned at `/api/v1/p/:personId/...`, session cookie authenticated the
-same way everything below is, and refuse a `personId` that is not the caller's own with a 403
-rather than someone else's data. `apps/server/src/routes/v1/` is where every one of those routes
-lives; the table below stays scoped to setup, auth, sync and settings.
+tracking and export, are versioned at `/api/v1/p/:personId/...`, guarded by the same session check
+everything below is — an `Authorization: Bearer` token or the session cookie, the header winning
+when both arrive, so a native client is not a browser session's passenger — and refuse a
+`personId` that is not the caller's own with a 403 rather than someone else's data.
+`apps/server/src/routes/v1/` is where every one of those routes lives; the table below stays
+scoped to setup, auth, sync and settings.
 
 M4a-2 adds a second way to read the same data: the MCP tool surface in
 [`TOOLS.md`](../../TOOLS.md), reached over stdio today
