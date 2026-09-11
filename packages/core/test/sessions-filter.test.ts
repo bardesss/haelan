@@ -53,12 +53,23 @@ describe('readSessions filters', () => {
   })
 
   it('latest answers the most recent one, after the type filter', () => {
-    expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'RUNNING', latest: true }).map((s) => s.id))
+    expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'RUNNING', last: 1 }).map((s) => s.id))
       .toEqual(['run-2'])
   })
 
   it('latest with no match answers nothing rather than the wrong session', () => {
-    expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'SWIMMING', latest: true })).toEqual([])
+    expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'SWIMMING', last: 1 })).toEqual([])
+  })
+
+  it('last answers the N most recent matches, oldest first within them', () => {
+    expect(readSessions(test.db, { personId: 'p1', ...RANGE, type: 'RUNNING', last: 2 }).map((s) => s.id))
+      .toEqual(['run-1', 'run-2'])
+  })
+
+  it('refuses a last that is not a positive integer', () => {
+    const q = new PersonQuery(test.db, 'p1')
+    expect(() => q.sessions({ ...RANGE, last: 0 })).toThrow(ConfigError)
+    expect(() => q.sessions({ ...RANGE, last: 1.5 })).toThrow(/positive integer/)
   })
 
   it('a session with no exercise type is never matched by a type filter', () => {
@@ -70,11 +81,11 @@ describe('readSessions filters', () => {
 describe('PersonQuery.sessions', () => {
   // Three sessions, arranged so that each forwarded field is the only thing standing between this
   // assertion and a different answer. One session would have made the test unfailable: it is the
-  // whole list, the latest, and the only run at once, so dropping either `type` or `latest` from
-  // the pass-through would still answer it and nothing would go red.
+  // whole list, the most recent, and the only run at once, so dropping either `type` or `last`
+  // from the pass-through would still answer it and nothing would go red.
   //
-  // The ride is deliberately the LATEST of the three rather than the earliest. With an earlier
-  // ride, `latest` alone still lands on run-2 and a dropped `type` stays invisible.
+  // The ride is deliberately the most recent of the three rather than the earliest. With an
+  // earlier ride, `last` alone still lands on run-2 and a dropped `type` stays invisible.
   beforeEach(() => {
     addSession({ id: 'run-1', localDate: '2026-08-12', startMs: Date.UTC(2026, 7, 12, 7), exerciseType: 'RUNNING' })
     addSession({ id: 'run-2', localDate: '2026-08-20', startMs: Date.UTC(2026, 7, 20, 7), exerciseType: 'RUNNING' })
@@ -83,28 +94,30 @@ describe('PersonQuery.sessions', () => {
 
   it('passes the filters through', () => {
     const q = new PersonQuery(test.db, 'p1')
-    // Dropping `type` answers ['ride']; dropping `latest` answers ['run-1', 'run-2'].
-    expect(q.sessions({ ...RANGE, type: 'RUNNING', latest: true }).map((s) => s.id)).toEqual(['run-2'])
+    // Dropping `type` answers ['ride']; dropping `last` answers ['run-1', 'run-2'].
+    expect(q.sessions({ ...RANGE, type: 'RUNNING', last: 1 }).map((s) => s.id)).toEqual(['run-2'])
   })
 
   it('answers the whole list when neither narrowing field is given', () => {
     // The other half of the pass-through: a forwarded field that is undefined must not become a
-    // filter. Without this, a reader hard-coding `latest: true` would pass the test above.
+    // filter. Without this, a reader hard-coding `last: 1` would pass the test above.
     const q = new PersonQuery(test.db, 'p1')
     expect(q.sessions({ ...RANGE }).map((s) => s.id)).toEqual(['run-1', 'run-2', 'ride'])
   })
 
   // The cast is the point rather than a workaround: this is what an HTTP query string and a
   // model's tool arguments actually deliver, and the type annotation does not reach either of
-  // them. Coerced instead of refused, `"true"` fails the reader's `=== true` and answers the whole
-  // list, which is the worst possible reading of "the latest one".
-  it.each([['the string "true"', 'true'], ['the number 1', 1], ['null', null]])(
-    'refuses %s for latest rather than reading it as no filter',
+  // them. `1` is dropped from the values under test here (it was the old boolean coercion's
+  // interesting case; as a `last` it is simply a valid count of 1, covered above), and `true` and
+  // `null` still reach `requireOptionalPositiveInteger` as values the type system would have
+  // refused, exactly as an HTTP query string or a model's tool call can actually deliver them.
+  it.each([['the string "1"', '1'], ['true', true], ['null', null]])(
+    'refuses %s for last rather than reading it as no filter',
     (_label, value) => {
       const q = new PersonQuery(test.db, 'p1')
-      const input = { ...RANGE, latest: value } as unknown as Parameters<PersonQuery['sessions']>[0]
+      const input = { ...RANGE, last: value } as unknown as Parameters<PersonQuery['sessions']>[0]
       expect(() => q.sessions(input)).toThrow(ConfigError)
-      expect(() => q.sessions(input)).toThrow(/latest must be true or false/)
+      expect(() => q.sessions(input)).toThrow(/positive integer/)
     },
   )
 

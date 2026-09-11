@@ -331,7 +331,7 @@ export class PersonQuery {
   /**
    * Sessions of one kind in a local date range. See `readSessions` for why kind is load bearing.
    *
-   * `type` and `latest` exist for one question an agent asks constantly and the list form answers
+   * `type` and `last` exist for one question an agent asks constantly and the list form answers
    * badly: the last run. Both are validated here rather than in the reader, because this is the
    * boundary an HTTP query string and a model's tool arguments arrive at.
    */
@@ -341,7 +341,7 @@ export class PersonQuery {
     to: string
     sourceId?: string
     type?: string
-    latest?: boolean
+    last?: number
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
@@ -355,7 +355,7 @@ export class PersonQuery {
     if (input.kind === 'sleep' && input.type !== undefined) {
       throw new ConfigError(`kind 'sleep' has no exercise type to filter on, so '${input.type}' would match nothing. Use kind 'exercise' to filter by type.`)
     }
-    requireBoolean('latest', input.latest)
+    requireOptionalPositiveInteger('last', input.last)
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
@@ -363,7 +363,7 @@ export class PersonQuery {
       to: input.to,
       sourceId: input.sourceId,
       type: input.type,
-      latest: input.latest,
+      last: input.last,
     })
   }
 
@@ -516,14 +516,17 @@ function requirePositiveInteger(label: string, value: number): void {
 }
 
 /**
- * `points` on its own, because it is optional everywhere it appears and `requirePositiveInteger`
- * would refuse the absence as well as the mistake.
+ * Separate from `requirePositiveInteger` because every caller of this one is optional, and that
+ * function would refuse the absence as well as the mistake.
  *
- * The HTTP surface validates it in `optionalPositiveInt`, which is why this went unnoticed: a tool
- * caller does not arrive through HTTP. Left unvalidated, `points: NaN` reaches `Math.max(2, NaN)`
- * inside the downsampler, and `thinBand` then answers two points with a `reduction` claiming
- * `to: 2` - a confident wrong answer about somebody's health record, which is the exact failure
- * this class's rule about throwing rather than returning an emptiness exists to prevent.
+ * `points` is where this was first needed: the HTTP surface validates it in `optionalPositiveInt`,
+ * which is why an unvalidated tool caller went unnoticed. Left unvalidated, `points: NaN` reaches
+ * `Math.max(2, NaN)` inside the downsampler, and `thinBand` then answers two points with a
+ * `reduction` claiming `to: 2` - a confident wrong answer about somebody's health record, which is
+ * the exact failure this class's rule about throwing rather than returning an emptiness exists to
+ * prevent. `last` reaches this the same way, from a language model's tool arguments where "3" and
+ * 3 are both plausible and only one is a number: a non-integer silently slicing nothing would
+ * answer an empty list, the same emptiness this class exists not to return.
  */
 function requireOptionalPositiveInteger(label: string, value: number | undefined): void {
   if (value === undefined) return
@@ -538,21 +541,6 @@ function requireOptionalPositiveInteger(label: string, value: number | undefined
 function requireFiniteNumber(label: string, value: number): void {
   if (!Number.isFinite(value)) {
     throw new ConfigError(`${label} must be a number, got ${value}`)
-  }
-}
-
-/**
- * Same reasoning as `requireSessionKind`: the type system only protects a caller written in
- * TypeScript, and neither real consumer is one. `latest` is read with a `=== true` test in the
- * reader, so the string `"true"` an HTTP query string carries, or the `1` a model reaches for,
- * would quietly mean "no, give me everything" - and an agent then summarises thirty sessions as
- * "your last run". Refused rather than coerced, because guessing which of `"true"`, `"1"` and
- * `"yes"` were meant is how a caller learns nothing about the mistake it is making.
- */
-function requireBoolean(label: string, value: boolean | undefined): void {
-  if (value === undefined) return
-  if (typeof value !== 'boolean') {
-    throw new ConfigError(`${label} must be true or false, got ${JSON.stringify(value)}`)
   }
 }
 
