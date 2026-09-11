@@ -15,6 +15,25 @@ it is. An instance whose only users are the people who own its OAuth client neve
 The direct cost is that every household brings its own Google Cloud project; the direct benefit is
 that no ceiling exists.
 
+## Written by an AI agent
+
+**Every line of haelan was written by a coding agent, with a human deciding what got built, what
+got rejected, and what got merged.** That is stated here rather than in a footnote because you are
+considering pointing this at your own health record, and it should inform that decision rather than
+surprise you later.
+
+What it means in practice: nothing merges without tests, every pull request is reviewed - by a
+second agent and by a human - and the numbers in this README and in `ROADMAP.md` are measured
+against a real instance rather than estimated. The one figure that is not, the time this release's
+rebuild will take on a database larger than any that has been timed, is marked as an extrapolation
+where it appears. Where something is unverified, it says so.
+
+What it does not mean: no security professional has audited this. It has one household's worth of
+production use. `CONTRIBUTING.md` documents five failure modes that have actually produced wrong
+work in this repository - a green test that never failed for the right reason, an assertion matching
+a substring instead of a value, a claim about a file nobody opened - because they recur, and
+catching them is a standing part of how the project is built rather than a past embarrassment.
+
 ![The Dashboard](assets/screenshots/dashboard.png)
 
 ![Sleep](assets/screenshots/sleep.png)
