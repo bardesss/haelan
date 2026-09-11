@@ -2,13 +2,18 @@ import { z } from 'zod'
 import type { Tool } from '../contract.ts'
 import { budgetFor, summaryOf, DEFAULT_DAILY_POINTS } from '../contract.ts'
 
-// A plain `: Tool` annotation on an object literal collapses `inputSchema`/`outputSchema` to the
-// interface's own default `I`/`O` (`z.ZodRawShape`), and `z.infer` over that default has no
-// concrete keys — every field of `args` inside `run` becomes `unknown`, caught only by
-// `pnpm typecheck`, never by a test. Routing each tool through this generic identity function
-// instead makes `I`/`O` infer from the object literal actually written, the same way a generic
-// call's argument drives inference anywhere else, so `run`'s `args` and return type are checked
-// against this tool's own schemas rather than the interface's default.
+// A plain `: Tool` annotation on an object literal (no type arguments given) instantiates the
+// interface at its own declared defaults, `Tool<z.ZodRawShape, z.ZodRawShape>` — TypeScript does
+// not back-infer `I`/`O` from the initializer for a variable type annotation the way it infers a
+// generic function's type parameters from the arguments of a call. Left that way, `z.infer` over
+// the defaulted `I` has no concrete keys, so every field of `args` inside `run` is `unknown`,
+// caught only by `pnpm typecheck`, never by any test that calls `run` with a plain object literal.
+// Routing each tool through this generic identity function instead gives TypeScript an actual call
+// to infer `I`/`O` from, the same mechanism any other generic function uses, so `run`'s `args` and
+// return value are checked against this tool's own schemas. This is unrelated to why `Tool.run` in
+// contract.ts is method shorthand: that fix is what lets `Tool<I, O>` values with different,
+// narrower `I`/`O` collapse into one `Tool[]` below with no cast; this function is what gives each
+// of them a real `I`/`O` to narrow from in the first place.
 function defineTool<I extends z.ZodRawShape, O extends z.ZodRawShape>(tool: Tool<I, O>): Tool<I, O> {
   return tool
 }
@@ -191,14 +196,4 @@ export const trend = defineTool({
   },
 })
 
-// Each tool above is a Tool<I, O> for its own concrete I/O, which is what let `run` above check
-// `args` against real fields rather than `unknown`. A plain array literal here would ask TS to
-// find one I/O every element satisfies, and `run`'s arrow-typed parameter is checked
-// contravariantly, so the array element type would have to accept every tool's own narrower args
-// shape — exactly the soundness hole this file exists to close, not open back up by inference. The
-// erasure to the catalogue's own `Tool` (its default, widest I/O) is what a heterogeneous list of
-// tools is always going to need at its one assembly point; each tool's own zod schema still
-// validates its `args` at the actual call site, in the adapter, before `run` ever sees them.
-export const seriesTools: Tool[] = [
-  querySeries, getDaily, getBaselines, comparePeriods, trend,
-] as unknown as Tool[]
+export const seriesTools: Tool[] = [querySeries, getDaily, getBaselines, comparePeriods, trend]

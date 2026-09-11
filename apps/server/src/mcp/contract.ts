@@ -19,7 +19,17 @@ export interface Tool<I extends z.ZodRawShape = z.ZodRawShape, O extends z.ZodRa
   notes?: string
   inputSchema: I
   outputSchema: O
-  run: (q: PersonQuery, args: z.infer<z.ZodObject<I>>) => z.infer<z.ZodObject<O>>
+  // Method shorthand, deliberately, not an arrow-typed property (`run: (q, args) => ...`). The
+  // catalogue is a `Tool[]` holding many `Tool<I, O>` instances with different, unrelated I/O, and
+  // TypeScript checks an arrow-typed property's parameters contravariantly: a `run` narrower than
+  // the array's own default `I`/`O` (which every tool with a real input schema is) then fails to
+  // collapse into that one array at all without a cast through `unknown` — a cast that would just
+  // as happily hide a `run` some later tool widened to take a second, non-`PersonQuery` argument,
+  // which is exactly what this signature exists to make unrepresentable. Method shorthand is
+  // checked bivariantly instead, which is the looseness a heterogeneous registry like this one
+  // needs, and it is TypeScript's own idiomatic answer to this shape rather than a workaround.
+  // Do not "tidy" this back into an arrow-typed property: every tool file breaks at once.
+  run(q: PersonQuery, args: z.infer<z.ZodObject<I>>): z.infer<z.ZodObject<O>>
 }
 
 /**
