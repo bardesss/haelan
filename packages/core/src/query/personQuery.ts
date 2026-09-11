@@ -16,7 +16,7 @@ import type { Insight, PeriodPoint } from './insights.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
-import { readIntraday } from './intraday.ts'
+import { readIntraday, readIntradayWindow } from './intraday.ts'
 import type { IntradayResult } from './intraday.ts'
 import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
@@ -242,6 +242,36 @@ export class PersonQuery {
       personId: this.#personId,
       metric: input.metric,
       localDate: input.localDate,
+      points: input.points,
+      sourceId: input.sourceId,
+    })
+  }
+
+  /**
+   * Per-minute samples over an arbitrary UTC span, thinned against that span.
+   *
+   * The budget is the reason this is separate from `intraday`: a workout is minutes long inside a
+   * day that is 1,440, and a day-wide budget spends almost none of itself on it.
+   */
+  intradayWindow(input: {
+    metric: string
+    startMs: number
+    endMs: number
+    points?: number
+    sourceId?: string
+  }): IntradayResult {
+    requireMetric(input.metric)
+    requireFiniteNumber('startMs', input.startMs)
+    requireFiniteNumber('endMs', input.endMs)
+    if (input.startMs > input.endMs) {
+      throw new ConfigError(`startMs ${input.startMs} is after endMs ${input.endMs}`)
+    }
+    requireSource(this.#db, this.#personId, input.sourceId, [])
+    return readIntradayWindow(this.#db, {
+      personId: this.#personId,
+      metric: input.metric,
+      startMs: input.startMs,
+      endMs: input.endMs,
       points: input.points,
       sourceId: input.sourceId,
     })

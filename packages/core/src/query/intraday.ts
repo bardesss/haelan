@@ -72,7 +72,71 @@ export function readIntraday(db: DbOrTx, input: {
   sourceId?: string
   points?: number
 }): IntradayResult {
+  // Widened the way deriveDayInto widens, because a provider offset can put a local day's
+  // instants up to 14 hours either side of its UTC midnight; the predicate below is what narrows
+  // it back, per row, by that row's own offset.
   const { start: windowStart, end: windowEnd } = widenedUtcWindow(input.localDate)
+  return readWindow(db, {
+    personId: input.personId,
+    metric: input.metric,
+    sourceId: input.sourceId,
+    points: input.points,
+    windowStart,
+    windowEnd,
+    keep: (row) => localDateOf(row.utcMs, row.tzOffsetMinutes) === input.localDate,
+  })
+}
+
+/**
+ * The same reader over an arbitrary UTC span, for a caller that has one: a workout's own start
+ * and end, or a sleep session's.
+ *
+ * It exists because `readIntraday` thins a whole day. A 45-minute run inside a 24-hour day gets
+ * roughly fifteen of the day's 500 points, which is the opposite of what a caller asking about
+ * that run wants. Here the budget is spent on the window instead.
+ *
+ * No local date is involved and none is inferred. The caller already has the instants, and
+ * deriving a day from them would reintroduce the offset question this reader does not need to
+ * ask.
+ */
+export function readIntradayWindow(db: DbOrTx, input: {
+  personId: string
+  metric: string
+  startMs: number
+  endMs: number
+  sourceId?: string
+  points?: number
+}): IntradayResult {
+  return readWindow(db, {
+    personId: input.personId,
+    metric: input.metric,
+    sourceId: input.sourceId,
+    points: input.points,
+    windowStart: input.startMs,
+    windowEnd: input.endMs,
+    keep: () => true,
+  })
+}
+
+/**
+ * The body both public readers share: everything between a UTC span and a thinned result. The
+ * invariants it keeps - per-source pivoting, per-source thinning, override application per row -
+ * are documented on `readIntraday` above, which is the reader they were written for.
+ *
+ * `keep` is the one thing that differs. `readIntraday` widens its query past its own day and uses
+ * this to narrow it back by each row's own offset; `readIntradayWindow` already has the exact
+ * instants it wants and keeps everything the query returned.
+ */
+function readWindow(db: DbOrTx, input: {
+  personId: string
+  metric: string
+  sourceId?: string
+  points?: number
+  windowStart: number
+  windowEnd: number
+  keep: (row: { utcMs: number, tzOffsetMinutes: number }) => boolean
+}): IntradayResult {
+  const { windowStart, windowEnd } = input
 
   // Scoped to this read, which is a single statement's worth of work: nothing here writes, so
   // there is no transaction to outlive, and building it per call is what keeps that true.
@@ -96,7 +160,7 @@ export function readIntraday(db: DbOrTx, input: {
     lte(samples.utcMs, windowEnd),
     sourceRef === undefined ? undefined : eq(samples.sourceRef, sourceRef),
   )).all()
-    .filter((row) => localDateOf(row.utcMs, row.tzOffsetMinutes) === input.localDate)
+    .filter((row) => input.keep(row))
     // Back into names for the rest of this function: a point carries the source id a client
     // charts by and a correction is keyed on, and its own `agg` decides which of min, mean and
     // max it fills in.
