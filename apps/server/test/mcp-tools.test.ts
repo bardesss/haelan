@@ -357,6 +357,33 @@ describe('get_workout', () => {
     expect(out.trace[0]!.summary.n).toBe(10)
   })
 
+  it('traces the device that recorded the workout by default, not every source in the window', () => {
+    test.db.insert(schema.sources).values({
+      id: 'phone', personId: 'robin', externalId: 'phone', displayName: 'Phone',
+      kind: 'device', createdAtMs: 0,
+    }).run()
+    seedRun({ metricsSummary: { caloriesKcal: 400 } })
+    seedHeartRate() // writes to 'watch', the session's own sourceId.
+    for (const agg of ['min', 'mean', 'max'] as const) {
+      insertSample(test.db, {
+        personId: 'robin', sourceId: 'phone', metric: 'heart_rate',
+        utcMs: START + 60_000, tzOffsetMinutes: 120, agg, value: 200,
+      })
+    }
+
+    const bySourceOf = (points: { sourceId: string }[]) => new Set(points.map((p) => p.sourceId))
+
+    const defaultOut = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      trace: { points: { sourceId: string }[] }[]
+    }
+    expect(bySourceOf(defaultOut.trace[0]!.points)).toEqual(new Set(['watch']))
+
+    const phoneOut = tool('get_workout').run(q(), { sessionId: 'run-x', sourceId: 'phone' }) as {
+      trace: { points: { sourceId: string }[] }[]
+    }
+    expect(bySourceOf(phoneOut.trace[0]!.points)).toEqual(new Set(['phone']))
+  })
+
   it('answers autoSplits and laps as empty arrays, not null, for a workout that recorded neither', () => {
     seedRun({ metricsSummary: { caloriesKcal: 400 } })
     seedHeartRate()
