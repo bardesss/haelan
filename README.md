@@ -304,6 +304,25 @@ works. Measured on the author's database, upgrading from the pre-M5d schema: **2
 MB handed back**, taking the file from 891 MB to 247 MB. The app stalls for those 21 seconds rather
 than stopping, and it happens once - the boots after it find too little dead space to bother.
 
+**This release costs one rebuild as well.** Workout detail pages read fields the session mapper
+used to drop on the floor - the automatic splits, the pause markers, moving time, the workout's own
+name - so the mapping version moves from 4 to 5 and every person's derived rows are rebuilt from
+the raw archive on the first boot after the upgrade. That is the point of spending it: the archive
+still holds the full payload of every workout you have ever synced, so the runs you recorded last
+year become as detailed as the ones you record tomorrow, with nothing re-fetched from the provider.
+
+What it costs is set by how much archive you have, not by what changed in this release, because a
+rebuild reads every archived payload back and re-derives from it either way. No timing for your
+instance can be quoted here, only the comparable ones already measured on this project: **11 to 15
+minutes** on a database holding 2.1 million sample rows, 15,982 archived payloads and 434 sessions,
+which is the author's own. A smaller history is quicker in proportion; a slower disk is not.
+
+While it runs, that person's sync is paused - the runner skips anyone waiting on a rebuild rather
+than writing new rows under one set of rules beside old rows written under another - and the
+dashboard stays reachable with its intraday charts empty, which is not distinguishable from a day
+with no data. Both come back on their own when it finishes. It happens once: the next boot finds
+the person stamped at the current version and starts normally.
+
 ## Roadmap
 
 Five milestones are done and the sixth is finishing: the store and sync engine, the derivation
