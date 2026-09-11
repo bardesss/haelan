@@ -26,6 +26,19 @@ const insert = (o: { id: string, personId?: string, sourceId?: string, attrs?: u
     rawPayloadId: null,
   }).run()
 
+// The same row, of whichever of the three kinds the table holds. `insert` above always writes an
+// exercise row, which is the interesting one for attrs; this one exists so the kind is the only
+// thing a test varies.
+const insertOfKind = (o: {
+  id: string, kind: 'sleep' | 'exercise' | 'ecg', personId?: string, sourceId?: string,
+}) =>
+  t.db.insert(sessions).values({
+    id: o.id, personId: o.personId ?? 'p1', sourceId: o.sourceId ?? 'watch',
+    kind: o.kind, externalId: o.id,
+    startMs: 1, startOffsetMinutes: 120, endMs: 2, endOffsetMinutes: 120,
+    localDate: '2026-08-18', attrs: '{}', rawPayloadId: null,
+  }).run()
+
 describe('readSession', () => {
   it('returns the session, with attrs already parsed', () => {
     insert({ id: 'run1', attrs: { exerciseType: 'RUNNING', displayName: 'Evening Run' } })
@@ -76,16 +89,38 @@ describe('readSession', () => {
     expect(out?.excludeReason).toBeNull()
   })
 
-  it('returns a session of either kind, since the id already names exactly one row', () => {
-    t.db.insert(sessions).values({
-      id: 'night1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'night1',
-      startMs: 1, startOffsetMinutes: 120, endMs: 2, endOffsetMinutes: 120,
-      localDate: '2026-08-18', attrs: '{}', rawPayloadId: null,
-    }).run()
+  it('returns a sleep session as well as an exercise one, with no kind asked for', () => {
+    insertOfKind({ id: 'night1', kind: 'sleep' })
 
-    // No kind filter here, unlike readSessions, where kind is load bearing because a range read
-    // of one kind would otherwise answer with the other's rows too. An id is already unique
-    // across both kinds, so demanding a kind would only let a caller get it wrong.
+    // No kind parameter here, unlike readSessions, where the caller's kind is load bearing
+    // because a range read of one kind would otherwise answer with the other's rows too. An id
+    // is already unique, so demanding a kind would only let a caller get it wrong.
     expect(readSession(t.db, { personId: 'p1', sessionId: 'night1' })?.id).toBe('night1')
+  })
+
+  it('returns null for an ecg id, which the list route refuses for the same reason', () => {
+    insertOfKind({ id: 'ecg1', kind: 'ecg' })
+
+    // The row exists and belongs to this person. It is still null, because WorkoutSession cannot
+    // say anything true about an ECG: no classification, no waveform, and every exercise attr
+    // null. tier2.ts refuses kind=ecg on the list route, and a by-id read answering one would
+    // have made the two routes disagree about whether an ECG is readable at all.
+    expect(readSession(t.db, { personId: 'p1', sessionId: 'ecg1' })).toBeNull()
+  })
+
+  it('answers an ecg id exactly as it answers a nonexistent one, so the two cannot be told apart', () => {
+    insertOfKind({ id: 'ecg1', kind: 'ecg' })
+    insertOfKind({ id: 'their-ecg', personId: 'p2', sourceId: 'their-watch', kind: 'ecg' })
+
+    // Three different reasons for null - unreadable kind, nothing there, somebody else's row -
+    // and one indistinguishable answer, which is what lets the route send one 404 envelope for
+    // all three. A refusal that threw, or returned a distinct marker, would tell a caller that
+    // an id they are not entitled to know about exists.
+    const ownEcg = readSession(t.db, { personId: 'p1', sessionId: 'ecg1' })
+    const missing = readSession(t.db, { personId: 'p1', sessionId: 'nope' })
+    const theirs = readSession(t.db, { personId: 'p1', sessionId: 'their-ecg' })
+    expect(ownEcg).toBeNull()
+    expect(missing).toBeNull()
+    expect(theirs).toBeNull()
   })
 })

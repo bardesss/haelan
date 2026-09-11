@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from 'drizzle-orm'
+import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { sessions, overrides as overridesTable } from '../db/schema/index.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
@@ -85,10 +85,22 @@ export function readSessions(db: DbOrTx, input: {
  * having to distinguish them: a 403 would confirm the id exists, and the caller asking is by
  * definition not entitled to that.
  *
- * No kind filter, unlike readSessions, where kind is load bearing because sleep and exercise
- * share one table and a range read of one kind would otherwise answer with the other's rows. An
- * id already names exactly one row across both kinds, so a kind parameter here could only be
- * passed wrongly.
+ * No kind parameter, unlike readSessions, where the caller's kind is load bearing because a range
+ * read of one kind would otherwise answer with the other's rows. An id already names exactly one
+ * row, so a kind parameter here could only be passed wrongly.
+ *
+ * The table holds three kinds, not two: SESSION_KINDS is sleep, exercise and ecg. This reader
+ * answers the first two and refuses the third, because WorkoutSession is the only shape it can
+ * answer in and that shape has nothing to say about an ECG - no classification, no waveform, and
+ * fourteen exercise attrs that would all read null. The list route already refuses `kind=ecg` for
+ * exactly that reason; a by-id read that happily answered one would have made the two routes
+ * disagree about whether an ECG is readable at all.
+ *
+ * Refused by answering null, not by throwing or by a distinct error: an ECG id is then
+ * indistinguishable from an id that names nothing and from an id belonging to somebody else, all
+ * three reaching the same 404. A caller who learned that an id was "an ECG, which this route does
+ * not serve" would have learned that the id exists, which is the thing the person scoping above
+ * exists to withhold.
  */
 export function readSession(db: DbOrTx, input: {
   personId: string
@@ -97,6 +109,7 @@ export function readSession(db: DbOrTx, input: {
   const row = db.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
     eq(sessions.id, input.sessionId),
+    inArray(sessions.kind, ['sleep', 'exercise']),
   )).get()
   if (row === undefined) return null
   return toWorkoutSession(row, readSessionExclusions(db, input.personId))

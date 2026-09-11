@@ -40,6 +40,17 @@ function seedWorkout(h: Harness, input: {
   }).run()
 }
 
+// seedWorkout always writes an exercise row. This one writes a row of whichever of the three
+// kinds the table holds, so a test can vary the kind and nothing else.
+function seedOfKind(h: Harness, input: { id: string, kind: 'sleep' | 'exercise' | 'ecg' }): void {
+  seedSource(h, 'p1', 'watch')
+  h.app.haelan.instance.db.insert(schema.sessions).values({
+    id: input.id, personId: 'p1', sourceId: 'watch', kind: input.kind, externalId: input.id,
+    startMs: 1, startOffsetMinutes: OFFSET_MINUTES, endMs: 2, endOffsetMinutes: OFFSET_MINUTES,
+    localDate: '2026-08-18', attrs: '{}', rawPayloadId: null,
+  }).run()
+}
+
 describe('GET /sessions/:sessionId', () => {
   it('answers the session itself, not a one-item list', async () => {
     harness = await withServer(); const token = await harness.signIn()
@@ -136,15 +147,27 @@ describe('GET /sessions/:sessionId', () => {
     expect(second.statusCode).toBe(304)
   })
 
-  it('answers a sleep session too, since an id names one row across both kinds', async () => {
+  it('answers a sleep session too, since an id names one row across the two kinds it serves', async () => {
     harness = await withServer(); const token = await harness.signIn()
-    seedSource(harness, 'p1', 'watch')
-    harness.app.haelan.instance.db.insert(schema.sessions).values({
-      id: 'night1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'night1',
-      startMs: 1, startOffsetMinutes: OFFSET_MINUTES, endMs: 2, endOffsetMinutes: OFFSET_MINUTES,
-      localDate: '2026-08-18', attrs: '{}', rawPayloadId: null,
-    }).run()
+    seedOfKind(harness, { id: 'night1', kind: 'sleep' })
 
     expect((await get(harness, token, '/sessions/night1')).json().id).toBe('night1')
+  })
+
+  it('answers 404 for an ecg id, in the same envelope as an id that names nothing', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedOfKind(harness, { id: 'ecg1', kind: 'ecg' })
+
+    const res = await get(harness, token, '/sessions/ecg1')
+
+    // The row is this person's and it exists. The list route refuses kind=ecg because nothing has
+    // designed an ECG response, and readSession refuses it for the same reason, so the two agree.
+    // The full envelope, not just the status: the 404 must carry the same code and the same
+    // message an absent id gets, or "this id is an ECG" becomes a way to confirm an id is real -
+    // the same leak the cross-person case above exists to prevent.
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({
+      error: { kind: 'not_found', code: 'no_such_session', message: "no session 'ecg1'" },
+    })
   })
 })

@@ -191,12 +191,16 @@ export function registerTier2Routes(app: FastifyInstance): void {
   })
 
   /**
-   * One session by id. Registered after the list route; fastify's router is not order sensitive
-   * between a static segment and a parameter at the same depth, but keeping them adjacent keeps
-   * the two shapes of the same resource in one place.
+   * One session by id, registered next to the list route because the two are the same resource in
+   * two shapes. There is no routing conflict between them to resolve: `/sessions` and
+   * `/sessions/:sessionId` are at different depths, so fastify never has to choose.
    *
    * Answers the session object directly rather than a one-item list, because a detail read has
    * exactly one answer and wrapping it would make every caller index into it first.
+   *
+   * `kind` is not a parameter here and cannot be one: an id names its own row. The list route
+   * above refuses `kind=ecg`, and readSession refuses an ECG row for the same reason, by
+   * answering null - so an ECG id 404s here exactly as an unknown id does.
    */
   app.get<{ Params: SessionParams }>('/p/:personId/sessions/:sessionId', async (request, reply) => {
     const personQuery = personQueryOf(request)
