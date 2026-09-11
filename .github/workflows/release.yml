@@ -32,6 +32,39 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
 
+      # Resolved here, before anything is built or pushed, even though the release itself is
+      # created at the very end. Reading the changelog is a file read that costs milliseconds, and
+      # leaving it until after the push meant a tag with no changelog entry failed only once both
+      # architectures were public and `latest` already pointed at a version with no release. The
+      # cheap check now gates the irreversible step instead of following it.
+      #
+      # The notes come from CHANGELOG.md rather than GitHub's generated notes, which would list
+      # merged pull requests. A generated list and a hand-kept changelog are two records of the
+      # same thing, and the one that drifts is always the human-maintained one -- so there is one
+      # record here, and this step reads it instead of writing a second. scripts/changelog-section.ts
+      # does the reading; it is a script rather than a marketplace action so the extraction logic
+      # is plain, readable TypeScript with its own tests (scripts/test/changelog-section.test.ts)
+      # instead of a black box pinned by SHA.
+      - name: Resolve release notes from CHANGELOG.md
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # A pre-release tag (v1.0.0-rc.1) has no section of its own, and it should not need one
+          # -- writing a changelog entry for every release candidate is not what a changelog is
+          # for. It reads Unreleased instead, and the release is marked prerelease so it never
+          # looks like the numbered version it is built from.
+          if [[ "$VERSION" == *-* ]]; then
+            SECTION="Unreleased"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            SECTION="$VERSION"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          # No fallback to generated notes on failure -- that would defeat the point of reading
+          # CHANGELOG.md at all. A missing or empty section fails the job here, with the section
+          # name it looked for, and the fix is to write the entry, not to retry the workflow.
+          node --experimental-strip-types scripts/changelog-section.ts "$SECTION" > "$RUNNER_TEMP/release-notes.md"
+
       # arm64 runs under emulation, which is what lets the boot check below start it. The native
       # prebuilds differ per architecture, so the one that is not booted is the one most likely
       # to be broken.
@@ -96,37 +129,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # Everything from here is the GitHub Release, deliberately after the image has already
-      # reached the registry. A release pointing at an image that failed to publish is worse than
-      # no release at all, because it looks like the tag succeeded.
-      #
-      # The notes come from CHANGELOG.md rather than GitHub's generated notes, which would list
-      # merged pull requests. A generated list and a hand-kept changelog are two records of the
-      # same thing, and the one that drifts is always the human-maintained one -- so there is one
-      # record here, and this step reads it instead of writing a second. scripts/changelog-section.ts
-      # does the reading; it is a script rather than a marketplace action so the extraction logic
-      # is plain, readable TypeScript with its own tests (scripts/test/changelog-section.test.ts)
-      # instead of a black box pinned by SHA.
-      - name: Resolve release notes from CHANGELOG.md
-        id: notes
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          # A pre-release tag (v1.0.0-rc.1) has no section of its own, and it should not need one
-          # -- writing a changelog entry for every release candidate is not what a changelog is
-          # for. It reads Unreleased instead, and the release is marked prerelease so it never
-          # looks like the numbered version it is built from.
-          if [[ "$VERSION" == *-* ]]; then
-            SECTION="Unreleased"
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            SECTION="$VERSION"
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
-          # No fallback to generated notes on failure -- that would defeat the point of reading
-          # CHANGELOG.md at all. A missing or empty section fails the job here, with the section
-          # name it looked for, and the fix is to write the entry, not to retry the workflow.
-          node --experimental-strip-types scripts/changelog-section.ts "$SECTION" > "$RUNNER_TEMP/release-notes.md"
-
+      # The release is created last, deliberately after the image has already reached the
+      # registry. A release pointing at an image that failed to publish is worse than no release
+      # at all, because it looks like the tag succeeded. Its notes were resolved up front.
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
