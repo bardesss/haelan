@@ -33,7 +33,8 @@ tracked, so this file is the only place any of it exists.
 | **M3e-2** Insight cards and the shell | Period over period cards, each withheld with its own reason when the data is thin, and the Dutch sweep | Done, [#82](https://github.com/bardesss/haelan/pull/82) |
 | **M3f** The consumers M3 never built | The intraday chart, the activity list, naps and the weight trend, and two sleep defects an audit found | Done, [#85](https://github.com/bardesss/haelan/pull/85), [#86](https://github.com/bardesss/haelan/pull/86), [#87](https://github.com/bardesss/haelan/pull/87) |
 | **M3 second pass** Corrections a second audit found | The tier 2 readers learn about a person's corrections, and Correct finally gets its home on the intraday chart | Done, [#93](https://github.com/bardesss/haelan/pull/93) |
-| **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2 | Not started |
+| **M4** Agent surfaces | MCP server including `sql_query`, and the CLI. Both thin over M2. Cut into three: M4a the typed tools over `PersonQuery` on both transports with a person bound token, M4b `sql_query` and its sandbox, M4c the CLI | In progress |
+| **M4a-1** Core foundations | The five query layer capabilities the tools read through, and no MCP code at all: a read only open that migrates nothing, the workout decoder moved into `core` behind its own subpath, `type` and `latest` on the sessions reader, intraday over an arbitrary window, and notes and events as person bound readers | In review |
 | **M5a** Source naming | A person scoped name for each source, so a 32 character hex id can read "My watch" | Done, [#91](https://github.com/bardesss/haelan/pull/91) |
 | **M5b** People | Invites stored as a hash, a member who chooses their own password, the first `is_admin` guard, and suspension | Done, [#94](https://github.com/bardesss/haelan/pull/94) |
 | **M5f** Wizard polish | The connect card `/oauth/start` had been reachable from nowhere, and per person data type exclusions | Done, [#95](https://github.com/bardesss/haelan/pull/95), [#96](https://github.com/bardesss/haelan/pull/96) |
@@ -48,6 +49,7 @@ tracked, so this file is the only place any of it exists.
 | **M5** Packaging | Cut into six units, a, b, c, d, e and f as listed here, with M5d itself cut into four strands - D cheaper tests, A narrow keys, then B reclaiming the space a rebuild frees but never returns and C backup and restore, which shipped together because a vacuum and a backup are one SQLite operation writing to two places - and M5e itself cut into three: M5e-1 the envelope, M5e-2 the seeded demo data and the automated upgrade rehearsal, M5e-3 the documentation and screenshots - and the catalogue work and the image both landing before the v1.0.0 tag | Done |
 | **M6** What only the archive can answer | Source staleness, so a source that quietly stopped reporting says so instead of thinning a chart; all-time records and a milestones timeline; and an Eddington style number, which needs every day on disk to compute at all | Not started |
 | **M7** The small screen | A layout that works on a phone: the rail driven by the viewport rather than only by a toggle, the charts and the eight pages below 620px, and the wizard, which is the one flow a person is most likely to walk holding a phone | Not started |
+| **M8** Detail pages | A workout page and a night page: laps, pause markers, moving time, zones and running dynamics recovered from the archive by a mapping bump; the overnight traces a date-keyed read cannot express; and session-scope exclusion, which the server has had since M3c and no browser could reach | Not started |
 
 ## Why the order is not alphabetical
 
@@ -108,6 +110,21 @@ overflow and clip its last item on a short viewport, which is the first thing to
 
 **M6 has no order against M4 yet.** Neither is started, and letter order has not decided sequence
 anywhere else in this table.
+
+**M8 comes before M7.** M7 is a sweep across eight pages, the rail, the charts and the wizard.
+Landing two more pages after it would mean either sweeping twice or shipping two pages that do
+not work on a phone. M8 before M7 means M7 sweeps ten pages once. M8 has no order against M4 or
+M6; neither is started, and letter order has not decided sequence anywhere else in this table.
+
+**M8 and M4 meet in one function, and M8's design is the one that names it.** M4a-1 built
+`readIntradayWindow` and `PersonQuery.intradayWindow` so an agent could read one workout at full
+resolution instead of fifteen points out of a day-wide budget; M8 section 2.2 specifies the same
+pair for the night page, because a night running 23:15 to 07:02 is not a local date. The function
+exists as of M4a-1. Two things M8 asks of it are not built: the 48 hour refusal, and the HTTP
+route `GET /p/:personId/intraday/window` that exposes it. **M8's design also settles an open
+question M4a-1 left**: the v4 `Exercise` schema does carry `splits`, `splitSummaries` and
+`exerciseEvents`, archived and unmapped, so the laps M4a-1 declined to assume do exist and M8a is
+where they are mapped.
 
 ## The rule that keeps this true
 
