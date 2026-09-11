@@ -8,7 +8,11 @@ import type { ReactNode } from 'react'
 import { useSeries, seriesPath } from '../src/data/useSeries.js'
 import { baselinePath } from '../src/data/useBaseline.js'
 import { nightsPath } from '../src/data/useNights.js'
+import { useWorkoutSession, sessionPath } from '../src/data/useWorkoutSession.js'
+import { useIntradayWindow, intradayWindowPath } from '../src/data/useIntradayWindow.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -39,6 +43,24 @@ function mount(node: ReactNode): void {
  */
 function withoutSession(node: ReactNode): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+}
+
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam',
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+}
+
+/**
+ * A client with the session already resolved and cached, the state a page reaches once
+ * /api/auth/me has answered. Seeded with setQueryData rather than mocked through fetch: the
+ * session query itself is not what these tests are about, and seeding it means the fetch mock
+ * below counts and names only the requests the hook under test makes, not a same-tick session
+ * request racing it too.
+ */
+function withSession(node: ReactNode): ReactNode {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), PERSON)
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
@@ -136,5 +158,145 @@ describe('useSeries', () => {
     // not fire is a series request for an undefined person, which would be a request for
     // /api/v1/p/undefined/series.
     expect(calls).toBe(1)
+  })
+})
+
+// useWorkoutSession and useIntradayWindow both compound two conditions into one `enabled`
+// (personId resolved, and a second local fact - sessionId present, or options.enabled). A
+// path-builder test never touches `enabled` at all, so it cannot tell a working guard from one
+// where the && became || or half the condition was dropped: either still compiles, and a request
+// for an undefined id still succeeds if the id happens to route somewhere (or 404s quietly if it
+// does not), leaving the bug to surface only as an extra network call nothing here would have
+// caught. These mount-and-count blocks exist to close exactly that gap, the same way the
+// useSeries block above does for its own guard.
+describe('useWorkoutSession', () => {
+  it('does not fetch when the session has not resolved a person', async () => {
+    let calls = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => { calls += 1; return new Response('{}', { status: 200 }) }) as typeof fetch
+
+    function Probe() {
+      useWorkoutSession('run1')
+      return null
+    }
+    mount(withoutSession(<Probe />))
+    // Same reasoning as the useSeries test above: the session fetch is real and resolves
+    // asynchronously, so only a wait that survives a real microtask trip can tell a query that
+    // never ran apart from one that simply has not run yet.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    // Only the session query itself should fire. What must not fire is a session-by-id request for
+    // an unresolved person, which would be a request for /api/v1/p/undefined/sessions/run1.
+    expect(calls).toBe(1)
+  })
+
+  it('does not fetch when sessionId is undefined, even with a resolved person', async () => {
+    let calls = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => { calls += 1; return new Response('{}', { status: 200 }) }) as typeof fetch
+
+    function Probe() {
+      useWorkoutSession(undefined)
+      return null
+    }
+    // withSession seeds the person synchronously, so no /api/auth/me request happens either:
+    // nothing at all should reach the fetch mock while sessionId stays undefined.
+    mount(withSession(<Probe />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    expect(calls).toBe(0)
+  })
+
+  it('fetches exactly once, to the expected path, once both are present', async () => {
+    let calls = 0
+    let lastUrl: string | undefined
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls += 1
+      lastUrl = String(input)
+      return new Response('{}', { status: 200 })
+    }) as typeof fetch
+
+    function Probe() {
+      useWorkoutSession('run1')
+      return null
+    }
+    mount(withSession(<Probe />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    expect(calls).toBe(1)
+    expect(lastUrl).toBe(sessionPath('p1', 'run1'))
+  })
+})
+
+describe('useIntradayWindow', () => {
+  const QUERY = {
+    metric: 'heart_rate', startMs: Date.UTC(2026, 7, 18, 22, 0), endMs: Date.UTC(2026, 7, 18, 23, 0),
+    source: ALL_SOURCES,
+  }
+
+  it('does not fetch when the session has not resolved a person', async () => {
+    let calls = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => {
+      calls += 1
+      return new Response('{"points":[],"reduction":null}', { status: 200 })
+    }) as typeof fetch
+
+    function Probe() {
+      useIntradayWindow(QUERY)
+      return null
+    }
+    mount(withoutSession(<Probe />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    // Only the session query itself should fire. What must not fire is an intraday window request
+    // for an unresolved person, which would be a request for /api/v1/p/undefined/intraday/window.
+    expect(calls).toBe(1)
+  })
+
+  it('does not fetch when explicitly disabled, even with a resolved person', async () => {
+    let calls = 0
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async () => {
+      calls += 1
+      return new Response('{"points":[],"reduction":null}', { status: 200 })
+    }) as typeof fetch
+
+    function Probe() {
+      useIntradayWindow(QUERY, { enabled: false })
+      return null
+    }
+    mount(withSession(<Probe />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    expect(calls).toBe(0)
+  })
+
+  it('fetches exactly once, to the expected path, once both are present and enabled', async () => {
+    let calls = 0
+    let lastUrl: string | undefined
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls += 1
+      lastUrl = String(input)
+      return new Response('{"points":[],"reduction":null}', { status: 200 })
+    }) as typeof fetch
+
+    function Probe() {
+      useIntradayWindow(QUERY)
+      return null
+    }
+    mount(withSession(<Probe />))
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    expect(calls).toBe(1)
+    expect(lastUrl).toBe(intradayWindowPath('p1', QUERY))
   })
 })
