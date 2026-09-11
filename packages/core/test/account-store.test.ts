@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { AccountStore } from '../src/store/accounts.ts'
+import { ConfigError } from '../src/errors.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 
 let fixture: TestDatabase
@@ -125,10 +126,43 @@ describe('AccountStore', () => {
     expect(unchanged.ok).toBe(true)
   })
 
-  it('refuses a username it cannot find rather than silently doing nothing', async () => {
+  // Two accounts, because the failure worth pinning is not the throw. A lookup that fell back to
+  // an unfiltered select would resolve a typo to whichever row came first, reset that person's
+  // password and report success - and in a household the first account is the admin. Asserting
+  // only the rejection would pass against that, since an empty table still throws. So the
+  // assertion is that nothing moved.
+  it('touches no other account when the username does not exist', async () => {
     await create()
-    await expect(store.setPassword('nobody', 'a brand new password')).rejects.toThrow(/no account named nobody/)
-    expect(() => store.clearLockout('nobody')).toThrow(/no account named nobody/)
+    seedPerson(fixture.db, 'p2')
+    await store.create({
+      id: 'a2', personId: 'p2', username: 'alice', password: 'another long password', isAdmin: false, nowMs: 2000,
+    })
+    const hashes = () => fixture.db.$client
+      .prepare('select id, password_hash from accounts order by id').all() as Array<{ id: string, password_hash: string }>
+    const before = hashes()
+    expect(before).toHaveLength(2)
+
+    // The rejection is captured rather than asserted on the spot, so that what did or did not
+    // happen to the two accounts is asserted first. Against a lookup that resolved a typo to
+    // another row, the informative failure is the changed hash, not the missing throw.
+    let reset: unknown = null
+    await store.setPassword('nobody', 'a brand new password').catch((err: unknown) => { reset = err })
+    expect(hashes()).toEqual(before)
+    expect(reset).toBeInstanceOf(ConfigError)
+    expect(String(reset)).toContain('no account named nobody')
+
+    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    const locked = 2000 + 15 * 60_000
+    const lockouts = () => store.list().map((row) => [row.username, row.lockedUntilMs])
+    expect(lockouts()).toEqual([['alice', null], ['bartus', locked]])
+
+    let cleared: unknown = null
+    try { store.clearLockout('nobody') } catch (err) { cleared = err }
+    // The lockout the typo did not name is still in force, and neither hash has moved.
+    expect(lockouts()).toEqual([['alice', null], ['bartus', locked]])
+    expect(hashes()).toEqual(before)
+    expect(cleared).toBeInstanceOf(ConfigError)
+    expect(String(cleared)).toContain('no account named nobody')
   })
 
   it('clearLockout keeps the hash, so somebody who knows their password is simply let back in', async () => {
