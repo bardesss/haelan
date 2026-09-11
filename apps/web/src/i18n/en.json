@@ -846,6 +846,21 @@
       },
       "failed": "That did not work. Try again."
     },
+    "instanceUrl": {
+      "title": "Instance address",
+      "current": "Current address",
+      "syncUnaffected": "Changing this does not interrupt syncing. It changes where Google sends someone back after they give consent.",
+      "newLabel": "New address",
+      "newHint": "The address this instance is reached at, with no path after it.",
+      "placeholder": "https://haelan.example.com",
+      "redirectLabel": "Redirect URI",
+      "copy": "Copy",
+      "registerFirst": "Add this redirect URI in the Google Cloud console before you save. Until it is registered, syncing carries on as normal and nothing looks wrong, but every consent fails: adding a household member, and reconnecting an account whose access was revoked.",
+      "save": "Save address",
+      "saving": "Saving…",
+      "saved": "Saved. This instance is now set to {{url}}.",
+      "failed": "That address was not saved: {{reason}}"
+    },
     "maintenance": {
       "title": "Database maintenance",
       "credentialsUnreadable": "$t(connect.restoreDetail)",

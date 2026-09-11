@@ -445,6 +445,29 @@ body {
   margin-bottom: var(--space-3);
 }
 
+/* InstanceUrl.tsx. The warning carries the same negative toned box .connect-warning and
+   .maintenance-blocked use, and for a harder reason than either: those describe something the
+   reader can already see going wrong, and this one describes something that will look fine for
+   months. It is not muted, and it does not sit below the button. */
+/* min-width: 0 so the two .copy-value fields inside can scroll their own long URLs rather than
+   stretching this section past the card, the same reason .session-list carries it. */
+.instance-url { min-width: 0; }
+.instance-url-warning {
+  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  background: color-mix(in srgb, var(--negative) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
+  border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+/* What the save did, once it resolves: the same muted inset box the maintenance results use, since
+   a saved address is an uneventful report and the sentence that mattered was read before the
+   click. */
+.instance-url-result {
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  background: var(--surface-inset); border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
+}
+
 /* Maintenance.tsx: reads as paragraphs stacked in order rather than a row list, since each line
    states one whole fact about the shared database file rather than one record among many the way
    .source-name-row or .member-row do. */

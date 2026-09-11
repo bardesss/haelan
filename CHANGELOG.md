@@ -8,6 +8,16 @@ follows [Semantic Versioning](https://semver.org/). See the Contributing section
 
 ## [Unreleased]
 
+### Added
+
+- A supported way to change the instance's address after setup, under Settings for an admin. Until
+  now the address was written once by the setup wizard and could not be changed again, which is
+  exactly the wrong time to find that out: moving an instance to a new hostname is what a household
+  does after it is running, not before. The panel shows the redirect URI the new address produces
+  and says to register it in the Google Cloud console before saving, because a stale address does
+  not interrupt syncing and so gives no sign anything is wrong until the next consent, which is
+  adding a household member or reconnecting an account whose access was revoked.
+
 ## [1.0.0] - 2026-09-11
 
 First release. A self-hosted dashboard and local mirror for your own health data, built on the

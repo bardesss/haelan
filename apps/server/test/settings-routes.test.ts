@@ -142,3 +142,102 @@ describe('settings routes', () => {
     expect(stores.syncState.get('p1', 'weight')?.backfillCursorMs).toBe(deepFloorMs)
   })
 })
+
+// Moving an instance: the one change /api/setup/instance-url could make exactly once, before it
+// started answering 409 to everything. Nothing here is about sync, which survives a stale value
+// untouched; it is about what the next consent would be sent.
+describe('the instance URL', () => {
+  it('reports the stored address and the redirect built from it', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const cookie = await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({
+      baseUrl: 'http://localhost:4235', redirectUri: 'http://localhost:4235/oauth/callback',
+    })
+  })
+
+  it('refuses a non-admin caller', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    await harness.addPerson({ id: 'p-outsider', displayName: 'Outsider', username: 'outsider' })
+    const cookie = await harness.signIn('outsider')
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+      payload: { baseUrl: 'https://haelan.example.com' },
+    })
+    expect(response.statusCode).toBe(403)
+    // Not merely a status: a member who could set this could point every future consent at an
+    // address they control, so the refusal is asserted whole rather than by its code alone.
+    expect(response.json()).toEqual({ error: { kind: 'forbidden', code: 'not_admin', message: 'this needs an admin' } })
+    expect(harness.app.haelan.stores.settings.get()?.baseUrl).toBe('http://localhost:4235')
+  })
+
+  it('rejects an address Google will not register, quoting the rule that rules it out', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const cookie = await harness.signIn()
+    // A raw LAN IP is the value somebody moving to a homelab reaches for first, and the one
+    // candidateFor exists to stop before it becomes a redirect_uri_mismatch at consent.
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+      payload: { baseUrl: 'https://192.168.178.82' },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({
+      error: { kind: 'config', code: 'config', message: expect.stringContaining('Hosts cannot be raw IP addresses') },
+    })
+    expect(harness.app.haelan.stores.settings.get()?.baseUrl).toBe('http://localhost:4235')
+  })
+
+  it('stores a trailing slash off, so the redirect never doubles one', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const cookie = await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+      payload: { baseUrl: 'https://haelan.example.com//' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({
+      baseUrl: 'https://haelan.example.com',
+      redirectUri: 'https://haelan.example.com/oauth/callback',
+    })
+    // Persisted, and readable by the GET beside it: the response above could be right about a
+    // value the store never took.
+    expect(harness.app.haelan.stores.settings.get()?.baseUrl).toBe('https://haelan.example.com')
+    const readBack = await harness.app.inject({
+      method: 'GET', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+    })
+    expect(readBack.json()).toEqual({
+      baseUrl: 'https://haelan.example.com',
+      redirectUri: 'https://haelan.example.com/oauth/callback',
+    })
+  })
+
+  // The reason putBaseUrl exists rather than a second caller of put(): put() takes the consent
+  // path alongside the URL, so a route reaching for it would have had to invent one, and the
+  // wizard's choice would have been overwritten by a screen that never mentions it. Nothing else
+  // in this suite would notice - consent_path is read only at consent time.
+  it('leaves the consent path chosen during setup alone', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const cookie = await harness.signIn()
+    const before = harness.app.haelan.stores.settings.get()!
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+      payload: { baseUrl: 'https://haelan.example.com' },
+    })
+    expect(response.statusCode).toBe(200)
+    const after = harness.app.haelan.stores.settings.get()!
+    expect(after.baseUrl).toBe('https://haelan.example.com')
+    expect(after.consentPath).toBe(before.consentPath)
+    // The neighbouring columns put() would also have had an opinion about, for the same reason.
+    expect(after.syncIntervalMinutes).toBe(before.syncIntervalMinutes)
+    expect(after.backfillHorizonDays).toBe(before.backfillHorizonDays)
+    expect(after.setupCompletedAtMs).toBe(before.setupCompletedAtMs)
+  })
+})

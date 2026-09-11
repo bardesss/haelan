@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import { USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS, DATA_TYPES, supports } from '@haelan/core'
 import { errorBody } from '../api/envelope.ts'
+import { candidateFor, redirectUriFor } from '../oauth/redirectUri.ts'
 
 interface HorizonBody { days?: unknown }
+interface InstanceUrlBody { baseUrl?: unknown }
 
 // Post-setup routes: reachable once the wizard finishes and answered with setup_incomplete
 // before that, unlike /api/setup/*, which the gate closes the moment setup is done. The
@@ -49,5 +51,44 @@ export function registerSettings(app: FastifyInstance): void {
       }
     }
     return reply.send({ backfillHorizonDays: days })
+  })
+
+  // POST /api/setup/instance-url writes this value once and then 409s forever, which left moving
+  // an instance - the homelab this was written for - with no supported route at all. Ongoing sync
+  // survives a stale value (the refresh grant in packages/core/src/api/tokens.ts sends no
+  // redirect_uri), so nothing appears to be wrong; what breaks is every later consent, because
+  // those build their redirect from this. A household finds that out the day they add a member.
+  //
+  // The GET stays on requireSession alone, like the horizon's: this is the address the member
+  // already typed into their own browser, and the redirect beside it is a public OAuth parameter.
+  app.get('/api/settings/instance-url', { preHandler: [app.requireSession] }, async (_request, reply) => {
+    // The setup gate answers setup_incomplete for this whole family until the wizard is done, and
+    // a wizard that got to done wrote this row, so the fallback is for the type rather than for a
+    // state this route can be reached in.
+    const baseUrl = stores().settings.get()?.baseUrl ?? ''
+    return reply.send({ baseUrl, redirectUri: redirectUriFor(baseUrl) })
+  })
+
+  // requireAdmin for the reason the horizon above gives: one value the whole instance consents
+  // against, not the caller's own. Stronger here than there, in fact - a wrong value costs every
+  // member their next consent, including the admin's own recovery from a revoked token.
+  app.put<{ Body: InstanceUrlBody }>('/api/settings/instance-url', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
+    const { baseUrl } = request.body ?? {}
+    if (typeof baseUrl !== 'string') {
+      return reply.code(400).send(errorBody('config', 'config', 'baseUrl is required'))
+    }
+    // candidateFor rather than a check of this route's own: it carries Google's rules quoted from
+    // the console, and it is what the wizard refused the same value with. A second, looser opinion
+    // here would accept an address the console then rejects, which is the failure this route
+    // exists to prevent rather than relocate.
+    const candidate = candidateFor(baseUrl)
+    if (!candidate.registrable) {
+      return reply.code(400).send(errorBody('config', 'config', candidate.reason ?? 'that URL cannot be registered with Google'))
+    }
+    const normalized = baseUrl.replace(/\/+$/, '')
+    stores().settings.putBaseUrl(normalized, app.haelan.now())
+    // The stored value put through redirectUriFor, which is the same call every consent makes, so
+    // what the panel tells somebody to register is the string Google will actually be sent.
+    return reply.send({ baseUrl: normalized, redirectUri: redirectUriFor(normalized) })
   })
 }
