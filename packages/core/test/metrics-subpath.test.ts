@@ -36,15 +36,19 @@ describe('the @haelan/core/metrics subpath', () => {
   it('is published, and points at the catalogue module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
-    // The barrel is still the only other way in besides the five named subpaths. `exports`
+    // The barrel is still the only other way in besides the six named subpaths. `exports`
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
-    // dragging argon2 along behind it. ./coverage-signal, ./target-key, ./baseline-window and
-    // ./metric-data-type are the other four browser-safe entry points; coverage-signal-subpath.
-    // test.ts, target-key-subpath.test.ts, baseline-window-subpath.test.ts and
-    // metric-data-type-subpath.test.ts carry their own guarantees, each a different shape because
-    // none of those four modules, unlike this one, is import-free.
+    // dragging argon2 along behind it. ./coverage-signal, ./target-key, ./baseline-window,
+    // ./metric-data-type and ./workout-summary are the other five browser-safe entry points;
+    // coverage-signal-subpath.test.ts, target-key-subpath.test.ts, baseline-window-subpath.
+    // test.ts, metric-data-type-subpath.test.ts and workout-summary.test.ts carry their own
+    // guarantees, each a different shape: the first four modules are not import-free, so each of
+    // those tests allow-lists the specific imports it carries; workout-summary.test.ts instead
+    // blocklists the database layer by name, because unlike this file's own module that one is
+    // import-free only today, not by contract.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './coverage-signal', './metric-data-type', SUBPATH, './target-key',
+      './workout-summary',
     ])
   })
 
