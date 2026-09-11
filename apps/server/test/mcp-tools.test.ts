@@ -416,7 +416,7 @@ describe('get_workout', () => {
     }
     expect(bySourceOf(defaultOut.trace[0]!.points)).toEqual(new Set(['watch']))
 
-    const phoneOut = tool('get_workout').run(q(), { sessionId: 'run-x', sourceId: 'phone' }) as {
+    const phoneOut = tool('get_workout').run(q(), { sessionId: 'run-x', source: 'phone' }) as {
       trace: { points: { sourceId: string }[] }[]
     }
     expect(bySourceOf(phoneOut.trace[0]!.points)).toEqual(new Set(['phone']))
@@ -448,5 +448,15 @@ describe('the catalogue itself', () => {
 
   it('gives every tool a description that tells an agent when to reach for it', () => {
     for (const t of CATALOGUE) expect(t.description.length).toBeGreaterThan(40)
+  })
+
+  // One argument, one name. The surface shipped with the daily tools taking `source` and the
+  // intraday, sleep and workout tools taking `sourceId` for the same thing, while describe_person
+  // told an agent its ids were what `source` accepted — two spellings an agent has to learn by
+  // trial. Named here rather than left to review: a new family file copied from the wrong
+  // neighbour brings the second spelling back, and nothing else in the suite would say so.
+  it('spells the source argument `source` on every tool that takes one', () => {
+    const withSourceId = CATALOGUE.filter((t) => 'sourceId' in t.inputSchema).map((t) => t.name)
+    expect(withSourceId).toEqual([])
   })
 })

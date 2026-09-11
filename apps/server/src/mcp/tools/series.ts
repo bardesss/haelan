@@ -2,6 +2,24 @@ import { z } from 'zod'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
+/**
+ * The `source` every daily tool takes, described once and shared, because all five accept exactly
+ * the same three kinds of value and a description that drifted between them would be worse than
+ * none.
+ *
+ * `merged` and `provider` are why this argument is `source` on these five and not `sourceId`:
+ * neither is a device id, and neither appears in any source registry — they name who reconciled a
+ * day rather than what recorded it (`packages/core/src/derive/rollup.ts` declares both, and
+ * `requireSource` lets them through for the `daily` backed reads only). The intraday, sleep and
+ * workout tools take the same argument name but not these two values, and say so themselves.
+ */
+const DAILY_SOURCE = z.string().optional().describe(
+  'A source id from describe_person to read one device on its own, or `merged` for only the days '
+  + 'this app reconciled itself, or `provider` for only the days Google had already reconciled. '
+  + 'Omitted answers the day rather than one device: the merged row where there is one, the '
+  + 'provider row where there is not.',
+)
+
 export const querySeries = defineTool({
   name: 'query_series',
   description:
@@ -15,7 +33,7 @@ export const querySeries = defineTool({
     from: z.string().describe('YYYY-MM-DD, inclusive'),
     to: z.string().describe('YYYY-MM-DD, inclusive'),
     points: z.number().optional(),
-    source: z.string().optional(),
+    source: DAILY_SOURCE,
   },
   outputSchema: {
     points: z.array(z.object({
@@ -51,7 +69,7 @@ export const getDaily = defineTool({
     localDate: z.string().describe('YYYY-MM-DD'),
     metrics: z.array(z.string()).min(1),
     agg: z.string(),
-    source: z.string().optional(),
+    source: DAILY_SOURCE,
   },
   outputSchema: {
     localDate: z.string(),
@@ -90,7 +108,7 @@ export const getBaselines = defineTool({
     agg: z.string(),
     on: z.string().describe('YYYY-MM-DD, the baseline is computed from the days before this one'),
     windowDays: z.number().optional(),
-    source: z.string().optional(),
+    source: DAILY_SOURCE,
   },
   outputSchema: {
     baseline: z.object({
@@ -122,7 +140,7 @@ export const comparePeriods = defineTool({
     agg: z.string(),
     from: z.string().describe('YYYY-MM-DD, inclusive, the current period'),
     to: z.string().describe('YYYY-MM-DD, inclusive, the current period'),
-    source: z.string().optional(),
+    source: DAILY_SOURCE,
   },
   outputSchema: {
     current: z.number().nullable(),
@@ -156,7 +174,7 @@ export const trend = defineTool({
     agg: z.string(),
     from: z.string().describe('YYYY-MM-DD, inclusive'),
     to: z.string().describe('YYYY-MM-DD, inclusive'),
-    source: z.string().optional(),
+    source: DAILY_SOURCE,
   },
   outputSchema: {
     points: z.array(z.object({ localDate: z.string(), value: z.number() })),

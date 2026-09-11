@@ -45,7 +45,10 @@ export const getWorkouts = defineTool({
     kind: z.enum(['sleep', 'exercise']),
     from: z.string().describe('YYYY-MM-DD, inclusive'),
     to: z.string().describe('YYYY-MM-DD, inclusive'),
-    sourceId: z.string().optional(),
+    source: z.string().optional().describe(
+      'A source id from describe_person, to list one device\'s sessions only. A source id only: '
+      + '`merged` and `provider` name a reconciled day, and a session is one device\'s recording.',
+    ),
     type: z.string().optional().describe('A provider exercise type, e.g. RUNNING. Exercise only.'),
     last: z.number().optional().describe('At most the N most recent matches, applied after `type`.'),
   },
@@ -64,7 +67,7 @@ export const getWorkouts = defineTool({
   run: (q, args) => ({
     workouts: q.sessions({
       kind: args.kind, from: args.from, to: args.to,
-      sourceId: args.sourceId, type: args.type, last: args.last,
+      sourceId: args.source, type: args.type, last: args.last,
     }).map((session) => ({
       sessionId: session.id,
       sourceId: session.sourceId,
@@ -130,7 +133,7 @@ export const getWorkout = defineTool({
     + 'the minute; ask for others explicitly rather than assuming they are dense enough inside a '
     + 'workout window), read from the device that recorded the workout by default — a workout is '
     + 'one device\'s artifact, unlike a day or a night, so the trace is not blended across sources '
-    + 'unless `sourceId` asks for a different one explicitly. Splits and laps answer empty arrays, '
+    + 'unless `source` asks for a different one explicitly. Splits and laps answer empty arrays, '
     + 'not null, on the four sessions in five that recorded neither. A `sessionId` naming no '
     + 'session, somebody else\'s session, or an ECG row all answer the same tool error rather than '
     + 'an empty object, because those are different statements about a health record and only the '
@@ -141,11 +144,13 @@ export const getWorkout = defineTool({
     metrics: z.array(z.string()).optional()
       .describe('Metrics to trace over the session span. Defaults to [\'heart_rate\'].'),
     points: z.number().optional(),
-    sourceId: z.string().optional()
+    source: z.string().optional()
       .describe(
         'Which device\'s samples to trace. Defaults to the device that recorded the workout '
-        + 'itself; pass another source id to widen the trace to a different device\'s samples '
-        + 'over the same span instead — a different question, not a broader answer to this one.',
+        + 'itself; pass another source id from describe_person to trace a different device\'s '
+        + 'samples over the same span instead — a different question, not a broader answer to this '
+        + 'one. A source id only: `merged` and `provider` name a reconciled day, and a workout is '
+        + 'one device\'s recording.',
       ),
   },
   outputSchema: {
@@ -220,7 +225,7 @@ export const getWorkout = defineTool({
         // multi-device average in front of an agent with nothing to say it was one.
         const result = q.intradayWindow({
           metric, startMs: session.startMs, endMs: session.endMs, points,
-          sourceId: args.sourceId ?? session.sourceId,
+          sourceId: args.source ?? session.sourceId,
         })
         return {
           metric,

@@ -14,7 +14,11 @@ export const getIntraday = defineTool({
     metric: z.string(),
     localDate: z.string().describe('YYYY-MM-DD'),
     points: z.number().optional(),
-    sourceId: z.string().optional(),
+    source: z.string().optional().describe(
+      'A source id from describe_person, to read one device on its own. Omitted blends every '
+      + 'source that sampled in the day. Unlike the daily tools this takes a source id only: '
+      + '`merged` and `provider` name a reconciled day, and samples are never either.',
+    ),
   },
   outputSchema: {
     points: z.array(z.object({
@@ -32,7 +36,7 @@ export const getIntraday = defineTool({
   run: (q, args) => {
     const result = q.intraday({
       metric: args.metric, localDate: args.localDate,
-      points: budgetFor(args.points, DEFAULT_INTRADAY_POINTS), sourceId: args.sourceId,
+      points: budgetFor(args.points, DEFAULT_INTRADAY_POINTS), sourceId: args.source,
     })
     return {
       points: result.points.map((p) => ({
@@ -56,7 +60,11 @@ export const getSleep = defineTool({
   inputSchema: {
     from: z.string().describe('YYYY-MM-DD, inclusive'),
     to: z.string().describe('YYYY-MM-DD, inclusive'),
-    sourceId: z.string().optional(),
+    source: z.string().optional().describe(
+      'A source id from describe_person, to read one device on its own. Omitted answers one entry '
+      + 'per night per source. A source id only: `merged` and `provider` name a reconciled day, '
+      + 'and a night is one device\'s recording.',
+    ),
   },
   outputSchema: {
     nights: z.array(z.object({
@@ -75,7 +83,7 @@ export const getSleep = defineTool({
     })),
   },
   run: (q, args) => ({
-    nights: q.sleepNights({ from: args.from, to: args.to, sourceId: args.sourceId }),
+    nights: q.sleepNights({ from: args.from, to: args.to, sourceId: args.source }),
   }),
 })
 

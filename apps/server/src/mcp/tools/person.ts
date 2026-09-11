@@ -8,7 +8,9 @@ export const describePerson: Tool = {
   description:
     'The person this session is bound to: their id, their timezone, and the sources that have '
     + 'reported data for them. Call this first — every other tool answers for this person only, '
-    + 'and source ids from here are what the `source` arguments elsewhere accept.',
+    + 'and source ids from here are what the `source` argument of every other tool accepts. The '
+    + 'five daily tools additionally accept `merged` and `provider`, which name who reconciled a '
+    + 'day rather than a device, and so appear in no list here.',
   notes:
     'There is deliberately no tool that lists the household. A session is bound to one person, and '
     + 'listing the others would name people whose data this session cannot read.',
