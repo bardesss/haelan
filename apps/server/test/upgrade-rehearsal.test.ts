@@ -344,24 +344,34 @@ describe('the upgrade path', () => {
       // mapper's, and both moved these figures on this branch already. A number below failing is
       // therefore a question, not an instruction: check what changed in seed.ts before assuming
       // the regression is in the derivation.
+      //
+      // 2492 samples and 904 daily rows, not the prior round's 1736 and 648: seed.ts now writes
+      // six more data types closing the Activity page's own gap (distance, active-energy-burned,
+      // active-minutes, active-zone-minutes as samples; floors and total-calories as dailyRollUp,
+      // which lands only in `daily`, never `samples` - see this file's per-metric breakdowns
+      // below for exactly what each type added).
       expect({
         samples: countOf(db, 'samples'),
         daily: countOf(db, 'daily'),
         sessions: countOf(db, 'sessions'),
         observations: countOf(db, 'observations'),
-      }).toEqual({ samples: 1736, daily: 648, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 2492, daily: 904, sessions: 19, observations: 14 })
       // The report an operator reads has to say what the tables say.
       expect({
         samples: rebuilt.samples, dailyRows: rebuilt.dailyRows,
         sessions: rebuilt.sessions, observations: rebuilt.observations,
-      }).toEqual({ samples: 1736, dailyRows: 648, sessions: 19, observations: 14 })
+      }).toEqual({ samples: 2492, dailyRows: 904, sessions: 19, observations: 14 })
 
       // Broken down per metric, so a regression that lost 300 steps samples while a mapper
       // started emitting 300 spurious weight rows - invisible to the bare total above, which
-      // would still read 1736 - names what moved. Four of the six are one raw sample a day, exact
+      // would still read 2492 - names what moved. Six of the ten are one raw sample a day, exact
       // against SEED_DAYS; heart_rate is downsampled to the minute, so its one reading an hour
-      // becomes four rows (mean, min, max, count), and steps has no downsampling but reports
-      // every one of its twenty-four hourly points.
+      // becomes four rows (mean, min, max, count); steps, distance and active_energy have no
+      // downsampling and report every one of their twenty-four hourly points; distance tracks the
+      // step curve (seed.ts's own stepsByHour) rather than being drawn on its own, which is why it
+      // matches steps' count exactly. floors and total_calories are not here at all - dailyRollUp
+      // lands only in `daily`, as a `provider` row, never in `samples` (see mapRollups.ts's own
+      // comment on why).
       expect(countsByKey(db, 'select m.name as key, count(*) as n from samples s'
         + ' join metrics m on m.ref = s.metric_ref group by m.name')).toEqual({
         steps: 24 * SEED_DAYS,
@@ -370,6 +380,14 @@ describe('the upgrade path', () => {
         daily_hrv: SEED_DAYS,
         respiratory_rate: SEED_DAYS,
         resting_heart_rate: SEED_DAYS,
+        distance: 24 * SEED_DAYS,
+        active_energy: 24 * SEED_DAYS,
+        active_minutes_light: SEED_DAYS,
+        active_minutes_moderate: SEED_DAYS,
+        active_minutes_vigorous: SEED_DAYS,
+        active_zone_minutes_fat_burn: SEED_DAYS,
+        active_zone_minutes_cardio: SEED_DAYS,
+        active_zone_minutes_peak: SEED_DAYS,
       })
       // Sleep is one session a night, exact against SEED_DAYS. Exercise is not: seed.ts schedules
       // a workout every third day (`i % 3 === 1`) rather than every day, which over fourteen days
@@ -414,8 +432,25 @@ describe('the upgrade path', () => {
           sleep_rem_minutes: 2 * SEED_DAYS,
           sleep_waketime_minutes: 2 * SEED_DAYS,
           // Same spillover as heart_rate above, one metric's worth: +2 for the same extra local
-          // date.
+          // date. distance and active_energy carry the identical +2, for the identical reason:
+          // both are written on the same hourly, Amsterdam-offset walk steps is.
           steps: 2 * SEED_DAYS + 2,
+          distance: 2 * SEED_DAYS + 2,
+          active_energy: 2 * SEED_DAYS + 2,
+          // active-minutes and active-zone-minutes carry no spillover: seed.ts writes each as one
+          // point spanning the whole civil day rather than an hourly walk, so there is no last UTC
+          // hour to land past local midnight the way steps' twenty-fourth hourly point does.
+          active_minutes_light: 2 * SEED_DAYS,
+          active_minutes_moderate: 2 * SEED_DAYS,
+          active_minutes_vigorous: 2 * SEED_DAYS,
+          active_zone_minutes_fat_burn: 2 * SEED_DAYS,
+          active_zone_minutes_cardio: 2 * SEED_DAYS,
+          active_zone_minutes_peak: 2 * SEED_DAYS,
+          // floors and total_calories are dailyRollUp types: one `provider` row a day and no
+          // `merged` row on top, since there is no per-source data under either for a merge to
+          // choose between (mapRollups.ts's own comment, and Activity.tsx's REQUESTS comment).
+          floors: SEED_DAYS,
+          total_calories: SEED_DAYS,
           weight: 4 * SEED_DAYS,
           workout_count: 10,
           workout_minutes: 10,
@@ -428,32 +463,31 @@ describe('the upgrade path', () => {
       // a mapper, a unit or an aggregate moves at least one of them.
       const sourceSamples = readSamples(db, PERSON)
       // A day's weight: one raw sample, the last day the seed writes. The magnitude moved from a
-      // prior round's 69900 to 63258 not because the weight formula changed - it did not - but
-      // because the shared PRNG stream did: the short-night flag seed.ts now draws once per
-      // night and the workout step-spike it draws once per workout day both land earlier in the
-      // sequence than weightGrams's own draws, so every later draw, weight included, comes off a
-      // different mulberry32 output than before. The magnitude is read back from a real rebuild,
-      // not computed by hand.
+      // prior round's 63258 to 63321 not because the weight formula changed - it did not - but
+      // because the shared PRNG stream did: seed.ts now draws distance and active energy inside
+      // every day's loop body ahead of weightGrams's own draw, and draws active minutes,
+      // active-zone minutes, total calories and floors after it, so every iteration after the
+      // first pulls weightGrams's trend from a different point in the mulberry32 sequence than
+      // before. The magnitude is read back from a real rebuild, not computed by hand.
       const lastDayStart = SEED_END - 1 * 86_400_000
       expect(sampleValue(sourceSamples, {
         sourceId, metric: 'weight', utcMs: lastDayStart + 7 * 3_600_000, agg: 'raw',
-      })).toBe(63_258)
+      })).toBe(63_321)
       // A known heart-rate hour's mean and its sample count: the same instant OVERRIDDEN_AT_MS
       // names, which is a real seeded reading (noon, seven days before the end) rather than a
       // second instant invented for this assertion alone. One reading a minute means mean, min
       // and max all equal the reading and count is 1; asserting mean and count is enough to catch
       // a downsample that started averaging across more than the one point it should have.
       //
-      // 164, not the prior round's 76: day i=7 (seven days before SEED_END) is a scheduled
-      // workout day (i % 3 === 1 in seed.ts), and under the reordered PRNG stream this run's
-      // workout for that day lands on the 12:00 hour - the same hour OVERRIDDEN_AT_MS names. So
-      // this instant now falls inside the workout window and reads the elevated exercise heart
-      // rate (seed.ts's 128-168 range) rather than the ambient midday curve; 164 is well inside
-      // that range. This is exactly Finding 2's fix taking effect on the one instant this file
-      // happens to pin - the ambient formula alone could never reach past 85.
+      // 82, not the prior round's 164: day i=7 (seven days before SEED_END) is still a scheduled
+      // workout day (i % 3 === 1 in seed.ts), but the six new data types draw ahead of `pick(rand,
+      // [7, 12, 18])` in every day's loop body, so this run's workout for that day picks a
+      // different hour of the three - not noon, the hour OVERRIDDEN_AT_MS names. Noon here reads
+      // the ambient midday curve instead of the elevated exercise band: `60 + stepCurve(12) *
+      // range(rand, 15, 25)`, whose ceiling is a little under 84, and 82 sits inside it.
       expect(sampleValue(sourceSamples, {
         sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS, agg: 'mean',
-      })).toBe(164)
+      })).toBe(82)
       expect(sampleValue(sourceSamples, {
         sourceId, metric: 'heart_rate', utcMs: OVERRIDDEN_AT_MS, agg: 'count',
       })).toBe(1)
@@ -496,12 +530,16 @@ describe('the upgrade path', () => {
         .toBe(SOURCE_ALIAS)
 
       // Counts alone would let a rebuild that dropped one data type and over-produced another
-      // pass, so name what came back. Every seeded type is here: steps, heart rate, weight and
-      // the three daily recovery metrics (resting heart rate, HRV, respiratory rate) as samples,
-      // sleep and exercise as sessions, moods as observations.
+      // pass, so name what came back. Every seeded type is here: steps, heart rate, weight, the
+      // three daily recovery metrics (resting heart rate, HRV, respiratory rate), distance and
+      // active energy burned, and the six active-minutes/active-zone-minutes sub-dimension
+      // metrics - as samples; sleep and exercise as sessions; moods as observations. floors and
+      // total_calories are not here: they are dailyRollUp types and land only in `daily`.
       expect(namesOf(db, 'select distinct m.name as name from samples s'
         + ' join metrics m on m.ref = s.metric_ref')).toEqual([
-        'daily_hrv', 'heart_rate', 'respiratory_rate', 'resting_heart_rate', 'steps', 'weight',
+        'active_energy', 'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
+        'active_zone_minutes_cardio', 'active_zone_minutes_fat_burn', 'active_zone_minutes_peak',
+        'daily_hrv', 'distance', 'heart_rate', 'respiratory_rate', 'resting_heart_rate', 'steps', 'weight',
       ])
       expect(namesOf(db, 'select distinct kind as name from sessions'))
         .toEqual(['exercise', 'sleep'])
@@ -566,8 +604,14 @@ describe('the upgrade path', () => {
       // empty database that also happens not to hold the marker.
       expect(restored.overrides.get(PERSON, overrideId)?.targetKey).toBe(targetKey)
       expect(restored.events.listFor(PERSON, '2026-01-01', '2026-12-31')).toHaveLength(1)
-      expect(countOf(restored.db, 'samples')).toBe(1736)
-      expect(countOf(restored.db, 'raw_payloads')).toBe(117)
+      expect(countOf(restored.db, 'samples')).toBe(2492)
+      // 175, not the prior round's 117: 8 list calls a day plus one exercise call every third day
+      // was 117 over SEED_DAYS=14 (14*8+5). Four more list calls a day - distance,
+      // active-energy-burned, active-minutes, active-zone-minutes - add 4*14=56, and floors and
+      // total-calories each add exactly one dailyRollUp call: putRollups chunks by
+      // rollupRangeCapDays, and fourteen days is inside floors' 90-day cap and exactly at
+      // total-calories' 14-day cap (both close on one chunk), so +2, not +14 apiece.
+      expect(countOf(restored.db, 'raw_payloads')).toBe(175)
       closeRestored()
     } finally {
       for (const close of [...openHandles]) close()

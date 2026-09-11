@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 import {
-  withinSchedule, localMinutesOf, inWindow, napInWindow, noDataYFor,
+  withinSchedule, localMinutesOf, inWindow, napInWindow, noDataYFor, axisTickInterval,
   AXIS_MIN, AXIS_MAX, DEFAULT_WINDOW, WIDE_WINDOW,
 } from '../src/charts/schedule.js'
 
@@ -215,6 +215,51 @@ describe('noDataYFor', () => {
 
   it('keeps AXIS_MIN and the default window in the shape every caller assumes', () => {
     expect(DEFAULT_WINDOW).toEqual({ min: AXIS_MIN, max: AXIS_MAX })
+  })
+})
+
+// The y-axis defect final-review.md reported and reproduced live: labels reading
+// 12:00|16:00|01:00|09:00|17:00|00:00 bottom to top, not monotonic, with the bottom two
+// overlapping. ECharts's own automatic tick search for a value axis chose an interval without
+// regard to whether it divided AXIS_MIN..AXIS_MAX evenly, so one tick landed however far short
+// of a full interval its neighbour happened to leave. axisTickInterval replaces that search with
+// an explicit interval; these are the properties an axis built from it has to hold for every
+// window this app actually passes, not just the two numbers below.
+describe('axisTickInterval', () => {
+  it('divides the default noon-to-noon window into four-hour ticks', () => {
+    expect(axisTickInterval(DEFAULT_WINDOW)).toBe(4 * 60)
+  })
+
+  it('divides the wide window into six-hour ticks, not the default window\'s four', () => {
+    expect(axisTickInterval(WIDE_WINDOW)).toBe(6 * 60)
+  })
+
+  it('divides both windows\' own span exactly, leaving no leftover gap at the top boundary', () => {
+    // The defect itself: an interval that does not divide the span evenly leaves the tick
+    // nearest one boundary closer to its neighbour than every other pair, which is what
+    // overlapped in the reported screenshot. This is the property this function has to hold,
+    // not merely the two concrete values above.
+    for (const window of [DEFAULT_WINDOW, WIDE_WINDOW]) {
+      expect((window.max - window.min) % axisTickInterval(window)).toBe(0)
+    }
+  })
+
+  it('steps the clock reading forward by exactly one interval a tick, or back by one interval minus a day at a genuine midnight crossing, and never anything else', () => {
+    for (const window of [DEFAULT_WINDOW, WIDE_WINDOW]) {
+      const interval = axisTickInterval(window)
+      const ticks: number[] = []
+      for (let v = window.min; v <= window.max; v += interval) ticks.push(v)
+      // Not vacuous: a window whose span happened to be shorter than one interval would let the
+      // loop below run zero times and pass without checking anything.
+      expect(ticks.length).toBeGreaterThan(2)
+      const clockOf = (v: number) => ((v % 1440) + 1440) % 1440
+      for (let i = 1; i < ticks.length; i++) {
+        const delta = clockOf(ticks[i]!) - clockOf(ticks[i - 1]!)
+        // This is exactly what the reported sequence broke: 17:00 to 09:00 is neither +interval
+        // nor a wrapped -interval, it is a jump the axis's own reader has no clock reading for.
+        expect([interval, interval - 1440]).toContain(delta)
+      }
+    }
   })
 })
 

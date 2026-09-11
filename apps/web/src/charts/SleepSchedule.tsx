@@ -3,7 +3,7 @@ import type { EChartsOption, CustomSeriesRenderItemAPI, CustomSeriesRenderItemPa
 import { useChart } from './useChart.js'
 import { chartBase, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
-import { nightMark, noDataYFor, DEFAULT_WINDOW, type Night } from './schedule.js'
+import { nightMark, noDataYFor, axisTickInterval, DEFAULT_WINDOW, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
@@ -32,6 +32,11 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow = DEF
       xAxis: { type: 'category' as const, data: nights.map((n) => n.date.slice(8)),
         ...base.labelledAxis, axisLabel: { ...base.axisLabel, interval: 4 } },
       yAxis: { type: 'value' as const, min: axisWindow.min, max: axisWindow.max, inverse: false,
+        // Explicit, not ECharts's own automatic "nice number" search: axisTickInterval's own
+        // comment has the reproduction and the reasoning, but in short, the default search does
+        // not know this axis wraps every 1440 minutes and picked an interval that left one tick,
+        // and its label, off the evenly spaced grid the rest of the axis draws.
+        interval: axisTickInterval(axisWindow),
         axisLabel: { ...base.axisLabel, formatter: (v: number) => formatClock(v).slice(0, 2) + ':00' },
         splitLine: base.splitLine },
       series: [

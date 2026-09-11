@@ -36,6 +36,34 @@ export function noDataYFor(window: { min: number, max: number }): number {
   return window.max - NO_DATA_MARGIN
 }
 
+const MINUTES_PER_HOUR = 60
+
+/**
+ * SleepSchedule's own y-axis tick spacing, in minutes: six equal, whole-hour intervals across
+ * whichever window a caller passes, rather than ECharts's default value-axis tick search, which
+ * this replaced. That search picks a "nice" interval from the axis's overall range without regard
+ * to where the caller's own min and max actually sit, so the tick nearest each boundary lands
+ * whatever distance short of it the interval happens to leave, not a whole interval away like
+ * every other gap - which is what put an unevenly spaced tick, and its overlapping label, at one
+ * end of the axis (reproduced live: `12:00|16:00|01:00|09:00|17:00|00:00`, not monotonic and not
+ * evenly spaced). Six is not a magic tick count so much as the number that happens to land on a
+ * whole hour for both windows this app actually builds - DEFAULT_WINDOW's 24 hour span becomes
+ * four-hour ticks, WIDE_WINDOW's 36 hour span becomes six-hour ticks - so both read at the same
+ * density, seven labels evenly spaced in the same 150px chart, rather than the wider window
+ * buying itself more ticks than that height has room to draw without them touching.
+ *
+ * This does not remove the axis's wrap-around: a noon-to-noon window genuinely does cross
+ * midnight, and an evenly spaced tick either side of it will always read as a large apparent drop
+ * (23:xx down to 00:xx) because that is what the clock actually does there. What this removes is
+ * every OTHER tick reading like that - the defect was never the wrap itself, it was ECharts
+ * picking tick positions this axis's own formatter (`formatClock`, wrapping every 1440 minutes)
+ * was never consulted about.
+ */
+export function axisTickInterval(window: { min: number, max: number }): number {
+  const spanHours = (window.max - window.min) / MINUTES_PER_HOUR
+  return Math.round(spanHours / 6) * MINUTES_PER_HOUR
+}
+
 // The default window's own no-data Y, named for callers (and schedule-marks.test.ts's own
 // pre-existing assertions) that only ever draw the default window.
 export const NO_DATA_Y = noDataYFor(DEFAULT_WINDOW)

@@ -2,6 +2,7 @@
   "name": "@haelan/web",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "predev": "pnpm --filter @haelan/tokens build:css",

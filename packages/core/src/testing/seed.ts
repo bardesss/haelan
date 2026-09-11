@@ -20,7 +20,19 @@
 // schedule rather than a coin flip, so the exercise type always shows up regardless of which
 // seed a caller passes, and the type is always one the Google Health API actually emits: drawn
 // from the repository's own drift-checked `EXERCISE_TYPES`, not a private list that could invent
-// a value the API has never sent. Recovery's three daily figures each get a different kind of
+// a value the API has never sent. Distance tracks the same per-hour step curve rather than being
+// drawn on its own - each hour's distance is that hour's own step count times a jittered stride
+// length, so a workout hour's longer, faster steps carry straight through to a longer distance for
+// free, the same way the workout's own hour already lifts steps and heart rate together. Active
+// energy burned carries a resting floor under the activity-shaped component on top of it, because
+// even the hour someone is asleep a real tracker still reports a small burn, never zero. Active
+// minutes and heart-rate-zone minutes both concentrate around the day's own workout rather than
+// accruing steadily across it: a light-activity floor from the day's ordinary movement, and the
+// moderate/vigorous minutes (and the cardio/peak zone minutes) landing almost entirely inside the
+// workout's own span, which is where a real watch would actually see the elevated effort. Floors
+// is modest and lumpy - most days a handful, some days a stair-climbing outlier - rather than a
+// smooth curve, since a flight of stairs is a discrete event a formula-shaped curve does not
+// produce. Recovery's three daily figures each get a different kind of
 // noise instead of one formula reused three times: resting heart rate drifts like weight, HRV
 // swings around a fixed baseline day to day, and respiratory rate barely moves at all - the same
 // spread a real week of each actually has, and the reason the Recovery page (and its Dashboard
@@ -39,14 +51,26 @@
 // nothing here ever reaches for Math.random. The same seed produces the same bytes today and a
 // year from now, which is the property both this unit's rehearsal and the next unit's
 // screenshots depend on.
+//
+// Floors and total-calories are the two exceptions to every `put` call above: the catalogue gives
+// them no `list` filter at all - `filterMember` is null, and `dailyRollUp` is the only action that
+// answers a per-day figure for either - so they cannot go through `listRequestParams`, which
+// assumes a filter exists to build. `putRollups`, below, mirrors client.ts's own
+// `dailyRollUpDataPoints` instead: a `range` requestParams rather than a `filter`, a
+// `rollupDataPoints` envelope rather than `dataPoints`, and a window no wider than the type's own
+// `rollupRangeCapDays` - a wider one is a request the real API would refuse, and a payload this
+// generator wrote for a call no real sync could have made would break the file's own opening
+// promise just as surely as a derived row would.
 
 import { randomUUID } from 'node:crypto'
 import type { DataType } from '../api/catalogue.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
+import { localDateOf } from '../derive/localDay.ts'
+import { rollupRangeCapDays } from '../sync/runRollupJob.ts'
 import type { RawArchive } from '../store/rawArchive.ts'
-import type { SleepStage } from './payloads.ts'
-import { body, dailyPoint, intervalPoint, samplePoint, sleepPoint } from './payloads.ts'
+import type { RollupWindow, SleepStage } from './payloads.ts'
+import { body, dailyPoint, dailyRollupBody, intervalPoint, nextDay, samplePoint, sleepPoint } from './payloads.ts'
 
 const DAY_MS = 86_400_000
 const HOUR_MS = 3_600_000
@@ -70,12 +94,25 @@ function mulberry32(seed: number): () => number {
 const range = (rand: () => number, min: number, max: number): number => min + rand() * (max - min)
 const pick = <T>(rand: () => number, items: readonly T[]): T => items[Math.floor(rand() * items.length)]!
 
-// The three daily-summary metrics below key off the civil date dailyPoint expects, not the
-// millisecond instant the rest of this file passes around. Read back with getUTC*, matching the
-// UTC approximation listRequestParams already makes for this generator's person-less timezone.
+// The daily-summary metrics below (resting heart rate, HRV, respiratory rate, and - via
+// floorsWindows/totalCaloriesWindows further down - floors and total calories) key off the civil
+// date dailyPoint and putRollups expect, not the millisecond instant the rest of this file passes
+// around. `dayStart` sits at Amsterdam local midnight (localMidnightMs's own comment, and every
+// day back from it is one more 24-hour chunk), which is a UTC instant late in the *previous* UTC
+// day whenever Amsterdam is ahead of UTC - which it always is, CET or CEST, never behind. Reading
+// getUTCFullYear/Month/Date straight off that instant, as an earlier version of this function did,
+// therefore names the day before the one this chunk was generated for, on every one of these five
+// metrics, every day of the span. steps, heart rate and the rest of this file never went through
+// this function - the rebuild works their civil date out from the timestamps and offsets each
+// payload already carries - which is why the earlier bug was invisible everywhere except these
+// five: they are the ones that hand the API a pre-computed date rather than an instant, and the
+// only caller of this function. Fixed by asking derive/localDay.ts's own `localDateOf`, the one
+// place this codebase already computes a local day boundary, rather than re-approximating it a
+// second time with a mistake the first approximation did not have.
 const civilDateOf = (ms: number): { year: number, month: number, day: number } => {
-  const d = new Date(ms)
-  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }
+  const offsetMinutes = Number(amsterdamOffset(ms).slice(0, -1)) / 60
+  const [year, month, day] = localDateOf(ms, offsetMinutes).split('-').map(Number) as [number, number, number]
+  return { year, month, day }
 }
 
 // The catalogue has grown twice this month, and a wrong id here is a payload nothing maps: the
@@ -120,6 +157,20 @@ function amsterdamOffset(ms: number): string {
   const dstStarts = lastSundayUtcMs(year, 2) // March
   const dstEnds = lastSundayUtcMs(year, 9) // October
   return ms >= dstStarts && ms < dstEnds ? '7200s' : '3600s'
+}
+
+// The Amsterdam local-midnight instant that opens civil date `dateStr` (YYYY-MM-DD), in UTC
+// milliseconds - exported for scripts/seed-demo.mjs to anchor a span's exclusive end on. An
+// anchor at UTC midnight instead lets the last day this file generates, which is one UTC-day
+// chunk wide, straddle a local-day boundary: the couple of hours (one outside CEST) on the far
+// side of that boundary land in a new local day that nothing generated after endMs ever fills
+// back in, so it reads as the demo's own final day and reads nearly empty. Anchoring here instead
+// means the last chunk's own local day is the one that closes exactly on endMs, so there is
+// nothing left on the far side of it to spill into.
+export function localMidnightMs(dateStr: string): number {
+  const utcMidnight = Date.parse(`${dateStr}T00:00:00Z`)
+  const offsetSeconds = Number(amsterdamOffset(utcMidnight).slice(0, -1))
+  return utcMidnight - offsetSeconds * 1000
 }
 
 // Rises from nothing at 6am to a midday peak and back to nothing by 10pm. Reused for the heart
@@ -221,6 +272,46 @@ function moodPoint(o: { atMs: number, utcOffset?: string, moods: string[] }): Re
   }
 }
 
+// active-minutes carries its dimension as an array inside one point -
+// activeMinutesByActivityLevel[], one element per level - rather than one point per level the way
+// active-zone-minutes below does, so this builder takes the whole day's levels at once instead of
+// being called once per level.
+function activeMinutesPoint(o: {
+  startTime: string, endTime: string, utcOffset?: string, minutesByLevel: Readonly<Record<string, number>>,
+}): Record<string, unknown> {
+  const offset = o.utcOffset ?? '0s'
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    activeMinutes: {
+      interval: { startTime: o.startTime, startUtcOffset: offset, endTime: o.endTime, endUtcOffset: offset },
+      activeMinutesByActivityLevel: Object.entries(o.minutesByLevel).map(([activityLevel, minutes]) => ({
+        activityLevel, activeMinutes: String(minutes),
+      })),
+    },
+  }
+}
+
+// active-zone-minutes carries no array - the field map found no interval with more than one zone
+// in it - so one point holds exactly one zone, and a day with three zones' worth of minutes is
+// three separate points, called once per zone below rather than once per day.
+function activeZoneMinutesPoint(o: {
+  startTime: string, endTime: string, utcOffset?: string, zone: string, minutes: number,
+}): Record<string, unknown> {
+  const offset = o.utcOffset ?? '0s'
+  return {
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    activeZoneMinutes: {
+      interval: { startTime: o.startTime, startUtcOffset: offset, endTime: o.endTime, endUtcOffset: offset },
+      heartRateZone: o.zone,
+      activeZoneMinutes: String(o.minutes),
+    },
+  }
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+const civilDateStr = (d: { year: number, month: number, day: number }): string =>
+  `${d.year}-${pad2(d.month)}-${pad2(d.day)}`
+
 export interface SeedArchiveInput {
   archive: RawArchive
   personId: string
@@ -243,6 +334,12 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const DAILY_RESTING_HR = requireType('daily-resting-heart-rate')
   const DAILY_HRV = requireType('daily-heart-rate-variability')
   const DAILY_RESPIRATORY_RATE = requireType('daily-respiratory-rate')
+  const DISTANCE = requireType('distance')
+  const ACTIVE_ENERGY_BURNED = requireType('active-energy-burned')
+  const ACTIVE_MINUTES = requireType('active-minutes')
+  const ACTIVE_ZONE_MINUTES = requireType('active-zone-minutes')
+  const TOTAL_CALORIES = requireType('total-calories')
+  const FLOORS = requireType('floors')
 
   const rand = mulberry32(input.seed ?? DEFAULT_SEED)
   let payloads = 0
@@ -264,6 +361,35 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       body: body(points),
     })
     payloads++
+  }
+
+  // See this file's own header comment on why floors and total-calories cannot go through `put`
+  // above. `windows` is every day this call is responsible for, in calendar order; chunked here
+  // into spans no wider than the type's own cap, one archive row per chunk, the same shape
+  // runRollupJob's own backward walk produces for a real sync - a caller of this function needs to
+  // pass only the day-by-day figures, not know the cap exists.
+  const putRollups = (t: DataType, windows: readonly RollupWindow[]): void => {
+    const capDays = rollupRangeCapDays(t)
+    for (let i = 0; i < windows.length; i += capDays) {
+      const chunk = windows.slice(i, i + capDays)
+      const fromDate = chunk[0]!.date
+      // Exclusive, like every other window bound in this file: the day after the chunk's last day.
+      const toDate = nextDay(chunk.at(-1)!.date)
+      const windowStartMs = Date.parse(`${civilDateStr(fromDate)}T00:00:00Z`)
+      const windowEndMs = Date.parse(`${civilDateStr(toDate)}T00:00:00Z`)
+      input.archive.put({
+        personId: input.personId,
+        dataType: t.id,
+        requestParams: { range: { start: { date: fromDate }, end: { date: toDate } } },
+        fetchEpisodeId: randomUUID(),
+        windowStartMs,
+        windowEndMs,
+        fetchedAtMs: windowEndMs,
+        httpStatus: 200,
+        body: dailyRollupBody(t.payloadKey, chunk),
+      })
+      payloads++
+    }
   }
 
   // Every night's boundaries, computed before the day loop below writes anything: night i ends
@@ -300,6 +426,11 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   const hrvBaselineMs = range(rand, 45, 70)
   const respiratoryRateBpm = range(rand, 13.5, 15.5)
 
+  // floors and total-calories are collected here rather than put() one day at a time, because
+  // putRollups above has to see a whole span at once to chunk it against the type's own cap.
+  const floorsWindows: RollupWindow[] = []
+  const totalCaloriesWindows: RollupWindow[] = []
+
   for (let i = 0; i < input.days; i++) {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
     const dayEnd = dayStart + DAY_MS
@@ -323,21 +454,62 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
     // could land anywhere relative to each other.
     restingHrBpm += restingHrTrendPerDay + range(rand, -0.6, 0.6)
 
-    const stepsPoints = Array.from({ length: 24 }, (_, h) => {
-      const hourStart = dayStart + h * HOUR_MS
+    // Kept as its own array rather than folded straight into stepsPoints below, because distance
+    // and active energy both read it back a few lines down - distance tracks the step curve
+    // rather than being drawn independently, and the cleanest way to track it is to read the same
+    // number steps itself just wrote, not to recompute a second curve shaped to agree with it.
+    const stepsByHour = Array.from({ length: 24 }, (_, h) => {
       const intensity = stepCurve(h) * (isSunday ? 0.6 : 1) * range(rand, 0.85, 1.15)
       // The workout's own hour gets the steps its minutes actually took, laid on top of the
       // ambient curve, instead of a session the step chart shows no sign of at all.
       const workoutMinutes = workout && workout.hour === h ? (workout.endMs - workout.startMs) / 60_000 : 0
       const workoutSteps = workoutMinutes > 0 ? Math.round(workoutMinutes * range(rand, 120, 160)) : 0
+      return Math.round(700 * intensity) + workoutSteps
+    })
+    const stepsPoints = stepsByHour.map((steps, h) => {
+      const hourStart = dayStart + h * HOUR_MS
       return intervalPoint({
-        payloadKey: STEPS.payloadKey, valuePath: STEPS.valuePath, value: Math.round(700 * intensity) + workoutSteps,
+        payloadKey: STEPS.payloadKey, valuePath: STEPS.valuePath, value: steps,
         physicalTime: new Date(hourStart).toISOString(),
         endTime: new Date(hourStart + HOUR_MS).toISOString(),
         utcOffset: amsterdamOffset(hourStart),
       })
     })
     put(STEPS, dayStart, dayEnd, stepsPoints)
+
+    // Distance tracks the step curve - each hour's distance is that hour's own step count times a
+    // jittered stride length - rather than being drawn from stepCurve a second, independent time,
+    // which is what let an earlier draft show a "run" whose distance chart went flat.
+    const distancePoints = stepsByHour.map((steps, h) => {
+      const hourStart = dayStart + h * HOUR_MS
+      const strideMillimeters = range(rand, 700, 820)
+      return intervalPoint({
+        payloadKey: DISTANCE.payloadKey, valuePath: DISTANCE.valuePath, value: Math.round(steps * strideMillimeters),
+        physicalTime: new Date(hourStart).toISOString(),
+        endTime: new Date(hourStart + HOUR_MS).toISOString(),
+        utcOffset: amsterdamOffset(hourStart),
+      })
+    })
+    put(DISTANCE, dayStart, dayEnd, distancePoints)
+
+    // A resting floor under the same activity curve steps and distance already follow: the
+    // overnight hours still report a small burn, never zero, and the workout's own hour adds a
+    // burst on top the way its hour already spikes the step and heart-rate curves.
+    const activeEnergyPoints = Array.from({ length: 24 }, (_, h) => {
+      const hourStart = dayStart + h * HOUR_MS
+      const overnight = h < 6 || h >= 23
+      const restingKcal = overnight ? range(rand, 8, 14) : range(rand, 14, 22)
+      const activeKcal = stepCurve(h) * (isSunday ? 0.6 : 1) * range(rand, 20, 45)
+      const workoutKcal = workout && workout.hour === h ? range(rand, 150, 350) : 0
+      return intervalPoint({
+        payloadKey: ACTIVE_ENERGY_BURNED.payloadKey, valuePath: ACTIVE_ENERGY_BURNED.valuePath,
+        value: Math.round(restingKcal + activeKcal + workoutKcal),
+        physicalTime: new Date(hourStart).toISOString(),
+        endTime: new Date(hourStart + HOUR_MS).toISOString(),
+        utcOffset: amsterdamOffset(hourStart),
+      })
+    })
+    put(ACTIVE_ENERGY_BURNED, dayStart, dayEnd, activeEnergyPoints)
 
     const hrPoints = Array.from({ length: 24 }, (_, h) => {
       const atMs = dayStart + h * HOUR_MS
@@ -389,6 +561,53 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       value: respiratoryRateToday.toFixed(1), date: civilDate,
     })])
 
+    // Active minutes and heart-rate-zone minutes both concentrate around the day's own workout
+    // rather than accruing steadily through it: a light-activity floor from the day's ordinary
+    // movement, and the moderate/vigorous minutes (and the cardio/peak zone minutes) landing
+    // almost entirely inside the workout's own span. One point spanning the whole day, the same
+    // civil-day grain the daily recovery figures above use, rather than an hourly walk like steps
+    // - real per-interval granularity is a detail nothing here has measured, and a coarser body
+    // still maps to the one figure a day the page actually charts.
+    const workoutMinutesToday = workout ? (workout.endMs - workout.startMs) / 60_000 : 0
+    const lightMinutes = Math.round(range(rand, 40, 90) * (isSunday ? 0.7 : 1))
+    const moderateMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.3, 0.5)) : 0
+    const vigorousMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.3, 0.5)) : 0
+    put(ACTIVE_MINUTES, dayStart, dayEnd, [activeMinutesPoint({
+      startTime: new Date(dayStart).toISOString(), endTime: new Date(dayEnd).toISOString(),
+      utcOffset: amsterdamOffset(dayStart),
+      minutesByLevel: { LIGHT: lightMinutes, MODERATE: moderateMinutes, VIGOROUS: vigorousMinutes },
+    })])
+
+    const fatBurnMinutes = Math.round(range(rand, 10, 30) * (isSunday ? 0.7 : 1))
+    const cardioMinutes = workout ? Math.round(workoutMinutesToday * range(rand, 0.2, 0.4)) : 0
+    // A running workout is the one type here that plausibly pushes a heart rate into the top
+    // zone; the others (a lift, a swim, a walk) stay out of it, the same distinction the field map
+    // found no more than one zone active in a single interval to begin with.
+    const peakMinutes = workout && workout.exerciseType === 'RUNNING'
+      ? Math.round(workoutMinutesToday * range(rand, 0.05, 0.15)) : 0
+    const minutesByZone: Readonly<Record<string, number>> = {
+      FAT_BURN: fatBurnMinutes, CARDIO: cardioMinutes, PEAK: peakMinutes,
+    }
+    put(ACTIVE_ZONE_MINUTES, dayStart, dayEnd, Object.entries(minutesByZone).map(([zone, minutes]) => (
+      activeZoneMinutesPoint({
+        startTime: new Date(dayStart).toISOString(), endTime: new Date(dayEnd).toISOString(),
+        utcOffset: amsterdamOffset(dayStart), zone, minutes,
+      })
+    )))
+
+    // Total calories carries the same resting-floor-plus-activity shape active energy burned does
+    // above, but as one number for the whole day rather than an hourly curve - dailyRollUp answers
+    // nothing finer than that. Floors is modest and lumpy: most days a handful, and roughly one day
+    // in four a stair-climbing outlier on top, rather than a curve that only ever creeps.
+    const restingCaloriesToday = range(rand, 1450, 1650)
+    const activeCaloriesToday = range(rand, 200, 500) * (isSunday ? 0.7 : 1)
+      + (workout ? range(rand, 200, 450) : 0)
+    totalCaloriesWindows.push({
+      date: civilDate, value: { kcalSum: Math.round(restingCaloriesToday + activeCaloriesToday) },
+    })
+    const floorsToday = Math.round(range(rand, 0, 6) + (rand() < 0.25 ? range(rand, 6, 16) : 0))
+    floorsWindows.push({ date: civilDate, value: { countSum: String(floorsToday) } })
+
     const night = nights[i]!
     put(SLEEP, dayStart, dayEnd, [sleepPoint({
       name: `users/me/dataTypes/sleep/dataPoints/seed-${i}`,
@@ -412,6 +631,9 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
       atMs: dayStart + 20 * HOUR_MS, utcOffset: amsterdamOffset(dayStart + 20 * HOUR_MS), moods: [pick(rand, MOOD_LABELS)],
     })])
   }
+
+  putRollups(TOTAL_CALORIES, totalCaloriesWindows)
+  putRollups(FLOORS, floorsWindows)
 
   return { payloads }
 }

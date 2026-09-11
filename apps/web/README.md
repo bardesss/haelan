@@ -1,7 +1,7 @@
 # @haelan/web
 
-The dashboard's reference pages, which are fixtures only until M3, and the setup wizard, which
-is real: it talks to `@haelan/server` and is how an instance is configured.
+The dashboard the browser loads, and the setup wizard that configures an instance. Both talk to
+`@haelan/server`; the pages read a person's real derived data through the versioned API.
 
     pnpm install
     pnpm dev
