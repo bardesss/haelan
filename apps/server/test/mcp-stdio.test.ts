@@ -200,7 +200,21 @@ describe('stdout purity', () => {
       // The first newline, not the first parseable reply: a stray `console.log` arrives before the
       // handshake does, and waiting for valid JSON would wait past the very line under test.
       spawned.stdout.on('data', (chunk: string) => { stdout += chunk; if (stdout.includes('\n')) settle() })
-      spawned.on('exit', settle)
+      // A child that dies during startup wrote its reason to stderr and nothing to stdout.
+      // Resolving here would hand the assertions an empty string, so the failure would land on
+      // `toHaveLength(1)` with the reason captured and never printed - which is exactly how a
+      // version-gated entry that never served once read as a protocol bug. Fail with the reason.
+      //
+      // `close` rather than `exit`, because `exit` can fire while the last stdout chunk is still
+      // in flight: a child that answered and then exited would race into this rejection.
+      spawned.on('close', (code, signal) => {
+        if (stdout.includes('\n')) { settle(); return }
+        clearTimeout(timer)
+        reject(new Error(
+          `the child exited (code ${String(code)}, signal ${String(signal)}) without writing a `
+          + `line to stdout. stderr was: ${stderr}`,
+        ))
+      })
       spawned.on('error', (err) => { clearTimeout(timer); reject(err) })
     })
     // Newline-delimited JSON is the stdio transport's framing; `ReadBuffer` splits on \n.
