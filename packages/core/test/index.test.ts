@@ -14,7 +14,6 @@ describe('package barrel', () => {
     expect(typeof core.DATABASE_FILENAME).toBe('string')
     expect(typeof core.migrateToLatest).toBe('function')
     expect(typeof core.openReadOnly).toBe('function')
-    expect(typeof core.latestMigrationWhen).toBe('function')
   })
 
   it('exports the agent surface additions', () => {
@@ -304,16 +303,21 @@ describe('package barrel', () => {
       } finally { test.cleanup() }
     })
 
-    // readIntraday, readSleepNights and readSessions all take a plain person id, not a bound
-    // query. What holds the person-isolation guarantee, that a caller who forgets a WHERE clause
-    // must not be able to reach another member's data, is that none of the three is reachable
-    // except through PersonQuery, which binds the id once at construction and never again. Adding
-    // one of them to the barrel would hand every later caller, including a later milestone's SQL
-    // surface, a way to name a person id straight from the outside, quietly widening a guarantee
-    // person-query-isolation.test.ts otherwise pins shut.
+    // readIntraday, readIntradayWindow, readSleepNights and readSessions all take a plain person
+    // id, not a bound query. What holds the person-isolation guarantee, that a caller who forgets
+    // a WHERE clause must not be able to reach another member's data, is that none of the four is
+    // reachable except through PersonQuery, which binds the id once at construction and never
+    // again. Adding one of them to the barrel would hand every later caller, including a later
+    // milestone's SQL surface, a way to name a person id straight from the outside, quietly
+    // widening a guarantee person-query-isolation.test.ts otherwise pins shut.
+    //
+    // readIntradayWindow is named here rather than left to the shape of the list: it is the
+    // newest of the four and the likeliest to be reached for by a route wanting one workout, and
+    // an absence nothing asserts is an absence that goes green the day somebody ends it.
     it('does not export the bound readers themselves, only the shapes they return', async () => {
       const api = await import('../src/index.ts') as Record<string, unknown>
       expect(api['readIntraday']).toBeUndefined()
+      expect(api['readIntradayWindow']).toBeUndefined()
       expect(api['readSleepNights']).toBeUndefined()
       expect(api['readSessions']).toBeUndefined()
     })

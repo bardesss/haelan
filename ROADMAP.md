@@ -118,13 +118,17 @@ M6; neither is started, and letter order has not decided sequence anywhere else 
 
 **M8 and M4 meet in one function, and M8's design is the one that names it.** M4a-1 built
 `readIntradayWindow` and `PersonQuery.intradayWindow` so an agent could read one workout at full
-resolution instead of fifteen points out of a day-wide budget; M8 section 2.2 specifies the same
-pair for the night page, because a night running 23:15 to 07:02 is not a local date. The function
-exists as of M4a-1. Two things M8 asks of it are not built: the 48 hour refusal, and the HTTP
-route `GET /p/:personId/intraday/window` that exposes it. **M8's design also settles an open
-question M4a-1 left**: the v4 `Exercise` schema does carry `splits`, `splitSummaries` and
-`exerciseEvents`, archived and unmapped, so the laps M4a-1 declined to assume do exist and M8a is
-where they are mapped.
+resolution instead of fifteen points out of a day-wide budget; M8's design specifies the same pair
+for the night page, because a night running 23:15 to 07:02 is not a local date. The function exists
+as of M4a-1, and so does the 48 hour refusal, taking M8's number rather than inventing a second
+one. What M8 asks of it that is not built is the HTTP route `GET /p/:personId/intraday/window`
+that exposes it. **M8's design also moves an open question M4a-1 left**, though only part of the
+way, and the difference is the point of the strand: `exercise.splits[]` — carrying a `splitType` of
+`DISTANCE` — and `exercise.exerciseEvents[]` are **observed in this household's archived payloads**
+and unmapped, so those two exist and M8a is where they are mapped. `exercise.splitSummaries`, which
+is where laps would live, appears in the v4 discovery schema and **in no archived payload we have
+seen**; `exercise.notes` is the same. M4a-1 declined to design around a field it had not observed,
+and recording an unobserved field here as an observed one would be that same mistake.
 
 ## The rule that keeps this true
 
