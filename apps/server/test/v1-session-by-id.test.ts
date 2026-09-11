@@ -87,7 +87,15 @@ describe('GET /sessions/:sessionId', () => {
     const res = await get(harness, token, '/sessions/their-run')
 
     expect(res.statusCode).toBe(404)
-    expect(res.json().error.kind).toBe('not_found')
+    // The full envelope, byte for byte the same shape the nonexistent-id case above asserts, with
+    // only the id substituted: kind, code and message must all fail to distinguish "no such id"
+    // from "somebody else's id", not merely kind. A regression that kept kind: 'not_found' but
+    // changed code to something like 'not_your_session', or wrote a message admitting the row
+    // exists, would still pass a kind-only check and would still be the exact leak this route
+    // exists to prevent.
+    expect(res.json()).toEqual({
+      error: { kind: 'not_found', code: 'no_such_session', message: "no session 'their-run'" },
+    })
     // Nothing about the other person's session leaks into the message.
     expect(res.body).not.toContain('their-watch')
   })
