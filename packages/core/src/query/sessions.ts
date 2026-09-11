@@ -63,28 +63,8 @@ export function readSessions(db: DbOrTx, input: {
   // did not actually change.
   )).orderBy(asc(sessions.startMs), asc(sessions.id)).all()
 
-  // Read here rather than taken as a parameter: every caller of this reader wants the same answer,
-  // and one that forgot to pass them would silently answer as though the person had corrected
-  // nothing. Overrides are hand-entered and few, so this is one small indexed read.
-  const excluded = new Map<string, string | null>()
-  for (const row of db.select().from(overridesTable)
-    .where(and(eq(overridesTable.personId, input.personId), eq(overridesTable.scope, 'session'))).all()) {
-    if (row.action !== 'exclude') continue
-    excluded.set(parseSessionTarget(row.targetKey), row.reason ?? null)
-  }
-
-  const mapped = rows.map((row) => ({
-    id: row.id,
-    sourceId: row.sourceId,
-    startMs: row.startMs,
-    endMs: row.endMs,
-    startOffsetMinutes: row.startOffsetMinutes,
-    endOffsetMinutes: row.endOffsetMinutes,
-    localDate: row.localDate,
-    attrs: parseAttrs(row.attrs),
-    excluded: excluded.has(row.id),
-    excludeReason: excluded.get(row.id) ?? null,
-  }))
+  const excluded = readSessionExclusions(db, input.personId)
+  const mapped = rows.map((row) => toWorkoutSession(row, excluded))
 
   // A session whose provider recorded no exercise type is never a match: "my last run" must not
   // be answered by a session nobody can say was a run.
@@ -95,6 +75,68 @@ export function readSessions(db: DbOrTx, input: {
   // The rows arrived oldest first, so the most recent is the last one, and taking it after the
   // type filter is what stops `latest` answering with a bike ride.
   return input.latest === true ? matched.slice(-1) : matched
+}
+
+/**
+ * One session by id, or null.
+ *
+ * Scoped by person as well as id. A session belonging to somebody else is null here, exactly as
+ * an id that names nothing is, which is what lets the route answer 404 for both without ever
+ * having to distinguish them: a 403 would confirm the id exists, and the caller asking is by
+ * definition not entitled to that.
+ *
+ * No kind filter, unlike readSessions, where kind is load bearing because sleep and exercise
+ * share one table and a range read of one kind would otherwise answer with the other's rows. An
+ * id already names exactly one row across both kinds, so a kind parameter here could only be
+ * passed wrongly.
+ */
+export function readSession(db: DbOrTx, input: {
+  personId: string
+  sessionId: string
+}): WorkoutSession | null {
+  const row = db.select().from(sessions).where(and(
+    eq(sessions.personId, input.personId),
+    eq(sessions.id, input.sessionId),
+  )).get()
+  if (row === undefined) return null
+  return toWorkoutSession(row, readSessionExclusions(db, input.personId))
+}
+
+// Extracted from readSessions when readSession joined it. Two readers building this object from
+// two literals is how one of them comes to omit a field the other has, and attrs is exactly the
+// field a by-id reader would be tempted to hand back unparsed.
+function toWorkoutSession(
+  row: typeof sessions.$inferSelect,
+  excluded: Map<string, string | null>,
+): WorkoutSession {
+  return {
+    id: row.id,
+    sourceId: row.sourceId,
+    startMs: row.startMs,
+    endMs: row.endMs,
+    startOffsetMinutes: row.startOffsetMinutes,
+    endOffsetMinutes: row.endOffsetMinutes,
+    localDate: row.localDate,
+    attrs: parseAttrs(row.attrs),
+    excluded: excluded.has(row.id),
+    excludeReason: excluded.get(row.id) ?? null,
+  }
+}
+
+// Extracted for the same reason: readSession needs exactly the map readSessions builds, and a
+// second copy of this loop would be a second place to forget the action filter.
+//
+// Read here rather than taken as a parameter: every caller of this reader wants the same answer,
+// and one that forgot to pass them would silently answer as though the person had corrected
+// nothing. Overrides are hand-entered and few, so this is one small indexed read.
+function readSessionExclusions(db: DbOrTx, personId: string): Map<string, string | null> {
+  const excluded = new Map<string, string | null>()
+  for (const row of db.select().from(overridesTable)
+    .where(and(eq(overridesTable.personId, personId), eq(overridesTable.scope, 'session'))).all()) {
+    if (row.action !== 'exclude') continue
+    excluded.set(parseSessionTarget(row.targetKey), row.reason ?? null)
+  }
+  return excluded
 }
 
 // attrs is stored as a JSON string so the schema does not have to know each provider's shape.

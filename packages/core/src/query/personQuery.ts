@@ -20,7 +20,7 @@ import { readIntraday, readIntradayWindow } from './intraday.ts'
 import type { IntradayResult } from './intraday.ts'
 import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
-import { readSessions } from './sessions.ts'
+import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
 import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
@@ -365,6 +365,18 @@ export class PersonQuery {
       type: input.type,
       latest: input.latest,
     })
+  }
+
+  /**
+   * One session by id, or null. Named sessionById rather than session because it sits one line
+   * from sessions() and the singular would misread at a glance.
+   *
+   * No requireSource call: the session's own row names its source, and a caller who has the id
+   * is not choosing between devices. No requireSessionKind either; see readSession.
+   */
+  sessionById(input: { sessionId: string }): WorkoutSession | null {
+    if (input.sessionId.trim() === '') throw new ConfigError('sessionId is required')
+    return readSession(this.#db, { personId: this.#personId, sessionId: input.sessionId })
   }
 
   /**
