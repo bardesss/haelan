@@ -140,9 +140,8 @@ credentials, and it is deliberately **not** in a backup, so keep a copy of it so
 
 ## Storage, and how it grows
 
-The numbers below are the author's own instance - one person, 741 days of history - measured
-during this milestone. Use them to size a volume; nothing here is rounded into vagueness and
-nothing here is invented.
+Every number below was measured on the author's own instance: one person, 741 days of history.
+They are here so you can size a volume before you start rather than after the disk fills.
 
 After a reclaim the database holds **247 MB** for those 741 days, which is about **120 MB per
 person-year**. Of that, the gzipped raw archive is roughly **122 MB** and the derived samples with
@@ -334,10 +333,10 @@ The app ships English and Dutch, both complete at 616 keys. Locales are plain JS
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding a language is copy `en.json`, translate its 616 keys, import and register it beside `en` and
-`nl`. Say the cost plainly too: a half-translated locale is worse than none, because i18next falls
-back per key rather than per file, and the result is a screen carrying two languages at once rather
-than a screen in the fallback language throughout.
+Adding one is three steps: copy `en.json`, translate its 616 keys, then import and register it
+beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
+half-finished locale does not show the fallback language throughout - it shows one screen carrying
+two languages at once, which is worse than shipping no locale at all.
 
 ## Development
 
@@ -414,8 +413,9 @@ sitting beside rows built under the new ones is exactly what `DERIVATION_VERSION
 `MAPPING_VERSION` exist to prevent - see [Upgrading](#upgrading) for what moving either one costs
 on the next boot.
 
-`pnpm test` and `pnpm typecheck` pass before a pull request is opened. CI runs the same two, plus a
-build and the commit message check described under [Conventions](#conventions).
+`pnpm test` and `pnpm typecheck` pass before a pull request is opened. CI runs both again, plus a
+build, a check that the generated stylesheet is not tracked, and the commit message rule described
+under [Conventions](#conventions).
 
 **haelan is built with a coding agent, and AI-assisted contributions are welcome, held to the same
 bar as everything else here - not a lower one, not a separate one.** The bar is measurement rather
