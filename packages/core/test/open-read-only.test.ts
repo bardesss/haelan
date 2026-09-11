@@ -63,11 +63,15 @@ describe('openReadOnly', () => {
     expect(() => openReadOnly(test.dir)).toThrow(/newer than this build/i)
   })
 
-  it('names the rebuild when the write lock will not come free, rather than saying "locked"', () => {
-    // The third failure mode the design lists, and the only one a caller should respond to by
-    // waiting. Provoked with locking_mode = EXCLUSIVE on the fixture's own connection, which is
-    // what makes a writer's lock outlast its transaction and reach a reader at all: under plain
-    // WAL a reader never blocks on a writer, so a real rebuild is the rare shape that does.
+  it('answers a busy database with a sentence rather than SQLite saying "locked"', () => {
+    // `locking_mode = EXCLUSIVE` forces a state production does not produce. Under the write-ahead
+    // log every real instance runs, a reader is never blocked by a writer: the rebuild's long
+    // transaction, VACUUM and wal_checkpoint(TRUNCATE) all leave a newly arriving reader alone,
+    // and this pragma appears nowhere outside this test. What openReadOnly's busy branch is
+    // actually there for is SQLITE_BUSY_RECOVERY, while another connection replays the log, and
+    // that lasts milliseconds - too short to provoke on purpose and too cheap to leave unhandled.
+    // So the branch is kept and exercised through the one condition that can be held open, and
+    // the assertion is on the shape of the refusal rather than on how it was reached.
     //
     // The call costs about five seconds of wall clock, which is openReadOnly's own busy_timeout
     // running out: the refusal is what the wait ends in. Called once and the error kept, rather
@@ -83,7 +87,7 @@ describe('openReadOnly', () => {
     }
     expect(thrown).toBeInstanceOf(ConfigError)
     expect((thrown as Error).message).toMatch(/busy and did not come free/i)
-    expect((thrown as Error).message).toMatch(/rebuild/i)
+    expect((thrown as Error).message).toMatch(/recovering the write-ahead log/i)
   }, 20_000)
 
   it('refuses a database that exists but was never migrated', () => {

@@ -44,25 +44,30 @@ export function openReadOnly(dir: string): Database {
   try {
     client = new BetterSqlite3(file, { readonly: true, fileMustExist: true })
   } catch (err) {
-    // SQLite cannot replay a write-ahead log on a read-only connection. Against a running
-    // container this never happens, because the server is the writer and has already recovered
-    // it; against a stopped instance it is the first thing that goes wrong, and the raw error
-    // says "attempt to write a readonly database", which describes none of that.
+    // The constructor opens the file and never reads a page from it, so a failure here is about
+    // reaching the file rather than about what is inside it.
+    //
+    // Not, despite the obvious guess, an unrecovered write-ahead log. SQLite has replayed a WAL on
+    // a read-only connection since 3.22, creating the `-shm` itself, and this package's
+    // better-sqlite3 carries 3.53 - measured against a database whose log was never checkpointed
+    // and whose `-shm` was deleted, which opened and read the right rows. What is actually
+    // reachable here is permissions and paths, and the likeliest of those is a data directory this
+    // process cannot write: creating that `-shm` needs directory write permission even for a
+    // reader, which is what a wrong uid on a mounted volume takes away inside a container.
     const code = (err as { code?: string }).code ?? ''
     if (code.startsWith('SQLITE_READONLY') || code === 'SQLITE_CANTOPEN') {
-      throw new ConfigError(`'${file}' has a write-ahead log that needs recovering, and a read-only connection cannot do it. Start the instance once and try again.`)
+      throw new ConfigError(`cannot open '${file}' for reading. Check that the file and the directory holding it are readable by this process, and that the directory is writable: even a read-only connection creates a '-shm' file beside the database, so a data directory this user cannot write fails here.`)
     }
     if (isBusy(err)) throw new ConfigError(busyMessage(file))
     throw err
   }
 
   // Every refusal from here on holds an open connection, so the close lives in one place rather
-  // than beside each throw. c842a92 fixed that leak by hand on the `prepare()` path; the pragma
-  // below and the journal read further down can throw as well, and each was a second copy of it.
+  // than beside each throw.
   try {
-    // A rebuild wraps one person's entire re-derivation in a single transaction and holds SQLite's
-    // only write lock for as long as that takes. Readers proceed under WAL; this bounds the wait
-    // for the moments they do not, matching what openDatabase already sets for the server.
+    // A reader under a write-ahead log is not held up by a writer, so this is not the rebuild
+    // wait `openDatabase` sets the same pragma for. It bounds the one wait a reader can still
+    // meet: another connection replaying the log, which is milliseconds at boot.
     client.pragma('busy_timeout = 5000')
 
     // `openDatabase` creates the physical file before `migrateToLatest` runs, so a migration that
@@ -110,18 +115,21 @@ function isBusy(err: unknown): boolean {
 }
 
 /**
- * The third failure mode the design asks to have a name, alongside the unrecovered log and the
- * version mismatch. Raw SQLite says `database is locked`, which says nothing about how long the
- * lock will last - and that is the only fact deciding whether waiting is sensible or whether
- * something is wrong.
+ * Defensive rather than expected, and deliberately not admin.ts's message.
  *
- * Worded for a read rather than for admin.ts's write. Nothing was going to be changed here, so
- * that message's opening reassurance does not apply, but the explanation of who holds the lock and
- * for how long is deliberately the same one.
+ * admin.ts writes, so the rebuild's ten-minute transaction really does reach it. This function
+ * reads, and under a write-ahead log a reader is not blocked by a writer at all: the rebuild's
+ * long transaction, `VACUUM` and `wal_checkpoint(TRUNCATE)` each leave a newly arriving reader
+ * unimpeded, and nothing in this codebase sets `locking_mode = EXCLUSIVE` outside the one test
+ * that forces this branch open. What a reader can still meet is `SQLITE_BUSY_RECOVERY`, while
+ * another connection replays the log - milliseconds at boot, not something to plan a wait around.
+ *
+ * Worth a sentence anyway, because raw SQLite says `database is locked`, which says nothing about
+ * how long the lock lasts, and that is the only fact deciding whether trying again is sensible.
  */
 function busyMessage(file: string): string {
-  return `the database at '${file}' is busy and did not come free. A rebuild wraps one person's `
-    + "entire re-derivation in a single transaction and holds SQLite's only write lock for as long "
-    + 'as that takes, which on a large instance is ten minutes or more. An upgrade that changed how '
-    + 'data is derived starts one on boot. Wait for it to finish and try again.'
+  return `the database at '${file}' was busy and did not come free within five seconds. A reader `
+    + 'is not held up by a writer here, so this is not a sync or a rebuild to wait out: what blocks '
+    + 'one is another connection recovering the write-ahead log, which takes milliseconds. Try '
+    + 'again, and if it happens twice the instance is not in the state it appears to be in.'
 }
