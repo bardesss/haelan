@@ -87,6 +87,25 @@ describe('describe_person', () => {
     }
     expect(out.sources[0]!.name.untrustedText).toBe('Fitbit Sense')
   })
+
+  // The one branch in PersonQuery.describe() that can fail silently. Its LEFT JOIN on
+  // source_aliases is what routes this tool through the same alias-then-display-name-then-id
+  // choice M5a gave every other surface, and a join that matched nothing would still answer a
+  // name - the device's own - so the tool would look like it worked. An agent would then be
+  // reading "Fitbit Sense" back to a person whose own word for it is "My watch".
+  it('answers the name this person gave a source, not the name the device gave itself', () => {
+    test.db.insert(schema.sourceAliases).values({
+      personId: 'robin', sourceId: 'watch', alias: 'My watch', updatedAtMs: 0,
+    }).run()
+
+    const out = tool('describe_person').run(q(), {}) as {
+      sources: { id: string, name: { untrustedText: string | null } }[]
+    }
+
+    expect(out.sources).toHaveLength(1)
+    expect(out.sources[0]!.id).toBe('watch')
+    expect(out.sources[0]!.name.untrustedText).toBe('My watch')
+  })
 })
 
 describe('list_metrics', () => {
@@ -172,6 +191,34 @@ describe('query_series', () => {
         expect(out.reduction === null).toBe(out.points.length === seriesLength)
       },
     ), { numRuns: 40 })
+  })
+})
+
+describe('get_daily', () => {
+  // The tool's description asserts this in so many words: "A metric with no row that day answers
+  // null rather than being left out, so a caller can tell 'zero' from 'not measured'." Nothing
+  // exercised it. A description asserting behaviour no test pins is how an agent comes to report
+  // a day of no steps as a day of zero steps, which is a different claim about somebody's health
+  // record - and the readings must stay in the order they were asked for, or a caller matching
+  // them up by position reads the wrong metric's answer.
+  it('answers null for a metric with no row that day, in the order the metrics were asked for', () => {
+    seedDaily({ localDate: '2026-08-10', metric: 'steps', value: 8000 })
+
+    // `distance` takes the same 'sum' aggregate steps does and has no row that day, so the null
+    // is the absence of a reading rather than a metric the aggregate was wrong for. Asked first,
+    // so "answers null" is distinguishable from "is left out and the list shifts up".
+    const out = tool('get_daily').run(q(), {
+      localDate: '2026-08-10', metrics: ['distance', 'steps'], agg: 'sum',
+    }) as {
+      localDate: string
+      readings: { metric: string, value: number | null, coverage: number | null, source: string | null }[]
+    }
+
+    expect(out.localDate).toBe('2026-08-10')
+    expect(out.readings).toEqual([
+      { metric: 'distance', value: null, coverage: null, source: null },
+      { metric: 'steps', value: 8000, coverage: null, source: 'merged' },
+    ])
   })
 })
 
