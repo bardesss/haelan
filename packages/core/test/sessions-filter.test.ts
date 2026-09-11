@@ -113,4 +113,23 @@ describe('PersonQuery.sessions', () => {
     expect(() => q.sessions({ ...RANGE, type: 'JOGGING' })).toThrow(ConfigError)
     expect(() => q.sessions({ ...RANGE, type: 'JOGGING' })).toThrow(/no exercise type named 'JOGGING'/)
   })
+
+  // A real exercise type against the wrong kind. Both arguments are individually valid, which is
+  // what made this the one combination that got through: the type passes requireExerciseType, the
+  // kind passes requireSessionKind, and the reader then matches no row for any range in any
+  // household. An agent handed that empty list says the person has not run, which is a confident
+  // false statement about somebody's health record - the thing this class throws to avoid.
+  it("refuses an exercise type against kind 'sleep' rather than answering nothing", () => {
+    const q = new PersonQuery(test.db, 'p1')
+    const input = { kind: 'sleep' as const, from: '2026-08-01', to: '2026-08-31', type: 'RUNNING' }
+    expect(() => q.sessions(input)).toThrow(ConfigError)
+    expect(() => q.sessions(input)).toThrow(/no exercise type to filter on/)
+  })
+
+  it("still answers kind 'sleep' with no type", () => {
+    // The other half: the refusal is about the pair, not about sleep, and must not have closed
+    // the plain sleep listing this branch's own barrel test depends on.
+    const q = new PersonQuery(test.db, 'p1')
+    expect(q.sessions({ kind: 'sleep', from: '2026-08-01', to: '2026-08-31' })).toEqual([])
+  })
 })

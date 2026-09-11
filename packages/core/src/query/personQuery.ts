@@ -347,6 +347,14 @@ export class PersonQuery {
     requireRange(input.from, input.to)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     requireExerciseType(input.type)
+    // A sleep row has no exercise type to match, so this combination answers an empty list for
+    // every range and every household - and an agent reads an empty list as "you did not run in
+    // August" rather than as "that question is malformed". Refused for the same reason a metric
+    // typo is: the only two callers are an HTTP query string and a model's tool arguments, and
+    // neither of them can tell a true empty answer from a question that could never be answered.
+    if (input.kind === 'sleep' && input.type !== undefined) {
+      throw new ConfigError(`kind 'sleep' has no exercise type to filter on, so '${input.type}' would match nothing. Use kind 'exercise' to filter by type.`)
+    }
     requireBoolean('latest', input.latest)
     return readSessions(this.#db, {
       personId: this.#personId,
