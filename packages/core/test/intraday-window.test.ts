@@ -130,4 +130,75 @@ describe('PersonQuery.intradayWindow', () => {
     })
     expect(result.points).toHaveLength(45)
   })
+
+  // The reader selects every sample row in the span into JS before pivoting, and a year of heart
+  // rate is about 1.5 million of them. `intraday` cannot reach that shape - one local day is its
+  // whole argument - so this is the only place the bound can live.
+  it('refuses a span wider than 48 hours, naming the limit and the span asked for', () => {
+    const q = new PersonQuery(test.db, 'p1')
+    const input = { metric: 'heart_rate', startMs: 0, endMs: NINE_AM }
+    expect(() => q.intradayWindow(input)).toThrow(ConfigError)
+    expect(() => q.intradayWindow(input)).toThrow(/at most 48 hours/)
+  })
+
+  it('allows a span of exactly 48 hours', () => {
+    // The boundary is inclusive, so a caller who computed the limit themselves is not refused by
+    // one millisecond for having got it exactly right.
+    const q = new PersonQuery(test.db, 'p1')
+    expect(() => q.intradayWindow({
+      metric: 'heart_rate', startMs: NINE_AM, endMs: NINE_AM + 48 * 60 * MINUTE,
+    })).not.toThrow()
+  })
+
+  it('answers the span rather than the limit when the window is reversed', () => {
+    // Order, not taste: a reversed window's span is negative, so a cap tested first would let it
+    // through, but a wide AND reversed window would be answered with a complaint about a limit it
+    // does not exceed. The reversed check has to come first for this message to be reachable.
+    const q = new PersonQuery(test.db, 'p1')
+    expect(() => q.intradayWindow({ metric: 'heart_rate', startMs: NINE_AM, endMs: 0 }))
+      .toThrow(/startMs .* is after endMs/)
+  })
+
+  // points is unvalidated everywhere it appears: HTTP catches it in optionalPositiveInt, and a
+  // tool caller does not arrive through HTTP. NaN survives Math.max(2, NaN) inside the downsampler
+  // and comes back as two points with a reduction claiming `to: 2`, which is a wrong answer stated
+  // confidently rather than an error.
+  describe('points', () => {
+    const bad: Array<[string, unknown]> = [
+      ['NaN', Number.NaN], ['zero', 0], ['a negative', -5], ['a fraction', 2.5],
+      ['the string "10"', '10'], ['null', null],
+    ]
+
+    it.each(bad)('intradayWindow refuses %s', (_label, value) => {
+      const q = new PersonQuery(test.db, 'p1')
+      const input = {
+        metric: 'heart_rate', startMs: NINE_AM, endMs: NINE_AM + 44 * MINUTE, points: value,
+      } as unknown as Parameters<PersonQuery['intradayWindow']>[0]
+      expect(() => q.intradayWindow(input)).toThrow(ConfigError)
+      expect(() => q.intradayWindow(input)).toThrow(/points must be a positive integer/)
+    })
+
+    it.each(bad)('intraday refuses %s', (_label, value) => {
+      const q = new PersonQuery(test.db, 'p1')
+      const input = {
+        metric: 'heart_rate', localDate: LOCAL_DATE, points: value,
+      } as unknown as Parameters<PersonQuery['intraday']>[0]
+      expect(() => q.intraday(input)).toThrow(/points must be a positive integer/)
+    })
+
+    it.each(bad)('series refuses %s', (_label, value) => {
+      const q = new PersonQuery(test.db, 'p1')
+      const input = {
+        metric: 'steps', agg: 'sum', from: LOCAL_DATE, to: LOCAL_DATE, points: value,
+      } as unknown as Parameters<PersonQuery['series']>[0]
+      expect(() => q.series(input)).toThrow(/points must be a positive integer/)
+    })
+
+    it('still accepts an absent points, which is not a mistake', () => {
+      const q = new PersonQuery(test.db, 'p1')
+      expect(q.intradayWindow({
+        metric: 'heart_rate', startMs: NINE_AM, endMs: NINE_AM + 44 * MINUTE,
+      }).points).toHaveLength(45)
+    })
+  })
 })

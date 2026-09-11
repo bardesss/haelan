@@ -53,6 +53,19 @@ export interface SeriesResult {
 }
 
 /**
+ * The widest span `intradayWindow` will read.
+ *
+ * 48 rather than 24 because the two questions the window exists for both cross a midnight: a night
+ * runs 23:15 to 07:02, and a caller asking for "yesterday and today" of a person in a different
+ * zone is not making a mistake. It is the number M8's design chose independently for the same
+ * function, and taking that one rather than picking a second means the HTTP route and the tool
+ * surface cannot come to disagree about what is too much to ask for.
+ */
+const MAX_WINDOW_HOURS = 48
+
+const MAX_WINDOW_MS = MAX_WINDOW_HOURS * 3_600_000
+
+/**
  * Everything a surface asks of the store, bound to one person at construction.
  *
  * Master design section 11 requires the binding to live here rather than in the callers, because
@@ -95,6 +108,7 @@ export class PersonQuery {
   }): SeriesResult {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const source = input.source
@@ -241,6 +255,7 @@ export class PersonQuery {
   }): IntradayResult {
     requireMetric(input.metric)
     requireDate('localDate', input.localDate)
+    requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntraday(this.#db, {
       personId: this.#personId,
@@ -256,6 +271,11 @@ export class PersonQuery {
    *
    * The budget is the reason this is separate from `intraday`: a workout is minutes long inside a
    * day that is 1,440, and a day-wide budget spends almost none of itself on it.
+   *
+   * Bounded at 48 hours, which is this surface's only span limit and has to be: `intraday` is
+   * bounded by construction at one local day, while the reader underneath this one selects every
+   * sample row in the span into JS before pivoting, and a year of heart rate is about 1.5 million
+   * of them. `startMs: 0` is a perfectly plausible thing for a language model to send.
    */
   intradayWindow(input: {
     metric: string
@@ -267,9 +287,20 @@ export class PersonQuery {
     requireMetric(input.metric)
     requireFiniteNumber('startMs', input.startMs)
     requireFiniteNumber('endMs', input.endMs)
+    // Before the span cap, never after. A reversed window is not a wide one, and a cap tested
+    // first would answer `startMs` after `endMs` with a complaint about a limit it does not
+    // exceed - sending whoever read it to shorten a window that was never too long.
     if (input.startMs > input.endMs) {
       throw new ConfigError(`startMs ${input.startMs} is after endMs ${input.endMs}`)
     }
+    if (input.endMs - input.startMs > MAX_WINDOW_MS) {
+      throw new ConfigError(
+        `the window must be at most ${MAX_WINDOW_HOURS} hours, got ${
+          Math.round((input.endMs - input.startMs) / 3_600_000)} hours. Use series or intraday for `
+        + 'a longer span, which read derived rows rather than every sample in it.',
+      )
+    }
+    requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntradayWindow(this.#db, {
       personId: this.#personId,
@@ -462,6 +493,21 @@ function requirePositiveInteger(label: string, value: number): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new ConfigError(`${label} must be a positive integer, got ${value}`)
   }
+}
+
+/**
+ * `points` on its own, because it is optional everywhere it appears and `requirePositiveInteger`
+ * would refuse the absence as well as the mistake.
+ *
+ * The HTTP surface validates it in `optionalPositiveInt`, which is why this went unnoticed: a tool
+ * caller does not arrive through HTTP. Left unvalidated, `points: NaN` reaches `Math.max(2, NaN)`
+ * inside the downsampler, and `thinBand` then answers two points with a `reduction` claiming
+ * `to: 2` - a confident wrong answer about somebody's health record, which is the exact failure
+ * this class's rule about throwing rather than returning an emptiness exists to prevent.
+ */
+function requireOptionalPositiveInteger(label: string, value: number | undefined): void {
+  if (value === undefined) return
+  requirePositiveInteger(label, value)
 }
 
 /**
