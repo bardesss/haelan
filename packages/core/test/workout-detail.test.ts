@@ -157,7 +157,12 @@ describe('workoutDetail', () => {
     expect(d.laps[0]?.paceSecondsPerKm).toBeNull()
   })
 
-  it('reads the pause and resume markers', () => {
+  it('reads a marker of any type the v4 schema allows, keeping the type the device wrote', () => {
+    // Both types here are read because the schema has both, not because this archive holds both:
+    // across 197 measured sessions it holds 44 PAUSE, 96 START and 117 STOP, and not one RESUME or
+    // AUTO variant. The page therefore marks each PAUSE instant and gets total paused time as
+    // elapsed minus activeDuration, since an interval needs two ends and the data supplies one.
+    // The decoder still reads every type, because another device may write what this one does not.
     const d = workoutDetail({
       exerciseEvents: [
         { eventTime: '2026-08-18T06:10:00Z', eventUtcOffset: '7200s', exerciseEventType: 'PAUSE' },

@@ -139,8 +139,13 @@ export interface WorkoutDetail {
   autoSplits: WorkoutSplit[]
   laps: WorkoutSplit[]
   /**
-   * Pause and resume markers. Spec section 3 puts these on the heart rate trace as shading, so a
-   * run with a five minute traffic light stop reads as one run rather than as a mysterious dip.
+   * The markers the device wrote, of whichever types it wrote. They belong on the heart rate
+   * trace, so a run with a five minute traffic light stop reads as one run rather than as a
+   * mysterious dip - as a mark at each `PAUSE` instant rather than as shading from a pause to its
+   * resume, because an interval needs two ends and this archive supplies one: 44 pauses across 197
+   * measured sessions and not a single `RESUME`. Total paused time is elapsed minus
+   * `activeDuration` instead, which needs no second marker.
+   *
    * An earlier draft declared `WorkoutEvent` and then left it out of this shape, which made the
    * interface an export nothing consumed.
    */
