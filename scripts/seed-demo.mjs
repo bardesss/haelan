@@ -63,7 +63,11 @@ const USERNAME = 'demo'
 // A known password, printed below and said again wherever the README points at this script.
 // Correct for a directory this script itself refuses to write over an existing database (see the
 // refusal above) - wrong for anything this script did not just create.
-const PASSWORD = 'haelan-demo'
+//
+// Eight characters because accounts.create refuses fewer (accounts.ts), and it is the same word
+// twice rather than something stronger because a memorable one is the point here: this account is
+// published in the README and exists only in a directory the seeder just made.
+const PASSWORD = 'demodemo'
 
 // Anchored, not "today". Spec section 3 requires a screenshot regenerated next month to show the
 // same chart, and the fixed PRNG below only guarantees that if the calendar window it draws over

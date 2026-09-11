@@ -183,7 +183,7 @@ node --experimental-strip-types scripts/seed-demo.mjs ./demo-data
 HAELAN_DATA_DIR=./demo-data pnpm start
 ```
 
-Sign in as `demo` with the password `haelan-demo`. That password is printed by the script and
+Sign in as `demo` with the password `demodemo`. That password is printed by the script and
 written down here on purpose: it is correct for a throwaway directory and wrong for anything else,
 and the script refuses to run against a directory that already holds a database. The data comes
 from a fixed seed, so the data behind the screenshots above regenerates identically. The images
