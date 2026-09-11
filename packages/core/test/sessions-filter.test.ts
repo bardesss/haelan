@@ -68,11 +68,45 @@ describe('readSessions filters', () => {
 })
 
 describe('PersonQuery.sessions', () => {
-  it('passes the filters through', () => {
+  // Three sessions, arranged so that each forwarded field is the only thing standing between this
+  // assertion and a different answer. One session would have made the test unfailable: it is the
+  // whole list, the latest, and the only run at once, so dropping either `type` or `latest` from
+  // the pass-through would still answer it and nothing would go red.
+  //
+  // The ride is deliberately the LATEST of the three rather than the earliest. With an earlier
+  // ride, `latest` alone still lands on run-2 and a dropped `type` stays invisible.
+  beforeEach(() => {
     addSession({ id: 'run-1', localDate: '2026-08-12', startMs: Date.UTC(2026, 7, 12, 7), exerciseType: 'RUNNING' })
-    const q = new PersonQuery(test.db, 'p1')
-    expect(q.sessions({ ...RANGE, type: 'RUNNING', latest: true }).map((s) => s.id)).toEqual(['run-1'])
+    addSession({ id: 'run-2', localDate: '2026-08-20', startMs: Date.UTC(2026, 7, 20, 7), exerciseType: 'RUNNING' })
+    addSession({ id: 'ride', localDate: '2026-08-25', startMs: Date.UTC(2026, 7, 25, 7), exerciseType: 'BIKING' })
   })
+
+  it('passes the filters through', () => {
+    const q = new PersonQuery(test.db, 'p1')
+    // Dropping `type` answers ['ride']; dropping `latest` answers ['run-1', 'run-2'].
+    expect(q.sessions({ ...RANGE, type: 'RUNNING', latest: true }).map((s) => s.id)).toEqual(['run-2'])
+  })
+
+  it('answers the whole list when neither narrowing field is given', () => {
+    // The other half of the pass-through: a forwarded field that is undefined must not become a
+    // filter. Without this, a reader hard-coding `latest: true` would pass the test above.
+    const q = new PersonQuery(test.db, 'p1')
+    expect(q.sessions({ ...RANGE }).map((s) => s.id)).toEqual(['run-1', 'run-2', 'ride'])
+  })
+
+  // The cast is the point rather than a workaround: this is what an HTTP query string and a
+  // model's tool arguments actually deliver, and the type annotation does not reach either of
+  // them. Coerced instead of refused, `"true"` fails the reader's `=== true` and answers the whole
+  // list, which is the worst possible reading of "the latest one".
+  it.each([['the string "true"', 'true'], ['the number 1', 1], ['null', null]])(
+    'refuses %s for latest rather than reading it as no filter',
+    (_label, value) => {
+      const q = new PersonQuery(test.db, 'p1')
+      const input = { ...RANGE, latest: value } as unknown as Parameters<PersonQuery['sessions']>[0]
+      expect(() => q.sessions(input)).toThrow(ConfigError)
+      expect(() => q.sessions(input)).toThrow(/latest must be true or false/)
+    },
+  )
 
   it('refuses an exercise type the provider has no such value for', () => {
     const q = new PersonQuery(test.db, 'p1')

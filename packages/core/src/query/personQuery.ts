@@ -316,6 +316,7 @@ export class PersonQuery {
     requireRange(input.from, input.to)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     requireExerciseType(input.type)
+    requireBoolean('latest', input.latest)
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
@@ -471,6 +472,21 @@ function requirePositiveInteger(label: string, value: number): void {
 function requireFiniteNumber(label: string, value: number): void {
   if (!Number.isFinite(value)) {
     throw new ConfigError(`${label} must be a number, got ${value}`)
+  }
+}
+
+/**
+ * Same reasoning as `requireSessionKind`: the type system only protects a caller written in
+ * TypeScript, and neither real consumer is one. `latest` is read with a `=== true` test in the
+ * reader, so the string `"true"` an HTTP query string carries, or the `1` a model reaches for,
+ * would quietly mean "no, give me everything" - and an agent then summarises thirty sessions as
+ * "your last run". Refused rather than coerced, because guessing which of `"true"`, `"1"` and
+ * `"yes"` were meant is how a caller learns nothing about the mistake it is making.
+ */
+function requireBoolean(label: string, value: boolean | undefined): void {
+  if (value === undefined) return
+  if (typeof value !== 'boolean') {
+    throw new ConfigError(`${label} must be true or false, got ${JSON.stringify(value)}`)
   }
 }
 
