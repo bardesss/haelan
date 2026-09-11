@@ -82,6 +82,24 @@ export function requireBoundedRange(from: string, to: string, name = 'range'): v
 }
 
 /**
+ * A required query parameter that must be a whole number of milliseconds.
+ *
+ * Separate from optionalPositiveInt: a millisecond instant is required rather than optional, and
+ * is not constrained to be positive, since an instant before 1970 is a perfectly well formed one
+ * even if no health data carries it.
+ */
+export function requireMs(value: string | undefined, name: string): number {
+  if (value === undefined || value.trim() === '') {
+    throw new ConfigError(`${name} is required`)
+  }
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) {
+    throw new ConfigError(`${name} must be a whole number of milliseconds, got '${value}'`)
+  }
+  return parsed
+}
+
+/**
  * Sets the ETag, then either a 304 with no body or the answer itself.
  *
  * The content hash base rather than the stamp plus count one, for the routes whose answer has no

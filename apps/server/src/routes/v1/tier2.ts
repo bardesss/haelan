@@ -3,7 +3,8 @@ import { ConfigError } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
-  optionalPositiveInt, personQueryOf, requireBoundedRange, requireString, roundMetricValueOrNull, sendHashed,
+  optionalPositiveInt, personQueryOf, requireBoundedRange, requireMs, requireString, roundMetricValueOrNull,
+  sendHashed,
 } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -12,6 +13,14 @@ interface SessionParams { personId: string, sessionId: string }
 interface IntradayQuery {
   metric?: string
   date?: string
+  points?: string
+  source?: string
+}
+
+interface IntradayWindowQuery {
+  metric?: string
+  startMs?: string
+  endMs?: string
   points?: string
   source?: string
 }
@@ -100,6 +109,38 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // Rounded here, at the boundary, not inside readIntraday: min/mean/max are stored and thinned
     // at full precision (thinBand picks its band edges from the real values), so only the reply
     // decides how many decimals a reader of this one metric's chart ends up seeing.
+    const rounded: IntradayResult = {
+      ...result,
+      points: result.points.map((point) => ({
+        ...point,
+        min: roundMetricValueOrNull(metric, point.min),
+        mean: roundMetricValueOrNull(metric, point.mean),
+        max: roundMetricValueOrNull(metric, point.max),
+      })),
+    }
+    return sendHashed(reply, request, rounded)
+  })
+
+  /**
+   * Intraday samples across a UTC window rather than a local date.
+   *
+   * Its own route rather than optional parameters on /intraday: a night runs 23:15 to 07:02 and
+   * spans two local dates, so the two reads answer different questions and one handler taking
+   * either would have to branch on which parameters arrived and refuse the combinations that
+   * mean nothing.
+   */
+  app.get<{ Params: PersonParams, Querystring: IntradayWindowQuery }>('/p/:personId/intraday/window', async (request, reply) => {
+    const personQuery = personQueryOf(request)
+    const metric = requireString(request.query.metric, 'metric')
+    const startMs = requireMs(request.query.startMs, 'startMs')
+    const endMs = requireMs(request.query.endMs, 'endMs')
+    const points = optionalPositiveInt(request.query.points, 'points')
+    const source = request.query.source
+
+    const result: IntradayResult = personQuery.intradayWindow({ metric, startMs, endMs, points, sourceId: source })
+    // Rounded here, at the boundary, for the same reason the day route rounds here: min/mean/max
+    // are stored and thinned at full precision, because thinBand picks its band edges from the
+    // real values, so only the reply decides how many decimals a reader ends up seeing.
     const rounded: IntradayResult = {
       ...result,
       points: result.points.map((point) => ({
