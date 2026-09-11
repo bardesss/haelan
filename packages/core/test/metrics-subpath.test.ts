@@ -43,9 +43,8 @@ describe('the @haelan/core/metrics subpath', () => {
     // coverage-signal-subpath.test.ts, target-key-subpath.test.ts, baseline-window-subpath.
     // test.ts, metric-data-type-subpath.test.ts and workout-summary.test.ts carry their own
     // guarantees, each a different shape: the first four modules are not import-free, so each of
-    // those tests allow-lists the specific imports it carries; workout-summary.test.ts instead
-    // blocklists the database layer by name, because unlike this file's own module that one is
-    // import-free only today, not by contract.
+    // those tests allow-lists the specific imports it carries; workout-summary.test.ts allow-lists
+    // an empty list, the same contract this file's own module holds itself to.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './coverage-signal', './metric-data-type', SUBPATH, './target-key',
       './workout-summary',

@@ -5,8 +5,6 @@
 // `@haelan/core/workout-summary` subpath rather than the root barrel, and the root barrel pulls
 // better-sqlite3, which cannot enter a browser bundle.
 
-// This is the only module allowed to open a WorkoutSession's attrs blob. See useSessions.ts.
-
 export interface WorkoutSummary {
   exerciseType: string | null
   caloriesKcal: number | null

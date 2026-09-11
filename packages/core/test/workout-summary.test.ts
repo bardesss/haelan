@@ -109,14 +109,23 @@ describe('workoutSummary', () => {
   })
 })
 
+// Matches an `import` statement of any shape, and also an `export ... from '...'` re-export, which
+// pulls a module in exactly as surely as an import does but carries no `import` keyword. Lifted
+// from target-key-subpath.test.ts, which uses the same scan for the same guarantee; a bare
+// `export interface` or `export function` line has no `from '...'` clause and does not match.
+const IMPORT_LINE = /^(?:import\s.*|export\s.*\bfrom\s*['"].*)$/gm
+
 describe('the decoder stays importable from a browser bundle', () => {
-  it('imports nothing from the database layer', () => {
+  // An allow-list with nothing on it, rather than three forbidden names. The names were the wrong
+  // shape twice over: a dynamic `await import('better-sqlite3')` carries no `from` clause and slid
+  // straight past them, and - far likelier - so did a TRANSITIVE pull, since `import { metricSpec }
+  // from '../derive/metrics.ts'` names none of the three and still drags whatever that file grows
+  // to reach into the browser bundle. A module with no imports has a module graph of exactly
+  // itself, which is the same fact metrics-subpath.test.ts rests its own subpath on, and it holds
+  // under any bundler with no configuration to get wrong.
+  it('imports nothing at all, which is what makes it bundler-proof', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/api/workoutSummary.ts', import.meta.url)), 'utf8')
-    // Anchored to `from '...'` rather than matching the bare package name anywhere: the comment at
-    // the top of the module names better-sqlite3 deliberately, to say why the rule exists, and a
-    // guard that forbids its own explanation is a guard nobody can document.
-    expect(source).not.toMatch(/from '\.\.\/db\//)
-    expect(source).not.toMatch(/from '[^']*better-sqlite3'/)
-    expect(source).not.toMatch(/from '[^']*drizzle[^']*'/)
+    const importLines = [...source.matchAll(IMPORT_LINE)].map((m) => m[0])
+    expect(importLines, 'workoutSummary.ts must import nothing').toEqual([])
   })
 })
