@@ -28,10 +28,10 @@ async function restoredWithoutTheKey(): Promise<{
 
   const sealed = openHaelan(dir, {})
   new PeopleStore(sealed.db).create({
-    id: 'p1', displayName: 'Bartus', timezone: 'Europe/Amsterdam', nowMs: NOW_MS,
+    id: 'p1', displayName: 'Robin', timezone: 'Europe/Amsterdam', nowMs: NOW_MS,
   })
   await new AccountStore(sealed.db).create({
-    id: 'a1', personId: 'p1', username: 'bartus', password: 'a good long password',
+    id: 'a1', personId: 'p1', username: 'robin', password: 'a good long password',
     isAdmin: true, nowMs: NOW_MS,
   })
   new SettingsStore(sealed.db).put({
@@ -93,7 +93,7 @@ describe('a database restored without its instance.key', () => {
     // hold one, and the wizard's remaining steps all require it.
     const signedIn = await app.inject({
       method: 'POST', url: '/api/auth/login', headers: ORIGIN,
-      payload: { username: 'bartus', password: 'a good long password' },
+      payload: { username: 'robin', password: 'a good long password' },
     })
     expect(signedIn.statusCode).toBe(200)
     const cookie = signedIn.cookies.find((c) => c.name === 'haelan_session')?.value ?? ''
@@ -127,7 +127,7 @@ describe('a database restored without its instance.key', () => {
 
     const signedIn = await app.inject({
       method: 'POST', url: '/api/auth/login', headers: ORIGIN,
-      payload: { username: 'bartus', password: 'a good long password' },
+      payload: { username: 'robin', password: 'a good long password' },
     })
     const cookie = signedIn.cookies.find((c) => c.name === 'haelan_session')?.value ?? ''
     await app.inject({

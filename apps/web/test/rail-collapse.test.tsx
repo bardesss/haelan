@@ -32,7 +32,7 @@ beforeEach(() => {
 })
 
 function renderRail(): string {
-  return renderToStaticMarkup(<Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} />)
+  return renderToStaticMarkup(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
 }
 
 function renderCollapsed(): string {
@@ -78,7 +78,7 @@ const EXPECTED_NAMES: Record<string, string> = {
 
 function renderRailNamed(): string {
   return renderToStaticMarkup(
-    <I18nProvider lng="en"><Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} /></I18nProvider>,
+    <I18nProvider lng="en"><Sidebar person="Robin" active="/sleep" onSignOut={() => {}} /></I18nProvider>,
   )
 }
 
@@ -138,7 +138,7 @@ describe('the rail collapses to an icon strip', () => {
   it('names the sign out button, the account and the resources links too, which lose their labels with the rest', () => {
     const expanded = renderRailNamed()
     const collapsed = renderCollapsedNamed()
-    for (const name of ['Sign out', 'Documentation', 'Changelog', 'Issues', 'Bartus']) {
+    for (const name of ['Sign out', 'Documentation', 'Changelog', 'Issues', 'Robin']) {
       expect(collapsed, name).toContain(`title="${name}"`)
     }
     expect(expanded).not.toContain('title=')
@@ -197,7 +197,7 @@ describe('the collapse toggle', () => {
   // makes the second assertion fail while the third still passes, and breaking writeCollapsed
   // while leaving setCollapsed alone flips the result.
   it('flips the toggle on click and remembers the choice for the next mount', () => {
-    mount(<Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} />)
+    mount(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
     const toggle = container!.querySelector('.rail-toggle')!
     expect(toggle.getAttribute('aria-label')).toBe('Collapse navigation')
 
@@ -213,13 +213,13 @@ describe('the collapse toggle', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-    mount(<Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} />)
+    mount(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
     expect(container!.querySelector('.rail-toggle')!.getAttribute('aria-label')).toBe('Expand navigation')
   })
 
   it('keeps the label text in the DOM rather than removing it, so a screen reader still has it', () => {
     writeCollapsed(true)
-    mount(<Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} />)
+    mount(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
     const sleepLink = [...container!.querySelectorAll('a')].find((a) => a.getAttribute('href') === '/sleep')!
     // Clipped visually via the "sr-only" class, not display:none: textContent still reports it,
     // which is exactly the property a screen reader's accessible name computation reads too.

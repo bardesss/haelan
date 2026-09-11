@@ -10,7 +10,7 @@ const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 async function sessionCookie(h: Harness): Promise<string> {
   const response = await h.app.inject({
     method: 'POST', url: '/api/auth/login', headers,
-    payload: { username: 'bartus', password: 'a good long password' },
+    payload: { username: 'robin', password: 'a good long password' },
   })
   return response.cookies.find((c) => c.name === 'haelan_session')!.value
 }

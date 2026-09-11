@@ -11,7 +11,7 @@ const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 async function readyForConsent(h: Harness): Promise<string> {
   const created = await h.app.inject({
     method: 'POST', url: '/api/setup/account', headers,
-    payload: { username: 'bartus', password: 'a good long password', displayName: 'Bartus', timezone: 'Europe/Amsterdam' },
+    payload: { username: 'robin', password: 'a good long password', displayName: 'Robin', timezone: 'Europe/Amsterdam' },
   })
   const cookie = created.cookies.find((c) => c.name === 'haelan_session')!.value
   await h.app.inject({
@@ -51,7 +51,7 @@ describe('the consent handoff', () => {
 
     const login = await harness.app.inject({
       method: 'POST', url: '/api/auth/login', headers,
-      payload: { username: 'bartus', password: 'a good long password' },
+      payload: { username: 'robin', password: 'a good long password' },
     })
     const cookie = login.cookies.find((c) => c.name === 'haelan_session')!.value
 
@@ -109,7 +109,7 @@ describe('the consent handoff', () => {
     harness = await withServer()
     const created = await harness.app.inject({
       method: 'POST', url: '/api/setup/account', headers,
-      payload: { username: 'bartus', password: 'a good long password', displayName: 'Bartus', timezone: 'Europe/Amsterdam' },
+      payload: { username: 'robin', password: 'a good long password', displayName: 'Robin', timezone: 'Europe/Amsterdam' },
     })
     const cookie = created.cookies.find((c) => c.name === 'haelan_session')!.value
     const response = await harness.app.inject({

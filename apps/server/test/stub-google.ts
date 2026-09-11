@@ -103,7 +103,7 @@ export async function startStubGoogle(): Promise<StubGoogle> {
     }
 
     authHeaders.push(request.headers.authorization)
-    if (url.startsWith('/v4/users/me/profile')) return json(200, { displayName: 'Bartus' })
+    if (url.startsWith('/v4/users/me/profile')) return json(200, { displayName: 'Robin' })
     if (url.includes('/dataPoints:dailyRollUp')) {
       const rollup = rollupBodyFor(typeIdFrom(url))
       return response.writeHead(200, { 'content-type': 'application/json' })

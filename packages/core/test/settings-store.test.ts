@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(() => fixture.cleanup())
 
 const addAccount = () => accounts.create({
-  id: 'a1', personId: 'p1', username: 'bartus', password: 'a good long password', isAdmin: true, nowMs: 0,
+  id: 'a1', personId: 'p1', username: 'robin', password: 'a good long password', isAdmin: true, nowMs: 0,
 })
 
 describe('setupStep', () => {

@@ -5,14 +5,14 @@
  * Physical access to the machine running the container is that proof, and this is what it buys.
  *
  *   node --experimental-strip-types apps/server/src/admin.ts list
- *   docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts passwd bartus
+ *   docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts passwd robin
  *
  * It lives beside the server rather than in `scripts/` because of what the Dockerfile copies:
  * `packages/core/src` and `apps/server/src` reach the runtime image and `scripts/` does not. A
  * recovery tool that exists only in a checkout is missing from the one place it is needed, which
  * is a homelab container at the moment somebody is locked out of it.
  *
- * No password is ever an argument. `passwd bartus hunter2` would sit in shell history and be
+ * No password is ever an argument. `passwd robin hunter2` would sit in shell history and be
  * readable in `ps` by every user on the machine, so the new password is asked for on stdin and
  * never echoed.
  */

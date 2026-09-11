@@ -22,7 +22,7 @@ beforeEach(async () => {
   seedPerson(fixture.db, 'p1')
   accounts = new AccountStore(fixture.db)
   await accounts.create({
-    id: 'a1', personId: 'p1', username: 'bartus', password: OLD_PASSWORD, isAdmin: true, nowMs: CREATED_MS,
+    id: 'a1', personId: 'p1', username: 'robin', password: OLD_PASSWORD, isAdmin: true, nowMs: CREATED_MS,
   })
 })
 // Closes the handle before removing the directory. The other order throws EPERM on Windows, and
@@ -62,23 +62,23 @@ const columns = (): LockColumns => fixture.db.$client
 
 async function lockTheAccount(): Promise<void> {
   for (let i = 0; i < 10; i++) {
-    await accounts.login({ username: 'bartus', password: 'wrong', nowMs: ATTEMPT_MS })
+    await accounts.login({ username: 'robin', password: 'wrong', nowMs: ATTEMPT_MS })
   }
 }
 
 describe('admin passwd', () => {
   it('sets a password the new one logs in with and the old one no longer does', async () => {
     const run = capture([NEW_PASSWORD, NEW_PASSWORD])
-    expect(await runAdmin(['passwd', 'bartus'], run.deps)).toBe(0)
+    expect(await runAdmin(['passwd', 'robin'], run.deps)).toBe(0)
     expect(run.err).toEqual([])
-    expect(run.out).toEqual(['password set for bartus, and any lockout cleared.'])
+    expect(run.out).toEqual(['password set for robin, and any lockout cleared.'])
 
-    const withNew = await accounts.login({ username: 'bartus', password: NEW_PASSWORD, nowMs: NOW_MS })
+    const withNew = await accounts.login({ username: 'robin', password: NEW_PASSWORD, nowMs: NOW_MS })
     expect(withNew).toEqual({
       ok: true,
-      account: { id: 'a1', personId: 'p1', username: 'bartus', isAdmin: true, disabledAtMs: null },
+      account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null },
     })
-    const withOld = await accounts.login({ username: 'bartus', password: OLD_PASSWORD, nowMs: NOW_MS })
+    const withOld = await accounts.login({ username: 'robin', password: OLD_PASSWORD, nowMs: NOW_MS })
     expect(withOld).toEqual({ ok: false, reason: 'bad_password' })
   })
 
@@ -88,31 +88,31 @@ describe('admin passwd', () => {
     expect(locked.failed_attempts).toBe(10)
     expect(locked.locked_until_ms).toBe(LOCKED_UNTIL_MS)
 
-    expect(await runAdmin(['passwd', 'bartus'], capture([NEW_PASSWORD, NEW_PASSWORD]).deps)).toBe(0)
+    expect(await runAdmin(['passwd', 'robin'], capture([NEW_PASSWORD, NEW_PASSWORD]).deps)).toBe(0)
 
     const cleared = columns()
     expect(cleared.failed_attempts).toBe(0)
     expect(cleared.locked_until_ms).toBeNull()
     // The columns being right is half of it. The point of clearing them is that the person can
     // actually get in, which a lock still in force at NOW_MS would refuse before ever hashing.
-    const signedIn = await accounts.login({ username: 'bartus', password: NEW_PASSWORD, nowMs: NOW_MS })
+    const signedIn = await accounts.login({ username: 'robin', password: NEW_PASSWORD, nowMs: NOW_MS })
     expect(signedIn.ok).toBe(true)
   })
 
   it('refuses a password under eight characters and leaves the old one working', async () => {
     const run = capture(['short7!', 'short7!'])
-    expect(await runAdmin(['passwd', 'bartus'], run.deps)).toBe(1)
+    expect(await runAdmin(['passwd', 'robin'], run.deps)).toBe(1)
     expect(run.out).toEqual([])
     expect(run.err).toEqual(['password must be at least 8 characters'])
 
-    const stillOld = await accounts.login({ username: 'bartus', password: OLD_PASSWORD, nowMs: NOW_MS })
+    const stillOld = await accounts.login({ username: 'robin', password: OLD_PASSWORD, nowMs: NOW_MS })
     expect(stillOld.ok).toBe(true)
   })
 
   it('refuses two entries that do not match, without asking the store anything', async () => {
     const before = columns().password_hash
     const run = capture([NEW_PASSWORD, 'something else entirely'])
-    expect(await runAdmin(['passwd', 'bartus'], run.deps)).toBe(1)
+    expect(await runAdmin(['passwd', 'robin'], run.deps)).toBe(1)
     expect(run.err).toEqual(['the two entries did not match, so nothing was changed.'])
     expect(columns().password_hash).toBe(before)
   })
@@ -127,7 +127,7 @@ describe('admin passwd', () => {
   it('refuses a password given as an argument, where a shell history would keep it', async () => {
     const before = columns().password_hash
     const run = capture([])
-    expect(await runAdmin(['passwd', 'bartus', 'hunter2'], run.deps)).toBe(1)
+    expect(await runAdmin(['passwd', 'robin', 'hunter2'], run.deps)).toBe(1)
     expect(run.err).toHaveLength(1)
     expect(run.err[0]).toContain('shell history')
     // capture([]) queues nothing, so readSecret throwing is what proves it was never reached.
@@ -143,14 +143,14 @@ describe('admin unlock', () => {
     expect(columns().locked_until_ms).toBe(LOCKED_UNTIL_MS)
 
     const run = capture([])
-    expect(await runAdmin(['unlock', 'bartus'], run.deps)).toBe(0)
-    expect(run.out).toEqual(['lockout cleared for bartus. Their existing password still works.'])
+    expect(await runAdmin(['unlock', 'robin'], run.deps)).toBe(0)
+    expect(run.out).toEqual(['lockout cleared for robin. Their existing password still works.'])
 
     const after = columns()
     expect(after.failed_attempts).toBe(0)
     expect(after.locked_until_ms).toBeNull()
     expect(after.password_hash).toBe(before.password_hash)
-    const signedIn = await accounts.login({ username: 'bartus', password: OLD_PASSWORD, nowMs: NOW_MS })
+    const signedIn = await accounts.login({ username: 'robin', password: OLD_PASSWORD, nowMs: NOW_MS })
     expect(signedIn.ok).toBe(true)
   })
 
@@ -172,7 +172,7 @@ describe('admin list', () => {
     expect(await runAdmin(['list'], run.deps)).toBe(0)
     expect(run.out).toEqual([
       'username  admin  disabled  locked',
-      `bartus    yes    no        until ${new Date(LOCKED_UNTIL_MS).toISOString()}`,
+      `robin    yes    no        until ${new Date(LOCKED_UNTIL_MS).toISOString()}`,
     ])
     const printed = run.out.join('\n')
     expect(printed).not.toContain(stored)
@@ -186,14 +186,14 @@ describe('admin list', () => {
     expect(await runAdmin(['list'], run.deps)).toBe(0)
     expect(run.out).toEqual([
       'username  admin  disabled                        locked',
-      `bartus    yes    since ${new Date(CREATED_MS + 5).toISOString()}  `
+      `robin    yes    since ${new Date(CREATED_MS + 5).toISOString()}  `
         + `lapsed ${new Date(LOCKED_UNTIL_MS).toISOString()}`,
     ])
   })
 
   it('takes no arguments, so a mistyped command is not silently a listing', async () => {
     const run = capture([])
-    expect(await runAdmin(['list', 'bartus'], run.deps)).toBe(1)
+    expect(await runAdmin(['list', 'robin'], run.deps)).toBe(1)
     expect(run.err).toEqual(['list takes no arguments'])
     expect(run.out).toEqual([])
   })

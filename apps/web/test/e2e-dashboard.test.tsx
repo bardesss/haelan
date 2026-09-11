@@ -117,7 +117,7 @@ describe('the end to end path: a real server behind a real render', () => {
     const harness = await withServer()
     const originalFetch = globalThis.fetch
     try {
-      // One person (harness.signIn below completes the wizard for 'p1'/'bartus'), one derived
+      // One person (harness.signIn below completes the wizard for 'p1'/'robin'), one derived
       // daily row carrying a known value. Written straight into the daily table, the same way
       // packages/core/src/testing/fixtures.ts's own seedSecondPerson does, rather than replayed
       // through the sync/derive pipeline: this task proves the read path from a real row to a

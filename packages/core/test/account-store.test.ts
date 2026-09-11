@@ -15,7 +15,7 @@ beforeEach(() => {
 afterEach(() => fixture.cleanup())
 
 const create = () => store.create({
-  id: 'a1', personId: 'p1', username: 'Bartus', password: 'correct horse battery staple',
+  id: 'a1', personId: 'p1', username: 'Robin', password: 'correct horse battery staple',
   isAdmin: true, nowMs: 1000,
 })
 
@@ -31,25 +31,25 @@ describe('AccountStore', () => {
     expect(row.password_hash.startsWith('$argon2id$')).toBe(true)
   })
 
-  it('lower cases the username, so Bartus and bartus are one account', async () => {
+  it('lower cases the username, so Robin and robin are one account', async () => {
     await create()
     await expect(store.create({
-      id: 'a2', personId: 'p1', username: 'BARTUS', password: 'a good long password', isAdmin: false, nowMs: 2000,
+      id: 'a2', personId: 'p1', username: 'ROBIN', password: 'a good long password', isAdmin: false, nowMs: 2000,
     })).rejects.toThrow(/username/)
   })
 
   it('accepts the right password', async () => {
     await create()
-    const result = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 })
+    const result = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
     expect(result).toEqual({
       ok: true,
-      account: { id: 'a1', personId: 'p1', username: 'bartus', isAdmin: true, disabledAtMs: null },
+      account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null },
     })
   })
 
   it('rejects the wrong password without saying whether the account exists', async () => {
     await create()
-    const wrongPassword = await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    const wrongPassword = await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
     const wrongUser = await store.login({ username: 'nobody', password: 'wrong', nowMs: 2000 })
     expect(wrongPassword.ok).toBe(false)
     expect(wrongUser.ok).toBe(false)
@@ -60,16 +60,16 @@ describe('AccountStore', () => {
 
   it('locks an account after ten failures and says so', async () => {
     await create()
-    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
-    const locked = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 })
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
+    const locked = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
     expect(locked).toEqual({ ok: false, reason: 'locked' })
   })
 
   it('unlocks once the lock expires', async () => {
     await create()
-    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
     const after = await store.login({
-      username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 + 15 * 60_000 + 1,
+      username: 'robin', password: 'correct horse battery staple', nowMs: 2000 + 15 * 60_000 + 1,
     })
     expect(after.ok).toBe(true)
   })
@@ -83,20 +83,20 @@ describe('AccountStore', () => {
     const listed = store.list()
     expect(listed).toEqual([
       { id: 'a2', personId: 'p2', username: 'alice', isAdmin: false, disabledAtMs: null, lockedUntilMs: null },
-      { id: 'a1', personId: 'p1', username: 'bartus', isAdmin: true, disabledAtMs: null, lockedUntilMs: null },
+      { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null, lockedUntilMs: null },
     ])
   })
 
   it('reports a lock it can see, which is the whole reason list exists', async () => {
     await create()
-    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
     expect(store.list().map((row) => row.lockedUntilMs)).toEqual([2000 + 15 * 60_000])
   })
 
   it('setPassword replaces the password and leaves admin and disabled alone', async () => {
     await create()
     store.disable('a1', 1500)
-    await store.setPassword('bartus', 'a brand new password')
+    await store.setPassword('robin', 'a brand new password')
 
     // Disabled, so login answers bad_password whatever is typed. The columns are what can be
     // asserted here, and that the reset did not quietly revive a suspended account is the point.
@@ -108,21 +108,21 @@ describe('AccountStore', () => {
     expect(row.password_hash.startsWith('$argon2id$')).toBe(true)
 
     store.enable('a1')
-    const signedIn = await store.login({ username: 'bartus', password: 'a brand new password', nowMs: 3000 })
+    const signedIn = await store.login({ username: 'robin', password: 'a brand new password', nowMs: 3000 })
     expect(signedIn.ok).toBe(true)
   })
 
   it('setPassword accepts the username in any case, the way login does', async () => {
     await create()
-    await store.setPassword('  BARTUS  ', 'a brand new password')
-    const signedIn = await store.login({ username: 'bartus', password: 'a brand new password', nowMs: 3000 })
+    await store.setPassword('  ROBIN  ', 'a brand new password')
+    const signedIn = await store.login({ username: 'robin', password: 'a brand new password', nowMs: 3000 })
     expect(signedIn.ok).toBe(true)
   })
 
   it('setPassword holds the same eight character floor as create', async () => {
     await create()
-    await expect(store.setPassword('bartus', 'short7!')).rejects.toThrow(/at least 8 characters/)
-    const unchanged = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 3000 })
+    await expect(store.setPassword('robin', 'short7!')).rejects.toThrow(/at least 8 characters/)
+    const unchanged = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 3000 })
     expect(unchanged.ok).toBe(true)
   })
 
@@ -151,15 +151,15 @@ describe('AccountStore', () => {
     expect(reset).toBeInstanceOf(ConfigError)
     expect(String(reset)).toContain('no account named nobody')
 
-    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
     const locked = 2000 + 15 * 60_000
     const lockouts = () => store.list().map((row) => [row.username, row.lockedUntilMs])
-    expect(lockouts()).toEqual([['alice', null], ['bartus', locked]])
+    expect(lockouts()).toEqual([['alice', null], ['robin', locked]])
 
     let cleared: unknown = null
     try { store.clearLockout('nobody') } catch (err) { cleared = err }
     // The lockout the typo did not name is still in force, and neither hash has moved.
-    expect(lockouts()).toEqual([['alice', null], ['bartus', locked]])
+    expect(lockouts()).toEqual([['alice', null], ['robin', locked]])
     expect(hashes()).toEqual(before)
     expect(cleared).toBeInstanceOf(ConfigError)
     expect(String(cleared)).toContain('no account named nobody')
@@ -168,24 +168,24 @@ describe('AccountStore', () => {
   it('clearLockout keeps the hash, so somebody who knows their password is simply let back in', async () => {
     await create()
     const before = fixture.db.$client.prepare('select password_hash from accounts').get() as { password_hash: string }
-    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
-    expect(await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 }))
+    for (let i = 0; i < 10; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
+    expect(await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 }))
       .toEqual({ ok: false, reason: 'locked' })
 
-    store.clearLockout('bartus')
+    store.clearLockout('robin')
 
     const after = fixture.db.$client.prepare('select password_hash from accounts').get() as { password_hash: string }
     expect(after.password_hash).toBe(before.password_hash)
-    const signedIn = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 })
+    const signedIn = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
     expect(signedIn.ok).toBe(true)
   })
 
   it('clears the failure count on a success, so a slow typist is not locked out tomorrow', async () => {
     await create()
-    for (let i = 0; i < 9; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
-    await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 })
-    for (let i = 0; i < 9; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 3000 })
-    const stillOpen = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 3000 })
+    for (let i = 0; i < 9; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
+    await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
+    for (let i = 0; i < 9; i++) await store.login({ username: 'robin', password: 'wrong', nowMs: 3000 })
+    const stillOpen = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 3000 })
     expect(stillOpen.ok).toBe(true)
   })
 })

@@ -70,7 +70,7 @@ describe('the error envelope', () => {
   // row into a response, so the log gets the detail and the caller gets a kind.
   it('turns anything else into a 500 that says nothing about itself', () => {
     const reply = fakeReply()
-    sendCoreError(reply as never, new Error('SQLITE_CORRUPT: /home/bartus/.local-data/haelan.sqlite'))
+    sendCoreError(reply as never, new Error('SQLITE_CORRUPT: /home/robin/.local-data/haelan.sqlite'))
     expect(reply.sent.status).toBe(500)
     // 'internal', not 'transient': a caller that retries on kind must not hammer a deterministic
     // bug in us forever.

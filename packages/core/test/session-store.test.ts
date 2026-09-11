@@ -12,7 +12,7 @@ beforeEach(async () => {
   fixture = createTestDatabase()
   seedPerson(fixture.db, 'p1')
   await new AccountStore(fixture.db).create({
-    id: 'a1', personId: 'p1', username: 'bartus', password: 'a good long password', isAdmin: true, nowMs: 0,
+    id: 'a1', personId: 'p1', username: 'robin', password: 'a good long password', isAdmin: true, nowMs: 0,
   })
   sessions = new SessionStore(fixture.db)
 })

@@ -11,8 +11,8 @@ const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 const createAccount = (h: Harness, overrides: Record<string, unknown> = {}) => h.app.inject({
   method: 'POST', url: '/api/setup/account', headers,
   payload: {
-    username: 'bartus', password: 'a good long password',
-    displayName: 'Bartus', timezone: 'Europe/Amsterdam', ...overrides,
+    username: 'robin', password: 'a good long password',
+    displayName: 'Robin', timezone: 'Europe/Amsterdam', ...overrides,
   },
 })
 

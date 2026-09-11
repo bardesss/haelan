@@ -136,7 +136,7 @@ describe('sync isolation', () => {
   it('names whose snapshot it is, so a switched person cannot render a stale one as its own', async () => {
     harness = await withServer({ google: 'ok' })
     await twoPeople(harness)
-    const owner = await sessionCookie(harness, 'bartus')
+    const owner = await sessionCookie(harness, 'robin')
 
     const response = await harness.app.inject({
       method: 'GET', url: '/api/sync/status', cookies: { haelan_session: owner },

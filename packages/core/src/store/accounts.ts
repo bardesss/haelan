@@ -51,8 +51,8 @@ export type LoginResult =
 
 // The one spelling rule for a username, applied on every write and on every lookup. Named once
 // because accounts.username carries a unique index and that index is only real if nothing reaches
-// the column without passing through here: a second path that skipped it would let `Bartus` and
-// `bartus` both exist, and the first person to sign in with the wrong one reads it as a forgotten
+// the column without passing through here: a second path that skipped it would let `Robin` and
+// `robin` both exist, and the first person to sign in with the wrong one reads it as a forgotten
 // password rather than as two accounts.
 const normalise = (username: string): string => username.trim().toLowerCase()
 

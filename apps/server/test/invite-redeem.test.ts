@@ -113,7 +113,7 @@ describe('POST /api/invite/:token', () => {
   })
 
   it('refuses a username somebody already has', async () => {
-    expect((await redeem(token, 'bartus', 'correct horse battery')).statusCode).toBe(400)
+    expect((await redeem(token, 'robin', 'correct horse battery')).statusCode).toBe(400)
   })
 
   it('refuses a password under eight characters, and leaves the invite usable', async () => {

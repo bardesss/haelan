@@ -54,8 +54,8 @@ describe('GET /api/members', () => {
   it('lists the person who ran setup as active', async () => {
     expect((await list(adminToken)).json().items).toEqual([
       {
-        personId: 'p1', displayName: 'Bartus', timezone: 'Europe/Amsterdam',
-        accountId: expect.any(String), username: 'bartus', isAdmin: true,
+        personId: 'p1', displayName: 'Robin', timezone: 'Europe/Amsterdam',
+        accountId: expect.any(String), username: 'robin', isAdmin: true,
         state: 'active', inviteId: null,
       },
     ])

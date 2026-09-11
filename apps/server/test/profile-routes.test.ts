@@ -56,12 +56,12 @@ describe('PUT /api/profile', () => {
   it('lower cases a username on the way in, the same way create does', async () => {
     // The pair the unique index exists to stop coexisting. Asserted on the stored value, not on
     // the request, because the index is only real if the column itself never sees the capital B.
-    const response = await saveProfile(adminToken, { username: 'BarTus2' })
+    const response = await saveProfile(adminToken, { username: 'RoBin2' })
     expect(response.statusCode).toBe(200)
-    expect(response.json().username).toBe('bartus2')
-    expect((await me(adminToken)).json().username).toBe('bartus2')
+    expect(response.json().username).toBe('robin2')
+    expect((await me(adminToken)).json().username).toBe('robin2')
     // And the capitalised spelling signs in, because it is normalised on the way in too.
-    expect((await login('BARTUS2', PASSWORD)).statusCode).toBe(200)
+    expect((await login('ROBIN2', PASSWORD)).statusCode).toBe(200)
   })
 
   it('refuses a username another account already holds, and changes nothing', async () => {
@@ -74,13 +74,13 @@ describe('PUT /api/profile', () => {
 
     // Not merely "the response said no": the admin still answers to their old name, and bob's
     // account is still bob's.
-    expect((await me(adminToken)).json().username).toBe('bartus')
+    expect((await me(adminToken)).json().username).toBe('robin')
     expect((await login('bob', PASSWORD)).statusCode).toBe(200)
   })
 
   it('lets an account re-save its own name, which is not a collision', async () => {
-    expect((await saveProfile(adminToken, { username: 'Bartus' })).statusCode).toBe(200)
-    expect((await me(adminToken)).json().username).toBe('bartus')
+    expect((await saveProfile(adminToken, { username: 'Robin' })).statusCode).toBe(200)
+    expect((await me(adminToken)).json().username).toBe('robin')
   })
 
   it('keeps the caller signed in across a rename', async () => {
@@ -128,7 +128,7 @@ describe('PUT /api/profile', () => {
     // The whole form, exactly as a panel saving an edited name would send it: the zone is present
     // and identical, which must not cost this person every derived row they have.
     const response = await saveProfile(adminToken, {
-      displayName: 'Bartus', username: 'bartus', timezone: 'Europe/Amsterdam',
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
     })
     expect(response.statusCode).toBe(200)
     expect(response.json().rebuildPending).toBe(false)
@@ -139,7 +139,7 @@ describe('PUT /api/profile', () => {
     const response = await saveProfile(adminToken, { displayName: '   ' })
     expect(response.statusCode).toBe(400)
     expect(response.json().error.kind).toBe('config')
-    expect(person('p1')!.displayName).toBe('Bartus')
+    expect(person('p1')!.displayName).toBe('Robin')
   })
 
   it('refuses a username sent as something other than text', async () => {
@@ -156,9 +156,9 @@ describe('PUT /api/profile/password', () => {
     const response = await changePassword(adminToken, { currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
     expect(response.statusCode).toBe(204)
 
-    expect((await login('bartus', NEW_PASSWORD)).statusCode).toBe(200)
+    expect((await login('robin', NEW_PASSWORD)).statusCode).toBe(200)
     // The old one has to stop working, or nothing was replaced.
-    expect((await login('bartus', PASSWORD)).statusCode).toBe(401)
+    expect((await login('robin', PASSWORD)).statusCode).toBe(401)
   })
 
   it('leaves the session alive, so nobody is signed out by changing their own password', async () => {
@@ -173,8 +173,8 @@ describe('PUT /api/profile/password', () => {
 
     // Both halves, because only the pair says nothing happened: the new password must not work,
     // and the old one must still.
-    expect((await login('bartus', NEW_PASSWORD)).statusCode).toBe(401)
-    expect((await login('bartus', PASSWORD)).statusCode).toBe(200)
+    expect((await login('robin', NEW_PASSWORD)).statusCode).toBe(401)
+    expect((await login('robin', PASSWORD)).statusCode).toBe(200)
   })
 
   it('does not count a wrong current password towards a lockout', async () => {
@@ -183,20 +183,20 @@ describe('PUT /api/profile/password', () => {
     for (let attempt = 0; attempt < 12; attempt += 1) {
       expect((await changePassword(adminToken, { currentPassword: 'wrong', newPassword: NEW_PASSWORD })).statusCode).toBe(403)
     }
-    expect((await login('bartus', PASSWORD)).statusCode).toBe(200)
+    expect((await login('robin', PASSWORD)).statusCode).toBe(200)
   })
 
   it('refuses a new password under the length floor', async () => {
     const response = await changePassword(adminToken, { currentPassword: PASSWORD, newPassword: 'short' })
     expect(response.statusCode).toBe(400)
     expect(response.json().error.kind).toBe('config')
-    expect((await login('bartus', PASSWORD)).statusCode).toBe(200)
+    expect((await login('robin', PASSWORD)).statusCode).toBe(200)
   })
 
   it('refuses a request with no session', async () => {
     const response = await changePassword(null, { currentPassword: PASSWORD, newPassword: NEW_PASSWORD })
     expect(response.statusCode).toBe(401)
-    expect((await login('bartus', PASSWORD)).statusCode).toBe(200)
+    expect((await login('robin', PASSWORD)).statusCode).toBe(200)
   })
 })
 
@@ -223,7 +223,7 @@ describe('POST /api/members/:accountId/password', () => {
     expect(response.statusCode).toBe(403)
     expect(response.json().error).toMatchObject({ kind: 'forbidden', code: 'not_admin' })
     // The admin's own password is untouched, which is the thing the refusal is protecting.
-    expect((await login('bartus', PASSWORD)).statusCode).toBe(200)
+    expect((await login('robin', PASSWORD)).statusCode).toBe(200)
   })
 
   it('refuses an unknown account', async () => {

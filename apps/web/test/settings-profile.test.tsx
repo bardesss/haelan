@@ -31,7 +31,7 @@ afterEach(() => {
 })
 
 const SESSION: Session = {
-  personId: 'p1', displayName: 'Bartus', username: 'bartus', isAdmin: true,
+  personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
   timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false,
   baseUrl: 'http://localhost:4235',
 }
@@ -116,7 +116,7 @@ const json = (status: number, payload: unknown) =>
 describe('the profile section', () => {
   it('shows the session\'s own name, username and time zone', () => {
     mountSection()
-    expect(fields().map((f) => f.value)).toEqual(['Bartus', 'bartus', 'Europe/Amsterdam', '', ''])
+    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', ''])
   })
 
   // Written after a catalogue key landed under the wrong section and this panel rendered
@@ -155,7 +155,7 @@ describe('the profile section', () => {
 
   it('sends all three fields and reports the rebuild the server actually marked', async () => {
     const api = mockProfileApi(() => json(200, {
-      displayName: 'Bartus', username: 'bartus', timezone: 'Pacific/Auckland', rebuildPending: true,
+      displayName: 'Robin', username: 'robin', timezone: 'Pacific/Auckland', rebuildPending: true,
     }))
     const client = mountSection()
 
@@ -167,7 +167,7 @@ describe('the profile section', () => {
     expect(api.requests[0]).toMatchObject({
       method: 'PUT',
       url: '/api/profile',
-      body: { displayName: 'Bartus', username: 'bartus', timezone: 'Pacific/Auckland' },
+      body: { displayName: 'Robin', username: 'robin', timezone: 'Pacific/Auckland' },
     })
     // The server's own answer, not the panel's guess: a form that submits all three every time
     // cannot tell from its own side whether the stored zone moved.
@@ -176,7 +176,7 @@ describe('the profile section', () => {
 
   it('says nothing about a rebuild when the server says none is pending', async () => {
     const api = mockProfileApi(() => json(200, {
-      displayName: 'Bart', username: 'bartus', timezone: 'Europe/Amsterdam', rebuildPending: false,
+      displayName: 'Bart', username: 'robin', timezone: 'Europe/Amsterdam', rebuildPending: false,
     }))
     const client = mountSection()
 

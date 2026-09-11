@@ -776,7 +776,7 @@
       "displayName": "Naam",
       "displayNameHint": "Verschijnt op je eigen pagina's. Verder ziet niemand dit.",
       "username": "Gebruikersnaam",
-      "usernameHint": "Waarmee je inlogt. Hoofdletters worden omgezet naar kleine letters, dus BARTUS en bartus zijn hetzelfde account.",
+      "usernameHint": "Waarmee je inlogt. Hoofdletters worden omgezet naar kleine letters, dus ROBIN en robin zijn hetzelfde account.",
       "timezone": "Tijdzone",
       "timezoneHint": "Elke daggrens wordt berekend in deze zone, zodat een nacht die om 07:00 eindigt bij de juiste dag hoort.",
       "timezoneWarning": "Dit wijzigen verschuift al je daggrenzen. Je hele geschiedenis wordt opnieuw afgeleid uit het archief zodra haelan de volgende keer start, wat een paar minuten duurt, en tot dat klaar is synchroniseert dit account niet. Er gaat hoe dan ook niets verloren.",

@@ -776,7 +776,7 @@
       "displayName": "Name",
       "displayNameHint": "Shown on your own pages. Nobody else sees it.",
       "username": "Username",
-      "usernameHint": "What you sign in with. Capitals are folded to lower case, so BARTUS and bartus are the same account.",
+      "usernameHint": "What you sign in with. Capitals are folded to lower case, so ROBIN and robin are the same account.",
       "timezone": "Time zone",
       "timezoneHint": "Every day boundary is computed in this zone, so a night that ends at 07:00 belongs to the right day.",
       "timezoneWarning": "Changing this moves every one of your day boundaries. Your whole history is re-derived from the archive the next time haelan starts, which takes several minutes, and until that finishes this account does not sync. Nothing is lost either way.",
