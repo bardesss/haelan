@@ -26,6 +26,7 @@
  *    `summarise` below for what that means mechanically.
  */
 import { resolve } from 'node:path'
+import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { AccountStore, ConfigError, PeopleStore, PersonQuery, openReadOnly } from '@haelan/core'
@@ -135,50 +136,89 @@ const MAX_DEPTH = 2
 const MAX_PARTS = 12
 
 /**
- * The human-readable sentence that rides alongside every structured result.
+ * The summary sentence that rides alongside every structured result.
  *
  * The rule that makes the untrusted contract mechanical rather than stylistic lives here, and it
  * is stated as what may go in rather than as what may not: counts of arrays, finite numbers,
  * booleans, and strings that are both under a date key and shaped like a date. Every other string
  * in a result is dropped, so a note's body, a device's display name and a workout's own title
- * cannot reach the prose an agent reads first no matter how they are nested - they travel in the
- * structured content, where a field name says what they are.
+ * cannot reach the first sentence an agent reads no matter how they are nested - they travel in
+ * the structured content, where a field name says what they are.
  *
  * Stated the other way round it would be one `untrusted` envelope away from wrong every time a
  * tool grows a field. Stated this way, a new free-text field is excluded by default and has to be
  * deliberately let in.
  *
- * The tool's name and the key names are safe for the same reason: every one of them is a literal
- * in this repository's own source, not a value out of the database.
+ * The walk is driven by the tool's declared `outputSchema`, not by the keys of the result it is
+ * summarising, and that is the load-bearing half of the claim two paragraphs up that "the key
+ * names are safe, because every one of them is a literal in this repository's own source". Walking
+ * the result made that a statement about every tool that happens to exist rather than a property
+ * of this function: a tool answering a record keyed by user-controlled text - a `bySource` keyed by
+ * a device's display name, or M4b's `sql_query` answering rows keyed by column names and
+ * agent-chosen aliases - would have put that text straight into the prose as a key, past a filter
+ * that only ever inspected values. Driven by the schema, a key can only be a literal somebody
+ * wrote in a `.ts` file here, and a field the result carries but the schema does not declare is
+ * not summarised at all.
+ *
+ * It closes a second gap for nothing extra: the summary now describes the shape the tool promised
+ * rather than whatever `run` happened to return, so the distinction between the two - which the
+ * SDK validates the result against anyway - stops being one this sentence can fall on the wrong
+ * side of.
  */
-export function summarise(toolName: string, result: unknown): string {
+export function summarise(toolName: string, outputSchema: z.ZodRawShape, result: unknown): string {
   const parts: string[] = []
-  collect(result, '', 0, parts)
+  collect(outputSchema, result, '', 0, parts)
   if (parts.length === 0) return `${toolName}: answered. The structured content carries it.`
   const shown = parts.slice(0, MAX_PARTS)
   const tail = parts.length > shown.length ? ', and more in the structured content' : ''
   return `${toolName}: ${shown.join(', ')}${tail}.`
 }
 
-function collect(value: unknown, path: string, depth: number, parts: string[]): void {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return
+/**
+ * The declared type of a field, with `optional` and `nullable` peeled off - the same unwrapping
+ * `scripts/generate-tools-doc.mjs` does, for the same reason: nearly every field on this surface
+ * is wrapped in one or both, and the wrapper says nothing about what may be printed.
+ */
+function unwrap(schema: z.ZodRawShape[string]): z.ZodRawShape[string] {
+  let s = schema
+  while (s instanceof z.ZodOptional || s instanceof z.ZodNullable) s = s.def.innerType
+  return s
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function collect(
+  shape: z.ZodRawShape, value: unknown, path: string, depth: number, parts: string[],
+): void {
+  if (!isRecord(value)) return
   // Belt and braces: no string ever leaves this walk except a dated one, so an untrusted envelope
   // is already inert. Skipped by shape anyway, so a reader does not have to prove that twice.
-  if ('untrustedText' in value) return
+  // Recognised from the declared shape rather than from the value, so an envelope whose text
+  // happened to be absent is skipped exactly like one whose text is there.
+  if ('untrustedText' in shape) return
 
-  for (const [key, field] of Object.entries(value)) {
+  for (const [key, declared] of Object.entries(shape)) {
+    const base = unwrap(declared)
+    const field = value[key]
     const at = path === '' ? key : `${path}.${key}`
-    if (Array.isArray(field)) {
-      parts.push(`${at} ${field.length}`)
-    } else if (typeof field === 'number') {
-      if (Number.isFinite(field)) parts.push(`${at} ${round(field)}`)
-    } else if (typeof field === 'boolean') {
-      parts.push(`${at} ${field ? 'yes' : 'no'}`)
-    } else if (typeof field === 'string') {
-      if (DATE_KEYS.has(key) && ISO_DATE.test(field)) parts.push(`${at} ${field}`)
-    } else if (depth + 1 < MAX_DEPTH) {
-      collect(field, at, depth + 1, parts)
+    if (base instanceof z.ZodArray) {
+      if (Array.isArray(field)) parts.push(`${at} ${field.length}`)
+    } else if (base instanceof z.ZodNumber) {
+      if (typeof field === 'number' && Number.isFinite(field)) parts.push(`${at} ${round(field)}`)
+    } else if (base instanceof z.ZodBoolean) {
+      if (typeof field === 'boolean') parts.push(`${at} ${field ? 'yes' : 'no'}`)
+    } else if (base instanceof z.ZodString) {
+      if (typeof field === 'string' && DATE_KEYS.has(key) && ISO_DATE.test(field)) {
+        parts.push(`${at} ${field}`)
+      }
+    } else if (base instanceof z.ZodObject && depth + 1 < MAX_DEPTH) {
+      collect(base.def.shape, field, at, depth + 1, parts)
     }
+    // Every other declared type - an enum, a record, a union, anything a later tool reaches for -
+    // falls through to nothing. Excluded by default is the point: a shape nobody thought about
+    // here is silent rather than printed.
   }
 }
 
@@ -208,7 +248,7 @@ function register(server: McpServer, tool: (typeof CATALOGUE)[number], query: Pe
     (args) => {
       const structuredContent = tool.run(query, args)
       return {
-        content: [{ type: 'text', text: summarise(tool.name, structuredContent) }],
+        content: [{ type: 'text', text: summarise(tool.name, tool.outputSchema, structuredContent) }],
         structuredContent,
       }
     },

@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import fc from 'fast-check'
+import { z } from 'zod'
 import {
   PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
   NoteStore, EventStore, ConfigError,
@@ -458,5 +459,32 @@ describe('the catalogue itself', () => {
   it('spells the source argument `source` on every tool that takes one', () => {
     const withSourceId = CATALOGUE.filter((t) => 'sourceId' in t.inputSchema).map((t) => t.name)
     expect(withSourceId).toEqual([])
+  })
+
+  // The other half of the schema-driven summary. `summarise` in mcp.ts prints key names, and
+  // takes them from the declared outputSchema so that every one of them is a literal somebody
+  // wrote in a .ts file here rather than a value out of the database. That holds only while no
+  // schema declares a record, whose keys are whatever the value happens to carry — a `bySource`
+  // keyed by a device's display name, or M4b's `sql_query` answering rows keyed by column names
+  // and agent-chosen aliases. Nothing answers a record today; this is what keeps it that way, and
+  // it is the door M4b has to knock on deliberately rather than walk through by accident.
+  it('declares no record-shaped output, whose keys would be values rather than literals', () => {
+    const records: string[] = []
+
+    function walk(schema: z.ZodRawShape[string], at: string): void {
+      let s = schema
+      while (s instanceof z.ZodOptional || s instanceof z.ZodNullable) s = s.def.innerType
+      if (s instanceof z.ZodRecord) records.push(at)
+      else if (s instanceof z.ZodArray) walk(s.def.element, `${at}[]`)
+      else if (s instanceof z.ZodObject) {
+        for (const [key, child] of Object.entries(s.def.shape)) walk(child, `${at}.${key}`)
+      }
+    }
+
+    for (const t of CATALOGUE) {
+      for (const [key, child] of Object.entries(t.outputSchema)) walk(child, `${t.name}.${key}`)
+    }
+
+    expect(records).toEqual([])
   })
 })
