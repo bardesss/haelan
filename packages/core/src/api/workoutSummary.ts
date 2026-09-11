@@ -97,3 +97,156 @@ export function workoutSummary(attrs: unknown): WorkoutSummary {
     activeZoneMinutes: numberOrNull(metrics.activeZoneMinutes),
   }
 }
+
+export interface WorkoutSplit {
+  startMs: number | null
+  endMs: number | null
+  splitType: string | null
+  activeDurationSeconds: number | null
+  distanceMeters: number | null
+  paceSecondsPerKm: number | null
+  averageHeartRateBpm: number | null
+}
+export interface WorkoutEvent { atMs: number | null, kind: string | null }
+export interface HeartRateZoneDurations {
+  lightSeconds: number | null
+  moderateSeconds: number | null
+  vigorousSeconds: number | null
+  peakSeconds: number | null
+}
+export interface MobilityMetrics {
+  cadenceStepsPerMinute: number | null
+  strideLengthMeters: number | null
+  groundContactTimeSeconds: number | null
+  verticalOscillationMeters: number | null
+  verticalRatio: number | null
+}
+export interface WorkoutDetail {
+  displayName: string | null
+  notes: string | null
+  activeDurationSeconds: number | null
+  hasGps: boolean
+  poolLengthMeters: number | null
+  runVo2Max: number | null
+  averageSpeedMetersPerSecond: number | null
+  totalSwimLengths: number | null
+  zones: HeartRateZoneDurations | null
+  mobility: MobilityMetrics | null
+  autoSplits: WorkoutSplit[]
+  laps: WorkoutSplit[]
+}
+
+/**
+ * The provider writes durations as a protobuf Duration string: a decimal number of seconds with a
+ * trailing 's' ('1680s', '0.256s'). Number('1680s') is NaN, so every duration on a session has to
+ * come through here rather than through numberOrNull directly.
+ *
+ * A duration that is already a number is taken as seconds, so a future payload that drops the
+ * suffix does not silently read as absent.
+ */
+export function durationSecondsOrNull(value: unknown): number | null {
+  if (typeof value === 'number') return numberOrNull(value)
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  return numberOrNull(trimmed.endsWith('s') ? trimmed.slice(0, -1) : trimmed)
+}
+
+// Date.parse answers NaN for anything it cannot read, and NaN reaching a chart's x axis is worse
+// than a missing point, because it silently collapses a scale.
+function instantOrNull(value: unknown): number | null {
+  if (typeof value !== 'string') return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function splitFrom(entry: unknown): WorkoutSplit | null {
+  if (!isRecord(entry)) return null
+  const metrics = isRecord(entry.metricsSummary) ? entry.metricsSummary : {}
+  const distanceMillimeters = numberOrNull(metrics.distanceMillimeters)
+  const paceSecondsPerMeter = numberOrNull(metrics.averagePaceSecondsPerMeter)
+  return {
+    startMs: instantOrNull(entry.startTime),
+    endMs: instantOrNull(entry.endTime),
+    splitType: typeof entry.splitType === 'string' ? entry.splitType : null,
+    activeDurationSeconds: durationSecondsOrNull(entry.activeDuration),
+    distanceMeters: distanceMillimeters === null ? null : distanceMillimeters / MILLIMETERS_PER_METER,
+    paceSecondsPerKm: paceSecondsPerMeter === null ? null : paceSecondsPerMeter * METERS_PER_KM,
+    averageHeartRateBpm: numberOrNull(metrics.averageHeartRateBeatsPerMinute),
+  }
+}
+
+// An entry that is not an object is dropped rather than thrown on, and an absent array reads the
+// same as an empty one: both render no table, and a caller that had to distinguish them would
+// write the same branch at every call site.
+function splitsFrom(value: unknown): WorkoutSplit[] {
+  if (!Array.isArray(value)) return []
+  return value.map(splitFrom).filter((split): split is WorkoutSplit => split !== null)
+}
+
+function zonesFrom(value: unknown): HeartRateZoneDurations | null {
+  if (!isRecord(value)) return null
+  return {
+    lightSeconds: durationSecondsOrNull(value.lightTime),
+    moderateSeconds: durationSecondsOrNull(value.moderateTime),
+    vigorousSeconds: durationSecondsOrNull(value.vigorousTime),
+    peakSeconds: durationSecondsOrNull(value.peakTime),
+  }
+}
+
+function mobilityFrom(value: unknown): MobilityMetrics | null {
+  if (!isRecord(value)) return null
+  const strideMillimeters = numberOrNull(value.avgStrideLengthMillimeters)
+  const oscillationMillimeters = numberOrNull(value.avgVerticalOscillationMillimeters)
+  return {
+    cadenceStepsPerMinute: numberOrNull(value.avgCadenceStepsPerMinute),
+    strideLengthMeters: strideMillimeters === null ? null : strideMillimeters / MILLIMETERS_PER_METER,
+    groundContactTimeSeconds: durationSecondsOrNull(value.avgGroundContactTimeDuration),
+    verticalOscillationMeters: oscillationMillimeters === null
+      ? null
+      : oscillationMillimeters / MILLIMETERS_PER_METER,
+    verticalRatio: numberOrNull(value.avgVerticalRatio),
+  }
+}
+
+/**
+ * Everything a detail page needs from a session's attrs that workoutSummary does not already
+ * answer. Lives here, and not in a module of its own, because workoutSummary.ts's opening line
+ * claims to be the only module allowed to open a WorkoutSession's attrs, and a second reader
+ * elsewhere would quietly retire that rule rather than change it.
+ *
+ * The same discipline applies throughout: presence is tested before a value is coerced, a
+ * recorded zero survives, and a field the provider never sent stays null rather than becoming a
+ * printed zero. See workoutSummary's own comment for why that distinction is the point.
+ *
+ * hasGps is the one deliberate exception, a boolean rather than a tri-state: see its test.
+ */
+export function workoutDetail(attrs: unknown): WorkoutDetail {
+  const record = isRecord(attrs) ? attrs : {}
+  const metrics = isRecord(record.metricsSummary) ? record.metricsSummary : {}
+  const metadata = isRecord(record.exerciseMetadata) ? record.exerciseMetadata : {}
+  const poolLengthMillimeters = numberOrNull(metadata.poolLengthMillimeters)
+  const speedMillimetersPerSecond = numberOrNull(metrics.averageSpeedMillimetersPerSecond)
+
+  return {
+    displayName: typeof record.displayName === 'string' ? record.displayName : null,
+    notes: typeof record.notes === 'string' ? record.notes : null,
+    activeDurationSeconds: durationSecondsOrNull(record.activeDuration),
+    hasGps: metadata.hasGps === true,
+    poolLengthMeters: poolLengthMillimeters === null
+      ? null
+      : poolLengthMillimeters / MILLIMETERS_PER_METER,
+    runVo2Max: numberOrNull(metrics.runVo2Max),
+    averageSpeedMetersPerSecond: speedMillimetersPerSecond === null
+      ? null
+      : speedMillimetersPerSecond / MILLIMETERS_PER_METER,
+    totalSwimLengths: numberOrNull(metrics.totalSwimLengths),
+    zones: zonesFrom(metrics.heartRateZoneDurations),
+    mobility: mobilityFrom(metrics.mobilityMetrics),
+    // splits is the provider's automatic 1 km or 1 mile; splitSummaries is recorded laps. Named
+    // for what they are rather than mirroring the provider's own two nouns, which do not say
+    // which is which.
+    autoSplits: splitsFrom(record.splits),
+    laps: splitsFrom(record.splitSummaries),
+  }
+}
