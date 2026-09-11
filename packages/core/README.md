@@ -1,8 +1,7 @@
 # @haelan/core
 
-The only package that issues SQL or talks to Google. `server`, `mcp`, `cli` and `web` are
-adapters over it, which is what makes a dashboard card, a CLI table and an MCP tool answer the
-same question identically.
+The only package that issues SQL or talks to Google. `server`, `mcp` and `web` are adapters over
+it, which is what makes a dashboard card and an MCP tool answer the same question identically.
 
 This package covers the store (schema, migrations, encryption and the raw archive), the API
 client and mapping, the sync engine, the derivation layer that turns tier 2 into tier 3, the
@@ -17,7 +16,7 @@ lives in `apps/server` and `apps/web`.
     const db = openDatabase('/data')
     migrateToLatest(db)
 
-WAL mode is on, so the MCP server, the CLI and a running sync share the file. Foreign keys are
+WAL mode is on, so the MCP server and a running sync share the file. Foreign keys are
 enforced, which is what stops a mistyped person id orphaning rows.
 
 ## Tiers

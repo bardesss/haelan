@@ -3,7 +3,14 @@
   "compilerOptions": {
     "types": ["node"],
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    // tools-doc-drift.test.ts imports scripts/generate-tools-doc.mjs's `render` directly, so the
+    // same function the drift test calls is the function `pnpm docs:tools` calls to write
+    // TOOLS.md — a spawned-and-diffed script would only prove the process wrote a file, not that
+    // this file matches what it wrote. That import needs allowJs: without it tsc has no
+    // declaration for a plain .mjs module and refuses under noImplicitAny (TS7016), since checkJs
+    // stays off by default this does not turn on type checking for .mjs files anywhere else.
+    "allowJs": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

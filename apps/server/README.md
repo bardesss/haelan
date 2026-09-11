@@ -9,11 +9,21 @@ Default port 4235. Override with `HAELAN_PORT`, the data directory with `HAELAN_
 working defaults because spec section 15 promises an install with no environment variables and
 no edited files; the variables exist for people who disagree.
 
-## There are no data reading endpoints yet
+## Reading data
 
-Setup, auth, sync and one settings control are the whole API surface. The metric routes spec
-section 11 describes read tier 3, and tier 3 does not exist until M2's derivation layer, so they
-arrive with it. Nothing is missing here that was meant to be here.
+Setup, auth, sync and one settings control are not the whole API surface any more. The metric
+routes spec section 11 describes — daily series, baselines, insights, trend, intraday, sleep
+nights, sessions and session detail — plus annotations, sources, data type exclusions, change
+tracking and export, are versioned at `/api/v1/p/:personId/...`, session cookie authenticated the
+same way everything below is, and refuse a `personId` that is not the caller's own with a 403
+rather than someone else's data. `apps/server/src/routes/v1/` is where every one of those routes
+lives; the table below stays scoped to setup, auth, sync and settings.
+
+M4a-2 adds a second way to read the same data: the MCP tool surface in
+[`TOOLS.md`](../../TOOLS.md), reached over stdio today
+(`node --experimental-strip-types apps/server/src/mcp.ts --person <name>`) and, from M4a-3, over
+`POST /mcp` as well — both transports read through the same person bound query layer the routes
+above do.
 
 ## Routes
 
