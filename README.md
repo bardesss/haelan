@@ -215,6 +215,21 @@ run it should not be the day it matters.
 
 ## Upgrading
 
+**Most upgrades cost nothing.** Pull the new image and start it. The schema migrates in
+milliseconds, the app comes up, and nothing else happens.
+
+An upgrade costs more than that only when a release changes how your data is *derived* - what a
+reading means, how a night is assembled, which rows a metric produces. Every person's derived rows
+carry the mapping and derivation versions that built them, and a release that moves either one
+rebuilds them from the raw archive, because rows built by the old rules sitting beside rows built
+by the new ones is the one outcome worth spending minutes to avoid.
+
+Between them those two counters have moved ten times across this project's first hundred merged
+changes, and some of those were a single change moving both. **The other nine in ten boot straight
+up.** Nothing about a release on its own costs you a rebuild; only what is in it does.
+
+When it does happen, this is the shape of it, using the largest one so far as the example.
+
 **Upgrading past M5d-A costs one rebuild.** Migration 0016 drops `samples` rather than translating
 it, so the first boot after this release rebuilds tier 2 from the archive; measured at 11 minutes
 36 seconds on 1.6 million rows over 741 days. The dashboard is reachable while that runs, and its
