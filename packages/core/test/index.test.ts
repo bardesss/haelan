@@ -17,6 +17,12 @@ describe('package barrel', () => {
     expect(typeof core.latestMigrationWhen).toBe('function')
   })
 
+  it('exports the agent surface additions', () => {
+    expect(typeof core.workoutSummary).toBe('function')
+    expect(typeof core.numberOrNull).toBe('function')
+    expect(Array.isArray(core.EXERCISE_TYPES)).toBe(true)
+  })
+
   it('exports the schema namespace', () => {
     expect(typeof core.schema).toBe('object')
     expect(core.schema.people).toBeDefined()
