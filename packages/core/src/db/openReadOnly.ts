@@ -60,9 +60,26 @@ export function openReadOnly(dir: string): Database {
   // for the moments they do not, matching what openDatabase already sets for the server.
   client.pragma('busy_timeout = 5000')
 
-  const applied = client.prepare('select max(created_at) as newest from __drizzle_migrations')
-    .get() as { newest: number | null } | undefined
-  const onDisk = applied?.newest ?? null
+  // `openDatabase` creates the physical file before `migrateToLatest` runs, so a migration that
+  // fails leaves exactly this on disk: a file that exists but has never had a single migration
+  // applied, and therefore has no `__drizzle_migrations` table at all. That is a distinct failure
+  // from the table existing with zero rows (handled below via `onDisk === null`) - here the query
+  // itself throws, and it has to be caught before it reaches the caller as a raw driver error.
+  let onDisk: number | null
+  try {
+    const applied = client.prepare('select max(created_at) as newest from __drizzle_migrations')
+      .get() as { newest: number | null } | undefined
+    onDisk = applied?.newest ?? null
+  } catch (err) {
+    const code = (err as { code?: string }).code ?? ''
+    const message = err instanceof Error ? err.message : ''
+    if (code === 'SQLITE_ERROR' && /no such table/i.test(message)) {
+      onDisk = null
+    } else {
+      client.close()
+      throw err
+    }
+  }
   const expected = latestMigrationWhen()
   if (onDisk === null || onDisk < expected) {
     client.close()
