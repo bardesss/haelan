@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.1.1](https://github.com/bardesss/haelan/compare/v1.1.0...v1.1.1) (2026-09-11)
+
+
+### Bug Fixes
+
+* the seeded demo directory is gitignored, and its password is typeable ([#128](https://github.com/bardesss/haelan/issues/128)) ([9f40a5a](https://github.com/bardesss/haelan/commit/9f40a5aaa2984aa9062651a1681fb447baa2a0a3))
+
 ## [1.1.0] - 2026-09-11
 
 ### Added
