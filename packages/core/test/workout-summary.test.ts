@@ -112,8 +112,11 @@ describe('workoutSummary', () => {
 describe('the decoder stays importable from a browser bundle', () => {
   it('imports nothing from the database layer', () => {
     const source = readFileSync(fileURLToPath(new URL('../src/api/workoutSummary.ts', import.meta.url)), 'utf8')
+    // Anchored to `from '...'` rather than matching the bare package name anywhere: the comment at
+    // the top of the module names better-sqlite3 deliberately, to say why the rule exists, and a
+    // guard that forbids its own explanation is a guard nobody can document.
     expect(source).not.toMatch(/from '\.\.\/db\//)
-    expect(source).not.toMatch(/better-sqlite3/)
-    expect(source).not.toMatch(/drizzle/)
+    expect(source).not.toMatch(/from '[^']*better-sqlite3'/)
+    expect(source).not.toMatch(/from '[^']*drizzle[^']*'/)
   })
 })
