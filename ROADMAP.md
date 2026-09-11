@@ -132,10 +132,17 @@ one. What M8 asks of it that is not built is the HTTP route `GET /p/:personId/in
 that exposes it. **M8's design also moves an open question M4a-1 left**, though only part of the
 way, and the difference is the point of the strand: `exercise.splits[]` — carrying a `splitType` of
 `DISTANCE` — and `exercise.exerciseEvents[]` are **observed in this household's archived payloads**
-and unmapped, so those two exist and M8a is where they are mapped. `exercise.splitSummaries`, which
-is where laps would live, appears in the v4 discovery schema and **in no archived payload we have
-seen**; `exercise.notes` is the same. M4a-1 declined to design around a field it had not observed,
-and recording an unobserved field here as an observed one would be that same mistake.
+and unmapped, so those two exist and M8a is where they are mapped. `exercise.splitSummaries` and
+`exercise.notes` appear in the v4 discovery schema; a four-point sample taken at M0 had observed
+neither. A fuller measurement taken 2026-09-11, a read-only probe over 15,982 archived exercise
+payload rows deduplicated to 197 distinct sessions, replaces that sample and corrects it in one
+direction only: `notes` **is** observed — rare, 4 of 197 — so M4a-1's rule now supports mapping it
+as an observed field rather than a schema-only one. `splitSummaries` stays schema-only, and the
+finding is now stronger, not weaker: zero of 197 sessions carry it, and every `splitType` recorded
+by any device this household uses, across every split and lap in the archive, is `DISTANCE` — no
+manual lap has ever been recorded. M4a-1 declined to design around a field it had not observed, and
+recording an unobserved field here as an observed one would be that same mistake; the correction
+above is the opposite mistake avoided in the other direction, now that the evidence has changed.
 
 ## The rule that keeps this true
 

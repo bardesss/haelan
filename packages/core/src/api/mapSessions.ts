@@ -108,14 +108,18 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
       // between tier 1 and the stage segments it deliberately does not become.
       //
       // M8a widened this from seven keys to fourteen. Five of the seven added fields - splits,
-      // exerciseEvents, activeDuration, displayName and exerciseMetadata.hasGps - are confirmed
-      // against the archive in probe/findings/field-map.md; none of them reached tier 2, so a
-      // detail page could not be answered from the sessions table at all. The other two,
-      // splitSummaries and notes, are mapped because the v4 schema carries them, not because
-      // this archive has ever held one. `?? null` rather than a presence test: valueAt already
-      // answers undefined for a path the payload does not have, and null is what every other
-      // key here uses for the same absence. An empty array the provider really sent survives as
-      // an empty array, which is a different statement from a provider that sent no array at all.
+      // exerciseEvents, activeDuration, displayName and exerciseMetadata.hasGps - were confirmed
+      // against a four-point sample in probe/findings/field-map.md; none of them reached tier 2, so
+      // a detail page could not be answered from the sessions table at all. A fuller read-only probe
+      // taken 2026-09-11, over 197 distinct sessions, replaced that sample: `notes` is observed
+      // there - rare, 4 of 197 - so it is mapped because the archive holds it, not only because the
+      // v4 schema does. `splitSummaries` is still mapped for the schema alone; it is absent from all
+      // 197 sessions, and every `splitType` this household's devices have ever recorded is
+      // `DISTANCE`, so no manual lap has ever appeared. `?? null` rather than a presence test:
+      // valueAt already answers undefined for a path the payload does not have, and null is what
+      // every other key here uses for the same absence. An empty array the provider really sent
+      // survives as an empty array, which is a different statement from a provider that sent no
+      // array at all.
       attrs: JSON.stringify({
         type: valueAt(payload, 'type') ?? null,
         mainSleep: valueAt(payload, 'metadata.mainSleep') ?? null,

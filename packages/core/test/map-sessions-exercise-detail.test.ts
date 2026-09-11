@@ -7,9 +7,12 @@ const ctx = { personId: 'p1', resolveSource: () => 's1', rawPayloadId: 'r1' }
 const exercise = dataTypeById('exercise')!
 
 // The field names and nesting are taken from the v4 Exercise schema and confirmed against real
-// payloads in probe/findings/field-map.md. splitSummaries and notes were NOT observed in the four
-// archived points there; they are in the schema, so they are mapped, and the "absent" test below
-// is the one that actually covers this household's data.
+// payloads in probe/findings/field-map.md, a four-point sample from M0. A fuller read-only probe
+// taken 2026-09-11 replaced that sample: across 197 distinct sessions, splitSummaries is absent
+// from every one of them, and every splitType this household's devices have ever recorded is
+// DISTANCE - so the "absent" test below covers the case that never varies. notes is observed but
+// rare, 4 of 197, so it is mapped because the archive holds it, not only because the schema does;
+// the fixture above, where notes is present, covers the less common but real case.
 const aRunWithEverything = {
   name: 'users/me/dataTypes/exercise/dataPoints/run1',
   dataSource: { platform: 'FITBIT', recordingMethod: 'ACTIVELY_MEASURED' },
