@@ -1,6 +1,7 @@
 ﻿import { eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { people } from '../db/schema/index.ts'
+import { ConfigError } from '../errors.ts'
 import { MAPPING_VERSION } from '../api/version.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
 
@@ -77,6 +78,44 @@ export class PeopleStore {
 
   count(): number {
     return this.#db.select().from(people).all().length
+  }
+
+  /**
+   * The name this person is called on their own pages. Nothing else depends on it: no index, no
+   * derived row and no join, which is why this is the one profile field that changes and costs
+   * nothing.
+   */
+  setDisplayName(id: string, displayName: string): void {
+    const trimmed = displayName.trim()
+    if (trimmed === '') throw new ConfigError('a name is required')
+    this.#db.update(people).set({ displayName: trimmed }).where(eq(people.id, id)).run()
+  }
+
+  /**
+   * Moves this person's day boundary, and marks everything derived under the old one as stale.
+   *
+   * The second half is not housekeeping. Day boundaries are computed here rather than in UTC
+   * (see the column's own comment, and spec invariant 3), and `daily` is keyed by the local date
+   * the old zone produced, so the instant this column changes every derived row for this person
+   * is filed under a day that is no longer theirs. Nothing recomputes on read.
+   *
+   * So the derivation stamp is cleared in the same statement as the zone. That is the existing
+   * record of "this person's tiers 2 and 3 were built by something that no longer applies", the
+   * one `peopleNeedingRebuild` already reads and the boot rebuild already acts on, and clearing
+   * it here needs no second mechanism to remember what this change owes. The mapping stamp is
+   * left alone: tier 1 is archived payloads mapped to samples and carries no local date at all,
+   * so it is not what went stale, and `runRebuild` replays a person in full for either reason
+   * regardless.
+   *
+   * One statement rather than two, because a timezone written without the stamp cleared is the
+   * one state nothing downstream can detect: a person whose rows silently disagree with their
+   * own day boundary and whose stamp says they are current.
+   */
+  setTimezone(id: string, timezone: string): void {
+    this.#db.update(people)
+      .set({ timezone, builtDerivationVersion: null })
+      .where(eq(people.id, id))
+      .run()
   }
 
   /**

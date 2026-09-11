@@ -107,6 +107,11 @@ const rowNames = (): string[] =>
 const rowStates = (): string[] =>
   [...container!.querySelectorAll('.member-state')].map((n) => n.textContent ?? '')
 
+// Every control the list draws, in order, by its label. A count alone said "three buttons" and
+// would have gone on saying it if the wrong three had been drawn.
+const buttonLabels = (): string[] =>
+  [...container!.querySelectorAll('.member-actions button')].map((n) => n.textContent ?? '')
+
 const linkText = (): string =>
   container!.querySelector('.copy-value')?.textContent ?? ''
 
@@ -150,6 +155,9 @@ function mockMembersApi(initialItems: MemberRow[]): {
       items = [...items, invited]
       return json(200, { personId: invited.personId, inviteId: invited.inviteId, token: 'TOKEN123', expiresAtMs: 1_000 })
     }
+    // The password reset answers 204 with no body, exactly as the route does: there is nothing to
+    // report back about a password, and the panel's own result line is what says it landed.
+    if (method === 'POST' && url.endsWith('/password')) return new Response(null, { status: 204 })
     throw new Error(`unexpected request: ${method} ${url}`)
   }) as typeof fetch
   return { restore: () => { globalThis.fetch = original }, requests }
@@ -168,7 +176,49 @@ describe('the members section', () => {
     ])
     expect(rowNames()).toEqual(['Ann', 'Bob', 'Cat', 'Dee'])
     expect(rowStates()).toEqual(['Active', 'Invited', 'Suspended', 'Invite expired'])
-    expect(container!.querySelectorAll('.member-actions button')).toHaveLength(3)
+    // Five, not three: reset password sits beside suspend on Ann and beside restore on Cat, since
+    // a forgotten password has nothing to do with whether an account is suspended. Bob has an
+    // invite and no account, so he gets revoke alone, and Dee has neither.
+    expect(buttonLabels()).toEqual([
+      'Suspend', 'Reset password', 'Revoke invite', 'Restore', 'Reset password',
+    ])
+  })
+
+  it('offers no reset on the viewer\'s own row', () => {
+    mountSection([
+      member({ displayName: 'Admin', personId: ADMIN.personId, username: 'admin', state: 'active', isAdmin: true }),
+    ])
+    // The admin's own password goes through the Profile card, which asks for the current one.
+    // Reaching it through the reset door would make that question optional for the one person who
+    // can open the door.
+    expect(buttonLabels()).toEqual([])
+  })
+
+  it('sends the typed password to the reset route and says whose it was', async () => {
+    const api = mockMembersApi([])
+    const client = mountSection([
+      member({ displayName: 'Cat', username: 'cat', state: 'active', accountId: 'account-cat' }),
+    ])
+
+    click(container!.querySelector('.member-actions button:last-child')!)
+    const field = container!.querySelector('.member-reset input') as HTMLInputElement
+    // A password field, so a member standing beside the admin hears it rather than reads it.
+    expect(field.type).toBe('password')
+    type(field, 'a replacement password')
+    click(container!.querySelector('.member-reset button[type="submit"]')!)
+
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    const post = api.requests.find((r) => r.url.endsWith('/password'))
+    expect(post).toMatchObject({
+      method: 'POST',
+      url: '/api/members/account-cat/password',
+      body: { password: 'a replacement password' },
+    })
+    expect(container!.querySelector('.member-reset-result')?.textContent).toContain('Cat')
+    // The form closes on success, so the password is not left sitting in a field on screen.
+    expect(container!.querySelector('.member-reset')).toBeNull()
   })
 
   it('says so when there is nobody else in the household', () => {
@@ -185,16 +235,18 @@ describe('the members section', () => {
 
     click(container!.querySelector('.form-actions button')!)
 
+    // One field. The timezone the invited person lands in is the inviting admin's own, so there
+    // is nothing here to guess on their behalf any more.
     const inputs = [...container!.querySelectorAll('input')] as HTMLInputElement[]
+    expect(inputs).toHaveLength(1)
     type(inputs[0]!, 'New Person')
-    type(inputs[1]!, 'Europe/Amsterdam')
     click(container!.querySelector('button[type="submit"]')!)
 
     await flush(client, () => container!.innerHTML)
     api.restore()
 
-    const post = api.requests.find((r) => r.method === 'POST')
-    expect(post?.body).toEqual({ displayName: 'New Person', timezone: 'Europe/Amsterdam' })
+    const post = api.requests.find((r) => r.method === 'POST' && r.url.endsWith('/api/members'))
+    expect(post?.body).toEqual({ displayName: 'New Person' })
     expect(linkText()).toBe(`${window.location.origin}/invite/TOKEN123`)
     expect(container!.textContent).toContain('This link is shown once')
     // INVITE_TTL_MS is why an expiry exists at all; the copy stating it is what this asserts,

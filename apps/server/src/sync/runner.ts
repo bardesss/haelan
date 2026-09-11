@@ -63,7 +63,10 @@ export interface RunOutcome {
  * used to have, where the array held one entry per person per type and duplicate dataType
  * values were the only sign that two households were mixed together. Spec section 15 settles
  * the question a household-wide variant would raise: each account sees only its own data, with
- * no sharing mechanism and no admin override, so there is nothing for a per-row owner to serve.
+ * no sharing mechanism, so there is nothing for a per-row owner to serve. An admin may now reset
+ * another member's password, and that changes nothing here: it is a named exception for account
+ * recovery, not a role hierarchy, and it reaches no row of anybody's - least of all this one,
+ * which is a person's own sync progress and stays theirs alone.
  */
 export interface BackfillSummary {
   dataType: string

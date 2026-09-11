@@ -771,6 +771,33 @@
   },
   "settings": {
     "title": "Instellingen",
+    "profile": {
+      "title": "Je account",
+      "displayName": "Naam",
+      "displayNameHint": "Verschijnt op je eigen pagina's. Verder ziet niemand dit.",
+      "username": "Gebruikersnaam",
+      "usernameHint": "Waarmee je inlogt. Hoofdletters worden omgezet naar kleine letters, dus BARTUS en bartus zijn hetzelfde account.",
+      "timezoneInherited": "Het nieuwe lid begint in jouw eigen tijdzone. Diegene kan die zelf aanpassen in de eigen accountinstellingen zodra die binnen is.",
+      "timezoneHint": "Elke daggrens wordt berekend in deze zone, zodat een nacht die om 07:00 eindigt bij de juiste dag hoort.",
+      "timezoneWarning": "Dit wijzigen verschuift al je daggrenzen. Je hele geschiedenis wordt opnieuw afgeleid uit het archief zodra haelan de volgende keer start, wat een paar minuten duurt, en tot dat klaar is synchroniseert dit account niet. Er gaat hoe dan ook niets verloren.",
+      "save": "Opslaan",
+      "saving": "Opslaan…",
+      "saved": "Opgeslagen.",
+      "savedRebuild": "Opgeslagen. Je geschiedenis wordt opnieuw afgeleid uit het archief zodra haelan de volgende keer start, en tot die tijd kloppen je dagen niet.",
+      "failed": "Dit is niet opgeslagen: {{reason}}",
+      "password": {
+        "title": "Je wachtwoord wijzigen",
+        "current": "Huidig wachtwoord",
+        "currentHint": "Hier gevraagd ook al ben je ingelogd, zodat een sessie die openstaat op een onvergrendelde laptop niet het account zelf kan worden.",
+        "new": "Nieuw wachtwoord",
+        "newHint": "Minimaal 8 tekens. Er is geen resetlink: deze instantie verstuurt geen e-mail.",
+        "submit": "Wachtwoord wijzigen",
+        "submitting": "Bezig met wijzigen",
+        "changed": "Wachtwoord gewijzigd. Je bent nog steeds ingelogd.",
+        "wrong": "Dit is niet je huidige wachtwoord.",
+        "failed": "Het wachtwoord is niet gewijzigd: {{reason}}"
+      }
+    },
     "overrides": {
       "title": "Correcties en uitsluitingen",
       "empty": {
@@ -840,6 +867,12 @@
       "suspend": "Schorsen",
       "restore": "Herstellen",
       "revoke": "Uitnodiging intrekken",
+      "reset": "Wachtwoord opnieuw instellen",
+      "resetLabel": "Nieuw wachtwoord voor {{name}}",
+      "resetHint": "Minimaal 8 tekens. Geef het persoonlijk door en vraag diegene het te wijzigen.",
+      "resetSubmit": "Wachtwoord instellen",
+      "resetDone": "Wachtwoord ingesteld voor {{name}}. Bestaande sessies blijven ingelogd.",
+      "resetFailed": "Het wachtwoord is niet ingesteld: {{reason}}",
       "empty": {
         "title": "Geen andere leden",
         "detail": "Nodig iemand uit om diegene een eigen account en eigen gegevens te geven."

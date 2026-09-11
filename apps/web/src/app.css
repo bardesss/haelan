@@ -445,6 +445,37 @@ body {
   margin-bottom: var(--space-3);
 }
 
+/* Profile.tsx: two forms in one card, so the second gets a heading to say where the first ended.
+   min-width: 0 for the reason .instance-url carries it, since the timezone field holds a value
+   long enough to stretch a narrow card.
+
+   The timezone warning takes the same negative toned box .instance-url-warning uses, and earns it
+   for the same reason: it describes a cost that is paid later and out of sight, by somebody whose
+   days quietly stop lining up until a rebuild runs. The result line beside it is the muted inset
+   the maintenance results use, because a save that went through is an uneventful report. */
+.profile { min-width: 0; }
+.profile-subhead {
+  font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary);
+  margin: var(--space-4) 0 var(--space-2);
+}
+.profile-warning {
+  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  background: color-mix(in srgb, var(--negative) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
+  border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+.profile-result, .member-reset-result {
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  background: var(--surface-inset); border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
+}
+
+/* The reset form opens inside the member's own row, below its controls rather than beside them:
+   .member-row is a flex line and a password field on it would squeeze the name and state it
+   belongs to. flex-basis 100% is what drops it onto its own line within that same row. */
+.member-reset { flex-basis: 100%; margin-top: var(--space-2); }
+
 /* InstanceUrl.tsx. The warning carries the same negative toned box .connect-warning and
    .maintenance-blocked use, and for a harder reason than either: those describe something the
    reader can already see going wrong, and this one describes something that will look fine for

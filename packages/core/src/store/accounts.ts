@@ -49,6 +49,13 @@ export type LoginResult =
   | { ok: true, account: AccountRow }
   | { ok: false, reason: 'unknown' | 'bad_password' | 'locked' }
 
+// The one spelling rule for a username, applied on every write and on every lookup. Named once
+// because accounts.username carries a unique index and that index is only real if nothing reaches
+// the column without passing through here: a second path that skipped it would let `Bartus` and
+// `bartus` both exist, and the first person to sign in with the wrong one reads it as a forgotten
+// password rather than as two accounts.
+const normalise = (username: string): string => username.trim().toLowerCase()
+
 // A function rather than a constant, so the floor and the sentence that explains it stay together
 // and a second way into a password cannot quietly enforce a different number.
 function requireLongEnough(password: string): void {
@@ -73,7 +80,7 @@ export class AccountStore {
   }
 
   async create(input: CreateAccountInput): Promise<AccountRow> {
-    const username = input.username.trim().toLowerCase()
+    const username = normalise(input.username)
     if (username === '') throw new ConfigError('username must not be empty')
     if (this.#db.select().from(accounts).where(eq(accounts.username, username)).get()) {
       throw new ConfigError(`username ${username} is already taken`)
@@ -92,7 +99,7 @@ export class AccountStore {
   }
 
   async login(input: LoginInput): Promise<LoginResult> {
-    const username = input.username.trim().toLowerCase()
+    const username = normalise(input.username)
     const row = this.#db.select().from(accounts).where(eq(accounts.username, username)).get()
     if (!row) {
       await verify(await decoy(), input.password).catch(() => false)
@@ -169,11 +176,16 @@ export class AccountStore {
    * stamp, and a parameter this ignored would be a promise the table cannot keep.
    */
   async setPassword(username: string, password: string): Promise<void> {
-    const row = this.#require(username)
+    await this.#writePassword(this.#require(username).id, password)
+  }
+
+  // The one write behind both `setPassword` and `setPasswordById`. Two ways to name an account,
+  // one set of columns changed: a second copy of these three lines is how the length floor or the
+  // lockout clear ends up applying on one route and not the other.
+  async #writePassword(id: string, password: string): Promise<void> {
     requireLongEnough(password)
     const passwordHash = await hash(password, ARGON2)
-    this.#db.update(accounts).set({ passwordHash, ...LOCKOUT_CLEARED })
-      .where(eq(accounts.id, row.id)).run()
+    this.#db.update(accounts).set({ passwordHash, ...LOCKOUT_CLEARED }).where(eq(accounts.id, id)).run()
   }
 
   /**
@@ -188,10 +200,62 @@ export class AccountStore {
     this.#db.update(accounts).set(LOCKOUT_CLEARED).where(eq(accounts.id, row.id)).run()
   }
 
+  /**
+   * Renames an account, by id rather than by username: the id is the identity, and the name being
+   * replaced is the one thing about this row the caller is in the middle of changing.
+   *
+   * Lower cased through the same `normalise` every other write and lookup uses, so the unique
+   * index keeps meaning what it says. The collision is refused here rather than left to SQLite,
+   * because a UNIQUE violation reaches a route as an opaque 500 where this reaches it as the
+   * sentence the person typing needs to read.
+   *
+   * Nothing about the session is touched, and nothing needs to be: auth_sessions.account_id
+   * points at this row's id, not at its name, so a rename leaves every live session resolving to
+   * exactly the account it resolved to before.
+   */
+  setUsername(id: string, username: string): void {
+    const normalised = normalise(username)
+    if (normalised === '') throw new ConfigError('username must not be empty')
+    const taken = this.#db.select().from(accounts).where(eq(accounts.username, normalised)).get()
+    // The caller's own row is not a collision: re-saving an unchanged name, or changing only its
+    // capitalisation, must not read as somebody else already having it.
+    if (taken && taken.id !== id) throw new ConfigError(`username ${normalised} is already taken`)
+    this.#db.update(accounts).set({ username: normalised }).where(eq(accounts.id, id)).run()
+  }
+
+  /**
+   * Whether this account's password is the one given.
+   *
+   * The same argon2 verify `login` runs, on the same stored hash, rather than a second comparison
+   * written beside it - one verify means one set of parameters and one way to be wrong about them.
+   *
+   * Unlike `login` this records nothing: no failed attempt, no lockout, and no decoy hash for an
+   * account that does not exist. The caller is already signed in as somebody, so there is no
+   * username being guessed at and no existence to conceal, and counting a mistyped current
+   * password towards a lockout would let a signed-in person lock themselves out of their own
+   * account by failing to change their password.
+   */
+  async verifyPassword(id: string, password: string): Promise<boolean> {
+    const row = this.#db.select().from(accounts).where(eq(accounts.id, id)).get()
+    if (!row) return false
+    return await verify(row.passwordHash, password).catch(() => false)
+  }
+
+  /**
+   * `setPassword` addressed by id, for the two callers that hold one: a person changing their own
+   * password, and an admin resetting somebody else's. Same three columns, same reasons - see
+   * `setPassword` for why `isAdmin` and `disabledAtMs` survive a password change.
+   */
+  async setPasswordById(id: string, password: string): Promise<void> {
+    const row = this.#db.select().from(accounts).where(eq(accounts.id, id)).get()
+    if (!row) throw new ConfigError(`no account '${id}'`)
+    await this.#writePassword(row.id, password)
+  }
+
   // Throws rather than answering null, because both callers are a single operator command that
   // has nothing else to do with an account it cannot find.
   #require(username: string): typeof accounts.$inferSelect {
-    const normalised = username.trim().toLowerCase()
+    const normalised = normalise(username)
     const row = this.#db.select().from(accounts).where(eq(accounts.username, normalised)).get()
     if (!row) throw new ConfigError(`no account named ${normalised}`)
     return row

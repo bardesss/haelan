@@ -2,6 +2,7 @@ import { useTranslation } from '../i18n/index.js'
 import { useSession } from '../auth/session.js'
 import { Card } from '../components/Card.js'
 import { ConnectGoogle } from '../auth/ConnectGoogle.js'
+import { Profile } from './settings/Profile.js'
 import { OverrideList } from './settings/OverrideList.js'
 import { SourceNames } from './settings/SourceNames.js'
 import { DataTypes } from './settings/DataTypes.js'
@@ -23,6 +24,13 @@ export function Settings() {
             that is not the Dashboard's front page forever: ConnectGoogle renders nothing once
             connected (its own doc comment), so this is silent for the common case. */}
         <ConnectGoogle />
+        {/* First, and not gated on isAdmin: this is the reader's own account rather than anything
+            about the instance, and the two routes behind it act on whoever the session resolves to.
+            Every section below it changes something shared; this one is the only one that does not,
+            which is also why it is the one a member arriving here at all can use. */}
+        <Card span={12} label={t('settings.profile.title')}>
+          <Profile />
+        </Card>
         <Card span={12} label={t('settings.overrides.title')}>
           <OverrideList />
         </Card>

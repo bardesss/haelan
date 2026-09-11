@@ -14,6 +14,7 @@ import { registerSync } from './routes/sync.ts'
 import { registerSettings } from './routes/settings.ts'
 import { registerMaintenance } from './routes/maintenance.ts'
 import { registerMemberRoutes } from './routes/members.ts'
+import { registerProfile } from './routes/profile.ts'
 import { registerInviteRoutes } from './routes/invite.ts'
 import { registerV1 } from './routes/v1/index.ts'
 import { registerStatic } from './static.ts'
@@ -181,6 +182,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerSettings(app)
   registerMaintenance(app)
   registerMemberRoutes(app)
+  registerProfile(app)
   registerInviteRoutes(app)
   registerSetupGate(app)
   // Registered through app.register, not called directly like the routes above: the /api/v1

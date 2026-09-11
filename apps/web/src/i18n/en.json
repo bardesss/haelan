@@ -771,6 +771,33 @@
   },
   "settings": {
     "title": "Settings",
+    "profile": {
+      "title": "Your account",
+      "displayName": "Name",
+      "displayNameHint": "Shown on your own pages. Nobody else sees it.",
+      "username": "Username",
+      "usernameHint": "What you sign in with. Capitals are folded to lower case, so BARTUS and bartus are the same account.",
+      "timezoneInherited": "The new member starts in your own time zone. They can change it in their own account settings once they are in.",
+      "timezoneHint": "Every day boundary is computed in this zone, so a night that ends at 07:00 belongs to the right day.",
+      "timezoneWarning": "Changing this moves every one of your day boundaries. Your whole history is re-derived from the archive the next time haelan starts, which takes several minutes, and until that finishes this account does not sync. Nothing is lost either way.",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "savedRebuild": "Saved. Your history is re-derived from the archive the next time haelan starts, and your days will be wrong until it is.",
+      "failed": "That was not saved: {{reason}}",
+      "password": {
+        "title": "Change your password",
+        "current": "Current password",
+        "currentHint": "Asked for even though you are signed in, so a session left open on an unlocked laptop cannot be turned into the account itself.",
+        "new": "New password",
+        "newHint": "At least 8 characters. There is no reset link: this instance sends no email.",
+        "submit": "Change password",
+        "submitting": "Changing",
+        "changed": "Password changed. You are still signed in.",
+        "wrong": "That is not your current password.",
+        "failed": "The password was not changed: {{reason}}"
+      }
+    },
     "overrides": {
       "title": "Corrections and exclusions",
       "empty": {
@@ -840,6 +867,12 @@
       "suspend": "Suspend",
       "restore": "Restore",
       "revoke": "Revoke invite",
+      "reset": "Reset password",
+      "resetLabel": "New password for {{name}}",
+      "resetHint": "At least 8 characters. Hand it over in person and ask them to change it.",
+      "resetSubmit": "Set password",
+      "resetDone": "Password set for {{name}}. Their existing sessions stay signed in.",
+      "resetFailed": "The password was not set: {{reason}}",
       "empty": {
         "title": "No other members",
         "detail": "Invite someone to give them their own account and their own data."

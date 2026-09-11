@@ -147,7 +147,19 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   { route: 'POST /api/members', auth: 'admin' },
   { route: 'POST /api/members/:accountId/disable', auth: 'admin' },
   { route: 'POST /api/members/:accountId/enable', auth: 'admin' },
+  { route: 'POST /api/members/:accountId/password', auth: 'admin' },
   { route: 'DELETE /api/members/invites/:id', auth: 'admin' },
+
+  {
+    route: 'PUT /api/profile',
+    auth: 'session',
+    why: 'it changes the caller\'s own name, username and timezone; the account acted on is the one the session resolves to, never one named in the request',
+  },
+  {
+    route: 'PUT /api/profile/password',
+    auth: 'session',
+    why: 'the same account, and it asks for the current password on top of the session before it writes',
+  },
 
   {
     route: 'GET /api/invite/:token',

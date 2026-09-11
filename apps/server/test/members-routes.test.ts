@@ -23,8 +23,10 @@ const authHeader = (token: string | null) => (token === null ? {} : { authorizat
 
 const list = (token: string | null) => h.app.inject({ method: 'GET', url: '/api/members', headers: authHeader(token) })
 
-const invite = (token: string | null, displayName: string, timezone: string) => h.app.inject({
-  method: 'POST', url: '/api/members', headers: authHeader(token), payload: { displayName, timezone },
+// No timezone: the invite body carries one field now, and the person's zone comes from the
+// inviting admin's own row. profile-routes.test.ts is where that inheritance is asserted.
+const invite = (token: string | null, displayName: string) => h.app.inject({
+  method: 'POST', url: '/api/members', headers: authHeader(token), payload: { displayName },
 })
 
 const disable = (token: string | null, accountId: string) => h.app.inject({
@@ -33,6 +35,11 @@ const disable = (token: string | null, accountId: string) => h.app.inject({
 
 const enable = (token: string | null, accountId: string) => h.app.inject({
   method: 'POST', url: `/api/members/${accountId}/enable`, headers: authHeader(token),
+})
+
+const resetPassword = (token: string | null, accountId: string) => h.app.inject({
+  method: 'POST', url: `/api/members/${accountId}/password`, headers: authHeader(token),
+  payload: { password: 'a replacement password' },
 })
 
 const revoke = (token: string | null, id: string) => h.app.inject({
@@ -69,11 +76,12 @@ describe('every route requires a session and an admin', () => {
 
   const cases: { name: string, send: (token: string | null) => ReturnType<typeof list> }[] = [
     { name: 'GET /api/members', send: (token) => list(token) },
-    { name: 'POST /api/members', send: (token) => invite(token, 'Someone', 'Europe/Amsterdam') },
+    { name: 'POST /api/members', send: (token) => invite(token, 'Someone') },
     // Both ids are made up: the guard runs as a preHandler, ahead of any lookup the handler itself
     // does, so a request that never gets past the guard cannot tell an unknown id from a real one.
     { name: 'POST /api/members/:accountId/disable', send: (token) => disable(token, 'a-nonexistent') },
     { name: 'POST /api/members/:accountId/enable', send: (token) => enable(token, 'a-nonexistent') },
+    { name: 'POST /api/members/:accountId/password', send: (token) => resetPassword(token, 'a-nonexistent') },
     { name: 'DELETE /api/members/invites/:id', send: (token) => revoke(token, 'invite-nonexistent') },
   ]
 
@@ -92,28 +100,28 @@ describe('every route requires a session and an admin', () => {
 
 describe('POST /api/members', () => {
   it('creates the person and returns the token exactly once', async () => {
-    const created = (await invite(adminToken, 'Bob', 'Europe/Amsterdam')).json()
+    const created = (await invite(adminToken, 'Bob')).json()
     expect(created.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
     // The list never carries it back.
     expect(JSON.stringify((await list(adminToken)).json())).not.toContain(created.token)
   })
 
   it('shows the new person as invited', async () => {
-    await invite(adminToken, 'Bob', 'Europe/Amsterdam')
+    await invite(adminToken, 'Bob')
     const bob = (await list(adminToken)).json().items.find((m: { displayName: string }) => m.displayName === 'Bob')
     expect(bob).toMatchObject({ accountId: null, username: null, state: 'invited', isAdmin: false })
   })
 
-  it('refuses an unknown timezone', async () => {
-    expect((await invite(adminToken, 'Bob', 'Mars/Olympus')).statusCode).toBe(400)
-  })
+  // The timezone the invited person lands in, and the fact that the body no longer carries one,
+  // are profile-routes.test.ts's subject. What used to be here was a test that an unknown
+  // timezone was refused; there is no longer a field to send one in.
 
   it('refuses an empty or whitespace-only displayName', async () => {
-    const empty = await invite(adminToken, '', 'Europe/Amsterdam')
+    const empty = await invite(adminToken, '')
     expect(empty.statusCode).toBe(400)
     expect(empty.json().error.kind).toBe('config')
 
-    const blank = await invite(adminToken, '   ', 'Europe/Amsterdam')
+    const blank = await invite(adminToken, '   ')
     expect(blank.statusCode).toBe(400)
     expect(blank.json().error.kind).toBe('config')
   })
@@ -160,7 +168,7 @@ describe('disable and enable', () => {
 
 describe('DELETE /api/members/invites/:id', () => {
   it('revokes an unredeemed invite so its token stops working', async () => {
-    const created = (await invite(adminToken, 'Carol', 'Europe/Amsterdam')).json()
+    const created = (await invite(adminToken, 'Carol')).json()
     const revokeResponse = await revoke(adminToken, created.inviteId)
     expect(revokeResponse.statusCode).toBe(204)
 
