@@ -193,6 +193,27 @@ describe('the instance URL', () => {
     expect(harness.app.haelan.stores.settings.get()?.baseUrl).toBe('http://localhost:4235')
   })
 
+  // candidateFor reads a bare host as https and calls it registrable, so the address somebody
+  // types in a hurry validates fine. Storing the raw input would then send Google
+  // `homelab.example.com/oauth/callback`, a redirect with no scheme, and the panel would print
+  // that same broken string as the thing to register. This is the whole failure the route exists
+  // to prevent, arriving through the route itself.
+  it('stores a scheme-less address as https, because that is what it was validated as', async () => {
+    harness = await withServer({ google: 'ok' })
+    await harness.connectPerson()
+    const cookie = await harness.signIn()
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/instance-url', headers, cookies: { haelan_session: cookie },
+      payload: { baseUrl: 'haelan.example.com' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({
+      baseUrl: 'https://haelan.example.com',
+      redirectUri: 'https://haelan.example.com/oauth/callback',
+    })
+    expect(harness.app.haelan.stores.settings.get()?.baseUrl).toBe('https://haelan.example.com')
+  })
+
   it('stores a trailing slash off, so the redirect never doubles one', async () => {
     harness = await withServer({ google: 'ok' })
     await harness.connectPerson()

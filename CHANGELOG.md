@@ -18,6 +18,14 @@ follows [Semantic Versioning](https://semver.org/). See the Contributing section
   not interrupt syncing and so gives no sign anything is wrong until the next consent, which is
   adding a household member or reconnecting an account whose access was revoked.
 
+### Fixed
+
+- An instance address entered without a scheme is stored as the `https` it was validated as. Both
+  the setup wizard and the new settings panel read a bare `homelab.example.com` as https and accept
+  it, then stored it verbatim, which built a redirect URI with no scheme at all for Google to
+  reject and printed that same broken string as the one to register. The address that gets stored
+  is now the one that was validated.
+
 ## [1.0.0] - 2026-09-11
 
 First release. A self-hosted dashboard and local mirror for your own health data, built on the

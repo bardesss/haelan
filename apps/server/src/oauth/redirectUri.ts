@@ -3,6 +3,14 @@ export const CALLBACK_PATH = '/oauth/callback'
 export interface RedirectCandidate {
   uri: string
   /**
+   * The address to store, which is `uri` without the callback path. It exists because the
+   * caller's raw input is not safe to store: `homelab.example.com` is registrable, since this
+   * reads a bare host as https, but storing it verbatim makes redirectUriFor build
+   * `homelab.example.com/oauth/callback`, a string with no scheme that Google rejects. Storing
+   * what was validated rather than what was typed keeps the two from disagreeing.
+   */
+  origin: string
+  /**
    * Which label this is, not the label itself. The server has no locale - it renders nothing and
    * knows nothing about who is reading - so it names the case and the web app translates it under
    * its own `setup.redirect.` namespace. Sending the English text instead is what put
@@ -28,36 +36,37 @@ const IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/
 
 export function loopbackCandidates(port: number): RedirectCandidate[] {
   return [
-    { uri: `http://localhost:${port}${CALLBACK_PATH}`, labelKey: THIS_MACHINE, registrable: true },
-    { uri: `http://127.0.0.1:${port}${CALLBACK_PATH}`, labelKey: 'literalLoopback', registrable: true },
+    { uri: `http://localhost:${port}${CALLBACK_PATH}`, origin: `http://localhost:${port}`, labelKey: THIS_MACHINE, registrable: true },
+    { uri: `http://127.0.0.1:${port}${CALLBACK_PATH}`, origin: `http://127.0.0.1:${port}`, labelKey: 'literalLoopback', registrable: true },
   ]
 }
 
 export function candidateFor(hostOrUrl: string): RedirectCandidate {
   const trimmed = hostOrUrl.trim()
   const labelKey = 'proxyOrTailscale'
-  if (trimmed === '') return { uri: '', labelKey, registrable: false, reason: 'Enter a hostname.' }
+  if (trimmed === '') return { uri: '', origin: '', labelKey, registrable: false, reason: 'Enter a hostname.' }
 
   // A bare hostname is read as https, because https is the only thing Google will register for
   // a non loopback host. Guessing http would produce a value the console refuses.
   const hasScheme = /^https?:\/\//i.test(trimmed)
   const parsed = safeUrl(hasScheme ? trimmed : `https://${trimmed}`)
-  if (!parsed) return { uri: '', labelKey, registrable: false, reason: 'That is not a hostname a URL can be built from.' }
+  if (!parsed) return { uri: '', origin: '', labelKey, registrable: false, reason: 'That is not a hostname a URL can be built from.' }
 
   const host = parsed.hostname
   const isLoopback = LOOPBACK.has(host)
-  const uri = `${parsed.protocol}//${parsed.host}${CALLBACK_PATH}`
+  const origin = `${parsed.protocol}//${parsed.host}`
+  const uri = `${origin}${CALLBACK_PATH}`
 
-  if (isLoopback) return { uri, labelKey: THIS_MACHINE, registrable: true }
-  if (IPV4.test(host)) return { uri, labelKey, registrable: false, reason: RULE_IP }
-  if (parsed.protocol !== 'https:') return { uri, labelKey, registrable: false, reason: RULE_SCHEME }
+  if (isLoopback) return { uri, origin, labelKey: THIS_MACHINE, registrable: true }
+  if (IPV4.test(host)) return { uri, origin, labelKey, registrable: false, reason: RULE_IP }
+  if (parsed.protocol !== 'https:') return { uri, origin, labelKey, registrable: false, reason: RULE_SCHEME }
   // The real public suffix list is not shipped here, so this is a shape check and Google stays
   // the authority. It exists to catch .local and bare labels before consent, not to reproduce
   // the list.
   if (host.endsWith('.local') || !/\.[a-z]{2,}$/i.test(host)) {
-    return { uri, labelKey, registrable: false, reason: RULE_TLD }
+    return { uri, origin, labelKey, registrable: false, reason: RULE_TLD }
   }
-  return { uri, labelKey, registrable: true }
+  return { uri, origin, labelKey, registrable: true }
 }
 
 export function redirectUriFor(baseUrl: string): string {

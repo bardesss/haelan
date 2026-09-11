@@ -85,7 +85,10 @@ export function registerSettings(app: FastifyInstance): void {
     if (!candidate.registrable) {
       return reply.code(400).send(errorBody('config', 'config', candidate.reason ?? 'that URL cannot be registered with Google'))
     }
-    const normalized = baseUrl.replace(/\/+$/, '')
+    // candidate.origin, not the trimmed input: candidateFor reads a bare host as https and
+    // accepts it, so storing what was typed would keep `homelab.example.com` and send Google a
+    // redirect with no scheme at all. What was validated is what gets stored.
+    const normalized = candidate.origin
     stores().settings.putBaseUrl(normalized, app.haelan.now())
     // The stored value put through redirectUriFor, which is the same call every consent makes, so
     // what the panel tells somebody to register is the string Google will actually be sent.
