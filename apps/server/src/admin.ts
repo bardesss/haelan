@@ -20,6 +20,7 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
+import { fileURLToPath } from 'node:url'
 import {
   AccountStore, ConfigError, DATABASE_FILENAME, HaelanError, closeDatabase, openDatabase,
 } from '@haelan/core'
@@ -224,7 +225,12 @@ function secretReader(): { read: (label: string) => Promise<string>, close: () =
   }
 }
 
-if (import.meta.main) {
+// Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.13,
+// where it is `undefined` and this gate would be silently false. That matters most here - this is
+// the tool somebody runs when they are locked out, and it would print nothing and exit 0. Keep the
+// path comparison until the floor moves past 22.18; `test/engine-floor.test.ts` holds that.
+const entry = process.argv[1]
+if (entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url)) {
   const secrets = secretReader()
   try {
     process.exitCode = await runAdmin(process.argv.slice(2), {

@@ -7,6 +7,7 @@
 //
 // Usage: pnpm docs:tools
 import { writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CATALOGUE } from '../apps/server/src/mcp/catalogue.ts'
 import { DEFAULT_DAILY_POINTS, DEFAULT_INTRADAY_POINTS, MAX_POINTS } from '../apps/server/src/mcp/contract.ts'
@@ -136,7 +137,13 @@ export function render() {
   return lines.join('\n')
 }
 
-if (import.meta.main) {
+// Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.13,
+// where it is `undefined` and this gate would be silently false - `pnpm docs:tools` would exit 0
+// having written nothing, and the drift test would then fail on a TOOLS.md nobody could regenerate.
+// Keep the path comparison until the floor moves past 22.18; the guard that holds this is
+// `apps/server/test/engine-floor.test.ts`.
+const entry = process.argv[1]
+if (entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url)) {
   const target = new URL('../TOOLS.md', import.meta.url)
   await writeFile(target, render())
   console.error(`docs:tools: wrote ${CATALOGUE.length} tools to ${fileURLToPath(target)}`)
