@@ -12,6 +12,8 @@
     "@fastify/cookie": "^11.0.2",
     "@fastify/static": "^10.1.2",
     "@haelan/core": "workspace:*",
-    "fastify": "^5.2.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "fastify": "^5.2.0",
+    "zod": "^4.6.1"
   }
 }
