@@ -172,7 +172,7 @@ describe('admin list', () => {
     expect(await runAdmin(['list'], run.deps)).toBe(0)
     expect(run.out).toEqual([
       'username  admin  disabled  locked',
-      `robin    yes    no        until ${new Date(LOCKED_UNTIL_MS).toISOString()}`,
+      `robin     yes    no        until ${new Date(LOCKED_UNTIL_MS).toISOString()}`,
     ])
     const printed = run.out.join('\n')
     expect(printed).not.toContain(stored)
@@ -186,7 +186,7 @@ describe('admin list', () => {
     expect(await runAdmin(['list'], run.deps)).toBe(0)
     expect(run.out).toEqual([
       'username  admin  disabled                        locked',
-      `robin    yes    since ${new Date(CREATED_MS + 5).toISOString()}  `
+      `robin     yes    since ${new Date(CREATED_MS + 5).toISOString()}  `
         + `lapsed ${new Date(LOCKED_UNTIL_MS).toISOString()}`,
     ])
   })
