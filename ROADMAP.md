@@ -46,6 +46,8 @@ tracked, so this file is the only place any of it exists.
 | **M5e-2** Seed and rehearsal | A deterministic demo data generator, the upgrade path rehearsed end to end from an old schema through rebuild, reclaim, backup and restore, and the script that seeds a directory for anyone to boot an instance against | Done, [#116](https://github.com/bardesss/haelan/pull/116) |
 | **M5e-3** Documentation and screenshots | Three screenshots off the seeded demo data, and the README a stranger meets first: the features that shipped and not the ones that did not, one deploy block, and a configuration reference written for people who disagree with the defaults | Done, [#117](https://github.com/bardesss/haelan/pull/117) |
 | **M5** Packaging | Cut into six units, a, b, c, d, e and f as listed here, with M5d itself cut into four strands - D cheaper tests, A narrow keys, then B reclaiming the space a rebuild frees but never returns and C backup and restore, which shipped together because a vacuum and a backup are one SQLite operation writing to two places - and M5e itself cut into three: M5e-1 the envelope, M5e-2 the seeded demo data and the automated upgrade rehearsal, M5e-3 the documentation and screenshots - and the catalogue work and the image both landing before the v1.0.0 tag | Done |
+| **M6** What only the archive can answer | Source staleness, so a source that quietly stopped reporting says so instead of thinning a chart; all-time records and a milestones timeline; and an Eddington style number, which needs every day on disk to compute at all | Not started |
+| **M7** The small screen | A layout that works on a phone: the rail driven by the viewport rather than only by a toggle, the charts and the eight pages below 620px, and the wizard, which is the one flow a person is most likely to walk holding a phone | Not started |
 
 ## Why the order is not alphabetical
 
@@ -63,10 +65,11 @@ here, because an unanswered question belongs next to its evidence. **M2 is cut t
 into the units its derivation design names: M2a is the first
 of them and each has its own row above, and **M2e** is the last. **M3 is cut the same way**,
 with M3b-1 and a second plan covering the HTTP surface. D1 and M0 through
-M5 are the only phases the design defines. M1 comes before the dashboard deliberately: intraday samples have a shelf
-life, since the API only retains them for a recent window, so every week without ingestion is a
-week of minute-level history permanently unavailable at that resolution. Charts can be improved
-retroactively; resolution cannot be recovered.
+M5 are the only phases the design defines; **M6 is the first that it does not**, and the
+paragraph below says where it came from. M1 comes before the dashboard deliberately: intraday
+samples have a shelf life, since the API only retains them for a recent window, so every week
+without ingestion is a week of minute-level history permanently unavailable at that resolution.
+Charts can be improved retroactively; resolution cannot be recovered.
 
 **M5 comes before M4**, also out of letter order, and for two reasons rather than convenience.
 M4's `sql_query` is the widest read surface this project will have, and person isolation is so far
@@ -79,6 +82,32 @@ surface; M5 retires a risk that is already live.
 packages the image, and landing the wizard and connect polish first means the first published
 artifact already carries it rather than the image going out once and the polish arriving in a
 rebuild.
+
+**M6 is not in the design, and that is the point.** Every phase above was specified before any of
+it was built. M6 came from the opposite direction: from noticing, once the thing was running, that
+this project argues its value is a complete mirror outliving Google's retention windows while every
+page it ships renders a window. Nothing in the app yet computes anything that needs more than the
+range on screen, so the archive is the argument rather than a feature, and the three pieces of M6
+are the ones that cannot be computed without it.
+
+Its first strand is not really a feature. A source that stops reporting is the worst failure a
+mirror has, because it looks like a thin chart rather than an error, and nothing here detects it
+today. It is grouped with the other two because they read the same history, and it is separable
+from them if it ever needs to ship sooner.
+
+**M7 is separate from M6 rather than inside it**, and the cut is the same one this project makes
+everywhere else: M6's three strands share a thesis and a data layer, while M7 is a sweep across
+eight pages, the rail, the charts and the wizard. One milestone whose review had to cover both a
+query and a stylesheet would be reviewing neither.
+
+It starts from further along than it looks. The viewport meta tag is right, the twelve column grid
+already stacks at 900px, and `.rail-collapsed` already exists as a 60px icon strip. What is missing
+is that the collapse is a manual toggle rather than something the viewport decides, and that below
+900px there are exactly two media queries in the whole stylesheet. The rail has also been seen to
+overflow and clip its last item on a short viewport, which is the first thing to reproduce.
+
+**M6 has no order against M4 yet.** Neither is started, and letter order has not decided sequence
+anywhere else in this table.
 
 ## The rule that keeps this true
 
