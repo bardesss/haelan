@@ -5,10 +5,8 @@ API v4.** One household, one instance, no telemetry, no hosted offering.
 
 [![CI](https://github.com/bardesss/haelan/actions/workflows/ci.yml/badge.svg)](https://github.com/bardesss/haelan/actions/workflows/ci.yml)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
-
-> **Not installable yet.** haelan is under active development and there is no release. The
-> sections below describe what v1 is being built to do; the roadmap tells you what actually
-> exists today. Nothing here is a promise about a date.
+[![Release](https://img.shields.io/github/v/release/bardesss/haelan?sort=semver)](https://github.com/bardesss/haelan/releases)
+[![Container image](https://img.shields.io/badge/ghcr.io-haelan-blue?logo=docker)](https://github.com/bardesss/haelan/pkgs/container/haelan)
 
 The reason it is self-hosted is structural rather than ideological. Google caps an unverified
 OAuth client at 100 users, and clearing verification for health scopes needs a paid third-party
@@ -139,6 +137,37 @@ people who disagree rather than for people installing.
 note, event and override. `instance.key` is the 44 byte file that decrypts the stored Google
 credentials, and it is deliberately **not** in a backup, so keep a copy of it somewhere separate.
 `backups/` holds the compacted daily copies.
+
+## Storage, and how it grows
+
+The numbers below are the author's own instance - one person, 741 days of history - measured
+during this milestone. Use them to size a volume; nothing here is rounded into vagueness and
+nothing here is invented.
+
+After a reclaim the database holds **247 MB** for those 741 days, which is about **120 MB per
+person-year**. Of that, the gzipped raw archive is roughly **122 MB** and the derived samples with
+their two indexes roughly **160 MB** - the two overlap somewhat in how they were measured, so they
+do not sum exactly to the total. Intraday heart rate is the bulk of it: a reading every few
+seconds, collapsed to three rows a minute.
+
+**Backups multiply it.** The default keeps seven daily copies, each a compacted copy of the whole
+database, so a 247 MB instance carries roughly **1.7 GB of backups** on top of it.
+`HAELAN_BACKUP_KEEP` changes how many are kept, and `0` turns backups off for an operator who backs
+the volume up some other way.
+
+**The boot vacuum needs headroom of its own.** It declines to run unless free disk exceeds the live
+content by 20%, because `VACUUM` builds a whole new file before the old one is replaced. It says so
+in the log rather than filling the disk.
+
+Put together, a realistic steady state for one person after two years, on defaults, is roughly **2
+GB** - about a quarter of it the database, the rest its backups.
+
+The archive does not shrink to save space, and that is deliberate rather than an oversight: it is
+the only complete record once Google's own retention window has passed, so pruning it trades away
+the one thing that makes a rebuild - re-deriving samples and daily rows from scratch - possible at
+all. Intraday data carries the same asymmetry from the other end: the API itself only retains it
+briefly, so once a window has aged out at the source it cannot be re-fetched at that resolution no
+matter how much local disk is free. Growth here is the cost of what this project is for.
 
 ## Try it without a Google account
 
@@ -298,6 +327,18 @@ HTTP surface, and `apps/web/README.md` the dashboard and the wizard.
 Specs and plans live under `docs/superpowers/` and are deliberately not tracked: they are working
 documents for whoever is building, not part of what ships.
 
+## Translations
+
+The app ships English and Dutch, both complete at 616 keys. Locales are plain JSON
+(`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
+`resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
+from the browser's `navigator.language` - there is no in-app language switch.
+
+Adding a language is copy `en.json`, translate its 616 keys, import and register it beside `en` and
+`nl`. Say the cost plainly too: a half-translated locale is worse than none, because i18next falls
+back per key rather than per file, and the result is a screen carrying two languages at once rather
+than a screen in the fallback language throughout.
+
 ## Development
 
 ```
@@ -361,8 +402,27 @@ a network service, the AGPL requires you to publish your changes to the people u
 
 ## Contributing
 
-Not open to contributions yet; the interfaces are still moving weekly. Issues describing what you
-would want from a self-hosted health dashboard are welcome once the repository is public.
+This is one household's instance, not a platform, so the bar is written down rather than decided
+per pull request. What would be accepted: a fix, a feature that makes sense for one household
+running its own copy of haelan, a new translation, documentation that corrects itself against the
+code. What would not: anything serving a different shape of deployment - hosting for others, public
+exposure, writing back to Google. The [Non-goals](#non-goals) section already says so; it is linked
+here rather than repeated.
+
+A change touching derivation or mapping needs a version bump. Rows built under the old rules
+sitting beside rows built under the new ones is exactly what `DERIVATION_VERSION` and
+`MAPPING_VERSION` exist to prevent - see [Upgrading](#upgrading) for what moving either one costs
+on the next boot.
+
+`pnpm test` and `pnpm typecheck` pass before a pull request is opened. CI runs the same two, plus a
+build and the commit message check described under [Conventions](#conventions).
+
+**haelan is built with a coding agent, and AI-assisted contributions are welcome, held to the same
+bar as everything else here - not a lower one, not a separate one.** The bar is measurement rather
+than assertion: a comment records why the code does something, not what it does; a test fails when
+the thing it names actually breaks; a number in a commit message or a pull request came from
+running something, not from what running it was expected to produce. That is what a change is
+judged against here, and it is a higher bar than the tests passing.
 
 **Every user-visible change updates [CHANGELOG.md](CHANGELOG.md)'s `Unreleased` section, in the
 same pull request rather than afterwards.** A dependency bump or an internal refactor nobody using
