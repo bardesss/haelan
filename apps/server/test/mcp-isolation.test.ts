@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import {
   PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
-  NoteStore, EventStore,
+  NoteStore, EventStore, ConfigError,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
@@ -154,4 +154,32 @@ describe('every tool, bound to one person, proved against a second', () => {
       }
     })
   }
+
+  // The catalogue loop above only ever hands a tool one of alice's own ids, which proves what a
+  // tool bound to alice answers, never what it refuses. `get_workout` takes a sessionId as a bare
+  // string argument rather than something a query narrows by, and ids appear in other tools'
+  // output (get_workouts lists them) — a model that has seen bart's session id from somewhere
+  // else in a shared household and hands it back is the single most plausible route into another
+  // member's data on this surface. This is the file whose job is to make that refusal visible
+  // rather than assumed.
+  it("get_workout refuses bart's session id under alice's binding, rather than answering with it", () => {
+    const getWorkout = CATALOGUE.find((t) => t.name === 'get_workout')
+    if (getWorkout === undefined) throw new Error('no tool named get_workout')
+
+    let caught: unknown
+    try {
+      getWorkout.run(alice, { sessionId: 'bart-run' })
+    } catch (err) {
+      caught = err
+    }
+
+    expect(caught).toBeInstanceOf(ConfigError)
+    // The refusal is allowed to echo the id alice herself supplied — she already had it — but
+    // must carry nothing else that identifies bart: not his source, not his other session, not
+    // either sentinel, not either of his numbers.
+    const detail = (caught as ConfigError).detail
+    for (const fingerprint of ['bart-watch', 'bart-night', 'bart-note-sentinel', 'bart-event-sentinel', '8800', '176']) {
+      expect(detail).not.toContain(fingerprint)
+    }
+  })
 })
