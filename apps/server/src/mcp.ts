@@ -22,8 +22,16 @@
  *    can see a violation is the one that spawns this process
  *    (`apps/server/test/mcp-stdio.test.ts`), so there is nothing else guarding it.
  *
- * 2. The text block an agent reads first is composed only from values this app generated. See
- *    `summarise` below for what that means mechanically.
+ * 2. The summary sentence - the first text block, the one an agent reads first - is composed only
+ *    from values this app generated. See `summarise` below for what that means mechanically.
+ *
+ *    Not "the text blocks": there are two, and the second is the structured content serialised,
+ *    which the spec asks for and which carries a note's body and a device's name like any other
+ *    field. That is not a hole in the rule, it is the rule's other half: free text arrives there
+ *    labelled, inside an `untrustedText` field whose name says what it is, which is what the
+ *    envelope in `mcp/contract.ts` exists to do. The sentence is the one place a string can reach
+ *    an agent with nothing around it saying where it came from, so the sentence is what the rule
+ *    binds.
  */
 import { resolve } from 'node:path'
 import { z } from 'zod'
@@ -248,11 +256,34 @@ function register(server: McpServer, tool: (typeof CATALOGUE)[number], query: Pe
     (args) => {
       const structuredContent = tool.run(query, args)
       return {
-        content: [{ type: 'text', text: summarise(tool.name, tool.outputSchema, structuredContent) }],
+        content: [
+          { type: 'text', text: summarise(tool.name, tool.outputSchema, structuredContent) },
+          // The same answer again, serialised. MCP 2025-06-18's Structured Content section asks a
+          // tool returning `structuredContent` to also return the JSON as a text block, for
+          // clients written before that field existed - and a client reading only `content`
+          // otherwise sees the summary sentence and nothing else, which on describe_person is
+          // `describe_person: sources 0.` with the person, the timezone and every source id left
+          // in a field it never looks at.
+          { type: 'text', text: JSON.stringify(structuredContent) },
+        ],
         structuredContent,
       }
     },
   )
+}
+
+/**
+ * Every catalogue entry registered on one server, bound to one person's query.
+ *
+ * Separate from `serve` so a test can drive the real SDK over an in-memory transport - which is
+ * the only way to ask what a client actually receives, `content` blocks and argument validation
+ * alike, without spawning a process and speaking JSON-RPC by hand. No transport is chosen here:
+ * this is the half `serve` and M4a-3's `POST /mcp` have in common.
+ */
+export function buildServer(query: PersonQuery): McpServer {
+  const server = new McpServer(SERVER_INFO)
+  for (const tool of CATALOGUE) register(server, tool, query)
+  return server
 }
 
 export async function serve(argv: readonly string[], env: NodeJS.ProcessEnv): Promise<void> {
@@ -260,10 +291,8 @@ export async function serve(argv: readonly string[], env: NodeJS.ProcessEnv): Pr
   const dataDir = resolve(readConfig(env).dataDir)
   const db = openReadOnly(dataDir)
   const personId = resolvePerson(db, person)
-  const query = new PersonQuery(db, personId)
 
-  const server = new McpServer(SERVER_INFO)
-  for (const tool of CATALOGUE) register(server, tool, query)
+  const server = buildServer(new PersonQuery(db, personId))
   // Connected before the diagnostic, so stdin is being read from the first moment this process is
   // visibly alive. stderr, here and everywhere: see the note at the top of this file.
   await server.connect(new StdioServerTransport())

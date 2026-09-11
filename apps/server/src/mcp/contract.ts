@@ -134,9 +134,17 @@ export interface Untrusted {
  * Four sources reach an agent this way: a note's body, an event's note, a source's display name or
  * alias, and a workout's own name or notes — the last two straight from the provider's payload.
  * None of it is an instruction, and the tool descriptions say so. The rule that makes this
- * mechanical rather than stylistic lives at the adapters: the human-readable text block is
- * composed only from values this app generated, so no string from here ever reaches the prose an
- * agent reads first.
+ * mechanical rather than stylistic lives at the adapters: the summary sentence - the first text
+ * block of a tool result, the one an agent reads first - is composed only from values this app
+ * generated, so no string from here ever reaches it.
+ *
+ * The summary sentence, not "the text blocks". An adapter also returns the structured content
+ * serialised as a second text block, because MCP 2025-06-18 asks a tool returning
+ * `structuredContent` to send the JSON too for clients written before that field existed. Text
+ * from here is in that block - and arrives there exactly as it arrives in `structuredContent`
+ * itself, inside an `untrustedText` field whose name says what it is. That is the difference the
+ * rule turns on: a labelled field is this envelope working, and a sentence with a bare string in
+ * it is the thing there would be no way to label.
  */
 export function untrusted(text: string | null | undefined, max = MAX_TEXT): Untrusted {
   if (text === null || text === undefined) return { untrustedText: null, truncated: false }
