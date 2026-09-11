@@ -26,6 +26,10 @@ import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
 import { readChanges } from './changes.ts'
 import type { ChangesResult } from './changes.ts'
+import { NoteStore } from '../store/notes.ts'
+import type { StoredNote } from '../store/notes.ts'
+import { EventStore } from '../store/events.ts'
+import type { StoredEvent } from '../store/events.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -370,6 +374,40 @@ export class PersonQuery {
       limit: input.limit,
       cursor: input.cursor,
     })
+  }
+
+  /**
+   * The person's notes in a local date range, oldest first, optionally narrowed to those
+   * containing a piece of text.
+   *
+   * Here rather than on NoteStore because of who calls it. NoteStore.listFor takes a person id as
+   * a plain argument, so a tool body holding the store could name anybody in the household; this
+   * class is the one place that binding is allowed to live, which is the same reason changes.ts
+   * keeps its own reader unexported.
+   *
+   * `contains` is matched in memory rather than as a SQL LIKE. Notes are few and hand written,
+   * the comparison is case insensitive on both sides, and a LIKE would need its own escaping for
+   * the percent signs and underscores a person can perfectly well type into a note.
+   */
+  notes(input: {
+    from: string
+    to: string
+    contains?: string
+  }): StoredNote[] {
+    requireRange(input.from, input.to)
+    const rows = new NoteStore(this.#db).listFor(this.#personId, input.from, input.to)
+    if (input.contains === undefined || input.contains === '') return rows
+    const needle = input.contains.toLowerCase()
+    return rows.filter((note) => note.body.toLowerCase().includes(needle))
+  }
+
+  /** The person's typed events in a local date range. Bound here for the reason `notes` gives. */
+  events(input: {
+    from: string
+    to: string
+  }): StoredEvent[] {
+    requireRange(input.from, input.to)
+    return new EventStore(this.#db).listFor(this.#personId, input.from, input.to)
   }
 }
 
