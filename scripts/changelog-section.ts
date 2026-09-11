@@ -51,7 +51,7 @@ async function main() {
   if (body === null) {
     console.error(
       `No "## [${section}]" section with content found in ${changelogPath}. ` +
-        'Add one before tagging a release -- see the Contributing section of README.md.',
+        'Add one before tagging a release -- see CONTRIBUTING.md.',
     )
     process.exitCode = 1
     return
