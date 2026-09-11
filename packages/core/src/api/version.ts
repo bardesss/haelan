@@ -26,12 +26,25 @@
  *    rows inside a migration transaction, which means a person stamped 3 has no samples at all
  *    rather than samples in the older shape, and this bump is the whole of what refills them from
  *    the archive on the first boot after the upgrade.
- * 5: M8a widens a session's `attrs` from seven keys to fourteen. Laps, automatic splits, pause and
- *    resume events, moving time, the workout's own name, its notes and its GPS flag were all in
- *    the Exercise payload and none of them reached tier 2, so a session row built under 4 cannot
- *    answer a detail page at all. The archive holds every payload they are re-mapped from, which
- *    is what makes this a bump rather than a re-fetch: history becomes detailed, not only future
- *    workouts. Sessions are a rounding error against `samples`, so the disk cost is not
- *    measurable next to the rebuild the bump triggers.
+ * 5: M8a widens a session's `attrs` from seven keys to fourteen. Automatic splits, exercise
+ *    events, moving time, the workout's own name, its notes, its GPS flag and laps were in the
+ *    Exercise payload and none of them reached tier 2, so a session row built under 4 cannot
+ *    answer a detail page at all. What the bump is actually worth is measured rather than
+ *    assumed, because a bump justified by a field nobody has is a rebuild spent on nothing: a
+ *    read-only probe over the raw archive on 2026-09-11, 15,982 archived exercise payload rows
+ *    deduplicated to 197 distinct sessions, found five of the added fields present -
+ *    `activeDuration` 197 of 197, `displayName` 197, `exerciseEvents` 95, `hasGps` true on 40,
+ *    `splits` 37 - and `notes` observed but rare, 4 of 197. The sixth, `splitSummaries`, is where
+ *    a recorded lap would live; it is in the v4 schema and in none of the 197 sessions, and every
+ *    `splitType` any device here has written, across every split, is `DISTANCE`. It is therefore
+ *    mapped for the schema rather than on evidence, and a later bump should not cite it as one of
+ *    the things this one recovered. The event types are characterised, not merely counted: 257
+ *    entries, `START` 96, `STOP` 117, `PAUSE` 44, every entry typed, and no `RESUME`, `AUTO_PAUSE`
+ *    or `AUTO_RESUME` anywhere - so a pause is observed here and the resume that would close it
+ *    never is. The archive holds every payload all of this is re-mapped from, which is what makes
+ *    this a bump rather than a re-fetch: history becomes detailed, not only future workouts.
+ *    Sessions are a rounding error against `samples` - 434 of them against 2,138,327 sample rows
+ *    on the same instance - so the disk cost is not measurable next to the rebuild the bump
+ *    triggers.
  */
 export const MAPPING_VERSION = 5

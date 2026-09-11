@@ -50,7 +50,7 @@ tracked, so this file is the only place any of it exists.
 | **M6** What only the archive can answer | Source staleness, so a source that quietly stopped reporting says so instead of thinning a chart; all-time records and a milestones timeline; and an Eddington style number, which needs every day on disk to compute at all | Not started |
 | **M8a** Detail page spine | A session's `attrs` widened from seven keys to fourteen, and the archive re-mapped onto them by a mapping bump; one session by id; and intraday samples over a UTC window, which is the only shape a night crossing midnight has | Done, [#141](https://github.com/bardesss/haelan/pull/141) |
 | **M7** The small screen | A layout that works on a phone: the rail driven by the viewport rather than only by a toggle, the charts and the eight pages below 620px, and the wizard, which is the one flow a person is most likely to walk holding a phone | Not started |
-| **M8** Detail pages | A workout page and a night page: laps, pause markers, moving time, zones and running dynamics recovered from the archive; the overnight traces a date-keyed read cannot express; and session-scope exclusion, which the server has had since M3c and no browser could reach | In review |
+| **M8** Detail pages | A workout page and a night page: automatic splits, pause markers, moving time, zones and running dynamics recovered from the archive - laps are mapped for the v4 schema and no archived payload here carries one; the overnight traces a date-keyed read cannot express; and session-scope exclusion, which the server has had since M3c and no browser could reach | In review |
 
 ## Why the order is not alphabetical
 
@@ -140,7 +140,11 @@ direction only: `notes` **is** observed — rare, 4 of 197 — so M4a-1's rule n
 as an observed field rather than a schema-only one. `splitSummaries` stays schema-only, and the
 finding is now stronger, not weaker: zero of 197 sessions carry it, and every `splitType` recorded
 by any device this household uses, across every split and lap in the archive, is `DISTANCE` — no
-manual lap has ever been recorded. M4a-1 declined to design around a field it had not observed, and
+manual lap has ever been recorded. The same probe characterises the events, which until then were
+only counted: 257 entries across those sessions, `START` 96, `STOP` 117 and `PAUSE` 44, every one
+of them carrying a type, and not one `RESUME`, `AUTO_PAUSE` or `AUTO_RESUME`. A pause is real here;
+the resume that would close it has never been recorded, which is a fact M8b's shading has to face
+rather than a gap in the mapping. M4a-1 declined to design around a field it had not observed, and
 recording an unobserved field here as an observed one would be that same mistake; the correction
 above is the opposite mistake avoided in the other direction, now that the evidence has changed.
 
