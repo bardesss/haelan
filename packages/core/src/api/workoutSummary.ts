@@ -171,12 +171,30 @@ function instantOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/**
+ * A decoded shape whose every member is null is not a thin record, it is an absent one. The
+ * provider's empty object and a field it never sent are the same statement about the workout, and
+ * answering the first as an object while answering the second as null would leave every call site
+ * writing its own "is any of this non-null?" test before it could render anything - which is the
+ * exact branch this module exists to spare them. One rule, applied at each decoder that builds a
+ * fixed-member shape, rather than three call sites each remembering it.
+ *
+ * Object.values, not a hand-written list of members: a member added to one of these shapes later
+ * is then covered without this function having to be edited to know about it.
+ */
+function nullIfAllNull<T extends object>(shape: T): T | null {
+  return Object.values(shape).every((member) => member === null) ? null : shape
+}
+
+// An entry carrying nothing readable at all is dropped for the same reason zonesFrom answers null
+// for an empty object: a row of seven nulls is a row a lap table would render as blank cells,
+// which says a lap happened and says nothing about it. One readable member is enough to keep it.
 function splitFrom(entry: unknown): WorkoutSplit | null {
   if (!isRecord(entry)) return null
   const metrics = isRecord(entry.metricsSummary) ? entry.metricsSummary : {}
   const distanceMillimeters = numberOrNull(metrics.distanceMillimeters)
   const paceSecondsPerMeter = numberOrNull(metrics.averagePaceSecondsPerMeter)
-  return {
+  return nullIfAllNull({
     startMs: instantOrNull(entry.startTime),
     endMs: instantOrNull(entry.endTime),
     splitType: typeof entry.splitType === 'string' ? entry.splitType : null,
@@ -184,32 +202,38 @@ function splitFrom(entry: unknown): WorkoutSplit | null {
     distanceMeters: distanceMillimeters === null ? null : distanceMillimeters / MILLIMETERS_PER_METER,
     paceSecondsPerKm: paceSecondsPerMeter === null ? null : paceSecondsPerMeter * METERS_PER_KM,
     averageHeartRateBpm: numberOrNull(metrics.averageHeartRateBeatsPerMinute),
-  }
+  })
 }
 
-// An entry that is not an object is dropped rather than thrown on, and an absent array reads the
-// same as an empty one: both render no table, and a caller that had to distinguish them would
-// write the same branch at every call site.
+// An entry that is not an object is dropped rather than thrown on, as is one that decoded to
+// nothing readable (splitFrom's own comment says why), and an absent array reads the same as an
+// empty one: both render no table, and a caller that had to distinguish them would write the same
+// branch at every call site.
 function splitsFrom(value: unknown): WorkoutSplit[] {
   if (!Array.isArray(value)) return []
   return value.map(splitFrom).filter((split): split is WorkoutSplit => split !== null)
 }
 
+// null for an object carrying no readable zone at all, not four nulls: `zones === null` is already
+// how a caller asks "is there a zone breakdown to render?", and an empty object answering an
+// object would make that question wrong in exactly the case it is asked about.
 function zonesFrom(value: unknown): HeartRateZoneDurations | null {
   if (!isRecord(value)) return null
-  return {
+  return nullIfAllNull({
     lightSeconds: durationSecondsOrNull(value.lightTime),
     moderateSeconds: durationSecondsOrNull(value.moderateTime),
     vigorousSeconds: durationSecondsOrNull(value.vigorousTime),
     peakSeconds: durationSecondsOrNull(value.peakTime),
-  }
+  })
 }
 
+// Same rule as zonesFrom: `mobility === null` means "not an advanced run, render no card", and an
+// empty object is that same workout.
 function mobilityFrom(value: unknown): MobilityMetrics | null {
   if (!isRecord(value)) return null
   const strideMillimeters = numberOrNull(value.avgStrideLengthMillimeters)
   const oscillationMillimeters = numberOrNull(value.avgVerticalOscillationMillimeters)
-  return {
+  return nullIfAllNull({
     cadenceStepsPerMinute: numberOrNull(value.avgCadenceStepsPerMinute),
     strideLengthMeters: strideMillimeters === null ? null : strideMillimeters / MILLIMETERS_PER_METER,
     groundContactTimeSeconds: durationSecondsOrNull(value.avgGroundContactTimeDuration),
@@ -217,18 +241,35 @@ function mobilityFrom(value: unknown): MobilityMetrics | null {
       ? null
       : oscillationMillimeters / MILLIMETERS_PER_METER,
     verticalRatio: numberOrNull(value.avgVerticalRatio),
-  }
+  })
 }
 
-// Kept even when the instant will not parse, unlike splitFrom's non-object guard: an event whose
-// time is unreadable is still evidence the device recorded a pause, and dropping it would turn a
-// paused run into one that never stopped. A non-object entry carries no such evidence.
+/**
+ * Kept even when the instant will not parse, unlike splitFrom's non-object guard: an event whose
+ * time is unreadable is still evidence the device recorded a pause, and dropping it would turn a
+ * paused run into one that never stopped. A non-object entry carries no such evidence.
+ *
+ * The line is drawn at neither half surviving. An entry with no parseable time *and* no event
+ * type decodes to `{ atMs: null, kind: null }` - something unnamed happened at no particular
+ * moment - which is evidence of nothing and cannot be rendered as anything: an unlabelled marker
+ * at an unknown place on the trace. Either half alone is kept, because either half alone still
+ * says something true. That asymmetry is deliberate and it is the whole rule: a marker is worth
+ * keeping while any part of it is still readable.
+ *
+ * What makes the kept-with-a-broken-time case the one worth protecting: `PAUSE` is the only
+ * mid-session event type this household's archive has ever held - 44 of 257 entries, the rest
+ * `START` 96 and `STOP` 117, with no `RESUME`, `AUTO_PAUSE` or `AUTO_RESUME` anywhere - so the
+ * entry whose timestamp broke is likely to be the pause a workout page most wants. Every measured
+ * entry did carry a type, so the dropped case is defensive rather than observed. Decoding stays as
+ * wide as the v4 schema regardless: a type this device never writes is not a type to stop reading,
+ * since another device may write it.
+ */
 function eventsFrom(value: unknown): WorkoutEvent[] {
   if (!Array.isArray(value)) return []
   return value.filter(isRecord).map((entry) => ({
     atMs: instantOrNull(entry.eventTime),
     kind: typeof entry.exerciseEventType === 'string' ? entry.exerciseEventType : null,
-  }))
+  })).filter((event) => event.atMs !== null || event.kind !== null)
 }
 
 /**

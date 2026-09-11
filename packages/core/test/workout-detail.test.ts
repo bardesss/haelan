@@ -60,6 +60,32 @@ describe('workoutDetail', () => {
     expect(EMPTY.zones).toBeNull()
   })
 
+  it('answers null zones for an object carrying no readable zone, not four nulls', () => {
+    // The caller's question is "is there a breakdown to render?", and it asks it as
+    // `zones === null`. An object of four nulls would answer yes and then render four blanks, so
+    // every call site would need a second any-non-null test - the branch this module exists to
+    // spare them.
+    expect(workoutDetail({ metricsSummary: { heartRateZoneDurations: {} } }).zones).toBeNull()
+    expect(workoutDetail({
+      metricsSummary: { heartRateZoneDurations: { lightTime: 'not a duration' } },
+    }).zones).toBeNull()
+  })
+
+  it('answers null mobility for an object carrying no readable metric, by the same rule', () => {
+    expect(workoutDetail({ metricsSummary: { mobilityMetrics: {} } }).mobility).toBeNull()
+  })
+
+  it('keeps zones when one member is readable and the rest are absent', () => {
+    // The rule is "every member null", not "any member null": a device that recorded only time in
+    // the peak zone still recorded something, and dropping it would lose a real measurement.
+    const zones = workoutDetail({
+      metricsSummary: { heartRateZoneDurations: { peakTime: '120s' } },
+    }).zones
+    expect(zones).not.toBeNull()
+    expect(zones?.peakSeconds).toBe(120)
+    expect(zones?.lightSeconds).toBeNull()
+  })
+
   it('reads the five mobility metrics, converting the millimetre ones', () => {
     const d = workoutDetail({
       metricsSummary: {
@@ -156,6 +182,33 @@ describe('workoutDetail', () => {
     expect(workoutDetail({ exerciseEvents: ['nonsense', null, 7] }).events).toEqual([])
   })
 
+  it('drops an event with neither a readable time nor a type, which is evidence of nothing', () => {
+    // { atMs: null, kind: null } says something unnamed happened at no particular moment. It
+    // cannot be shaded, labelled or counted as a pause, so keeping it would put an unexplainable
+    // marker in the array rather than preserve a fact about the workout.
+    const d = workoutDetail({
+      exerciseEvents: [{ eventTime: 'not a time' }, {}, { exerciseEventType: 7 }],
+    })
+    expect(d.events).toEqual([])
+  })
+
+  it('keeps an event with only one of the two, in either direction', () => {
+    // The other direction of the same rule, which is where the line is actually drawn: either
+    // half alone still says something true, so either half alone is kept. A typed event with a
+    // broken clock is the case this protects, and PAUSE is the only mid-session type this
+    // household's archive holds.
+    const d = workoutDetail({
+      exerciseEvents: [
+        { eventTime: 'not a time', exerciseEventType: 'PAUSE' },
+        { eventTime: '2026-08-18T06:12:00Z' },
+      ],
+    })
+    expect(d.events).toEqual([
+      { atMs: null, kind: 'PAUSE' },
+      { atMs: Date.parse('2026-08-18T06:12:00Z'), kind: null },
+    ])
+  })
+
   it('answers an empty events array for a workout that recorded none', () => {
     expect(EMPTY.events).toEqual([])
   })
@@ -166,6 +219,16 @@ describe('workoutDetail', () => {
     // render the same absent table.
     expect(EMPTY.autoSplits).toEqual([])
     expect(EMPTY.laps).toEqual([])
+  })
+
+  it('drops a split entry carrying nothing readable, and keeps one carrying anything', () => {
+    // A row of seven nulls renders as a lap that happened at no time, for no distance, at no
+    // pace. One readable member is enough to keep the row, because then the table has something
+    // to say.
+    const d = workoutDetail({ splits: [{}, { metricsSummary: {} }, { splitType: 'DISTANCE' }] })
+    expect(d.autoSplits).toHaveLength(1)
+    expect(d.autoSplits[0]?.splitType).toBe('DISTANCE')
+    expect(d.autoSplits[0]?.distanceMeters).toBeNull()
   })
 
   it('drops a split entry that is not an object rather than throwing', () => {
