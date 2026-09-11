@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.4.0](https://github.com/bardesss/haelan/compare/v1.3.0...v1.4.0) (2026-09-11)
+
+
+### Features
+
+* an account's name, username, timezone and password can be changed after it is created ([#136](https://github.com/bardesss/haelan/issues/136)) ([b6153bf](https://github.com/bardesss/haelan/commit/b6153bf6b0325f9abab48bf9ffdb686ff76740f9))
+
+
+### Bug Fixes
+
+* release-please can find its own releases again, so the version stops being fiction ([#135](https://github.com/bardesss/haelan/issues/135)) ([46660de](https://github.com/bardesss/haelan/commit/46660dedecf07493e2952278236d90b466ce4f4f))
+
 ## [1.3.0](https://github.com/bardesss/haelan/compare/v1.2.0...v1.3.0) (2026-09-11)
 
 
