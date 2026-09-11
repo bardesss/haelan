@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import {
   PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
-  NoteStore, EventStore,
+  NoteStore, EventStore, ConfigError,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
@@ -49,6 +49,22 @@ function dateOf(day: number): string {
   const base = new Date(Date.UTC(2026, 0, 1))
   base.setUTCDate(base.getUTCDate() + day)
   return base.toISOString().slice(0, 10)
+}
+
+function seedExerciseSession(input: {
+  id: string
+  sourceId?: string
+  startMs: number
+  endMs: number
+  localDate: string
+  attrs: Record<string, unknown>
+}): void {
+  test.db.insert(schema.sessions).values({
+    id: input.id, personId: 'robin', sourceId: input.sourceId ?? 'watch', kind: 'exercise',
+    externalId: input.id, startMs: input.startMs, startOffsetMinutes: 120,
+    endMs: input.endMs, endOffsetMinutes: 120, localDate: input.localDate, rawPayloadId: null,
+    attrs: JSON.stringify(input.attrs),
+  }).run()
 }
 
 describe('describe_person', () => {
@@ -242,6 +258,120 @@ describe('get_events', () => {
     expect(out.events[0]!.kind).toBe('caffeine')
     expect(out.events[0]!.value).toBe(1)
     expect(out.events[0]!.note.untrustedText).toBeNull()
+  })
+})
+
+describe('get_workouts', () => {
+  it('filtered to RUNNING with last 2 returns the two most recent runs and no ride', () => {
+    const day = (n: number) => Date.UTC(2026, 7, n, 7, 0)
+    seedExerciseSession({
+      id: 'run-1', startMs: day(1), endMs: day(1) + 30 * 60_000, localDate: '2026-08-01',
+      attrs: { exerciseType: 'RUNNING' },
+    })
+    seedExerciseSession({
+      id: 'ride-1', startMs: day(2), endMs: day(2) + 30 * 60_000, localDate: '2026-08-02',
+      attrs: { exerciseType: 'BIKING' },
+    })
+    seedExerciseSession({
+      id: 'run-2', startMs: day(3), endMs: day(3) + 30 * 60_000, localDate: '2026-08-03',
+      attrs: { exerciseType: 'RUNNING' },
+    })
+    seedExerciseSession({
+      id: 'run-3', startMs: day(4), endMs: day(4) + 30 * 60_000, localDate: '2026-08-04',
+      attrs: { exerciseType: 'RUNNING' },
+    })
+
+    const out = tool('get_workouts').run(q(), {
+      kind: 'exercise', from: '2026-08-01', to: '2026-08-04', type: 'RUNNING', last: 2,
+    }) as { workouts: { sessionId: string, exerciseType: string | null }[] }
+
+    expect(out.workouts.map((w) => w.sessionId)).toEqual(['run-2', 'run-3'])
+    expect(out.workouts.every((w) => w.exerciseType === 'RUNNING')).toBe(true)
+  })
+})
+
+describe('get_workout', () => {
+  const START = Date.UTC(2026, 7, 10, 7, 0)
+  const END = START + 10 * 60_000
+
+  function seedRun(attrs: Record<string, unknown>): void {
+    seedExerciseSession({
+      id: 'run-x', startMs: START, endMs: END, localDate: '2026-08-10',
+      attrs: {
+        exerciseType: 'RUNNING',
+        displayName: 'Evening Run',
+        notes: 'legs felt heavy',
+        activeDuration: '600s',
+        ...attrs,
+      },
+    })
+  }
+
+  function seedHeartRate(): void {
+    for (let i = 0; i < 10; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, {
+          personId: 'robin', sourceId: 'watch', metric: 'heart_rate',
+          utcMs: START + i * 60_000, tzOffsetMinutes: 120, agg, value: 120 + i,
+        })
+      }
+    }
+  }
+
+  it('returns the decoded detail and a heart-rate trace over the session\'s own span', () => {
+    seedRun({
+      metricsSummary: {
+        caloriesKcal: 400,
+        distanceMillimeters: 5_000_000,
+        heartRateZoneDurations: {
+          lightTime: '200s', moderateTime: '300s', vigorousTime: '80s', peakTime: '20s',
+        },
+      },
+    })
+    seedHeartRate()
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      sessionId: string
+      exerciseType: string | null
+      caloriesKcal: number | null
+      distanceMeters: number | null
+      displayName: { untrustedText: string | null }
+      notes: { untrustedText: string | null }
+      activeDurationSeconds: number | null
+      zones: { lightSeconds: number | null, peakSeconds: number | null } | null
+      trace: { metric: string, points: unknown[], summary: { n: number } }[]
+    }
+
+    expect(out.sessionId).toBe('run-x')
+    expect(out.exerciseType).toBe('RUNNING')
+    expect(out.caloriesKcal).toBe(400)
+    expect(out.distanceMeters).toBe(5000)
+    expect(out.displayName.untrustedText).toBe('Evening Run')
+    expect(out.notes.untrustedText).toBe('legs felt heavy')
+    expect(out.activeDurationSeconds).toBe(600)
+    expect(out.zones?.lightSeconds).toBe(200)
+    expect(out.zones?.peakSeconds).toBe(20)
+    expect(out.trace).toHaveLength(1)
+    expect(out.trace[0]!.metric).toBe('heart_rate')
+    expect(out.trace[0]!.points).toHaveLength(10)
+    expect(out.trace[0]!.summary.n).toBe(10)
+  })
+
+  it('answers autoSplits and laps as empty arrays, not null, for a workout that recorded neither', () => {
+    seedRun({ metricsSummary: { caloriesKcal: 400 } })
+    seedHeartRate()
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      autoSplits: unknown[]
+      laps: unknown[]
+    }
+
+    expect(out.autoSplits).toEqual([])
+    expect(out.laps).toEqual([])
+  })
+
+  it('answers a tool error, not an empty object, for a session id that names nothing', () => {
+    expect(() => tool('get_workout').run(q(), { sessionId: 'does-not-exist' })).toThrow(ConfigError)
   })
 })
 
