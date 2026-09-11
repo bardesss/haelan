@@ -15,7 +15,7 @@ const WORKERS = Math.max(1, Math.min(6, cpus().length - 1))
 
 export default defineConfig({
   test: {
-    include: ['packages/**/test/**/*.test.ts?(x)', 'apps/**/test/**/*.test.ts?(x)'],
+    include: ['packages/**/test/**/*.test.ts?(x)', 'apps/**/test/**/*.test.ts?(x)', 'scripts/test/**/*.test.ts'],
     // Well above vitest's 5s default, because a lot of this suite is not unit work: a sync run
     // walks eighteen data types, gzips a payload per window and commits each one through
     // SQLite, and argon2 is deliberately expensive. Under the parallelism of a full run those
