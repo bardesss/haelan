@@ -13,6 +13,11 @@ probe/findings/token-log.jsonl
 *.tsbuildinfo
 # A local instance's data directory: a real refresh token and real health data.
 .local-data/
+# Any other local instance, including the ones scripts/seed-demo.mjs exists to create. Only
+# .local-data was listed, so a seeded demo directory beside it was tracked by default: harmless
+# in content, since the seed is synthetic, and still a database committed to a public repository
+# by accident. The glob covers the next one too.
+.local-*/
 
 # Linked worktrees. Kept out of the tree they live in: a git add -A from the repository root
 # would otherwise record one as an embedded repository and commit a gitlink nobody wanted.
