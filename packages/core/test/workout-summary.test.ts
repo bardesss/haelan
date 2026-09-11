@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { numberOrNull, workoutSummary } from '../src/data/workoutSummary.js'
+import { numberOrNull, workoutSummary } from '../src/api/workoutSummary.ts'
 
 describe('numberOrNull', () => {
   // The whole reason this function exists. Number(null) is 0 and Number('') is 0, so a reader that
@@ -104,5 +106,26 @@ describe('workoutSummary', () => {
       expect(() => workoutSummary(junk)).not.toThrow()
       expect(workoutSummary(junk).exerciseType).toBeNull()
     }
+  })
+})
+
+// Matches an `import` statement of any shape, and also an `export ... from '...'` re-export, which
+// pulls a module in exactly as surely as an import does but carries no `import` keyword. Lifted
+// from target-key-subpath.test.ts, which uses the same scan for the same guarantee; a bare
+// `export interface` or `export function` line has no `from '...'` clause and does not match.
+const IMPORT_LINE = /^(?:import\s.*|export\s.*\bfrom\s*['"].*)$/gm
+
+describe('the decoder stays importable from a browser bundle', () => {
+  // An allow-list with nothing on it, rather than three forbidden names. The names were the wrong
+  // shape twice over: a dynamic `await import('better-sqlite3')` carries no `from` clause and slid
+  // straight past them, and - far likelier - so did a TRANSITIVE pull, since `import { metricSpec }
+  // from '../derive/metrics.ts'` names none of the three and still drags whatever that file grows
+  // to reach into the browser bundle. A module with no imports has a module graph of exactly
+  // itself, which is the same fact metrics-subpath.test.ts rests its own subpath on, and it holds
+  // under any bundler with no configuration to get wrong.
+  it('imports nothing at all, which is what makes it bundler-proof', () => {
+    const source = readFileSync(fileURLToPath(new URL('../src/api/workoutSummary.ts', import.meta.url)), 'utf8')
+    const importLines = [...source.matchAll(IMPORT_LINE)].map((m) => m[0])
+    expect(importLines, 'workoutSummary.ts must import nothing').toEqual([])
   })
 })

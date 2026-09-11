@@ -1,7 +1,7 @@
 import { useTranslation } from '../../i18n/index.js'
 import { formatNumber, formatSessionDateHeading } from '../../format.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
-import { workoutSummary } from '../../data/workoutSummary.js'
+import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
 
 /**

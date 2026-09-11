@@ -5,6 +5,8 @@ import { PersonQuery } from '../src/query/personQuery.ts'
 import { daily, sessions, sources } from '../src/db/schema/index.ts'
 import type { SessionKind } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
+import { NoteStore } from '../src/store/notes.ts'
+import { EventStore } from '../src/store/events.ts'
 
 let test: TestDatabase
 let alice: PersonQuery
@@ -109,6 +111,25 @@ describe('PersonQuery isolation, the readers bound to samples and sessions', () 
     expect(out.points.map((p) => p.mean)).toEqual([60])
   })
 
+  it('reads a sample window only for its own person', () => {
+    // The window reader has no local date to narrow by and queries on utcMs alone, so the person
+    // clause is the only thing separating the two rows below. Its own test file seeds one person
+    // and could not have caught a missing one.
+    insertSource('alice-watch', 'alice')
+    insertSource('bart-watch', 'bart')
+    insertSample(test.db, {
+      personId: 'alice', sourceId: 'alice-watch', metric: 'heart_rate', utcMs: AT,
+      agg: 'mean', value: 60,
+    })
+    insertSample(test.db, {
+      personId: 'bart', sourceId: 'bart-watch', metric: 'heart_rate', utcMs: AT,
+      agg: 'mean', value: 150,
+    })
+
+    const out = alice.intradayWindow({ metric: 'heart_rate', startMs: AT - H, endMs: AT + H })
+    expect(out.points.map((p) => p.mean)).toEqual([60])
+  })
+
   it('reads sleep nights only for its own person', () => {
     insertSource('alice-watch', 'alice')
     insertSource('bart-watch', 'bart')
@@ -158,5 +179,40 @@ describe('PersonQuery isolation, the readers bound to samples and sessions', () 
 
     const out = alice.sessions({ kind: 'exercise', from: '2026-08-01', to: '2026-08-01' })
     expect(out.map((s) => s.id)).toEqual(['alice-run'])
+  })
+})
+
+/**
+ * The two readers that reach a store rather than a table of their own. NoteStore.listFor and
+ * EventStore.listFor both take a person id as a plain argument, so the binding these assert is
+ * PersonQuery's alone: a tool body holding either store could name anybody in the household.
+ *
+ * person-query-notes-events.test.ts asserts this too, next to each reader's own behaviour. It is
+ * repeated here because this is the file somebody auditing person isolation opens, and a reader
+ * absent from it reads as a reader nobody checked.
+ */
+describe('PersonQuery isolation, the readers bound to a person\'s own writing', () => {
+  const AT = Date.UTC(2026, 7, 1, 9, 0)
+
+  it('reads notes only for its own person', () => {
+    const notes = new NoteStore(test.db)
+    notes.put({ personId: 'alice', localDate: '2026-08-01', body: 'alice wrote this', nowMs: 0 })
+    notes.put({ personId: 'bart', localDate: '2026-08-01', body: 'bart wrote this', nowMs: 0 })
+
+    const rows = alice.notes({ from: '2026-08-01', to: '2026-08-01' })
+    expect(rows.map((n) => n.body)).toEqual(['alice wrote this'])
+  })
+
+  it('reads events only for its own person', () => {
+    const events = new EventStore(test.db)
+    events.add({
+      personId: 'alice', kind: 'illness', startedAtMs: AT, startedAtOffsetMinutes: 0, note: 'alice',
+    })
+    events.add({
+      personId: 'bart', kind: 'illness', startedAtMs: AT, startedAtOffsetMinutes: 0, note: 'bart',
+    })
+
+    const rows = alice.events({ from: '2026-08-01', to: '2026-08-01' })
+    expect(rows.map((e) => e.note)).toEqual(['alice'])
   })
 })

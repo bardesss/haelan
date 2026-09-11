@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, SESSION_KINDS, sources } from '../db/schema/index.ts'
+import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { ConfigError } from '../errors.ts'
@@ -15,7 +16,7 @@ import type { Insight, PeriodPoint } from './insights.ts'
 import { shiftLocalDate } from '../derive/localDay.ts'
 import { thin } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
-import { readIntraday } from './intraday.ts'
+import { readIntraday, readIntradayWindow } from './intraday.ts'
 import type { IntradayResult } from './intraday.ts'
 import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
@@ -25,6 +26,10 @@ import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
 import { readChanges } from './changes.ts'
 import type { ChangesResult } from './changes.ts'
+import { NoteStore } from '../store/notes.ts'
+import type { StoredNote } from '../store/notes.ts'
+import { EventStore } from '../store/events.ts'
+import type { StoredEvent } from '../store/events.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -46,6 +51,19 @@ export interface SeriesResult {
   points: DailyPoint[]
   reduction: Thinned<DailyPoint>['reduction']
 }
+
+/**
+ * The widest span `intradayWindow` will read.
+ *
+ * 48 rather than 24 because the two questions the window exists for both cross a midnight: a night
+ * runs 23:15 to 07:02, and a caller asking for "yesterday and today" of a person in a different
+ * zone is not making a mistake. It is the number M8's design chose independently for the same
+ * function, and taking that one rather than picking a second means the HTTP route and the tool
+ * surface cannot come to disagree about what is too much to ask for.
+ */
+const MAX_WINDOW_HOURS = 48
+
+const MAX_WINDOW_MS = MAX_WINDOW_HOURS * 3_600_000
 
 /**
  * Everything a surface asks of the store, bound to one person at construction.
@@ -90,6 +108,7 @@ export class PersonQuery {
   }): SeriesResult {
     requireMetricAndAgg(input.metric, input.agg)
     requireRange(input.from, input.to)
+    requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const source = input.source
@@ -236,11 +255,58 @@ export class PersonQuery {
   }): IntradayResult {
     requireMetric(input.metric)
     requireDate('localDate', input.localDate)
+    requireOptionalPositiveInteger('points', input.points)
     requireSource(this.#db, this.#personId, input.sourceId, [])
     return readIntraday(this.#db, {
       personId: this.#personId,
       metric: input.metric,
       localDate: input.localDate,
+      points: input.points,
+      sourceId: input.sourceId,
+    })
+  }
+
+  /**
+   * Per-minute samples over an arbitrary UTC span, thinned against that span.
+   *
+   * The budget is the reason this is separate from `intraday`: a workout is minutes long inside a
+   * day that is 1,440, and a day-wide budget spends almost none of itself on it.
+   *
+   * Bounded at 48 hours, which is this surface's only span limit and has to be: `intraday` is
+   * bounded by construction at one local day, while the reader underneath this one selects every
+   * sample row in the span into JS before pivoting, and a year of heart rate is about 1.5 million
+   * of them. `startMs: 0` is a perfectly plausible thing for a language model to send.
+   */
+  intradayWindow(input: {
+    metric: string
+    startMs: number
+    endMs: number
+    points?: number
+    sourceId?: string
+  }): IntradayResult {
+    requireMetric(input.metric)
+    requireFiniteNumber('startMs', input.startMs)
+    requireFiniteNumber('endMs', input.endMs)
+    // Before the span cap, never after. A reversed window is not a wide one, and a cap tested
+    // first would answer `startMs` after `endMs` with a complaint about a limit it does not
+    // exceed - sending whoever read it to shorten a window that was never too long.
+    if (input.startMs > input.endMs) {
+      throw new ConfigError(`startMs ${input.startMs} is after endMs ${input.endMs}`)
+    }
+    if (input.endMs - input.startMs > MAX_WINDOW_MS) {
+      throw new ConfigError(
+        `the window must be at most ${MAX_WINDOW_HOURS} hours, got ${
+          Math.round((input.endMs - input.startMs) / 3_600_000)} hours. Use series or intraday for `
+        + 'a longer span, which read derived rows rather than every sample in it.',
+      )
+    }
+    requireOptionalPositiveInteger('points', input.points)
+    requireSource(this.#db, this.#personId, input.sourceId, [])
+    return readIntradayWindow(this.#db, {
+      personId: this.#personId,
+      metric: input.metric,
+      startMs: input.startMs,
+      endMs: input.endMs,
       points: input.points,
       sourceId: input.sourceId,
     })
@@ -262,22 +328,42 @@ export class PersonQuery {
     })
   }
 
-  /** Sessions of one kind in a local date range. See `readSessions` for why kind is load bearing. */
+  /**
+   * Sessions of one kind in a local date range. See `readSessions` for why kind is load bearing.
+   *
+   * `type` and `latest` exist for one question an agent asks constantly and the list form answers
+   * badly: the last run. Both are validated here rather than in the reader, because this is the
+   * boundary an HTTP query string and a model's tool arguments arrive at.
+   */
   sessions(input: {
     kind: 'sleep' | 'exercise'
     from: string
     to: string
     sourceId?: string
+    type?: string
+    latest?: boolean
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
     requireSource(this.#db, this.#personId, input.sourceId, [])
+    requireExerciseType(input.type)
+    // A sleep row has no exercise type to match, so this combination answers an empty list for
+    // every range and every household - and an agent reads an empty list as "you did not run in
+    // August" rather than as "that question is malformed". Refused for the same reason a metric
+    // typo is: the only two callers are an HTTP query string and a model's tool arguments, and
+    // neither of them can tell a true empty answer from a question that could never be answered.
+    if (input.kind === 'sleep' && input.type !== undefined) {
+      throw new ConfigError(`kind 'sleep' has no exercise type to filter on, so '${input.type}' would match nothing. Use kind 'exercise' to filter by type.`)
+    }
+    requireBoolean('latest', input.latest)
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
       from: input.from,
       to: input.to,
       sourceId: input.sourceId,
+      type: input.type,
+      latest: input.latest,
     })
   }
 
@@ -328,6 +414,40 @@ export class PersonQuery {
       limit: input.limit,
       cursor: input.cursor,
     })
+  }
+
+  /**
+   * The person's notes in a local date range, oldest first, optionally narrowed to those
+   * containing a piece of text.
+   *
+   * Here rather than on NoteStore because of who calls it. NoteStore.listFor takes a person id as
+   * a plain argument, so a tool body holding the store could name anybody in the household; this
+   * class is the one place that binding is allowed to live, which is the same reason changes.ts
+   * keeps its own reader unexported.
+   *
+   * `contains` is matched in memory rather than as a SQL LIKE. Notes are few and hand written,
+   * the comparison is case insensitive on both sides, and a LIKE would need its own escaping for
+   * the percent signs and underscores a person can perfectly well type into a note.
+   */
+  notes(input: {
+    from: string
+    to: string
+    contains?: string
+  }): StoredNote[] {
+    requireRange(input.from, input.to)
+    const rows = new NoteStore(this.#db).listFor(this.#personId, input.from, input.to)
+    if (input.contains === undefined || input.contains === '') return rows
+    const needle = input.contains.toLowerCase()
+    return rows.filter((note) => note.body.toLowerCase().includes(needle))
+  }
+
+  /** The person's typed events in a local date range. Bound here for the reason `notes` gives. */
+  events(input: {
+    from: string
+    to: string
+  }): StoredEvent[] {
+    requireRange(input.from, input.to)
+    return new EventStore(this.#db).listFor(this.#personId, input.from, input.to)
   }
 }
 
@@ -384,6 +504,21 @@ function requirePositiveInteger(label: string, value: number): void {
 }
 
 /**
+ * `points` on its own, because it is optional everywhere it appears and `requirePositiveInteger`
+ * would refuse the absence as well as the mistake.
+ *
+ * The HTTP surface validates it in `optionalPositiveInt`, which is why this went unnoticed: a tool
+ * caller does not arrive through HTTP. Left unvalidated, `points: NaN` reaches `Math.max(2, NaN)`
+ * inside the downsampler, and `thinBand` then answers two points with a `reduction` claiming
+ * `to: 2` - a confident wrong answer about somebody's health record, which is the exact failure
+ * this class's rule about throwing rather than returning an emptiness exists to prevent.
+ */
+function requireOptionalPositiveInteger(label: string, value: number | undefined): void {
+  if (value === undefined) return
+  requirePositiveInteger(label, value)
+}
+
+/**
  * `since` reaches PersonQuery from an HTTP query string and a language model's tool arguments,
  * neither of which the type system protects: a value that failed to parse to a number arrives
  * here as NaN rather than being caught on the way in.
@@ -391,6 +526,21 @@ function requirePositiveInteger(label: string, value: number): void {
 function requireFiniteNumber(label: string, value: number): void {
   if (!Number.isFinite(value)) {
     throw new ConfigError(`${label} must be a number, got ${value}`)
+  }
+}
+
+/**
+ * Same reasoning as `requireSessionKind`: the type system only protects a caller written in
+ * TypeScript, and neither real consumer is one. `latest` is read with a `=== true` test in the
+ * reader, so the string `"true"` an HTTP query string carries, or the `1` a model reaches for,
+ * would quietly mean "no, give me everything" - and an agent then summarises thirty sessions as
+ * "your last run". Refused rather than coerced, because guessing which of `"true"`, `"1"` and
+ * `"yes"` were meant is how a caller learns nothing about the mistake it is making.
+ */
+function requireBoolean(label: string, value: boolean | undefined): void {
+  if (value === undefined) return
+  if (typeof value !== 'boolean') {
+    throw new ConfigError(`${label} must be true or false, got ${JSON.stringify(value)}`)
   }
 }
 
@@ -457,6 +607,17 @@ function requireSource(
 function requireSessionKind(kind: string): void {
   if (!(SESSION_KINDS as readonly string[]).includes(kind)) {
     throw new ConfigError(`kind must be one of ${SESSION_KINDS.join(', ')}, got '${kind}'`)
+  }
+}
+
+/**
+ * The provider's own vocabulary, not ours. A filter on a value Google never emits would answer
+ * an empty list, which reads as "you have not run this month" rather than "that is not a word".
+ */
+function requireExerciseType(type: string | undefined): void {
+  if (type === undefined) return
+  if (!EXERCISE_TYPES.includes(type)) {
+    throw new ConfigError(`no exercise type named '${type}'`)
   }
 }
 

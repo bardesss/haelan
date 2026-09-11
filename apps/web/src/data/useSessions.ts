@@ -5,7 +5,9 @@ import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { sourceParam } from '../controls/source.js'
 
-// Task 2's reader is the only thing allowed to look inside attrs.
+// `attrs` is the provider's payload, kept whole and unparsed. The one decoder allowed to look
+// inside it is packages/core/src/api/workoutSummary.ts, reached here through the
+// @haelan/core/workout-summary subpath; nothing in this app reads a field out of it by hand.
 export interface WorkoutSession {
   id: string
   sourceId: string

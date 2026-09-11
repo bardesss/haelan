@@ -2,9 +2,9 @@ import type { Translate } from '../format.js'
 
 /**
  * The API declares 182 exercise types (packages/core/src/api/enums.ts); this app does not import
- * that module. The boundary is @haelan/core's `exports` map, which publishes four browser-safe
- * subpaths and puts enums.ts on none of them, so reaching it would mean a fifth entry plus the
- * no-imports guard each of the four carries (metrics-subpath.test.ts explains what that guard is
+ * that module. The boundary is @haelan/core's `exports` map, which publishes six browser-safe
+ * subpaths and puts enums.ts on none of them, so reaching it would mean a seventh entry plus the
+ * no-imports guard each of the six carries (metrics-subpath.test.ts explains what that guard is
  * protecting), for a catalogue a browser label has no use for. enums.ts's own comment says only
  * why the values are there, which is drift detection against the live discovery document, and
  * states no boundary of its own.

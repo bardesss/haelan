@@ -2,6 +2,7 @@ import { and, asc, eq, gte, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { sessions, overrides as overridesTable } from '../db/schema/index.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
+import { workoutSummary } from '../api/workoutSummary.ts'
 
 // Named WorkoutSession rather than a generic SessionRow: the reader also serves readSleepNights'
 // underlying rows for kind 'sleep', but a workout list is its most interesting caller.
@@ -42,6 +43,14 @@ export function readSessions(db: DbOrTx, input: {
   from: string
   to: string
   sourceId?: string
+  /**
+   * A provider exercise type, from EXERCISE_TYPES. Applied after the blob is decoded rather than
+   * as a json_extract predicate: `attrs` field names belong to workoutSummary, and a SQL
+   * predicate naming them would be a second reader of the shape it is the only reader of.
+   */
+  type?: string
+  /** At most the most recent match, applied after `type` so it cannot answer the wrong session. */
+  latest?: boolean
 }): WorkoutSession[] {
   const rows = db.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
@@ -64,7 +73,7 @@ export function readSessions(db: DbOrTx, input: {
     excluded.set(parseSessionTarget(row.targetKey), row.reason ?? null)
   }
 
-  return rows.map((row) => ({
+  const mapped = rows.map((row) => ({
     id: row.id,
     sourceId: row.sourceId,
     startMs: row.startMs,
@@ -76,6 +85,16 @@ export function readSessions(db: DbOrTx, input: {
     excluded: excluded.has(row.id),
     excludeReason: excluded.get(row.id) ?? null,
   }))
+
+  // A session whose provider recorded no exercise type is never a match: "my last run" must not
+  // be answered by a session nobody can say was a run.
+  const matched = input.type === undefined
+    ? mapped
+    : mapped.filter((session) => workoutSummary(session.attrs).exerciseType === input.type)
+
+  // The rows arrived oldest first, so the most recent is the last one, and taking it after the
+  // type filter is what stops `latest` answering with a bike ride.
+  return input.latest === true ? matched.slice(-1) : matched
 }
 
 // attrs is stored as a JSON string so the schema does not have to know each provider's shape.

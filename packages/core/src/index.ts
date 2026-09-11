@@ -1,4 +1,7 @@
 export { openDatabase, closeDatabase, tableExists, DATABASE_FILENAME } from './db/open.ts'
+// M4a-1. The open a process that is not the server uses: read-only, migrating nothing, creating
+// no key. openHaelan does all three of those and is wrong for every surface except the server.
+export { openReadOnly } from './db/openReadOnly.ts'
 export type { Database, DbOrTx } from './db/open.ts'
 export { migrateToLatest } from './db/migrate.ts'
 export { databaseBloat, freeDiskBytes, BLOAT_FRACTION, BLOAT_FLOOR_BYTES, DISK_MARGIN } from './db/maintenance.ts'
@@ -191,3 +194,11 @@ export type { SampleText } from './db/keys.ts'
 // M5d-c. A daily compacted copy, verified before it is ever called a backup.
 export { runBackup, listBackups, pruneBackups, backupDecision, BACKUP_DIR_NAME } from './backup/runBackup.ts'
 export type { BackupFile, BackupDecision } from './backup/runBackup.ts'
+
+// M4a-1. The query layer additions the agent surface reads through, and the workout decoder two
+// apps now share. readIntradayWindow itself is deliberately absent, the same line every other
+// module level reader is on: it takes a person id as a plain argument, and PersonQuery is the
+// only way in from outside this package.
+export type { WorkoutSummary } from './api/workoutSummary.ts'
+export { workoutSummary, numberOrNull } from './api/workoutSummary.ts'
+export { EXERCISE_TYPES } from './api/enums.ts'
