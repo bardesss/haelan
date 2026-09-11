@@ -63,7 +63,9 @@ export type { QueueEntry } from './store/deriveQueue.ts'
 export { PeopleStore } from './store/people.ts'
 export type { PersonRow } from './store/people.ts'
 export { AccountStore } from './store/accounts.ts'
-export type { AccountRow, CreateAccountInput, LoginInput, LoginResult } from './store/accounts.ts'
+export type {
+  AccountRow, AccountListRow, CreateAccountInput, LoginInput, LoginResult,
+} from './store/accounts.ts'
 export { SessionStore, SESSION_TTL_MS } from './store/sessions.ts'
 export { SettingsStore, setupStep } from './store/settings.ts'
 export type { InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps } from './store/settings.ts'

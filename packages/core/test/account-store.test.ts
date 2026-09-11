@@ -73,6 +73,79 @@ describe('AccountStore', () => {
     expect(after.ok).toBe(true)
   })
 
+  it('lists every account in username order, without a hash among the fields', async () => {
+    await create()
+    seedPerson(fixture.db, 'p2')
+    await store.create({
+      id: 'a2', personId: 'p2', username: 'alice', password: 'another long password', isAdmin: false, nowMs: 2000,
+    })
+    const listed = store.list()
+    expect(listed).toEqual([
+      { id: 'a2', personId: 'p2', username: 'alice', isAdmin: false, disabledAtMs: null, lockedUntilMs: null },
+      { id: 'a1', personId: 'p1', username: 'bartus', isAdmin: true, disabledAtMs: null, lockedUntilMs: null },
+    ])
+  })
+
+  it('reports a lock it can see, which is the whole reason list exists', async () => {
+    await create()
+    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    expect(store.list().map((row) => row.lockedUntilMs)).toEqual([2000 + 15 * 60_000])
+  })
+
+  it('setPassword replaces the password and leaves admin and disabled alone', async () => {
+    await create()
+    store.disable('a1', 1500)
+    await store.setPassword('bartus', 'a brand new password')
+
+    // Disabled, so login answers bad_password whatever is typed. The columns are what can be
+    // asserted here, and that the reset did not quietly revive a suspended account is the point.
+    const row = fixture.db.$client.prepare('select * from accounts where id = ?').get('a1') as {
+      is_admin: number, disabled_at_ms: number | null, password_hash: string
+    }
+    expect(row.is_admin).toBe(1)
+    expect(row.disabled_at_ms).toBe(1500)
+    expect(row.password_hash.startsWith('$argon2id$')).toBe(true)
+
+    store.enable('a1')
+    const signedIn = await store.login({ username: 'bartus', password: 'a brand new password', nowMs: 3000 })
+    expect(signedIn.ok).toBe(true)
+  })
+
+  it('setPassword accepts the username in any case, the way login does', async () => {
+    await create()
+    await store.setPassword('  BARTUS  ', 'a brand new password')
+    const signedIn = await store.login({ username: 'bartus', password: 'a brand new password', nowMs: 3000 })
+    expect(signedIn.ok).toBe(true)
+  })
+
+  it('setPassword holds the same eight character floor as create', async () => {
+    await create()
+    await expect(store.setPassword('bartus', 'short7!')).rejects.toThrow(/at least 8 characters/)
+    const unchanged = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 3000 })
+    expect(unchanged.ok).toBe(true)
+  })
+
+  it('refuses a username it cannot find rather than silently doing nothing', async () => {
+    await create()
+    await expect(store.setPassword('nobody', 'a brand new password')).rejects.toThrow(/no account named nobody/)
+    expect(() => store.clearLockout('nobody')).toThrow(/no account named nobody/)
+  })
+
+  it('clearLockout keeps the hash, so somebody who knows their password is simply let back in', async () => {
+    await create()
+    const before = fixture.db.$client.prepare('select password_hash from accounts').get() as { password_hash: string }
+    for (let i = 0; i < 10; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })
+    expect(await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 }))
+      .toEqual({ ok: false, reason: 'locked' })
+
+    store.clearLockout('bartus')
+
+    const after = fixture.db.$client.prepare('select password_hash from accounts').get() as { password_hash: string }
+    expect(after.password_hash).toBe(before.password_hash)
+    const signedIn = await store.login({ username: 'bartus', password: 'correct horse battery staple', nowMs: 2000 })
+    expect(signedIn.ok).toBe(true)
+  })
+
   it('clears the failure count on a success, so a slow typist is not locked out tomorrow', async () => {
     await create()
     for (let i = 0; i < 9; i++) await store.login({ username: 'bartus', password: 'wrong', nowMs: 2000 })

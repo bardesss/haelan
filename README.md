@@ -241,6 +241,40 @@ poor trade afterwards - by then the repair is the thing that works, and the old 
 Worth doing once, on a copy, before you need it: the procedure is four steps and the day you first
 run it should not be the day it matters.
 
+## If you forget your password
+
+There is no reset link, and there is no route that offers one. An instance with no mail server and
+no second factor has nothing to prove that a reset request came from the person it names, so the
+proof is physical access to the machine the container runs on. That is what the console tool is.
+
+```
+docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts list
+docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts passwd bartus
+```
+
+`list` prints every account with whether it is an admin, whether it is disabled, and whether it is
+locked and until when. It never prints a hash. `passwd` asks for the new password twice on stdin,
+echoes neither, and then writes a fresh argon2id hash and clears the lockout that a forgotten
+password usually arrives with. `unlock <username>` clears only the lockout and leaves the password
+alone, which is what somebody needs who knows theirs and ran out of attempts: ten wrong ones lock
+an account for fifteen minutes.
+
+**No password is ever an argument**, and the tool refuses one given as such rather than ignoring
+it. `passwd bartus hunter2` would sit in your shell history and be readable in `ps` by every other
+user on that machine.
+
+Outside a container it is the same command against the same data directory:
+
+```
+HAELAN_DATA_DIR=./data node --experimental-strip-types apps/server/src/admin.ts list
+```
+
+It declines rather than waits when a rebuild has the database. An upgrade that changes how data is
+derived re-derives each person inside one transaction and holds SQLite's only write lock for as
+long as that takes, so `passwd` and `unlock` say the database is busy and change nothing instead of
+failing somewhere in the middle. `list` answers throughout, because readers do not queue behind a
+writer.
+
 ## Upgrading
 
 **Most upgrades cost nothing.** Pull the new image and start it. The schema migrates in
