@@ -13,6 +13,8 @@ describe('package barrel', () => {
     expect(typeof core.tableExists).toBe('function')
     expect(typeof core.DATABASE_FILENAME).toBe('string')
     expect(typeof core.migrateToLatest).toBe('function')
+    expect(typeof core.openReadOnly).toBe('function')
+    expect(typeof core.latestMigrationWhen).toBe('function')
   })
 
   it('exports the schema namespace', () => {

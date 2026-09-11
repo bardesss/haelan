@@ -1,4 +1,7 @@
 export { openDatabase, closeDatabase, tableExists, DATABASE_FILENAME } from './db/open.ts'
+// M4a-1. The open a process that is not the server uses: read-only, migrating nothing, creating
+// no key. openHaelan does all three of those and is wrong for every surface except the server.
+export { openReadOnly, latestMigrationWhen } from './db/openReadOnly.ts'
 export type { Database, DbOrTx } from './db/open.ts'
 export { migrateToLatest } from './db/migrate.ts'
 export { databaseBloat, freeDiskBytes, BLOAT_FRACTION, BLOAT_FLOOR_BYTES, DISK_MARGIN } from './db/maintenance.ts'
