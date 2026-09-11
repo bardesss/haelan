@@ -230,6 +230,51 @@ describe('useWorkoutSession', () => {
     expect(calls).toBe(1)
     expect(lastUrl).toBe(sessionPath('p1', 'run1'))
   })
+
+  // A collision here is not abstract cache hygiene: it renders one workout's data on another
+  // workout's detail page - in a health app, Tuesday's heart rate read and believed under
+  // Thursday's date. queryKeys.resource(personId, 'session', { sessionId }) is what keeps the two
+  // apart; if that ever lost its sessionId member, both mounts below would share one cache entry,
+  // the second would never fetch, and it would render the first's session instead of its own.
+  it('keeps two sessionIds from colliding on one cache entry', async () => {
+    let calls = 0
+    const urls: string[] = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls += 1
+      const url = String(input)
+      urls.push(url)
+      // Each response names which session it answers, so the DOM assertions below can tell
+      // whether a hook actually resolved its own request rather than silently reading the other
+      // session's cache entry.
+      const id = url.endsWith('/run1') ? 'run1' : url.endsWith('/run2') ? 'run2' : 'unexpected'
+      return new Response(JSON.stringify({ id }), { status: 200 })
+    }) as typeof fetch
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+
+    function ProbeA() {
+      const result = useWorkoutSession('run1')
+      return <span className="a">{result.data?.id ?? ''}</span>
+    }
+    function ProbeB() {
+      const result = useWorkoutSession('run2')
+      return <span className="b">{result.data?.id ?? ''}</span>
+    }
+    mount(<QueryClientProvider client={client}><ProbeA /><ProbeB /></QueryClientProvider>)
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    globalThis.fetch = originalFetch
+    // Two different sessions, two distinct requests. A collapsed cache key would leave this at 1:
+    // the second mount reading the first's already-cached entry instead of fetching its own.
+    expect(calls).toBe(2)
+    expect(new Set(urls)).toEqual(new Set([sessionPath('p1', 'run1'), sessionPath('p1', 'run2')]))
+
+    // Not just two requests: each hook resolves its own session, not the other's.
+    expect(container!.querySelector('.a')!.textContent).toBe('run1')
+    expect(container!.querySelector('.b')!.textContent).toBe('run2')
+  })
 })
 
 describe('useIntradayWindow', () => {
