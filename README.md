@@ -312,10 +312,14 @@ still holds the full payload of every workout you have ever synced, so the runs 
 year become as detailed as the ones you record tomorrow, with nothing re-fetched from the provider.
 
 What it costs is set by how much archive you have, not by what changed in this release, because a
-rebuild reads every archived payload back and re-derives from it either way. No timing for your
-instance can be quoted here, only the comparable ones already measured on this project: **11 to 15
-minutes** on a database holding 2.1 million sample rows, 15,982 archived payloads and 434 sessions,
-which is the author's own. A smaller history is quicker in proportion; a slower disk is not.
+rebuild reads every archived payload back and re-derives from it either way. **One rebuild has ever
+been timed on this project**, the M5d-A one above: 11 minutes 36 seconds on 1.6 million sample rows
+over 741 days. The author's instance has grown since that measurement was taken and now holds
+2,138,327 sample rows, 15,982 archived payloads and 434 sessions - about a third more rows - and no
+rebuild has been timed at that size. Scaling the one measured figure by that growth puts this one a
+little over 15 minutes, which is an extrapolation from a single measurement rather than something
+anybody has observed, and it is the only basis this README has for a number. A smaller history is
+quicker in proportion; a slower disk is not.
 
 While it runs, that person's sync is paused - the runner skips anyone waiting on a rebuild rather
 than writing new rows under one set of rules beside old rows written under another - and the
