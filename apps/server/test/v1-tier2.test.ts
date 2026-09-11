@@ -44,16 +44,17 @@ function seedIntraday(h: Harness, input: {
 }
 
 let workoutCounter = 0
-function seedWorkout(h: Harness, input: { localDate: string, sourceId?: string }): void {
+function seedWorkout(h: Harness, input: { localDate: string, sourceId?: string, exerciseType?: string }): void {
   const sourceId = input.sourceId ?? 'watch'
   seedSource(h, sourceId)
   workoutCounter += 1
   const id = `workout-${workoutCounter}`
   const startMs = Date.parse(`${input.localDate}T09:00:00Z`) - OFFSET_MINUTES * 60_000
+  const attrs = input.exerciseType === undefined ? {} : { exerciseType: input.exerciseType }
   h.app.haelan.instance.db.insert(schema.sessions).values({
     id, personId: 'p1', sourceId, kind: 'exercise', externalId: id,
     startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 3_600_000, endOffsetMinutes: OFFSET_MINUTES,
-    localDate: input.localDate, attrs: JSON.stringify({}), rawPayloadId: null,
+    localDate: input.localDate, attrs: JSON.stringify(attrs), rawPayloadId: null,
   }).run()
 }
 
@@ -169,6 +170,23 @@ describe('GET /sessions', () => {
     const third = (await get(harness, token, `${range}&limit=2&cursor=${encodeURIComponent(second.cursor)}`)).json()
 
     expect([...first.items, ...second.items, ...third.items]).toEqual(whole)
+  })
+
+  it('filters to one exercise type when asked', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, { localDate: '2026-08-01', exerciseType: 'RUNNING' })
+    seedWorkout(harness, { localDate: '2026-08-02', exerciseType: 'BIKING' })
+
+    const body = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31&type=RUNNING')).json()
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0].localDate).toBe('2026-08-01')
+  })
+
+  it('answers 400 for an exercise type not in the catalogue', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const response = await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31&type=NOT_A_REAL_TYPE')
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
   })
 })
 

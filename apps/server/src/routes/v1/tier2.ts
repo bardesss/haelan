@@ -40,6 +40,7 @@ interface SessionsQuery {
   limit?: string
   cursor?: string
   source?: string
+  type?: string
 }
 
 /**
@@ -175,6 +176,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const to = requireString(request.query.to, 'to')
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
+    const type = request.query.type
 
     // SESSION_KINDS (personQuery's own runtime validator) now also allows 'ecg', a kind this
     // route does not serve: WorkoutSession's attrs carries no ECG classification and nothing has
@@ -185,7 +187,14 @@ export function registerTier2Routes(app: FastifyInstance): void {
     if (kind !== 'sleep' && kind !== 'exercise') {
       throw new ConfigError(`kind must be one of sleep, exercise, got '${kind}'`)
     }
-    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source })
+    // type is passed straight through, unvalidated here: personQuery.sessions already checks it
+    // against EXERCISE_TYPES and refuses it alongside kind 'sleep', both as ConfigError, which the
+    // shared envelope maps to 400 the same way this route's own checks do. A second check here
+    // would just be a second guard for the same rule, free to drift from the first.
+    //
+    // `latest` is not exposed: a caller wanting one session should say so with `limit=1` against
+    // this same list rather than gain a second, narrower parameter to keep in sync with it.
+    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source, type })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
     return sendHashed(reply, request, page)
   })
