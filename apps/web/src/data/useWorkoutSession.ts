@@ -30,6 +30,18 @@ export function sessionPath(personId: string, sessionId: string): string {
  * `sessionId` is allowed to be undefined so a page can call this before its route parameter has
  * resolved, rather than every caller having to guard the call site. Undefined disables the query,
  * exactly as a missing personId does.
+ *
+ * **No write in this app can invalidate this key, and M8b has to change that.** The only
+ * invalidation mechanism here is useAnnotations' overlapsAffected, which decides a cached query is
+ * affected by reading a string `from` and a string `to` out of its key params. This key carries
+ * `{ sessionId }` and no range at all, so it never matches and is never invalidated - it simply
+ * ages out after its staleTime. Nothing in M8a can write a session, which is why this is recorded
+ * rather than fixed here: the workout page M8b builds is the first browser surface that can
+ * exclude a session, and the moment it does, this cached copy would keep reporting
+ * `excluded: false` for up to 60 seconds while the range-keyed activity list showed the exclusion
+ * immediately - two surfaces disagreeing about a correction the person just made. M8b's fix is
+ * either to call `invalidateResource(queryClient, personId, 'session')` after a session write, or
+ * to teach `overlapsAffected` a `sessionId` member so a session-scope write invalidates by id.
  */
 export function useWorkoutSession(sessionId: string | undefined): UseQueryResult<WorkoutSession> {
   const session = useSession()

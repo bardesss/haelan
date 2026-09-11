@@ -41,6 +41,16 @@ export function intradayWindowPath(
  * `options.enabled` is separate from `query` for the same reason useIntraday keeps it separate:
  * whether a caller wants the request at all is not a fact about which window to fetch, and
  * folding it into `query` would put it in the cache key and cycle the entry every time it flipped.
+ *
+ * **This key is invisible to the only invalidation this app has, the same gap useWorkoutSession
+ * records.** useAnnotations' overlapsAffected matches a cached query by reading a string `from`
+ * and a string `to` out of its key params; this key carries `{ metric, startMs, endMs, source }`,
+ * millisecond numbers rather than local dates, so no write ever matches it. A correction made on
+ * the workout page - an excluded session, a corrected sample inside the window - leaves this
+ * entry stale until its staleTime expires, while every date-keyed chart on the page updates at
+ * once. M8a has no surface that writes, so this is recorded here and fixed in M8b, by the same
+ * two options useWorkoutSession names: invalidate the resource explicitly after a session write,
+ * or teach overlapsAffected to understand a millisecond window as a range.
  */
 export function useIntradayWindow(
   query: { metric: string, startMs: number, endMs: number, source: string },
