@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.6.0](https://github.com/bardesss/haelan/compare/v1.5.0...v1.6.0) (2026-09-11)
+
+
+### Features
+
+* **core:** the detail page spine, and the archive re-mapped onto it ([#141](https://github.com/bardesss/haelan/issues/141)) ([3eb7ff7](https://github.com/bardesss/haelan/commit/3eb7ff7dcd016a79163bf12e9f63dc0ec45f1e42))
+
 ## [1.5.0](https://github.com/bardesss/haelan/compare/v1.4.0...v1.5.0) (2026-09-11)
 
 
