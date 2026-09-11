@@ -290,9 +290,16 @@ describe('runJob', () => {
       endMs: Date.parse('2026-08-18T09:00:30Z'),
       endOffsetMinutes: 120,
       localDate: '2026-08-18',
+      // mapSessions writes one attrs shape for every kind (sleep, exercise, ecg), not one shape
+      // per kind - a sleep row already resolved the exercise fields to null before M8a, and now
+      // an ecg row resolves the sleep fields AND the exercise fields to null, this test's fourteen
+      // nulls being none of them ECG-specific. Widening attrs again for a fourth kind's fields
+      // will add more nulls here too; that is this design working as intended, not a regression.
       attrs: JSON.stringify({
         type: null, mainSleep: null, stagesStatus: null, summary: null,
         metricsSummary: null, shortAwakenings: null, exerciseType: null,
+        splits: null, splitSummaries: null, exerciseEvents: null, activeDuration: null,
+        displayName: null, notes: null, exerciseMetadata: null,
       }),
       rawPayloadId: sessionRows[0]?.rawPayloadId,
     })
