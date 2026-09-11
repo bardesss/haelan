@@ -1,9 +1,10 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily, SESSION_KINDS, sources } from '../db/schema/index.ts'
+import { daily, people, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
+import { nameFor } from '../store/sourceAliases.ts'
 import { ConfigError } from '../errors.ts'
 import { baselineOf, baselineWindow, BASELINE_WINDOW_DAYS } from './baseline.ts'
 import type { Baseline } from './baseline.ts'
@@ -461,6 +462,57 @@ export class PersonQuery {
     requireRange(input.from, input.to)
     return new EventStore(this.#db).listFor(this.#personId, input.from, input.to)
   }
+
+  /**
+   * The bound person themselves: their id, display name, timezone, and the sources that have
+   * reported for them. What `describe_person` answers, and the first call the M4a-2 tool surface
+   * expects — source ids from here are what every other tool's `source` argument accepts.
+   *
+   * A missing person row is not an emptiness this throws past: construction binds `#personId`
+   * once, and a session that outlives the account it was issued for is a bug elsewhere, not a
+   * question this method can answer by degrading to nulls.
+   *
+   * `sources[].name` runs the same alias-then-display-name-then-id choice `nameFor` makes for
+   * every other surface, rather than a second copy of it living here.
+   */
+  describe(): DescribedPerson {
+    const person = this.#db.select({
+      id: people.id, displayName: people.displayName, timezone: people.timezone,
+    }).from(people).where(eq(people.id, this.#personId)).get()
+    if (person === undefined) throw new ConfigError(`no person named '${this.#personId}'`)
+
+    const rows = this.#db.select({
+      id: sources.id,
+      displayName: sources.displayName,
+      kind: sources.kind,
+      alias: sourceAliases.alias,
+    }).from(sources)
+      .leftJoin(sourceAliases, and(
+        eq(sourceAliases.personId, sources.personId),
+        eq(sourceAliases.sourceId, sources.id),
+      ))
+      .where(eq(sources.personId, this.#personId))
+      .orderBy(asc(sources.createdAtMs), asc(sources.id))
+      .all()
+
+    return {
+      id: person.id,
+      displayName: person.displayName,
+      timezone: person.timezone,
+      sources: rows.map((row) => ({
+        id: row.id,
+        name: nameFor({ id: row.id, displayName: row.displayName, alias: row.alias }),
+        kind: row.kind,
+      })),
+    }
+  }
+}
+
+export interface DescribedPerson {
+  id: string
+  displayName: string
+  timezone: string
+  sources: { id: string, name: string, kind: 'device' | 'app' | 'manual' }[]
 }
 
 /**
