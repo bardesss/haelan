@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { daily, SESSION_KINDS, sources } from '../db/schema/index.ts'
+import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { metricSpec } from '../derive/metrics.ts'
 import { ConfigError } from '../errors.ts'
@@ -262,22 +263,33 @@ export class PersonQuery {
     })
   }
 
-  /** Sessions of one kind in a local date range. See `readSessions` for why kind is load bearing. */
+  /**
+   * Sessions of one kind in a local date range. See `readSessions` for why kind is load bearing.
+   *
+   * `type` and `latest` exist for one question an agent asks constantly and the list form answers
+   * badly: the last run. Both are validated here rather than in the reader, because this is the
+   * boundary an HTTP query string and a model's tool arguments arrive at.
+   */
   sessions(input: {
     kind: 'sleep' | 'exercise'
     from: string
     to: string
     sourceId?: string
+    type?: string
+    latest?: boolean
   }): WorkoutSession[] {
     requireSessionKind(input.kind)
     requireRange(input.from, input.to)
     requireSource(this.#db, this.#personId, input.sourceId, [])
+    requireExerciseType(input.type)
     return readSessions(this.#db, {
       personId: this.#personId,
       kind: input.kind,
       from: input.from,
       to: input.to,
       sourceId: input.sourceId,
+      type: input.type,
+      latest: input.latest,
     })
   }
 
@@ -457,6 +469,17 @@ function requireSource(
 function requireSessionKind(kind: string): void {
   if (!(SESSION_KINDS as readonly string[]).includes(kind)) {
     throw new ConfigError(`kind must be one of ${SESSION_KINDS.join(', ')}, got '${kind}'`)
+  }
+}
+
+/**
+ * The provider's own vocabulary, not ours. A filter on a value Google never emits would answer
+ * an empty list, which reads as "you have not run this month" rather than "that is not a word".
+ */
+function requireExerciseType(type: string | undefined): void {
+  if (type === undefined) return
+  if (!EXERCISE_TYPES.includes(type)) {
+    throw new ConfigError(`no exercise type named '${type}'`)
   }
 }
 
