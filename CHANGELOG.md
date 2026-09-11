@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.5.0](https://github.com/bardesss/haelan/compare/v1.4.0...v1.5.0) (2026-09-11)
+
+
+### Features
+
+* **core:** the query layer M4a's agent surfaces read through ([#138](https://github.com/bardesss/haelan/issues/138)) ([73de283](https://github.com/bardesss/haelan/commit/73de28374a0af671d341cccb0a5369520c590e86))
+
 ## [1.4.0](https://github.com/bardesss/haelan/compare/v1.3.0...v1.4.0) (2026-09-11)
 
 
