@@ -1,21 +1,49 @@
 name: Release
 
+# Release Please watches master, keeps a release pull request up to date from the conventional
+# commit titles that land here, and cuts the release when that pull request is merged. Tagging by
+# hand is gone: the two times it was done in this project's first day of being public, the tag was
+# forgotten both times and the release simply did not happen.
 on:
   push:
-    tags: ['v*']
+    branches: [master]
 
-# Not cancel-in-progress: two tags pushed close together would otherwise race to write `latest`,
-# but killing a publish partway through -- after amd64 pushed, before arm64 does -- is worse than
-# making the second tag wait for the first to finish.
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+# Not cancel-in-progress: killing a publish partway through, after amd64 pushed and before arm64
+# does, is worse than making the second run wait for the first.
 concurrency:
   group: ${{ github.workflow }}
 
 jobs:
-  publish:
+  release-please:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
+    outputs:
+      released: ${{ steps.rp.outputs.release_created }}
+      version: ${{ steps.rp.outputs.version }}
+      tag: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        id: rp
+        with:
+          # A PAT rather than GITHUB_TOKEN, because a release pull request opened by
+          # `app/github-actions` gets CI runs that land in `action_required` and never start, so
+          # the required checks never report and the pull request sits blocked until somebody
+          # presses "Approve and run" by hand. The `||` keeps releases working before the secret
+          # exists: an unset secret is the empty string, which is falsy. It needs contents:write
+          # and pull-requests:write on this repository and nothing else.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Only on a release, and everything here has to pass before the release stops being a draft.
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
@@ -26,44 +54,11 @@ jobs:
           node-version: '24'
           cache: pnpm
 
-      # The commit is already green on master. This is insurance against tagging a commit whose
+      # The commit is already green on master. This is insurance against releasing a commit whose
       # CI never ran, which costs one wrong image on a registry other people pull from.
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
-
-      # Resolved here, before anything is built or pushed, even though the release itself is
-      # created at the very end. Reading the changelog is a file read that costs milliseconds, and
-      # leaving it until after the push meant a tag with no changelog entry failed only once both
-      # architectures were public and `latest` already pointed at a version with no release. The
-      # cheap check now gates the irreversible step instead of following it.
-      #
-      # The notes come from CHANGELOG.md rather than GitHub's generated notes, which would list
-      # merged pull requests. A generated list and a hand-kept changelog are two records of the
-      # same thing, and the one that drifts is always the human-maintained one -- so there is one
-      # record here, and this step reads it instead of writing a second. scripts/changelog-section.ts
-      # does the reading; it is a script rather than a marketplace action so the extraction logic
-      # is plain, readable TypeScript with its own tests (scripts/test/changelog-section.test.ts)
-      # instead of a black box pinned by SHA.
-      - name: Resolve release notes from CHANGELOG.md
-        id: notes
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          # A pre-release tag (v1.0.0-rc.1) has no section of its own, and it should not need one
-          # -- writing a changelog entry for every release candidate is not what a changelog is
-          # for. It reads Unreleased instead, and the release is marked prerelease so it never
-          # looks like the numbered version it is built from.
-          if [[ "$VERSION" == *-* ]]; then
-            SECTION="Unreleased"
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
-            SECTION="$VERSION"
-            echo "prerelease=false" >> "$GITHUB_OUTPUT"
-          fi
-          # No fallback to generated notes on failure -- that would defeat the point of reading
-          # CHANGELOG.md at all. A missing or empty section fails the job here, with the section
-          # name it looked for, and the fix is to write the entry, not to retry the workflow.
-          node --experimental-strip-types scripts/changelog-section.ts "$SECTION" > "$RUNNER_TEMP/release-notes.md"
 
       # arm64 runs under emulation, which is what lets the boot check below start it. The native
       # prebuilds differ per architecture, so the one that is not booted is the one most likely
@@ -81,20 +76,32 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository }}
-          # v1.2.3 publishes 1.2.3, 1.2, 1 and latest. latest has to move, because compose.yaml
-          # pins it and an install instruction that does not resolve is worse than none.
+          # `version` (a bare 1.2.3), never `tag` (v1.2.3): metadata-action parses the value as
+          # semver and emits nothing at all when it cannot, which produces an image carrying only
+          # `latest` with the job still green.
           #
-          # There is deliberately no `type=raw,value=latest` line here, and it is worth saying why
-          # since adding one looks like the obvious way to guarantee the tag. A raw value fires on
-          # every tag that matches v*, including a pre-release: v1.0.0-rc.1 would move latest to
-          # the release candidate, and every fresh `docker compose up` would then install it.
-          # metadata-action's default flavor is `latest=auto`, which already emits latest for a
-          # full release and withholds it for a pre-release, so the explicit line is both
-          # redundant and harmful.
+          # latest is written here explicitly rather than left to the `latest=auto` flavour,
+          # because that flavour reads the git ref, and on this workflow the ref is a branch. The
+          # job only reaches this step when release-please cut a release, and release-please's
+          # own config sets prerelease false, so a value arriving here is a full release.
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.version }}
+            type=semver,pattern={{major}},value=${{ needs.release-please.outputs.version }}
+            type=raw,value=latest
+
+      # A release that publishes only `latest` moves the tag every install resolves while leaving
+      # nothing pinnable behind it. Fail loudly rather than find out afterwards.
+      - name: The version tags exist
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          VERSION: ${{ needs.release-please.outputs.version }}
+        run: |
+          echo "$TAGS"
+          if ! echo "$TAGS" | grep -q ":${VERSION}$"; then
+            echo "::error::release ${VERSION} computed no ${VERSION} image tag"
+            exit 1
+          fi
 
       # Built and loaded per architecture first, so each one is booted before anything is pushed.
       - name: Build and boot amd64
@@ -129,17 +136,18 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # The release is created last, deliberately after the image has already reached the
-      # registry. A release pointing at an image that failed to publish is worse than no release
-      # at all, because it looks like the tag succeeded. Its notes were resolved up front.
-      - name: Create GitHub Release
+      # release-please writes the release as a draft, and a draft carries no git tag: GitHub
+      # creates the tag at the moment it is published. So this step is what makes the release and
+      # its tag exist at all, and it runs only once the image both architectures were booted from
+      # is in the registry.
+      #
+      # That ordering is the reason for the draft. A release pointing at an image that failed to
+      # publish is worse than no release at all, because it looks like the tag succeeded, and
+      # somebody following the README's one command gets a 404 from the thing the release page
+      # says is ready. If this workflow fails before here, what is left behind is an unpublished
+      # draft and no tag, which is a state a rerun can reach the same way it reached it first.
+      - name: Publish the release the image is now behind
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${{ steps.notes.outputs.prerelease }}" = "true" ]; then
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
-              --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease
-          else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" \
-              --notes-file "$RUNNER_TEMP/release-notes.md"
-          fi
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --latest

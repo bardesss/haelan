@@ -54,15 +54,46 @@ rewritten tree being byte-identical to the original and by the commit count and 
 `Co-Authored-By` line surviving. The merge references on pull requests #30 through #38 point at
 commits that rewrite left unreachable. There is no second exception.
 
+## Pull request titles, and the release they cut
+
+**A pull request title is a conventional commit**, because merging squashes it onto master and
+Release Please reads it there to decide whether a release exists and how big it is. A prose title
+is not a style disagreement, it is a release that silently never happens. CI checks the title on
+every push to a pull request.
+
+```
+feat: an instance's address can be changed after setup
+fix(web): stack the log table into cards on a phone
+docs: the contributor rules move to their own file
+```
+
+`feat` and `fix` cut a release, minor and patch. `docs`, `test`, `ci`, `build`, `chore`, `perf`,
+`refactor` and `revert` land on master and cut nothing, which is right for a change nobody running
+the dashboard would notice. A breaking change takes a `!` before the colon and cuts a major.
+
+Write the title for somebody reading the changelog later, not for the reviewer reading the diff
+now. It is the sentence that outlives the pull request.
+
 ## The changelog
 
-**Every user-visible change updates [CHANGELOG.md](CHANGELOG.md)'s `Unreleased` section, in the
-same pull request rather than afterwards.** A dependency bump or an internal refactor nobody using
-the dashboard would notice has no entry to add.
+**CHANGELOG.md is generated. Do not edit it.** Release Please rewrites it from the titles above
+when it opens its release pull request, and a hand-written entry there is overwritten without
+warning. This is the opposite of the rule that stood until 1.1.0, where entries were written by
+hand in the same pull request as the change.
 
-At release, `Unreleased` is renamed to the new version and an empty `Unreleased` goes back above
-it. The release workflow reads that section straight out of the file, so a tag whose version has no
-section fails the job before anything is published.
+The reasoning behind the swap: releases were being forgotten. Merging does not release, and the
+tag was missed twice on the first day this repository was public, so work sat finished and
+unreleased. Automation that cuts the release from what already merged removes the step that was
+being skipped.
+
+What moved rather than disappeared is the prose. A changelog entry is now one line, and the
+reasoning belongs in the pull request body it links to, which is where this project already
+writes at length.
+
+Releasing is therefore: merge your change, and Release Please opens or updates a release pull
+request. Merging **that** is what publishes. The image is built, both architectures are booted,
+and only then does the release stop being a draft, so a release page never points at an image
+that failed to reach the registry.
 
 ## If you are working with a coding agent
 

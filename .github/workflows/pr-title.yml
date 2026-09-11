@@ -1,0 +1,41 @@
+name: PR title
+
+# A squash merge writes the pull request title as the commit subject on master, and that subject
+# is the only thing Release Please reads to decide whether there is a release to cut and how big
+# it is. A prose title is not a policy disagreement, it is a release that silently never happens:
+# the run stays green, no release pull request appears, and the change waits in Unreleased limbo
+# until somebody notices.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The title is a conventional commit
+        # Through the environment rather than interpolated into the script. A pull request title
+        # is attacker controlled on a fork, and `run:` interpolation would execute it.
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # feat and fix are the two that produce a release. The rest are deliberate: they land on
+          # master and cut nothing, which is right for a test, a docs fix or a CI change.
+          PATTERN='^(feat|fix|docs|test|ci|build|chore|perf|refactor|revert)(\([a-z0-9.,/ -]+\))?!?: .+'
+          if printf '%s' "$TITLE" | grep -Eq "$PATTERN"; then
+            echo "ok: $TITLE"
+            exit 0
+          fi
+          echo "::error::Not a conventional commit title: ${TITLE}"
+          echo "Squash merging writes this title to master, and Release Please reads it there."
+          echo "Start it with one of feat, fix, docs, test, ci, build, chore, perf, refactor or revert."
+          echo "A breaking change takes a ! before the colon, as in feat!: ..."
+          echo "See CONTRIBUTING.md."
+          exit 1

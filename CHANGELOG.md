@@ -2,11 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versioning
-follows [Semantic Versioning](https://semver.org/). See [CONTRIBUTING.md](CONTRIBUTING.md) for
-who writes an entry and when.
+**This file is generated. Do not edit it.** Release Please rewrites it from the conventional
+commit titles that reach master, and a hand-written entry here is overwritten without warning.
+Versioning follows [Semantic Versioning](https://semver.org/); see
+[CONTRIBUTING.md](CONTRIBUTING.md) for how a title decides the version.
 
-## [Unreleased]
+Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
 ## [1.1.0] - 2026-09-11
 
