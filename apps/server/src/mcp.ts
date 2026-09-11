@@ -238,16 +238,28 @@ const round = (value: number): number => Math.round(value * 100) / 100
  * Registers one catalogue entry as an MCP tool.
  *
  * `registerTool` validates the call's arguments against this same `inputSchema` and raises
- * `InvalidParams` before it ever reaches this callback - verified in the SDK's own source, where
- * the CallTool handler awaits `validateToolInput` and only then calls the handler. That is what
- * the soundness of `Tool.run`'s bivariant signature rests on: `run` is typed for arguments this
- * shape, and something has to be the thing that makes a malformed call fail before it gets there.
- * If a future SDK stops validating, a tool body starts receiving whatever was sent, and no type in
- * this repository would notice - so if that line ever moves, this adapter grows a `safeParse` of
- * its own.
+ * `InvalidParams` before it ever reaches this callback - the SDK's CallTool handler awaits
+ * `validateToolInput` and only then calls the handler. That is what the soundness of `Tool.run`'s
+ * bivariant signature rests on: `run` is typed for arguments this shape, and something has to be
+ * the thing that makes a malformed call fail before it gets there. If a future SDK stops
+ * validating, a tool body starts receiving whatever was sent, and no type in this repository would
+ * notice.
+ *
+ * So a test asks, rather than a comment asserting it: `apps/server/test/mcp-sdk.test.ts` drives a
+ * real client and server over an in-memory transport, sends `query_series` a string where the
+ * schema declares a number, and requires both that the call is refused and that `run` was never
+ * entered. That is the line this adapter would have to grow a `safeParse` of its own the day it
+ * moves, and a weekly Dependabot bump of an `^1.30.0` dependency is how it would move.
  *
  * Throwing from `run` is the intended way for a tool to refuse: the SDK turns a thrown error into
  * a tool result with `isError` set, which is a refusal an agent can read, and not a dead session.
+ *
+ * That path does not pass through `summarise`, which puts core's error messages inside the
+ * untrusted rule's scope rather than outside it. A `ConfigError` thrown by `PersonQuery` reaches
+ * an agent as prose, unfiltered, so a message template there must interpolate only what a caller
+ * sent or what this repository's own source names - which is what all seventeen of them do today
+ * (`requireSource` lists source ids rather than display names for exactly this reason). Whoever
+ * writes the eighteenth: not a display name, not a note body, not a workout's own title.
  */
 function register(server: McpServer, tool: (typeof CATALOGUE)[number], query: PersonQuery): void {
   server.registerTool(

@@ -1,9 +1,10 @@
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { PersonQuery, createTestDatabase, seedPerson, schema } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { buildServer } from '../src/mcp.ts'
+import { CATALOGUE } from '../src/mcp/catalogue.ts'
 
 /**
  * The suite that drives the real SDK rather than calling `Tool.run` directly.
@@ -27,7 +28,10 @@ beforeEach(() => {
     kind: 'device', createdAtMs: 0,
   }).run()
 })
-afterEach(() => fixture.cleanup())
+afterEach(() => {
+  vi.restoreAllMocks()
+  fixture.cleanup()
+})
 
 async function connected(): Promise<Client> {
   const server = buildServer(new PersonQuery(fixture.db, 'robin'))
@@ -85,6 +89,76 @@ describe('a tool result over the real protocol', () => {
     // The summary sentence is the one place a bare string would have nothing around it, and the
     // block above is what the rule binds.
     expect(parsed.sources[0]!.name.untrustedText).toBe('Fitbit Sense')
+
+    await client.close()
+  })
+})
+
+/**
+ * Whether a call was refused, however the SDK chose to say so.
+ *
+ * 1.30 converts the handler's `InvalidParams` into a tool result with `isError` set, whose text
+ * begins `MCP error -32602:`; a future one could just as reasonably let it out as a JSON-RPC error
+ * and reject here. Both are refusals, and pinning either would make this a test of the transport
+ * rather than of the property. `detail` carries whatever came back, so a failure says what the
+ * server answered instead of refusing.
+ */
+async function refusal(client: Client, request: Parameters<Client['callTool']>[0]): Promise<{
+  refused: boolean
+  detail: string
+}> {
+  try {
+    const result = await client.callTool(request)
+    return { refused: result.isError === true, detail: JSON.stringify(result.content) }
+  } catch (err) {
+    return { refused: true, detail: String(err) }
+  }
+}
+
+describe('argument validation', () => {
+  // The comment at `register` in mcp.ts says the SDK validates a call's arguments against the
+  // declared inputSchema before the handler is entered, and that `Tool.run`'s bivariant signature
+  // is sound only because it does. Nothing asked: every other test calls `run` directly, and the
+  // stdio test only exchanges an `initialize`. A comment cannot see that line move, and the SDK is
+  // an `^1.30.0` dependency under weekly Dependabot.
+  it('refuses a string where the schema declares a number, without entering the tool', async () => {
+    const querySeries = CATALOGUE.find((t) => t.name === 'query_series')
+    if (querySeries === undefined) throw new Error('no tool named query_series')
+    const run = vi.spyOn(querySeries, 'run')
+    const client = await connected()
+
+    const outcome = await refusal(client, {
+      name: 'query_series',
+      arguments: {
+        metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-03', points: '50',
+      },
+    })
+
+    expect(outcome.refused, `expected a refusal, the server answered: ${outcome.detail}`).toBe(true)
+    // The half a refusal alone does not prove. A tool body that ran and then failed would also
+    // produce a refusal, and it is the running that this comment's claim is about.
+    expect(run).toHaveBeenCalledTimes(0)
+
+    await client.close()
+  })
+
+  // The control. Without it the test above passes on a server that refuses everything, which is
+  // not the property either - the claim is that the schema decides, not that nothing gets through.
+  it('lets the same call through when points is the number the schema declares', async () => {
+    const querySeries = CATALOGUE.find((t) => t.name === 'query_series')
+    if (querySeries === undefined) throw new Error('no tool named query_series')
+    const run = vi.spyOn(querySeries, 'run')
+    const client = await connected()
+
+    const outcome = await refusal(client, {
+      name: 'query_series',
+      arguments: {
+        metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-03', points: 50,
+      },
+    })
+
+    expect(outcome.refused, `expected an answer, the server refused with: ${outcome.detail}`).toBe(false)
+    expect(run).toHaveBeenCalledTimes(1)
 
     await client.close()
   })
