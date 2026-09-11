@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { numberOrNull, workoutSummary } from '../src/data/workoutSummary.js'
+import { numberOrNull, workoutSummary } from '../src/api/workoutSummary.ts'
 
 describe('numberOrNull', () => {
   // The whole reason this function exists. Number(null) is 0 and Number('') is 0, so a reader that
@@ -104,5 +106,14 @@ describe('workoutSummary', () => {
       expect(() => workoutSummary(junk)).not.toThrow()
       expect(workoutSummary(junk).exerciseType).toBeNull()
     }
+  })
+})
+
+describe('the decoder stays importable from a browser bundle', () => {
+  it('imports nothing from the database layer', () => {
+    const source = readFileSync(fileURLToPath(new URL('../src/api/workoutSummary.ts', import.meta.url)), 'utf8')
+    expect(source).not.toMatch(/from '\.\.\/db\//)
+    expect(source).not.toMatch(/better-sqlite3/)
+    expect(source).not.toMatch(/drizzle/)
   })
 })

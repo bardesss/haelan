@@ -1,3 +1,10 @@
+// The only module allowed to open a WorkoutSession's attrs blob, now that two apps read it: the
+// dashboard's activity list and the agent surface's workout tools.
+//
+// It imports nothing from ../db/ and must not start. apps/web reaches it through the
+// `@haelan/core/workout-summary` subpath rather than the root barrel, and the root barrel pulls
+// in the native SQLite driver, which cannot enter a browser bundle.
+
 // This is the only module allowed to open a WorkoutSession's attrs blob. See useSessions.ts.
 
 export interface WorkoutSummary {
