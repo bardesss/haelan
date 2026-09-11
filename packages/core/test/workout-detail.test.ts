@@ -131,6 +131,35 @@ describe('workoutDetail', () => {
     expect(d.laps[0]?.paceSecondsPerKm).toBeNull()
   })
 
+  it('reads the pause and resume markers', () => {
+    const d = workoutDetail({
+      exerciseEvents: [
+        { eventTime: '2026-08-18T06:10:00Z', eventUtcOffset: '7200s', exerciseEventType: 'PAUSE' },
+        { eventTime: '2026-08-18T06:12:00Z', eventUtcOffset: '7200s', exerciseEventType: 'RESUME' },
+      ],
+    })
+    expect(d.events).toEqual([
+      { atMs: Date.parse('2026-08-18T06:10:00Z'), kind: 'PAUSE' },
+      { atMs: Date.parse('2026-08-18T06:12:00Z'), kind: 'RESUME' },
+    ])
+  })
+
+  it('keeps an event whose time will not parse, rather than dropping the marker', () => {
+    // atMs null means the chart cannot place the shading, which the page can handle. Dropping the
+    // entry instead would silently turn a paused run into one that never stopped, and a reader
+    // counting pauses would be told a different story than the device recorded.
+    const d = workoutDetail({ exerciseEvents: [{ eventTime: 'not a time', exerciseEventType: 'PAUSE' }] })
+    expect(d.events).toEqual([{ atMs: null, kind: 'PAUSE' }])
+  })
+
+  it('drops an event entry that is not an object', () => {
+    expect(workoutDetail({ exerciseEvents: ['nonsense', null, 7] }).events).toEqual([])
+  })
+
+  it('answers an empty events array for a workout that recorded none', () => {
+    expect(EMPTY.events).toEqual([])
+  })
+
   it('answers empty arrays, never null, for a workout with no splits', () => {
     // An empty array is what a caller can map over without a guard. The distinction the mapper
     // preserves - no array against an empty array - has no consumer at this layer, because both

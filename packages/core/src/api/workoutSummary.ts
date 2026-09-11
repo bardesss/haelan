@@ -107,7 +107,11 @@ export interface WorkoutSplit {
   paceSecondsPerKm: number | null
   averageHeartRateBpm: number | null
 }
-export interface WorkoutEvent { atMs: number | null, kind: string | null }
+export interface WorkoutEvent {
+  atMs: number | null
+  /** `START`, `STOP`, `PAUSE`, `RESUME`, `AUTO_PAUSE`, `AUTO_RESUME`, or the unspecified member. */
+  kind: string | null
+}
 export interface HeartRateZoneDurations {
   lightSeconds: number | null
   moderateSeconds: number | null
@@ -134,6 +138,13 @@ export interface WorkoutDetail {
   mobility: MobilityMetrics | null
   autoSplits: WorkoutSplit[]
   laps: WorkoutSplit[]
+  /**
+   * Pause and resume markers. Spec section 3 puts these on the heart rate trace as shading, so a
+   * run with a five minute traffic light stop reads as one run rather than as a mysterious dip.
+   * An earlier draft declared `WorkoutEvent` and then left it out of this shape, which made the
+   * interface an export nothing consumed.
+   */
+  events: WorkoutEvent[]
 }
 
 /**
@@ -209,6 +220,17 @@ function mobilityFrom(value: unknown): MobilityMetrics | null {
   }
 }
 
+// Kept even when the instant will not parse, unlike splitFrom's non-object guard: an event whose
+// time is unreadable is still evidence the device recorded a pause, and dropping it would turn a
+// paused run into one that never stopped. A non-object entry carries no such evidence.
+function eventsFrom(value: unknown): WorkoutEvent[] {
+  if (!Array.isArray(value)) return []
+  return value.filter(isRecord).map((entry) => ({
+    atMs: instantOrNull(entry.eventTime),
+    kind: typeof entry.exerciseEventType === 'string' ? entry.exerciseEventType : null,
+  }))
+}
+
 /**
  * Everything a detail page needs from a session's attrs that workoutSummary does not already
  * answer. Lives here, and not in a module of its own, because workoutSummary.ts's opening line
@@ -248,5 +270,6 @@ export function workoutDetail(attrs: unknown): WorkoutDetail {
     // which is which.
     autoSplits: splitsFrom(record.splits),
     laps: splitsFrom(record.splitSummaries),
+    events: eventsFrom(record.exerciseEvents),
   }
 }
