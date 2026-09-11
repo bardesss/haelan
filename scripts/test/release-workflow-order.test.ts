@@ -29,12 +29,22 @@ describe('the release workflow', () => {
     expect(publishSteps.length).toBeGreaterThan(5)
   })
 
-  it('publishes the release only after the image is pushed', () => {
-    const push = indexOf('Push both architectures')
-    const release = indexOf('Publish the release')
-    expect(push).toBeGreaterThanOrEqual(0)
-    expect(release).toBeGreaterThanOrEqual(0)
-    expect(release).toBeGreaterThan(push)
+  it('does not ask release-please for a draft release', () => {
+    // A draft release carries no git tag, and release-please finds its own previous releases by
+    // tag. With draft true it never found one, reported "No latest release found" on every run,
+    // and recomputed the version from all 217 commits in this repository's history rather than
+    // from the handful since the last release. That history always holds a feat, so every run
+    // proposed a minor bump and merging a release opened another release for no changes.
+    //
+    // Pinned here rather than left to the config file, because the setting looks like a safety
+    // improvement and reads like one: it was added to keep a release from ever pointing at an
+    // image that failed to publish. Anyone re-adding it for that reason should meet this first.
+    const config = JSON.parse(
+      readFileSync(new URL('../../release-please-config.json', import.meta.url), 'utf8'),
+    ) as { packages: Record<string, { draft?: boolean }> }
+    const root = config.packages['.']
+    expect(root).toBeDefined()
+    expect(root?.draft).toBe(false)
   })
 
   it('boots both architectures before pushing either', () => {
