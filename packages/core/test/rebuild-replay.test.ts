@@ -72,6 +72,31 @@ function sleepBody(): string {
   })])
 }
 
+// An exercise point carrying the detail fields M8a's mapper widened `attrs` onto: a name, moving
+// time and one automatic split. Written out here rather than through a helper because which
+// fields are present is the point of the test that uses it.
+function exerciseBody(): string {
+  return body([{
+    name: 'users/me/dataTypes/exercise/dataPoints/run1',
+    dataSource: { platform: 'FITBIT', recordingMethod: 'ACTIVELY_MEASURED' },
+    exercise: {
+      interval: {
+        startTime: '2026-08-18T06:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T06:30:00Z', endUtcOffset: '7200s',
+      },
+      exerciseType: 'RUNNING',
+      displayName: 'Evening Run',
+      activeDuration: '1680s',
+      splits: [{
+        startTime: '2026-08-18T06:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T06:06:19Z', endUtcOffset: '7200s',
+        activeDuration: '379s', splitType: 'DISTANCE',
+        metricsSummary: { distanceMillimeters: 1_000_000 },
+      }],
+    },
+  }])
+}
+
 // The mean row for one downsampled minute. Four tests below check a minute's mean and n, and
 // spelling the filter out at each one buried what they were actually claiming.
 function meanAt(db: TestDatabase['db'], utcMs: number): unknown {
@@ -389,6 +414,39 @@ describe('replayPerson', () => {
     // an inequality check just as well as the right one.
     expect(counts.segments).toBe(2)
     expect(db.select().from(sessions).all()).toHaveLength(1)
+  })
+
+  test('writes an exercise session with its detail attrs from the archive alone, with no re-fetch', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'exercise', requestParams: listParams,
+      windowStartMs: Date.parse('2026-08-18T00:00:00Z'),
+      windowEndMs: Date.parse('2026-08-19T00:00:00Z'),
+      fetchedAtMs: 1, httpStatus: 200,
+      body: exerciseBody(),
+    })
+
+    // The state a person carrying an older mapping version is in when the rebuild starts: the
+    // payload is on disk and the session row is not, because runRebuild empties tier 2 first.
+    expect(db.select().from(sessions).where(eq(sessions.personId, 'p1')).all()).toHaveLength(0)
+
+    db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    const rows = db.select().from(sessions).where(eq(sessions.personId, 'p1')).all()
+    expect(rows).toHaveLength(1)
+    const attrs = JSON.parse(rows[0]!.attrs) as Record<string, unknown>
+    // The whole justification for a mapping bump rather than a re-fetch: an archived payload that
+    // was mapped onto seven keys is re-mapped onto fourteen, so a workout that happened before
+    // the release becomes as detailed as one that happens after it. Nothing was fetched here.
+    expect(attrs.displayName).toBe('Evening Run')
+    expect(attrs.activeDuration).toBe('1680s')
+    expect(attrs.splits).toHaveLength(1)
+    expect((attrs.splits as Record<string, unknown>[])[0]?.splitType).toBe('DISTANCE')
   })
 
   // The bug this pins: electrocardiogram declares target: 'sessions' with

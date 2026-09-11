@@ -1,15 +1,26 @@
 import type { FastifyInstance } from 'fastify'
 import { ConfigError } from '@haelan/core'
 import type { IntradayResult, Night, WorkoutSession } from '@haelan/core'
+import { errorBody, statusFor } from '../../api/envelope.ts'
 import {
-  optionalPositiveInt, personQueryOf, requireBoundedRange, requireString, roundMetricValueOrNull, sendHashed,
+  optionalPositiveInt, personQueryOf, requireBoundedRange, requireMs, requireString, roundMetricValueOrNull,
+  sendHashed,
 } from './shared.ts'
 
 interface PersonParams { personId: string }
+interface SessionParams { personId: string, sessionId: string }
 
 interface IntradayQuery {
   metric?: string
   date?: string
+  points?: string
+  source?: string
+}
+
+interface IntradayWindowQuery {
+  metric?: string
+  startMs?: string
+  endMs?: string
   points?: string
   source?: string
 }
@@ -29,6 +40,7 @@ interface SessionsQuery {
   limit?: string
   cursor?: string
   source?: string
+  type?: string
 }
 
 /**
@@ -110,6 +122,38 @@ export function registerTier2Routes(app: FastifyInstance): void {
     return sendHashed(reply, request, rounded)
   })
 
+  /**
+   * Intraday samples across a UTC window rather than a local date.
+   *
+   * Its own route rather than optional parameters on /intraday: a night runs 23:15 to 07:02 and
+   * spans two local dates, so the two reads answer different questions and one handler taking
+   * either would have to branch on which parameters arrived and refuse the combinations that
+   * mean nothing.
+   */
+  app.get<{ Params: PersonParams, Querystring: IntradayWindowQuery }>('/p/:personId/intraday/window', async (request, reply) => {
+    const personQuery = personQueryOf(request)
+    const metric = requireString(request.query.metric, 'metric')
+    const startMs = requireMs(request.query.startMs, 'startMs')
+    const endMs = requireMs(request.query.endMs, 'endMs')
+    const points = optionalPositiveInt(request.query.points, 'points')
+    const source = request.query.source
+
+    const result: IntradayResult = personQuery.intradayWindow({ metric, startMs, endMs, points, sourceId: source })
+    // Rounded here, at the boundary, for the same reason the day route rounds here: min/mean/max
+    // are stored and thinned at full precision, because thinBand picks its band edges from the
+    // real values, so only the reply decides how many decimals a reader ends up seeing.
+    const rounded: IntradayResult = {
+      ...result,
+      points: result.points.map((point) => ({
+        ...point,
+        min: roundMetricValueOrNull(metric, point.min),
+        mean: roundMetricValueOrNull(metric, point.mean),
+        max: roundMetricValueOrNull(metric, point.max),
+      })),
+    }
+    return sendHashed(reply, request, rounded)
+  })
+
   app.get<{ Params: PersonParams, Querystring: NightsQuery }>('/p/:personId/sleep/nights', async (request, reply) => {
     const personQuery = personQueryOf(request)
     const from = requireString(request.query.from, 'from')
@@ -132,6 +176,7 @@ export function registerTier2Routes(app: FastifyInstance): void {
     const to = requireString(request.query.to, 'to')
     const limit = optionalPositiveInt(request.query.limit, 'limit')
     const source = request.query.source
+    const type = request.query.type
 
     // SESSION_KINDS (personQuery's own runtime validator) now also allows 'ecg', a kind this
     // route does not serve: WorkoutSession's attrs carries no ECG classification and nothing has
@@ -142,8 +187,42 @@ export function registerTier2Routes(app: FastifyInstance): void {
     if (kind !== 'sleep' && kind !== 'exercise') {
       throw new ConfigError(`kind must be one of sleep, exercise, got '${kind}'`)
     }
-    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source })
+    // type is passed straight through, unvalidated here: personQuery.sessions already checks it
+    // against EXERCISE_TYPES and refuses it alongside kind 'sleep', both as ConfigError, which the
+    // shared envelope maps to 400 the same way this route's own checks do. A second check here
+    // would just be a second guard for the same rule, free to drift from the first.
+    //
+    // `latest` is not exposed: a caller wanting one session should say so with `limit=1` against
+    // this same list rather than gain a second, narrower parameter to keep in sync with it.
+    const all: WorkoutSession[] = personQuery.sessions({ kind, from, to, sourceId: source, type })
     const page = paginate(all, { limit, cursor: request.query.cursor, keyOf: (s) => s.id })
     return sendHashed(reply, request, page)
+  })
+
+  /**
+   * One session by id, registered next to the list route because the two are the same resource in
+   * two shapes. There is no routing conflict between them to resolve: `/sessions` and
+   * `/sessions/:sessionId` are at different depths, so fastify never has to choose.
+   *
+   * Answers the session object directly rather than a one-item list, because a detail read has
+   * exactly one answer and wrapping it would make every caller index into it first.
+   *
+   * `kind` is not a parameter here and cannot be one: an id names its own row. The list route
+   * above refuses `kind=ecg`, and readSession refuses an ECG row for the same reason, by
+   * answering null - so an ECG id 404s here exactly as an unknown id does.
+   */
+  app.get<{ Params: SessionParams }>('/p/:personId/sessions/:sessionId', async (request, reply) => {
+    const personQuery = personQueryOf(request)
+    const sessionId = request.params.sessionId
+
+    const session: WorkoutSession | null = personQuery.sessionById({ sessionId })
+    // 404 for an id that names nothing and for one belonging to somebody else alike. readSession
+    // is scoped by person, so this handler never learns which of the two it is, and therefore
+    // cannot leak the difference: a 403 would confirm the id exists.
+    if (session === null) {
+      return reply.code(statusFor('not_found'))
+        .send(errorBody('not_found', 'no_such_session', `no session '${sessionId}'`))
+    }
+    return sendHashed(reply, request, session)
   })
 }

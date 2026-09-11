@@ -177,6 +177,20 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-source-999999',
   },
   {
+    name: 'intraday/window',
+    template: '/api/v1/p/:personId/intraday/window',
+    // The same seed and markers the date-keyed intraday row uses. seedSample writes its reading
+    // on 2026-08-22; the window is the whole of that UTC day, which is inside the 48 hour cap.
+    path: (p) => {
+      const from = Date.UTC(2026, 7, 22, 0, 0)
+      return `/api/v1/p/${p}/intraday/window?metric=heart_rate&startMs=${from}&endMs=${from + 86_400_000}`
+    },
+    seedOwn: (h) => seedSample(h, { personId: 'p1', sourceId: 'own-source-ok', value: 61 }),
+    seedOther: (h, personId) => seedSample(h, { personId, sourceId: 'leaked-source-999999', value: 62 }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
     name: 'sleep/nights',
     template: '/api/v1/p/:personId/sleep/nights',
     path: (p) => `/api/v1/p/${p}/sleep/nights?from=2026-08-01&to=2026-08-01`,
@@ -189,6 +203,19 @@ const ROUTES: readonly RouteCase[] = [
     name: 'sessions',
     template: '/api/v1/p/:personId/sessions',
     path: (p) => `/api/v1/p/${p}/sessions?kind=exercise&from=2026-08-01&to=2026-08-01`,
+    seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise' }),
+    seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
+    name: 'sessions/:sessionId',
+    template: '/api/v1/p/:personId/sessions/:sessionId',
+    // seedSession derives its id as `${personId}-${kind}-session`, so each person's path names
+    // their own row. The cross-person case, p1's own path carrying p2's session id, cannot be
+    // expressed by a table whose path() takes one personId; it has its own test in
+    // v1-session-by-id.test.ts.
+    path: (p) => `/api/v1/p/${p}/sessions/${p}-exercise-session`,
     seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'exercise' }),
     seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'exercise' }),
     ownNeedle: 'own-source-ok',

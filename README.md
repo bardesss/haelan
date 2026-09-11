@@ -15,6 +15,25 @@ it is. An instance whose only users are the people who own its OAuth client neve
 The direct cost is that every household brings its own Google Cloud project; the direct benefit is
 that no ceiling exists.
 
+## Written by an AI agent
+
+**Every line of haelan was written by a coding agent, with a human deciding what got built, what
+got rejected, and what got merged.** That is stated here rather than in a footnote because you are
+considering pointing this at your own health record, and it should inform that decision rather than
+surprise you later.
+
+What it means in practice: nothing merges without tests, every pull request is reviewed - by a
+second agent and by a human - and the numbers in this README and in `ROADMAP.md` are measured
+against a real instance rather than estimated. The one figure that is not, the time this release's
+rebuild will take on a database larger than any that has been timed, is marked as an extrapolation
+where it appears. Where something is unverified, it says so.
+
+What it does not mean: no security professional has audited this. It has one household's worth of
+production use. `CONTRIBUTING.md` documents five failure modes that have actually produced wrong
+work in this repository - a green test that never failed for the right reason, an assertion matching
+a substring instead of a value, a claim about a file nobody opened - because they recur, and
+catching them is a standing part of how the project is built rather than a past embarrassment.
+
 ![The Dashboard](assets/screenshots/dashboard.png)
 
 ![Sleep](assets/screenshots/sleep.png)
@@ -303,6 +322,29 @@ fifth of the file and more than 64 MiB of it are dead and the disk can hold a se
 works. Measured on the author's database, upgrading from the pre-M5d schema: **21 seconds, and 645
 MB handed back**, taking the file from 891 MB to 247 MB. The app stalls for those 21 seconds rather
 than stopping, and it happens once - the boots after it find too little dead space to bother.
+
+**This release costs one rebuild as well.** Workout detail pages read fields the session mapper
+used to drop on the floor - the automatic splits, the pause markers, moving time, the workout's own
+name - so the mapping version moves from 4 to 5 and every person's derived rows are rebuilt from
+the raw archive on the first boot after the upgrade. That is the point of spending it: the archive
+still holds the full payload of every workout you have ever synced, so the runs you recorded last
+year become as detailed as the ones you record tomorrow, with nothing re-fetched from the provider.
+
+What it costs is set by how much archive you have, not by what changed in this release, because a
+rebuild reads every archived payload back and re-derives from it either way. **One rebuild has ever
+been timed on this project**, the M5d-A one above: 11 minutes 36 seconds on 1.6 million sample rows
+over 741 days. The author's instance has grown since that measurement was taken and now holds
+2,138,327 sample rows, 15,982 archived payloads and 434 sessions - about a third more rows - and no
+rebuild has been timed at that size. Scaling the one measured figure by that growth puts this one a
+little over 15 minutes, which is an extrapolation from a single measurement rather than something
+anybody has observed, and it is the only basis this README has for a number. A smaller history is
+quicker in proportion; a slower disk is not.
+
+While it runs, that person's sync is paused - the runner skips anyone waiting on a rebuild rather
+than writing new rows under one set of rules beside old rows written under another - and the
+dashboard stays reachable with its intraday charts empty, which is not distinguishable from a day
+with no data. Both come back on their own when it finishes. It happens once: the next boot finds
+the person stamped at the current version and starts normally.
 
 ## Roadmap
 
