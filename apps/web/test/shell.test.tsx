@@ -14,13 +14,13 @@ import { Settings } from '../src/pages/Settings.js'
 
 describe('the navigation rail', () => {
   it('links to a real path rather than to a fragment, so a link can be opened in a new tab', () => {
-    const html = renderToStaticMarkup(<Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} />)
+    const html = renderToStaticMarkup(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
     expect(html).toContain('href="/sleep"')
     expect(html).not.toContain('href="#sleep"')
   })
 
   it('marks the current page and only the current page', () => {
-    const html = renderToStaticMarkup(<Sidebar person="Bartus" active="/sleep" onSignOut={() => {}} />)
+    const html = renderToStaticMarkup(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
   })
 

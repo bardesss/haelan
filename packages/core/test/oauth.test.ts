@@ -123,7 +123,7 @@ describe('exchangeAuthorizationCode', () => {
 describe('probeAccess', () => {
   it('passes when the profile call succeeds', async () => {
     await expect(probeAccess({
-      accessToken: 'a', deps: { fetch: respond(200, { displayName: 'Bartus' }) },
+      accessToken: 'a', deps: { fetch: respond(200, { displayName: 'Robin' }) },
     })).resolves.toBeUndefined()
   })
 

@@ -8,7 +8,7 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 
 const login = (h: Harness, password = 'a good long password') => h.app.inject({
-  method: 'POST', url: '/api/auth/login', headers, payload: { username: 'bartus', password },
+  method: 'POST', url: '/api/auth/login', headers, payload: { username: 'robin', password },
 })
 
 const cookieFrom = (response: { cookies: Array<{ name: string, value: string, secure?: boolean }> }) =>
@@ -47,7 +47,7 @@ describe('auth', () => {
         'x-forwarded-proto': 'https',
         origin: 'https://box.tail1234.ts.net', host: 'box.tail1234.ts.net',
       },
-      payload: { username: 'bartus', password: 'a good long password' },
+      payload: { username: 'robin', password: 'a good long password' },
     })
     expect(cookieFrom(response)?.secure).toBe(true)
   })
@@ -87,7 +87,7 @@ describe('auth', () => {
       method: 'GET', url: '/api/auth/me', cookies: { haelan_session: cookie.value },
     })
     expect(response.json()).toEqual({
-      personId: 'p1', displayName: 'Bartus', username: 'bartus', isAdmin: true,
+      personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
       timezone: 'Europe/Amsterdam', connected: false, credentialsUnreadable: false,
       baseUrl: 'http://localhost:4235',
     })
@@ -156,7 +156,7 @@ describe('auth', () => {
     const response = await harness.app.inject({
       method: 'POST', url: '/api/auth/login',
       headers: { origin: 'http://evil.example', host: 'localhost:4235' },
-      payload: { username: 'bartus', password: 'a good long password' },
+      payload: { username: 'robin', password: 'a good long password' },
     })
     expect(response.statusCode).toBe(403)
     expect(response.json()).toEqual({

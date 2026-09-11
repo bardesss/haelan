@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import type { PendingInvite } from '@haelan/core'
-import { errorBody, statusFor } from '../api/envelope.ts'
-import { isKnownTimezone } from './setup.ts'
+import { errorBody, sendCoreError, statusFor } from '../api/envelope.ts'
 
-interface CreateMemberBody { displayName?: unknown, timezone?: unknown }
+interface CreateMemberBody { displayName?: unknown }
+interface ResetPasswordBody { password?: unknown }
 interface AccountParams { accountId: string }
 interface InviteParams { id: string }
 
@@ -73,18 +73,29 @@ export function registerMemberRoutes(app: FastifyInstance): void {
     return reply.send({ items })
   })
 
+  /**
+   * One field, because the other one was never the admin's to answer.
+   *
+   * This used to require a timezone as well, and the acceptance screen only read it back: the
+   * admin guessed a household member's day boundary on their behalf, the member saw the guess and
+   * could not touch it, and nothing anywhere could correct it afterwards. The inviting admin's own
+   * zone is the better guess by a distance - a household mostly shares one - and it is now only a
+   * starting value, since the member changes it in their own Profile card the moment they are in.
+   */
   app.post<{ Body: CreateMemberBody }>('/api/members', { preHandler: guard }, async (request, reply) => {
-    const { displayName, timezone } = request.body ?? {}
+    const { displayName } = request.body ?? {}
     // trim(), not === '': a name of only spaces is exactly as useless as an empty one, and the
     // household member list is what a person sees named after them - it deserves the same refusal.
-    if (typeof displayName !== 'string' || displayName.trim() === '' || typeof timezone !== 'string') {
+    if (typeof displayName !== 'string' || displayName.trim() === '') {
       return reply.code(statusFor('config'))
-        .send(errorBody('config', 'config', 'displayName and timezone are required'))
+        .send(errorBody('config', 'config', 'displayName is required'))
     }
-    if (!isKnownTimezone(timezone)) {
-      return reply.code(statusFor('config'))
-        .send(errorBody('config', 'config', `unknown timezone ${timezone}`))
-    }
+    // The caller is an admin with a live session, so both of these resolve; the fallback is for
+    // the type rather than for a state this route can be reached in. Read rather than validated:
+    // it was validated when it was written, by the wizard or by the owner's own Profile card,
+    // which is the only surface that can put a value in this column.
+    const inviter = stores().accounts.getById(callerAccountId(request))
+    const timezone = (inviter ? stores().people.get(inviter.personId)?.timezone : null) ?? 'UTC'
 
     const now = app.haelan.now()
     // The person row before the invite, the same order setup.ts creates a person before the
@@ -128,6 +139,45 @@ export function registerMemberRoutes(app: FastifyInstance): void {
     }
     stores().accounts.enable(accountId)
     return reply.send({ state: 'active' })
+  })
+
+  /**
+   * The named exception to "no admin override" (see the accounts table's own comment): an admin
+   * may set another member's password, and nothing else of theirs.
+   *
+   * It exists because this instance has no way to prove a reset request came from the person it
+   * names - no mail server, no second factor - so the only proof available is somebody standing in
+   * the household who is already trusted with the instance. The console tool in admin.ts is the
+   * same door for the case where even that person is locked out; this is it without a shell.
+   *
+   * No current password is asked for, and there is nothing coherent to ask for: the admin does not
+   * know it, which is the entire situation. What that costs is stated plainly rather than hidden -
+   * an admin can take over another account here. What it does not cost is data: the member's rows
+   * stay reachable only through their own session, and the isolation suites still prove it.
+   *
+   * The member's own sessions are deliberately left alone. Whoever asked for this reset is
+   * standing next to the admin; signing out the device in their hand, and every other one, would
+   * be the app deciding their account was stolen on evidence it does not have.
+   */
+  app.post<{ Params: AccountParams, Body: ResetPasswordBody }>('/api/members/:accountId/password', { preHandler: guard }, async (request, reply) => {
+    const { accountId } = request.params
+    const account = stores().accounts.getById(accountId)
+    if (!account) {
+      return reply.code(statusFor('not_found')).send(errorBody('not_found', 'no_such_account', `no account '${accountId}'`))
+    }
+    const { password } = request.body ?? {}
+    if (typeof password !== 'string') {
+      return reply.code(statusFor('config')).send(errorBody('config', 'config', 'password is required'))
+    }
+    try {
+      await stores().accounts.setPasswordById(accountId, password)
+    } catch (error) {
+      // This family has no scope of its own (see the note above registerMemberRoutes), so the one
+      // route here that lets core throw catches it itself rather than registering an error handler
+      // that would also swallow the four routes beside it.
+      return sendCoreError(reply, error)
+    }
+    return reply.code(204).send()
   })
 
   app.delete<{ Params: InviteParams }>('/api/members/invites/:id', { preHandler: guard }, async (request, reply) => {

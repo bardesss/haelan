@@ -13,7 +13,7 @@ const respond = (status: number, body: unknown) => new Response(
 describe('submitSignIn', () => {
   it('reports success when the server accepts the credentials', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => respond(200, { personId: 'p1' })))
-    await expect(submitSignIn({ username: 'bartus', password: 'a good long password' }))
+    await expect(submitSignIn({ username: 'robin', password: 'a good long password' }))
       .resolves.toEqual({ ok: true })
   })
 
@@ -21,13 +21,13 @@ describe('submitSignIn', () => {
   // screen. They also must not say which half was wrong.
   it('reports a rejection as a message key rather than throwing', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => respond(401, { error: { kind: 'auth', code: 'bad_credentials' } })))
-    await expect(submitSignIn({ username: 'bartus', password: 'wrong' }))
+    await expect(submitSignIn({ username: 'robin', password: 'wrong' }))
       .resolves.toEqual({ ok: false, messageKey: 'signIn.failed' })
   })
 
   it('tells an unreachable instance apart from a rejection', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch') }))
-    await expect(submitSignIn({ username: 'bartus', password: 'x' }))
+    await expect(submitSignIn({ username: 'robin', password: 'x' }))
       .resolves.toEqual({ ok: false, messageKey: 'signIn.unreachable' })
   })
 })

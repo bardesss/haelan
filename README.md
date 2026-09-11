@@ -249,7 +249,7 @@ proof is physical access to the machine the container runs on. That is what the 
 
 ```
 docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts list
-docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts passwd bartus
+docker exec -it haelan node --experimental-strip-types apps/server/src/admin.ts passwd robin
 ```
 
 `list` prints every account with whether it is an admin, whether it is disabled, and whether it is
@@ -260,7 +260,7 @@ alone, which is what somebody needs who knows theirs and ran out of attempts: te
 an account for fifteen minutes.
 
 **No password is ever an argument**, and the tool refuses one given as such rather than ignoring
-it. `passwd bartus hunter2` would sit in your shell history and be readable in `ps` by every other
+it. `passwd robin hunter2` would sit in your shell history and be readable in `ps` by every other
 user on that machine.
 
 Outside a container it is the same command against the same data directory:

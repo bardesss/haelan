@@ -66,7 +66,12 @@ export function useMembers(): UseQueryResult<MembersResponse> {
   })
 }
 
-export function useInviteMember(): UseMutationResult<InviteResult, ApiError, { displayName: string, timezone: string }> {
+/**
+ * One field. The invite used to carry a timezone too, which the admin guessed on the member's
+ * behalf and the acceptance screen could only read back; the person row now takes the inviting
+ * admin's own zone, and the member changes it in their own Profile card (useProfile.ts).
+ */
+export function useInviteMember(): UseMutationResult<InviteResult, ApiError, { displayName: string }> {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input) => apiSend<InviteResult>('POST', '/api/members', input),

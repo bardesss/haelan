@@ -2,15 +2,21 @@ import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
 import { people } from './people.ts'
 
 // One account, one person, enforced by the unique constraint rather than by convention.
-// Spec section 15: each account sees only its own data, there is no sharing and no override.
+// Spec section 15: each account sees only its own data, and there is no sharing. The one
+// exception, added when accounts gained self-management, is named rather than general: an admin
+// may reset another member's password, because an instance with no mail server has no other way
+// back in. It reaches no row of theirs - the isolation suites still prove an admin cannot query
+// another person's data - so it is a recovery door, not a role hierarchy.
 export const accounts = sqliteTable('accounts', {
   id: text('id').primaryKey(),
   personId: text('person_id').notNull().unique().references(() => people.id),
   /** Lower cased at write time, which is what makes the unique index a real one. */
   username: text('username').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
-  // Who may change instance level settings such as the OAuth client. Not a data visibility
-  // role: spec section 15 has no admin override over another person's data.
+  // Who may change instance level settings such as the OAuth client, and who may reset another
+  // member's password when they are locked out of it. Not a data visibility role: spec section 15
+  // gives no admin a way to read another person's rows, and the password reset does not become
+  // one, since it hands back an account rather than what is inside it.
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
   failedAttempts: integer('failed_attempts').notNull().default(0),
   lockedUntilMs: integer('locked_until_ms'),

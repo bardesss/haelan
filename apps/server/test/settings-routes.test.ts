@@ -9,7 +9,7 @@ afterEach(async () => { await harness?.cleanup(); harness = null })
 const headers = { origin: 'http://localhost:4235', host: 'localhost:4235' }
 const DAY_MS = 86_400_000
 
-async function sessionCookie(h: Harness, username = 'bartus'): Promise<string> {
+async function sessionCookie(h: Harness, username = 'robin'): Promise<string> {
   const response = await h.app.inject({
     method: 'POST', url: '/api/auth/login', headers,
     payload: { username, password: 'a good long password' },

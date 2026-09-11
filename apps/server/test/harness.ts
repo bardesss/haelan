@@ -82,7 +82,7 @@ function stubFetch(mode: GoogleMode): typeof globalThis.fetch {
           },
         }), { status: 403 })
       }
-      return new Response(JSON.stringify({ displayName: 'Bartus' }), { status: 200 })
+      return new Response(JSON.stringify({ displayName: 'Robin' }), { status: 200 })
     }
     // list_fails answers LIST_FAILS_TYPE's data windows with a status the client does not retry
     // (only 429 and 5xx get a backoff sleep; see fetchWithRetry), so a sprint that hits it fails
@@ -180,12 +180,12 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     // which is a person the sync runner skips. A harness that produced the second while claiming
     // to produce a finished wizard would make every sync test in this file a test of the skip.
     new PeopleStore(instance.db).create({
-      id: 'p1', displayName: 'Bartus', timezone: 'Europe/Amsterdam', nowMs: clock.nowMs,
+      id: 'p1', displayName: 'Robin', timezone: 'Europe/Amsterdam', nowMs: clock.nowMs,
     })
     const accounts = new AccountStore(instance.db)
     const settings = new SettingsStore(instance.db)
     await accounts.create({
-      id: 'a1', personId: 'p1', username: 'bartus', password: 'a good long password',
+      id: 'a1', personId: 'p1', username: 'robin', password: 'a good long password',
       isAdmin: true, nowMs: clock.nowMs,
     })
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: clock.nowMs })
@@ -215,7 +215,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
 
     // Every test file has been rolling its own cookie extraction. One helper instead, returning
     // the raw session id, which is what both transports carry.
-    signIn: async (username = 'bartus', password = 'a good long password') => {
+    signIn: async (username = 'robin', password = 'a good long password') => {
       await completeSetup()
       const response = await app.inject({
         method: 'POST', url: '/api/auth/login',

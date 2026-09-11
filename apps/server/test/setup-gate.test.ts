@@ -76,14 +76,14 @@ describe('the setup gate', () => {
     await harness.app.inject({
       method: 'POST', url: '/api/setup/account', headers,
       payload: {
-        username: 'bartus', password: 'a good long password',
-        displayName: 'Bartus', timezone: 'Europe/Amsterdam',
+        username: 'robin', password: 'a good long password',
+        displayName: 'Robin', timezone: 'Europe/Amsterdam',
       },
     })
     // The cookie that step minted, thrown away - a reload, a second browser, or a restore.
     const response = await harness.app.inject({
       method: 'POST', url: '/api/auth/login', headers,
-      payload: { username: 'bartus', password: 'a good long password' },
+      payload: { username: 'robin', password: 'a good long password' },
     })
 
     expect(response.statusCode).toBe(200)

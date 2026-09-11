@@ -70,8 +70,8 @@ describe('empty volume to syncing instance', () => {
     const created = await fetch(`${base}/api/setup/account`, {
       method: 'POST', headers,
       body: JSON.stringify({
-        username: 'bartus', password: 'a good long password',
-        displayName: 'Bartus', timezone: 'Europe/Amsterdam',
+        username: 'robin', password: 'a good long password',
+        displayName: 'Robin', timezone: 'Europe/Amsterdam',
       }),
     })
     expect(created.status).toBe(201)
@@ -199,10 +199,10 @@ describe('empty volume to syncing instance', () => {
     expect(missingFile.status).toBe(404)
 
     // With setup finished the gate steps aside, so this reaches the not found handler itself.
-    seedPerson(instance.db, 'p1', { displayName: 'Bartus', timezone: 'Europe/Amsterdam' })
+    seedPerson(instance.db, 'p1', { displayName: 'Robin', timezone: 'Europe/Amsterdam' })
     const settings = new SettingsStore(instance.db)
     await new AccountStore(instance.db).create({
-      id: 'a1', personId: 'p1', username: 'bartus', password: 'a good long password',
+      id: 'a1', personId: 'p1', username: 'robin', password: 'a good long password',
       isAdmin: true, nowMs: NOW_MS,
     })
     settings.put({ baseUrl: base, consentPath: 'localhost', nowMs: NOW_MS })
