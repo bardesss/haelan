@@ -107,13 +107,15 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
       // exercise a session was, and shortAwakenings survives instead of being silently dropped
       // between tier 1 and the stage segments it deliberately does not become.
       //
-      // M8a widened this from seven keys to fourteen. The three added arrays, the two strings,
-      // the duration and the metadata object were in every payload this app has ever archived
-      // and none of them reached tier 2, so a detail page could not be answered from the
-      // sessions table at all. `?? null` rather than a presence test: valueAt already answers
-      // undefined for a path the payload does not have, and null is what every other key here
-      // uses for the same absence. An empty array the provider really sent survives as an empty
-      // array, which is a different statement from a provider that sent no array at all.
+      // M8a widened this from seven keys to fourteen. Five of the seven added fields - splits,
+      // exerciseEvents, activeDuration, displayName and exerciseMetadata.hasGps - are confirmed
+      // against the archive in probe/findings/field-map.md; none of them reached tier 2, so a
+      // detail page could not be answered from the sessions table at all. The other two,
+      // splitSummaries and notes, are mapped because the v4 schema carries them, not because
+      // this archive has ever held one. `?? null` rather than a presence test: valueAt already
+      // answers undefined for a path the payload does not have, and null is what every other
+      // key here uses for the same absence. An empty array the provider really sent survives as
+      // an empty array, which is a different statement from a provider that sent no array at all.
       attrs: JSON.stringify({
         type: valueAt(payload, 'type') ?? null,
         mainSleep: valueAt(payload, 'metadata.mainSleep') ?? null,
