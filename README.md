@@ -350,9 +350,8 @@ the person stamped at the current version and starts normally.
 
 Five milestones are done and the sixth is finishing: the store and sync engine, the derivation
 layer, eight dashboard pages, then packaging, people, backups and the upgrade path. The agent
-surface now ships too: an MCP server with typed tools, reachable over stdio and over HTTP behind
-a per-account token. What is left before this is feature complete is `sql_query` (M4b), behind its
-own sandbox.
+surface ships too: an MCP server with typed tools, reachable over stdio and over HTTP behind a
+per-account token, including `sql_query` behind its own sandbox.
 
 **[ROADMAP.md](ROADMAP.md)** has the table, every milestone's pull request, and why the order is
 what it is.
