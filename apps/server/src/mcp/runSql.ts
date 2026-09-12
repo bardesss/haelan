@@ -60,8 +60,12 @@ function asAgentError(reply: { message: string }): ConfigError {
   return new ConfigError(m)
 }
 
-export async function runSql(input: { projectionPath: string, sql: string }): Promise<SqlResult> {
+export async function runSql(
+  input: { projectionPath: string, sql: string, cleanup: () => void },
+): Promise<SqlResult> {
   if (busy) {
+    // No worker was ever opened for this call, so nothing else will remove the caller's file.
+    input.cleanup()
     throw new ConfigError(
       'another sql_query is already running on this instance. Try again in a moment - a query that '
       + 'timed out may still be finishing.',
@@ -111,6 +115,13 @@ export async function runSql(input: { projectionPath: string, sql: string }): Pr
       worker.on('exit', (code) => {
         busy = false
         clearTimeout(timer)
+        // Cleanup lives here, and nowhere else on this path, for the same reason `busy` is
+        // released here: the parent names the projection file, so a terminated worker's file is
+        // still reachable after 'exit' fires - but 'exit' is the first moment this side can prove
+        // the worker's handle on it is actually gone. Calling this earlier - on the timeout
+        // rejection, say - races a native call that has not returned yet; on Windows that race is
+        // exactly what turned the caller's ConfigError into an EPERM.
+        input.cleanup()
         if (reply === undefined) {
           // A terminated worker exits with no reply. The timeout path has already rejected by
           // then, and a second rejection on a settled promise is a no-op; this covers the worker
@@ -128,8 +139,12 @@ export async function runSql(input: { projectionPath: string, sql: string }): Pr
       })
     })
   } catch (error) {
-    // The worker never started, so nothing will ever fire 'exit' to release the flag.
-    if (worker === undefined) busy = false
+    // The worker never started, so nothing will ever fire 'exit' to release the flag - or to
+    // remove the caller's file, which is why this path removes it itself.
+    if (worker === undefined) {
+      busy = false
+      input.cleanup()
+    }
     throw error
   }
 }
@@ -141,11 +156,23 @@ export async function runSql(input: { projectionPath: string, sql: string }): Pr
  * be reachable from the side that survives. `rmSync` never sits in a `finally` around an
  * assertion - this repo has been bitten eight times by an EPERM from an open handle replacing the
  * real error - so callers remove it explicitly after the result is in hand.
+ *
+ * `remove()` itself never throws. A projection is a throwaway file in a throwaway temp directory;
+ * failing to delete one is never worth surfacing, and on Windows a still-open handle (a terminated
+ * worker's native call has not actually returned yet) makes `rmSync` throw `EPERM` - which is
+ * exactly the failure this design exists to keep off the caller. The directory is simply leaked in
+ * that case, same as the OS temp directory is cleaned up eventually regardless.
  */
 export function makeProjectionDir(): { path: string, remove: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'haelan-sql-'))
   return {
     path: join(dir, 'projection.db'),
-    remove: () => rmSync(dir, { recursive: true, force: true }),
+    remove: () => {
+      try {
+        rmSync(dir, { recursive: true, force: true })
+      } catch {
+        // Swallowed deliberately - see the doc comment above.
+      }
+    },
   }
 }
