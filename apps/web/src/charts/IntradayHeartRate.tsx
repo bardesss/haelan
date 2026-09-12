@@ -25,6 +25,14 @@ type Props = {
   // day_metric charts' onPointClick reports: a click here names one (source, minute) bucket, not
   // a day, and the panel's Correct guard needs n to decide whether that bucket is one stored row.
   onPointClick?: (point: { sourceId: string, utcMs: number, n: number }) => void
+  /**
+   * Markers at an instant, not shading. A workout's exerciseEvents are the only caller today, and
+   * the archive supplies one end of a pause and never the other: 44 PAUSE events across 197
+   * measured sessions and zero RESUME, zero AUTO_PAUSE, zero AUTO_RESUME. An interval needs two
+   * ends, so a band's right-hand edge would be one this project made up. A tick makes no claim
+   * about when the person started again.
+   */
+  eventMarks?: readonly { atMs: number, label: string }[]
 }
 
 /**
@@ -92,7 +100,15 @@ function timeOfDay(utcMs: number, timeZone: string, language: string): string {
   return new Date(utcMs).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone })
 }
 
-export function IntradayHeartRate({ points, label, onPointClick }: Props) {
+// A module-level constant, not an inline `[]` default: a fresh array literal is a new reference on
+// every render, and `build`'s useCallback below lists `eventMarks` in its own dependency array, so
+// a caller that never passes eventMarks (Dashboard's IntradayHeartRate, still the common case)
+// would otherwise see that dependency change on every render, disposing and reinitialising the
+// chart each time - exactly the defect chart-lifecycle.test.tsx's Day-tab case exists to catch,
+// caused here the same way useSourceNames' own nameOf memo comment describes for a different prop.
+const NO_EVENT_MARKS: readonly { atMs: number, label: string }[] = []
+
+export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO_EVENT_MARKS }: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
   const { nameOf } = useSourceNames()
@@ -169,7 +185,7 @@ export function IntradayHeartRate({ points, label, onPointClick }: Props) {
         axisLine: base.labelledAxis.axisLine,
       },
       yAxis: { type: 'value' as const, scale: true, splitLine: base.splitLine, axisLabel: base.axisLabel },
-      series: series.flatMap(({ sourceId, points: ownPoints }, index) => {
+      series: [...series.flatMap(({ sourceId, points: ownPoints }, index) => {
         const color = colors[index % colors.length]!
         const label = nameOf(sourceId)
         // The stack key stays the id. It is not a label: it is what keeps two sources' bands from
@@ -198,8 +214,24 @@ export function IntradayHeartRate({ points, label, onPointClick }: Props) {
               })) } },
         ]
       }),
+        // Appended last on purpose: pointsBySeriesIndex and excludedBySeriesIndex above key a
+        // source's mean line as series 3i+2, counting from the front, so a series added at the end
+        // cannot shift either lookup. A series added anywhere before them would.
+        ...(eventMarks.length === 0 ? [] : [{
+          name: t('activity.workout.trace.events'),
+          type: 'line' as const,
+          data: [],
+          markLine: {
+            symbol: 'none' as const,
+            silent: true,
+            label: { show: false },
+            lineStyle: { color: tokens.axis, type: 'dashed' as const },
+            data: eventMarks.map((mark) => ({ xAxis: mark.atMs })),
+          },
+        }]),
+      ],
     }
-  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf])
+  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const seriesIndex = event.seriesIndex

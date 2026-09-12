@@ -423,6 +423,12 @@
         "basis": "the session's own four zones, as the device recorded them — not the three active zone minutes zones",
         "column": "Zone",
         "light": "Light", "moderate": "Moderate", "vigorous": "Vigorous", "peak": "Peak"
+      },
+      "trace": {
+        "label": "Heart rate through this workout",
+        "pause": "Pause",
+        "events": "Pauses",
+        "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
       }
     }
   },

@@ -1,13 +1,15 @@
 import { useTranslation } from '../i18n/index.js'
 import { workoutDetail } from '@haelan/core/workout-summary'
-import { useRoute, routeParams } from '../router.js'
+import { useRoute, routeParams, readQuery } from '../router.js'
 import { WORKOUT_ROUTE } from '../routes.js'
 import { useWorkoutSession } from '../data/useWorkoutSession.js'
 import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
+import { ALL_SOURCES } from '../controls/source.js'
 import { WorkoutHeader } from './activity/WorkoutHeader.js'
 import { WorkoutTiles } from './activity/WorkoutTiles.js'
 import { WorkoutZones } from './activity/WorkoutZones.js'
+import { WorkoutTrace } from './activity/WorkoutTrace.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -68,12 +70,19 @@ export function WorkoutDetail() {
 
   const detail = workoutDetail(query.data.attrs)
 
+  // The reader's own choice, when they arrived carrying one; null otherwise. Read from the URL
+  // rather than from a control row: this page has none, and useWorkoutTrace's fallback rule turns
+  // on whether the READER chose a source, which only the URL can say here.
+  const chosenSourceParam = readQuery(route.split('?')[1] ?? '').get('source')
+  const chosenSource = chosenSourceParam === null || chosenSourceParam === ALL_SOURCES ? null : chosenSourceParam
+
   return (
     <>
       <WorkoutHeader session={query.data} detail={detail} timezone={timezone} />
       <div className="grid">
         <WorkoutTiles session={query.data} detail={detail} />
         <WorkoutZones detail={detail} />
+        <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
       </div>
     </>
   )
