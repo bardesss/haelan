@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.7.1](https://github.com/bardesss/haelan/compare/v1.7.0...v1.7.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* the password form on the profile card says where it begins ([#146](https://github.com/bardesss/haelan/issues/146)) ([7570de9](https://github.com/bardesss/haelan/commit/7570de96f7cb52db29046e2b9dcd6767ba094d08))
+
 ## [1.7.0](https://github.com/bardesss/haelan/compare/v1.6.0...v1.7.0) (2026-09-12)
 
 
