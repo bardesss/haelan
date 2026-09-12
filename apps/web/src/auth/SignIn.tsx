@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useTranslation } from '../i18n/index.js'
+import { BrandMark } from '../components/BrandMark.js'
 import { submitSignIn } from './signInRequest.js'
 
 export function SignIn({ onSignedIn, expired = false }: { onSignedIn: () => void, expired?: boolean }) {
@@ -23,6 +24,7 @@ export function SignIn({ onSignedIn, expired = false }: { onSignedIn: () => void
   return (
     <main className="signin">
       <form className="card" onSubmit={(e) => void submit(e)}>
+        <BrandMark />
         <h1>{t('signIn.title')}</h1>
 
         {expired && <p className="form-error" role="alert">{t('shell.sessionExpired')}</p>}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96">
+  <!-- GitHub renders this through <img>, which gives it neither a theme nor currentColor, so it is
+       painted once in the accent blue that holds on both of GitHub's own backgrounds. -->
+  <g fill="none" stroke="#4F8FF7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 4v16M19 4v16"/>
+    <path d="M5 12h3.9l.9 1.5 1.4-6.2 1.8 8.6 1-3.9H19"/>
+  </g>
+</svg>

@@ -1,4 +1,9 @@
-# haelan
+<img src="assets/brand/mark.svg" alt="" width="72" height="72">
+
+# Hælan
+
+*Hælan* is Old English for "to heal, to make whole" — the root of both *heal* and *health*. The
+package, the image and the command are all `haelan`.
 
 **A self-hosted dashboard and local mirror for your own health data, built on the Google Health
 API v4.** One household, one instance, no telemetry, no hosted offering.
