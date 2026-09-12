@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.13.0](https://github.com/bardesss/haelan/compare/v1.12.1...v1.13.0) (2026-09-12)
+
+
+### Features
+
+* **web:** the workout page, and the exclude control no browser could reach ([#172](https://github.com/bardesss/haelan/issues/172)) ([8fd36d5](https://github.com/bardesss/haelan/commit/8fd36d5b7f6c2392ac82b2293b3e82f49b4b9f93))
+
 ## [1.12.1](https://github.com/bardesss/haelan/compare/v1.12.0...v1.12.1) (2026-09-12)
 
 
