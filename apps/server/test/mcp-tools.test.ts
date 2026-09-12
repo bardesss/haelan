@@ -609,7 +609,9 @@ describe('sql_query', () => {
     }) as { columns: string[], rows: unknown[][], truncated: boolean }
 
     expect(result.columns).toEqual(['metric', 'value'])
-    expect(result.rows.length).toBeGreaterThan(0)
+    // The exact rows, not just a nonzero count: a count survives a regression that returns the
+    // wrong rows, the wrong order or the wrong types, and none of those would be a correct answer.
+    expect(result.rows).toEqual([['steps', 1000], ['steps', 2000]])
     expect(result.truncated).toBe(false)
   })
 

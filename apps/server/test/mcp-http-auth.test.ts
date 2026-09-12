@@ -291,13 +291,17 @@ describe('the log cannot hold free text', () => {
     expect(rows.length).toBeGreaterThan(0)
     expect(JSON.stringify(rows)).not.toContain(sentinel)
   })
+})
 
+// A different invariant from the describe block above: that one is about what a log row can hold,
+// this one is about which of the two `content` blocks a free-text cell may appear in.
+describe('the summary sentence', () => {
   it('keeps a note body out of the sentence an agent reads first, even under sql_query', async () => {
     const { secret } = h.mintMcpToken()
     const sentinel = 'zzz-never-in-the-prose-zzz'
     // Put the sentinel where only a cell value can carry it.
     h.app.haelan.instance.db.insert(schema.notes).values({
-      id: 'sentinel', personId: 'p1', localDate: '2026-08-01', body: sentinel, updatedAtMs: 0,
+      id: 'sentinel', personId: ADMIN_PERSON, localDate: '2026-08-01', body: sentinel, updatedAtMs: 0,
     }).run()
 
     const response = await toolsCall(secret, 'sql_query', { sql: 'SELECT body FROM notes' })

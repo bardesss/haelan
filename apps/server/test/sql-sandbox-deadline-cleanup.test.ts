@@ -71,3 +71,41 @@ describe('the deadline, and the file it leaves behind', () => {
     expect(existsSync(dir)).toBe(false)
   }, 95_000)
 })
+
+// Cleanup was, until now, only ever asserted on the hardest path above - the terminated worker.
+// Nothing proved the directory also disappears on the two paths that leave a worker without ever
+// terminating one: a query that finishes normally, and a call refused before a worker even
+// starts. Deleting `input.cleanup()` from runSql's busy branch would leave every other test in
+// this suite green while each refused-as-busy call leaked its projection directory for the life
+// of the container - these two close that gap. Both call `runSql`/`makeProjectionDir` directly,
+// the same way the case above does, because the tool wrapper never exposes the projection path to
+// poll.
+describe('cleanup on the paths that never terminate a worker', () => {
+  it('removes the projection directory after a query that finishes normally', async () => {
+    const projection = makeProjectionDir()
+    alice.writeProjection(projection.path)
+    await runSql({ projectionPath: projection.path, sql: 'SELECT 1', cleanup: projection.remove })
+    expect(existsSync(dirname(projection.path))).toBe(false)
+  })
+
+  it('removes the projection directory for a call refused as busy', async () => {
+    const first = makeProjectionDir()
+    alice.writeProjection(first.path)
+    // An unbounded recursive CTE, same as the row-cap case in sql-sandbox.test.ts: it returns
+    // inside the cap in under a second, so this occupies `busy` just long enough for the second
+    // call below to land while it is still true, without leaving a worker running past this test.
+    const slow = runSql({
+      projectionPath: first.path,
+      sql: 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c) SELECT x FROM c',
+      cleanup: first.remove,
+    })
+
+    const second = makeProjectionDir()
+    alice.writeProjection(second.path)
+    await expect(runSql({ projectionPath: second.path, sql: 'SELECT 1', cleanup: second.remove }))
+      .rejects.toThrow(/already running/)
+    expect(existsSync(dirname(second.path))).toBe(false)
+
+    await slow
+  })
+})
