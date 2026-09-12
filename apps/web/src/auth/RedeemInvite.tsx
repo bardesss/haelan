@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { apiGet, apiSend } from '../api/client.js'
 import { useTranslation } from '../i18n/index.js'
+import { BrandMark } from '../components/BrandMark.js'
 
 interface InviteInfo { displayName: string, timezone: string }
 interface RedeemResult { personId: string, username: string }
@@ -53,6 +54,7 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
     return (
       <main className="signin">
         <div className="card">
+          <BrandMark />
           <p>{t('invite.invalid')}</p>
         </div>
       </main>
@@ -64,6 +66,7 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
   return (
     <main className="signin">
       <form className="card" onSubmit={(event: FormEvent) => { event.preventDefault(); redeem.mutate() }}>
+        <BrandMark />
         <h1>{t('invite.joinAs', { name: invite.data.displayName })}</h1>
         <p>{t('invite.explain')}</p>
 

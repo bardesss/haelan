@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
+import { BrandMark } from './BrandMark.js'
 import { Icon } from './icons.js'
 import { Link } from '../router.js'
 import { readCollapsed, writeCollapsed } from '../ui/railState.js'
@@ -75,8 +76,10 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
   return (
     <nav className={collapsed ? 'rail rail-collapsed' : 'rail'} aria-label={t('sidebar.sectionsLabel')}>
       <div className="brand-row">
-        {/* Brand name, not copy: it stays "haelan" in every language. */}
-        <div className="brand">{label('haelan')}</div>
+        {/* Brand name, not copy: it stays "Hælan" in every language. The æ is the display
+            spelling only — the package, the image, the command and every instruction in the
+            catalogue stay "haelan", because those are the ones a reader has to type. */}
+        <div className="brand"><BrandMark />{label('Hælan')}</div>
         <button type="button" className="icon-button rail-toggle" onClick={toggle}
           aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
           <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} />

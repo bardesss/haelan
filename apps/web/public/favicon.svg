@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- A tab icon inherits no colour, so the two accent tokens are written out and the media query
+       picks between them. Geometry is scripts/render-icons.mjs's PATHS; the drift test pins it. -->
+  <style>
+    g { stroke: #2376E9 }
+    @media (prefers-color-scheme: dark) { g { stroke: #4F8FF7 } }
+  </style>
+  <g fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 4v16M19 4v16"/>
+    <path d="M5 12h3.9l.9 1.5 1.4-6.2 1.8 8.6 1-3.9H19"/>
+  </g>
+</svg>
