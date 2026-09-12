@@ -168,6 +168,15 @@ body {
    selector to query under. */
 .workout-tiles { display: contents; }
 
+/* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
+   the same card - each is its own Card, this only styles the table each one wraps. */
+.workout-splits { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
+.workout-splits th { text-align: left; color: var(--text-muted); font-weight: 600; padding: var(--space-1) 0; }
+.workout-splits td { padding: var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
+/* WorkoutDynamics.tsx's own tile row - up to five StatTiles, fewer when a session recorded fewer
+   of the five fields, wrapping onto a second row on a narrow viewport rather than compressing. */
+.workout-dynamics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
+
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }

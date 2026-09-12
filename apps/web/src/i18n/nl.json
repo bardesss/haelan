@@ -81,7 +81,8 @@
     "to": "tot en met",
     "loading": "Laden",
     "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
-    "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
+    "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}",
+    "absent": "—"
   },
   "errorState": {
     "title": "Dit kon niet worden geladen.",
@@ -293,7 +294,11 @@
       "paceSuffix": "/km",
       "elevationGainShort": "m omhoog",
       "meters": "m",
-      "speed": "m/s"
+      "speed": "m/s",
+      "spm": "spm",
+      "ms": "ms",
+      "cm": "cm",
+      "percent": "%"
     },
     "insights": {
       "steps": "Stappen, deze periode tegenover de vorige"
@@ -428,6 +433,19 @@
         "label": "Hartslag tijdens deze training",
         "events": "Pauzes",
         "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+      },
+      "splits": {
+        "autoLabel": "Automatische tussentijden", "lapLabel": "Rondes", "lapLabelTyped": "Rondes ({{type}})",
+        "number": "#", "distance": "Afstand", "duration": "Duur", "pace": "Tempo", "heartRate": "Hartslag",
+        "type": {
+          "MANUAL": "handmatig", "DURATION": "op duur", "DISTANCE": "op afstand",
+          "CALORIES": "op calorieën", "SPLIT_TYPE_UNSPECIFIED": "niet gespecificeerd"
+        }
+      },
+      "dynamics": {
+        "label": "Hardloopdynamiek",
+        "cadence": "Cadans", "stride": "Paslengte", "groundContact": "Grondcontact",
+        "oscillation": "Verticale oscillatie", "verticalRatio": "Verticale ratio"
       }
     }
   },

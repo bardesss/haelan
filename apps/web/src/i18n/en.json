@@ -81,7 +81,8 @@
     "to": "to",
     "loading": "Loading",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
-    "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}"
+    "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}",
+    "absent": "—"
   },
   "errorState": {
     "title": "This did not load.",
@@ -293,7 +294,11 @@
       "paceSuffix": "/km",
       "elevationGainShort": "m gained",
       "meters": "m",
-      "speed": "m/s"
+      "speed": "m/s",
+      "spm": "spm",
+      "ms": "ms",
+      "cm": "cm",
+      "percent": "%"
     },
     "insights": {
       "steps": "Steps, this period against the last"
@@ -428,6 +433,19 @@
         "label": "Heart rate through this workout",
         "events": "Pauses",
         "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
+      },
+      "splits": {
+        "autoLabel": "Automatic splits", "lapLabel": "Laps", "lapLabelTyped": "Laps ({{type}})",
+        "number": "#", "distance": "Distance", "duration": "Duration", "pace": "Pace", "heartRate": "Heart rate",
+        "type": {
+          "MANUAL": "manual", "DURATION": "by duration", "DISTANCE": "by distance",
+          "CALORIES": "by calories", "SPLIT_TYPE_UNSPECIFIED": "unspecified"
+        }
+      },
+      "dynamics": {
+        "label": "Running dynamics",
+        "cadence": "Cadence", "stride": "Stride length", "groundContact": "Ground contact",
+        "oscillation": "Vertical oscillation", "verticalRatio": "Vertical ratio"
       }
     }
   },
