@@ -33,7 +33,10 @@ body {
    toggle 6px right of the strip's centre and 1px past its edge. The .button reset is the same
    shape one row down: 11px of horizontal padding either side of a 15px icon needs 39px inside a
    36px content box, which is what the collapsed rail used to overflow by. */
-.rail-collapsed .brand-row { justify-content: center; padding-left: 0; }
+/* Stacked rather than side by side: a 60px rail leaves 36px between its paddings, and a 20px
+   mark next to the toggle's 15px chevron does not fit in it. Stacking keeps both at full size,
+   which matters more here than the row staying a row. */
+.rail-collapsed .brand-row { flex-direction: column; align-items: center; gap: var(--space-2); justify-content: center; padding-left: 0; }
 .rail-collapsed .rail-foot .button { padding-left: 0; padding-right: 0; }
 /* Group headings become dividers rather than keeping their box. Their text is sr-only under
    collapse, which left three 16px gaps of nothing between the icons: the grouping was still
@@ -49,7 +52,11 @@ body {
 .rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px var(--space-3); border-radius: 7px; font-size: var(--font-size-sm); color: var(--text-secondary); text-decoration: none; }
 .rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: 600; }
 .brand-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 16px 12px; }
-.brand { font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; }
+.brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; }
+/* The one element that survives the rail collapsing, since `label()` sends the wordmark to
+   sr-only and the row would otherwise be left holding nothing but the chevron. Sized here rather
+   than on the svg so each surface below can ask for its own without touching the component. */
+.brand-mark { width: 20px; height: 20px; flex: none; color: var(--accent); }
 .rail-toggle { flex: none; }
 .rail-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
 .rail-item[aria-current='page'] svg { opacity: 1; color: var(--accent); }
@@ -211,7 +218,7 @@ body {
    viewport is the one thing being asked for. */
 .setup-shell { min-height: 100vh; display: flex; justify-content: center; padding: var(--space-6) var(--space-4); }
 .setup-column { width: 100%; max-width: 640px; }
-.setup-brand { font-weight: 700; font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
+.setup-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
 
 /* The steps are a real sequence the server derives from what is in the database, so showing
    position states a fact rather than decorating one. */
@@ -300,6 +307,14 @@ body {
    the boxed alert already declared above under "Forms" fits this screen too. */
 .signin { display: grid; place-items: center; min-height: 100vh; padding: var(--space-6); }
 .signin .card { display: grid; gap: var(--space-3); width: min(360px, 100%); }
+/* Larger than the rail's: the card is the whole screen here, so the mark is doing the work the
+   rail's wordmark does elsewhere. justify-self because the card is a grid and a stretched svg
+   would scale to the full column width. */
+.signin .brand-mark { width: 30px; height: 30px; justify-self: start; }
+/* The card is a grid, so the first child's own top margin does not collapse into anything: it
+   adds to the grid gap. That put 29px between the mark and the heading it is meant to sit with.
+   Scoped to whatever follows the mark so the rest of the card keeps the spacing it had. */
+.signin .brand-mark + * { margin-top: 0; }
 
 /* The panel a reader opens by clicking a plotted point (AnnotatePanel.tsx). color-mix over
    surface-page rather than a flat black, the same device .surface-chosen and .setup-rail's own

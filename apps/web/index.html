@@ -6,10 +6,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>haelan</title>
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" href="/logo-dark.png" media="(prefers-color-scheme: dark)" />
-    <link rel="icon" type="image/png" href="/logo-light.png" media="(prefers-color-scheme: light)" />
+    <title>Hælan</title>
+    <!-- The svg carries its own prefers-color-scheme rule, so one file covers both themes and
+         stays sharp at every size a browser asks for. The ico is the fallback for anything that
+         will not take an svg icon, and holds 16/32/48 with alpha. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0A0E17" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F5F7FB" media="(prefers-color-scheme: light)" />

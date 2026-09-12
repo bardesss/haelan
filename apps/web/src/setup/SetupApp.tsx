@@ -7,6 +7,7 @@ import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
 import { DataTypeStep } from './DataTypeStep.js'
 import { SignIn } from '../auth/SignIn.js'
+import { BrandMark } from '../components/BrandMark.js'
 import {
   getLastError, getRedirectUris, getScopes, getSetupState, getSyncStatus, putBackfillHorizon,
 } from './api.js'
@@ -149,7 +150,7 @@ export function SetupApp() {
   return (
     <div className="setup-shell">
       <div className="setup-column">
-        <div className="setup-brand">haelan</div>
+        <div className="setup-brand"><BrandMark />Hælan</div>
         <Rail current={step ?? 'account'} />
 
         {route.startsWith('/setup/instance-url')
