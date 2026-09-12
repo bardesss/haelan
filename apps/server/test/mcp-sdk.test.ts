@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { PersonQuery, createTestDatabase, seedPerson, schema } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
-import { buildServer } from '../src/mcp.ts'
+import { buildMcpServer } from '../src/mcp/adapter.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
 
 /**
@@ -34,7 +34,7 @@ afterEach(() => {
 })
 
 async function connected(): Promise<Client> {
-  const server = buildServer(new PersonQuery(fixture.db, 'robin'))
+  const server = buildMcpServer(new PersonQuery(fixture.db, 'robin'))
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   const client = new Client({ name: 'mcp-sdk-test', version: '1' })
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])

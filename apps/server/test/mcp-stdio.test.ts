@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { AccountStore, createTestDatabase, seedPerson } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
-import { resolvePerson, summarise } from '../src/mcp.ts'
+import { resolvePerson } from '../src/mcp.ts'
+import { summarise } from '../src/mcp/adapter.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
 
 const ENTRY = fileURLToPath(new URL('../src/mcp.ts', import.meta.url))
