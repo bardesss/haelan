@@ -169,6 +169,27 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   },
 
   {
+    route: 'GET /api/profile/mcp-tokens',
+    auth: 'session',
+    why: 'it lists the caller\'s own tokens; the account is the one the session resolves to, never one named in the request',
+  },
+  {
+    route: 'POST /api/profile/mcp-tokens',
+    auth: 'session',
+    why: 'minting is the member\'s own act by design - there is deliberately no admin path to another member\'s token',
+  },
+  {
+    route: 'DELETE /api/profile/mcp-tokens/:id',
+    auth: 'session',
+    why: 'the store scopes the revocation to the caller\'s own account, so an id from elsewhere is a 404 rather than a revocation',
+  },
+  {
+    route: 'GET /api/profile/mcp-calls',
+    auth: 'session',
+    why: 'it reports calls made with the caller\'s own tokens, reached through the token\'s account rather than a path parameter',
+  },
+
+  {
     route: 'POST /mcp',
     auth: 'mcp_token',
     why: 'the agent surface: its own credential, checked at onRequest, and invisible until this instance has minted one',
