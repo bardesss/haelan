@@ -471,6 +471,25 @@ body {
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
 
+/* McpTokens.tsx: the same row shape .member-row uses, one row per token rather than a table, since
+   a token carries the same kind of mixed name/state/action line a member does. min-width: 0 for
+   the reason .profile carries it, since the secret and its hint are long single lines that would
+   otherwise stretch the card. */
+.mcp-tokens { min-width: 0; }
+.mcp-token-list { list-style: none; margin: 0; padding: 0; }
+.mcp-token {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
+}
+.mcp-token:last-child { border-bottom: 0; }
+/* The calls list: plain rows of muted text rather than .mcp-token's flex line, since a call has no
+   action to align to the right the way a live token's Revoke button does. */
+.mcp-call-list {
+  list-style: none; margin: 0; padding: 0; font-size: var(--font-size-xs); color: var(--text-secondary);
+}
+.mcp-call-list li { padding: var(--space-1) 0; border-bottom: 1px solid var(--border-subtle); }
+.mcp-call-list li:last-child { border-bottom: 0; }
+
 /* The reset form opens inside the member's own row, below its controls rather than beside them:
    .member-row is a flex line and a password field on it would squeeze the name and state it
    belongs to. flex-basis 100% is what drops it onto its own line within that same row. */

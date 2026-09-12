@@ -798,6 +798,36 @@
         "failed": "Het wachtwoord is niet gewijzigd: {{reason}}"
       }
     },
+    "mcp": {
+      "title": "Agent-toegang",
+      "intro": "Een token laat een AI-agent op een andere machine de gezondheidsgegevens van dit account lezen via haelans tool-oppervlak. Het leest en schrijft nooit, het antwoordt alleen voor dit account, en het verloopt vanzelf. Alles wat een agent leest, verlaat het huis naar welke modelaanbieder er ook aan de andere kant van het gesprek zit.",
+      "empty": "Nog geen tokens. Tot er een bestaat, reageert het agent-oppervlak alsof het er helemaal niet is.",
+      "label": "Waar is dit voor",
+      "labelHint": "Een machine of een app, zodat je later kunt zien welke je moet intrekken. De laptop, de telefoon, een script.",
+      "life": "Verloopt na",
+      "lifeDays": "{{days}} dagen",
+      "mint": "Token aanmaken",
+      "minting": "Bezig met aanmaken…",
+      "failed": "Dit token is niet aangemaakt: {{reason}}",
+      "secretTitle": "Kopieer dit nu",
+      "secretHint": "Dit wordt maar één keer getoond. Stuur het mee als een Authorization: Bearer header, en laat de client zowel application/json als text/event-stream accepteren.",
+      "secretDone": "Ik heb het gekopieerd",
+      "created": "Aangemaakt {{when}}",
+      "expires": "Verloopt {{when}}",
+      "expired": "Verlopen {{when}}",
+      "revoked": "Ingetrokken {{when}}",
+      "lastUsed": "Laatst gebruikt {{when}}",
+      "neverUsed": "Nooit gebruikt",
+      "revoke": "Intrekken",
+      "revoking": "Bezig met intrekken…",
+      "revokeFailed": "Dit token is niet ingetrokken: {{reason}}",
+      "callsTitle": "Recente aanroepen",
+      "callsEmpty": "Nog geen aanroepen.",
+      "callsHint": "Wat er is gevraagd en wanneer. De argumenten worden niet vastgelegd: daar is geen kolom voor, dus een zoekopdracht in je eigen notities kan hier niet worden teruggelezen.",
+      "outcomeOk": "ok",
+      "outcomeError": "geweigerd door de tool",
+      "outcomeRefused": "geweigerd"
+    },
     "overrides": {
       "title": "Correcties en uitsluitingen",
       "empty": {

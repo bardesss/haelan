@@ -798,6 +798,36 @@
         "failed": "The password was not changed: {{reason}}"
       }
     },
+    "mcp": {
+      "title": "Agent access",
+      "intro": "A token lets an AI agent on another machine read this account's health data through haelan's tool surface. It reads and never writes, it answers for this account only, and it expires on its own. Anything an agent reads leaves the house for whichever model provider is on the other end of the conversation.",
+      "empty": "No tokens yet. Until one exists, the agent surface answers as though it were not there at all.",
+      "label": "What is this for",
+      "labelHint": "A machine or an app, so you can tell later which one to revoke. The laptop, the phone, a script.",
+      "life": "Expires after",
+      "lifeDays": "{{days}} days",
+      "mint": "Create token",
+      "minting": "Creating…",
+      "failed": "That token was not created: {{reason}}",
+      "secretTitle": "Copy this now",
+      "secretHint": "This is the only time it is shown. Send it as an Authorization: Bearer header, and have the client accept both application/json and text/event-stream.",
+      "secretDone": "I have copied it",
+      "created": "Created {{when}}",
+      "expires": "Expires {{when}}",
+      "expired": "Expired {{when}}",
+      "revoked": "Revoked {{when}}",
+      "lastUsed": "Last used {{when}}",
+      "neverUsed": "Never used",
+      "revoke": "Revoke",
+      "revoking": "Revoking…",
+      "revokeFailed": "That token was not revoked: {{reason}}",
+      "callsTitle": "Recent calls",
+      "callsEmpty": "No calls yet.",
+      "callsHint": "What was asked and when. The arguments are not recorded: there is no column for them, so a search of your own notes cannot be read back here.",
+      "outcomeOk": "ok",
+      "outcomeError": "refused by the tool",
+      "outcomeRefused": "refused"
+    },
     "overrides": {
       "title": "Corrections and exclusions",
       "empty": {
