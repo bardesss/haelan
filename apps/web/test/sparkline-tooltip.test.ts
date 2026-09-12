@@ -21,8 +21,8 @@ const t: Translate = (key, options) => {
   return text
 }
 
-const labels = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13']
-const values = [9000, null, 8600, null]
+const labels = ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14']
+const values = [9000, null, 8600, null, null]
 const excluded = ['2026-08-13']
 const annotations = [{ date: '2026-08-11', text: 'travelling' }, { date: '2026-08-11', text: 'ill' }]
 
@@ -83,8 +83,8 @@ describe('the sparkline tooltip', () => {
   // drops that row rather than rowing it "no reading". A tooltip that announced an absence there
   // would contradict, on the canvas, the rule the table follows beside it.
   it('says nothing at all for a silent day under episodic', () => {
-    expect(sparklineTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 1 }))
-      .toBe('2026-08-11<br/>Steps: no reading')
+    expect(sparklineTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 4 }))
+      .toBe('')
   })
 
   // ...but a day the reader acted on keeps its readout even under episodic, for the same reason it
@@ -97,7 +97,7 @@ describe('the sparkline tooltip', () => {
 
   it('keeps the readout under episodic for a day that was annotated', () => {
     expect(sparklineTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 1 }))
-      .not.toBe('')
+      .toBe('2026-08-11<br/>Steps: no reading')
   })
 
   // The defect this project has already shipped once, in the table: Activity's distance plots raw
