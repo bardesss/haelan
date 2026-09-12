@@ -482,13 +482,17 @@ describe('Sparkline', () => {
     })
   })
 
-  // Sparkline's own build() never sets a `tooltip` key at all (its own comment: "a sparkline is a
-  // shape, not a chart to consult"), and echarts only creates a component for a mainType present
-  // in the option object handed to setOption, so omitting the key is not an empty tooltip, it is
-  // no tooltip component at all. Confirmed against the real setOption argument rather than assumed
-  // from the source, since ActivityHeatmap's own leak (this task's starting defect) came from the
-  // opposite mistake: a tooltip present with no formatter, not a tooltip absent altogether.
-  it('sets no tooltip at all, so a mark hover shows nothing rather than leaking an internal id', () => {
+  // Sparkline used to set no `tooltip` key at all ("a sparkline is a shape, not a chart to
+  // consult"); the sparkline readouts feature (#143) is exactly the change that gave it one, so a
+  // mark hover now goes through the real formatter instead of drawing nothing. It must still not
+  // leak an internal id: MarkLineModel's own `tooltip.trigger` defaults to 'item' and reports a
+  // dataIndex counting into `marks.atDate`, never into `values`, so the formatter has to resolve
+  // through `marks` (as sparklineTooltip does; sparkline-tooltip.test.ts covers that resolution on
+  // its own) rather than through whatever echarts would otherwise name the point with. Calls the
+  // real `tooltip.formatter` off the real setOption argument with the params object echarts would
+  // pass, the same device the ActivityHeatmap and HeartRateRange tooltip blocks in this file use,
+  // since a tooltip cannot be asserted by rendering and hovering under happy-dom.
+  it('names the day and the reason on a mark hover, never an internal id', () => {
     act(() => {
       root!.render(
         <Sparkline values={appliedValues} labels={labels} label="steps" unit="steps" metric="steps"
@@ -496,8 +500,12 @@ describe('Sparkline', () => {
       )
     })
     const stub = chartStubs.at(-1)!
-    const option = stub.setOption.mock.calls[0]![0] as { tooltip?: unknown }
-    expect(option.tooltip).toBeUndefined()
+    const option = stub.setOption.mock.calls[0]![0] as { tooltip: { formatter: (params: unknown) => string } }
+    // Only entry in `marks.atDate` here is the excluded, annotated 2026-08-02, so its markLine
+    // dataIndex is 0.
+    const text = option.tooltip.formatter({ componentType: 'markLine', dataIndex: 0 })
+    expect(text).toBe(`2026-08-02<br/>charts.absence.excluded, ${EXCLUDED_REASON}`)
+    expect(text).not.toContain('series0')
   })
 
   describe('sparklinePointDate', () => {
