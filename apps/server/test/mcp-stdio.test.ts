@@ -185,7 +185,13 @@ describe('stdout purity', () => {
     jsonrpc: '2.0',
     id: 2,
     method: 'tools/call',
-    params: { name: 'list_metrics', arguments: {} },
+    // `sql_query`, deliberately, and not a cheaper tool. It is the only one that forks a child,
+    // and that child's stdio is inherited from this very process unless runSql.ts sets it
+    // otherwise - which is the exact hazard the purity test below exists to catch. `list_metrics`
+    // would exercise a tool body and leave the sandbox child, the harder half, untested.
+    // `SELECT 1 AS one` needs no seeded rows: the projection is built either way, so the fork,
+    // the child's stdio and the reply all happen regardless of what the person's history holds.
+    params: { name: 'sql_query', arguments: { sql: 'SELECT 1 AS one' } },
   })}\n`
 
   /**
