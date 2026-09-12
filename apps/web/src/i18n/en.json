@@ -466,6 +466,10 @@
     "bandToggle": {
       "hide": "Hide daily range",
       "show": "Show daily range"
+    },
+    "tableToggle": {
+      "show": "Show numbers",
+      "hide": "Hide numbers"
     }
   },
   "sleep": {

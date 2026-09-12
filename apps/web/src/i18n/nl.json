@@ -466,6 +466,10 @@
     "bandToggle": {
       "hide": "Dagbereik verbergen",
       "show": "Dagbereik tonen"
+    },
+    "tableToggle": {
+      "show": "Cijfers tonen",
+      "hide": "Cijfers verbergen"
     }
   },
   "sleep": {

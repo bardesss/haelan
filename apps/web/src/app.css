@@ -278,6 +278,16 @@ body {
   clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;
 }
 
+/* The same accessible table, shown. A scroll box rather than a plain block for the reason
+   ChartFigure's own comment gives: a table's used width is floored at its min-content width, so it
+   is allowed to be as wide as it needs and scrolls inside the card instead of widening the page.
+   The height cap is what keeps a year - 365 rows - from pushing everything below it off screen. */
+.chart-table { max-height: 220px; overflow: auto; margin-top: var(--space-1); }
+.chart-table table { width: 100%; border-collapse: collapse; font-size: var(--font-size-micro); }
+.chart-table caption { text-align: left; color: var(--text-faint); padding-bottom: var(--space-1); }
+.chart-table th, .chart-table td { text-align: left; padding: 2px var(--space-1); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
+
 @media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
