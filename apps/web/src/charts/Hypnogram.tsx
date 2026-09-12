@@ -8,6 +8,7 @@ import { stageMark, STAGE_LABEL_KEY } from './stage.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatDuration } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
+import { hypnogramTooltip } from './hypnogramTooltip.js'
 
 const LANES: Stage[] = ['awake', 'rem', 'light', 'deep']
 
@@ -72,6 +73,16 @@ export function Hypnogram({ segments, startLabel, label }: {
     const base = chartBase(tokens)
     return {
       grid: base.grid({ left: 46, top: 10 }),
+      tooltip: {
+        ...base.tooltip,
+        // 'item', not 'axis': this is a custom series of rects on a category y, so the thing a
+        // reader points at is one segment, not a column of them sharing an x.
+        trigger: 'item' as const,
+        formatter: (params: unknown) => {
+          const p = Array.isArray(params) ? params[0] : params
+          return hypnogramTooltip(segments, (p as { dataIndex?: number } | undefined)?.dataIndex, t)
+        },
+      },
       xAxis: { type: 'value' as const, min: 0, max: (segments.at(-1)?.endMs ?? 480 * MINUTE_MS) / MINUTE_MS,
         axisLabel: { ...base.axisLabel, formatter: (v: number) => `${Math.floor(v / 60)}h` },
         splitLine: base.splitLine },
@@ -105,7 +116,7 @@ export function Hypnogram({ segments, startLabel, label }: {
       graphic: [{ type: 'text' as const, left: 46, top: 0,
         style: { text: startLabel, fill: tokens.muted, fontSize: base.axisLabel.fontSize } }],
     }
-  }, [segments, startLabel])
+  }, [segments, startLabel, t])
 
   const { host, style } = useChart(build, 130)
 
