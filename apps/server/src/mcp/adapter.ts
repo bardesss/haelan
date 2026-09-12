@@ -214,7 +214,7 @@ function register(
   server.registerTool(
     tool.name,
     { description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema },
-    (args) => {
+    async (args) => {
       // performance.now(), and a duration rather than two timestamps: every other clock in this
       // app is injected so a test can freeze it, and a frozen clock would make every duration
       // zero. An elapsed measure is not a timestamp, so it does not belong to that rule - the
@@ -222,7 +222,7 @@ function register(
       const started = performance.now()
       let structuredContent: Record<string, unknown>
       try {
-        structuredContent = tool.run(query, args) as Record<string, unknown>
+        structuredContent = await tool.run(query, args) as Record<string, unknown>
       } catch (error) {
         // Reported before it is rethrown. A refused call is the half of the log that matters most
         // - the SDK turns this throw into a tool result with `isError` set, which an agent reads

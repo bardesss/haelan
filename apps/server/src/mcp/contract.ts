@@ -29,7 +29,13 @@ export interface Tool<I extends z.ZodRawShape = z.ZodRawShape, O extends z.ZodRa
   // checked bivariantly instead, which is the looseness a heterogeneous registry like this one
   // needs, and it is TypeScript's own idiomatic answer to this shape rather than a workaround.
   // Do not "tidy" this back into an arrow-typed property: every tool file breaks at once.
-  run(q: PersonQuery, args: z.infer<z.ZodObject<I>>): z.infer<z.ZodObject<O>>
+  //
+  // The return widened to `| Promise<...>` for M4b: `sql_query` runs its SQL on a worker thread,
+  // because better-sqlite3 is synchronous and a slow query would otherwise hold the event loop
+  // for its whole duration. Every other tool returns a value and satisfies this unchanged; the
+  // adapter awaits, so a synchronous tool costs one already-resolved microtask and nothing else.
+  run(q: PersonQuery, args: z.infer<z.ZodObject<I>>):
+    z.infer<z.ZodObject<O>> | Promise<z.infer<z.ZodObject<O>>>
 }
 
 /**

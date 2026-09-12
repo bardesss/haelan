@@ -45,7 +45,7 @@ afterEach(() => test.cleanup())
 
 describe('every tool, bound to one person, proved against a second', () => {
   for (const t of CATALOGUE) {
-    it(`${t.name} never answers with another person's data`, () => {
+    it(`${t.name} never answers with another person's data`, async () => {
       const input = TOOL_INPUTS[t.name]
       if (input === undefined) {
         throw new Error(
@@ -54,7 +54,7 @@ describe('every tool, bound to one person, proved against a second', () => {
         )
       }
 
-      const result = t.run(alice, input)
+      const result = await t.run(alice, input)
       const json = JSON.stringify(result)
       for (const fingerprint of BART_TEXT_FINGERPRINTS) {
         expect(json).not.toContain(fingerprint)
@@ -68,12 +68,12 @@ describe('every tool, bound to one person, proved against a second', () => {
   // The suite's own floor. Without this, a PersonQuery bound to nobody's rows would answer
   // thirteen empty results, contain none of bart's fingerprints, and pass - which is the one way
   // this file could be green and worthless.
-  it("answers with alice's own data, so the absence of bart's means something", () => {
+  it("answers with alice's own data, so the absence of bart's means something", async () => {
     const missing: string[] = []
     for (const [name, fingerprint] of Object.entries(ALICE_FINGERPRINTS)) {
       const t = CATALOGUE.find((tool) => tool.name === name)
       if (t === undefined) throw new Error(`no tool named ${name}`)
-      const result = t.run(alice, TOOL_INPUTS[name]!)
+      const result = await t.run(alice, TOOL_INPUTS[name]!)
       const json = JSON.stringify(result)
       // A plain substring check here would be the mirror image of the bug master's numberLeak
       // fixes: this is an assertion that a number IS present, so a coincidental match inside a
@@ -116,13 +116,13 @@ describe('every tool, bound to one person, proved against a second', () => {
   // else in a shared household and hands it back is the single most plausible route into another
   // member's data on this surface. This is the file whose job is to make that refusal visible
   // rather than assumed.
-  it("get_workout refuses bart's session id under alice's binding, rather than answering with it", () => {
+  it("get_workout refuses bart's session id under alice's binding, rather than answering with it", async () => {
     const getWorkout = CATALOGUE.find((t) => t.name === 'get_workout')
     if (getWorkout === undefined) throw new Error('no tool named get_workout')
 
     let caught: unknown
     try {
-      getWorkout.run(alice, { sessionId: 'bart-run' })
+      await getWorkout.run(alice, { sessionId: 'bart-run' })
     } catch (err) {
       caught = err
     }
@@ -135,5 +135,16 @@ describe('every tool, bound to one person, proved against a second', () => {
     for (const fingerprint of ['bart-watch', 'bart-night', 'bart-note-sentinel', 'bart-event-sentinel', '8800', '176']) {
       expect(detail).not.toContain(fingerprint)
     }
+  })
+
+  // A tool that returns a Promise which nobody awaits serialises to '{}', contains no
+  // fingerprint, and passes every case above while proving nothing. Since M4b a tool is allowed
+  // to be asynchronous, so that is now reachable by accident rather than impossible. This asserts
+  // the suite actually unwrapped whatever run() returned.
+  it('awaits whatever a tool returns, so no case can pass on an unresolved promise', async () => {
+    const describe_ = CATALOGUE.find((t) => t.name === 'describe_person')!
+    const result = await describe_.run(alice, {})
+    expect(result).not.toBeInstanceOf(Promise)
+    expect(JSON.stringify(result)).toContain('alice')
   })
 })
