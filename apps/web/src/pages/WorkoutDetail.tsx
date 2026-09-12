@@ -7,6 +7,7 @@ import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
 import { WorkoutHeader } from './activity/WorkoutHeader.js'
 import { WorkoutTiles } from './activity/WorkoutTiles.js'
+import { WorkoutZones } from './activity/WorkoutZones.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -33,9 +34,9 @@ import { EmptyState } from '../components/EmptyState.js'
  * No `.page` or `.workout-page` wrapper on the loaded state below: every page in this app returns
  * a fragment, a heading - here, WorkoutHeader rather than a plain `<h1>`, since this page's heading
  * also carries the workout's clock times, its source and its excluded badge - followed by the
- * twelve-column `.grid` the design's cards land in: the stat tiles first, then the later tasks'
- * zones, trace, splits and comparison card. Notes.tsx is the shortest example of the same shape
- * this page follows.
+ * twelve-column `.grid` the design's cards land in: the stat tiles first, then the zone card, then
+ * the later tasks' trace, splits and comparison card. Notes.tsx is the shortest example of the
+ * same shape this page follows.
  */
 export function WorkoutDetail() {
   const { t } = useTranslation()
@@ -72,6 +73,7 @@ export function WorkoutDetail() {
       <WorkoutHeader session={query.data} detail={detail} timezone={timezone} />
       <div className="grid">
         <WorkoutTiles session={query.data} detail={detail} />
+        <WorkoutZones detail={detail} />
       </div>
     </>
   )

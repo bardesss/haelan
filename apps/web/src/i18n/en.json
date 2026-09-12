@@ -417,6 +417,12 @@
         "moving": "active duration, as the device recorded it",
         "provider": "as the provider recorded it",
         "pool": "as the provider recorded it, in a {{meters}} m pool"
+      },
+      "zones": {
+        "label": "Time in heart rate zones",
+        "basis": "the session's own four zones, as the device recorded them — not the three active zone minutes zones",
+        "column": "Zone",
+        "light": "Light", "moderate": "Moderate", "vigorous": "Vigorous", "peak": "Peak"
       }
     }
   },
