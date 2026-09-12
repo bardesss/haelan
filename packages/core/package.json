@@ -12,7 +12,8 @@
     "./target-key": "./src/derive/targetKey.ts",
     "./baseline-window": "./src/query/baseline.ts",
     "./metric-data-type": "./src/api/metricDataType.ts",
-    "./workout-summary": "./src/api/workoutSummary.ts"
+    "./workout-summary": "./src/api/workoutSummary.ts",
+    "./workout-comparison": "./src/api/workoutComparison.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"
