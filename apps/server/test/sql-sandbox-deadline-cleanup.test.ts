@@ -10,15 +10,15 @@ import { runSql, makeProjectionDir } from '../src/mcp/runSql.ts'
  * deadline')` block.
  *
  * `busy` in `runSql.ts` is a module-level singleton, not per-instance state, and it is released
- * only on the worker's `'exit'` event. The sandbox suite's own deadline case sends a query bounded
- * at x < 2,000,000,000, which - at the throughput measured while choosing this file's own bound,
- * roughly 4-6 million rows/second - keeps that worker's native call running, and `busy` held,
- * for several minutes after the 5-second rejection already fired. A second deadline-shaped test
- * placed right after it in the same file would inherit that still-`true` `busy` flag and be
- * refused as "another sql_query is already running" before its own query ever started - confirmed
- * by trying exactly that. Vitest gives each test *file* a fresh module instance by default
- * (`isolate: true`), so a separate file is what actually gets this test a clean `busy = false` to
- * start from, not a workaround for a flaky assertion.
+ * only on the worker's `'exit'` event. Even after being sized down to outlast the 5-second
+ * deadline by only ~10 seconds rather than minutes (see the comment on the bound below, and the
+ * matching one in `sql-sandbox.test.ts`), the sandbox suite's own deadline case still leaves its
+ * worker's native call - and `busy` - running for a few seconds after its own assertion has
+ * already passed. A second deadline-shaped test placed right after it in the same file would
+ * inherit that still-`true` `busy` flag and be refused as "another sql_query is already running"
+ * before its own query ever started - confirmed by trying exactly that. Vitest gives each test
+ * *file* a fresh module instance by default (`isolate: true`), so a separate file is what actually
+ * gets this test a clean `busy = false` to start from, not a workaround for a flaky assertion.
  */
 let test: TestDatabase
 let alice: PersonQuery
@@ -34,17 +34,19 @@ describe('the deadline, and the file it leaves behind', () => {
   it('removes the projection file once the still-running worker actually exits', async () => {
     // The rejection fires the instant the deadline timer does; the query itself is still running
     // underneath it, blocked in a native call nothing here can interrupt, and it still holds the
-    // projection file open. This is the case that caught the EPERM bug in apps/server/src/mcp/
-    // tools/sql.ts: cleanup cannot happen at the rejection, only later, once the worker's 'exit'
-    // event proves the handle is actually gone. Calling runSql and makeProjectionDir directly,
-    // rather than through the sql_query tool, is what gives this test the path to poll - the tool
-    // itself never exposes it.
+    // projection file open. This is NOT the case that caught the EPERM bug - that was
+    // `sql-sandbox.test.ts`'s deadline case, which goes through the actual `sql_query` tool and so
+    // exercises `sql.ts`'s own wiring. This one calls `runSql` and `makeProjectionDir` directly,
+    // bypassing `sql.ts` entirely, which is what gives it the projection path to poll (the tool
+    // never exposes it) but also means it pins `runSql`'s own contract in isolation - not the
+    // tool's - and a future reader should not delete this believing the other test already covers
+    // it: neither one, on its own, proves what the other does.
     //
-    // The bound (60,000,000) is chosen empirically on this machine to reliably run past the
-    // 5-second deadline while still finishing, once left to run to completion, well inside this
-    // test's own budget: a plain, un-workered recursive count on this machine measured 4.1-5.8
-    // million rows/second across two separate runs, and the margin below is sized off the slower
-    // of the two on purpose.
+    // The bound (60,000,000) only needs to outlast the 5-second deadline, not run for minutes -
+    // see the identical reasoning on `sql-sandbox.test.ts`'s own deadline case. Sized off two
+    // direct throughput measurements on this machine (4.1-5.8 million rows/second for an
+    // unworkered recursive count) to land this query's own natural runtime around 13-15 seconds,
+    // which is also what the poll loop below measured directly, twice, end to end.
     const projection = makeProjectionDir()
     alice.writeProjection(projection.path)
     const started = Date.now()
