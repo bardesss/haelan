@@ -11,6 +11,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CATALOGUE } from '../apps/server/src/mcp/catalogue.ts'
 import { DEFAULT_DAILY_POINTS, DEFAULT_INTRADAY_POINTS, MAX_POINTS } from '../apps/server/src/mcp/contract.ts'
+import { SQL_DEADLINE_MS, SQL_ROW_CAP } from '../apps/server/src/mcp/runSql.ts'
 
 /**
  * Peels every `optional`/`nullable` wrapper off a Zod schema and reports what was under them: the
@@ -152,6 +153,30 @@ export function render() {
       + 'out of the log. Calls made over stdio are not logged at all: that entry opens the database '
       + 'read-only and cannot write, and a process that can `docker exec` into the container '
       + 'already holds everything a log would be protecting.',
+    '',
+    '## sql_query',
+    '',
+    'One read-only SELECT over a database built for the question and thrown away after it. It '
+      + 'holds one person\'s rows in seven tables and nothing else: no other member, and none of '
+      + 'the tables that hold a password hash, an OAuth token or a session. Start with `SELECT sql '
+      + 'FROM sqlite_master` - the schema documents itself, because it is the schema.',
+    '',
+    '**There is no person column anywhere.** The database holds exactly one person, so there is '
+      + 'nothing to filter by, and a query that tries gets an error naming a column that does not '
+      + 'exist rather than a silent empty answer.',
+    '',
+    '**Intraday samples are not in it.** They are 85% of the database and the one table whose '
+      + 'shape is hostile to hand-written SQL; `get_intraday` and `get_workout` serve them at the '
+      + 'resolution the data holds.',
+    '',
+    'It is slower than the other tools - it builds a fresh database per query - and it runs one '
+      + 'at a time, so a second concurrent call is refused rather than queued. A query that has '
+      + `not finished in ${SQL_DEADLINE_MS / 1000} seconds is given up on. At most ${SQL_ROW_CAP} `
+      + 'rows come back; when more matched, `truncated` is true and what you have is a prefix.',
+    '',
+    '**The call log records that it ran, never what it ran.** `mcp_calls` has no column for '
+      + 'argument values, so the SQL is not kept - the same rule that stops the log recording what '
+      + 'somebody searched their notes for.',
     '',
     '## Where the data goes',
     '',

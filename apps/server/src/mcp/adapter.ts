@@ -166,6 +166,10 @@ export interface McpCallObserver {
  * Top-level arrays only, and no recursion. This is a rough size, not an inventory: "a call that
  * returned forty thousand rows in a minute" is the question the log exists to answer, and nesting
  * would make one tool's number incomparable with another's.
+ *
+ * `sql_query` is the case where that number reads most like a promise it is not: it declares both
+ * `columns` and `rows`, so a 3-column, 12-row answer sums to 15, and that sum - not 12 - is what
+ * Settings → Agent access shows for the call.
  */
 export function countRows(outputSchema: z.ZodRawShape, result: unknown): number {
   if (!isRecord(result)) return 0
@@ -214,7 +218,7 @@ function register(
   server.registerTool(
     tool.name,
     { description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema },
-    (args) => {
+    async (args) => {
       // performance.now(), and a duration rather than two timestamps: every other clock in this
       // app is injected so a test can freeze it, and a frozen clock would make every duration
       // zero. An elapsed measure is not a timestamp, so it does not belong to that rule - the
@@ -222,7 +226,7 @@ function register(
       const started = performance.now()
       let structuredContent: Record<string, unknown>
       try {
-        structuredContent = tool.run(query, args) as Record<string, unknown>
+        structuredContent = await tool.run(query, args) as Record<string, unknown>
       } catch (error) {
         // Reported before it is rethrown. A refused call is the half of the log that matters most
         // - the SDK turns this throw into a tool result with `isError` set, which an agent reads

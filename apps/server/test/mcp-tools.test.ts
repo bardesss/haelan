@@ -599,6 +599,33 @@ describe('get_workout', () => {
   })
 })
 
+describe('sql_query', () => {
+  it('answers a real SELECT over the projection', async () => {
+    seedDaily({ localDate: '2026-08-01', metric: 'steps', value: 1000 })
+    seedDaily({ localDate: '2026-08-02', metric: 'steps', value: 2000 })
+
+    const result = await tool('sql_query').run(q(), {
+      sql: 'SELECT metric, value FROM daily ORDER BY local_date',
+    }) as { columns: string[], rows: unknown[][], truncated: boolean }
+
+    expect(result.columns).toEqual(['metric', 'value'])
+    // The exact rows, not just a nonzero count: a count survives a regression that returns the
+    // wrong rows, the wrong order or the wrong types, and none of those would be a correct answer.
+    expect(result.rows).toEqual([['steps', 1000], ['steps', 2000]])
+    expect(result.truncated).toBe(false)
+  })
+
+  it('discovers its own schema, which is how an agent is told to start', async () => {
+    const result = await tool('sql_query').run(q(), {
+      sql: "SELECT name FROM sqlite_master WHERE type='table'",
+    }) as { rows: unknown[][] }
+
+    const names = result.rows.map((r) => r[0])
+    expect(names).toContain('daily')
+    expect(names).not.toContain('accounts')
+  })
+})
+
 describe('the catalogue itself', () => {
   it('has no duplicate tool names', () => {
     const names = CATALOGUE.map((t) => t.name)

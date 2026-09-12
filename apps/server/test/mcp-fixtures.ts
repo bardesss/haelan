@@ -31,6 +31,10 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   get_events: { from: '2026-08-01', to: '2026-08-01' },
   get_workouts: { kind: 'exercise', from: '2026-08-01', to: '2026-08-01' },
   get_workout: { sessionId: 'alice-run' },
+  // A query that would return bart's rows if the projection carried any. `daily` has no person
+  // column, so this is every daily row the bound person can see - which is exactly what the
+  // isolation suites then check for a second person's fingerprints.
+  sql_query: { sql: 'SELECT local_date, metric, value FROM daily ORDER BY local_date' },
 }
 
 /**
@@ -93,6 +97,7 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   search_notes: 'alice-note-sentinel',
   get_events: 'alice-event-sentinel',
   get_workouts: 'alice-run',
+  sql_query: '1200',
 }
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)

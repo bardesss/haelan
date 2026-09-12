@@ -1,9 +1,11 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { z } from 'zod'
 import {
   PersonQuery, createTestDatabase, seedPerson, ConfigError,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
+import { defineTool } from '../src/mcp/contract.ts'
 import {
   ALICE_FINGERPRINTS, BART_TEXT_FINGERPRINTS, BART_NUMBER_FINGERPRINTS, TOOL_INPUTS,
   seedToolData, numberLeak,
@@ -45,7 +47,7 @@ afterEach(() => test.cleanup())
 
 describe('every tool, bound to one person, proved against a second', () => {
   for (const t of CATALOGUE) {
-    it(`${t.name} never answers with another person's data`, () => {
+    it(`${t.name} never answers with another person's data`, async () => {
       const input = TOOL_INPUTS[t.name]
       if (input === undefined) {
         throw new Error(
@@ -54,7 +56,7 @@ describe('every tool, bound to one person, proved against a second', () => {
         )
       }
 
-      const result = t.run(alice, input)
+      const result = await t.run(alice, input)
       const json = JSON.stringify(result)
       for (const fingerprint of BART_TEXT_FINGERPRINTS) {
         expect(json).not.toContain(fingerprint)
@@ -68,12 +70,19 @@ describe('every tool, bound to one person, proved against a second', () => {
   // The suite's own floor. Without this, a PersonQuery bound to nobody's rows would answer
   // thirteen empty results, contain none of bart's fingerprints, and pass - which is the one way
   // this file could be green and worthless.
-  it("answers with alice's own data, so the absence of bart's means something", () => {
+  it("answers with alice's own data, so the absence of bart's means something", async () => {
     const missing: string[] = []
     for (const [name, fingerprint] of Object.entries(ALICE_FINGERPRINTS)) {
       const t = CATALOGUE.find((tool) => tool.name === name)
       if (t === undefined) throw new Error(`no tool named ${name}`)
-      const result = t.run(alice, TOOL_INPUTS[name]!)
+      // This is where a dropped `await` on the catalogue loop above would actually be caught.
+      // Every assertion up there checks for bart's data being absent, and an un-awaited Promise
+      // serialises to '{}', which satisfies every one of them — nothing that only checks for
+      // absence can catch that. Asserting alice's own data is present is the one check a bare
+      // '{}' fails, so this case is the real guard, not the one below it. It only bites once a
+      // catalogue tool actually answers asynchronously, which `sql_query` does from Task 4 - until
+      // then every `run` here is synchronous and this loop would pass with or without the await.
+      const result = await t.run(alice, TOOL_INPUTS[name]!)
       const json = JSON.stringify(result)
       // A plain substring check here would be the mirror image of the bug master's numberLeak
       // fixes: this is an assertion that a number IS present, so a coincidental match inside a
@@ -116,13 +125,13 @@ describe('every tool, bound to one person, proved against a second', () => {
   // else in a shared household and hands it back is the single most plausible route into another
   // member's data on this surface. This is the file whose job is to make that refusal visible
   // rather than assumed.
-  it("get_workout refuses bart's session id under alice's binding, rather than answering with it", () => {
+  it("get_workout refuses bart's session id under alice's binding, rather than answering with it", async () => {
     const getWorkout = CATALOGUE.find((t) => t.name === 'get_workout')
     if (getWorkout === undefined) throw new Error('no tool named get_workout')
 
     let caught: unknown
     try {
-      getWorkout.run(alice, { sessionId: 'bart-run' })
+      await getWorkout.run(alice, { sessionId: 'bart-run' })
     } catch (err) {
       caught = err
     }
@@ -135,5 +144,23 @@ describe('every tool, bound to one person, proved against a second', () => {
     for (const fingerprint of ['bart-watch', 'bart-night', 'bart-note-sentinel', 'bart-event-sentinel', '8800', '176']) {
       expect(detail).not.toContain(fingerprint)
     }
+  })
+
+  // Not a guard on the loop above: nothing can guard a false *pass* by checking for absence,
+  // which is all the loop's fingerprint assertions do. This documents the hazard itself, so the
+  // next person to touch this file can see why every `run` here is awaited.
+  it('serialises an un-awaited tool result to nothing, which is why every call above is awaited', async () => {
+    const asyncTool = defineTool({
+      name: 'promise_probe',
+      description: 'test only; never registered in CATALOGUE',
+      inputSchema: {},
+      outputSchema: { leaked: z.string() },
+      run: async () => ({ leaked: 'bart-note-sentinel' }),
+    })
+    // The failure mode, made visible: un-awaited, a leak of bart's own sentinel passes every
+    // fingerprint check in this file, because there is nothing in '{}' to find.
+    expect(JSON.stringify(asyncTool.run(alice, {}))).toBe('{}')
+    // Awaited, the leak is visible - which is the only reason the assertions above mean anything.
+    expect(JSON.stringify(await asyncTool.run(alice, {}))).toContain('bart-note-sentinel')
   })
 })
