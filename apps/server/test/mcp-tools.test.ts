@@ -211,14 +211,64 @@ describe('get_daily', () => {
       localDate: '2026-08-10', metrics: ['distance', 'steps'], agg: 'sum',
     }) as {
       localDate: string
-      readings: { metric: string, value: number | null, coverage: number | null, source: string | null }[]
+      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null }[]
     }
 
     expect(out.localDate).toBe('2026-08-10')
     expect(out.readings).toEqual([
-      { metric: 'distance', value: null, coverage: null, source: null },
-      { metric: 'steps', value: 8000, coverage: null, source: 'merged' },
+      { metric: 'distance', agg: 'sum', value: null, coverage: null, source: null },
+      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged' },
     ])
+  })
+
+  // The defect this fixes: a single required `agg` applied to every metric asked for, so the
+  // tool's own headline call — mixed metrics, one question — threw whenever one metric's natural
+  // aggregate was not another's, losing the whole answer including the metric that would have
+  // answered. heart_rate's default (see defaultAggFor in series.ts) is 'mean', not the 'min' its
+  // own aggs lists first; steps has only 'sum'. Naming both readings' own `agg` back is what lets
+  // a caller comparing them tell they are not the same statistic.
+  it('answers a mixed call with no agg, each metric under its own natural aggregate', () => {
+    seedDaily({ localDate: '2026-08-10', metric: 'steps', agg: 'sum', value: 8000 })
+    seedDaily({ localDate: '2026-08-10', metric: 'heart_rate', agg: 'mean', value: 62 })
+
+    const out = tool('get_daily').run(q(), {
+      localDate: '2026-08-10', metrics: ['heart_rate', 'steps'],
+    }) as {
+      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null }[]
+    }
+
+    expect(out.readings).toEqual([
+      { metric: 'heart_rate', agg: 'mean', value: 62, coverage: null, source: 'merged' },
+      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged' },
+    ])
+  })
+
+  it('applies an explicit agg to every metric asked for when all of them support it', () => {
+    seedDaily({ localDate: '2026-08-10', metric: 'resting_heart_rate', agg: 'last', value: 55 })
+    seedDaily({ localDate: '2026-08-10', metric: 'weight', agg: 'last', value: 70000 })
+
+    const out = tool('get_daily').run(q(), {
+      localDate: '2026-08-10', metrics: ['resting_heart_rate', 'weight'], agg: 'last',
+    }) as {
+      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null }[]
+    }
+
+    expect(out.readings).toEqual([
+      { metric: 'resting_heart_rate', agg: 'last', value: 55, coverage: null, source: 'merged' },
+      { metric: 'weight', agg: 'last', value: 70000, coverage: null, source: 'merged' },
+    ])
+  })
+
+  // Refused loudly, not dropped: a query that quietly answered only the metrics an explicit `agg`
+  // happened to fit would let an agent report "no data" for resting_heart_rate, a false statement
+  // about somebody's health record made with total confidence. resting_heart_rate's aggs are
+  // ['last'] only (packages/core/src/derive/metrics.ts), so 'sum' — valid for steps — is not.
+  it('throws for an explicit agg one metric refuses, naming that metric and that aggregate', () => {
+    seedDaily({ localDate: '2026-08-10', metric: 'steps', agg: 'sum', value: 8000 })
+
+    expect(() => tool('get_daily').run(q(), {
+      localDate: '2026-08-10', metrics: ['steps', 'resting_heart_rate'], agg: 'sum',
+    })).toThrow("metric 'resting_heart_rate' has no 'sum' aggregate, only last")
   })
 })
 

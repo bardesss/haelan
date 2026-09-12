@@ -96,13 +96,13 @@ A daily metric over a date range, oldest first. Returns at most a few hundred po
 
 ### get_daily
 
-Several metrics for a single day, one reading each, so an agent asking "what happened on this date" does not have to call query_series once per metric itself. A metric with no row that day answers null rather than being left out, so a caller can tell "zero" from "not measured" — the same distinction a missing daily row always carries elsewhere on this surface.
+Several metrics for a single day, one reading each, so an agent asking "what happened on this date" does not have to call query_series once per metric itself. Omit `agg` and each metric answers with its own natural aggregate — the reading each metric's own card shows elsewhere on this surface — named in that reading's own `agg` field, so metrics as different as heart rate and steps can be asked for together in one call. Name an `agg` and it applies to every metric in the list alike; a metric that does not support it is refused outright, naming that metric and that aggregate, rather than silently dropped from the answer. A metric with no row that day answers null rather than being left out, so a caller can tell "zero" from "not measured" — the same distinction a missing daily row always carries elsewhere on this surface.
 
 **Input**
 
 - **localDate** (string) — YYYY-MM-DD
 - **metrics** (array of string)
-- **agg** (string)
+- **agg** (string, optional) — Applies to every metric in `metrics` alike. Omitted, each metric uses its own default aggregate instead (see each reading's own `agg`); named, a metric that does not support it throws rather than being dropped from the answer.
 - **source** (string, optional) — A source id from describe_person to read one device on its own, or `merged` for only the days this app reconciled itself, or `provider` for only the days Google had already reconciled. Omitted answers the day rather than one device: the merged row where there is one, the provider row where there is not.
 
 **Output**
@@ -110,6 +110,7 @@ Several metrics for a single day, one reading each, so an agent asking "what hap
 - **localDate** (string)
 - **readings** (array of object)
   - **metric** (string)
+  - **agg** (string)
   - **value** (number, nullable)
   - **coverage** (number, nullable)
   - **source** (string, nullable)

@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { metricSpec } from '@haelan/core/metrics'
+import type { MetricSpec } from '@haelan/core/metrics'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
@@ -58,23 +60,51 @@ export const querySeries = defineTool({
   },
 })
 
+/**
+ * The aggregate get_daily reaches for when a metric's own reading is asked for and `agg` was not
+ * named.
+ *
+ * `MetricSpec.aggs` is ordered for the range-chart display (min, mean, max, then the rest), not by
+ * which one answers "what happened this day" — the app's own dashboard already answers that
+ * question for heart_rate, hrv and spo2 by asking `query_series` for 'mean', never for the 'min'
+ * their `aggs` lists first (Dashboard.tsx's mean-HR tile, and the mean series Health.tsx and
+ * Recovery.tsx build spo2/hrv cards from). Every other metric's first entry already is the one
+ * natural single-day reading: the metric's only aggregate, or 'last' for an episodic reading like
+ * weight or body_fat, which is why `aggs[0]` is trusted everywhere else. This overrides it only for
+ * the three metrics where the list is a display order rather than a priority order.
+ */
+function defaultAggFor(spec: MetricSpec): string {
+  return spec.aggs.includes('min') && spec.aggs.includes('mean') ? 'mean' : spec.aggs[0]!
+}
+
 export const getDaily = defineTool({
   name: 'get_daily',
   description:
     'Several metrics for a single day, one reading each, so an agent asking "what happened on '
-    + 'this date" does not have to call query_series once per metric itself. A metric with no row '
-    + 'that day answers null rather than being left out, so a caller can tell "zero" from "not '
-    + 'measured" — the same distinction a missing daily row always carries elsewhere on this surface.',
+    + 'this date" does not have to call query_series once per metric itself. Omit `agg` and each '
+    + 'metric answers with its own natural aggregate — the reading each metric\'s own card shows '
+    + 'elsewhere on this surface — named in that reading\'s own `agg` field, so metrics as different '
+    + 'as heart rate and steps can be asked for together in one call. Name an `agg` and it applies '
+    + 'to every metric in the list alike; a metric that does not support it is refused outright, '
+    + 'naming that metric and that aggregate, rather than silently dropped from the answer. A metric '
+    + 'with no row that day answers null rather than being left out, so a caller can tell "zero" '
+    + 'from "not measured" — the same distinction a missing daily row always carries elsewhere on '
+    + 'this surface.',
   inputSchema: {
     localDate: z.string().describe('YYYY-MM-DD'),
     metrics: z.array(z.string()).min(1),
-    agg: z.string(),
+    agg: z.string().optional().describe(
+      'Applies to every metric in `metrics` alike. Omitted, each metric uses its own default '
+      + 'aggregate instead (see each reading\'s own `agg`); named, a metric that does not support '
+      + 'it throws rather than being dropped from the answer.',
+    ),
     source: DAILY_SOURCE,
   },
   outputSchema: {
     localDate: z.string(),
     readings: z.array(z.object({
       metric: z.string(),
+      agg: z.string(),
       value: z.number().nullable(),
       coverage: z.number().nullable(),
       source: z.string().nullable(),
@@ -83,11 +113,17 @@ export const getDaily = defineTool({
   run: (q, args) => ({
     localDate: args.localDate,
     readings: args.metrics.map((metric) => {
+      const spec = metricSpec(metric)
+      // spec undefined means `metric` is not in the catalogue at all; any string handed to `agg`
+      // here is moot, because q.series's own requireMetricAndAgg rejects the unknown metric before
+      // it ever looks at the aggregate, and this value never reaches a caller.
+      const agg = args.agg ?? (spec === undefined ? '' : defaultAggFor(spec))
       const point = q.series({
-        metric, agg: args.agg, from: args.localDate, to: args.localDate, source: args.source,
+        metric, agg, from: args.localDate, to: args.localDate, source: args.source,
       }).points[0]
       return {
         metric,
+        agg,
         value: point?.value ?? null,
         coverage: point?.coverage ?? null,
         source: point?.source ?? null,
