@@ -10,6 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { McpTokens } from '../src/pages/settings/McpTokens.js'
 import { mcpCallsKey, mcpTokensKey } from '../src/data/useMcpTokens.js'
 import type { McpCallRow, McpTokenRow } from '../src/data/useMcpTokens.js'
+import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -55,7 +56,7 @@ const SESSION: Session = {
  * also has to answer the session refetch those mutations do not invalidate would be an unrelated
  * hazard for those tests to carry.
  */
-function mount(tokens: McpTokenRow[], calls: McpCallRow[] = [], session: Session = SESSION): void {
+function mount(tokens: McpTokenRow[], calls: McpCallRow[] = [], session: Session = SESSION): QueryClient {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(mcpTokensKey(), { tokens })
   client.setQueryData(mcpCallsKey(), { calls })
@@ -67,6 +68,7 @@ function mount(tokens: McpTokenRow[], calls: McpCallRow[] = [], session: Session
       </QueryClientProvider>,
     )
   })
+  return client
 }
 
 const text = (): string => container!.textContent ?? ''
@@ -113,12 +115,17 @@ describe('the Agent access card', () => {
       )
     }) as unknown as typeof globalThis.fetch
 
-    mount([])
+    const client = mount([])
     const input = container!.querySelector('input')!
     await act(async () => { type(input, 'the laptop') })
-    await act(async () => {
+    // A plain, synchronous act() here: it flushes only the click's own re-render and leaves the
+    // mutation's fetch promise untouched, so flush() below is guaranteed to find it still in
+    // flight rather than racing an unpredictable partial drain of that promise chain (the same
+    // race that made the sibling test flake - see mcp-tokens-card.test.tsx's mint-failure case).
+    act(() => {
       container!.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
+    await flush(client, () => container!.innerHTML)
     expect(text()).toContain(secret)
 
     await act(async () => { buttonSaying('I have copied it')!.click() })
@@ -141,12 +148,13 @@ describe('the Agent access card', () => {
       )
     }) as unknown as typeof globalThis.fetch
 
-    mount([])
+    const client = mount([])
     const input = container!.querySelector('input')!
     await act(async () => { type(input, 'the laptop') })
-    await act(async () => {
+    act(() => {
       container!.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
+    await flush(client, () => container!.innerHTML)
 
     // The exact string a client config needs, not merely "mcp" appearing somewhere on the page -
     // SESSION.baseUrl has no trailing slash, so a naive concatenation bug (a doubled or missing
@@ -177,13 +185,21 @@ describe('the Agent access card', () => {
       )
     }) as unknown as typeof globalThis.fetch
 
-    mount([TOKEN])
+    const client = mount([TOKEN])
     expect(text()).toContain('Expires')
     expect(text()).not.toContain('Expired')
     const revokeButton = buttonSaying('Revoke')
     expect(revokeButton).toBeDefined()
 
-    await act(async () => { revokeButton!.click() })
+    act(() => { revokeButton!.click() })
+    // The assertions below read a plain object captured inside the fetch stub, not rendered text,
+    // so they do not themselves need the mutation to have settled. flush() still earns its place
+    // here: revoke, like mint, invalidates mcpTokensKey and fires a GET this stub also answers, and
+    // without waiting for that refetch to land before the test ends, its resolution (and the
+    // re-render it triggers) can land after afterEach() unmounts the tree - a state update on an
+    // unmounted component, or an act() call overlapping the next test's, exactly the failure mode
+    // flush.ts's own doc comment describes.
+    await flush(client, () => container!.innerHTML)
 
     expect(request).not.toBeNull()
     expect(request!.method).toBe('DELETE')
@@ -202,12 +218,18 @@ describe('the Agent access card', () => {
       { status: 400, headers: { 'content-type': 'application/json' } },
     )) as unknown as typeof globalThis.fetch
 
-    mount([])
+    const client = mount([])
     const input = container!.querySelector('input')!
     await act(async () => { type(input, 'x') })
-    await act(async () => {
+    // A plain, synchronous act(): see the comment on the mint-and-dismiss test above for why this
+    // must not be `await act(async () => ...)`. That async form is what made this exact test flake
+    // on CI - it drains an unpredictable, engine-dependent slice of the mutation's fetch-then-throw
+    // microtask chain, so how close to "error" the state lands before the assertion runs differs
+    // by Node version instead of being pinned to "fully settled" by flush() below.
+    act(() => {
       container!.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
+    await flush(client, () => container!.innerHTML)
     // The instance's own sentence, naming the three lives - not "that did not work".
     expect(text()).toContain('30, 90, 365')
   })
