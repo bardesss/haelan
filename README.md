@@ -1,5 +1,7 @@
 # haelan
 
+<img src="assets/brand/mark-light.png" alt="" width="96" height="96">
+
 **A self-hosted dashboard and local mirror for your own health data, built on the Google Health
 API v4.** One household, one instance, no telemetry, no hosted offering.
 
