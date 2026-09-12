@@ -442,6 +442,9 @@
       "mean": "mean {{value}} bpm",
       "range": "range {{min}} to {{max}} bpm"
     },
+    "tooltip": {
+      "line": "{{label}}: {{value}}"
+    },
     "spo2Tooltip": {
       "mean": "mean {{value}}%",
       "range": "range {{min}} to {{max}}%",
