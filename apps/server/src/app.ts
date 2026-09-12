@@ -21,6 +21,7 @@ import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
 import { registerRequireAdmin } from './api/requireAdmin.ts'
 import { registerRequireMcpToken } from './mcp/guard.ts'
+import { registerMcp } from './mcp/http.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
 export interface EndpointOverrides {
@@ -195,6 +196,10 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   // prefix and Fastify's plugin encapsulation are what keep this surface's error handler and
   // its isolation rule from touching anything outside it.
   void app.register((instance) => registerV1(instance, deps.v1TestExtra), { prefix: '/api/v1' })
+  // Outside /api/v1 and outside the setup gate alike: setupGate.ts returns early for any path that
+  // does not start with /api/ or /oauth/, so an unconfigured instance answers this route's own 404
+  // rather than the gate's 409. Registered before registerStatic so the SPA fallback never sees it.
+  registerMcp(app)
   if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
 
   return app
