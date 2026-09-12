@@ -177,6 +177,10 @@ body {
    of the five fields, wrapping onto a second row on a narrow viewport rather than compressing. */
 .workout-dynamics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
 
+/* WorkoutComparison.tsx's own sentence list, one per compared facet - a plain list, not a table,
+   since each row is a full sentence rather than a value under a column header. */
+.workout-comparison { margin: 0; padding-left: var(--space-4); }
+
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }

@@ -12,6 +12,7 @@ import { WorkoutZones } from './activity/WorkoutZones.js'
 import { WorkoutTrace } from './activity/WorkoutTrace.js'
 import { WorkoutSplits } from './activity/WorkoutSplits.js'
 import { WorkoutDynamics } from './activity/WorkoutDynamics.js'
+import { WorkoutComparison } from './activity/WorkoutComparison.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -39,8 +40,13 @@ import { EmptyState } from '../components/EmptyState.js'
  * a fragment, a heading - here, WorkoutHeader rather than a plain `<h1>`, since this page's heading
  * also carries the workout's clock times, its source and its excluded badge - followed by the
  * twelve-column `.grid` the design's cards land in: the stat tiles first, then the zone card, the
- * heart rate trace, the splits and running dynamics cards, then a later task's comparison card.
+ * heart rate trace, the splits and running dynamics cards, then the comparison card last.
  * Notes.tsx is the shortest example of the same shape this page follows.
+ *
+ * WorkoutComparison (unlike WorkoutTrace, which takes the resolved session as a prop but owns its
+ * own hook the same way) is mounted only here, inside the grid reached only once `query` has left
+ * both isPending and isError below - the guard useWorkoutComparison's own comment names: it is
+ * never asked to compare against a session that has not resolved.
  */
 export function WorkoutDetail() {
   const { t } = useTranslation()
@@ -87,6 +93,7 @@ export function WorkoutDetail() {
         <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
         <WorkoutSplits detail={detail} />
         <WorkoutDynamics detail={detail} />
+        <WorkoutComparison session={query.data} />
       </div>
     </>
   )

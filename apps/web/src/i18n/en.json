@@ -446,6 +446,16 @@
         "label": "Running dynamics",
         "cadence": "Cadence", "stride": "Stride length", "groundContact": "Ground contact",
         "oscillation": "Vertical oscillation", "verticalRatio": "Vertical ratio"
+      },
+      "comparison": {
+        "label": "Against your recent workouts",
+        "basis": "the {{days}} days before this workout, at most {{limit}} of the same type, excluded workouts left out",
+        "pace": "Faster than {{better}} of your last {{of}} of this type",
+        "heartRate": "Lower average heart rate than {{better}} of your last {{of}}",
+        "distance": "Longer than {{better}} of your last {{of}}",
+        "tooFew": "Not enough workouts of this type yet",
+        "tooFewDetail_one": "{{count}} earlier workout of this type in the last 90 days; three are needed to compare.",
+        "tooFewDetail_other": "{{count}} earlier workouts of this type in the last 90 days; three are needed to compare."
       }
     }
   },

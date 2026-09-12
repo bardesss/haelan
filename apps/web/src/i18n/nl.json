@@ -446,6 +446,16 @@
         "label": "Hardloopdynamiek",
         "cadence": "Cadans", "stride": "Paslengte", "groundContact": "Grondcontact",
         "oscillation": "Verticale oscillatie", "verticalRatio": "Verticale ratio"
+      },
+      "comparison": {
+        "label": "Vergeleken met je recente trainingen",
+        "basis": "de {{days}} dagen voor deze training, hoogstens {{limit}} van hetzelfde type, uitgesloten trainingen niet meegeteld",
+        "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type",
+        "heartRate": "Lagere gemiddelde hartslag dan {{better}} van je laatste {{of}}",
+        "distance": "Verder dan {{better}} van je laatste {{of}}",
+        "tooFew": "Nog niet genoeg trainingen van dit type",
+        "tooFewDetail_one": "{{count}} eerdere training van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken.",
+        "tooFewDetail_other": "{{count}} eerdere trainingen van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken."
       }
     }
   },

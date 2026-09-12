@@ -38,8 +38,10 @@ function isRealDate(date: string): boolean {
   return day >= 1 && day <= daysInMonth(year, month)
 }
 
-/** Shifts by whole days. Safe across month and year boundaries because it goes through epoch ms. */
-function addDays(date: string, days: number): string {
+/** Shifts by whole days. Safe across month and year boundaries because it goes through epoch ms.
+ *  Exported for the workout page's comparison window, its second caller: the ninety trailing days
+ *  before a workout's own local date, computed the same way stepAnchor already shifts an anchor. */
+export function addDays(date: string, days: number): string {
   const { year, month, day } = partsOf(date)
   return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
 }
