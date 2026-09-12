@@ -72,6 +72,15 @@ CREATE INDEX sessions_kind_date ON sessions (kind, local_date);
  * The live database is ATTACHed here, by our own text, and that is not in tension with the rule
  * that the caller's SQL can never attach anything. The boundary is which API the caller's string
  * reaches, not whether ATTACH exists - see `apps/server/src/mcp/runSql.ts`.
+ *
+ * One thing worth recording rather than fixing: `out` is opened read-write (it has to be - this
+ * function writes to it), and measured, an ATTACH issued from a read-write connection yields a
+ * writable handle on the attached file too. So for the ~24ms this function runs, the process
+ * holds a read-write handle on the *live* database - including from the stdio entry point, which
+ * `TOOLS.md` describes as opening the database read-only. No write is ever issued here, and the
+ * caller's SQL never reaches this connection at all, so this is an observation rather than a
+ * defect. But it means a future statement added to this function that named `live.*` as a target
+ * - rather than only a source - would succeed.
  */
 export function writeProjection(db: DbOrTx, personId: string, destPath: string): void {
   // A stale file from a previous call would otherwise be appended to rather than replaced.

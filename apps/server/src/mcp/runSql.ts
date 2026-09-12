@@ -90,8 +90,10 @@ export async function runSql(
       })
       const timer = setTimeout(() => {
         // terminate() will land when the native call returns, not now. The caller stops waiting
-        // either way, which is what the deadline is for.
-        void worker?.terminate()
+        // either way, which is what the deadline is for. .catch(() => {}) rather than `void`,
+        // because `void` on a Promise silences a lint rule but does not attach a handler - a
+        // rejection here would still surface as an unhandled rejection.
+        worker?.terminate().catch(() => {})
         reject(new ConfigError(
           `that query did not finish within ${SQL_DEADLINE_MS / 1000} seconds. Narrow it - add a WHERE clause, or aggregate over fewer rows.`,
         ))
@@ -105,14 +107,17 @@ export async function runSql(
       // previous one returned to it.
       let reply: WorkerReply | undefined
       worker.on('message', (message: WorkerReply) => { reply = message })
-      worker.on('error', (error) => { clearTimeout(timer); reject(error) })
+      // Wrapped the same way asAgentError wraps every other refusal below: a raw worker error can
+      // carry Node's own prose - a stack, a module path - and this is otherwise the one path that
+      // would hand an agent unfiltered internals rather than a sentence about its own query.
+      worker.on('error', (error: Error) => { clearTimeout(timer); reject(asAgentError(error)) })
       // `busy` is released HERE and nowhere else, and that is the whole of the concurrency
       // guarantee. Releasing it when the caller stops waiting would be worse than useless: a
       // timeout rejects while the thread is still burning - terminate() lands only when the native
       // call returns - so the next caller would start a second thread beside the first, exactly in
       // the case the limit exists for. One runaway would become as many as somebody cared to ask
       // for.
-      worker.on('exit', (code) => {
+      worker.on('exit', (_code) => {
         busy = false
         clearTimeout(timer)
         // Cleanup lives here, and nowhere else on this path, for the same reason `busy` is
@@ -135,7 +140,6 @@ export async function runSql(
         } else {
           reject(asAgentError(reply))
         }
-        void code
       })
     })
   } catch (error) {

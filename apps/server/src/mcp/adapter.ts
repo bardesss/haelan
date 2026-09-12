@@ -166,6 +166,10 @@ export interface McpCallObserver {
  * Top-level arrays only, and no recursion. This is a rough size, not an inventory: "a call that
  * returned forty thousand rows in a minute" is the question the log exists to answer, and nesting
  * would make one tool's number incomparable with another's.
+ *
+ * `sql_query` is the case where that number reads most like a promise it is not: it declares both
+ * `columns` and `rows`, so a 3-column, 12-row answer sums to 15, and that sum - not 12 - is what
+ * Settings → Agent access shows for the call.
  */
 export function countRows(outputSchema: z.ZodRawShape, result: unknown): number {
   if (!isRecord(result)) return 0

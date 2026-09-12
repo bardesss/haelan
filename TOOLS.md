@@ -41,7 +41,7 @@ One read-only SELECT over a database built for the question and thrown away afte
 
 **Intraday samples are not in it.** They are 85% of the database and the one table whose shape is hostile to hand-written SQL; `get_intraday` and `get_workout` serve them at the resolution the data holds.
 
-It is slower than the other tools - it builds a fresh database per query - and it runs one at a time, so a second concurrent call is refused rather than queued. A query that has not finished in five seconds is given up on. At most 500 rows come back; when more matched, `truncated` is true and what you have is a prefix.
+It is slower than the other tools - it builds a fresh database per query - and it runs one at a time, so a second concurrent call is refused rather than queued. A query that has not finished in 5 seconds is given up on. At most 500 rows come back; when more matched, `truncated` is true and what you have is a prefix.
 
 **The call log records that it ran, never what it ran.** `mcp_calls` has no column for argument values, so the SQL is not kept - the same rule that stops the log recording what somebody searched their notes for.
 

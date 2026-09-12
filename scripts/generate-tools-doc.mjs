@@ -11,6 +11,7 @@ import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CATALOGUE } from '../apps/server/src/mcp/catalogue.ts'
 import { DEFAULT_DAILY_POINTS, DEFAULT_INTRADAY_POINTS, MAX_POINTS } from '../apps/server/src/mcp/contract.ts'
+import { SQL_DEADLINE_MS, SQL_ROW_CAP } from '../apps/server/src/mcp/runSql.ts'
 
 /**
  * Peels every `optional`/`nullable` wrapper off a Zod schema and reports what was under them: the
@@ -170,8 +171,8 @@ export function render() {
     '',
     'It is slower than the other tools - it builds a fresh database per query - and it runs one '
       + 'at a time, so a second concurrent call is refused rather than queued. A query that has '
-      + 'not finished in five seconds is given up on. At most 500 rows come back; when more '
-      + 'matched, `truncated` is true and what you have is a prefix.',
+      + `not finished in ${SQL_DEADLINE_MS / 1000} seconds is given up on. At most ${SQL_ROW_CAP} `
+      + 'rows come back; when more matched, `truncated` is true and what you have is a prefix.',
     '',
     '**The call log records that it ran, never what it ran.** `mcp_calls` has no column for '
       + 'argument values, so the SQL is not kept - the same rule that stops the log recording what '

@@ -32,10 +32,13 @@ export const sqlQuery = defineTool({
     try {
       q.writeProjection(projection.path)
     } catch (error) {
-      // runSql never ran, so nothing downstream will remove this. Every other path hands the
-      // file to runSql, which removes it when the worker has actually exited - the only moment
-      // the handle is provably released. Removing it here on a timeout instead throws EPERM on
-      // Windows and replaces the caller's error with a filesystem one.
+      // This try wraps writeProjection only, not the call to runSql below - deliberately narrow.
+      // writeProjection runs synchronously, on this thread, and either finishes or throws before
+      // any worker exists; if it throws, no worker was ever handed the file, so this catch is the
+      // only code that will ever remove it. Every path that reaches runSql instead lets *runSql*
+      // own removal, because a worker can outlive the promise it returns - its 'exit' handler is
+      // the only moment the handle is provably released, and closing over projection.remove() a
+      // second time in a wider try here would race that handler on the same file.
       projection.remove()
       throw error
     }
