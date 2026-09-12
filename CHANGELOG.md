@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.8.1](https://github.com/bardesss/haelan/compare/v1.8.0...v1.8.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **server:** the TOOLS.md drift test compares content, not line endings ([#151](https://github.com/bardesss/haelan/issues/151)) ([911f69e](https://github.com/bardesss/haelan/commit/911f69e667c39cf4705884420362796fc3ed5b8e))
+
 ## [1.8.0](https://github.com/bardesss/haelan/compare/v1.7.1...v1.8.0) (2026-09-12)
 
 
