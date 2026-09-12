@@ -49,8 +49,12 @@ export function readSessions(db: DbOrTx, input: {
    * predicate naming them would be a second reader of the shape it is the only reader of.
    */
   type?: string
-  /** At most the most recent match, applied after `type` so it cannot answer the wrong session. */
-  latest?: boolean
+  /**
+   * At most the N most recent matches, applied after `type` so it cannot answer the wrong
+   * session. Not the same operation as the HTTP route's `limit`, which is pagination — the first
+   * N of an ascending list. This is the last N. They will eventually sit in one query string.
+   */
+  last?: number
 }): WorkoutSession[] {
   const rows = db.select().from(sessions).where(and(
     eq(sessions.personId, input.personId),
@@ -72,9 +76,9 @@ export function readSessions(db: DbOrTx, input: {
     ? mapped
     : mapped.filter((session) => workoutSummary(session.attrs).exerciseType === input.type)
 
-  // The rows arrived oldest first, so the most recent is the last one, and taking it after the
-  // type filter is what stops `latest` answering with a bike ride.
-  return input.latest === true ? matched.slice(-1) : matched
+  // The rows arrived oldest first, so the most recent N are the last N, and slicing after the
+  // type filter is what stops `last` answering with a bike ride.
+  return input.last === undefined ? matched : matched.slice(-input.last)
 }
 
 /**

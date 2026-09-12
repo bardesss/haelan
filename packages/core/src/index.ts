@@ -202,3 +202,8 @@ export type { BackupFile, BackupDecision } from './backup/runBackup.ts'
 export type { WorkoutSummary } from './api/workoutSummary.ts'
 export { workoutSummary, numberOrNull } from './api/workoutSummary.ts'
 export { EXERCISE_TYPES } from './api/enums.ts'
+
+// M4a-2 task 3. describe_person's own reader: the bound person's id, display name, timezone and
+// sources, in the shape PersonQuery.describe returns it. Same discipline as every bound reader
+// above — only the shape is exported, never a module level function taking a person id.
+export type { DescribedPerson } from './query/personQuery.ts'
