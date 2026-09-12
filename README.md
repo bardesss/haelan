@@ -349,9 +349,10 @@ the person stamped at the current version and starts normally.
 ## Roadmap
 
 Five milestones are done and the sixth is finishing: the store and sync engine, the derivation
-layer, eight dashboard pages, then packaging, people, backups and the upgrade path. What is left
-before this is feature complete is the agent surface - an MCP server, with typed tools over both
-its transports and `sql_query` behind its own sandbox.
+layer, eight dashboard pages, then packaging, people, backups and the upgrade path. The agent
+surface now ships too: an MCP server with typed tools, reachable over stdio and over HTTP behind
+a per-account token. What is left before this is feature complete is `sql_query` (M4b), behind its
+own sandbox.
 
 **[ROADMAP.md](ROADMAP.md)** has the table, every milestone's pull request, and why the order is
 what it is.
@@ -399,7 +400,8 @@ space; the findings stay.
 
 `packages/core/README.md` documents the store and the API client, `apps/server/README.md` the
 HTTP surface, `apps/web/README.md` the dashboard and the wizard, and
-[`TOOLS.md`](TOOLS.md) the MCP tool surface an agent reads through.
+[`TOOLS.md`](TOOLS.md) the MCP tool surface an agent reads through on either transport, and how to
+connect over HTTP.
 
 Specs and plans live under `docs/superpowers/` and are deliberately not tracked: they are working
 documents for whoever is building, not part of what ships.
