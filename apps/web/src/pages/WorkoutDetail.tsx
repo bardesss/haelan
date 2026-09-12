@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { workoutDetail } from '@haelan/core/workout-summary'
 import { useRoute, routeParams, readQuery } from '../router.js'
 import { WORKOUT_ROUTE } from '../routes.js'
 import { useWorkoutSession } from '../data/useWorkoutSession.js'
+import { useSourceNames } from '../data/useSourceNames.js'
 import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
-import { ALL_SOURCES } from '../controls/source.js'
+import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import { WorkoutHeader } from './activity/WorkoutHeader.js'
 import { WorkoutTiles } from './activity/WorkoutTiles.js'
@@ -67,7 +68,19 @@ export function WorkoutDetail() {
   const session = useSession()
   const timezone = session.data?.timezone ?? 'UTC'
   const query = useWorkoutSession(sessionId)
+  const { sources } = useSourceNames()
   const [annotating, setAnnotating] = useState(false)
+
+  // Memoised on query.data itself, not rebuilt by hand on every read: WorkoutTrace's own `marks`
+  // and WorkoutZones' own `rows` derive from this object, and useChart keys each chart's own
+  // init/dispose effect on values built from them, so a `detail` that changed reference on every
+  // render (a bare `workoutDetail(query.data.attrs)` call here did) disposed and reinitialised
+  // both of this page's charts on every commit - window focus, opening or closing the annotate
+  // panel, and this task's own session-scope invalidation among them. Final review finding.
+  const detail = useMemo(
+    () => (query.data === undefined ? null : workoutDetail(query.data.attrs)),
+    [query.data],
+  )
 
   if (query.isError) {
     const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
@@ -81,7 +94,10 @@ export function WorkoutDetail() {
       </div>
     )
   }
-  if (query.isPending) {
+  // `detail === null` cannot actually happen once isPending is false (both read query.data), but
+  // spelling it out here rather than asserting past it is what lets TypeScript narrow `detail` to
+  // non-null for the rest of the function without a bare `!`.
+  if (query.isPending || detail === null) {
     return (
       <div className="grid">
         <Card span={12}><Loading /></Card>
@@ -89,13 +105,22 @@ export function WorkoutDetail() {
     )
   }
 
-  const detail = workoutDetail(query.data.attrs)
-
   // The reader's own choice, when they arrived carrying one; null otherwise. Read from the URL
   // rather than from a control row: this page has none, and useWorkoutTrace's fallback rule turns
   // on whether the READER chose a source, which only the URL can say here.
+  //
+  // Routed through resolveSource, like every sibling page (Activity.tsx, Dashboard.tsx, Health.tsx,
+  // Recovery.tsx, Sleep.tsx, Weight.tsx): a link can name a source this person does not have, and a
+  // source can be removed after a link was made, and both must read as the all-sources view, not as
+  // an explicit (and therefore unfalling-back) choice of a device that will never answer. Final
+  // review finding - as shipped, an unknown source id suppressed useWorkoutTrace's fallback rule and
+  // made the trace card vanish, which reads as "no heart rate was recorded", the exact false claim
+  // that rule exists to prevent.
   const chosenSourceParam = readQuery(route.split('?')[1] ?? '').get('source')
-  const chosenSource = chosenSourceParam === null || chosenSourceParam === ALL_SOURCES ? null : chosenSourceParam
+  const resolvedSource = chosenSourceParam === null
+    ? ALL_SOURCES
+    : resolveSource(chosenSourceParam, [ALL_SOURCES, ...sources.map((s) => s.id)])
+  const chosenSource = resolvedSource === ALL_SOURCES ? null : resolvedSource
 
   return (
     <>

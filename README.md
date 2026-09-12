@@ -60,11 +60,11 @@ Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep
 nap detection, resting heart rate and HRV, SpO2 with its confidence interval, an activity heatmap
 and a workout list, and a page behind every workout in that list: splits, heart rate zones, running
 dynamics, the trace from the device that recorded it, and the exclude control that used to exist
-only on the server. Also an intraday chart, a weight trend, and period-over-period insight cards
-that withhold themselves, each with its own reason, when the data behind them is thin. English and
-Dutch throughout. Nutrition is the one page with nothing on it: this household has never logged
-food, and the API's Food type carries no timestamp to file a meal under, so the page says so
-rather than inventing a data model to have something to draw.
+only on the server. There is also an intraday chart, a weight trend, and period-over-period insight
+cards that withhold themselves, each with its own reason, when the data behind them is thin.
+English and Dutch throughout. Nutrition is the one page with nothing on it: this household has
+never logged food, and the API's Food type carries no timestamp to file a meal under, so the page
+says so rather than inventing a data model to have something to draw.
 
 ### 📐 Personal baselines
 
@@ -425,12 +425,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 760 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 761 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 760 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 761 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

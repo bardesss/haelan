@@ -428,6 +428,7 @@
         "label": "Time in heart rate zones",
         "basis": "the session's own four zones, as the device recorded them — not the three active zone minutes zones",
         "column": "Zone",
+        "duration": "Duration",
         "light": "Light", "moderate": "Moderate", "vigorous": "Vigorous", "peak": "Peak"
       },
       "trace": {

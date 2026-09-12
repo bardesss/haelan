@@ -9,7 +9,14 @@ import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
+import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
+
+// happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
+// this, the same reason chart-lifecycle.test.tsx sets them. Only the source-resolution case below
+// actually mounts a chart (every other case in this file keeps trace.points empty); harmless for
+// the rest, which never touch echarts.
+for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -254,7 +261,7 @@ describe('the workout stat tiles', () => {
     } finally { restore() }
   })
 
-  it('renders no tile section at all for a session carrying nothing but its span', async () => {
+  it('renders the tile section with a single Elapsed tile for a session carrying nothing but its span', async () => {
     window.history.replaceState(null, '', '/activity/bare')
     const restore = stub({ bare: BARE })
     try {
@@ -264,5 +271,62 @@ describe('the workout stat tiles', () => {
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toEqual(['Elapsed'])
     } finally { restore() }
+  })
+})
+
+describe('the workout page\'s own ?source= parameter', () => {
+  // Final review finding: this page used to read `?source=` straight off the URL, never through
+  // resolveSource (controls/source.ts) the way every sibling page does. A source id that names no
+  // device this person has - a stale or foreign link, or one this person removed since - became a
+  // non-null EXPLICIT choice, which suppresses useWorkoutTrace's own fallback rule
+  // (WorkoutTrace.tsx's own comment on it). The pinned request for a source that never recorded
+  // this workout comes back empty, the fallback that would otherwise answer it never fires, and the
+  // trace card vanishes - reading as "no heart rate was recorded for this workout", the exact false
+  // claim the fallback rule exists to prevent.
+  it('treats an unrecognised source id as no choice at all, so the fallback still fires', async () => {
+    window.history.replaceState(null, '', '/activity/run1?source=phantom-device')
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const json = (body: unknown) =>
+        new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+      if (url.includes('/api/auth/me')) return json(PERSON)
+      if (url.includes('/sessions/run1')) return json(RUN)
+      // Only 'watch' (the session's own recording device) is real; 'phantom-device' names nothing
+      // this person has.
+      if (url.includes('/sources')) {
+        return json({
+          items: [{
+            id: 'watch', externalId: 'watch-ext', displayName: 'Pixel Watch 4',
+            alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 0,
+          }],
+        })
+      }
+      if (url.includes('/intraday/window')) {
+        const source = new URLSearchParams(url.split('?')[1] ?? '').get('source') ?? ''
+        // The pinned device (watch, RUN's own sourceId) recorded nothing in this window; every
+        // other device did. `''` is the blended request, sent with no `source` param at all
+        // (sourceParam's own rule for ALL_SOURCES) - the request the fallback sends, and the one
+        // an unresolved 'phantom-device' would never reach.
+        const points = source === '' ? [{ sourceId: 'phone', utcMs: Date.UTC(2026, 7, 3, 6, 10), min: 120, mean: 130, max: 140, n: 1, excluded: false }] : []
+        return json({ points, reduction: null })
+      }
+      if (url.includes('/sessions')) return json({ items: [], cursor: null })
+      return json({})
+    }) as typeof fetch
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      // Absent entirely would be the old, wrong behaviour (WorkoutTrace.tsx's own rule for nobody
+      // recorded anything); present with the fallback's own basis line, naming the pinned device
+      // that answered empty, is what an unrecognised source id must read as instead.
+      const cards = [...(container?.querySelectorAll('.card') ?? [])]
+      const traceCard = cards.find((c) => c.querySelector('.label')?.textContent === 'Heart rate through this workout')
+      expect(traceCard, 'the trace card was absent').not.toBeUndefined()
+      expect(traceCard?.querySelector('.basis')?.textContent).toBe(
+        'Pixel Watch 4 recorded no heart rate in this window, so this is every other device instead; '
+        + 'these 1 points are the readings',
+      )
+    } finally { globalThis.fetch = original }
   })
 })

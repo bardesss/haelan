@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useTranslation } from '../../i18n/index.js'
 import { Card } from '../../components/Card.js'
 import { ErrorState } from '../../components/ErrorState.js'
@@ -31,9 +32,19 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
     sessionSourceId: session.sourceId, chosenSource,
   })
 
-  const marks = detail.events
-    .filter((event) => event.kind === PAUSE && event.atMs !== null)
-    .map((event) => ({ atMs: event.atMs! }))
+  // Memoised on detail.events, not rebuilt as a fresh array on every render: this feeds
+  // IntradayHeartRate's own `eventMarks` prop, which sits in that chart's `build` useCallback
+  // deps, which useChart keys its init/dispose effect on (useChart.ts's own comment on `build`) -
+  // a fresh `filter().map()` here disposed and reinitialised the chart on every commit regardless
+  // of whether the events actually changed. Final review finding; the same defect NO_EVENT_MARKS
+  // in IntradayHeartRate.tsx exists to prevent for the no-marks caller, reintroduced by the one
+  // caller that passes marks.
+  const marks = useMemo(
+    () => detail.events
+      .filter((event) => event.kind === PAUSE && event.atMs !== null)
+      .map((event) => ({ atMs: event.atMs! })),
+    [detail.events],
+  )
 
   if (trace.isError) {
     return <Card span={12} label={t('activity.workout.trace.label')}>

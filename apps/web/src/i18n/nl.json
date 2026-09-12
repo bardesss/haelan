@@ -428,6 +428,7 @@
         "label": "Tijd in hartslagzones",
         "basis": "de eigen vier zones van de sessie, zoals het apparaat ze registreerde — niet de drie zones van actieve zoneminuten",
         "column": "Zone",
+        "duration": "Duur",
         "light": "Licht", "moderate": "Matig", "vigorous": "Intensief", "peak": "Piek"
       },
       "trace": {
