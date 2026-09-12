@@ -1,4 +1,4 @@
-import { backupDecision, listBackups, pruneBackups, runBackup } from '@haelan/core'
+import { backupDecision, listBackups, McpCallLog, pruneBackups, runBackup } from '@haelan/core'
 import type { BackupFile, Instance } from '@haelan/core'
 
 export interface MaintenanceTickDeps {
@@ -74,6 +74,27 @@ export class MaintenanceTick {
     }
   }
 
+  /**
+   * Old `mcp_calls` rows, dropped on the same schedule as everything else this class decides is
+   * old. One place that answers "what is past its horizon" rather than two.
+   *
+   * Its own method rather than a line inside `runIfDue`, because that returns early whenever a
+   * backup is not due - and `HAELAN_BACKUP_KEEP=0` makes it never due at all. Folded in there, the
+   * call log would grow forever on exactly the instances that turned backups off.
+   *
+   * Caught for the same reason `runIfDue` is: this is called from inside a bare `setInterval` with
+   * no `process.on('uncaughtException')` anywhere in this app, so an escaping throw is not a failed
+   * prune, it is the process.
+   */
+  pruneCallLog(): number {
+    try {
+      return new McpCallLog(this.#deps.instance.db).prune(this.#deps.now())
+    } catch (error) {
+      console.error(`maintenance: call log prune failed, ${error instanceof Error ? error.message : String(error)}`)
+      return 0
+    }
+  }
+
   start(): void {
     if (this.#timer) return
     // Armed before either timer has ever run a tick, so a throw from one - runIfDue is caught
@@ -86,7 +107,7 @@ export class MaintenanceTick {
     // Hourly, like the sync scheduler, because the question is cheap - it reads one directory -
     // and asking it often is what lets a daily backup happen soon after an instance comes back up
     // rather than at whatever hour the process happened to start.
-    this.#timer = setInterval(() => { this.runIfDue() }, 3_600_000)
+    this.#timer = setInterval(() => { this.runIfDue(); this.pruneCallLog() }, 3_600_000)
     this.#timer.unref?.()
     // An instance restarted more often than its interval would otherwise never back up at all -
     // setInterval waits a whole interval before its first tick, the exact hazard SyncRunner.start()
@@ -96,7 +117,7 @@ export class MaintenanceTick {
     // measured in tens of seconds on a large database. Delayed rather than dropped: dueNow() asks
     // the files, not a clock, so nothing already due stops being due a minute from now, and a
     // minute is enough that the app is up and serving first.
-    this.#firstTick = setTimeout(() => { this.runIfDue() }, 60_000)
+    this.#firstTick = setTimeout(() => { this.runIfDue(); this.pruneCallLog() }, 60_000)
     this.#firstTick.unref?.()
   }
 

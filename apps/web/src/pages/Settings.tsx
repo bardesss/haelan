@@ -3,6 +3,7 @@ import { useSession } from '../auth/session.js'
 import { Card } from '../components/Card.js'
 import { ConnectGoogle } from '../auth/ConnectGoogle.js'
 import { Profile } from './settings/Profile.js'
+import { McpTokens } from './settings/McpTokens.js'
 import { OverrideList } from './settings/OverrideList.js'
 import { SourceNames } from './settings/SourceNames.js'
 import { DataTypes } from './settings/DataTypes.js'
@@ -43,6 +44,12 @@ export function Settings() {
             than household wide. */}
         <Card span={6} label={t('settings.dataTypes.title')}>
           <DataTypes />
+        </Card>
+        {/* Under the Profile/DataTypes row and not gated on isAdmin, for the same reason Profile
+            is not: this is the reader's own credential, and there is deliberately no path by
+            which an admin could mint one for somebody else. */}
+        <Card span={12} label={t('settings.mcp.title')}>
+          <McpTokens />
         </Card>
         <Card span={12} label={t('settings.overrides.title')}>
           <OverrideList />

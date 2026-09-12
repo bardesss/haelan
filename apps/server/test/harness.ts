@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -54,6 +55,10 @@ export interface WithServerOptions {
   /** See ServerDeps.rebuildInFlight. Unset by every test but the one that exercises the two
    * maintenance routes declining while it is true. */
   rebuildInFlight?: () => boolean
+  /** See ServerDeps.webRoot. Unset by every test but the one that installs the static handler
+   * to prove the not found handler's non-GET branch, since most of this suite is about the API
+   * and registering @fastify/static against a directory that does not exist would fail. */
+  webRoot?: string
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -113,6 +118,13 @@ export interface Harness {
   // exactly one, and every test that wanted a second has been reaching into the stores itself.
   addPerson: (input: { id: string, displayName: string, username: string }) =>
     Promise<{ personId: string, accountId: string }>
+  /**
+   * A usable MCP token for an account, minted straight through the store rather than through the
+   * Profile card's route: the guard's tests are about the credential, not about the screen that
+   * hands one out, and going through the route would make every one of them depend on it.
+   */
+  mintMcpToken: (options?: { accountId?: string, label?: string, days?: number }) =>
+    { secret: string, id: string }
   cleanup: () => Promise<void>
 }
 
@@ -160,6 +172,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     dataTypeIdsForTest: options.dataTypes,
     v1TestExtra: options.v1TestExtra,
     onRouteForTest: options.onRouteForTest,
+    ...(options.webRoot === undefined ? {} : { webRoot: options.webRoot }),
   })
   await app.ready()
 
@@ -241,6 +254,18 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
         password: 'a good long password', isAdmin: false, nowMs: clock.nowMs,
       })
       return { personId: input.id, accountId: `a-${input.id}` }
+    },
+
+    mintMcpToken: (options = {}) => {
+      // 'a1' by name, not accounts.list()[0]: that list is ordered by username, so the first
+      // row stops being the admin's the moment a test adds an account sorting before 'robin'.
+      // This harness creates the admin as a1/p1 itself, so naming it is both exact and stable.
+      const accountId = options.accountId ?? 'a1'
+      const { token, secret } = app.haelan.stores.mcpTokens.create({
+        id: randomUUID(), accountId, label: options.label ?? 'a test machine',
+        days: options.days ?? 90, nowMs: clock.nowMs,
+      })
+      return { secret, id: token.id }
     },
 
     cleanup: async () => {

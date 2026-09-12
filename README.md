@@ -349,9 +349,10 @@ the person stamped at the current version and starts normally.
 ## Roadmap
 
 Five milestones are done and the sixth is finishing: the store and sync engine, the derivation
-layer, eight dashboard pages, then packaging, people, backups and the upgrade path. What is left
-before this is feature complete is the agent surface - an MCP server, with typed tools over both
-its transports and `sql_query` behind its own sandbox.
+layer, eight dashboard pages, then packaging, people, backups and the upgrade path. The agent
+surface now ships too: an MCP server with typed tools, reachable over stdio and over HTTP behind
+a per-account token. What is left before this is feature complete is `sql_query` (M4b), behind its
+own sandbox.
 
 **[ROADMAP.md](ROADMAP.md)** has the table, every milestone's pull request, and why the order is
 what it is.
@@ -399,19 +400,20 @@ space; the findings stay.
 
 `packages/core/README.md` documents the store and the API client, `apps/server/README.md` the
 HTTP surface, `apps/web/README.md` the dashboard and the wizard, and
-[`TOOLS.md`](TOOLS.md) the MCP tool surface an agent reads through.
+[`TOOLS.md`](TOOLS.md) the MCP tool surface an agent reads through on either transport, and how to
+connect over HTTP.
 
 Specs and plans live under `docs/superpowers/` and are deliberately not tracked: they are working
 documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 616 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 694 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 616 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 694 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

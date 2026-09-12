@@ -18,6 +18,16 @@ export function registerStatic(app: FastifyInstance, webRoot: string): void {
     if (path.startsWith('/api/') || path.startsWith('/oauth/')) {
       return reply.code(404).send(errorBody('not_found', 'not_found', `no route answers '${path}'`))
     }
+    // The shell exists for a browser following a client routed link, and a browser only ever
+    // does that with GET (or the HEAD fastify derives from it). A non-GET landing here is an API
+    // call to a route that does not exist - nothing issues a POST hoping for a document - and
+    // handing it HTML back both misleads whoever is debugging it and, for /mcp specifically,
+    // contradicts what TOOLS.md tells an operator to expect from an instance with no token minted
+    // yet (guard.ts's callNotFound reaches this handler). Checked before LOOKS_LIKE_A_FILE so it
+    // also covers a non-GET request for something that merely looks like a file.
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      return reply.code(404).send(errorBody('not_found', 'not_found', `no route answers '${path}'`))
+    }
     // A missing file is a missing file. Handing index.html to a <script type="module"> answers
     // it with HTML, and the browser reports a MIME type error that names neither the file that
     // was missing nor the reason, which is a genuinely hard thing to diagnose from.

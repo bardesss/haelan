@@ -14,6 +14,25 @@ docker exec -i haelan node --experimental-strip-types apps/server/src/mcp.ts --p
 
 `--person` is a binding, not a permission check. It says which person in the household this process answers for; it does not gate who is allowed to run the command. A process that can `docker exec` into the container can already read the whole database file underneath it, `--person` or no `--person` — so the ability to reach the container is the real security boundary, and this flag is not a second one. Do not treat it as access control.
 
+## Connecting over HTTP
+
+```
+POST https://<your instance>/mcp
+Authorization: Bearer hmcp_…
+Content-Type: application/json
+Accept: application/json, text/event-stream
+```
+
+Mint a token in **Settings → Agent access**, in your own account. It is shown once. Tokens read and never write, answer for the one account that minted them, and expire after 30, 90 or 365 days - there is no permanent one, and no way for an admin to mint one on somebody else's behalf.
+
+`Accept` must name **both** `application/json` and `text/event-stream`, even though this server always answers with JSON and never opens a stream. A request that accepts only JSON is refused with 406. That is the MCP SDK's transport rule rather than a choice made here, and it is the single most likely reason a first attempt fails.
+
+The server is **stateless**: one JSON-RPC request, one response, no session id, no SSE and no resumability. `initialize` is accepted but nothing is remembered between requests, and there is no `GET /mcp` to open a stream against.
+
+**Before the first token is minted, `POST /mcp` answers 404 - exactly as it would if the route did not exist.** That is deliberate: an instance nobody has configured should not advertise that this surface is there, and there is no default credential to find. It also means a misconfigured instance looks like a missing route rather than an unauthenticated one, which is said here plainly so whoever is debugging it is not misled. Once any token exists, a missing or invalid one gets a 401 instead.
+
+Every call is recorded: when, which token, which tool, how many rows came back, how long it took and how it ended - visible on the same Settings card. **The arguments are not recorded.** There is no column for them, so a search of your own notes cannot be read back out of the log. Calls made over stdio are not logged at all: that entry opens the database read-only and cannot write, and a process that can `docker exec` into the container already holds everything a log would be protecting.
+
 ## Where the data goes
 
 Pointing an LLM at this server sends that person's health data to whichever model provider is on the other end of the conversation. Self-hosting the store does not self-host the model: haelan keeps the database on your own disk, but the moment an agent calls one of these tools, the answer it reads leaves the house for wherever that model runs.

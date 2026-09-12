@@ -32,6 +32,13 @@ type FlatRoute =
   | { route: string, auth: 'admin' }
   /** 'session' is requireSession alone - any signed-in member, admin or not. 'open' is neither. */
   | { route: string, auth: 'session' | 'open', why: string }
+  /**
+   * requireMcpToken, which is neither of the above and must never become either: an MCP token is
+   * not a session and a session is not an MCP token. Its own kind here rather than 'open' with an
+   * excuse, because an anonymous caller does not get a 401 from it - on an instance with no tokens
+   * it gets fastify's own 404, which is the mitigation rather than an accident.
+   */
+  | { route: string, auth: 'mcp_token', why: string }
 
 // `${METHOD} ${url}` in the exact form fastify registers, params included, matching what
 // registeredRoutes observes. Grouped by family, not by auth level, so a family's entries stay
@@ -159,6 +166,33 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
     route: 'PUT /api/profile/password',
     auth: 'session',
     why: 'the same account, and it asks for the current password on top of the session before it writes',
+  },
+
+  {
+    route: 'GET /api/profile/mcp-tokens',
+    auth: 'session',
+    why: 'it lists the caller\'s own tokens; the account is the one the session resolves to, never one named in the request',
+  },
+  {
+    route: 'POST /api/profile/mcp-tokens',
+    auth: 'session',
+    why: 'minting is the member\'s own act by design - there is deliberately no admin path to another member\'s token',
+  },
+  {
+    route: 'DELETE /api/profile/mcp-tokens/:id',
+    auth: 'session',
+    why: 'the store scopes the revocation to the caller\'s own account, so an id from elsewhere is a 404 rather than a revocation',
+  },
+  {
+    route: 'GET /api/profile/mcp-calls',
+    auth: 'session',
+    why: 'it reports calls made with the caller\'s own tokens, reached through the token\'s account rather than a path parameter',
+  },
+
+  {
+    route: 'POST /mcp',
+    auth: 'mcp_token',
+    why: 'the agent surface: its own credential, checked at onRequest, and invisible until this instance has minted one',
   },
 
   {
@@ -307,6 +341,16 @@ describe('the flat surface outside /api/v1 is guarded', () => {
     for (const entry of FLAT_ROUTES) {
       const harness = onlyReachableDuringSetup(entry.route) ? duringSetup : afterSetup
       const response = await call(harness.app, entry.route)
+      if (entry.auth === 'mcp_token') {
+        // Not 401. The harness this runs against has minted no token, and an instance with none
+        // answers as though the route were not registered - which is the whole of the mitigation
+        // for a surface that gets deployed and forgotten. mcp-http-auth.test.ts is where that 404
+        // is compared, byte for byte, against a genuinely unregistered path.
+        if (response.statusCode !== 404) {
+          wrong.push(`${entry.route} is declared mcp_token but answered an anonymous caller ${response.statusCode} ${response.body}`)
+        }
+        continue
+      }
       const refused = refusedForNoSession(response)
       if (entry.auth === 'open') {
         // Not "answered 200": /api/auth/login answers 401 invalid_credentials to the empty body

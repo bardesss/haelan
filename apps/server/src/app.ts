@@ -2,8 +2,8 @@ import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
 import {
-  AccountStore, CredentialStore, PeopleStore, RawArchive, SessionStore, SettingsStore, SourceRegistry,
-  SyncStateStore,
+  AccountStore, CredentialStore, McpCallLog, McpTokenStore, PeopleStore, RawArchive, SessionStore,
+  SettingsStore, SourceRegistry, SyncStateStore,
 } from '@haelan/core'
 import type { ExcludedDataTypeStore, Instance, RateLimiter } from '@haelan/core'
 import { registerSetupGate } from './routes/setupGate.ts'
@@ -15,11 +15,14 @@ import { registerSettings } from './routes/settings.ts'
 import { registerMaintenance } from './routes/maintenance.ts'
 import { registerMemberRoutes } from './routes/members.ts'
 import { registerProfile } from './routes/profile.ts'
+import { registerMcpTokenRoutes } from './routes/mcpTokens.ts'
 import { registerInviteRoutes } from './routes/invite.ts'
 import { registerV1 } from './routes/v1/index.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
 import { registerRequireAdmin } from './api/requireAdmin.ts'
+import { registerRequireMcpToken } from './mcp/guard.ts'
+import { registerMcp } from './mcp/http.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
 export interface EndpointOverrides {
@@ -126,6 +129,8 @@ export interface Stores {
   sources: SourceRegistry
   archive: RawArchive
   excludedDataTypes: ExcludedDataTypeStore
+  mcpTokens: McpTokenStore
+  mcpCalls: McpCallLog
 }
 
 export interface ServerContext extends ServerDeps {
@@ -161,6 +166,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     sources: new SourceRegistry(deps.instance.db),
     archive: deps.instance.archive,
     excludedDataTypes: deps.instance.excludedDataTypes,
+    mcpTokens: new McpTokenStore(deps.instance.db),
+    mcpCalls: new McpCallLog(deps.instance.db),
   }
   // The runner takes the context and the context holds the runner, so it is assigned rather
   // than passed. One object, so a route reaching app.haelan.runner reaches the same instance
@@ -176,6 +183,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   app.get('/api/health', async () => ({ ok: true }))
   registerAuth(app)
   registerRequireAdmin(app)
+  registerRequireMcpToken(app)
   registerSetup(app)
   registerOauth(app)
   registerSync(app)
@@ -183,12 +191,17 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   registerMaintenance(app)
   registerMemberRoutes(app)
   registerProfile(app)
+  registerMcpTokenRoutes(app)
   registerInviteRoutes(app)
   registerSetupGate(app)
   // Registered through app.register, not called directly like the routes above: the /api/v1
   // prefix and Fastify's plugin encapsulation are what keep this surface's error handler and
   // its isolation rule from touching anything outside it.
   void app.register((instance) => registerV1(instance, deps.v1TestExtra), { prefix: '/api/v1' })
+  // Outside /api/v1 and outside the setup gate alike: setupGate.ts returns early for any path that
+  // does not start with /api/ or /oauth/, so an unconfigured instance answers this route's own 404
+  // rather than the gate's 409. Registered before registerStatic so the SPA fallback never sees it.
+  registerMcp(app)
   if (deps.webRoot !== undefined) registerStatic(app, deps.webRoot)
 
   return app

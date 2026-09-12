@@ -8,5 +8,8 @@ export {
 } from './derived.ts'
 export type { SampleAgg, SessionKind } from './derived.ts'
 export { syncState, deriveQueue, excludedDataTypes } from './sync.ts'
-export { accounts, authSessions, instanceSettings, invites, CONSENT_PATHS } from './accounts.ts'
-export type { ConsentPath } from './accounts.ts'
+export {
+  accounts, authSessions, instanceSettings, invites, mcpTokens, mcpCalls,
+  CONSENT_PATHS, MCP_CALL_OUTCOMES,
+} from './accounts.ts'
+export type { ConsentPath, McpCallOutcome } from './accounts.ts'
