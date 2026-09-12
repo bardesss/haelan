@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, real, index } from 'drizzle-orm/sqlite-core'
 import { people } from './people.ts'
 
 // One account, one person, enforced by the unique constraint rather than by convention.
@@ -82,3 +82,78 @@ export const instanceSettings = sqliteTable('instance_settings', {
   setupCompletedAtMs: integer('setup_completed_at_ms'),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })
+
+/**
+ * The credential a remote agent presents at `POST /mcp`, stored the way auth_sessions and invites
+ * store theirs: the sha256 of the value, never the value. A copied database is a list of expiry
+ * times rather than a set of working keys.
+ *
+ * SHA-256 rather than the argon2 accounts.password_hash uses, and that is the right algorithm here
+ * rather than a shortcut. Argon2's cost - OWASP's 19 MiB and two passes - exists to make guessing
+ * a *low-entropy* secret expensive, and a 32-byte random token has no entropy to guess. Paying it
+ * on every request would buy nothing. A password is chosen by a human; this is not.
+ *
+ * There is no capability column. Read-only is the only kind of token that exists, and a flag
+ * nobody can set is a flag that cannot be set wrong later. Writes, if they are ever wanted, arrive
+ * with their own migration.
+ */
+export const mcpTokens = sqliteTable('mcp_tokens', {
+  id: text('id').primaryKey(),
+  // An account, never a person. The person comes from accounts.person_id, which is notNull and
+  // unique, so a forged or edited token cannot be made to point at a different household member.
+  accountId: text('account_id').notNull().references(() => accounts.id),
+  // Required, unlike anything else on this table. A token you cannot identify is a token you will
+  // not revoke, and the whole value of the list on the Profile card is that each row says which
+  // machine it is.
+  label: text('label').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  createdAtMs: integer('created_at_ms').notNull(),
+  // Mandatory, unlike a session's, and chosen from 30 / 90 / 365 days at creation. A credential
+  // for a machine outlives every visit to the screen that could have retired it.
+  expiresAtMs: integer('expires_at_ms').notNull(),
+  // What makes a leaked token visible rather than theoretical. Null until the first call.
+  lastUsedAtMs: integer('last_used_at_ms'),
+  // A stamp rather than a delete, so mcp_calls rows still name something after a revocation - and
+  // so the one place an attack shows up does not erase itself when the attack is stopped.
+  revokedAtMs: integer('revoked_at_ms'),
+})
+
+export const MCP_CALL_OUTCOMES = ['ok', 'error', 'refused'] as const
+export type McpCallOutcome = (typeof MCP_CALL_OUTCOMES)[number]
+
+/**
+ * When, which token, which tool, how much came back, how long it took, and how it ended.
+ *
+ * **There is no column for argument values, and there never is to be one.** Not a filter and not
+ * an allow-list: the table structurally cannot record that somebody searched their notes for a
+ * word they would not say aloud. A durable log of search terms is a new privacy surface in a
+ * health application, and this log's purpose does not need one - a token used at four in the
+ * morning, or one that returned forty thousand rows in a minute, is visible from the shape alone.
+ *
+ * `token_id` is notNull, which is also the rule for what gets written: a presented secret that
+ * matches no row at all writes nothing. That keeps an anonymous caller from growing this table by
+ * guessing, on a surface that is deliberately not rate limited yet, and costs nothing the log was
+ * for - a leaked token is a known row, which is the case worth seeing.
+ *
+ * stdio calls are absent by construction. That entry opens the database through `openReadOnly`,
+ * which cannot write a row; opening it read-write to log would trade a guarantee for an audit
+ * trail that protects nothing, since reaching stdio requires `docker exec` and a process with that
+ * already holds the volume, the database and the encryption key.
+ */
+export const mcpCalls = sqliteTable('mcp_calls', {
+  id: text('id').primaryKey(),
+  tokenId: text('token_id').notNull().references(() => mcpTokens.id),
+  atMs: integer('at_ms').notNull(),
+  // Null on a refusal: the guard turns a call away before any tool name is known.
+  tool: text('tool'),
+  // Spelled row_count rather than rows: ROWS is a window-frame keyword in SQLite and the name is
+  // not worth the question.
+  rowCount: integer('row_count'),
+  durationMs: integer('duration_ms'),
+  outcome: text('outcome', { enum: MCP_CALL_OUTCOMES }).notNull(),
+}, (t) => [
+  // What the Profile card reads: this account's tokens, newest call first.
+  index('mcp_calls_token_at').on(t.tokenId, t.atMs),
+  // What the prune reads.
+  index('mcp_calls_at').on(t.atMs),
+])
