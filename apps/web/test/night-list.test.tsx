@@ -103,4 +103,28 @@ describe('the night list', () => {
     expect(row).toContain('watch')
     expect(row).toContain('8h 00m')
   })
+
+  // Task 2 review: nothing exercised night-row-excluded, the branch that says a session was thrown
+  // out of this night, so a broken or removed rendering of it would have shipped unnoticed. The
+  // whole sentence, not a substring, for the same reason the plural form below matters: a dropped
+  // pluralisation ("2 session excluded") still contains "excluded" and "2".
+  it('says a session was excluded from a night that has one', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8, { excludedSessions: ['s1'] })]),
+      <NightList controls={CONTROLS} />)
+    expect(container?.querySelector('.night-row-excluded')?.textContent).toBe('1 session excluded')
+  })
+
+  it('pluralises when a night has more than one excluded session', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8, { excludedSessions: ['s1', 's2'] })]),
+      <NightList controls={CONTROLS} />)
+    expect(container?.querySelector('.night-row-excluded')?.textContent).toBe('2 sessions excluded')
+  })
+
+  // The other side of both cases above: a night with nothing excluded renders no such line at all,
+  // rather than one reading "0 sessions excluded" - the same "absent, never empty" rule the empty
+  // list state above this one follows.
+  it('renders no excluded line for a night that excluded nothing', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8)]), <NightList controls={CONTROLS} />)
+    expect(container?.querySelector('.night-row-excluded')).toBeNull()
+  })
 })

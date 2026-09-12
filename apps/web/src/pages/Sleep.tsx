@@ -487,9 +487,15 @@ export function Sleep() {
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
           label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} />
         {/* Task 2 of M8c: a night list below the cards above, mirroring Activity's own SessionList,
-            with each row a link into the night detail page tasks 4-7 build. */}
+            with each row a link into the night detail page tasks 4-7 build. `resolved`, not the
+            raw `controls`: every other query on this page reads through `resolved` for the reason
+            stated where it is built above (a source named in the URL that this person's own
+            series responses have never reported has to fall back to the all sources sentinel), and
+            `Activity.tsx` mounts its own SessionList with `resolved` for that identical reason. A
+            night list built from the unresolved value would query a source the control row above
+            it is not showing, so the two would read as two different periods for the one page. */}
         <Card span={12} label={t('sleep.nights.label')}>
-          <NightList controls={controls} />
+          <NightList controls={resolved} />
         </Card>
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
