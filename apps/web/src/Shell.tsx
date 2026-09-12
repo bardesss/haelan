@@ -118,7 +118,7 @@ export function Shell() {
           neither failure takes both. */}
       <ErrorBoundary>
         <Sidebar
-          active={active.path}
+          active={active.rail ?? active.path}
           person={session.data.displayName}
           signOutError={signOutError}
           onSignOut={() => {

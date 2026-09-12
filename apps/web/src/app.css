@@ -146,6 +146,15 @@ body {
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
 .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
 
+/* WorkoutDetail.tsx's own heading, above its `.grid` rather than one of the cards inside it - the
+   same "heading, then grid" shape every sibling page's own `<h1>` sits in front of, just with more
+   to say than a page title alone (the workout's name, when it happened, and its excluded badge). */
+.workout-header { display: flex; flex-direction: column; gap: var(--space-1); }
+.workout-title { font-size: var(--font-size-xl); margin: 0; }
+.workout-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
+.workout-excluded { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }
+.workout-gps { margin: 0; }
+
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
@@ -441,6 +450,16 @@ body {
    "this text is gone" and the reason is the opposite, the one line explaining why. */
 .session-row-excluded { color: var(--text-faint); text-decoration: line-through; }
 .session-row-excluded-reason { font-size: var(--font-size-xs); color: var(--text-faint); text-decoration: none; margin-top: var(--space-1); }
+
+/* The row itself keeps every rule it had; the link exists to make the whole row a target and to
+   stop the browser underlining and recolouring the text inside it. surface-hover is the same
+   token .segment and .rail-item reach for on their own hover/current states; the outline uses the
+   app-wide :focus-visible colour (--focus) rather than inventing a second one, drawn inward
+   (a negative offset) rather than outward since the row already sits flush against its neighbours
+   and an outward ring would overlap the row above or below it. */
+.session-row-link { display: block; color: inherit; text-decoration: none; }
+.session-row-link:hover .session-row { background: var(--surface-hover); }
+.session-row-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 /* SessionList.tsx's own root: min-width: 0 so a row's own flex children can actually shrink
    inside the card's grid column rather than pushing it wide, the same reason .card itself carries

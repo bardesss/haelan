@@ -398,6 +398,12 @@
       "emptyFilteredDetail": "Choose another type to see the rest of this period's sessions.",
       "excluded": "Excluded: {{reason}}",
       "excludedNoReason": "Excluded"
+    },
+    "workout": {
+      "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
+      "missingTitle": "No such workout",
+      "missingDetail": "This link names a workout that is not in your data."
     }
   },
   "charts": {

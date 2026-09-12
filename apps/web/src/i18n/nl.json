@@ -398,6 +398,12 @@
       "emptyFilteredDetail": "Kies een ander type om de rest van de sessies in deze periode te zien.",
       "excluded": "Uitgesloten: {{reason}}",
       "excludedNoReason": "Uitgesloten"
+    },
+    "workout": {
+      "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
+      "missingTitle": "Geen training gevonden",
+      "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat."
     }
   },
   "charts": {

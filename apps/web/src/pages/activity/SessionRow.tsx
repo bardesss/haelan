@@ -3,6 +3,7 @@ import { formatNumber, formatSessionDateHeading } from '../../format.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
+import { Link } from '../../router.js'
 
 /**
  * mm:ss per kilometre, the shape a pace reads as rather than a plain decimal (378.5 seconds
@@ -85,31 +86,36 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
   const rowClassName = session.excluded ? 'session-row session-row-excluded' : 'session-row'
 
   return (
-    <div className={rowClassName}>
-      <div className="session-row-main">
-        <span className="session-row-primary">
-          {/* Trailing space: this text node sits directly against session-row-type's own text
-              node with nothing between them in the accessibility tree, and without it a screen
-              reader concatenates the two into one word ("augustusCardiotraining"). */}
-          <span className="sr-only">{`${dateHeading} `}</span>
-          <span className="session-row-type">{typeText}</span>
-          <span className="session-row-duration">{durationText}</span>
-        </span>
-        {stats.length > 0 && <span className="session-row-stats">{stats.join(' - ')}</span>}
-      </div>
-      {/* Omitted outright, not rendered empty: the fourth test pins a session with none of these
-          fields to one line, and an empty div here would still be a second line, just a blank one. */}
-      {detail.length > 0 && <div className="session-row-detail">{detail.join(' - ')}</div>}
-      {/* excludeReason can be null even when excluded is true (a person can exclude without
-          typing a reason), so this falls back to a bare "Excluded" rather than printing "Excluded:
-          " with nothing after the colon. */}
-      {session.excluded && (
-        <div className="session-row-excluded-reason">
-          {session.excludeReason !== null
-            ? t('activity.sessions.excluded', { reason: session.excludeReason })
-            : t('activity.sessions.excludedNoReason')}
+    // The row's own way into WorkoutDetail (M8b): the whole row is the target, not a link buried
+    // inside it, so this wraps the existing body unchanged rather than adding a link somewhere
+    // within it.
+    <Link to={`/activity/${encodeURIComponent(session.id)}`} className="session-row-link">
+      <div className={rowClassName}>
+        <div className="session-row-main">
+          <span className="session-row-primary">
+            {/* Trailing space: this text node sits directly against session-row-type's own text
+                node with nothing between them in the accessibility tree, and without it a screen
+                reader concatenates the two into one word ("augustusCardiotraining"). */}
+            <span className="sr-only">{`${dateHeading} `}</span>
+            <span className="session-row-type">{typeText}</span>
+            <span className="session-row-duration">{durationText}</span>
+          </span>
+          {stats.length > 0 && <span className="session-row-stats">{stats.join(' - ')}</span>}
         </div>
-      )}
-    </div>
+        {/* Omitted outright, not rendered empty: the fourth test pins a session with none of these
+            fields to one line, and an empty div here would still be a second line, just a blank one. */}
+        {detail.length > 0 && <div className="session-row-detail">{detail.join(' - ')}</div>}
+        {/* excludeReason can be null even when excluded is true (a person can exclude without
+            typing a reason), so this falls back to a bare "Excluded" rather than printing "Excluded:
+            " with nothing after the colon. */}
+        {session.excluded && (
+          <div className="session-row-excluded-reason">
+            {session.excludeReason !== null
+              ? t('activity.sessions.excluded', { reason: session.excludeReason })
+              : t('activity.sessions.excludedNoReason')}
+          </div>
+        )}
+      </div>
+    </Link>
   )
 }
