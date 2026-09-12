@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { MCP_TOKEN_PREFIX, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
@@ -97,6 +100,38 @@ describe('before the first token exists', () => {
     expect(response.statusCode).toBe(404)
   })
 
+  it('answers the JSON 404, not the SPA shell, when a static handler is actually installed', async () => {
+    // Every other case in this file runs against a harness with no webRoot, so the static
+    // handler's not found branch is never installed at all and callNotFound falls through to
+    // fastify's own bare 404. That is not what a shipped container does: index.ts sets webRoot
+    // whenever web/dist/index.html exists, which is always in the image. This proves the same
+    // byte-identity claim holds once the shell is actually reachable, which is the situation
+    // TOOLS.md is describing.
+    const webRoot = mkdtempSync(join(tmpdir(), 'haelan-mcp-web-'))
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>haelan</title><div id="root"></div>')
+
+    const withShell = await withServer({ webRoot })
+    await withShell.completeSetup()
+
+    const present = await withShell.app.inject({
+      method: 'POST', url: '/mcp', headers: MCP_HEADERS,
+      payload: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+    })
+    const absent = await withShell.app.inject({
+      method: 'POST', url: '/mcp-not-a-route', headers: MCP_HEADERS,
+      payload: { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+    })
+
+    // Cleanup before the assertions, not in a finally: an EPERM from an open database handle
+    // during cleanup would replace the real assertion error.
+    await withShell.cleanup()
+    rmSync(webRoot, { recursive: true, force: true })
+
+    expect(present.statusCode).toBe(404)
+    expect(present.headers['content-type']).toContain('application/json')
+    expect(present.body).toBe(absent.body.replace('/mcp-not-a-route', '/mcp'))
+  })
+
   it('is not turned into the setup gate 409, because /mcp is outside the gate', async () => {
     const midWizard = await withServer()
     const response = await midWizard.app.inject({
@@ -128,14 +163,21 @@ describe('once a token exists', () => {
 
   it('refuses an expired token and records the refusal', async () => {
     const { secret, id } = h.mintMcpToken({ days: 30 })
+    const accountId = ADMIN_ACCOUNT
+    const read = () => h.app.haelan.stores.mcpTokens.listForAccount(accountId)
+      .find((t) => t.id === id)!.lastUsedAtMs
+    const used = read()
     h.clock.nowMs += 31 * 86_400_000
 
     expect((await toolsCall(secret, 'list_metrics')).statusCode).toBe(401)
 
-    const accountId = ADMIN_ACCOUNT
     const [call] = h.app.haelan.stores.mcpCalls.listForAccount(accountId, 10)
     // A leaked token's first sign is usually a failure, so the log has to hold one.
     expect(call).toMatchObject({ tokenId: id, tool: null, outcome: 'refused' })
+    // This row is known - unlike the "matches no row" case above, the guard reaches it and then
+    // declines - so this is the assertion that would catch mcpTokens.touch moved above the
+    // mcpTokenUsable check.
+    expect(read()).toBe(used)
   })
 
   it('refuses a revoked token', async () => {

@@ -13,7 +13,15 @@ let container: HTMLDivElement | null = null
 let root: Root | null = null
 const realFetch = globalThis.fetch
 
+const NOW = 1_770_000_000_000
+
 beforeEach(() => {
+  // TOKEN.expiresAtMs is 90 days out from NOW, and McpTokens.tsx computes naturallyExpired off
+  // real Date.now(). Left unmocked, every row this suite mounts is expired the moment NOW falls
+  // behind the actual clock - which it has, silently, since the day this suite was written - and
+  // the live-token branch (the Revoke button, useRevokeMcpToken) goes untested with every
+  // assertion about it still green.
+  vi.setSystemTime(NOW)
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -25,9 +33,8 @@ afterEach(() => {
   container = null
   root = null
   globalThis.fetch = realFetch
+  vi.useRealTimers()
 })
-
-const NOW = 1_770_000_000_000
 
 const TOKEN: McpTokenRow = {
   id: 't1', label: 'the laptop', createdAtMs: NOW, expiresAtMs: NOW + 90 * 86_400_000,
@@ -114,6 +121,35 @@ describe('the Agent access card', () => {
     mount([{ ...TOKEN, revokedAtMs: NOW + 1000 }])
     expect(text()).toContain('Revoked')
     expect(buttonSaying('Revoke')).toBeUndefined()
+  })
+
+  it('shows a live token as live, with a working revoke button', async () => {
+    let request: { method: string | undefined, url: string } | null = null
+    // Revoking invalidates mcpTokensKey, which refetches the token list from this same stub
+    // while the panel is still mounted - the mint test above hits the identical hazard and the
+    // same fix applies: a mock answering every method with the DELETE's own 204 would hand that
+    // refetch an empty body, and McpTokens.tsx would crash reading rows off it.
+    globalThis.fetch = vi.fn(async (input, init) => {
+      if (init?.method === 'DELETE') {
+        request = { method: init.method, url: String(input) }
+        return new Response(null, { status: 204 })
+      }
+      return new Response(
+        JSON.stringify({ tokens: [TOKEN] }), { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as unknown as typeof globalThis.fetch
+
+    mount([TOKEN])
+    expect(text()).toContain('Expires')
+    expect(text()).not.toContain('Expired')
+    const revokeButton = buttonSaying('Revoke')
+    expect(revokeButton).toBeDefined()
+
+    await act(async () => { revokeButton!.click() })
+
+    expect(request).not.toBeNull()
+    expect(request!.method).toBe('DELETE')
+    expect(request!.url).toContain('/api/profile/mcp-tokens/t1')
   })
 
   it('always says the arguments are not recorded, even with no calls', () => {

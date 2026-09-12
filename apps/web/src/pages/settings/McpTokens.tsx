@@ -126,19 +126,28 @@ export function McpTokens() {
           is the part of this card worth reading, and hiding it behind "there are calls to show"
           would hide it from exactly the reader deciding whether to mint their first token. */}
       <p className="field-hint">{t('settings.mcp.callsHint')}</p>
-      {calls.data === undefined || calls.data.calls.length === 0
-        ? <p className="field-hint">{t('settings.mcp.callsEmpty')}</p>
-        : (
-          <ul className="mcp-call-list">
-            {calls.data.calls.map((call) => (
-              <li key={call.id}>
-                {when(call.atMs)} · {call.tool ?? '—'} · {call.rowCount ?? '—'} · {t(OUTCOME_KEY[call.outcome])}
-              </li>
-            ))}
-          </ul>
-        )}
+      <CallsList />
     </div>
   )
+
+  // A failed fetch and an empty list must not read the same: this list is the one surface on the
+  // card whose job is to detect an attack rather than prevent one, and "No calls yet." over a
+  // dropped request would tell the one reader checking for a leaked token that nothing happened.
+  function CallsList() {
+    if (calls.isError) return <ErrorState onRetry={() => { void calls.refetch() }} />
+    if (calls.data === undefined || calls.data.calls.length === 0) {
+      return <p className="field-hint">{t('settings.mcp.callsEmpty')}</p>
+    }
+    return (
+      <ul className="mcp-call-list">
+        {calls.data.calls.map((call) => (
+          <li key={call.id}>
+            {when(call.atMs)} · {call.tool ?? '—'} · {call.rowCount ?? '—'} · {t(OUTCOME_KEY[call.outcome])}
+          </li>
+        ))}
+      </ul>
+    )
+  }
 
   function TokenRow({ row }: { row: McpTokenRow }) {
     // Expiry and revocation are different facts about a token and the row says which: a member
@@ -148,6 +157,9 @@ export function McpTokens() {
     // as a lie the moment the reader notices the tense. dead wins over naturallyExpired when a
     // token was revoked after it had already lapsed, since revocation is the more specific fact.
     const dead = row.revokedAtMs !== null
+    // Duplicates core's mcpTokenUsable rule, the same way LIVES above duplicates the server's
+    // closed set: this is a rendering fact about a row already fetched, not a second gate, and
+    // the guard evaluating the same expiry against the real clock server side is the backstop.
     const naturallyExpired = !dead && row.expiresAtMs <= Date.now()
     return (
       <li className="mcp-token">

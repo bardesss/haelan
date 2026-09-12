@@ -55,6 +55,10 @@ export interface WithServerOptions {
   /** See ServerDeps.rebuildInFlight. Unset by every test but the one that exercises the two
    * maintenance routes declining while it is true. */
   rebuildInFlight?: () => boolean
+  /** See ServerDeps.webRoot. Unset by every test but the one that installs the static handler
+   * to prove the not found handler's non-GET branch, since most of this suite is about the API
+   * and registering @fastify/static against a directory that does not exist would fail. */
+  webRoot?: string
 }
 
 const GOOGLE_STUB_ROOT = 'http://stub.invalid'
@@ -168,6 +172,7 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     dataTypeIdsForTest: options.dataTypes,
     v1TestExtra: options.v1TestExtra,
     onRouteForTest: options.onRouteForTest,
+    ...(options.webRoot === undefined ? {} : { webRoot: options.webRoot }),
   })
   await app.ready()
 
