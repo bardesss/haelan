@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.7.0](https://github.com/bardesss/haelan/compare/v1.6.0...v1.7.0) (2026-09-12)
+
+
+### Features
+
+* **server:** thirteen tools and an MCP server on stdio ([#144](https://github.com/bardesss/haelan/issues/144)) ([0faee79](https://github.com/bardesss/haelan/commit/0faee798f8caa33c9fe36524843fb8e199b97b2e))
+
 ## [1.6.0](https://github.com/bardesss/haelan/compare/v1.5.0...v1.6.0) (2026-09-11)
 
 
