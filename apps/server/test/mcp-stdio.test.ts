@@ -176,6 +176,18 @@ describe('stdout purity', () => {
     },
   })}\n`
 
+  // A real tool call, not a second handshake message: the whole reason this suite exists is that
+  // only a spawned process can see a stray `console.log` corrupt the stream, and an exchange that
+  // never calls a tool cannot see one written from inside a tool body or the sql_query sandbox
+  // child (whose stdio is inherited from this same process - see runSql.ts). `list_metrics` needs
+  // no seeded rows, which keeps this test about the transport rather than about fixture data.
+  const TOOLS_CALL = `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 2,
+    method: 'tools/call',
+    params: { name: 'list_metrics', arguments: {} },
+  })}\n`
+
   /**
    * Two deadlines, because this exchange is two things whose costs differ by three orders of
    * magnitude, and only the second one is what this test asserts.
@@ -216,7 +228,14 @@ describe('stdout purity', () => {
 
   interface Exchange { stdout: string, stderr: string }
 
-  async function oneExchange(personId: string): Promise<Exchange> {
+  const nonEmptyLines = (text: string): string[] => text.split('\n').filter((line) => line.trim() !== '')
+
+  // requests is every line to write to stdin, in order; the exchange is done once stdout has
+  // carried back that many lines. Written up front rather than one at a time waiting for each
+  // reply: this transport is a single ordered stream, so the second request queues behind the
+  // first exactly as a real client's would, and this stays a test of stdout's purity rather than
+  // of request/response pacing.
+  async function oneExchange(personId: string, requests: readonly string[]): Promise<Exchange> {
     const spawned = spawn(
       process.execPath,
       ['--experimental-strip-types', ENTRY, '--person', personId],
@@ -246,8 +265,8 @@ describe('stdout purity', () => {
         clearTimeout(timer)
         timer = setTimeout(() => {
           reject(new Error(
-            `the child started but wrote no line to stdout within ${REPLY_DEADLINE_MS}ms of its `
-            + `first output. stderr was: ${stderr}`,
+            `the child started but wrote fewer than ${requests.length} line(s) to stdout within `
+            + `${REPLY_DEADLINE_MS}ms of its first output. stderr was: ${stderr}`,
           ))
         }, REPLY_DEADLINE_MS)
       }
@@ -257,27 +276,28 @@ describe('stdout purity', () => {
       spawned.stdout.on('data', (chunk: string) => {
         stdout += chunk
         sawOutput()
-        if (stdout.includes('\n')) settle()
+        if (nonEmptyLines(stdout).length >= requests.length) settle()
       })
       // A child that dies during startup wrote its reason to stderr and nothing to stdout.
       // Resolving here would hand the assertions an empty string, so the failure would land on
-      // `toHaveLength(1)` with the reason captured and never printed - which is exactly how a
+      // the length assertion with the reason captured and never printed - which is exactly how a
       // version-gated entry that never served once read as a protocol bug. Fail with the reason.
       //
       // `close` rather than `exit`, because `exit` can fire while the last stdout chunk is still
       // in flight: a child that answered and then exited would race into this rejection.
       spawned.on('close', (code, signal) => {
-        if (stdout.includes('\n')) { settle(); return }
+        if (nonEmptyLines(stdout).length >= requests.length) { settle(); return }
         clearTimeout(timer)
         reject(new Error(
-          `the child exited (code ${String(code)}, signal ${String(signal)}) without writing a `
-          + `line to stdout. stderr was: ${stderr}`,
+          `the child exited (code ${String(code)}, signal ${String(signal)}) having written only `
+          + `${nonEmptyLines(stdout).length} of ${requests.length} expected line(s) to stdout. `
+          + `stderr was: ${stderr}`,
         ))
       })
       spawned.on('error', (err) => { clearTimeout(timer); reject(err) })
     })
     // Newline-delimited JSON is the stdio transport's framing; `ReadBuffer` splits on \n.
-    spawned.stdin.write(INITIALIZE)
+    for (const request of requests) spawned.stdin.write(request)
     await settled
     spawned.stdin.end()
     return { stdout, stderr }
@@ -286,8 +306,8 @@ describe('stdout purity', () => {
   it('writes nothing but JSON-RPC to stdout, and its diagnostics to stderr', async () => {
     seedPerson(fixture.db, 'p1')
 
-    const { stdout, stderr } = await oneExchange('p1')
-    const lines = stdout.split('\n').filter((line) => line.trim() !== '')
+    const { stdout, stderr } = await oneExchange('p1', [INITIALIZE])
+    const lines = nonEmptyLines(stdout)
     const unparsable = lines.filter((line) => {
       try { JSON.parse(line); return false } catch { return true }
     })
@@ -303,5 +323,26 @@ describe('stdout purity', () => {
     expect(reply.result.protocolVersion).toBe('2025-06-18')
     // The startup line proves a diagnostic was printed at all, and that it went the other way.
     expect(stderr).toContain('serving')
+  }, BOOT_LIKE_BUDGET_MS)
+
+  // The gap the review found: the test above never calls a tool, so a stray `console.log` in a
+  // tool body - or in the sql_query sandbox child, whose stdio is inherited from this very
+  // process (runSql.ts's own comment on why it sets 'ignore') - would corrupt the stream and
+  // nothing here would notice. This exchange goes one message further: initialize, then a real
+  // `tools/call`, and still nothing but JSON-RPC lines on stdout.
+  it('stays pure through a real tool call, not just the handshake', async () => {
+    seedPerson(fixture.db, 'p1')
+
+    const { stdout } = await oneExchange('p1', [INITIALIZE, TOOLS_CALL])
+    const lines = nonEmptyLines(stdout)
+    const unparsable = lines.filter((line) => {
+      try { JSON.parse(line); return false } catch { return true }
+    })
+
+    expect(unparsable).toEqual([])
+    expect(lines).toHaveLength(2)
+    const reply = JSON.parse(lines[1]!) as { id: number, result: { isError?: boolean } }
+    expect(reply.id).toBe(2)
+    expect(reply.result.isError).not.toBe(true)
   }, BOOT_LIKE_BUDGET_MS)
 })

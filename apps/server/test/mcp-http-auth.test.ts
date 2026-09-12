@@ -277,6 +277,20 @@ describe('the transport', () => {
     const [call] = h.app.haelan.stores.mcpCalls.listForAccount(accountId, 10)
     expect(call).toMatchObject({ tool: 'get_workout', outcome: 'error', rowCount: null })
   })
+
+  // Minor 1 of the M4 review: a thrown ConfigError reached an agent as `error.message`, which
+  // carries the `[kind]` tag HaelanError's own comment says exists for a log line - the HTTP
+  // envelope already strips it via `.detail` (api/envelope.ts's sendCoreError); this is that same
+  // rule reaching the MCP path.
+  it('answers a refusal without the internal [kind] tag on the message', async () => {
+    const { secret } = h.mintMcpToken()
+    const response = await toolsCall(secret, 'get_workout', { sessionId: 'no-such-session' })
+
+    const result = (response.json() as { result: { content: { type: string, text: string }[] } }).result
+    const text = result.content.map((c) => c.text).join('\n')
+    expect(text).toContain("no session 'no-such-session'")
+    expect(text).not.toContain('[config]')
+  })
 })
 
 // The regression Important 2 of the M4 review is actually about: `mcpTokens.touch` and
