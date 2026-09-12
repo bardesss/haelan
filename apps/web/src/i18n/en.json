@@ -640,6 +640,11 @@
       "excluded_other": "{{count}} sessions excluded",
       "emptyTitle": "No nights in this period",
       "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
+    },
+    "night": {
+      "when": "{{bed}} to {{wake}} · {{source}}",
+      "missingTitle": "No night recorded",
+      "missingDetail": "This date has no sleep from this source. It may not have synced yet."
     }
   },
   "setup": {

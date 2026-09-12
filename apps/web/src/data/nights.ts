@@ -1,5 +1,6 @@
 import type { Night } from './useNights.js'
 import type { Stage } from '../fixtures/july.js'
+import { ALL_SOURCES } from '../controls/source.js'
 
 // oneNightPerDate and stageOf lived, byte-identical, in Dashboard.tsx and Sleep.tsx, one copy
 // each. The night detail page is a third caller, and a third copy is what makes the duplication
@@ -33,4 +34,18 @@ export function oneNightPerDate(items: readonly Night[]): Night[] {
     }
   }
   return [...byDate.values()].sort((a, b) => a.localDate.localeCompare(b.localDate))
+}
+
+/**
+ * Which of a date's nights this page draws.
+ *
+ * The route answers one row per (localDate, sourceId), and a date can hold two. A reader who named
+ * a source gets that source's night or nothing at all - never another device's, because silently
+ * answering a different question is the same failure the workout page's trace rule exists to
+ * prevent. With no source named, the longer recording wins, which is oneNightPerDate's rule and the
+ * same one the hypnogram on Sleep has always applied.
+ */
+export function nightFor(items: readonly Night[], source: string): Night | null {
+  if (source !== ALL_SOURCES) return items.find((night) => night.sourceId === source) ?? null
+  return oneNightPerDate(items)[0] ?? null
 }

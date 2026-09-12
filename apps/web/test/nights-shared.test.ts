@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { oneNightPerDate, stageOf } from '../src/data/nights.js'
+import { oneNightPerDate, stageOf, nightFor } from '../src/data/nights.js'
 import type { Night } from '../src/data/useNights.js'
+import { ALL_SOURCES } from '../src/controls/source.js'
 
 const night = (localDate: string, sourceId: string, hours: number): Night => ({
   localDate, sourceId, sessionIds: [`${sourceId}-${localDate}`],
@@ -41,5 +42,27 @@ describe('stageOf', () => {
     expect(stageOf('ASLEEP')).toBeNull()
     expect(stageOf('RESTLESS')).toBeNull()
     expect(stageOf('SOMETHING_NEW')).toBeNull()
+  })
+})
+
+describe('nightFor', () => {
+  it('takes the night belonging to the source the reader named', () => {
+    const picked = nightFor([night('2026-08-03', 'watch', 8), night('2026-08-03', 'phone', 3)], 'phone')
+    expect(picked?.sourceId).toBe('phone')
+  })
+
+  it('takes the longer recording when the reader named no source', () => {
+    const picked = nightFor([night('2026-08-03', 'phone', 3), night('2026-08-03', 'watch', 8)], ALL_SOURCES)
+    expect(picked?.sourceId).toBe('watch')
+  })
+
+  it('answers null when the named source recorded no night, rather than quietly drawing another', () => {
+    // Silently answering a different question is the failure the workout page's own source rule
+    // exists to prevent, and it applies identically here.
+    expect(nightFor([night('2026-08-03', 'watch', 8)], 'phone')).toBeNull()
+  })
+
+  it('answers null for no nights at all', () => {
+    expect(nightFor([], ALL_SOURCES)).toBeNull()
   })
 })

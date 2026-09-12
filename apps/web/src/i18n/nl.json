@@ -640,6 +640,11 @@
       "excluded_other": "{{count}} sessies uitgesloten",
       "emptyTitle": "Geen nachten in deze periode",
       "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
+    },
+    "night": {
+      "when": "{{bed}} tot {{wake}} · {{source}}",
+      "missingTitle": "Geen nacht geregistreerd",
+      "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd."
     }
   },
   "setup": {

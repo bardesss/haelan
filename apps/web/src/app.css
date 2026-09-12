@@ -168,6 +168,13 @@ body {
    on this line to align it against. */
 .workout-actions { display: flex; justify-content: flex-end; }
 
+/* NightDetail.tsx's own heading, the same shape .workout-header is: a page title followed by one
+   line naming when the night ran and who recorded it, above the `.grid` rather than one of the
+   cards inside it. */
+.night-header { display: flex; flex-direction: column; gap: var(--space-1); }
+.night-title { font-size: var(--font-size-xl); margin: 0; }
+.night-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
+
 /* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is
    already this section's grid, and `display: contents` makes each `Card` child a direct grid item
    of it, exactly as an unwrapped card would be, while still giving this section's own tests a
