@@ -24,6 +24,7 @@
  */
 import { z } from 'zod'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { HaelanError } from '@haelan/core'
 import type { PersonQuery } from '@haelan/core'
 import { CATALOGUE } from './catalogue.ts'
 
@@ -235,7 +236,13 @@ function register(
           tool: tool.name, rowCount: null,
           durationMs: Math.round(performance.now() - started), outcome: 'error',
         })
-        throw error
+        // The SDK reads `error.message` verbatim into the tool result's text (createToolError
+        // above it, not this file). HaelanError's own `message` carries the `[kind]` tag for a log
+        // line, where nothing else states the class - api/envelope.ts's `sendCoreError` already
+        // strips it for the HTTP surface by sending `.detail` instead of `.message`, and this is
+        // that same rule's MCP side. Without it an agent reads `[config] no session 'nope'`
+        // rather than the sentence a caller actually wrote.
+        throw error instanceof HaelanError ? new Error(error.detail) : error
       }
       observe?.({
         tool: tool.name, rowCount: countRows(tool.outputSchema, structuredContent),

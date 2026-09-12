@@ -23,7 +23,13 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   query_series: { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-04' },
   get_daily: { localDate: '2026-08-01', metrics: ['steps'], agg: 'sum' },
   get_baselines: { metric: 'steps', agg: 'sum', on: '2026-08-10' },
-  compare_periods: { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-04' },
+  // 2026-08-05 to 08 rather than the 01-04 every other tool here uses: comparePeriods answers the
+  // equal-length period immediately before its own range, which for 01-04 is 07-28 to 07-31 -
+  // outside what seedToolData writes, so both periods used to answer zero days, the whole answer
+  // was suppressed, and every number was null. A leak of bart's 8800 into a mean that never gets
+  // computed is invisible, and this tool was not in ALICE_FINGERPRINTS either. 05-08's previous
+  // period is 01-04, which seedToolData does write, so both sides now carry real data.
+  compare_periods: { metric: 'steps', agg: 'sum', from: '2026-08-05', to: '2026-08-08' },
   trend: { metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-04' },
   get_intraday: { metric: 'heart_rate', localDate: '2026-08-01' },
   get_sleep: { from: '2026-08-01', to: '2026-08-02' },
@@ -98,6 +104,9 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   get_events: 'alice-event-sentinel',
   get_workouts: 'alice-run',
   sql_query: '1200',
+  // Both the 08-05..08 period and its computed previous period (08-01..04) carry alice's own
+  // 1200, so a suppressed answer (every field null) fails this the same way a missing tool would.
+  compare_periods: '1200',
 }
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
@@ -121,8 +130,21 @@ export function seedToolData(db: DbOrTx): void {
   insertSource('alice-watch', 'alice')
   insertSource('bart-watch', 'bart')
 
+  // 1 through 8, not 1 through 4: compare_periods needs a second, equal-length window with real
+  // data behind it (see the comment on TOOL_INPUTS.compare_periods above) - 05 through 08 is
+  // exactly that second window, alongside the 01-04 every other tool's TOOL_INPUTS entry reads.
+  //
+  // Alice is still inserted before bart on every date, unchanged from before this fix. The
+  // reviewer noted that get_baselines, get_daily and trend catch a dropped person-id filter only
+  // because personQuery.ts's preferMerged keeps whichever row of a tied pair arrived last, which
+  // today is bart's - so the isolation guarantee for those three tools rests on this insertion
+  // order rather than on anything the fixture states on purpose. This change does not make that
+  // explicit: the order is exactly as accidental after it as before. Fixing it - seeding so a
+  // dropped filter is caught regardless of insertion order - is real work of its own and out of
+  // scope here; this comment exists so the next person touching this loop does not reorder it
+  // without knowing three tools' isolation coverage quietly rides on the current order.
   for (const [personId, value] of [['alice', 1200], ['bart', 8800]] as const) {
-    for (let day = 1; day <= 4; day += 1) {
+    for (let day = 1; day <= 8; day += 1) {
       db.insert(schema.daily).values({
         personId, localDate: `2026-08-0${day}`, metric: 'steps', agg: 'sum', source: 'merged',
         value, coverage: 0.9, sourceMix: null, derivationVersion: DERIVATION_VERSION,

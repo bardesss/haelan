@@ -22,7 +22,7 @@ import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import {
-  AccountStore, ConfigError, DATABASE_FILENAME, HaelanError, closeDatabase, openDatabase,
+  AccountStore, ConfigError, DATABASE_FILENAME, HaelanError, McpTokenStore, closeDatabase, openDatabase,
 } from '@haelan/core'
 import type { Database } from '@haelan/core'
 import { readConfig } from './config.ts'
@@ -102,7 +102,7 @@ export async function runAdmin(argv: readonly string[], deps: AdminDeps): Promis
   let db: Database | null = null
   try {
     db = openDatabase(dataDir)
-    return await execute(parsed.command, new AccountStore(db), deps)
+    return await execute(parsed.command, new AccountStore(db), new McpTokenStore(db), deps)
   } catch (err) {
     if (isBusy(err)) {
       deps.err(BUSY_MESSAGE)
@@ -122,7 +122,9 @@ export async function runAdmin(argv: readonly string[], deps: AdminDeps): Promis
   }
 }
 
-async function execute(command: Command, accounts: AccountStore, deps: AdminDeps): Promise<number> {
+async function execute(
+  command: Command, accounts: AccountStore, mcpTokens: McpTokenStore, deps: AdminDeps,
+): Promise<number> {
   if (command.name === 'list') {
     listAccounts(accounts, deps)
     return 0
@@ -139,7 +141,13 @@ async function execute(command: Command, accounts: AccountStore, deps: AdminDeps
     deps.err('the two entries did not match, so nothing was changed.')
     return 1
   }
-  await accounts.setPassword(command.username, password)
+  const accountId = await accounts.setPassword(command.username, password)
+  // This console tool is the door for the case where even the admin route in members.ts is out
+  // of reach - somebody locked out at the console, or with nobody else to ask - but the reason to
+  // end this account's MCP tokens is the same one either route acts on: a password set here is
+  // set by someone who does not trust whatever currently proves this account's identity, and an
+  // agent credential minted under the old proof must not survive the person deciding that.
+  mcpTokens.revokeAllForAccount(accountId, deps.now())
   deps.out(`password set for ${command.username}, and any lockout cleared.`)
   return 0
 }

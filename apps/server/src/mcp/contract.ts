@@ -129,6 +129,24 @@ export function summaryOf(values: readonly number[]): Summary {
 
 export const MAX_TEXT = 2000
 
+/**
+ * The sandbox's total result budget, summed across every cell of every row together.
+ *
+ * `MAX_TEXT` bounds one cell; `SQL_ROW_CAP` (runSql.ts) bounds the row count; nothing before this
+ * bounded their product, and SQLite's own `MAX_COLUMN` (2000) leaves a lot of room to multiply
+ * them. Measured: 600 columns x 500 rows of `hex(randomblob(1000))` reached 1.8GB peak RSS, then
+ * `JSON.stringify` in adapter.ts threw `Invalid string length` - after the call log had already
+ * written `ok`, because the observer there fires before serialisation runs.
+ *
+ * 2MB. A real answer from this tool - a handful of columns of numbers, short strings and ISO
+ * dates, up to `SQL_ROW_CAP` rows - lands in the tens of kilobytes, nowhere near this. It would
+ * still be reached by 500 rows of two dozen columns each holding a full `MAX_TEXT` string (500 *
+ * 24 * 2000 = 24MB) - and that is the right outcome, not a false positive: that shape is exactly
+ * what Important 1 measured turning into an OOM, so truncating it (`truncated: true`, a usable
+ * partial answer) rather than letting the product run unbounded is the point of this constant.
+ */
+export const MAX_RESULT_BYTES = 2_000_000
+
 export interface Untrusted {
   untrustedText: string | null
   truncated: boolean

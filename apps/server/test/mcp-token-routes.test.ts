@@ -21,6 +21,23 @@ const revoke = (token: string, id: string) =>
   h.app.inject({ method: 'DELETE', url: `/api/profile/mcp-tokens/${id}`, headers: auth(token) })
 const calls = (token: string) => h.app.inject({ method: 'GET', url: '/api/profile/mcp-calls', headers: auth(token) })
 
+// Whether an MCP secret still opens POST /mcp, exercising the guard the same way an agent would
+// rather than reading mcp_tokens back off the store - the property Important 5 cares about is
+// that the credential itself stops working, not merely that a column changed.
+const usable = async (secret: string): Promise<boolean> => {
+  const response = await h.app.inject({
+    method: 'POST',
+    url: '/mcp',
+    headers: {
+      authorization: `Bearer ${secret}`,
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+    },
+    payload: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_metrics', arguments: {} } },
+  })
+  return response.statusCode === 200
+}
+
 describe('the Profile card routes', () => {
   it('mints a token, returns the secret once, and never returns it again', async () => {
     const created = await mint(session, { label: 'the laptop', days: 30 })
@@ -91,5 +108,41 @@ describe('the Profile card routes', () => {
     ]) {
       expect(response.statusCode).toBe(401)
     }
+  })
+})
+
+// Important 5 of the M4 review: a token minted from a session used to outlive every one of the
+// three ways this app can change what proves an account's identity. Nothing here is about the
+// Profile card - it is about the credential still working, or not, afterwards.
+describe('a password change ends every MCP token the account holds', () => {
+  it('own password change: a previously working token is refused at POST /mcp afterwards', async () => {
+    const { secret, id } = h.mintMcpToken()
+    expect(await usable(secret)).toBe(true)
+
+    const changed = await h.app.inject({
+      method: 'PUT', url: '/api/profile/password', headers: auth(session),
+      payload: { currentPassword: 'a good long password', newPassword: 'a different good long password' },
+    })
+    expect(changed.statusCode).toBe(204)
+
+    expect(await usable(secret)).toBe(false)
+    // A stamp, not a delete: the row survives so the call log this token made still resolves to
+    // an account, the same guarantee `revoke` already gives a caller-initiated revocation.
+    const rows = (await list(session)).json().tokens as { id: string, revokedAtMs: number | null }[]
+    expect(rows).toEqual([expect.objectContaining({ id, revokedAtMs: expect.any(Number) })])
+  })
+
+  it('admin reset: a member\'s previously working token is refused at POST /mcp afterwards', async () => {
+    const bob = await h.addPerson({ id: 'p-bob', displayName: 'Bob', username: 'bob' })
+    const { secret } = h.mintMcpToken({ accountId: bob.accountId })
+    expect(await usable(secret)).toBe(true)
+
+    const reset = await h.app.inject({
+      method: 'POST', url: `/api/members/${bob.accountId}/password`,
+      headers: auth(session), payload: { password: 'the admin chose this one' },
+    })
+    expect(reset.statusCode).toBe(204)
+
+    expect(await usable(secret)).toBe(false)
   })
 })

@@ -7,6 +7,18 @@ import { buildServer } from './app.ts'
 import { runBootSequence } from './rebuild.ts'
 import { rebuildInWorkerIfNeeded } from './rebuildInWorker.ts'
 import { MaintenanceTick } from './maintenance/tick.ts'
+import { sweepStaleProjections } from './mcp/sweepProjections.ts'
+
+// Cheap and non-fatal, and first: a crash mid sql_query leaves its projection - a plaintext copy
+// of one person's health data - behind in os.tmpdir() forever, since nothing else ever revisits
+// that directory. Before anything else opens a database or starts listening, so this can never
+// sweep a projection this very process just created.
+try {
+  const swept = sweepStaleProjections()
+  if (swept > 0) console.log(`swept ${swept} stale sql_query projection${swept === 1 ? '' : 's'} from a previous crash`)
+} catch (error) {
+  console.error('boot projection sweep failed', error)
+}
 
 const config = readConfig(process.env)
 // Resolved and reported, because a relative HAELAN_DATA_DIR means whatever the working

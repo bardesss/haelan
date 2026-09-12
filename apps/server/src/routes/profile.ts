@@ -100,6 +100,13 @@ export function registerProfile(app: FastifyInstance): void {
           .send(errorBody('forbidden', 'wrong_password', 'that is not your current password'))
       }
       await stores().accounts.setPasswordById(accountId, newPassword)
+      // Every MCP token this account has minted ends here, unlike its sessions two lines below,
+      // which survive. The tokens were minted by whoever held a session at the time, and this
+      // password change is the act of someone who believes that person may not have been them -
+      // the whole reason to change a password after noticing a break-in. A session surviving is a
+      // choice (see the comment below); an agent credential surviving the same button press would
+      // leave the thing the person is actually worried about untouched.
+      stores().mcpTokens.revokeAllForAccount(accountId, app.haelan.now())
       // No 200 body worth sending, and nothing the client should re-read: the session survives
       // (auth_sessions keys on the account id, not on anything this touched) and every other
       // session this account holds survives too. Signing the others out would be a defensible

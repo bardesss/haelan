@@ -31,6 +31,20 @@ declare module 'fastify' {
  * exists, on an instance whose whole mitigation is that it does not. At `onRequest` the guard runs
  * first in every case. Measured, not assumed.
  */
+/**
+ * How often `touch` actually writes, once a token is already known to have been used inside this
+ * window.
+ *
+ * The stamp exists so a leaked token is visible in Settings -> Agent access - "was this used, and
+ * when" - rather than only theoretical; it does not exist to time an agent's calls to the
+ * millisecond. A minute of slack answers that question exactly as well as a write on every single
+ * request, and skipping the common case is what keeps a read-only surface from taking a write
+ * lock on every call - the lock `rebuildWorker.ts` holds for a whole rebuild, which is Important
+ * 2's actual bug: a write on every read meant the surface died on `SQLITE_BUSY` for the rebuild's
+ * entire duration.
+ */
+const TOKEN_TOUCH_INTERVAL_MS = 60_000
+
 export function registerRequireMcpToken(app: FastifyInstance): void {
   app.decorateRequest('mcpToken', null)
 
@@ -38,11 +52,20 @@ export function registerRequireMcpToken(app: FastifyInstance): void {
     const { mcpTokens, mcpCalls, accounts } = app.haelan.stores
     const nowMs = app.haelan.now()
 
+    // Best-effort: `mcp_calls` is an audit trail, not part of the read this guard exists to let
+    // through. A write that fails here - the database busy with a rebuild's own transaction, most
+    // plausibly - must never turn an otherwise-good refusal into a 500, and must never turn an
+    // accepted call into one either (see the call site of `touch` below). Logged to stderr rather
+    // than silently dropped, so an operator can still see that logging itself is failing.
     const logRefusal = (tokenId: string): void => {
-      mcpCalls.record({
-        id: randomUUID(), tokenId, atMs: nowMs, tool: null,
-        rowCount: null, durationMs: null, outcome: 'refused',
-      })
+      try {
+        mcpCalls.record({
+          id: randomUUID(), tokenId, atMs: nowMs, tool: null,
+          rowCount: null, durationMs: null, outcome: 'refused',
+        })
+      } catch (error) {
+        console.error('mcp guard: failed to log a refused call', error)
+      }
     }
 
     // Before anything else, and before the credential is even looked at. An instance nobody has
@@ -95,7 +118,17 @@ export function registerRequireMcpToken(app: FastifyInstance): void {
       return refuse(reply)
     }
 
-    mcpTokens.touch(token.id, nowMs)
+    // Coalesced to once every TOKEN_TOUCH_INTERVAL_MS, and best-effort like the refusal log
+    // above: a failed write here must not turn an otherwise-good call into a 500. The common case
+    // - the same token, called again inside the same minute - now writes nothing at all, which is
+    // what keeps this guard from taking a write lock on every single read.
+    if (token.lastUsedAtMs === null || nowMs - token.lastUsedAtMs >= TOKEN_TOUCH_INTERVAL_MS) {
+      try {
+        mcpTokens.touch(token.id, nowMs)
+      } catch (error) {
+        console.error('mcp guard: failed to record token use', error)
+      }
+    }
     request.mcpToken = token
   })
 }

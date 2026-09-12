@@ -137,6 +137,29 @@ export class McpTokenStore {
       ))
       .run().changes > 0
   }
+
+  /**
+   * Ends every live token this account holds, on a password change - mirroring
+   * `SessionStore.destroyForAccount`, which exists for exactly this reason.
+   *
+   * A token is minted by whoever holds the session at the time (`routes/mcpTokens.ts`), and a
+   * password change is the act of someone who believes that person may no longer be them: their
+   * own password change after noticing a break-in, an admin resetting a compromised member's
+   * password, or the console tool doing the same from the machine itself. None of those three
+   * routes used to touch `mcp_tokens` - only `disable` suspended one - so an agent's 90 day
+   * credential outlived the very event meant to end a stolen session's reach. `disable` still
+   * exists beside this for the account-level shutdown; this is the credential-level one, fired on
+   * every path that can change what proves who somebody is.
+   *
+   * A stamp, like `revoke`, not a delete: the rows survive for the call log
+   * (`McpCallLog.listForAccount` joins through them), so a revoked token's history stays readable
+   * after the credential itself stops working.
+   */
+  revokeAllForAccount(accountId: string, nowMs: number): number {
+    return this.#db.update(mcpTokens).set({ revokedAtMs: nowMs })
+      .where(and(eq(mcpTokens.accountId, accountId), isNull(mcpTokens.revokedAtMs)))
+      .run().changes
+  }
 }
 
 function toToken(row: typeof mcpTokens.$inferSelect): McpToken {
