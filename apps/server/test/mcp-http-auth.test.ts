@@ -291,4 +291,22 @@ describe('the log cannot hold free text', () => {
     expect(rows.length).toBeGreaterThan(0)
     expect(JSON.stringify(rows)).not.toContain(sentinel)
   })
+
+  it('keeps a note body out of the sentence an agent reads first, even under sql_query', async () => {
+    const { secret } = h.mintMcpToken()
+    const sentinel = 'zzz-never-in-the-prose-zzz'
+    // Put the sentinel where only a cell value can carry it.
+    h.app.haelan.instance.db.insert(schema.notes).values({
+      id: 'sentinel', personId: 'p1', localDate: '2026-08-01', body: sentinel, updatedAtMs: 0,
+    }).run()
+
+    const response = await toolsCall(secret, 'sql_query', { sql: 'SELECT body FROM notes' })
+    expect(response.statusCode).toBe(200)
+    const result = (response.json() as { result: { content: { text: string }[] } }).result
+    // content[0] is the summary sentence. content[1] is the structured content serialised, where
+    // the sentinel legitimately appears - a cell is data and travels as data.
+    expect(result.content[0]!.text).not.toContain(sentinel)
+    expect(result.content[0]!.text).toMatch(/columns \d+, rows \d+/)
+    expect(result.content[1]!.text).toContain(sentinel)
+  })
 })
