@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.9.0](https://github.com/bardesss/haelan/compare/v1.8.1...v1.9.0) (2026-09-12)
+
+
+### Features
+
+* **web:** every chart says which day and what value, on hover ([#154](https://github.com/bardesss/haelan/issues/154)) ([82e758d](https://github.com/bardesss/haelan/commit/82e758d48d911d268ae32da9909bbbc1d39a4a35))
+
+
+### Bug Fixes
+
+* **test:** charts stop animating in tests, so flush() stops waiting them out ([#153](https://github.com/bardesss/haelan/issues/153)) ([ab7faa3](https://github.com/bardesss/haelan/commit/ab7faa32ebfd6838358f82fac8a07d8cf5502fe1))
+
 ## [1.8.1](https://github.com/bardesss/haelan/compare/v1.8.0...v1.8.1) (2026-09-12)
 
 
