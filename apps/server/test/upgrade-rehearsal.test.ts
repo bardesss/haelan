@@ -90,6 +90,17 @@ const rowsOf = (db: Database, tables: readonly string[]): Rows => Object.fromEnt
 const countOf = (db: Database, table: string): number =>
   (db.$client.prepare(`select count(*) as n from ${table}`).get() as { n: number }).n
 
+// How many migrations the repository's history holds, read the same way buildOldDatabase reads
+// it below: `_journal.json`'s entry count, not a literal. A literal here goes stale on the next
+// migration and fails a test about the upgrade path for a reason that has nothing to do with
+// upgrading.
+const journalEntryCount = (): number => {
+  const journal = JSON.parse(
+    readFileSync(join(MIGRATIONS_DIR, 'meta', '_journal.json'), 'utf8'),
+  ) as { entries: { tag: string, when: number }[] }
+  return journal.entries.length
+}
+
 const countWhere = (db: Database, table: string, where: string, ...params: unknown[]): number =>
   (db.$client.prepare(`select count(*) as n from ${table} where ${where}`).get(...params) as { n: number }).n
 
@@ -309,8 +320,12 @@ describe('the upgrade path', () => {
       // The deliberate part. 0016 drops `samples` rather than translating 1.6 million rows inside
       // a migration transaction, and the rebuild below is what refills it.
       expect(countOf(db, 'samples')).toBe(0)
-      // 0016 ran, and the fixture stopped where it claimed to. See buildOldDatabase.
-      expect(countOf(db, '__drizzle_migrations')).toBe(17)
+      // 0016 ran, and the fixture stopped where it claimed to. See buildOldDatabase. Pinned
+      // against the journal's own entry count, not a literal: what this line claims is "every
+      // migration in the repository's history has now been applied", and the journal says that
+      // exactly, whereas a literal would go stale on the next migration and fail this test for a
+      // reason that has nothing to do with upgrading.
+      expect(countOf(db, '__drizzle_migrations')).toBe(journalEntryCount())
       // With no samples there is nothing yet for the override to point at, which is what makes
       // the same call in step 3 mean anything.
       expect(instance.overrides.affectedLocalDate({
