@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.8.0](https://github.com/bardesss/haelan/compare/v1.7.1...v1.8.0) (2026-09-12)
+
+
+### Features
+
+* **web:** settings puts its narrow sections side by side ([#148](https://github.com/bardesss/haelan/issues/148)) ([8c82dd0](https://github.com/bardesss/haelan/commit/8c82dd07b5b212c2ddf0dbc3d9ded49e36633c67))
+
 ## [1.7.1](https://github.com/bardesss/haelan/compare/v1.7.0...v1.7.1) (2026-09-12)
 
 
