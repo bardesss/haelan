@@ -445,7 +445,11 @@ body {
   margin-bottom: var(--space-3);
 }
 
-/* Profile.tsx: two forms in one card, so the second gets a heading to say where the first ended.
+/* Profile.tsx: two forms in one card, so the second gets a rule and a heading to say where the
+   first ended. The heading alone was not enough - a reader filled in both halves, pressed the one
+   button they had seen, and the password form was never submitted - so the second form carries
+   the same hairline this app separates its rows and panels with, and .profile-subhead drops its
+   own top margin because that gap is now the form's padding.
    min-width: 0 for the reason .instance-url carries it, since the timezone field holds a value
    long enough to stretch a narrow card.
 
@@ -454,9 +458,13 @@ body {
    days quietly stop lining up until a rebuild runs. The result line beside it is the muted inset
    the maintenance results use, because a save that went through is an uneventful report. */
 .profile { min-width: 0; }
+.profile-password {
+  margin-top: var(--space-4); padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
 .profile-subhead {
   font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary);
-  margin: var(--space-4) 0 var(--space-2);
+  margin: 0 0 var(--space-2);
 }
 .profile-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
