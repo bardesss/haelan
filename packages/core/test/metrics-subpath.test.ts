@@ -36,18 +36,20 @@ describe('the @haelan/core/metrics subpath', () => {
   it('is published, and points at the catalogue module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
-    // The barrel is still the only other way in besides the six named subpaths. `exports`
+    // The barrel is still the only other way in besides the seven named subpaths. `exports`
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
     // dragging argon2 along behind it. ./coverage-signal, ./target-key, ./baseline-window,
-    // ./metric-data-type and ./workout-summary are the other five browser-safe entry points;
-    // coverage-signal-subpath.test.ts, target-key-subpath.test.ts, baseline-window-subpath.
-    // test.ts, metric-data-type-subpath.test.ts and workout-summary.test.ts carry their own
-    // guarantees, each a different shape: the first four modules are not import-free, so each of
-    // those tests allow-lists the specific imports it carries; workout-summary.test.ts allow-lists
-    // an empty list, the same contract this file's own module holds itself to.
+    // ./metric-data-type, ./workout-summary and ./workout-comparison are the other six
+    // browser-safe entry points; coverage-signal-subpath.test.ts, target-key-subpath.test.ts,
+    // baseline-window-subpath.test.ts, metric-data-type-subpath.test.ts, workout-summary.test.ts
+    // and workout-comparison-subpath.test.ts carry their own guarantees, each a different shape:
+    // the first four modules are not import-free, so each of those tests allow-lists the specific
+    // imports it carries; workout-summary.test.ts allow-lists an empty list, the same contract
+    // this file's own module holds itself to, and workout-comparison-subpath.test.ts allow-lists
+    // the one import workoutComparison.ts makes, into workout-summary.ts.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './coverage-signal', './metric-data-type', SUBPATH, './target-key',
-      './workout-summary',
+      './workout-comparison', './workout-summary',
     ])
   })
 

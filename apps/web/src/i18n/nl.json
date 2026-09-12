@@ -81,7 +81,8 @@
     "to": "tot en met",
     "loading": "Laden",
     "bedWakeChartLabel": "Bed- en wektijden voor elke nacht van {{period}}",
-    "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}"
+    "trendBasis": "verandering is het gemiddelde van de laatste {{recent}} metingen tegenover de eerste {{earlier}}",
+    "absent": "—"
   },
   "errorState": {
     "title": "Dit kon niet worden geladen.",
@@ -291,7 +292,13 @@
       "workoutsShort": "work-outs",
       "bpm": "bpm",
       "paceSuffix": "/km",
-      "elevationGainShort": "m omhoog"
+      "elevationGainShort": "m omhoog",
+      "meters": "m",
+      "speed": "m/s",
+      "spm": "spm",
+      "ms": "ms",
+      "cm": "cm",
+      "percent": "%"
     },
     "insights": {
       "steps": "Stappen, deze periode tegenover de vorige"
@@ -398,6 +405,60 @@
       "emptyFilteredDetail": "Kies een ander type om de rest van de sessies in deze periode te zien.",
       "excluded": "Uitgesloten: {{reason}}",
       "excludedNoReason": "Uitgesloten"
+    },
+    "workout": {
+      "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "annotate": "Uitsluiten of een notitie toevoegen",
+      "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
+      "missingTitle": "Geen training gevonden",
+      "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
+      "tiles": {
+        "elapsed": "Verstreken", "moving": "In beweging", "distance": "Afstand", "pace": "Tempo",
+        "speed": "Snelheid", "calories": "Calorieën", "heartRate": "Hartslag",
+        "elevation": "Hoogtewinst", "steps": "Stappen", "activeZoneMinutes": "Actieve zoneminuten",
+        "vo2max": "VO2max", "swimLengths": "Baantjes"
+      },
+      "basis": {
+        "elapsed": "vanaf het eigen begin en einde van de sessie",
+        "moving": "actieve duur, zoals het apparaat die registreerde",
+        "provider": "zoals de provider het registreerde",
+        "pool": "zoals de provider het registreerde, in een baan van {{meters}} m"
+      },
+      "zones": {
+        "label": "Tijd in hartslagzones",
+        "basis": "de eigen vier zones van de sessie, zoals het apparaat ze registreerde — niet de drie zones van actieve zoneminuten",
+        "column": "Zone",
+        "duration": "Duur",
+        "light": "Licht", "moderate": "Matig", "vigorous": "Intensief", "peak": "Piek"
+      },
+      "trace": {
+        "label": "Hartslag tijdens deze training",
+        "events": "Pauzes",
+        "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+      },
+      "splits": {
+        "autoLabel": "Automatische tussentijden", "lapLabel": "Rondes", "lapLabelTyped": "Rondes ({{type}})",
+        "number": "#", "distance": "Afstand", "duration": "Duur", "pace": "Tempo", "heartRate": "Hartslag",
+        "type": {
+          "MANUAL": "handmatig", "DURATION": "op duur", "DISTANCE": "op afstand",
+          "CALORIES": "op calorieën", "SPLIT_TYPE_UNSPECIFIED": "niet gespecificeerd"
+        }
+      },
+      "dynamics": {
+        "label": "Hardloopdynamiek",
+        "cadence": "Cadans", "stride": "Paslengte", "groundContact": "Grondcontact",
+        "oscillation": "Verticale oscillatie", "verticalRatio": "Verticale ratio"
+      },
+      "comparison": {
+        "label": "Vergeleken met je recente trainingen",
+        "basis": "de {{days}} dagen voor deze training, hoogstens {{limit}} van hetzelfde type, uitgesloten trainingen niet meegeteld",
+        "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type",
+        "heartRate": "Lagere gemiddelde hartslag dan {{better}} van je laatste {{of}}",
+        "distance": "Verder dan {{better}} van je laatste {{of}}",
+        "tooFew": "Nog niet genoeg trainingen van dit type",
+        "tooFewDetail_one": "{{count}} eerdere training van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken.",
+        "tooFewDetail_other": "{{count}} eerdere trainingen van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken."
+      }
     }
   },
   "charts": {
@@ -670,6 +731,7 @@
   },
   "annotate": {
     "title": "{{metric}} op {{date}}",
+    "sessionTitle": "Deze training, {{date}}",
     "close": "Sluiten",
     "actionLabel": "Wat wil je doen",
     "actions": {

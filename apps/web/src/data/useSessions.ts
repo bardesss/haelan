@@ -55,16 +55,28 @@ export function sessionsPath(
   return `/api/v1/p/${personId}/sessions?${params.toString()}`
 }
 
+/**
+ * `options.enabled` is separate from `query` the way useIntradayWindow's own is: whether a caller
+ * wants the request at all is not a fact about which window to fetch, and folding it into `query`
+ * would put it in the cache key and cycle the entry every time it flipped.
+ *
+ * Its one caller so far is useWorkoutComparison, which has no window to ask for until the
+ * workout under comparison has itself resolved: without this half of the guard, an unresolved
+ * session there computes an empty `{ from: '', to: '' }` range and this hook would fire that as a
+ * real request the moment personId alone was ready, `?kind=exercise&from=&to=`, rather than
+ * waiting on the caller's own fact to also be true.
+ */
 export function useSessions(
   query: { kind: 'exercise' | 'sleep', from: string, to: string, source: string },
+  options?: { enabled?: boolean },
 ): UseQueryResult<{ items: WorkoutSession[], cursor: string | null }> {
   const session = useSession()
   const personId = session.data?.personId
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'sessions', query),
-    // Without this the hook requests /api/v1/p/undefined/sessions on first render, which the
-    // server answers 404 for and which then sits in the cache under a key naming no person.
-    enabled: personId !== undefined,
+    // Without the personId half this requests /api/v1/p/undefined/sessions on first render, which
+    // the server answers 404 for and which then sits in the cache under a key naming no person.
+    enabled: personId !== undefined && (options?.enabled ?? true),
     queryFn: () => apiGet<{ items: WorkoutSession[], cursor: string | null }>(sessionsPath(personId!, query)),
   })
 }

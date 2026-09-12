@@ -81,7 +81,8 @@
     "to": "to",
     "loading": "Loading",
     "bedWakeChartLabel": "Bed and wake times for each night of {{period}}",
-    "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}"
+    "trendBasis": "change is the mean of the last {{recent}} readings against the first {{earlier}}",
+    "absent": "—"
   },
   "errorState": {
     "title": "This did not load.",
@@ -291,7 +292,13 @@
       "workoutsShort": "workouts",
       "bpm": "bpm",
       "paceSuffix": "/km",
-      "elevationGainShort": "m gained"
+      "elevationGainShort": "m gained",
+      "meters": "m",
+      "speed": "m/s",
+      "spm": "spm",
+      "ms": "ms",
+      "cm": "cm",
+      "percent": "%"
     },
     "insights": {
       "steps": "Steps, this period against the last"
@@ -398,6 +405,60 @@
       "emptyFilteredDetail": "Choose another type to see the rest of this period's sessions.",
       "excluded": "Excluded: {{reason}}",
       "excludedNoReason": "Excluded"
+    },
+    "workout": {
+      "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "annotate": "Exclude or add a note",
+      "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
+      "missingTitle": "No such workout",
+      "missingDetail": "This link names a workout that is not in your data.",
+      "tiles": {
+        "elapsed": "Elapsed", "moving": "Moving", "distance": "Distance", "pace": "Pace",
+        "speed": "Speed", "calories": "Calories", "heartRate": "Heart rate",
+        "elevation": "Elevation gain", "steps": "Steps", "activeZoneMinutes": "Active zone minutes",
+        "vo2max": "VO2max", "swimLengths": "Lengths"
+      },
+      "basis": {
+        "elapsed": "from the session's own start and end",
+        "moving": "active duration, as the device recorded it",
+        "provider": "as the provider recorded it",
+        "pool": "as the provider recorded it, in a {{meters}} m pool"
+      },
+      "zones": {
+        "label": "Time in heart rate zones",
+        "basis": "the session's own four zones, as the device recorded them — not the three active zone minutes zones",
+        "column": "Zone",
+        "duration": "Duration",
+        "light": "Light", "moderate": "Moderate", "vigorous": "Vigorous", "peak": "Peak"
+      },
+      "trace": {
+        "label": "Heart rate through this workout",
+        "events": "Pauses",
+        "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
+      },
+      "splits": {
+        "autoLabel": "Automatic splits", "lapLabel": "Laps", "lapLabelTyped": "Laps ({{type}})",
+        "number": "#", "distance": "Distance", "duration": "Duration", "pace": "Pace", "heartRate": "Heart rate",
+        "type": {
+          "MANUAL": "manual", "DURATION": "by duration", "DISTANCE": "by distance",
+          "CALORIES": "by calories", "SPLIT_TYPE_UNSPECIFIED": "unspecified"
+        }
+      },
+      "dynamics": {
+        "label": "Running dynamics",
+        "cadence": "Cadence", "stride": "Stride length", "groundContact": "Ground contact",
+        "oscillation": "Vertical oscillation", "verticalRatio": "Vertical ratio"
+      },
+      "comparison": {
+        "label": "Against your recent workouts",
+        "basis": "the {{days}} days before this workout, at most {{limit}} of the same type, excluded workouts left out",
+        "pace": "Faster than {{better}} of your last {{of}} of this type",
+        "heartRate": "Lower average heart rate than {{better}} of your last {{of}}",
+        "distance": "Longer than {{better}} of your last {{of}}",
+        "tooFew": "Not enough workouts of this type yet",
+        "tooFewDetail_one": "{{count}} earlier workout of this type in the last 90 days; three are needed to compare.",
+        "tooFewDetail_other": "{{count}} earlier workouts of this type in the last 90 days; three are needed to compare."
+      }
     }
   },
   "charts": {
@@ -670,6 +731,7 @@
   },
   "annotate": {
     "title": "{{metric}} on {{date}}",
+    "sessionTitle": "This workout, {{date}}",
     "close": "Close",
     "actionLabel": "What do you want to do",
     "actions": {

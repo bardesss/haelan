@@ -1,0 +1,332 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { I18nProvider } from '../src/i18n/index.js'
+import type { Session } from '../src/auth/session.js'
+import type { WorkoutSession } from '../src/data/useSessions.js'
+import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
+import { CHART_VARS } from '../src/charts/tokens.js'
+import { flush } from './flush.js'
+
+// happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
+// this, the same reason chart-lifecycle.test.tsx sets them. Only the source-resolution case below
+// actually mounts a chart (every other case in this file keeps trace.points empty); harmless for
+// the rest, which never touch echarts.
+for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  window.history.replaceState(null, '', '/activity/run1')
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false,
+  timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false,
+  baseUrl: 'http://localhost:4235',
+}
+
+export const RUN: WorkoutSession = {
+  id: 'run1', sourceId: 'watch',
+  startMs: Date.UTC(2026, 7, 3, 6, 0), endMs: Date.UTC(2026, 7, 3, 6, 54),
+  startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-03',
+  attrs: {
+    exerciseType: 'RUNNING',
+    displayName: 'Morning run',
+    activeDuration: '3000s',
+    exerciseMetadata: { hasGps: true },
+    metricsSummary: { caloriesKcal: 412, distanceMillimeters: 8_000_000 },
+  },
+  excluded: false, excludeReason: null,
+}
+
+/** A session carrying nothing but its span: every optional card must be absent. */
+const BARE: WorkoutSession = {
+  ...RUN, id: 'bare', attrs: { exerciseType: 'WALKING' },
+}
+
+function stub(sessions: Record<string, WorkoutSession>): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    for (const [id, session] of Object.entries(sessions)) {
+      if (url.includes(`/sessions/${id}`)) return json(session)
+    }
+    if (url.includes('/intraday/window')) return json({ points: [], reduction: null })
+    if (url.includes('/sessions')) return json({ items: [], cursor: null })
+    if (url.includes('/sources')) return json({ items: [] })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+/**
+ * Answers the session request with an HTTP status rather than a session, everything else as
+ * `stub` above. Used for the error and not-found branches: `stub` can only ever answer 200, since
+ * every id absent from its `sessions` map falls through to the generic `/sessions` list route
+ * (also matched by `.includes('/sessions')`) rather than 404ing the way a real miss on
+ * `/sessions/:id` does.
+ */
+function stubSessionError(status: number): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown, responseStatus = 200) =>
+      new Response(JSON.stringify(body), { status: responseStatus, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/sessions/run1')) return json({}, status)
+    if (url.includes('/intraday/window')) return json({ points: [], reduction: null })
+    if (url.includes('/sessions')) return json({ items: [], cursor: null })
+    if (url.includes('/sources')) return json({ items: [] })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+function mount(node: ReactNode): { client: QueryClient, html: () => string } {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  act(() => {
+    root?.render(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en">{node}</I18nProvider>
+      </QueryClientProvider>,
+    )
+  })
+  return { client, html: () => container?.innerHTML ?? '' }
+}
+
+describe('the workout page', () => {
+  it('mounts cold at its own URL, with nothing in the query cache', async () => {
+    // The case approach B exists for: no other route into this page leaves the cache empty,
+    // because every one of them warms it by listing the session first.
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(html()).toContain('Morning run')
+    } finally { restore() }
+  })
+
+  it('falls back to the exercise type when the workout has no name of its own', async () => {
+    const restore = stub({ run1: { ...RUN, attrs: { ...(RUN.attrs as object), displayName: undefined } } })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(html()).toContain('Running')
+    } finally { restore() }
+  })
+
+  it('says a route was recorded only when the session says one was', async () => {
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route was recorded for this workout. This API does not return route points, so there is no map.',
+      )
+    } finally { restore() }
+  })
+
+  it('says nothing about a route when no GPS flag was recorded', async () => {
+    window.history.replaceState(null, '', '/activity/bare')
+    const restore = stub({ bare: BARE })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.workout-gps')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('renders the excluded badge with the reason the person typed', async () => {
+    const excluded = { ...RUN, excluded: true, excludeReason: 'strap slipped' }
+    const restore = stub({ run1: excluded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.workout-excluded')?.textContent)
+        .toBe('Excluded: strap slipped')
+    } finally { restore() }
+  })
+
+  it('renders an excluded badge without a colon when no reason was typed', async () => {
+    const restore = stub({ run1: { ...RUN, excluded: true, excludeReason: null } })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.workout-excluded')?.textContent).toBe('Excluded')
+    } finally { restore() }
+  })
+
+  // Review finding on this task: Shell renders `active.element` straight into `.main`, which
+  // carries no card background of its own (unlike SessionList.tsx's hand-rolled states, always
+  // inside a Card its caller Activity.tsx already supplies), so all three of this page's own
+  // states have to bring their own Card or render as unstyled floating text. These three cases are
+  // exactly what the review found nothing here exercising.
+  it('shows the loading state inside a card, not as floating text, before the session request settles', () => {
+    const restore = stub({ run1: RUN })
+    try {
+      // No flush: read the tree as it stands on the very first synchronous render, before the
+      // stubbed fetch above has had any chance to resolve - the cold-load window the review found.
+      const { html } = mount(<WorkoutDetail />)
+      expect(container?.querySelector('.card .empty')).not.toBeNull()
+      expect(html()).toContain('Loading')
+    } finally { restore() }
+  })
+
+  it('wraps the missing-workout state in a card too, for a link naming a session that is not there', async () => {
+    const restore = stubSessionError(404)
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.card .empty')).not.toBeNull()
+      expect(html()).toContain('No such workout')
+    } finally { restore() }
+  })
+
+  it('wraps a real request failure in a card too, with a retry', async () => {
+    const restore = stubSessionError(500)
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.card .empty')).not.toBeNull()
+      expect(html()).toContain('This did not load.')
+    } finally { restore() }
+  })
+})
+
+describe('the workout stat tiles', () => {
+  it('shows moving time only when it differs from elapsed', async () => {
+    // 54 minutes elapsed, 50 moving: two different facts, so two tiles.
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toContain('Elapsed')
+      expect(labels).toContain('Moving')
+    } finally { restore() }
+  })
+
+  it('drops the moving tile when the two are the same, rather than printing the same figure twice', async () => {
+    const equal = { ...RUN, attrs: { ...(RUN.attrs as object), activeDuration: '3240s' } } // 54 min
+    const restore = stub({ run1: equal })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toContain('Elapsed')
+      expect(labels).not.toContain('Moving')
+    } finally { restore() }
+  })
+
+  it('renders a tile for every field this session recorded and no tile for any it did not', async () => {
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toEqual(['Elapsed', 'Moving', 'Distance', 'Calories'])
+    } finally { restore() }
+  })
+
+  it('prints a recorded zero rather than dropping the tile', async () => {
+    // workoutDetail keeps a recorded 0 apart from an unrecorded field; a truthiness guard in this
+    // component would undo that one line before it reaches a reader.
+    const zeroed = { ...RUN, attrs: { ...(RUN.attrs as object), metricsSummary: { steps: '0' } } }
+    const restore = stub({ run1: zeroed })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
+      const steps = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Steps')
+      expect(steps?.querySelector('.value')?.textContent).toBe('0')
+    } finally { restore() }
+  })
+
+  it('renders the tile section with a single Elapsed tile for a session carrying nothing but its span', async () => {
+    window.history.replaceState(null, '', '/activity/bare')
+    const restore = stub({ bare: BARE })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      // Elapsed is always computable from the span, so the section is present with exactly one tile.
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toEqual(['Elapsed'])
+    } finally { restore() }
+  })
+})
+
+describe('the workout page\'s own ?source= parameter', () => {
+  // Final review finding: this page used to read `?source=` straight off the URL, never through
+  // resolveSource (controls/source.ts) the way every sibling page does. A source id that names no
+  // device this person has - a stale or foreign link, or one this person removed since - became a
+  // non-null EXPLICIT choice, which suppresses useWorkoutTrace's own fallback rule
+  // (WorkoutTrace.tsx's own comment on it). The pinned request for a source that never recorded
+  // this workout comes back empty, the fallback that would otherwise answer it never fires, and the
+  // trace card vanishes - reading as "no heart rate was recorded for this workout", the exact false
+  // claim the fallback rule exists to prevent.
+  it('treats an unrecognised source id as no choice at all, so the fallback still fires', async () => {
+    window.history.replaceState(null, '', '/activity/run1?source=phantom-device')
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const json = (body: unknown) =>
+        new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+      if (url.includes('/api/auth/me')) return json(PERSON)
+      if (url.includes('/sessions/run1')) return json(RUN)
+      // Only 'watch' (the session's own recording device) is real; 'phantom-device' names nothing
+      // this person has.
+      if (url.includes('/sources')) {
+        return json({
+          items: [{
+            id: 'watch', externalId: 'watch-ext', displayName: 'Pixel Watch 4',
+            alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 0,
+          }],
+        })
+      }
+      if (url.includes('/intraday/window')) {
+        const source = new URLSearchParams(url.split('?')[1] ?? '').get('source') ?? ''
+        // The pinned device (watch, RUN's own sourceId) recorded nothing in this window; every
+        // other device did. `''` is the blended request, sent with no `source` param at all
+        // (sourceParam's own rule for ALL_SOURCES) - the request the fallback sends, and the one
+        // an unresolved 'phantom-device' would never reach.
+        const points = source === '' ? [{ sourceId: 'phone', utcMs: Date.UTC(2026, 7, 3, 6, 10), min: 120, mean: 130, max: 140, n: 1, excluded: false }] : []
+        return json({ points, reduction: null })
+      }
+      if (url.includes('/sessions')) return json({ items: [], cursor: null })
+      return json({})
+    }) as typeof fetch
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      // Absent entirely would be the old, wrong behaviour (WorkoutTrace.tsx's own rule for nobody
+      // recorded anything); present with the fallback's own basis line, naming the pinned device
+      // that answered empty, is what an unrecognised source id must read as instead.
+      const cards = [...(container?.querySelectorAll('.card') ?? [])]
+      const traceCard = cards.find((c) => c.querySelector('.label')?.textContent === 'Heart rate through this workout')
+      expect(traceCard, 'the trace card was absent').not.toBeUndefined()
+      expect(traceCard?.querySelector('.basis')?.textContent).toBe(
+        'Pixel Watch 4 recorded no heart rate in this window, so this is every other device instead; '
+        + 'these 1 points are the readings',
+      )
+    } finally { globalThis.fetch = original }
+  })
+})

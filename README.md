@@ -58,11 +58,13 @@ mirror is the only place minute-level history stays available at that resolution
 
 Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with stages and
 nap detection, resting heart rate and HRV, SpO2 with its confidence interval, an activity heatmap
-and a workout list, an intraday chart, a weight trend, and period-over-period insight cards that
-withhold themselves, each with its own reason, when the data behind them is thin. English and
-Dutch throughout. Nutrition is the one page with nothing on it: this household has never logged
-food, and the API's Food type carries no timestamp to file a meal under, so the page says so
-rather than inventing a data model to have something to draw.
+and a workout list, and a page behind every workout in that list: splits, heart rate zones, running
+dynamics, the trace from the device that recorded it, and the exclude control that used to exist
+only on the server. There is also an intraday chart, a weight trend, and period-over-period insight
+cards that withhold themselves, each with its own reason, when the data behind them is thin.
+English and Dutch throughout. Nutrition is the one page with nothing on it: this household has
+never logged food, and the API's Food type carries no timestamp to file a meal under, so the page
+says so rather than inventing a data model to have something to draw.
 
 ### 📐 Personal baselines
 
@@ -86,6 +88,17 @@ raw payload is never modified, and removing the override restores the original v
 A few people, one instance, each seeing only their own data. An admin invites a member, the member
 chooses their own password, and each person connects their own Google account and picks which data
 types get fetched for them.
+
+### 🧰 Thirteen typed tools for an agent, read-only and person-bound
+
+They sit over the same person bound query layer the browser reads through, reachable over stdio
+from inside the container or over `POST /mcp` from anywhere else. An HTTP call needs a token
+minted from your own account, stored as a digest, and expiring on its own after 30, 90 or 365 days
+- there is no permanent one - and every one is logged: when, which token, which tool and how it
+ended, with no column for the arguments themselves; a call made over stdio is not logged at all.
+`sql_query` goes further still, running one read-only `SELECT` over a projection database built
+fresh for the call and thrown away after, holding one person's rows in seven tables and none of
+the ones that could name a password or another member.
 
 ## Deploy
 
@@ -412,12 +425,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 694 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 761 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 694 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 761 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

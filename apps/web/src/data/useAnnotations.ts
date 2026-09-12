@@ -250,7 +250,10 @@ export function useWriteOverride(): UseMutationResult<OverrideWriteResult, ApiEr
       const id = requirePersonId(personId)
       return apiSend<OverrideWriteResult>('POST', `/api/v1/p/${id}/overrides`, input)
     },
-    onSuccess: (result) => {
+    // TanStack Query v5 hands onSuccess (data, variables, context); `input` here is the second
+    // argument, the mutate() call's own WriteOverrideInput, which is where the scope this write
+    // targeted actually lives - the response (`result`) never carries it back.
+    onSuccess: (result, input) => {
       if (personId === undefined) return
       // Unconditional, unlike invalidateAffected below: the row is written to the store before
       // applyOverride ever runs (annotations.ts commits the write, then drains), so the override
@@ -260,6 +263,20 @@ export function useWriteOverride(): UseMutationResult<OverrideWriteResult, ApiEr
       // applied true or false alike.
       invalidateResource(queryClient, personId, 'overrides')
       invalidateAffected(queryClient, personId, result)
+      // A session-scope write is invisible to invalidateAffected above, and not by accident:
+      // overlapsAffected matches a cached query by finding a string `from` and a string `to` in its
+      // key params, and neither useWorkoutSession ({ sessionId }) nor useIntradayWindow
+      // ({ metric, startMs, endMs, source }) carries either. Both would age out on their own
+      // staleTime while the range-keyed activity list struck the session through at once, so the
+      // page a reader just excluded a session from would keep saying excluded: false for up to a
+      // minute. Invalidating the two resources by name is the narrower of the two fixes M8a's own
+      // comments named, and it is narrower than teaching overlapsAffected a sessionId: a millisecond
+      // window is not a date range, and pretending it is would make that helper answer a question
+      // it does not actually know how to answer.
+      if (input.scope === 'session') {
+        invalidateResource(queryClient, personId, 'session')
+        invalidateResource(queryClient, personId, 'intraday-window')
+      }
     },
   })
 }
@@ -280,6 +297,17 @@ export function useRemoveOverride(): UseMutationResult<OverrideWriteResult, ApiE
       // a removal unconditionally too.
       invalidateResource(queryClient, personId, 'overrides')
       invalidateAffected(queryClient, personId, result)
+      // Unlike useWriteOverride, RemoveOverrideInput carries only an overrideId - the scope the
+      // removed row was written at is not something this mutation's input or its
+      // OverrideWriteResult response tells us (the response is { id, affected, applied }, the same
+      // shape a write returns, and affected/applied both describe the derived rollup rather than
+      // naming a scope). There is no way to tell "this removal was a session-scope override" from
+      // "this removal was a sample or day_metric override" from here, so this invalidates both
+      // resources on every removal rather than only on the ones that need it. The cost is one extra
+      // no-op refetch on a session or intraday-window query that was never affected, which is cheap
+      // next to leaving a reader who just un-excluded a session staring at a stale excluded: true.
+      invalidateResource(queryClient, personId, 'session')
+      invalidateResource(queryClient, personId, 'intraday-window')
     },
   })
 }

@@ -11,6 +11,7 @@ import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
 import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
+import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 
 describe('the navigation rail', () => {
   it('links to a real path rather than to a fragment, so a link can be opened in a new tab', () => {
@@ -30,17 +31,28 @@ describe('the navigation rail', () => {
 })
 
 describe('the route table', () => {
-  it('has an entry for every page the design names', () => {
-    expect(ROUTES.map((r) => r.path).sort()).toEqual(
-      ['/', '/activity', '/health', '/notes', '/nutrition', '/recovery', '/settings', '/sleep', '/weight'].sort(),
-    )
+  // A parameterised route is by construction not a rail destination: the rail cannot link to
+  // /activity/:sessionId without inventing a session id. So the comparison is against the routes
+  // with no `:` segment, which is a rule rather than an exception list that would need editing
+  // again the next time a detail page lands.
+  it('agrees with the rail on exactly which unparameterised paths exist', () => {
+    const railable = ROUTES.map((r) => r.path).filter((path) => !path.includes(':'))
+    expect(new Set(RAIL_PATHS)).toEqual(new Set(railable))
   })
 
-  // The rail's own list is a hand-written literal, not generated from ROUTES: nothing enforces
-  // the two staying equal except this test. Without it, an edit to one could silently desync from
-  // the other, leaving a route nothing links to or a rail item pointing nowhere.
-  it('agrees with the rail on exactly which paths exist', () => {
-    expect(new Set(RAIL_PATHS)).toEqual(new Set(ROUTES.map((r) => r.path)))
+  // And the parameterised ones still mark a rail item, rather than leaving a reader on a page with
+  // nothing in the rail highlighted: each names the rail path it belongs under.
+  it('gives every parameterised route a rail path that the rail actually has', () => {
+    for (const route of ROUTES.filter((r) => r.path.includes(':'))) {
+      expect(RAIL_PATHS, route.path).toContain(route.rail)
+    }
+  })
+
+  it('has an entry for every page the design names', () => {
+    expect(ROUTES.map((r) => r.path).sort()).toEqual(
+      ['/', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition', '/recovery',
+        '/settings', '/sleep', '/weight'].sort(),
+    )
   })
 
   // The gap the two tests above cannot see: both compare path sets, and Shell.tsx renders
@@ -74,6 +86,7 @@ describe('the route table', () => {
       '/nutrition': Nutrition,
       '/notes': Notes,
       '/settings': Settings,
+      '/activity/:sessionId': WorkoutDetail,
     }
     for (const route of ROUTES) {
       const element = route.element as { type: unknown }

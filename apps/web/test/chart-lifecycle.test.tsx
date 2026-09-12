@@ -9,6 +9,7 @@ import { dayMetricTarget } from '@haelan/core/target-key'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
@@ -121,6 +122,52 @@ function stubFetch(): () => void {
   return () => { globalThis.fetch = original }
 }
 
+// A session carrying both a heart rate zone breakdown (WorkoutZones' own ZoneBar) and a PAUSE
+// event with a real instant (WorkoutTrace's own eventMarks), so both of the workout page's echarts
+// instances actually mount - one from a fresh `zoneRows(...)` call and one from a fresh
+// `filter().map()`, if either WorkoutZones.tsx or WorkoutTrace.tsx went back to computing it
+// inline on every render.
+const WORKOUT_SESSION = {
+  id: 'run1', sourceId: 'watch',
+  startMs: Date.UTC(2026, 7, 3, 6, 0), endMs: Date.UTC(2026, 7, 3, 6, 54),
+  startOffsetMinutes: 120, endOffsetMinutes: 120, localDate: '2026-08-03',
+  attrs: {
+    exerciseType: 'RUNNING', displayName: 'Morning run', activeDuration: '3000s',
+    metricsSummary: {
+      caloriesKcal: 412, distanceMillimeters: 8_000_000,
+      heartRateZoneDurations: { lightTime: '600s', peakTime: '120s' },
+    },
+    exerciseEvents: [{ eventTime: '2026-08-03T06:10:00.000Z', exerciseEventType: 'PAUSE' }],
+  },
+  excluded: false, excludeReason: null,
+}
+
+function stubWorkoutFetch(): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/api/auth/me')) return json(PERSON)
+    if (url.includes('/sessions/run1')) return json(WORKOUT_SESSION)
+    if (url.includes('/intraday/window')) {
+      // The pinned read (source=watch, WORKOUT_SESSION's own sourceId) answers real points, so
+      // useWorkoutTrace never needs its all-sources fallback.
+      const source = new URLSearchParams(url.split('?')[1] ?? '').get('source') ?? ''
+      const points = source === 'watch'
+        ? [{ sourceId: 'watch', utcMs: Date.UTC(2026, 7, 3, 6, 10), min: 120, mean: 130, max: 140, n: 1, excluded: false }]
+        : []
+      return json({ points, reduction: null })
+    }
+    if (url.includes('/sources')) return json({ items: [] })
+    // WorkoutComparison's own useSessions call (a trailing window list, not a third endpoint - its
+    // own comment on why).
+    if (url.includes('/sessions')) return json({ items: [], cursor: null })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
 /**
  * Whatever echarts.init rendered into each chart host. dispose() empties the host and a fresh
  * init fills it again, so a chart that survived a render keeps the very same node and one that
@@ -195,6 +242,44 @@ describe('the charts across a rerender', () => {
     expect(before.every((node) => node !== null)).toBe(true)
 
     act(() => { root!.render(tree(<Dashboard />)) })
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
+
+    const after = chartRoots()
+    expect(after).toHaveLength(before.length)
+    for (let i = 0; i < before.length; i += 1) {
+      expect(after[i], `chart ${i} was re-initialised`).toBe(before[i])
+    }
+    restore()
+  })
+
+  // Final review finding on M8b: WorkoutDetail.tsx built `detail` fresh from `workoutDetail(...)`
+  // on every render, and WorkoutTrace.tsx's own `marks` and WorkoutZones.tsx's own `rows` were each
+  // a fresh `filter().map()` / `zoneRows(...)` call over it, so the workout page's two charts (the
+  // zone bar and the heart rate trace) were disposed and reinitialised on every commit - window
+  // focus, opening or closing the annotate panel, and the session-scope invalidation M8b itself
+  // added among them. This is the same defect the two Dashboard cases above guard, on a page
+  // neither of them ever mounts.
+  it('are not disposed and re-initialised on the workout page either, where WorkoutZones and WorkoutTrace live', async () => {
+    const restore = stubWorkoutFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    window.history.replaceState(null, '', '/activity/run1')
+    const tree = (node: ReactNode): ReactNode => (
+      <I18nProvider lng="en"><QueryClientProvider client={client}>{node}</QueryClientProvider></I18nProvider>
+    )
+
+    act(() => { root!.render(tree(<WorkoutDetail />)) })
+    await flush(client, () => container!.innerHTML)
+
+    const before = chartRoots()
+    // The zone bar (a light and a peak zone recorded) and the heart rate trace (the pinned source
+    // answers real points): two charts on this fixture, neither absent.
+    expect(before).toHaveLength(2)
+    expect(before.every((node) => node !== null)).toBe(true)
+
+    // A second render of the same component with the same client: every query is already settled
+    // and staleTime is Infinity, so nothing either chart draws has changed.
+    act(() => { root!.render(tree(<WorkoutDetail />)) })
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
 
     const after = chartRoots()
