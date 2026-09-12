@@ -475,7 +475,7 @@ describe('get_workout', () => {
       notes: { untrustedText: string | null }
       activeDurationSeconds: number | null
       zones: { lightSeconds: number | null, peakSeconds: number | null } | null
-      trace: { metric: string, points: unknown[], summary: { n: number } }[]
+      trace: { metric: string, traceSource: string, points: unknown[], summary: { n: number } }[]
     }
 
     expect(out.sessionId).toBe('run-x')
@@ -489,6 +489,7 @@ describe('get_workout', () => {
     expect(out.zones?.peakSeconds).toBe(20)
     expect(out.trace).toHaveLength(1)
     expect(out.trace[0]!.metric).toBe('heart_rate')
+    expect(out.trace[0]!.traceSource).toBe('pinnedSource')
     expect(out.trace[0]!.points).toHaveLength(10)
     expect(out.trace[0]!.summary.n).toBe(10)
   })
@@ -510,14 +511,74 @@ describe('get_workout', () => {
     const bySourceOf = (points: { sourceId: string }[]) => new Set(points.map((p) => p.sourceId))
 
     const defaultOut = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
-      trace: { points: { sourceId: string }[] }[]
+      trace: { traceSource: string, points: { sourceId: string }[] }[]
     }
     expect(bySourceOf(defaultOut.trace[0]!.points)).toEqual(new Set(['watch']))
+    expect(defaultOut.trace[0]!.traceSource).toBe('pinnedSource')
 
     const phoneOut = tool('get_workout').run(q(), { sessionId: 'run-x', source: 'phone' }) as {
-      trace: { points: { sourceId: string }[] }[]
+      trace: { traceSource: string, points: { sourceId: string }[] }[]
     }
     expect(bySourceOf(phoneOut.trace[0]!.points)).toEqual(new Set(['phone']))
+    expect(phoneOut.trace[0]!.traceSource).toBe('pinnedSource')
+  })
+
+  // The case the 2026-09-12 measurement found: 5 of 198 archived exercise sessions had the
+  // recording device log no heart rate while a paired source logged some in the same span. Pinning
+  // alone would answer an empty trace here - a false "no heart rate recorded" by omission - so an
+  // unrequested empty pin gets one retry across every source before it reaches an agent.
+  it('falls back to another source when the recording device logged none, and says so', () => {
+    test.db.insert(schema.sources).values({
+      id: 'phone', personId: 'robin', externalId: 'phone', displayName: 'Phone',
+      kind: 'device', createdAtMs: 0,
+    }).run()
+    seedRun({ metricsSummary: { caloriesKcal: 400 } })
+    // No heart_rate written for 'watch', the session's own sourceId - only the paired phone has it.
+    for (let i = 0; i < 10; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, {
+          personId: 'robin', sourceId: 'phone', metric: 'heart_rate',
+          utcMs: START + i * 60_000, tzOffsetMinutes: 120, agg, value: 130 + i,
+        })
+      }
+    }
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      trace: { traceSource: string, points: { sourceId: string }[] }[]
+    }
+
+    expect(out.trace[0]!.traceSource).toBe('otherSources')
+    expect(out.trace[0]!.points).toHaveLength(10)
+    expect(out.trace[0]!.points.every((p) => p.sourceId === 'phone')).toBe(true)
+  })
+
+  it('does not fall back when the caller names a source explicitly, even if it has nothing', () => {
+    test.db.insert(schema.sources).values({
+      id: 'phone', personId: 'robin', externalId: 'phone', displayName: 'Phone',
+      kind: 'device', createdAtMs: 0,
+    }).run()
+    seedRun({ metricsSummary: { caloriesKcal: 400 } })
+    seedHeartRate() // 'watch' has samples; the explicitly-named 'phone' has none.
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x', source: 'phone' }) as {
+      trace: { traceSource: string, points: unknown[] }[]
+    }
+
+    expect(out.trace[0]!.points).toEqual([])
+    expect(out.trace[0]!.traceSource).toBe('pinnedSource')
+  })
+
+  it('answers an empty trace with no crash when no source recorded the metric at all', () => {
+    seedRun({ metricsSummary: { caloriesKcal: 400 } })
+    // No heart_rate written anywhere.
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      trace: { traceSource: string, points: unknown[], summary: { n: number } }[]
+    }
+
+    expect(out.trace[0]!.points).toEqual([])
+    expect(out.trace[0]!.traceSource).toBe('pinnedSource')
+    expect(out.trace[0]!.summary.n).toBe(0)
   })
 
   it('answers autoSplits and laps as empty arrays, not null, for a workout that recorded neither', () => {

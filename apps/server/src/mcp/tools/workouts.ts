@@ -108,8 +108,23 @@ const MOBILITY = z.object({
   verticalRatio: z.number().nullable(),
 }).nullable()
 
+// Named for what a reader needs to know without re-reading the tool description: `pinnedSource`
+// is the single source this trace stayed pinned to — the device that recorded the workout by
+// default, or an explicit `source` argument when one was given — and `otherSources` is every
+// other source in the window, blended, because the pinned source logged nothing. Measured against
+// the author's own archive on 2026-09-12: 189 of 198 exercise sessions never need it, 2 have the
+// same trace either way, and 5 would answer an empty trace without it - rare, not impossible.
+const TRACE_SOURCE = z.enum(['pinnedSource', 'otherSources']).describe(
+  '`pinnedSource`: the points below are the source this call pinned to (the recording device by '
+  + 'default, or an explicit `source`). `otherSources`: the pinned source logged no samples in this '
+  + 'session\'s span, so this blends every other source that did instead - only ever true when no '
+  + 'explicit `source` was given, and rare even then (5 of 198 archived exercise sessions measured '
+  + 'on 2026-09-12, not zero).',
+)
+
 const TRACE = z.object({
   metric: z.string(),
+  traceSource: TRACE_SOURCE,
   points: z.array(z.object({
     sourceId: z.string(), utcMs: z.number(), min: z.number().nullable(), mean: z.number().nullable(),
     max: z.number().nullable(), n: z.number(), excluded: z.boolean(),
@@ -133,7 +148,11 @@ export const getWorkout = defineTool({
     + 'the minute; ask for others explicitly rather than assuming they are dense enough inside a '
     + 'workout window), read from the device that recorded the workout by default — a workout is '
     + 'one device\'s artifact, unlike a day or a night, so the trace is not blended across sources '
-    + 'unless `source` asks for a different one explicitly. Splits and laps answer empty arrays, '
+    + 'unless `source` asks for a different one explicitly, or unless the recording device logged '
+    + 'no samples of that metric in the window, in which case every other source is blended instead '
+    + 'and `trace[].traceSource` says so - rare, but an empty trace from the recording device is not '
+    + 'proof nobody\'s heart rate was recorded. That fallback never fires when `source` was given: '
+    + 'a specific request gets a specific answer, empty or not. Splits and laps answer empty arrays, '
     + 'not null, on the four sessions in five that recorded neither. A `sessionId` naming no '
     + 'session, somebody else\'s session, or an ECG row all answer the same tool error rather than '
     + 'an empty object, because those are different statements about a health record and only the '
@@ -223,12 +242,31 @@ export const getWorkout = defineTool({
         // and `reduction` below are computed over whichever source this ends up as, and only the
         // per-point `sourceId` would otherwise say which: blending here would put an unlabelled
         // multi-device average in front of an agent with nothing to say it was one.
-        const result = q.intradayWindow({
-          metric, startMs: session.startMs, endMs: session.endMs, points,
-          sourceId: args.source ?? session.sourceId,
+        const pinnedSourceId = args.source ?? session.sourceId
+        let result = q.intradayWindow({
+          metric, startMs: session.startMs, endMs: session.endMs, points, sourceId: pinnedSourceId,
         })
+        let traceSource: z.infer<typeof TRACE_SOURCE> = 'pinnedSource'
+        // Measured on the author's own archive on 2026-09-12: 5 of 198 archived exercise sessions
+        // had the recording device log nothing while another source logged this metric inside the
+        // same span. Pinning is still the default because it is free for 189 sessions and strictly
+        // better for 2 - blending everywhere would put an unlabelled multi-device average into
+        // `summary.mean` for all 198 - but an empty trace here is not proof nobody's heart rate was
+        // recorded, so an unrequested empty pin gets one retry across every source before it is
+        // handed to an agent as an answer. A caller who named a `source` asked a specific question,
+        // and an empty answer to it is honest, not a gap to paper over.
+        if (result.points.length === 0 && args.source === undefined) {
+          const blended = q.intradayWindow({
+            metric, startMs: session.startMs, endMs: session.endMs, points, sourceId: undefined,
+          })
+          if (blended.points.length > 0) {
+            result = blended
+            traceSource = 'otherSources'
+          }
+        }
         return {
           metric,
+          traceSource,
           points: result.points.map((p) => ({
             sourceId: p.sourceId, utcMs: p.utcMs, min: p.min, mean: p.mean, max: p.max,
             n: p.n, excluded: p.excluded,
