@@ -51,6 +51,26 @@ export const BART_FINGERPRINTS = [
   '176',
 ]
 
+/**
+ * The other half of the guarantee. `BART_FINGERPRINTS` proves a tool bound to alice does not
+ * answer with bart's rows; without this, a surface that answered *nobody* anything would satisfy
+ * that perfectly - thirteen empty results contain no fingerprints - and both isolation suites
+ * would stay green while proving nothing at all.
+ *
+ * A map rather than a list, and six tools rather than thirteen, because not every tool answers
+ * with a person's own data: `list_metrics` returns the metric catalogue, which is identical for
+ * every member. Each value below is a string `seedToolData` wrote for alice, so a tool that
+ * stopped reaching her rows fails here rather than passing quietly.
+ */
+export const ALICE_FINGERPRINTS: Record<string, string> = {
+  describe_person: 'alice-watch',
+  query_series: '1200',
+  get_intraday: '58',
+  search_notes: 'alice-note-sentinel',
+  get_events: 'alice-event-sentinel',
+  get_workouts: 'alice-run',
+}
+
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
 const H = 3_600_000
 const BEDTIME = Date.UTC(2026, 7, 1, 22, 0)

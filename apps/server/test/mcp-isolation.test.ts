@@ -4,7 +4,7 @@ import {
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { BART_FINGERPRINTS, TOOL_INPUTS, seedToolData } from './mcp-fixtures.ts'
+import { ALICE_FINGERPRINTS, BART_FINGERPRINTS, TOOL_INPUTS, seedToolData } from './mcp-fixtures.ts'
 
 /**
  * This is the file that proves M4a-2's security property: every tool in CATALOGUE, called with a
@@ -58,6 +58,23 @@ describe('every tool, bound to one person, proved against a second', () => {
       }
     })
   }
+
+  // The suite's own floor. Without this, a PersonQuery bound to nobody's rows would answer
+  // thirteen empty results, contain none of bart's fingerprints, and pass - which is the one way
+  // this file could be green and worthless.
+  it("answers with alice's own data, so the absence of bart's means something", () => {
+    const missing: string[] = []
+    for (const [name, fingerprint] of Object.entries(ALICE_FINGERPRINTS)) {
+      const t = CATALOGUE.find((tool) => tool.name === name)
+      if (t === undefined) throw new Error(`no tool named ${name}`)
+      const result = t.run(alice, TOOL_INPUTS[name]!)
+      const json = JSON.stringify(result)
+      if (!json.includes(fingerprint)) {
+        missing.push(`${name} did not answer with ${fingerprint}: ${json.slice(0, 300)}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
 
   // The catalogue loop above only ever hands a tool one of alice's own ids, which proves what a
   // tool bound to alice answers, never what it refuses. `get_workout` takes a sessionId as a bare

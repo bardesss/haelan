@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { BART_FINGERPRINTS, TOOL_INPUTS, seedToolData } from './mcp-fixtures.ts'
+import { ALICE_FINGERPRINTS, BART_FINGERPRINTS, TOOL_INPUTS, seedToolData } from './mcp-fixtures.ts'
 
 /**
  * The sixth isolation file, and the one that asks the question over the wire: a token minted for
@@ -56,6 +56,20 @@ describe('every tool over POST /mcp, bound by a token, proved against a second p
       }
     })
   }
+
+  // The suite's own floor. Without this, a route that resolved to nobody would answer thirteen
+  // empty results, contain none of bart's fingerprints, and pass - which is the one way this file
+  // could be green and worthless.
+  it("answers with alice's own data, so the absence of bart's means something", async () => {
+    const missing: string[] = []
+    for (const [name, fingerprint] of Object.entries(ALICE_FINGERPRINTS)) {
+      const response = await call(name, TOOL_INPUTS[name]!)
+      if (!response.body.includes(fingerprint)) {
+        missing.push(`${name} did not answer with ${fingerprint}: ${response.body.slice(0, 300)}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
 
   it("refuses bart's session id presented under alice's token", async () => {
     const response = await call('get_workout', { sessionId: 'bart-run' })
