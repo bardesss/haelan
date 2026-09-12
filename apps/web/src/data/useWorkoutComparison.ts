@@ -21,11 +21,13 @@ export function comparisonRange(localDate: string): { from: string, to: string }
  * ran twice, and comparing a run only against the runs its own device recorded would answer a
  * question nobody asked.
  *
- * `session` may be undefined so the hook itself never has to be skipped conditionally, but its
- * one caller (WorkoutComparison, in WorkoutComparison.tsx) is mounted only inside WorkoutDetail's
- * `.grid`, which is only reached once the page's own session query has left both isPending and
- * isError - so in practice this always receives a resolved session and useSessions is never asked
- * to fetch an empty range.
+ * `session` may be undefined so the hook itself never has to be skipped conditionally - its one
+ * caller today (WorkoutComparison, in WorkoutComparison.tsx) is mounted only inside
+ * WorkoutDetail's `.grid`, which is only reached once the page's own session query has left both
+ * isPending and isError, so in practice it always receives a resolved session - but the guard is
+ * not left to that caller's discipline: `enabled: session !== undefined` is threaded into
+ * useSessions itself, so a future direct caller passing an unresolved session still cannot fire a
+ * request for the empty range below.
  */
 export function useWorkoutComparison(session: WorkoutSession | undefined): {
   comparison: WorkoutComparison | null
@@ -33,7 +35,10 @@ export function useWorkoutComparison(session: WorkoutSession | undefined): {
   isError: boolean
 } {
   const range = session === undefined ? { from: '', to: '' } : comparisonRange(session.localDate)
-  const query = useSessions({ kind: 'exercise', from: range.from, to: range.to, source: ALL_SOURCES })
+  const query = useSessions(
+    { kind: 'exercise', from: range.from, to: range.to, source: ALL_SOURCES },
+    { enabled: session !== undefined },
+  )
 
   const comparison = useMemo(() => {
     if (session === undefined || query.data === undefined) return null

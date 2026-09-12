@@ -65,6 +65,16 @@ describe('comparing a workout against recent ones of the same type', () => {
     expect(COMPARISON_WINDOW_DAYS).toBe(90)
   })
 
+  it('includes a candidate exactly on the window\'s own edge', () => {
+    // Pins the `>=` in the window filter rather than merely reading it as correct: a boundary
+    // session dropped by an off-by-one (`>` instead of `>=`) would pass the test above too, since
+    // that test only ever exercises one day inside the window and one day past it - never the
+    // edge itself.
+    const boundary = run('boundary', COMPARISON_WINDOW_DAYS)
+    const result = compareWorkout(subject, [run('a', 1), run('b', 2), run('c', 3), boundary])
+    expect(result.of).toBe(4)
+  })
+
   it('takes at most the twenty most recent inside the window', () => {
     const many = Array.from({ length: 30 }, (_, index) => run(`s${index}`, index + 1))
     expect(compareWorkout(subject, many).of).toBe(COMPARISON_LIMIT)
