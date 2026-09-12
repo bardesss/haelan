@@ -278,6 +278,21 @@ body {
   clip-path: inset(50%); white-space: nowrap; border: 0; padding: 0; margin: -1px;
 }
 
+/* The table's own control, deliberately lighter than `.button`: it sits under every chart on
+   every page, so it is text rather than a bordered box. Spec section 5.3 sets the weight. */
+.chart-table-toggle { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-faint); cursor: pointer; }
+.chart-table-toggle:hover { color: var(--text-secondary); }
+
+/* The same accessible table, shown. A scroll box rather than a plain block for the reason
+   ChartFigure's own comment gives: a table's used width is floored at its min-content width, so it
+   is allowed to be as wide as it needs and scrolls inside the card instead of widening the page.
+   The height cap is what keeps a year - 365 rows - from pushing everything below it off screen. */
+.chart-table { max-height: 220px; overflow: auto; margin-top: var(--space-1); }
+.chart-table table { width: 100%; border-collapse: collapse; font-size: var(--font-size-micro); }
+.chart-table caption { text-align: left; color: var(--text-faint); padding-bottom: var(--space-1); }
+.chart-table th, .chart-table td { text-align: left; padding: 2px var(--space-1); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
+
 @media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
@@ -445,7 +460,11 @@ body {
   margin-bottom: var(--space-3);
 }
 
-/* Profile.tsx: two forms in one card, so the second gets a heading to say where the first ended.
+/* Profile.tsx: two forms in one card, so the second gets a rule and a heading to say where the
+   first ended. The heading alone was not enough - a reader filled in both halves, pressed the one
+   button they had seen, and the password form was never submitted - so the second form carries
+   the same hairline this app separates its rows and panels with, and .profile-subhead drops its
+   own top margin because that gap is now the form's padding.
    min-width: 0 for the reason .instance-url carries it, since the timezone field holds a value
    long enough to stretch a narrow card.
 
@@ -454,9 +473,13 @@ body {
    days quietly stop lining up until a rebuild runs. The result line beside it is the muted inset
    the maintenance results use, because a save that went through is an uneventful report. */
 .profile { min-width: 0; }
+.profile-password {
+  margin-top: var(--space-4); padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
 .profile-subhead {
   font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary);
-  margin: var(--space-4) 0 var(--space-2);
+  margin: 0 0 var(--space-2);
 }
 .profile-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;

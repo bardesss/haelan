@@ -221,3 +221,60 @@ export function chartBase(t: ChartTokens) {
     labelledAxis: { axisLabel, axisLine: { lineStyle: { color: t.grid } } },
   }
 }
+
+/**
+ * The one place this project turns text into tooltip HTML.
+ *
+ * Every chart tooltip on the dashboard is assembled as an HTML string, because that is what
+ * echarts renders a `tooltip.formatter` return value as: it writes the string into the tooltip
+ * element with innerHTML, tags and all. Nothing upstream of that call stops markup getting in.
+ * i18next is configured with `interpolation: { escapeValue: false }` (i18n/index.tsx), which is
+ * the right setting for an app whose other output goes through React, and it means a `t()` result
+ * carries its interpolated values exactly as given. So an annotation a member of the household
+ * typed -- an override reason, a note, an event -- and a source's own alias both reached these
+ * formatters raw, and a note reading `<img src=x onerror=...>` was not text on hover, it was a
+ * tag the browser built and a handler the browser ran.
+ *
+ * The asymmetry is what made this worth its own pass rather than a shrug. The accessible table
+ * beside every one of these charts states the same annotation text through React, which escapes
+ * it; the chart-styling document treats the two channels saying the same thing about the same day
+ * as binding. Before this helper they disagreed about what the text even was.
+ *
+ * A tagged template rather than an `escapeHtml(...)` call at each interpolation, and that choice
+ * is the substance of the fix. Wrapping each value by hand keeps the formatters correct only for
+ * as long as everyone remembers to wrap, which is the "two implementations kept in agreement by
+ * habit" shape `ANNOTATION_JOIN` above exists to reject. Here the literal parts of the template
+ * are the formatter's own structure (`<br/>` and nothing else, in every caller) and every `${}`
+ * is text, so the default is safe and a new formatter written the obvious way inherits it. A
+ * value that is somehow NOT text can only come out over-escaped, which is a visible cosmetic bug
+ * rather than a silent hole: this fails safe in the one direction that matters.
+ */
+export function escapeHtml(text: string): string {
+  // `&` is in the same pass as the other two, not a separate `.replace` before them: replacing it
+  // first and the angle brackets afterwards would re-enter the `&` it had just written and turn
+  // `<` into `&amp;lt;`. One regex with one replacer visits each character exactly once.
+  //
+  // Quotes are deliberately not in this set. A formatter's output is element CONTENT -- echarts
+  // assigns it to the tooltip element's innerHTML -- never an attribute value, and inside content
+  // a quote is an ordinary character with nothing to break out of. Leaving them alone is also
+  // what makes these tooltips character-for-character identical to the DOM's own serialisation of
+  // the table cell beside them, so the two channels agree on the text without either having to
+  // know how the other escapes.
+  return text.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'))
+}
+
+/**
+ * Builds a tooltip's HTML, escaping every interpolated value and leaving the template's own
+ * literal markup (the `<br/>` separators these formatters are built out of) alone. See
+ * `escapeHtml` above for why this is a tagged template rather than a helper called per value.
+ *
+ * Nesting: a value that is itself a `tip` result would be escaped a second time, so a formatter
+ * assembling several already-built lines joins them with a plain `.join('<br/><br/>')` instead of
+ * feeding them back through here. IntradayHeartRate is the one caller that does this.
+ */
+export function tip(parts: TemplateStringsArray, ...values: unknown[]): string {
+  return parts.reduce(
+    (out, part, i) => out + part + (i < values.length ? escapeHtml(String(values[i])) : ''),
+    '',
+  )
+}

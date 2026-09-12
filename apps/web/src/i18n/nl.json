@@ -442,6 +442,12 @@
       "mean": "gemiddeld {{value}} bpm",
       "range": "bereik {{min}} tot {{max}} bpm"
     },
+    "tooltip": {
+      "line": "{{label}}: {{value}}"
+    },
+    "hypnogramTooltip": {
+      "span": "{{from}} tot {{to}}"
+    },
     "spo2Tooltip": {
       "mean": "gemiddeld {{value}}%",
       "range": "bereik {{min}} tot {{max}}%",
@@ -463,6 +469,12 @@
     "bandToggle": {
       "hide": "Dagbereik verbergen",
       "show": "Dagbereik tonen"
+    },
+    "tableToggle": {
+      "show": "Cijfers tonen",
+      "hide": "Cijfers verbergen",
+      "showFor": "Cijfers tonen voor {{label}}",
+      "hideFor": "Cijfers verbergen voor {{label}}"
     }
   },
   "sleep": {

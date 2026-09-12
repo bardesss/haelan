@@ -1,12 +1,14 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, dayMarks, markClickDate, STROKE, OPACITY, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
+import { sparklineTooltip } from './sparklineTooltip.js'
+import type { SparklineTooltipInput } from './sparklineTooltip.js'
 
 /**
  * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
@@ -137,8 +139,41 @@ export function Sparkline({
   // other Sparkline caller gets.
   const hasTrend = trend !== undefined && trend.some((v) => v !== null)
 
+  // One formatter, read by the canvas's tooltip and by every table row, rather than two built the
+  // same way: `formatValue` is the override for a caller whose displayed unit differs from the
+  // stored one (Activity's millimetres shown as kilometres, Weight's grams as kilograms), and a
+  // tooltip that took the catalogue default while the table took the override would print two
+  // different numbers for one day.
+  const format = (value: number | null, absent: string): string =>
+    formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
+
+  // A ref, not `build` dependencies, and for the reason useChart's own onClickRef exists: the
+  // tooltip reads `formatValue`, `t` and the language, and `formatValue` is a fresh arrow on every
+  // render at two call sites (Activity.tsx's distance card, Weight.tsx's weight card). In `build`'s
+  // dependency array those would dispose and re-initialise the chart on every render, which is the
+  // exact defect chart-lifecycle.test.tsx guards. The formatter runs on hover, long after the
+  // option was set, so reading the ref at that moment hands it the current values anyway.
+  const tooltipRef = useRef<SparklineTooltipInput | null>(null)
+  useLayoutEffect(() => {
+    tooltipRef.current = {
+      values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t,
+    }
+  })
+
   const build = useCallback((tokens: ChartTokens): EChartsOption => ({
     grid: { left: 0, right: 0, top: 4, bottom: 4 },
+    tooltip: {
+      ...chartBase(tokens).tooltip,
+      trigger: 'axis' as const,
+      // Every input arrives through the ref rather than through this closure, so nothing here
+      // widens `build`'s dependency array; see tooltipRef above for why that matters.
+      formatter: (params: unknown) => {
+        const p = Array.isArray(params) ? params[0] : params
+        const current = tooltipRef.current
+        if (!p || !current) return ''
+        return sparklineTooltip(current, p as Parameters<typeof sparklineTooltip>[1])
+      },
+    },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
     yAxis: { type: 'value' as const, show: false, scale: true },
     series: [
@@ -225,16 +260,14 @@ export function Sparkline({
               // and the day is blank because of something they did rather than because the device
               // never reported. "no reading" is the honest cell only for the second of those.
               const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              const format = (value: number | null): string =>
-                formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
-              const cell = format(v)
+              const cell = format(v, absent)
               // The same formatter the reading cell goes through, since the trend is a smoothed
               // reading and carries the identical unit: Weight's own kilogram conversion (its
               // `formatValue`) has to reach this cell too, or a table would print grams beside
               // kilograms under a header naming one of them. Null where trendOf had nothing to
               // smooth for that day, which reads as the same absence word the reading cell already
               // carries rather than as a number the line never had.
-              return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null)] : []),
+              return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
                 [isExcluded ? t('charts.absence.excluded') : '',
                   // filter, not find: several annotations (an override reason, a note, an event) can
                   // land on the same date now that day level marks join the per-metric ones, and a

@@ -70,5 +70,43 @@ export default defineConfig({
     // per file opt-in is one more thing a new component test can forget, which is exactly how the
     // suite ended up here.
     setupFiles: ['./vitest.setup.ts'],
+    // happy-dom answers '(prefers-reduced-motion: reduce)' from this setting, and its default is
+    // 'no-preference'. useChart reads exactly that query and feeds it to withMotionPreference, so
+    // the default left echarts animation ON in every test that mounts a chart - which is every page
+    // test file under apps/web/test.
+    //
+    // That is what made flush() wait on the wrong thing. flush() returns on two consecutive samples
+    // of the same innerHTML, and an animating echarts SVG rewrites its paths every frame, so the
+    // helper was not waiting for data at all: it was waiting out an animation clock. Instrumented
+    // with counters, every flush in activity.test.tsx saw the in-flight count at zero on every pump
+    // (all queries had landed inside the first one) and saw the HTML change on every pump but the
+    // last, 26 to 129 pumps deep. The reason to set the preference is that waiting is pure waste:
+    // no assertion anywhere reads a frame of it.
+    //
+    // Measured as an A/B, five concurrent full apps/web runs each way, 940 flushes per round:
+    //
+    //           mean    median   p95     p99     max      total in flush
+    //   on      1252ms  1291ms   3072ms  3830ms  5901ms   1177s
+    //   off      564ms   279ms   1841ms  2649ms  4435ms    531s
+    //
+    // So this halves the time the whole suite spends in flush() and takes 928 of 940 calls down to
+    // the two-pump minimum. Be honest about the tail, though: it improves only 5.9s to 4.4s against
+    // the 10s budget, because under that much contention a single pump costs seconds and flush needs
+    // two of them no matter what. This removes the largest avoidable term, not the fragility itself -
+    // what is left is the per-pump cost, which is the machine's, and the real trigger behind the
+    // "flush() timed out" flakes seen here is several of these suites running at once out of
+    // separate worktrees, which maxWorkers above cannot see or cap.
+    //
+    // Nothing is lost by it: no test asserts that a mounted chart animates, and motion.test.ts covers
+    // the decision itself by calling withMotionPreference directly, with no DOM and no matchMedia. It
+    // also removes a quieter hazard - with animation on, anything reading chart geometry could sample
+    // a half drawn frame.
+    //
+    // Declared here rather than assigned in vitest.setup.ts so it is part of how the environment is
+    // built, not a mutation applied after it already exists; happy-dom deep merges `device` over its
+    // own defaults (BrowserSettingsFactory), so naming one key leaves the rest alone.
+    environmentOptions: {
+      happyDOM: { settings: { device: { prefersReducedMotion: 'reduce' } } },
+    },
   },
 })

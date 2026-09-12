@@ -176,7 +176,43 @@ describe('stdout purity', () => {
     },
   })}\n`
 
-  const REPLY_TIMEOUT_MS = 15_000
+  /**
+   * Two deadlines, because this exchange is two things whose costs differ by three orders of
+   * magnitude, and only the second one is what this test asserts.
+   *
+   * Starting up means booting Node, stripping types over the whole import graph the entry pulls
+   * in, and opening the database. All of it is silent - `serving` is written after
+   * `server.connect`, so nothing reaches either stream until it is over - and all of it is the
+   * machine's work rather than this app's. Answering, once the transport is connected, is reading
+   * one line of stdin and writing one line of stdout.
+   *
+   * Measured here, first byte on stderr against the stdout line that follows it:
+   *
+   *                       starting up        answering
+   *   idle                2.1s to 4.7s       10ms to 50ms
+   *   five full suites    9.5s to 35.3s      18ms to 150ms
+   *
+   * One 15s budget covering both was therefore a startup budget wearing a reply budget's name, and
+   * it duly failed 5 of 6 attempts under that load with an empty stderr - the child had not yet
+   * reached its own first diagnostic. Every one of those children was starting normally, not hung:
+   * with the budget lifted all five exchanges completed.
+   *
+   * So startup gets a deadline generous enough to be a hang-detector rather than a performance
+   * assertion, the same posture (and the same argument) as boot.test.ts's READY_DEADLINE_MS, at
+   * 1.7x the worst startup measured. The reply keeps the 15s the whole exchange used to share,
+   * which against a 150ms worst case is margin this test will not spend. Splitting them is what
+   * makes the failure say which half broke: a slow machine and a server that connected but never
+   * answered are different findings, and the single budget reported them identically.
+   */
+  const SERVING_DEADLINE_MS = 60_000
+  const REPLY_DEADLINE_MS = 15_000
+
+  /**
+   * The whole test, on the same terms as boot.test.ts's BOOT_BUDGET_MS and for the same reason:
+   * generous on purpose, because it has to sit above both deadlines above plus the spawn, and a
+   * test that approaches it is stuck rather than slow. Idle this test costs about 3s.
+   */
+  const BOOT_LIKE_BUDGET_MS = 90_000
 
   interface Exchange { stdout: string, stderr: string }
 
@@ -191,16 +227,38 @@ describe('stdout purity', () => {
     let stderr = ''
     spawned.stdout.setEncoding('utf8')
     spawned.stderr.setEncoding('utf8')
-    spawned.stderr.on('data', (chunk: string) => { stderr += chunk })
-
     const settled = new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`nothing on stdout within ${REPLY_TIMEOUT_MS}ms. stderr was: ${stderr}`))
-      }, REPLY_TIMEOUT_MS)
+      let timer = setTimeout(() => {
+        reject(new Error(
+          `the child wrote nothing to either stream within ${SERVING_DEADLINE_MS}ms, so it never `
+          + 'finished starting up. That is the machine being slow, not the protocol being wrong.',
+        ))
+      }, SERVING_DEADLINE_MS)
       const settle = (): void => { clearTimeout(timer); resolve() }
+      // The first byte on either stream, which is the child telling us startup is over and the
+      // clock that matters now is the reply's. Whichever stream it arrives on: `serving` is the
+      // expected one, but a stray `console.log` beats it to stdout, and that line is the very
+      // thing this test exists to catch.
+      let started = false
+      const sawOutput = (): void => {
+        if (started) return
+        started = true
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          reject(new Error(
+            `the child started but wrote no line to stdout within ${REPLY_DEADLINE_MS}ms of its `
+            + `first output. stderr was: ${stderr}`,
+          ))
+        }, REPLY_DEADLINE_MS)
+      }
+      spawned.stderr.on('data', (chunk: string) => { stderr += chunk; sawOutput() })
       // The first newline, not the first parseable reply: a stray `console.log` arrives before the
       // handshake does, and waiting for valid JSON would wait past the very line under test.
-      spawned.stdout.on('data', (chunk: string) => { stdout += chunk; if (stdout.includes('\n')) settle() })
+      spawned.stdout.on('data', (chunk: string) => {
+        stdout += chunk
+        sawOutput()
+        if (stdout.includes('\n')) settle()
+      })
       // A child that dies during startup wrote its reason to stderr and nothing to stdout.
       // Resolving here would hand the assertions an empty string, so the failure would land on
       // `toHaveLength(1)` with the reason captured and never printed - which is exactly how a
@@ -245,5 +303,5 @@ describe('stdout purity', () => {
     expect(reply.result.protocolVersion).toBe('2025-06-18')
     // The startup line proves a diagnostic was printed at all, and that it went the other way.
     expect(stderr).toContain('serving')
-  }, 40_000)
+  }, BOOT_LIKE_BUDGET_MS)
 })

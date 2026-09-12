@@ -442,6 +442,12 @@
       "mean": "mean {{value}} bpm",
       "range": "range {{min}} to {{max}} bpm"
     },
+    "tooltip": {
+      "line": "{{label}}: {{value}}"
+    },
+    "hypnogramTooltip": {
+      "span": "{{from}} to {{to}}"
+    },
     "spo2Tooltip": {
       "mean": "mean {{value}}%",
       "range": "range {{min}} to {{max}}%",
@@ -463,6 +469,12 @@
     "bandToggle": {
       "hide": "Hide daily range",
       "show": "Show daily range"
+    },
+    "tableToggle": {
+      "show": "Show numbers",
+      "hide": "Hide numbers",
+      "showFor": "Show numbers for {{label}}",
+      "hideFor": "Hide numbers for {{label}}"
     }
   },
   "sleep": {

@@ -49,10 +49,9 @@ afterEach(() => {
 })
 
 // Mounts HeartRateRange inside a real I18nProvider, the same shape rail-collapse.test.tsx's own
-// mount uses for a control that flips one piece of state. `toggle` finds the control by its role
-// rather than by a class name: this component renders nothing else that is a button, so a plain
-// button lookup is unambiguous and does not couple the test to a class name the component is free
-// to rename.
+// mount uses for a control that flips one piece of state. `toggle` finds the control by
+// aria-pressed rather than by being the only button: ChartFigure renders a table toggle of its own
+// below this one, so "the first button" is a position this test should not depend on.
 function mountChart(lng = 'en'): { container: HTMLDivElement; toggle: () => HTMLElement } {
   act(() => {
     root!.render(
@@ -64,9 +63,11 @@ function mountChart(lng = 'en'): { container: HTMLDivElement; toggle: () => HTML
   return {
     container: container!,
     toggle: () => {
-      const el = container!.querySelector('button')
+      // By aria-pressed, not by being the only button: ChartFigure renders a table toggle of its
+      // own below this one, so "the first button" is a position this test should not depend on.
+      const el = container!.querySelector('button[aria-pressed]')
       if (!el) throw new Error('no band toggle button found')
-      return el
+      return el as HTMLElement
     },
   }
 }

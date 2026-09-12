@@ -79,12 +79,18 @@ export async function flush(
   let sawFetch = inFlight()
   let previous = getHtml()
   let idleOnce = false
-  const deadline = performance.now() + budgetMs
+  let pumps = 0
+  let fetching = 0
+  let changed = 0
+  const started = performance.now()
+  const deadline = started + budgetMs
   do {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+    pumps += 1
     if (inFlight()) {
       sawFetch = true
       idleOnce = false
+      fetching += 1
       previous = getHtml()
       continue
     }
@@ -94,10 +100,21 @@ export async function flush(
     }
     const current = getHtml()
     if (idleOnce && current === previous) return
+    if (current !== previous) changed += 1
     idleOnce = true
     previous = current
   } while (performance.now() < deadline)
-  throw new Error('flush() timed out: the page never settled (or never started changing at all)')
+  // The counts, not just the sentence: "never settled" and "never started" are two different
+  // failures and the sentence alone names neither, which is exactly how the animation race this
+  // budget was losing stayed undiagnosed - the report it produced said nothing a reader could act
+  // on. `fetching` still in step with `pumps` is a page stuck in flight; `changed` in step with
+  // `pumps` while `fetching` stays at zero is a page that keeps redrawing after its data landed
+  // (an animation, or a render loop); both at zero is a page that never started.
+  throw new Error(
+    `flush() timed out after ${Math.round(performance.now() - started)}ms: the page never settled `
+    + `(or never started changing at all) - ${pumps} pumps, in flight on ${fetching}, `
+    + `changed on ${changed}`,
+  )
 }
 
 /**

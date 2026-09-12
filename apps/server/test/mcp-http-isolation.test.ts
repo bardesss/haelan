@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { ALICE_FINGERPRINTS, BART_FINGERPRINTS, TOOL_INPUTS, seedToolData } from './mcp-fixtures.ts'
+import {
+  ALICE_FINGERPRINTS, BART_TEXT_FINGERPRINTS, BART_NUMBER_FINGERPRINTS, TOOL_INPUTS,
+  seedToolData, numberLeak,
+} from './mcp-fixtures.ts'
 
 /**
  * The sixth isolation file, and the one that asks the question over the wire: a token minted for
@@ -51,8 +54,17 @@ describe('every tool over POST /mcp, bound by a token, proved against a second p
       expect(response.statusCode).toBe(200)
       // The whole response body, not the structured content alone: the summary sentence and the
       // serialised JSON block travel in it too, and a leak into either is a leak.
-      for (const fingerprint of BART_FINGERPRINTS) {
+      //
+      // The body also carries note and event ids minted by randomUUID, so a plain substring
+      // check on a bare number has exactly the latent flake mcp-fixtures.ts's doc comment on
+      // BART_NUMBER_FINGERPRINTS describes for the in-process suite: a UUID is hex, and '176'
+      // lands inside one about once in every 215 ids. This suite calls CATALOGUE just as many
+      // times, so it has the same odds of rolling that coincidence - it just hadn't yet.
+      for (const fingerprint of BART_TEXT_FINGERPRINTS) {
         expect(response.body).not.toContain(fingerprint)
+      }
+      for (const fingerprint of BART_NUMBER_FINGERPRINTS) {
+        expect(numberLeak(response.body, fingerprint)).toBeNull()
       }
     })
   }
@@ -64,7 +76,16 @@ describe('every tool over POST /mcp, bound by a token, proved against a second p
     const missing: string[] = []
     for (const [name, fingerprint] of Object.entries(ALICE_FINGERPRINTS)) {
       const response = await call(name, TOOL_INPUTS[name]!)
-      if (!response.body.includes(fingerprint)) {
+      // A plain substring check here would be the mirror image of the bug BART_NUMBER_FINGERPRINTS
+      // fixes: this is an assertion that a number IS present, so a coincidental match inside a
+      // generated hex id (a note or event's randomUUID) would make '1200' or '58' pass even if
+      // alice's real value never appeared. Route the numeric fingerprints through the same
+      // boundary-anchored matcher, inverted, so this proves the number is really alice's value
+      // rather than hex noise.
+      const found = /^\d+$/.test(fingerprint)
+        ? numberLeak(response.body, fingerprint) !== null
+        : response.body.includes(fingerprint)
+      if (!found) {
         missing.push(`${name} did not answer with ${fingerprint}: ${response.body.slice(0, 300)}`)
       }
     }
@@ -77,9 +98,13 @@ describe('every tool over POST /mcp, bound by a token, proved against a second p
     expect(response.statusCode).toBe(200)
     expect((response.json() as { result: { isError?: boolean } }).result.isError).toBe(true)
     // The refusal may echo the id the caller supplied - they already had it - but nothing else of
-    // bart's may ride along in the message.
-    for (const fingerprint of ['bart-watch', 'bart-night', 'bart-note-sentinel', 'bart-event-sentinel', '8800', '176']) {
+    // bart's may ride along in the message. Same split as above: the number fingerprints go
+    // through numberLeak so a coincidental digit run inside a generated id cannot flake this.
+    for (const fingerprint of ['bart-watch', 'bart-night', 'bart-note-sentinel', 'bart-event-sentinel']) {
       expect(response.body).not.toContain(fingerprint)
+    }
+    for (const fingerprint of ['8800', '176']) {
+      expect(numberLeak(response.body, fingerprint)).toBeNull()
     }
   })
 })

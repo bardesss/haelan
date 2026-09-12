@@ -9,6 +9,39 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.9.0](https://github.com/bardesss/haelan/compare/v1.8.1...v1.9.0) (2026-09-12)
+
+
+### Features
+
+* **web:** every chart says which day and what value, on hover ([#154](https://github.com/bardesss/haelan/issues/154)) ([82e758d](https://github.com/bardesss/haelan/commit/82e758d48d911d268ae32da9909bbbc1d39a4a35))
+
+
+### Bug Fixes
+
+* **test:** charts stop animating in tests, so flush() stops waiting them out ([#153](https://github.com/bardesss/haelan/issues/153)) ([ab7faa3](https://github.com/bardesss/haelan/commit/ab7faa32ebfd6838358f82fac8a07d8cf5502fe1))
+
+## [1.8.1](https://github.com/bardesss/haelan/compare/v1.8.0...v1.8.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **server:** the TOOLS.md drift test compares content, not line endings ([#151](https://github.com/bardesss/haelan/issues/151)) ([911f69e](https://github.com/bardesss/haelan/commit/911f69e667c39cf4705884420362796fc3ed5b8e))
+
+## [1.8.0](https://github.com/bardesss/haelan/compare/v1.7.1...v1.8.0) (2026-09-12)
+
+
+### Features
+
+* **web:** settings puts its narrow sections side by side ([#148](https://github.com/bardesss/haelan/issues/148)) ([8c82dd0](https://github.com/bardesss/haelan/commit/8c82dd07b5b212c2ddf0dbc3d9ded49e36633c67))
+
+## [1.7.1](https://github.com/bardesss/haelan/compare/v1.7.0...v1.7.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* the password form on the profile card says where it begins ([#146](https://github.com/bardesss/haelan/issues/146)) ([7570de9](https://github.com/bardesss/haelan/commit/7570de96f7cb52db29046e2b9dcd6767ba094d08))
+
 ## [1.7.0](https://github.com/bardesss/haelan/compare/v1.6.0...v1.7.0) (2026-09-12)
 
 

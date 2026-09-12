@@ -249,6 +249,19 @@ describe('changing your own password', () => {
     mountSection()
     expect([fields()[3]!.type, fields()[4]!.type]).toEqual(['password', 'password'])
   })
+
+  /**
+   * Written from a report: the two forms were read as one panel with a stray second button, the
+   * password was typed alongside the name, one button was pressed, and half of what was typed was
+   * never sent. A heading alone did not say where the first form ended, so the second carries the
+   * rule this app already separates rows and panels with - and this holds the class on, because
+   * the whole failure is silent: every other assertion in this suite passed while the boundary
+   * was missing, since no stylesheet applies in this environment.
+   */
+  it('separates the password form from the one above it', () => {
+    mountSection()
+    expect(passwordForm().className).toContain('profile-password')
+  })
 })
 
 describe('where the card is mounted', () => {

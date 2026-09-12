@@ -34,28 +34,52 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
 }
 
 /**
- * Bart's fingerprints. Anything a tool bound to alice answers that contains one of these has
- * leaked bart's data: his person id, his source id, his session ids, the two sentinels he wrote
- * himself, and the two numbers that identify his rows. 'bart' alone already covers the person id
- * and every id built from it ('bart-watch', 'bart-run', 'bart-night'); the rest are named
- * separately because they do not contain the substring 'bart'.
+ * Bart's fingerprints in text. Anything a tool bound to alice answers that contains one of these
+ * has leaked bart's data: his person id, his source id, his session ids and the two sentinels he
+ * wrote himself. 'bart' alone already covers the person id and every id built from it
+ * ('bart-watch', 'bart-run', 'bart-night'); the rest are named separately because they do not
+ * contain the substring 'bart'.
  *
- * The two numbers are chosen with no shared digits against alice's own (1200 vs 8800, 58 vs 176),
- * so a coincidental overlap in a summary statistic cannot pass this file by accident.
+ * These stay substring matches, and safely: every one of them carries a letter outside a-f, so
+ * none can appear inside a generated id the way the numbers below can.
  */
-export const BART_FINGERPRINTS = [
+export const BART_TEXT_FINGERPRINTS = [
   'bart',
   'bart-note-sentinel',
   'bart-event-sentinel',
-  '8800',
-  '176',
 ]
 
 /**
- * The other half of the guarantee. `BART_FINGERPRINTS` proves a tool bound to alice does not
- * answer with bart's rows; without this, a surface that answered *nobody* anything would satisfy
- * that perfectly - thirteen empty results contain no fingerprints - and both isolation suites
- * would stay green while proving nothing at all.
+ * The two numbers that identify bart's rows, matched as whole numbers rather than as substrings.
+ *
+ * They are chosen with no shared digits against alice's own (1200 vs 8800, 58 vs 176), so a
+ * coincidental overlap in a summary statistic cannot pass this file by accident. What that
+ * reasoning missed is the other haystack in the answer: a UUID is hex, so it carries decimal
+ * digits of its own, and '176' lands inside one about once in every 215 ids. Every answer here
+ * serializes at least one generated id, so as a substring check this reported a leak that had not
+ * happened -- it turned CI red on Node 26 while 22 and 24 passed the very same commit, which is
+ * the signature of a coincidence and not of a defect.
+ *
+ * Anchoring to non-alphanumeric boundaries cannot match inside a UUID, whose groups are 8, 4, 4,
+ * 4 and 12 characters long and so never equal a bare '176', while a real leak still matches in
+ * every JSON position a number can occupy: `:176`, `,176`, `[176`, `"176"` and `176.0`.
+ */
+export const BART_NUMBER_FINGERPRINTS = ['8800', '176']
+
+/**
+ * Where one of bart's numbers leaked, with enough of the answer around it to see what leaked, or
+ * null. Returning the context rather than a boolean is what keeps a real failure readable.
+ */
+export function numberLeak(json: string, fingerprint: string): string | null {
+  const match = new RegExp(`(?<![0-9A-Za-z])${fingerprint}(?![0-9A-Za-z])`).exec(json)
+  return match === null ? null : json.slice(Math.max(0, match.index - 40), match.index + 40)
+}
+
+/**
+ * The other half of the guarantee. `BART_TEXT_FINGERPRINTS` and `BART_NUMBER_FINGERPRINTS` prove
+ * a tool bound to alice does not answer with bart's rows; without this, a surface that answered
+ * *nobody* anything would satisfy that perfectly - thirteen empty results contain no
+ * fingerprints - and both isolation suites would stay green while proving nothing at all.
  *
  * A map rather than a list, and six tools rather than thirteen, because not every tool answers
  * with a person's own data: `list_metrics` returns the metric catalogue, which is identical for

@@ -4,7 +4,10 @@ import {
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
-import { ALICE_FINGERPRINTS, BART_FINGERPRINTS, TOOL_INPUTS, seedToolData } from './mcp-fixtures.ts'
+import {
+  ALICE_FINGERPRINTS, BART_TEXT_FINGERPRINTS, BART_NUMBER_FINGERPRINTS, TOOL_INPUTS,
+  seedToolData, numberLeak,
+} from './mcp-fixtures.ts'
 
 /**
  * This is the file that proves M4a-2's security property: every tool in CATALOGUE, called with a
@@ -53,8 +56,11 @@ describe('every tool, bound to one person, proved against a second', () => {
 
       const result = t.run(alice, input)
       const json = JSON.stringify(result)
-      for (const fingerprint of BART_FINGERPRINTS) {
+      for (const fingerprint of BART_TEXT_FINGERPRINTS) {
         expect(json).not.toContain(fingerprint)
+      }
+      for (const fingerprint of BART_NUMBER_FINGERPRINTS) {
+        expect(numberLeak(json, fingerprint)).toBeNull()
       }
     })
   }
@@ -69,11 +75,38 @@ describe('every tool, bound to one person, proved against a second', () => {
       if (t === undefined) throw new Error(`no tool named ${name}`)
       const result = t.run(alice, TOOL_INPUTS[name]!)
       const json = JSON.stringify(result)
-      if (!json.includes(fingerprint)) {
+      // A plain substring check here would be the mirror image of the bug master's numberLeak
+      // fixes: this is an assertion that a number IS present, so a coincidental match inside a
+      // generated hex id would make '1200' or '58' pass even if alice's real value never
+      // appeared. Route the numeric fingerprints through the same boundary-anchored matcher,
+      // inverted, so this proves the number is really alice's value rather than hex noise.
+      const found = /^\d+$/.test(fingerprint) ? numberLeak(json, fingerprint) !== null : json.includes(fingerprint)
+      if (!found) {
         missing.push(`${name} did not answer with ${fingerprint}: ${json.slice(0, 300)}`)
       }
     }
     expect(missing).toEqual([])
+  })
+
+  // Guards the matcher rather than the tools, the way the fingerprints themselves guard the
+  // binding: a matcher relaxed back to includes() would resume reporting leaks that never
+  // happened, and a matcher too strict to see a real one would report nothing ever again. The
+  // first case below is the exact answer that failed CI, on a commit that leaked nothing.
+  it('reads a leaked number without reading the digits inside a generated id', () => {
+    const innocent = '{"notes":[{"id":"1162ccd1-58d0-453f-9599-17671dc0c77c",'
+      + '"body":{"untrustedText":"alice-note-sentinel"}}]}'
+    expect(innocent).toContain('176')
+    expect(numberLeak(innocent, '176')).toBeNull()
+
+    // Every JSON position a leaked number can occupy still reads as the leak it is.
+    expect(numberLeak('{"heightCm":176}', '176')).not.toBeNull()
+    expect(numberLeak('{"v":[176,2]}', '176')).not.toBeNull()
+    expect(numberLeak('{"v":"176"}', '176')).not.toBeNull()
+    expect(numberLeak('{"v":176.0}', '176')).not.toBeNull()
+    expect(numberLeak('{"steps":8800}', '8800')).not.toBeNull()
+
+    // A longer number that merely contains it is a different number, not bart's.
+    expect(numberLeak('{"v":21760}', '176')).toBeNull()
   })
 
   // The catalogue loop above only ever hands a tool one of alice's own ids, which proves what a

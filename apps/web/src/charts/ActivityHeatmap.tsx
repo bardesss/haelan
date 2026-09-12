@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, annotationsByDate, chartBase, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, annotationsByDate, chartBase, SYMBOL, tip } from './base.js'
 import { scaleStops, type ChartTokens } from './tokens.js'
 import { calendarLayout, type CalendarCell } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -123,7 +123,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
             const mark = marks[p.dataIndex]
             if (!mark) return ''
             const text = mark.kind === 'excluded' ? t('charts.absence.excluded') : mark.text
-            return `${mark.date}<br/>${text}`
+            return tip`${mark.date}<br/>${text}`
           }
           // The ordinary cell case, for both this chart's series: the worn heatmap and the
           // absent-day scatter. Both plot `[week, weekday, ...]`, so reading the cell off the
@@ -152,7 +152,7 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
             const text = steps === null || steps === undefined
               ? t(excluded.includes(cell.date) ? 'charts.absence.excluded' : 'charts.absence.noReading')
               : `${t('charts.columns.steps')}: ${formatMetricValue(steps, 'steps', i18n.language, '')}`
-            return `${cell.date}<br/>${text}`
+            return tip`${cell.date}<br/>${text}`
           }
           return ''
         },
