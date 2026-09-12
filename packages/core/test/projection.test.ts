@@ -39,6 +39,15 @@ beforeEach(() => {
       personId: p, kind: 'illness', startedAtMs: NINE_AM, startedAtOffsetMinutes: 0,
       note: `${p}-event-sentinel`,
     })
+    test.db.insert(schema.sessionSegments).values({
+      id: `${p}-segment-sentinel`, sessionId: `${p}-run`, stage: 'light',
+      startMs: NINE_AM, endMs: NINE_AM + 1_800_000,
+    }).run()
+    test.db.insert(schema.observations).values({
+      id: `${p}-obs-sentinel`, personId: p, sourceId: `${p}-watch`, kind: 'mood',
+      startedAtMs: NINE_AM, startedAtOffsetMinutes: 0, localDate: '2026-08-01',
+      value: `${p}-observation-sentinel`,
+    }).run()
   }
 })
 
@@ -93,16 +102,55 @@ describe('the projection', () => {
     const dump = JSON.stringify({
       daily: db.prepare('SELECT * FROM daily').all(),
       sessions: db.prepare('SELECT * FROM sessions').all(),
+      sessionSegments: db.prepare('SELECT * FROM session_segments').all(),
       notes: db.prepare('SELECT * FROM notes').all(),
       events: db.prepare('SELECT * FROM events').all(),
+      observations: db.prepare('SELECT * FROM observations').all(),
       sources: db.prepare('SELECT * FROM sources').all(),
     })
     close()
     expect(dump).toContain('alice-note-sentinel')
     expect(dump).toContain('1200')
-    for (const fingerprint of ['bart', 'bart-note-sentinel', 'bart-event-sentinel', '8800']) {
+    expect(dump).toContain('alice-segment-sentinel')
+    expect(dump).toContain('alice-observation-sentinel')
+    // The join that resolves observations.source_name is the one Finding 1 scoped: this is the
+    // assertion that would fail if `AND src.person_id = ?` were ever dropped from it, rather than
+    // only the SQL saying so.
+    expect(dump).toContain("alice's watch")
+    for (const fingerprint of [
+      'bart', 'bart-note-sentinel', 'bart-event-sentinel', '8800',
+      'bart-segment-sentinel', 'bart-observation-sentinel', "bart's watch",
+    ]) {
       expect(dump).not.toContain(fingerprint)
     }
+  })
+
+  it('refuses to resolve a source name across people even if a row is corrupted to point at one', () => {
+    // sessions.source_id and observations.source_id are plain foreign keys into sources.id, a
+    // global primary key - nothing at the schema level stops a session from pointing at another
+    // person's source. The only thing that keeps them aligned today is an application-level
+    // invariant in SourceRegistry, which this test deliberately breaks to prove the join itself
+    // still refuses to resolve the stranger's name rather than depending on that invariant.
+    test.db.insert(schema.sessions).values({
+      id: 'alice-corrupt-run', personId: 'alice', sourceId: 'bart-watch', kind: 'exercise',
+      externalId: 'alice-corrupt-run', startMs: NINE_AM, startOffsetMinutes: 0,
+      endMs: NINE_AM + 3_600_000, endOffsetMinutes: 0, localDate: '2026-08-01', attrs: '{}',
+      rawPayloadId: null,
+    }).run()
+    test.db.insert(schema.observations).values({
+      id: 'alice-corrupt-obs', personId: 'alice', sourceId: 'bart-watch', kind: 'mood',
+      startedAtMs: NINE_AM, startedAtOffsetMinutes: 0, localDate: '2026-08-01',
+      value: 'alice-corrupt-obs-value',
+    }).run()
+
+    const { db, close } = openProjection('alice')
+    const session = db.prepare("SELECT source_name FROM sessions WHERE id = 'alice-corrupt-run'")
+      .get() as { source_name: string | null }
+    const observation = db.prepare("SELECT source_name FROM observations WHERE id = 'alice-corrupt-obs'")
+      .get() as { source_name: string | null }
+    close()
+    expect(session.source_name).toBeNull()
+    expect(observation.source_name).toBeNull()
   })
 
   it('resolves a session source to its name and drops raw_payload_id', () => {

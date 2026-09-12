@@ -1,6 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { existsSync, rmSync } from 'node:fs'
 import type { DbOrTx } from '../db/open.ts'
+import { ConfigError } from '../errors.ts'
 
 /**
  * The tables an agent's SQL can see, and the only ones.
@@ -79,8 +80,14 @@ export function writeProjection(db: DbOrTx, personId: string, destPath: string):
   // `DbOrTx` omits `$client` on purpose (see open.ts: a transaction handle has none), but every
   // caller of this function reaches it through `PersonQuery`, which is always constructed on a
   // real connection, never a transaction - so the property is there at runtime even though the
-  // narrowed type does not carry it.
-  const livePath = (db as unknown as { $client: BetterSqlite3.Database }).$client.name
+  // narrowed type does not carry it. Checked rather than trusted: a future caller that does hand
+  // this a transaction handle gets a sentence naming the real problem instead of a bare
+  // "Cannot read properties of undefined" three frames inside the security boundary.
+  const client = (db as unknown as { $client?: BetterSqlite3.Database }).$client
+  if (client === undefined) {
+    throw new ConfigError('writeProjection needs a live database connection, not a transaction handle - $client is only present on the former')
+  }
+  const livePath = client.name
   const out = new BetterSqlite3(destPath)
   try {
     out.pragma('journal_mode = OFF')
@@ -90,10 +97,17 @@ export function writeProjection(db: DbOrTx, personId: string, destPath: string):
     out.transaction(() => {
       out.prepare(`INSERT INTO daily SELECT local_date, metric, agg, source, value, coverage,
         source_mix, updated_at_ms FROM live.daily WHERE person_id = ?`).run(personId)
+      // `src.person_id = ?` in the join, not only the row's own `WHERE`: `sessions.source_id` is
+      // a foreign key into `sources.id`, which is a global primary key with no composite
+      // constraint tying a session's source to a source owned by the same person. Nothing but an
+      // application-level invariant in SourceRegistry keeps them aligned today, and this file
+      // cannot see that invariant and must not depend on it - if it were ever violated, an
+      // unscoped join would resolve a stranger's `display_name` into this person's projection.
+      // One extra clause is the whole cost of not relying on it.
       out.prepare(`INSERT INTO sessions SELECT s.id, src.display_name, s.kind, s.external_id,
         s.start_ms, s.start_offset_minutes, s.end_ms, s.end_offset_minutes, s.local_date, s.attrs
-        FROM live.sessions s LEFT JOIN live.sources src ON src.id = s.source_id
-        WHERE s.person_id = ?`).run(personId)
+        FROM live.sessions s LEFT JOIN live.sources src ON src.id = s.source_id AND src.person_id = ?
+        WHERE s.person_id = ?`).run(personId, personId)
       out.prepare(`INSERT INTO session_segments SELECT g.id, g.session_id, g.stage, g.start_ms, g.end_ms
         FROM live.session_segments g JOIN live.sessions s ON s.id = g.session_id
         WHERE s.person_id = ?`).run(personId)
@@ -101,10 +115,14 @@ export function writeProjection(db: DbOrTx, personId: string, destPath: string):
         FROM live.notes WHERE person_id = ?`).run(personId)
       out.prepare(`INSERT INTO events SELECT id, kind, started_at_ms, started_at_offset_minutes,
         ended_at_ms, ended_at_offset_minutes, value, note FROM live.events WHERE person_id = ?`).run(personId)
+      // Scoped for the same reason as the sessions join above: `observations.source_id` is a
+      // foreign key into the global `sources.id`, and only `WHERE o.person_id = ?` filtering the
+      // row is not enough to keep the resolved name from crossing a person boundary if the
+      // application-level invariant that aligns them ever breaks.
       out.prepare(`INSERT INTO observations SELECT o.id, src.display_name, o.kind, o.started_at_ms,
         o.started_at_offset_minutes, o.ended_at_ms, o.ended_at_offset_minutes, o.local_date, o.value
-        FROM live.observations o LEFT JOIN live.sources src ON src.id = o.source_id
-        WHERE o.person_id = ?`).run(personId)
+        FROM live.observations o LEFT JOIN live.sources src ON src.id = o.source_id AND src.person_id = ?
+        WHERE o.person_id = ?`).run(personId, personId)
       out.prepare(`INSERT INTO sources SELECT id, display_name, kind, created_at_ms
         FROM live.sources WHERE person_id = ?`).run(personId)
     })()
