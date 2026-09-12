@@ -2,8 +2,8 @@ import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
 import {
-  AccountStore, CredentialStore, PeopleStore, RawArchive, SessionStore, SettingsStore, SourceRegistry,
-  SyncStateStore,
+  AccountStore, CredentialStore, McpCallLog, McpTokenStore, PeopleStore, RawArchive, SessionStore,
+  SettingsStore, SourceRegistry, SyncStateStore,
 } from '@haelan/core'
 import type { ExcludedDataTypeStore, Instance, RateLimiter } from '@haelan/core'
 import { registerSetupGate } from './routes/setupGate.ts'
@@ -20,6 +20,7 @@ import { registerV1 } from './routes/v1/index.ts'
 import { registerStatic } from './static.ts'
 import { SyncRunner } from './sync/runner.ts'
 import { registerRequireAdmin } from './api/requireAdmin.ts'
+import { registerRequireMcpToken } from './mcp/guard.ts'
 
 /** Overrides for Google's endpoints. Tests point these at a stub; production leaves them unset. */
 export interface EndpointOverrides {
@@ -126,6 +127,8 @@ export interface Stores {
   sources: SourceRegistry
   archive: RawArchive
   excludedDataTypes: ExcludedDataTypeStore
+  mcpTokens: McpTokenStore
+  mcpCalls: McpCallLog
 }
 
 export interface ServerContext extends ServerDeps {
@@ -161,6 +164,8 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     sources: new SourceRegistry(deps.instance.db),
     archive: deps.instance.archive,
     excludedDataTypes: deps.instance.excludedDataTypes,
+    mcpTokens: new McpTokenStore(deps.instance.db),
+    mcpCalls: new McpCallLog(deps.instance.db),
   }
   // The runner takes the context and the context holds the runner, so it is assigned rather
   // than passed. One object, so a route reaching app.haelan.runner reaches the same instance
@@ -176,6 +181,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
   app.get('/api/health', async () => ({ ok: true }))
   registerAuth(app)
   registerRequireAdmin(app)
+  registerRequireMcpToken(app)
   registerSetup(app)
   registerOauth(app)
   registerSync(app)
