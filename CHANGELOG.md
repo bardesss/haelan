@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.12.0](https://github.com/bardesss/haelan/compare/v1.11.0...v1.12.0) (2026-09-12)
+
+
+### Features
+
+* sql_query, over a projection nothing else is in ([#164](https://github.com/bardesss/haelan/issues/164)) ([79e8b2d](https://github.com/bardesss/haelan/commit/79e8b2d2a3e89c80fa5c589a8b60080c855d4720))
+
+
+### Bug Fixes
+
+* the M4 review's findings — a killable sandbox, bounded results, and writes that cannot fail a read ([#166](https://github.com/bardesss/haelan/issues/166)) ([241dd1a](https://github.com/bardesss/haelan/commit/241dd1a5cb51a857de05fb136d2676c5d461d384))
+
 ## [1.11.0](https://github.com/bardesss/haelan/compare/v1.10.0...v1.11.0) (2026-09-12)
 
 
