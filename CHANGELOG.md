@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.9.1](https://github.com/bardesss/haelan/compare/v1.9.0...v1.9.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* **test:** the MCP stdio test stops timing startup with a reply's budget ([#160](https://github.com/bardesss/haelan/issues/160)) ([d3f5b8f](https://github.com/bardesss/haelan/commit/d3f5b8f6320f6bb358897e60e41c5fcbdd677ef8))
+* **web:** chart tooltips escape the text a reader typed ([#157](https://github.com/bardesss/haelan/issues/157)) ([7f29b78](https://github.com/bardesss/haelan/commit/7f29b78dc097607b3d11690b7e8f7581a45c5be5))
+
 ## [1.9.0](https://github.com/bardesss/haelan/compare/v1.8.1...v1.9.0) (2026-09-12)
 
 
