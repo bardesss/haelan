@@ -51,14 +51,21 @@ export function useWorkoutTrace(args: {
   // Enabled only once the pinned read has actually answered with nothing. `isSuccess` rather than
   // `data !== undefined`: a cached-then-refetching entry carries data while a failed one does not,
   // and the fallback is a statement about an answered, empty request, not about a pending one.
+  //
+  // Named and kept as its own value, not inlined at each use below: `fellBack`, `isPending` and
+  // `refetch` all need "is the blended read worth asking about at all right now", and `refetch` in
+  // particular must not narrow that to `fellBack` (blended having already succeeded) - a reachable
+  // state is the reader having chosen nothing, the pin answering empty, and the blended read itself
+  // erroring, and a retry there has to re-ask the query that actually failed rather than re-asking
+  // the pinned one, which already gave its own honest empty answer and has nothing left to retry.
   const pinnedEmpty = pinned.isSuccess && pinned.data.points.length === 0
+  const blendedEnabled = args.chosenSource === null && pinnedEmpty
   const blended = useIntradayWindow(
     { metric: args.metric, startMs: args.startMs, endMs: args.endMs, source: ALL_SOURCES },
-    { enabled: args.chosenSource === null && pinnedEmpty },
+    { enabled: blendedEnabled },
   )
 
-  const fellBack = args.chosenSource === null && pinnedEmpty
-    && blended.isSuccess && blended.data.points.length > 0
+  const fellBack = blendedEnabled && blended.isSuccess && blended.data.points.length > 0
   const answered = fellBack ? blended : pinned
 
   return {
@@ -69,8 +76,11 @@ export function useWorkoutTrace(args: {
     // Pending while the fallback is in flight too: a card that called itself settled between the
     // two requests would render the empty pinned answer for a frame and then replace it, which is
     // the "no heart rate recorded" claim this hook exists to never make.
-    isPending: pinned.isPending || (args.chosenSource === null && pinnedEmpty && blended.isPending),
+    isPending: pinned.isPending || (blendedEnabled && blended.isPending),
     isError: pinned.isError || blended.isError,
-    refetch: () => { void pinned.refetch(); if (fellBack) void blended.refetch() },
+    // `blendedEnabled`, not `fellBack`: a Retry click after the blended read itself failed (rather
+    // than merely "hasn't succeeded yet") must still retry it, or the card is stuck showing an
+    // error a second click can never clear. See the comment on `blendedEnabled` above.
+    refetch: () => { void pinned.refetch(); if (blendedEnabled) void blended.refetch() },
   }
 }

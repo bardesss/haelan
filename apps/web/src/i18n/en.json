@@ -426,7 +426,6 @@
       },
       "trace": {
         "label": "Heart rate through this workout",
-        "pause": "Pause",
         "events": "Pauses",
         "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
       }

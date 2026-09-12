@@ -31,8 +31,14 @@ type Props = {
    * measured sessions and zero RESUME, zero AUTO_PAUSE, zero AUTO_RESUME. An interval needs two
    * ends, so a band's right-hand edge would be one this project made up. A tick makes no claim
    * about when the person started again.
+   *
+   * No `label` field: the markLine below draws with `label: { show: false }` (ECharts never
+   * renders one) and carries no `name` per entry either, so a caller-supplied label would be
+   * computed and then silently dropped. The excluded-point marker this same chart already draws
+   * (`markPoint` below) is visual-only for the same reason - a shape at a position, not a caption -
+   * and review on this task found the equivalent field on eventMarks was reachable but never read.
    */
-  eventMarks?: readonly { atMs: number, label: string }[]
+  eventMarks?: readonly { atMs: number }[]
 }
 
 /**
@@ -106,7 +112,7 @@ function timeOfDay(utcMs: number, timeZone: string, language: string): string {
 // would otherwise see that dependency change on every render, disposing and reinitialising the
 // chart each time - exactly the defect chart-lifecycle.test.tsx's Day-tab case exists to catch,
 // caused here the same way useSourceNames' own nameOf memo comment describes for a different prop.
-const NO_EVENT_MARKS: readonly { atMs: number, label: string }[] = []
+const NO_EVENT_MARKS: readonly { atMs: number }[] = []
 
 export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO_EVENT_MARKS }: Props) {
   const { t, i18n } = useTranslation()

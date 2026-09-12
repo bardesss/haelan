@@ -426,7 +426,6 @@
       },
       "trace": {
         "label": "Hartslag tijdens deze training",
-        "pause": "Pauze",
         "events": "Pauzes",
         "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
       }

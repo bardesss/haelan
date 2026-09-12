@@ -73,8 +73,15 @@ afterEach(() => {
  * sourceNamesKey('p1') seeded (the latter with `namedSources`, mirroring how control-row.test.tsx
  * seeds the same query so an unmocked fetch never runs in this environment), and returns the
  * ECharts option the mount actually built.
+ *
+ * `eventMarks` defaults to none: every existing caller of this helper wants the plain per-source
+ * option, and only the series-order test below needs the appended events series at all.
  */
-function optionForPoints(points: IntradayPoint[], namedSources: NamedSource[]): EChartsOption {
+function optionForPoints(
+  points: IntradayPoint[],
+  namedSources: NamedSource[],
+  eventMarks: readonly { atMs: number }[] = [],
+): EChartsOption {
   const session: Session = {
     personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
   }
@@ -85,7 +92,7 @@ function optionForPoints(points: IntradayPoint[], namedSources: NamedSource[]): 
     root!.render(
       <I18nProvider lng="en">
         <QueryClientProvider client={client}>
-          <IntradayHeartRate points={points} reduction={null} label="Heart rate" />
+          <IntradayHeartRate points={points} reduction={null} label="Heart rate" eventMarks={eventMarks} />
         </QueryClientProvider>
       </I18nProvider>,
     )
@@ -251,5 +258,39 @@ describe('source names in the intraday heart rate chart', () => {
     const html = formatter([{ seriesName: 'My watch', seriesIndex: 2, dataIndex: 0 }])
     expect(html).toContain('My watch')
     expect(html).not.toContain('src-hex-id')
+  })
+})
+
+// Task 4 review finding: Step 7 of the plan claimed this file and chart-marks.test.tsx already
+// proved the appended events series left the 3i+2 lookups alone, but neither actually passed
+// eventMarks - both only ever exercised the empty ("no series appended") arm. This is the missing
+// non-empty case.
+describe('the appended events series does not move the per-source series-index lookups', () => {
+  it('still resolves a two source tooltip to the right source and reading after an events series is appended', () => {
+    const option = optionForPoints(
+      [
+        { utcMs: 0, sourceId: 'watch', min: 50, mean: 60, max: 70, n: 1, excluded: false },
+        { utcMs: 0, sourceId: 'phone', min: 90, mean: 100, max: 110, n: 1, excluded: false },
+      ],
+      [],
+      [{ atMs: 30_000 }],
+    )
+    const series = option.series as { name: string, markLine?: unknown }[]
+    // Three series per source (min, range, mean) plus one appended events series: 7 total. Mean
+    // lines sit at indices 2 (watch) and 5 (phone) - the `3i + 2` contract pointsBySeriesIndex and
+    // excludedBySeriesIndex both depend on - and the events series is last, at index 6.
+    expect(series).toHaveLength(7)
+    expect(series[6]!.markLine).toBeDefined()
+
+    const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter
+    // seriesIndex 2 is watch's mean line; seriesIndex 5 is phone's. Resolving each must still
+    // report its own source and its own mean, not the other's and not nothing, which is exactly
+    // what would happen if appending the events series had shifted either index.
+    const watchHtml = formatter([{ seriesName: 'watch', seriesIndex: 2, dataIndex: 0 }])
+    const phoneHtml = formatter([{ seriesName: 'phone', seriesIndex: 5, dataIndex: 0 }])
+    expect(watchHtml).toContain('watch')
+    expect(watchHtml).toContain('mean 60 bpm')
+    expect(phoneHtml).toContain('phone')
+    expect(phoneHtml).toContain('mean 100 bpm')
   })
 })

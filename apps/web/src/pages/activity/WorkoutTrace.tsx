@@ -33,7 +33,7 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
 
   const marks = detail.events
     .filter((event) => event.kind === PAUSE && event.atMs !== null)
-    .map((event) => ({ atMs: event.atMs!, label: t('activity.workout.trace.pause') }))
+    .map((event) => ({ atMs: event.atMs! }))
 
   if (trace.isError) {
     return <Card span={12} label={t('activity.workout.trace.label')}>
