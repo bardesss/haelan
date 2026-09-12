@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import en from '../src/i18n/en.json' with { type: 'json' }
 import nl from '../src/i18n/nl.json' with { type: 'json' }
@@ -47,5 +48,30 @@ describe('the message catalogues', () => {
         expect(typeof value === 'string' && value.trim() !== '', `${locale}: ${path}`).toBe(true)
       }
     }
+  })
+
+  // README.md states this catalogue's size in prose, in two places, and it is the one fact about
+  // the catalogue that lives in a file nothing here reads - everything above compares en.json and
+  // nl.json against each other, never against a number typed by hand somewhere else. That number
+  // has already gone stale twice on this branch, silently both times, because nothing checked it:
+  // once when the branch that introduced it undercounted, and again when a later commit added two
+  // keys and nobody updated the sentence two files away. Regexes anchored on the surrounding
+  // words, not a bare \d+ - README.md has other numbers in it - and each match is asserted
+  // non-null before its number is compared, so a reworded sentence fails loudly with a message
+  // naming the sentence that moved, rather than the regex silently matching nothing and this test
+  // vacuously passing the way the branch's earlier drift went uncaught.
+  it('states its own key count correctly in both places README.md gives it', () => {
+    const readme = readFileSync(new URL('../../../README.md', import.meta.url), 'utf8')
+    const total = paths(en).length
+
+    const complete = readme.match(/both complete at (\d+) keys/)
+    expect(complete, 'README.md: "both complete at N keys" was not found - has that sentence been reworded?')
+      .not.toBeNull()
+    expect(Number(complete![1]), 'README.md: "both complete at N keys"').toBe(total)
+
+    const translate = readme.match(/translate its (\d+) keys/)
+    expect(translate, 'README.md: "translate its N keys" was not found - has that sentence been reworded?')
+      .not.toBeNull()
+    expect(Number(translate![1]), 'README.md: "translate its N keys"').toBe(total)
   })
 })
