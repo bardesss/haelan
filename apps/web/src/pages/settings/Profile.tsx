@@ -146,7 +146,11 @@ export function Profile() {
         </p>
       )}
 
-      <form onSubmit={submitPassword}>
+      {/* A rule above it, not only a heading: read as one panel, these two forms look like one
+          save button and a stray second one, and somebody who types a password beside their name
+          and presses the top button sends half of what they filled in and is told it saved. The
+          boundary is the same one .member-row and .session-row separate a list with. */}
+      <form className="profile-password" onSubmit={submitPassword}>
         <h3 className="profile-subhead">{t('settings.profile.password.title')}</h3>
         <label className="field">
           <span className="label">{t('settings.profile.password.current')}</span>
