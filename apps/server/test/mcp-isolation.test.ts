@@ -1,9 +1,11 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { z } from 'zod'
 import {
   PersonQuery, createTestDatabase, seedPerson, ConfigError,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
+import { defineTool } from '../src/mcp/contract.ts'
 import {
   ALICE_FINGERPRINTS, BART_TEXT_FINGERPRINTS, BART_NUMBER_FINGERPRINTS, TOOL_INPUTS,
   seedToolData, numberLeak,
@@ -73,6 +75,13 @@ describe('every tool, bound to one person, proved against a second', () => {
     for (const [name, fingerprint] of Object.entries(ALICE_FINGERPRINTS)) {
       const t = CATALOGUE.find((tool) => tool.name === name)
       if (t === undefined) throw new Error(`no tool named ${name}`)
+      // This is where a dropped `await` on the catalogue loop above would actually be caught.
+      // Every assertion up there checks for bart's data being absent, and an un-awaited Promise
+      // serialises to '{}', which satisfies every one of them — nothing that only checks for
+      // absence can catch that. Asserting alice's own data is present is the one check a bare
+      // '{}' fails, so this case is the real guard, not the one below it. It only bites once a
+      // catalogue tool actually answers asynchronously, which `sql_query` does from Task 4 - until
+      // then every `run` here is synchronous and this loop would pass with or without the await.
       const result = await t.run(alice, TOOL_INPUTS[name]!)
       const json = JSON.stringify(result)
       // A plain substring check here would be the mirror image of the bug master's numberLeak
@@ -137,14 +146,21 @@ describe('every tool, bound to one person, proved against a second', () => {
     }
   })
 
-  // A tool that returns a Promise which nobody awaits serialises to '{}', contains no
-  // fingerprint, and passes every case above while proving nothing. Since M4b a tool is allowed
-  // to be asynchronous, so that is now reachable by accident rather than impossible. This asserts
-  // the suite actually unwrapped whatever run() returned.
-  it('awaits whatever a tool returns, so no case can pass on an unresolved promise', async () => {
-    const describe_ = CATALOGUE.find((t) => t.name === 'describe_person')!
-    const result = await describe_.run(alice, {})
-    expect(result).not.toBeInstanceOf(Promise)
-    expect(JSON.stringify(result)).toContain('alice')
+  // Not a guard on the loop above: nothing can guard a false *pass* by checking for absence,
+  // which is all the loop's fingerprint assertions do. This documents the hazard itself, so the
+  // next person to touch this file can see why every `run` here is awaited.
+  it('serialises an un-awaited tool result to nothing, which is why every call above is awaited', async () => {
+    const asyncTool = defineTool({
+      name: 'promise_probe',
+      description: 'test only; never registered in CATALOGUE',
+      inputSchema: {},
+      outputSchema: { leaked: z.string() },
+      run: async () => ({ leaked: 'bart-note-sentinel' }),
+    })
+    // The failure mode, made visible: un-awaited, a leak of bart's own sentinel passes every
+    // fingerprint check in this file, because there is nothing in '{}' to find.
+    expect(JSON.stringify(asyncTool.run(alice, {}))).toBe('{}')
+    // Awaited, the leak is visible - which is the only reason the assertions above mean anything.
+    expect(JSON.stringify(await asyncTool.run(alice, {}))).toContain('bart-note-sentinel')
   })
 })
