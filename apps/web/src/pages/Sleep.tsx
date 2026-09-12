@@ -31,6 +31,7 @@ import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { oneNightPerDate, stageOf } from '../data/nights.js'
+import { NightList } from './sleep/NightList.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
@@ -485,6 +486,11 @@ export function Sleep() {
             shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
           label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} />
+        {/* Task 2 of M8c: a night list below the cards above, mirroring Activity's own SessionList,
+            with each row a link into the night detail page tasks 4-7 build. */}
+        <Card span={12} label={t('sleep.nights.label')}>
+          <NightList controls={controls} />
+        </Card>
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

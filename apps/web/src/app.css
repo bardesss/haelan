@@ -508,6 +508,31 @@ body {
 .session-date-group { min-width: 0; }
 .session-date-heading { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary); margin: 0 0 var(--space-1); }
 
+/* NightList.tsx/NightRow.tsx: the night list Sleep gains in M8c, mirroring SessionList/SessionRow
+   above one date at a time rather than one session at a time. .night-list and .night-groups carry
+   the same min-width: 0 and column-of-groups shape as their session-list counterparts, for the
+   same reasons (a row's flex children need room to shrink; the gap between groups is what
+   separates one night's row from the next now that nothing else does). */
+.night-list { min-width: 0; }
+.night-list-header { display: flex; align-items: baseline; justify-content: space-between; }
+.night-list-count { color: var(--text-secondary); font-size: var(--font-size-sm); }
+.night-groups { display: flex; flex-direction: column; gap: var(--space-4); }
+.night-date-group { min-width: 0; }
+.night-date-heading { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-3) 0 var(--space-1); }
+.night-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
+.night-row:last-child { border-bottom: 0; }
+.night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.night-row-duration { color: var(--text-primary); font-weight: 600; }
+.night-row-source { color: var(--text-secondary); font-size: var(--font-size-xs); }
+.night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.night-row-excluded { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); }
+/* Copied from .session-row-link's own hover/focus rules, unchanged, so the two lists behave
+   identically under a keyboard: same surface-hover on hover, same inward focus ring. */
+.night-row-link { display: block; color: inherit; text-decoration: none; }
+.night-row-link:hover .night-row { background: var(--surface-hover); }
+.night-row-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
 /* ConnectGoogle.tsx: the explanation reads at body size and secondary tone, the same pairing
    .setup-step's own intro paragraph uses, since this card is making the identical kind of ask (an
    action the reader has not taken yet) outside the wizard. The address warning below carries the

@@ -629,6 +629,17 @@
       "label": "Sleep schedule",
       "basis_one": "bed and wake time, {{count}} night",
       "basis_other": "bed and wake time, {{count}} nights"
+    },
+    "nights": {
+      "label": "Nights",
+      "count_one": "{{count}} recorded night in this period",
+      "count_other": "{{count}} recorded nights in this period",
+      "basis": "one row per date, the longer recording winning when two devices reported the same night",
+      "clock": "{{bed}} to {{wake}}",
+      "excluded_one": "{{count}} session excluded",
+      "excluded_other": "{{count}} sessions excluded",
+      "emptyTitle": "No nights in this period",
+      "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
     }
   },
   "setup": {

@@ -629,6 +629,17 @@
       "label": "Slaapschema",
       "basis_one": "bedtijd en wektijd, {{count}} nacht",
       "basis_other": "bedtijd en wektijd, {{count}} nachten"
+    },
+    "nights": {
+      "label": "Nachten",
+      "count_one": "{{count}} geregistreerde nacht in deze periode",
+      "count_other": "{{count}} geregistreerde nachten in deze periode",
+      "basis": "één rij per datum, waarbij de langste opname wint als twee apparaten dezelfde nacht rapporteerden",
+      "clock": "{{bed}} tot {{wake}}",
+      "excluded_one": "{{count}} sessie uitgesloten",
+      "excluded_other": "{{count}} sessies uitgesloten",
+      "emptyTitle": "Geen nachten in deze periode",
+      "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
     }
   },
   "setup": {
