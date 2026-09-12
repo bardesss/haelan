@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.11.0](https://github.com/bardesss/haelan/compare/v1.10.0...v1.11.0) (2026-09-12)
+
+
+### Features
+
+* **web:** the mark is drawn from the tokens, and worn everywhere ([#162](https://github.com/bardesss/haelan/issues/162)) ([32d27ec](https://github.com/bardesss/haelan/commit/32d27ece7036fb4cb6f5171de761c9e387039308))
+
 ## [1.10.0](https://github.com/bardesss/haelan/compare/v1.9.1...v1.10.0) (2026-09-12)
 
 
