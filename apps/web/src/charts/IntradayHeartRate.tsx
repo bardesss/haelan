@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { chartBase, OPACITY, STROKE, SYMBOL } from './base.js'
+import { chartBase, OPACITY, STROKE, SYMBOL, tip } from './base.js'
 import { scaleStops } from './tokens.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -155,9 +155,9 @@ export function IntradayHeartRate({ points, label, onPointClick }: Props) {
               const mean = formatMetricValue(point.mean, 'heart_rate', i18n.language, '')
               const min = formatMetricValue(point.min, 'heart_rate', i18n.language, '')
               const max = formatMetricValue(point.max, 'heart_rate', i18n.language, '')
-              return `${timeOfDay(point.utcMs, timezone, i18n.language)} ${nameOf(point.sourceId)}`
-                + `<br/>${t('charts.hrTooltip.mean', { value: mean })}`
-                + `<br/>${t('charts.hrTooltip.range', { min, max })}`
+              return tip`${timeOfDay(point.utcMs, timezone, i18n.language)} ${nameOf(point.sourceId)}`
+                + tip`<br/>${t('charts.hrTooltip.mean', { value: mean })}`
+                + tip`<br/>${t('charts.hrTooltip.range', { min, max })}`
             })
             .filter((line) => line !== '')
           return lines.join('<br/><br/>')

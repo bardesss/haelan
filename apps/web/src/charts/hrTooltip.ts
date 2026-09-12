@@ -1,3 +1,4 @@
+import { tip } from './base.js'
 import type { DayRow } from '../fixtures/july.js'
 import { formatMetricValue } from '../format.js'
 import type { Translate } from '../format.js'
@@ -13,14 +14,14 @@ import type { Translate } from '../format.js'
 export function hrTooltip(days: DayRow[], index: number | undefined, t: Translate, language: string): string {
   const day = index === undefined ? undefined : days[index]
   if (!day) return ''
-  if (!day.worn) return `${day.date}<br/>${t('charts.absence.notWorn')}`
+  if (!day.worn) return tip`${day.date}<br/>${t('charts.absence.notWorn')}`
   if (day.hrMean === null || day.hrMin === null || day.hrMax === null) {
     // Same word the accessible tables beside this chart already use for a day with nothing to
     // report, rather than a second synonym ("no data") this tooltip used to keep on its own.
-    return `${day.date}<br/>${t('charts.absence.noReading')}`
+    return tip`${day.date}<br/>${t('charts.absence.noReading')}`
   }
   const mean = formatMetricValue(day.hrMean, 'heart_rate', language, '')
   const min = formatMetricValue(day.hrMin, 'heart_rate', language, '')
   const max = formatMetricValue(day.hrMax, 'heart_rate', language, '')
-  return `${day.date}<br/>${t('charts.hrTooltip.mean', { value: mean })}<br/>${t('charts.hrTooltip.range', { min, max })}`
+  return tip`${day.date}<br/>${t('charts.hrTooltip.mean', { value: mean })}<br/>${t('charts.hrTooltip.range', { min, max })}`
 }

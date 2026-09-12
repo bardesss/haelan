@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, OPACITY, STROKE, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, OPACITY, STROKE, SYMBOL, tip } from './base.js'
 import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { hrTooltip } from './hrTooltip.js'
@@ -86,11 +86,11 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
           if (!p) return ''
           if (p.componentType === 'markPoint') {
             const mark = marks.atValue[p.dataIndex]
-            return mark ? `${mark.date}<br/>${t('charts.absence.excluded')}` : ''
+            return mark ? tip`${mark.date}<br/>${t('charts.absence.excluded')}` : ''
           }
           if (p.componentType === 'markLine') {
             const mark = marks.atDate[p.dataIndex]
-            return mark ? `${mark.date}<br/>${mark.text}` : ''
+            return mark ? tip`${mark.date}<br/>${mark.text}` : ''
           }
           return hrTooltip(days, p.dataIndex, t, i18n.language)
         },

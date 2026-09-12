@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, OPACITY, STROKE, SYMBOL } from './base.js'
+import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, OPACITY, STROKE, SYMBOL, tip } from './base.js'
 import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
@@ -79,16 +79,16 @@ export function Spo2Range({ days, annotations, excluded, label, onPointClick }: 
           if (!p) return ''
           if (p.componentType === 'markPoint') {
             const mark = marks.atValue[p.dataIndex]
-            return mark ? `${mark.date}<br/>${t('charts.absence.excluded')}` : ''
+            return mark ? tip`${mark.date}<br/>${t('charts.absence.excluded')}` : ''
           }
           if (p.componentType === 'markLine') {
             const mark = marks.atDate[p.dataIndex]
-            return mark ? `${mark.date}<br/>${mark.text}` : ''
+            return mark ? tip`${mark.date}<br/>${mark.text}` : ''
           }
           const day = days[p.dataIndex]
           if (!day) return ''
           if (day.mean === null || day.min === null || day.max === null) {
-            return `${day.date}<br/>${t('charts.absence.noReading')}`
+            return tip`${day.date}<br/>${t('charts.absence.noReading')}`
           }
           // Every number here goes through formatMetricValue/formatNumber before it ever reaches
           // t(), the same rule hrTooltip.ts states: a raw /series float reaching a reader
@@ -106,9 +106,9 @@ export function Spo2Range({ days, annotations, excluded, label, onPointClick }: 
           // (packages/core/src/derive/metrics.ts's own `count` agg), so nothing here needs
           // rounding or locale grouping; ?? 0 only guards the type (min/max/mean gate null above,
           // but count is not itself part of that guard) and is never expected to fire in practice.
-          return `${day.date}<br/>${t('charts.spo2Tooltip.mean', { value: mean })}`
-            + `<br/>${t('charts.spo2Tooltip.range', { min, max })}`
-            + `<br/>${t('charts.spo2Tooltip.count', { count: day.count ?? 0 })}`
+          return tip`${day.date}<br/>${t('charts.spo2Tooltip.mean', { value: mean })}`
+            + tip`<br/>${t('charts.spo2Tooltip.range', { min, max })}`
+            + tip`<br/>${t('charts.spo2Tooltip.count', { count: day.count ?? 0 })}`
         },
       },
       xAxis: { type: 'category' as const, data: days.map((d) => d.date.slice(8)), ...base.labelledAxis },
