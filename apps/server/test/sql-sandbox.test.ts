@@ -66,6 +66,23 @@ describe('what the caller\'s SQL cannot reach', () => {
     await expect(run('DELETE FROM daily')).rejects.toThrow(ConfigError)
   })
 
+  it('cannot write even when the statement returns rows - readonly is the only thing refusing this one', async () => {
+    // Every case above is refused by iterate()/columns() rejecting a statement with no data to
+    // return. RETURNING gives it data, so iterate() would run this exactly like a SELECT; the
+    // `readonly: true` on the connection in sqlWorker.ts is what actually stops it. Drop that flag
+    // - it looks redundant beside fileMustExist - and this is the one case here that would go from
+    // red to green while every other refusal in this file stayed exactly as it is.
+    await expect(run("INSERT INTO daily VALUES ('2026-01-01','steps','sum','merged',1,1,null,0) RETURNING *"))
+      .rejects.toThrow(ConfigError)
+  })
+
+  it('cannot VACUUM INTO a file - the returns-no-data leg refuses it, not readonly', async () => {
+    // The opposite pairing from the RETURNING case above: VACUUM INTO returns no data, so this is
+    // refused by columns()/iterate() exactly like ATTACH is - readonly plays no part, because this
+    // is a filesystem-write primitive rather than a write to the database it is called against.
+    await expect(run("VACUUM INTO 'should-never-be-created.db'")).rejects.toThrow(ConfigError)
+  })
+
   it('says what it does allow, rather than naming an API the agent cannot reach', async () => {
     // better-sqlite3's own message here is "This statement does not return data. Use run()
     // instead", which sends an agent looking for a method it has no access to.
@@ -118,6 +135,17 @@ describe('free text', () => {
     test.db.insert(schema.notes).values({ id: 'long', personId: 'alice', localDate: '2026-08-02', body: long, updatedAtMs: 0 }).run()
     const result = await run("SELECT body FROM notes WHERE id = 'long'")
     expect((result.rows[0]![0] as string).length).toBe(2000)
+    expect(result.textTruncated).toBe(true)
+  })
+
+  it('replaces a BLOB cell with a placeholder rather than letting a Buffer through', async () => {
+    // better-sqlite3 returns a BLOB as a Buffer, which is a Uint8Array and passes the string check
+    // above untouched - measured at 500 rows of randomblob(1000000), 500,000,000 bytes, in
+    // 1209ms: inside the row cap, inside the deadline, and large enough that structuredClone-ing
+    // it to the parent and then JSON.stringify-ing it throws or OOM-kills the container. A
+    // thousand-byte blob is enough to prove the placeholder fires without paying that cost here.
+    const result = await run('SELECT randomblob(1000)')
+    expect(result.rows).toEqual([['<1000 bytes>']])
     expect(result.textTruncated).toBe(true)
   })
 })
