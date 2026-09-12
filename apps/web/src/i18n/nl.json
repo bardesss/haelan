@@ -654,6 +654,12 @@
       "naps": {
         "none": "Geen dutjes geregistreerd op deze datum.",
         "list": "Dutjes:"
+      },
+      "traces": {
+        "heart_rate": "Hartslag tijdens de nacht",
+        "spo2": "Zuurstofsaturatie tijdens de nacht",
+        "hrv": "Hartslagvariabiliteit tijdens de nacht",
+        "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
       }
     }
   },

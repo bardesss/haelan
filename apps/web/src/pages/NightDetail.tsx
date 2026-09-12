@@ -9,6 +9,7 @@ import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { NightHeader } from './sleep/NightHeader.js'
 import { NightTiles } from './sleep/NightTiles.js'
 import { NightStages } from './sleep/NightStages.js'
+import { NightTraces } from './sleep/NightTraces.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -42,6 +43,10 @@ export function NightDetail() {
     () => nightFor(query.data?.items ?? [], source),
     [query.data, source],
   )
+  // null, not ALL_SOURCES: useSourceTrace's own chosenSource takes "the reader named no source" as
+  // null specifically, and the all-sources sentinel is this page's spelling of that, not a source
+  // name a trace could ever pin to.
+  const chosenSource = source === ALL_SOURCES ? null : source
 
   if (query.isError) {
     return <div className="grid"><Card span={12}><ErrorState onRetry={() => void query.refetch()} /></Card></div>
@@ -63,6 +68,7 @@ export function NightDetail() {
       <div className="grid">
         <NightTiles localDate={night.localDate} source={source} />
         <NightStages night={night} />
+        <NightTraces night={night} chosenSource={chosenSource} />
       </div>
     </>
   )

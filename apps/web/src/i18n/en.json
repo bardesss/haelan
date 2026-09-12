@@ -654,6 +654,12 @@
       "naps": {
         "none": "No naps recorded on this date.",
         "list": "Naps:"
+      },
+      "traces": {
+        "heart_rate": "Heart rate through the night",
+        "spo2": "Blood oxygen through the night",
+        "hrv": "Heart rate variability through the night",
+        "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}"
       }
     }
   },

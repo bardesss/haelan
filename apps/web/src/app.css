@@ -181,6 +181,12 @@ body {
    selector to query under. */
 .workout-tiles { display: contents; }
 .night-tiles { display: contents; }
+/* NightTraces.tsx wraps each metric's own Card in this class, one wrapper per card rather than one
+   around the group the way .night-tiles is above: the tests count `.night-trace` elements to
+   assert how many of the three metrics rendered a card, and a single group wrapper could not tell
+   that apart from a group of one. `display: contents` for the same reason as .night-tiles: the
+   wrapper must not become a grid item itself, only its `Card` child should. */
+.night-trace { display: contents; }
 
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */
