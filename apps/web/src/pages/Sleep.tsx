@@ -30,6 +30,7 @@ import { useInsight } from '../data/useInsight.js'
 import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
+import { oneNightPerDate, stageOf } from '../data/nights.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
@@ -98,32 +99,8 @@ function datesBetween(from: string, to: string): string[] {
 // for the same reason.
 type Stage = 'deep' | 'light' | 'rem' | 'awake'
 
-// packages/core/src/derive/sleep.ts's ASLEEP_STAGES and AWAKE_STAGES recognise six segment
-// stages (DEEP, LIGHT, REM, AWAKE, ASLEEP, RESTLESS); this page draws only the four staged ones.
-// A segment carrying ASLEEP, RESTLESS, or anything outside the six, is dropped (leaving a visible
-// gap) rather than guessed at, the same reasoning Dashboard.tsx's own stageOf states.
-function stageOf(raw: string): Stage | null {
-  const known: Record<string, Stage> = { DEEP: 'deep', LIGHT: 'light', REM: 'rem', AWAKE: 'awake' }
-  return known[raw] ?? null
-}
-
 const EMPTY_NIGHTS: Night[] = Object.freeze([]) as never[]
 const EMPTY_NAPS: number[] = Object.freeze([]) as never[]
-
-// /sleep/nights answers one row per (localDate, sourceId); collapsed to one per date, the longer
-// session winning, the same rule and reasoning as Dashboard.tsx's own oneNightPerDate (a second
-// device sharing the date is more likely a short partial recording than the source that stayed on
-// through the whole night).
-function oneNightPerDate(items: readonly Night[]): Night[] {
-  const byDate = new Map<string, Night>()
-  for (const n of items) {
-    const existing = byDate.get(n.localDate)
-    if (existing === undefined || (n.endMs - n.startMs) > (existing.endMs - existing.startMs)) {
-      byDate.set(n.localDate, n)
-    }
-  }
-  return [...byDate.values()].sort((a, b) => a.localDate.localeCompare(b.localDate))
-}
 
 function bandFrom(baseline: Baseline | null): { low: number, high: number } | undefined {
   // Thin stays undefined, not a band drawn thin: a band computed from three nights looks exactly
