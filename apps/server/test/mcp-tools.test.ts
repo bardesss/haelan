@@ -389,9 +389,9 @@ describe('get_events', () => {
       startedAtMs: Date.UTC(2026, 7, 10, 8, 0), startedAtOffsetMinutes: 120, value: 1,
     })
     const out = tool('get_events').run(q(), { from: '2026-08-01', to: '2026-08-31' }) as {
-      events: { kind: string, value: number | null, note: { untrustedText: string | null } }[]
+      events: { kind: { untrustedText: string | null }, value: number | null, note: { untrustedText: string | null } }[]
     }
-    expect(out.events[0]!.kind).toBe('caffeine')
+    expect(out.events[0]!.kind.untrustedText).toBe('caffeine')
     expect(out.events[0]!.value).toBe(1)
     expect(out.events[0]!.note.untrustedText).toBeNull()
   })
@@ -623,6 +623,24 @@ describe('sql_query', () => {
     const names = result.rows.map((r) => r[0])
     expect(names).toContain('daily')
     expect(names).not.toContain('accounts')
+  })
+
+  // The shape half of Important 4: a whole table of bare cells cannot be wrapped field by field
+  // the way a note body or a workout title is, so the label moves up to a marker beside `rows`.
+  it('names the answer\'s cells as possibly untrusted in the shape, not only in prose', async () => {
+    const result = await tool('sql_query').run(q(), { sql: 'SELECT 1' }) as {
+      rowsMayContainUntrustedText: boolean
+    }
+    expect(result.rowsMayContainUntrustedText).toBe(true)
+  })
+
+  // Minor 2 of the M4 review: a row-returning PRAGMA passes the sandbox and leaks the host's own
+  // temp path and, on a desktop install, the OS username. Refused here, before the sandbox is
+  // ever asked to run it, as defence in depth rather than the boundary.
+  it('refuses PRAGMA outright, before the sandbox ever sees it', async () => {
+    await expect(tool('sql_query').run(q(), { sql: 'PRAGMA database_list' })).rejects.toThrow(ConfigError)
+    // Leading whitespace does not smuggle it past a naive check.
+    await expect(tool('sql_query').run(q(), { sql: '   pragma table_info(daily)' })).rejects.toThrow(ConfigError)
   })
 })
 
