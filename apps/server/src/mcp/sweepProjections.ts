@@ -1,6 +1,30 @@
-import { readdirSync, rmSync } from 'node:fs'
+import { readdirSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+
+/**
+ * How old a projection directory must be before this sweep will touch it.
+ *
+ * Without this the sweep was stale in name only: it removed every `haelan-sql-*` directory in the
+ * temp directory, including one that belonged to a **different process** and had a query running
+ * against it. Measured - a probe that built a projection, started a query, then ran this sweep
+ * exactly as `index.ts` does reported `sweep removed 1 directories` and killed the query with
+ * `Cannot open database because the directory does not exist`, which names neither the sweep nor
+ * the cause.
+ *
+ * The comment below is right that boot precedes *this* process's first projection. The hazard is
+ * another process's: `TOOLS.md` documents reaching the stdio entry with `docker exec` into the
+ * running container, so a server restart during a stdio `sql_query` sweeps that session's file
+ * away. The same shape produced an intermittent failure in this repository's own suite, where
+ * `boot.test.ts` spawns the real server while other workers run `sql_query`.
+ *
+ * Five minutes, against a query whose whole life is bounded by the 24ms build and the five second
+ * deadline the sandbox enforces by killing its child: a sixty-fold margin over the longest a
+ * directory can legitimately still be in use. The cost is only that a genuine leftover survives
+ * until the first boot five minutes after the crash that made it, and the temp directory it sits
+ * in is reclaimed by the OS regardless.
+ */
+export const PROJECTION_MIN_AGE_MS = 5 * 60_000
 
 /**
  * The prefix every `sql_query` projection directory carries (`makeProjectionDir`, runSql.ts).
@@ -43,13 +67,21 @@ export function sweepStaleProjections(baseDir: string = tmpdir()): number {
   }
 
   let swept = 0
+  const cutoff = Date.now() - PROJECTION_MIN_AGE_MS
   for (const entry of entries) {
     if (!entry.startsWith(PROJECTION_PREFIX)) continue
+    const path = join(baseDir, entry)
     try {
-      rmSync(join(baseDir, entry), { recursive: true, force: true })
+      // Skipped rather than swept while it is young enough that a query in another process could
+      // still be reading it. See PROJECTION_MIN_AGE_MS: deleting one of those kills the query
+      // with an error that names neither this sweep nor the reason.
+      if (statSync(path).mtimeMs > cutoff) continue
+      rmSync(path, { recursive: true, force: true })
       swept += 1
     } catch {
-      // Leaked, same as makeProjectionDir's own remove() accepts in exactly this situation.
+      // A directory that vanished between the readdir and the stat is already gone, and one this
+      // process may not delete is leaked - the same EPERM-on-Windows hazard makeProjectionDir's
+      // own remove() accepts in exactly this situation.
     }
   }
   return swept
