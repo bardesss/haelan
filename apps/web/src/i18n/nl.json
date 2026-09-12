@@ -472,7 +472,9 @@
     },
     "tableToggle": {
       "show": "Cijfers tonen",
-      "hide": "Cijfers verbergen"
+      "hide": "Cijfers verbergen",
+      "showFor": "Cijfers tonen voor {{label}}",
+      "hideFor": "Cijfers verbergen voor {{label}}"
     }
   },
   "sleep": {

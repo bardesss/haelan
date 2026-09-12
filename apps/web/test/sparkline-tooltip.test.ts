@@ -115,7 +115,7 @@ describe('the sparkline tooltip', () => {
   })
 
   it('reports the trend on its own line, under the same name the table column carries', () => {
-    const withTrend = input({ trend: [8800, null, 8700, null], hasTrend: true })
+    const withTrend = input({ trend: [8800, null, 8700, null, null], hasTrend: true })
     expect(sparklineTooltip(withTrend, { componentType: 'series', dataIndex: 0 }))
       .toBe('2026-08-10<br/>Steps: 9,000<br/>Trend: 8,800')
   })

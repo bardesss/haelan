@@ -2,7 +2,7 @@
 //
 // happy-dom, not the default node environment, because this file clicks a real button and reads
 // the DOM back (createRoot + act), the same reason band-toggle.test.tsx needs it.
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act, useRef } from 'react'

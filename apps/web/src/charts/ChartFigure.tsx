@@ -35,7 +35,8 @@ export function ChartFigure({ label, table, host, style }: {
         app.css states for the collapsed rail.
       */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="button" className="button" aria-expanded={shown} aria-controls={tableId}
+        <button type="button" className="chart-table-toggle" aria-expanded={shown} aria-controls={tableId}
+          aria-label={t(shown ? 'charts.tableToggle.hideFor' : 'charts.tableToggle.showFor', { label })}
           onClick={() => setShown((current) => !current)}>
           {t(shown ? 'charts.tableToggle.hide' : 'charts.tableToggle.show')}
         </button>
