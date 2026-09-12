@@ -649,7 +649,12 @@
         "asleep": "Time asleep", "inBed": "Time in bed", "efficiency": "Efficiency",
         "deep": "Deep", "light": "Light", "rem": "REM", "awake": "Time awake", "naps": "Naps"
       },
-      "tileBasis": "from {{metric}}, as this night was derived"
+      "tileBasis": "from {{metric}}, as this night was derived",
+      "stages": { "label": "Stages through the night" },
+      "naps": {
+        "none": "No naps recorded on this date.",
+        "list": "Naps:"
+      }
     }
   },
   "setup": {

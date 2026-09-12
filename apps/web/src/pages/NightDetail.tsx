@@ -8,6 +8,7 @@ import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { NightHeader } from './sleep/NightHeader.js'
 import { NightTiles } from './sleep/NightTiles.js'
+import { NightStages } from './sleep/NightStages.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -61,6 +62,7 @@ export function NightDetail() {
       <NightHeader night={night} />
       <div className="grid">
         <NightTiles localDate={night.localDate} source={source} />
+        <NightStages night={night} />
       </div>
     </>
   )
