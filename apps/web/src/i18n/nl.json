@@ -644,7 +644,12 @@
     "night": {
       "when": "{{bed}} tot {{wake}} · {{source}}",
       "missingTitle": "Geen nacht geregistreerd",
-      "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd."
+      "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd.",
+      "tiles": {
+        "asleep": "Tijd in slaap", "inBed": "Tijd in bed", "efficiency": "Efficiëntie",
+        "deep": "Diep", "light": "Licht", "rem": "REM", "awake": "Tijd wakker", "naps": "Dutjes"
+      },
+      "tileBasis": "op basis van {{metric}}, zoals deze nacht is afgeleid"
     }
   },
   "setup": {

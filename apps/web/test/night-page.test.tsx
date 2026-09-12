@@ -145,3 +145,53 @@ describe('the night page', () => {
     } finally { restore() }
   })
 })
+
+describe('the night tiles', () => {
+  it('reads each figure from the metric the derivation already owns', async () => {
+    const restore = stub([NIGHT], {
+      sleep_asleep_minutes: 447, sleep_in_bed_minutes: 467, sleep_efficiency: 96,
+      sleep_deep_minutes: 62, sleep_light_minutes: 290, sleep_rem_minutes: 95,
+      sleep_awake_minutes: 20, sleep_nap_count: 1,
+    })
+    try {
+      const { client, html } = mount(<NightDetail />)
+      await flush(client, html)
+      const tiles = [...(container?.querySelectorAll('.night-tiles .card') ?? [])]
+      const valueOf = (label: string) => tiles
+        .find((tile) => tile.querySelector('.label')?.textContent === label)
+        ?.querySelector('.value')?.textContent
+      expect(valueOf('Time asleep')).toBe('7h 27m')
+      expect(valueOf('Time in bed')).toBe('7h 47m')
+      expect(valueOf('Efficiency')).toBe('96')
+      expect(valueOf('Deep')).toBe('1h 02m')
+      expect(valueOf('Time awake')).toBe('0h 20m')
+      expect(valueOf('Naps')).toBe('1')
+    } finally { restore() }
+  })
+
+  it('omits a tile for a metric this night has no row for', async () => {
+    const restore = stub([NIGHT], { sleep_asleep_minutes: 447 })
+    try {
+      const { client, html } = mount(<NightDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.night-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toEqual(['Time asleep'])
+    } finally { restore() }
+  })
+
+  it('does not clamp an efficiency above 100, because clamping would hide a real defect', async () => {
+    // Overlapping sleep sessions can push sleep_efficiency over 100. That is a derivation defect,
+    // pinned as the KNOWN GAP tests in packages/core/test/sleep-derive.test.ts ("KNOWN GAP:
+    // overlapping sessions within a night double count toward asleep and efficiency"), and this
+    // page makes it more visible than the Sleep page does. Showing 104 is the point: a plausible
+    // 100 would hide it.
+    const restore = stub([NIGHT], { sleep_efficiency: 104 })
+    try {
+      const { client, html } = mount(<NightDetail />)
+      await flush(client, html)
+      const tiles = [...(container?.querySelectorAll('.night-tiles .card') ?? [])]
+      const efficiency = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Efficiency')
+      expect(efficiency?.querySelector('.value')?.textContent).toBe('104')
+    } finally { restore() }
+  })
+})

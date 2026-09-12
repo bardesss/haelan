@@ -7,6 +7,7 @@ import { nightFor } from '../data/nights.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { NightHeader } from './sleep/NightHeader.js'
+import { NightTiles } from './sleep/NightTiles.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -58,7 +59,9 @@ export function NightDetail() {
   return (
     <>
       <NightHeader night={night} />
-      <div className="grid" />
+      <div className="grid">
+        <NightTiles localDate={night.localDate} source={source} />
+      </div>
     </>
   )
 }

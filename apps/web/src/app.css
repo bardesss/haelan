@@ -180,6 +180,7 @@ body {
    of it, exactly as an unwrapped card would be, while still giving this section's own tests a
    selector to query under. */
 .workout-tiles { display: contents; }
+.night-tiles { display: contents; }
 
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */

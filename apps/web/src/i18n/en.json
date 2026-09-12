@@ -644,7 +644,12 @@
     "night": {
       "when": "{{bed}} to {{wake}} · {{source}}",
       "missingTitle": "No night recorded",
-      "missingDetail": "This date has no sleep from this source. It may not have synced yet."
+      "missingDetail": "This date has no sleep from this source. It may not have synced yet.",
+      "tiles": {
+        "asleep": "Time asleep", "inBed": "Time in bed", "efficiency": "Efficiency",
+        "deep": "Deep", "light": "Light", "rem": "REM", "awake": "Time awake", "naps": "Naps"
+      },
+      "tileBasis": "from {{metric}}, as this night was derived"
     }
   },
   "setup": {
