@@ -31,6 +31,7 @@ import { NoteStore } from '../store/notes.ts'
 import type { StoredNote } from '../store/notes.ts'
 import { EventStore } from '../store/events.ts'
 import type { StoredEvent } from '../store/events.ts'
+import { writeProjection } from './projection.ts'
 
 export interface DailyPoint {
   localDate: string
@@ -505,6 +506,20 @@ export class PersonQuery {
         kind: row.kind,
       })),
     }
+  }
+
+  /**
+   * Writes a projection of *this* person to `destPath`, for `sql_query` to run against.
+   *
+   * A method on the bound query rather than a free function taking a person id, for the same
+   * reason every reader on this class is: `#personId` is a true private field, so there is no
+   * expression a caller can write that produces another member's projection. The alternative -
+   * handing `sql_query` the data directory and letting it open the database itself - would have
+   * put the binding back in the caller's hands, which is the one thing this class exists to
+   * prevent.
+   */
+  writeProjection(destPath: string): void {
+    writeProjection(this.#db, this.#personId, destPath)
   }
 }
 
