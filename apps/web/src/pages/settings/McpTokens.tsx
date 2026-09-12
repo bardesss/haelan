@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useTranslation } from '../../i18n/index.js'
+import { useSession } from '../../auth/session.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { useMcpCalls, useMcpTokens, useCreateMcpToken, useRevokeMcpToken } from '../../data/useMcpTokens.js'
@@ -27,10 +28,19 @@ const DEFAULT_LIFE = 90
  */
 export function McpTokens() {
   const { t, i18n } = useTranslation()
+  const session = useSession()
   const tokens = useMcpTokens()
   const calls = useMcpCalls()
   const create = useCreateMcpToken()
   const revoke = useRevokeMcpToken()
+
+  // Settings.tsx's own useSession() call shares this query key, so by the time a reader has
+  // minted a token this has almost always already resolved - but a fresh load racing the mint
+  // is not impossible, and an instance whose address was never configured (setup incomplete, or
+  // skipped) answers with '' rather than a value at all. Either way, a bare "/mcp" is worse than
+  // silence: it reads as a real endpoint and is not one.
+  const baseUrl = session.data?.baseUrl ?? ''
+  const endpoint = baseUrl === '' ? '' : `${baseUrl}/mcp`
 
   const [label, setLabel] = useState('')
   const [days, setDays] = useState<number>(DEFAULT_LIFE)
@@ -64,6 +74,20 @@ export function McpTokens() {
         // role="alert" rather than a quiet caption: this is the one thing on the panel whose cost
         // is paid entirely by somebody who did not read it in time.
         <div className="invite-link-panel" role="alert">
+          {/* Above the token's own field: the two things a client config needs sit together, and
+              a member who copies only the secret and skips the address has nowhere to send it. */}
+          {endpoint === ''
+            ? <p className="field-hint">{t('settings.mcp.endpointUnset')}</p>
+            : (
+              <div className="copy-field">
+                <span className="label">{t('settings.mcp.endpoint')}</span>
+                <code className="copy-value">{endpoint}</code>
+                <button type="button" className="button"
+                  onClick={() => { void navigator.clipboard.writeText(endpoint) }}>
+                  {t('settings.members.copy')}
+                </button>
+              </div>
+            )}
           <div className="copy-field">
             <span className="label">{t('settings.mcp.secretTitle')}</span>
             <code className="copy-value">{justMinted.secret}</code>

@@ -5,6 +5,8 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
 import { McpTokens } from '../src/pages/settings/McpTokens.js'
 import { mcpCallsKey, mcpTokensKey } from '../src/data/useMcpTokens.js'
 import type { McpCallRow, McpTokenRow } from '../src/data/useMcpTokens.js'
@@ -41,14 +43,23 @@ const TOKEN: McpTokenRow = {
   lastUsedAtMs: null, revokedAtMs: null,
 }
 
+const SESSION: Session = {
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false,
+  timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false,
+  baseUrl: 'https://haelan.example.com',
+}
+
 /**
- * Both queries seeded, so nothing this component renders depends on a request. The mint path is
- * the one place a test drives fetch, and it stubs it per case.
+ * All three queries seeded, so nothing this component renders depends on a request. The mint and
+ * revoke paths are the only places a test drives fetch, and they stub it per case - a stub that
+ * also has to answer the session refetch those mutations do not invalidate would be an unrelated
+ * hazard for those tests to carry.
  */
-function mount(tokens: McpTokenRow[], calls: McpCallRow[] = []): void {
+function mount(tokens: McpTokenRow[], calls: McpCallRow[] = [], session: Session = SESSION): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(mcpTokensKey(), { tokens })
   client.setQueryData(mcpCallsKey(), { calls })
+  client.setQueryData(queryKeys.session(), session)
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
@@ -115,6 +126,33 @@ describe('the Agent access card', () => {
     // held in component state and the query cache was never written with it.
     expect(text()).not.toContain(secret)
     expect(JSON.stringify(container!.innerHTML)).not.toContain(secret)
+  })
+
+  it('shows the full endpoint to point an agent at, built from the session own address', async () => {
+    const secret = 'hmcp_another-secret'
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      if (init?.method === 'POST') {
+        return new Response(
+          JSON.stringify({ token: TOKEN, secret }), { status: 201, headers: { 'content-type': 'application/json' } },
+        )
+      }
+      return new Response(
+        JSON.stringify({ tokens: [TOKEN] }), { status: 200, headers: { 'content-type': 'application/json' } },
+      )
+    }) as unknown as typeof globalThis.fetch
+
+    mount([])
+    const input = container!.querySelector('input')!
+    await act(async () => { type(input, 'the laptop') })
+    await act(async () => {
+      container!.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    // The exact string a client config needs, not merely "mcp" appearing somewhere on the page -
+    // SESSION.baseUrl has no trailing slash, so a naive concatenation bug (a doubled or missing
+    // slash) would still contain "mcp" and pass a substring check.
+    const code = [...container!.querySelectorAll('code')].map((el) => el.textContent)
+    expect(code).toContain(`${SESSION.baseUrl}/mcp`)
   })
 
   it('shows a revoked token as revoked, with no revoke button', () => {
