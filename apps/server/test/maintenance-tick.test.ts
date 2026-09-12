@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { listBackups, openHaelan } from '@haelan/core'
+import {
+  closeDatabase, listBackups, openHaelan, schema, seedPerson,
+  McpCallLog, McpTokenStore, MCP_CALL_LOG_TTL_MS,
+} from '@haelan/core'
+import type { Instance } from '@haelan/core'
 import { MaintenanceTick } from '../src/maintenance/tick.ts'
 
 function withDir<T>(fn: (dir: string) => T): T {
@@ -158,6 +162,86 @@ describe('MaintenanceTick', () => {
         tick.stop()
         vi.useRealTimers()
       }
+    })
+  })
+})
+
+const CALL_LOG_NOW = 1_770_000_000_000
+
+// Seeds the person/account/token chain a real `mcp_calls` row requires (`token_id` is NOT NULL
+// with a foreign key, and `openDatabase` turns foreign keys on), then one call at `nowMs` and one
+// at `nowMs + MCP_CALL_LOG_TTL_MS` - so a tick clock set past the horizon leaves exactly one row
+// on each side of it.
+function seedCallLog(instance: Instance, nowMs: number): string {
+  const accountId = 'acct-alice'
+  seedPerson(instance.db, 'alice')
+  instance.db.insert(schema.accounts).values({
+    id: accountId, personId: 'alice', username: 'alice',
+    passwordHash: 'x', isAdmin: false, failedAttempts: 0, lockedUntilMs: null,
+    createdAtMs: nowMs, disabledAtMs: null,
+  }).run()
+  new McpTokenStore(instance.db).create({ id: 't1', accountId, label: 'laptop', days: 90, nowMs })
+  const calls = new McpCallLog(instance.db)
+  calls.record({
+    id: 'old', tokenId: 't1', atMs: nowMs, tool: 'query_series', rowCount: 12, durationMs: 3, outcome: 'ok',
+  })
+  calls.record({
+    id: 'new', tokenId: 't1', atMs: nowMs + MCP_CALL_LOG_TTL_MS,
+    tool: 'query_series', rowCount: 12, durationMs: 3, outcome: 'ok',
+  })
+  return accountId
+}
+
+describe('the call log prune', () => {
+  // Each case seeds one account, one token and two calls - one at NOW and one at
+  // NOW + MCP_CALL_LOG_TTL_MS - then advances the tick's clock past the horizon, so exactly one
+  // row is past it and exactly one is not.
+
+  it('removes rows past the horizon and leaves the rest', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        const accountId = seedCallLog(instance, CALL_LOG_NOW)
+        const tick = new MaintenanceTick({
+          instance, dir, keep: 7, intervalHours: 24, now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
+        })
+        expect(tick.pruneCallLog()).toBe(1)
+        expect(new McpCallLog(instance.db).listForAccount(accountId, 10).map((c) => c.id)).toEqual(['new'])
+      } finally { instance.close() }
+    })
+  })
+
+  it('runs even when backups are switched off, which dueNow declines for', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        seedCallLog(instance, CALL_LOG_NOW)
+        // Built with keep: 0. runIfDue() returns null without reaching anything; the prune still
+        // runs, which is the whole reason it is not inside that gate.
+        const tick = new MaintenanceTick({
+          instance, dir, keep: 0, intervalHours: 24, now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
+        })
+        expect(tick.dueNow()).toBe(false)
+        expect(tick.pruneCallLog()).toBe(1)
+      } finally { instance.close() }
+    })
+  })
+
+  it('survives a throw rather than taking the process down', () => {
+    withDir((dir) => {
+      // No instance.close() in a finally here, on purpose: the connection is closed by hand
+      // below to produce the throw, and closing it twice is not this test's business - withDir's
+      // own finally still removes the directory either way.
+      const instance = openHaelan(dir, {})
+      seedCallLog(instance, CALL_LOG_NOW)
+      const tick = new MaintenanceTick({
+        instance, dir, keep: 7, intervalHours: 24, now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
+      })
+      // Close the database under the tick, then prune. This is called from inside a bare
+      // setInterval with no process.on('uncaughtException') anywhere in this app, so an escaping
+      // throw is not a failed prune - it is the instance.
+      closeDatabase(instance.db)
+      expect(() => tick.pruneCallLog()).not.toThrow()
     })
   })
 })
