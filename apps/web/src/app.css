@@ -162,6 +162,12 @@ body {
    carry, with spacing between them coming only from .workout-header's own flex `gap`. */
 .basis.workout-gps { margin: 0; }
 
+/* WorkoutDetail.tsx's own control row, between the heading and the grid: this page has exactly
+   one action (open the annotate panel at session scope), right-aligned rather than centered or
+   left-aligned the way ControlRow's own buttons sit, since there is only the one and nothing else
+   on this line to align it against. */
+.workout-actions { display: flex; justify-content: flex-end; }
+
 /* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is
    already this section's grid, and `display: contents` makes each `Card` child a direct grid item
    of it, exactly as an unwrapped card would be, while still giving this section's own tests a

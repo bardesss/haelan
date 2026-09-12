@@ -408,6 +408,7 @@
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
       "missingTitle": "Geen training gevonden",
       "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
@@ -729,6 +730,7 @@
   },
   "annotate": {
     "title": "{{metric}} op {{date}}",
+    "sessionTitle": "Deze training, {{date}}",
     "close": "Sluiten",
     "actionLabel": "Wat wil je doen",
     "actions": {

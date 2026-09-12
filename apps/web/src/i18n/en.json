@@ -408,6 +408,7 @@
     },
     "workout": {
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
+      "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
       "missingTitle": "No such workout",
       "missingDetail": "This link names a workout that is not in your data.",
@@ -729,6 +730,7 @@
   },
   "annotate": {
     "title": "{{metric}} on {{date}}",
+    "sessionTitle": "This workout, {{date}}",
     "close": "Close",
     "actionLabel": "What do you want to do",
     "actions": {

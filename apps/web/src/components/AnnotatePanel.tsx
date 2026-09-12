@@ -1,38 +1,50 @@
 import { useId, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { dayMetricTarget, sampleTarget } from '@haelan/core/target-key'
+import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/target-key'
 import { useTranslation } from '../i18n/index.js'
 import { useWriteEvent, useWriteNote, useWriteOverride } from '../data/useAnnotations.js'
 import { SEED_KINDS } from '../data/eventKinds.js'
 
 /**
- * What a clicked point hands the panel, tagged by the chart it came from. A by-day chart names a
- * day and a metric, nothing else, and the target key for that shape is built by dayMetricTarget.
- * An intraday chart names one plotted (source, minute) bucket instead, carrying the `n` stored
- * rows behind it (readIntraday's own reason `n` exists at all), and its target key is built by
- * sampleTarget. Both keep `localDate` and `metric`: the note and event actions below write against
- * the day whatever the click named, so they need it regardless of which builder wins.
+ * What a clicked point (or, for `session`, a whole workout) hands the panel, tagged by where it
+ * came from. A by-day chart names a day and a metric, nothing else, and the target key for that
+ * shape is built by dayMetricTarget. An intraday chart names one plotted (source, minute) bucket
+ * instead, carrying the `n` stored rows behind it (readIntraday's own reason `n` exists at all),
+ * and its target key is built by sampleTarget. The workout page names a session directly - there
+ * is no point to click, the target is the page itself - and its key is built by sessionTarget.
+ * All three keep `localDate`: the note action below writes against a day whatever the target
+ * named, so it needs one regardless of which builder wins.
  *
- * Either way the target key is built from these fields alone, by dayMetricTarget or sampleTarget,
- * the same encoders the store and the route read back with, so this component never types a key of
- * its own. A reader never sees or edits a target key at all; the click is the only place one is
- * ever named.
+ * Either way the target key is built from these fields alone, by dayMetricTarget, sampleTarget or
+ * sessionTarget, the same encoders the store and the route read back with, so this component
+ * never types a key of its own. A reader never sees or edits a target key at all; the click (or,
+ * for a workout, opening the panel at all) is the only place one is ever named.
  */
 export type AnnotateTarget =
   | { scope: 'day_metric', localDate: string, metric: string }
   | { scope: 'sample', localDate: string, metric: string, sourceId: string, utcMs: number, n: number }
+  // The workout page's own target. It carries localDate because the note action writes against a
+  // day whatever the target named, exactly as the other two variants do, and sessionId because
+  // that is what an exclusion at this scope actually names: a recorded session, not a derived day.
+  | { scope: 'session', localDate: string, sessionId: string }
 
 type Action = 'exclude' | 'correct' | 'note' | 'event'
 
 /**
- * Four actions, three, or three with a reason. `correct` is valid only at sample scope
+ * Four actions, three, two, or three with a reason. `correct` is valid only at sample scope
  * (OverrideStore.validate), and a sample override names one exact instant, so it is offered only
  * when the clicked point stands for exactly one stored row. Heart rate is stored downsampled to
  * the minute, so on the chart this ships from, n is always 1; the guard is what keeps a future
  * chart over raw readings from writing a correction against an instant that stands for six.
+ *
+ * `session` offers only exclude and note: correct is sample scope only, which OverrideStore.validate
+ * already enforces, and an event belongs to a day rather than to one workout, so offering one here
+ * would write it against the day the workout happens to fall on, which is a different claim from
+ * the one the reader made.
  */
 function actionsFor(target: AnnotateTarget): readonly Action[] {
   if (target.scope === 'day_metric') return ['exclude', 'note', 'event']
+  if (target.scope === 'session') return ['exclude', 'note']
   return target.n === 1 ? ['exclude', 'correct', 'note', 'event'] : ['exclude', 'note', 'event']
 }
 
@@ -72,12 +84,15 @@ export function AnnotatePanel({ target, onClose }: {
   const writeNote = useWriteNote()
   const writeEvent = useWriteEvent()
 
-  // Built here, from exactly the fields the click carried, and nowhere else in this component. No
-  // reason for a target key to appear as a field a reader could edit: the point they clicked
-  // already said which day and metric, or which source and instant, this panel is about.
+  // Built here, from exactly the fields the click (or, for a workout, the page) carried, and
+  // nowhere else in this component. No reason for a target key to appear as a field a reader could
+  // edit: the point they clicked already said which day and metric, or which source and instant,
+  // or the page they opened already said which session, this panel is about.
   const targetKey = target.scope === 'day_metric'
     ? dayMetricTarget({ localDate: target.localDate, metric: target.metric })
-    : sampleTarget({ source: target.sourceId, metric: target.metric, utcMs: target.utcMs })
+    : target.scope === 'session'
+      ? sessionTarget(target.sessionId)
+      : sampleTarget({ source: target.sourceId, metric: target.metric, utcMs: target.utcMs })
 
   const canSubmit =
     action === 'exclude' ? reason.trim() !== '' :
@@ -140,7 +155,15 @@ export function AnnotatePanel({ target, onClose }: {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="annotate-header">
-          <h2 id={titleId}>{t('annotate.title', { metric: target.metric, date: target.localDate })}</h2>
+          {/* A session target carries no metric to name - the workout page opens this panel for
+              the session as a whole, not for one chart's reading - so annotate.title's own
+              "{{metric}} on {{date}}" has nothing to fill its first slot with. sessionTitle is the
+              separate copy that shape needs rather than a blank or a made-up metric name. */}
+          <h2 id={titleId}>
+            {target.scope === 'session'
+              ? t('annotate.sessionTitle', { date: target.localDate })
+              : t('annotate.title', { metric: target.metric, date: target.localDate })}
+          </h2>
           <button type="button" className="icon-button" onClick={onClose} aria-label={t('annotate.close')}>
             {'×'}
           </button>

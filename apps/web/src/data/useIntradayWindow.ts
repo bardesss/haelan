@@ -42,15 +42,17 @@ export function intradayWindowPath(
  * whether a caller wants the request at all is not a fact about which window to fetch, and
  * folding it into `query` would put it in the cache key and cycle the entry every time it flipped.
  *
- * **This key is invisible to the only invalidation this app has, the same gap useWorkoutSession
- * records.** useAnnotations' overlapsAffected matches a cached query by reading a string `from`
- * and a string `to` out of its key params; this key carries `{ metric, startMs, endMs, source }`,
- * millisecond numbers rather than local dates, so no write ever matches it. A correction made on
- * the workout page - an excluded session, a corrected sample inside the window - leaves this
- * entry stale until its staleTime expires, while every date-keyed chart on the page updates at
- * once. M8a has no surface that writes, so this is recorded here and fixed in M8b, by the same
- * two options useWorkoutSession names: invalidate the resource explicitly after a session write,
- * or teach overlapsAffected to understand a millisecond window as a range.
+ * **This key was invisible to the only invalidation this app had, the same gap useWorkoutSession
+ * recorded, until M8b closed it.** useAnnotations' overlapsAffected matches a cached query by
+ * reading a string `from` and a string `to` out of its key params; this key carries
+ * `{ metric, startMs, endMs, source }`, millisecond numbers rather than local dates, so no write
+ * can ever match it that way - and M8b left it that way rather than teaching overlapsAffected to
+ * treat a millisecond window as a date range, which is not what it is. Instead, a session-scope
+ * write's `onSuccess` in useWriteOverride/useRemoveOverride (useAnnotations.ts) calls
+ * `invalidateResource(queryClient, personId, 'intraday-window')` by name, alongside the same call
+ * for the `session` resource. A correction made on the workout page - an excluded session - now
+ * invalidates this window the moment the write lands, rather than leaving it stale until its
+ * staleTime expires while every date-keyed chart on the page updates at once.
  */
 export function useIntradayWindow(
   query: { metric: string, startMs: number, endMs: number, source: string },

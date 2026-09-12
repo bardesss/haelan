@@ -31,17 +31,18 @@ export function sessionPath(personId: string, sessionId: string): string {
  * resolved, rather than every caller having to guard the call site. Undefined disables the query,
  * exactly as a missing personId does.
  *
- * **No write in this app can invalidate this key, and M8b has to change that.** The only
- * invalidation mechanism here is useAnnotations' overlapsAffected, which decides a cached query is
- * affected by reading a string `from` and a string `to` out of its key params. This key carries
- * `{ sessionId }` and no range at all, so it never matches and is never invalidated - it simply
- * ages out after its staleTime. Nothing in M8a can write a session, which is why this is recorded
- * rather than fixed here: the workout page M8b builds is the first browser surface that can
- * exclude a session, and the moment it does, this cached copy would keep reporting
- * `excluded: false` for up to 60 seconds while the range-keyed activity list showed the exclusion
- * immediately - two surfaces disagreeing about a correction the person just made. M8b's fix is
- * either to call `invalidateResource(queryClient, personId, 'session')` after a session write, or
- * to teach `overlapsAffected` a `sessionId` member so a session-scope write invalidates by id.
+ * **No write in this app could invalidate this key before M8b, and that was recorded here rather
+ * than fixed, because nothing in M8a could write a session in the first place.** The only
+ * invalidation mechanism useAnnotations has is overlapsAffected, which decides a cached query is
+ * affected by reading a string `from` and a string `to` out of its key params; this key carries
+ * `{ sessionId }` and no range at all, so it can never match. Teaching overlapsAffected a
+ * `sessionId` member was the other option this comment used to name, and M8b did not take it: a
+ * millisecond window is not a date range, and pretending it is would make that helper answer a
+ * question it does not actually know how to answer. Instead, `useWriteOverride`'s and
+ * `useRemoveOverride`'s `onSuccess` in useAnnotations.ts call
+ * `invalidateResource(queryClient, personId, 'session')` by name whenever the write they just made
+ * touched this resource, which is how the workout page - the first browser surface able to exclude
+ * a session - stops reporting a stale `excluded: false` after the reader just excluded it.
  */
 export function useWorkoutSession(sessionId: string | undefined): UseQueryResult<WorkoutSession> {
   const session = useSession()

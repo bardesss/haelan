@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { workoutDetail } from '@haelan/core/workout-summary'
 import { useRoute, routeParams, readQuery } from '../router.js'
@@ -6,6 +7,7 @@ import { useWorkoutSession } from '../data/useWorkoutSession.js'
 import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
 import { ALL_SOURCES } from '../controls/source.js'
+import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import { WorkoutHeader } from './activity/WorkoutHeader.js'
 import { WorkoutTiles } from './activity/WorkoutTiles.js'
 import { WorkoutZones } from './activity/WorkoutZones.js'
@@ -43,6 +45,16 @@ import { EmptyState } from '../components/EmptyState.js'
  * heart rate trace, the splits and running dynamics cards, then the comparison card last.
  * Notes.tsx is the shortest example of the same shape this page follows.
  *
+ * The one-button `.workout-actions` row between the heading and the grid is this page's own
+ * control, not ControlRow's: every other page that opens AnnotatePanel does it from a chart click
+ * (an `onPointClick` handing back the day or sample the reader clicked), and this page has no such
+ * click to hang it off - the target is the session itself, named by the route, not a point on a
+ * chart. `annotating` gates the panel the same way `annotateTarget` does on those pages; there is
+ * only ever one target here, so a boolean is enough where they need a nullable target object.
+ * Task 7 (M8b) is what makes `scope: 'session'` reachable at all - see AnnotatePanel.tsx's own
+ * comment on that variant, and useAnnotations.ts's on why writing at this scope also has to
+ * invalidate this page's own cached session and intraday window.
+ *
  * WorkoutComparison (unlike WorkoutTrace, which takes the resolved session as a prop but owns its
  * own hook the same way) is mounted only here, inside the grid reached only once `query` has left
  * both isPending and isError below - the guard useWorkoutComparison's own comment names: it is
@@ -55,6 +67,7 @@ export function WorkoutDetail() {
   const session = useSession()
   const timezone = session.data?.timezone ?? 'UTC'
   const query = useWorkoutSession(sessionId)
+  const [annotating, setAnnotating] = useState(false)
 
   if (query.isError) {
     const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
@@ -87,6 +100,11 @@ export function WorkoutDetail() {
   return (
     <>
       <WorkoutHeader session={query.data} detail={detail} timezone={timezone} />
+      <div className="workout-actions">
+        <button type="button" className="button" onClick={() => setAnnotating(true)}>
+          {t('activity.workout.annotate')}
+        </button>
+      </div>
       <div className="grid">
         <WorkoutTiles session={query.data} detail={detail} />
         <WorkoutZones detail={detail} />
@@ -95,6 +113,12 @@ export function WorkoutDetail() {
         <WorkoutDynamics detail={detail} />
         <WorkoutComparison session={query.data} />
       </div>
+      {annotating && (
+        <AnnotatePanel
+          target={{ scope: 'session', localDate: query.data.localDate, sessionId: query.data.id }}
+          onClose={() => setAnnotating(false)}
+        />
+      )}
     </>
   )
 }
