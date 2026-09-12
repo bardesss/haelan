@@ -13,7 +13,11 @@
     "@fastify/static": "^10.1.2",
     "@haelan/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^12.2.0",
     "fastify": "^5.2.0",
     "zod": "^4.6.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11"
   }
 }

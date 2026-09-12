@@ -44,12 +44,19 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.30.0
         version: 1.30.0(zod@4.6.1)
+      better-sqlite3:
+        specifier: ^12.2.0
+        version: 12.11.1
       fastify:
         specifier: ^5.2.0
         version: 5.12.1
       zod:
         specifier: ^4.6.1
         version: 4.6.1
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.11
+        version: 7.6.13
 
   apps/web:
     dependencies:
