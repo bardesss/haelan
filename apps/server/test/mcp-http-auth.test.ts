@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { MCP_TOKEN_PREFIX, schema } from '@haelan/core'
+import BetterSqlite3 from 'better-sqlite3'
+import { DATABASE_FILENAME, MCP_TOKEN_PREFIX, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -275,6 +276,38 @@ describe('the transport', () => {
     const accountId = ADMIN_ACCOUNT
     const [call] = h.app.haelan.stores.mcpCalls.listForAccount(accountId, 10)
     expect(call).toMatchObject({ tool: 'get_workout', outcome: 'error', rowCount: null })
+  })
+})
+
+// The regression Important 2 of the M4 review is actually about: `mcpTokens.touch` and
+// `mcpCalls.record` used to be writes on every single call, and `rebuildWorker.ts` holds a write
+// transaction for a whole rebuild's duration on the premise that the main thread only reads.
+// Reproduced with a real busy condition rather than a stub - a second connection to the same file
+// holding a genuine write transaction, the same technique packages/core/test/vacuum.test.ts uses
+// for the same reason - because a mock of `touch` or `record` throwing would only prove this
+// route survives a throw, not that it survives the one this app can actually produce.
+describe('a rebuild holding the write lock', () => {
+  it('still answers 200, because the guard and the call log are best-effort writes', async () => {
+    const { secret } = h.mintMcpToken()
+
+    // busy_timeout defaults to 5000ms in production; zeroed here only so the write below is
+    // refused at once rather than after SQLite's own five-second retry window. The busy condition
+    // itself is real: a second live connection genuinely holds `BEGIN IMMEDIATE`, the same lock
+    // rebuildWorker.ts holds for a rebuild's whole duration.
+    h.app.haelan.instance.db.$client.pragma('busy_timeout = 0')
+    const writer = new BetterSqlite3(join(h.dir, DATABASE_FILENAME))
+    writer.pragma('busy_timeout = 0')
+    writer.exec('BEGIN IMMEDIATE')
+    try {
+      const response = await toolsCall(secret, 'list_metrics')
+      expect(response.statusCode).toBe(200)
+      expect((response.json() as { result: { isError?: boolean } }).result.isError).toBeFalsy()
+    } finally {
+      // Rolled back rather than committed - this connection never held anything worth keeping -
+      // and closed before the harness's own cleanup touches the same file.
+      writer.exec('ROLLBACK')
+      writer.close()
+    }
   })
 })
 

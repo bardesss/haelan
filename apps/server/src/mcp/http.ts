@@ -44,17 +44,25 @@ export function registerMcp(app: FastifyInstance): void {
     const query = new PersonQuery(app.haelan.instance.db, account.personId)
 
     const server = buildMcpServer(query, (call) => {
-      app.haelan.stores.mcpCalls.record({
-        id: randomUUID(),
-        tokenId: token.id,
-        // The injected clock, so a test can place a row at a known instant. The duration beside it
-        // is an elapsed measure from the adapter and is not on that clock.
-        atMs: app.haelan.now(),
-        tool: call.tool,
-        rowCount: call.rowCount,
-        durationMs: call.durationMs,
-        outcome: call.outcome,
-      })
+      // Best-effort, the same as the guard's own writes (guard.ts): `mcp_calls` is an audit
+      // trail, not the read this route exists to serve. A busy database - a rebuild's write
+      // transaction, most plausibly - must not turn a call that already succeeded into a 500 the
+      // agent reads as a failed answer, because from the caller's side it was not one.
+      try {
+        app.haelan.stores.mcpCalls.record({
+          id: randomUUID(),
+          tokenId: token.id,
+          // The injected clock, so a test can place a row at a known instant. The duration beside
+          // it is an elapsed measure from the adapter and is not on that clock.
+          atMs: app.haelan.now(),
+          tool: call.tool,
+          rowCount: call.rowCount,
+          durationMs: call.durationMs,
+          outcome: call.outcome,
+        })
+      } catch (error) {
+        console.error('mcp http: failed to log a call', error)
+      }
     })
 
     const transport = new StreamableHTTPServerTransport({
