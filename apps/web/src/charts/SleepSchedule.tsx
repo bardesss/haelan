@@ -7,6 +7,7 @@ import { nightMark, noDataYFor, axisTickInterval, DEFAULT_WINDOW, type Night } f
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
+import { scheduleTooltip } from './scheduleTooltip.js'
 
 // The canonical values, and the window arithmetic that reads them, now live in schedule.ts (its
 // own pure, unit tested home); re-exported here for existing callers (Dashboard.tsx,
@@ -29,6 +30,14 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow = DEF
     const noDataY = noDataYFor(axisWindow)
     return {
       grid: base.grid({ left: 40 }),
+      tooltip: {
+        ...base.tooltip,
+        trigger: 'item' as const,
+        formatter: (params: unknown) => {
+          const p = Array.isArray(params) ? params[0] : params
+          return scheduleTooltip(nights, (p ?? {}) as { seriesType?: string; value?: unknown }, t)
+        },
+      },
       xAxis: { type: 'category' as const, data: nights.map((n) => n.date.slice(8)),
         ...base.labelledAxis, axisLabel: { ...base.axisLabel, interval: 4 } },
       yAxis: { type: 'value' as const, min: axisWindow.min, max: axisWindow.max, inverse: false,
@@ -78,7 +87,7 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow = DEF
     // module level constant of its own, for the same reason) should not have to guarantee object
     // identity across renders just to avoid disposing and rebuilding this chart every commit, the
     // defect useChart.ts's own doc comment already names for a freshly constructed array.
-  }, [nights, showNaps, axisWindow.min, axisWindow.max])
+  }, [nights, showNaps, axisWindow.min, axisWindow.max, t])
 
   const { host, style } = useChart(build, 150)
   const baseColumns = [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke')]

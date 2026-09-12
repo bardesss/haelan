@@ -445,6 +445,9 @@
     "tooltip": {
       "line": "{{label}}: {{value}}"
     },
+    "hypnogramTooltip": {
+      "span": "{{from}} to {{to}}"
+    },
     "spo2Tooltip": {
       "mean": "mean {{value}}%",
       "range": "range {{min}} to {{max}}%",
