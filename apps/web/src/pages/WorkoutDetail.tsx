@@ -6,6 +6,7 @@ import { useWorkoutSession } from '../data/useWorkoutSession.js'
 import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
 import { WorkoutHeader } from './activity/WorkoutHeader.js'
+import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { EmptyState } from '../components/EmptyState.js'
@@ -21,11 +22,18 @@ import { EmptyState } from '../components/EmptyState.js'
  * person's, which readSession answers identically for somebody else's id (M8a's own comment on
  * why it is never a 403) - so it reads as an empty state, not a retry.
  *
- * No `.page` or `.workout-page` wrapper: every page in this app returns a fragment, a heading -
- * here, WorkoutHeader rather than a plain `<h1>`, since this page's heading also carries the
- * workout's clock times, its source and its excluded badge - followed by the twelve-column
- * `.grid` the design's later cards (stat tiles, zones, the trace, splits, the comparison card)
- * land in. Notes.tsx is the shortest example of the same shape this page follows.
+ * All three states render inside `<div className="grid"><Card span={12}>...</Card></div>`,
+ * Nutrition.tsx's own shape for a whole page that is one card - not SessionList.tsx's, which was
+ * the wrong precedent: SessionList's hand-rolled states render inside a `Card` its *caller*
+ * (Activity.tsx) already supplies, whereas Shell renders `active.element` straight into `.main`,
+ * which carries no card background of its own. Without this a cold load, a slow network or a
+ * stale/bad session id in a link showed unstyled floating text - review finding on this task.
+ *
+ * No `.page` or `.workout-page` wrapper on the loaded state below: every page in this app returns
+ * a fragment, a heading - here, WorkoutHeader rather than a plain `<h1>`, since this page's heading
+ * also carries the workout's clock times, its source and its excluded badge - followed by the
+ * twelve-column `.grid` the design's later cards (stat tiles, zones, the trace, splits, the
+ * comparison card) land in. Notes.tsx is the shortest example of the same shape this page follows.
  */
 export function WorkoutDetail() {
   const { t } = useTranslation()
@@ -37,11 +45,23 @@ export function WorkoutDetail() {
 
   if (query.isError) {
     const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
-    return notFound
-      ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
-      : <ErrorState onRetry={() => void query.refetch()} />
+    return (
+      <div className="grid">
+        <Card span={12}>
+          {notFound
+            ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
+            : <ErrorState onRetry={() => void query.refetch()} />}
+        </Card>
+      </div>
+    )
   }
-  if (query.isPending) return <Loading />
+  if (query.isPending) {
+    return (
+      <div className="grid">
+        <Card span={12}><Loading /></Card>
+      </div>
+    )
+  }
 
   const detail = workoutDetail(query.data.attrs)
 

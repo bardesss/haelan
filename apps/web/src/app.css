@@ -153,7 +153,14 @@ body {
 .workout-title { font-size: var(--font-size-xl); margin: 0; }
 .workout-when { color: var(--text-secondary); font-size: var(--font-size-sm); margin: 0; }
 .workout-excluded { color: var(--text-muted); font-size: var(--font-size-sm); margin: 0; }
-.workout-gps { margin: 0; }
+/* .basis.workout-gps, not .workout-gps alone: the element carries both classes
+   (WorkoutHeader.tsx's own comment says why), and a single-class rule here sits at equal
+   specificity with .basis's own `margin-top`, declared later in this file - the later rule wins
+   the cascade regardless of which is "more specific to workout", and the margin reset below never
+   took effect (review finding). Two classes on the selector beats .basis's one regardless of
+   source order, so every child of .workout-header keeps the plain `margin: 0` the others already
+   carry, with spacing between them coming only from .workout-header's own flex `gap`. */
+.basis.workout-gps { margin: 0; }
 
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
