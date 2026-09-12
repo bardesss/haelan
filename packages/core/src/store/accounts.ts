@@ -174,9 +174,15 @@ export class AccountStore {
    *
    * No timestamp argument, unlike `putBaseUrl`: `accounts` has no column a password change would
    * stamp, and a parameter this ignored would be a promise the table cannot keep.
+   *
+   * Answers the account id, not for this method's own sake but for `admin.ts`'s: the console
+   * `passwd` command has a username and nothing else, and needs the id to revoke this account's
+   * MCP tokens (Important 5) without a second, bespoke lookup existing only for that.
    */
-  async setPassword(username: string, password: string): Promise<void> {
-    await this.#writePassword(this.#require(username).id, password)
+  async setPassword(username: string, password: string): Promise<string> {
+    const id = this.#require(username).id
+    await this.#writePassword(id, password)
+    return id
   }
 
   // The one write behind both `setPassword` and `setPasswordById`. Two ways to name an account,

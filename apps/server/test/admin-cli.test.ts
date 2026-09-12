@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { AccountStore, createTestDatabase, seedPerson } from '@haelan/core'
+import { AccountStore, McpTokenStore, createTestDatabase, seedPerson } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { runAdmin } from '../src/admin.ts'
 import type { AdminDeps } from '../src/admin.ts'
@@ -80,6 +80,26 @@ describe('admin passwd', () => {
     })
     const withOld = await accounts.login({ username: 'robin', password: OLD_PASSWORD, nowMs: NOW_MS })
     expect(withOld).toEqual({ ok: false, reason: 'bad_password' })
+  })
+
+  // Important 5 of the M4 review: nothing in the own-password-change route, the admin reset
+  // route or this console tool used to touch mcp_tokens, so a member noticing a break-in and
+  // changing their password had not ended the attacker's access. This is the console tool's half
+  // of that fix.
+  it('revokes every MCP token this account holds, so a compromised session cannot outlive the reset', async () => {
+    const mcpTokens = new McpTokenStore(fixture.db)
+    const { token } = mcpTokens.create({
+      id: 't1', accountId: 'a1', label: 'a laptop agent', days: 90, nowMs: CREATED_MS,
+    })
+    expect(token.revokedAtMs).toBeNull()
+
+    expect(await runAdmin(['passwd', 'robin'], capture([NEW_PASSWORD, NEW_PASSWORD]).deps)).toBe(0)
+
+    const [reloaded] = new McpTokenStore(fixture.db).listForAccount('a1')
+    // A stamp, not a delete: the row survives for the call log, only revoked rather than gone.
+    expect(reloaded).toBeDefined()
+    expect(reloaded!.id).toBe('t1')
+    expect(reloaded!.revokedAtMs).not.toBeNull()
   })
 
   it('clears the lockout, so the account it just rescued is not locked when it is used', async () => {

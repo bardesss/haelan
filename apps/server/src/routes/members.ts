@@ -177,6 +177,12 @@ export function registerMemberRoutes(app: FastifyInstance): void {
       // that would also swallow the four routes beside it.
       return sendCoreError(reply, error)
     }
+    // Unlike this member's own sessions (deliberately left alone, see the comment above), their
+    // MCP tokens end here. An admin resetting a password without knowing the old one is exactly
+    // the "somebody may have this account" situation the whole route exists for, and an agent
+    // credential the reset leaves standing would be the one door this recovery path forgot to
+    // close.
+    stores().mcpTokens.revokeAllForAccount(accountId, app.haelan.now())
     return reply.code(204).send()
   })
 
