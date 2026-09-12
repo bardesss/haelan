@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.12.1](https://github.com/bardesss/haelan/compare/v1.12.0...v1.12.1) (2026-09-12)
+
+
+### Bug Fixes
+
+* the projection sweep was deleting live queries' databases ([#167](https://github.com/bardesss/haelan/issues/167)) ([67e770a](https://github.com/bardesss/haelan/commit/67e770a8ef8ec8108479a2a13a81ca8a9822acb0))
+
 ## [1.12.0](https://github.com/bardesss/haelan/compare/v1.11.0...v1.12.0) (2026-09-12)
 
 
