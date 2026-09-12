@@ -241,7 +241,10 @@ describe('the call log prune', () => {
       // setInterval with no process.on('uncaughtException') anywhere in this app, so an escaping
       // throw is not a failed prune - it is the instance.
       closeDatabase(instance.db)
-      expect(() => tick.pruneCallLog()).not.toThrow()
+      // One assertion for both properties: it did not throw (the expression evaluated at all),
+      // and the failure was swallowed into "pruned nothing" rather than a thrown error the bare
+      // setInterval calling this has no handler for.
+      expect(tick.pruneCallLog()).toBe(0)
     })
   })
 })

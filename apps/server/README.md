@@ -22,8 +22,8 @@ when both arrive, so a native client is not a browser session's passenger — an
 scoped to setup, auth, sync and settings.
 
 M4a-2 adds a second way to read the same data: the MCP tool surface in
-[`TOOLS.md`](../../TOOLS.md), reached over stdio today
-(`node --experimental-strip-types apps/server/src/mcp.ts --person <name>`) and, from M4a-3, over
+[`TOOLS.md`](../../TOOLS.md), reached over stdio
+(`node --experimental-strip-types apps/server/src/mcp.ts --person <name>`) and, since M4a-3, over
 `POST /mcp` as well — both transports read through the same person bound query layer the routes
 above do.
 

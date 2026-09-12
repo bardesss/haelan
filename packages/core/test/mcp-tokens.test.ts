@@ -80,6 +80,15 @@ describe('McpTokenStore', () => {
     expect(mcpTokenUsable(row!, NOW + 2)).toBe(false)
   })
 
+  it('a second revoke is a no-op, so the stamp cannot be pushed forward', () => {
+    mint()
+    expect(tokens.revoke({ id: 't1', accountId: 'acct-alice', nowMs: NOW + 1 })).toBe(true)
+    expect(tokens.revoke({ id: 't1', accountId: 'acct-alice', nowMs: NOW + 999 })).toBe(false)
+
+    const [row] = tokens.listForAccount('acct-alice')
+    expect(row?.revokedAtMs).toBe(NOW + 1)
+  })
+
   it('moves lastUsedAtMs on touch and leaves expiry alone', () => {
     const { token } = mint()
     tokens.touch('t1', NOW + 5)

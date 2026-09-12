@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { mcpTokens } from '../db/schema/index.ts'
 import { ConfigError } from '../errors.ts'
@@ -121,10 +121,20 @@ export class McpTokenStore {
    * Scoped by account rather than by id alone, so a crafted id in a URL cannot revoke another
    * member's token. Returns false for an id this account does not own, which is the same answer
    * an id that does not exist gets - the route turns both into one 404.
+   *
+   * isNull(revokedAtMs) as well, so a second revoke of an already revoked token is also a no-op
+   * that returns false rather than moving the stamp forward. Without it "revoked on the 3rd" would
+   * quietly become "revoked on the 9th" on the row the call log anchors to, for anyone with a
+   * session and the id - not reachable from the card, which never shows a Revoke button on a dead
+   * token, but reachable directly against the route.
    */
   revoke(input: { id: string, accountId: string, nowMs: number }): boolean {
     return this.#db.update(mcpTokens).set({ revokedAtMs: input.nowMs })
-      .where(and(eq(mcpTokens.id, input.id), eq(mcpTokens.accountId, input.accountId)))
+      .where(and(
+        eq(mcpTokens.id, input.id),
+        eq(mcpTokens.accountId, input.accountId),
+        isNull(mcpTokens.revokedAtMs),
+      ))
       .run().changes > 0
   }
 }

@@ -64,6 +64,13 @@ export function registerRequireMcpToken(app: FastifyInstance): void {
     // has no row to attribute it to, and writing one anyway would let an anonymous caller grow the
     // table by guessing, on a surface that is deliberately not rate limited yet. A leaked token is
     // a known row, which is the case worth seeing.
+    //
+    // Only that half is bounded, though: an anonymous guess writes nothing, but the holder of a
+    // known token that has since expired or been revoked writes a row on every single request,
+    // just as unrate-limited as the guess would have been, pruned only at the 90 day TTL
+    // MCP_CALL_LOG_TTL_MS names. That is a deliberate trade, not an oversight either - the
+    // revoked/expired case is exactly the one the log exists to show - but it means this surface's
+    // abuse bound is "one attacker, one still-known token", not "no unbounded write path".
     const token = presented === null ? null : mcpTokens.match(presented)
     if (token === null) return refuse(reply)
 
@@ -75,6 +82,13 @@ export function registerRequireMcpToken(app: FastifyInstance): void {
     // A suspended account's tokens stop working with it. Without this, disabling a member would
     // end their sessions (SessionStore.destroyForAccount) and leave every agent they had
     // configured still reading their data.
+    //
+    // The two are not symmetric, though: destroyForAccount is permanent - a re-enabled member
+    // signs in fresh - while this check merely suspends. A token minted before disable is neither
+    // revoked nor expired by it, so re-enabling the account resumes it exactly as it was, with
+    // whatever agent the member configured able to read again without anything having been
+    // reissued. Coherent, since the account is the thing that was untrusted, not the credential -
+    // but an admin re-enabling somebody should know agent access comes back with everything else.
     const account = accounts.getById(token.accountId)
     if (!account || account.disabledAtMs !== null) {
       logRefusal(token.id)
