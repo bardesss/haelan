@@ -291,7 +291,9 @@
       "workoutsShort": "workouts",
       "bpm": "bpm",
       "paceSuffix": "/km",
-      "elevationGainShort": "m gained"
+      "elevationGainShort": "m gained",
+      "meters": "m",
+      "speed": "m/s"
     },
     "insights": {
       "steps": "Steps, this period against the last"
@@ -403,7 +405,19 @@
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
       "missingTitle": "No such workout",
-      "missingDetail": "This link names a workout that is not in your data."
+      "missingDetail": "This link names a workout that is not in your data.",
+      "tiles": {
+        "elapsed": "Elapsed", "moving": "Moving", "distance": "Distance", "pace": "Pace",
+        "speed": "Speed", "calories": "Calories", "heartRate": "Heart rate",
+        "elevation": "Elevation gain", "steps": "Steps", "activeZoneMinutes": "Active zone minutes",
+        "vo2max": "VO2max", "swimLengths": "Lengths"
+      },
+      "basis": {
+        "elapsed": "from the session's own start and end",
+        "moving": "active duration, as the device recorded it",
+        "provider": "as the provider recorded it",
+        "pool": "as the provider recorded it, in a {{meters}} m pool"
+      }
     }
   },
   "charts": {

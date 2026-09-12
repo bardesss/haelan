@@ -291,7 +291,9 @@
       "workoutsShort": "work-outs",
       "bpm": "bpm",
       "paceSuffix": "/km",
-      "elevationGainShort": "m omhoog"
+      "elevationGainShort": "m omhoog",
+      "meters": "m",
+      "speed": "m/s"
     },
     "insights": {
       "steps": "Stappen, deze periode tegenover de vorige"
@@ -403,7 +405,19 @@
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
       "missingTitle": "Geen training gevonden",
-      "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat."
+      "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
+      "tiles": {
+        "elapsed": "Verstreken", "moving": "In beweging", "distance": "Afstand", "pace": "Tempo",
+        "speed": "Snelheid", "calories": "Calorieën", "heartRate": "Hartslag",
+        "elevation": "Hoogtewinst", "steps": "Stappen", "activeZoneMinutes": "Actieve zoneminuten",
+        "vo2max": "VO2max", "swimLengths": "Baantjes"
+      },
+      "basis": {
+        "elapsed": "vanaf het eigen begin en einde van de sessie",
+        "moving": "actieve duur, zoals het apparaat die registreerde",
+        "provider": "zoals de provider het registreerde",
+        "pool": "zoals de provider het registreerde, in een baan van {{meters}} m"
+      }
     }
   },
   "charts": {

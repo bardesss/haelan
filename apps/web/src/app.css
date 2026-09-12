@@ -162,6 +162,12 @@ body {
    carry, with spacing between them coming only from .workout-header's own flex `gap`. */
 .basis.workout-gps { margin: 0; }
 
+/* Not a grid of its own: WorkoutTiles.tsx's own comment says why - the page's `.grid` above is
+   already this section's grid, and `display: contents` makes each `Card` child a direct grid item
+   of it, exactly as an unwrapped card would be, while still giving this section's own tests a
+   selector to query under. */
+.workout-tiles { display: contents; }
+
 .label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
 .value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
 .basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }

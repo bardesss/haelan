@@ -204,3 +204,65 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 })
+
+describe('the workout stat tiles', () => {
+  it('shows moving time only when it differs from elapsed', async () => {
+    // 54 minutes elapsed, 50 moving: two different facts, so two tiles.
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toContain('Elapsed')
+      expect(labels).toContain('Moving')
+    } finally { restore() }
+  })
+
+  it('drops the moving tile when the two are the same, rather than printing the same figure twice', async () => {
+    const equal = { ...RUN, attrs: { ...(RUN.attrs as object), activeDuration: '3240s' } } // 54 min
+    const restore = stub({ run1: equal })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toContain('Elapsed')
+      expect(labels).not.toContain('Moving')
+    } finally { restore() }
+  })
+
+  it('renders a tile for every field this session recorded and no tile for any it did not', async () => {
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toEqual(['Elapsed', 'Moving', 'Distance', 'Calories'])
+    } finally { restore() }
+  })
+
+  it('prints a recorded zero rather than dropping the tile', async () => {
+    // workoutDetail keeps a recorded 0 apart from an unrecorded field; a truthiness guard in this
+    // component would undo that one line before it reaches a reader.
+    const zeroed = { ...RUN, attrs: { ...(RUN.attrs as object), metricsSummary: { steps: '0' } } }
+    const restore = stub({ run1: zeroed })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
+      const steps = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Steps')
+      expect(steps?.querySelector('.value')?.textContent).toBe('0')
+    } finally { restore() }
+  })
+
+  it('renders no tile section at all for a session carrying nothing but its span', async () => {
+    window.history.replaceState(null, '', '/activity/bare')
+    const restore = stub({ bare: BARE })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      // Elapsed is always computable from the span, so the section is present with exactly one tile.
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toEqual(['Elapsed'])
+    } finally { restore() }
+  })
+})

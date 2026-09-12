@@ -6,6 +6,7 @@ import { useWorkoutSession } from '../data/useWorkoutSession.js'
 import { useSession } from '../auth/session.js'
 import { ApiError } from '../api/client.js'
 import { WorkoutHeader } from './activity/WorkoutHeader.js'
+import { WorkoutTiles } from './activity/WorkoutTiles.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -32,8 +33,9 @@ import { EmptyState } from '../components/EmptyState.js'
  * No `.page` or `.workout-page` wrapper on the loaded state below: every page in this app returns
  * a fragment, a heading - here, WorkoutHeader rather than a plain `<h1>`, since this page's heading
  * also carries the workout's clock times, its source and its excluded badge - followed by the
- * twelve-column `.grid` the design's later cards (stat tiles, zones, the trace, splits, the
- * comparison card) land in. Notes.tsx is the shortest example of the same shape this page follows.
+ * twelve-column `.grid` the design's cards land in: the stat tiles first, then the later tasks'
+ * zones, trace, splits and comparison card. Notes.tsx is the shortest example of the same shape
+ * this page follows.
  */
 export function WorkoutDetail() {
   const { t } = useTranslation()
@@ -68,11 +70,9 @@ export function WorkoutDetail() {
   return (
     <>
       <WorkoutHeader session={query.data} detail={detail} timezone={timezone} />
-      {/* Empty until a later task adds this page's first card: kept here rather than introduced
-          alongside that card so this task already establishes the shape every sibling page
-          follows (Notes.tsx: a heading, then `.grid`) instead of a follow-up task having to
-          restructure this return. */}
-      <div className="grid" />
+      <div className="grid">
+        <WorkoutTiles session={query.data} detail={detail} />
+      </div>
     </>
   )
 }
