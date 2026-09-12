@@ -28,19 +28,27 @@ export function Settings() {
             about the instance, and the two routes behind it act on whoever the session resolves to.
             Every section below it changes something shared; this one is the only one that does not,
             which is also why it is the one a member arriving here at all can use. */}
-        <Card span={12} label={t('settings.profile.title')}>
+        {/* Half width and side by side, and the only pairing on this page that is guaranteed to
+            hold: these two are the sections nobody is gated out of, so admin and member see the
+            same row rather than one of them seeing a card stranded beside a gap. Both are narrow
+            enough to earn it - a form of three fields and a list of checkboxes - where the three
+            sections below are a table and two rows of name-plus-controls that only lose columns
+            at half width. DataTypes is lifted above Overrides to make the pair; it reads better
+            here anyway, with the two sections about the reader's own account at the top and
+            everything instance wide beneath them. */}
+        <Card span={6} label={t('settings.profile.title')}>
           <Profile />
+        </Card>
+        {/* Not gated on isAdmin: DataTypes.tsx's own comment on why this is per person rather
+            than household wide. */}
+        <Card span={6} label={t('settings.dataTypes.title')}>
+          <DataTypes />
         </Card>
         <Card span={12} label={t('settings.overrides.title')}>
           <OverrideList />
         </Card>
         <Card span={12} label={t('settings.sourceNames.title')}>
           <SourceNames />
-        </Card>
-        {/* Not gated on isAdmin: DataTypes.tsx's own comment on why this is per person rather
-            than household wide. */}
-        <Card span={12} label={t('settings.dataTypes.title')}>
-          <DataTypes />
         </Card>
         {/* Admin only, and gated here rather than inside Members itself: the five routes it calls
             already answer 'forbidden' to anyone else, but mounting the section at all for a
@@ -53,9 +61,13 @@ export function Settings() {
         {/* Admin only, and gated here for the same reason Members is: the PUT it calls already
             answers 'forbidden' to anyone else, and the address on show is one nobody but an admin
             can act on. Placed above Maintenance because moving an instance is a thing a household
-            does once and needs to find, not a figure they watch. */}
+            does once and needs to find, not a figure they watch.
+
+            The second half width pair, and stable for the mirror image of the reason the first
+            one is: both of these are admin gated, so they are present together or absent
+            together and neither is ever left beside a gap. */}
         {session.data?.isAdmin === true && (
-          <Card span={12} label={t('settings.instanceUrl.title')}>
+          <Card span={6} label={t('settings.instanceUrl.title')}>
             <InstanceUrl />
           </Card>
         )}
@@ -63,7 +75,7 @@ export function Settings() {
             already answer 'forbidden' to anyone else, but mounting a card whose only content is
             two buttons a member could never press would be pure noise on their own screen. */}
         {session.data?.isAdmin === true && (
-          <Card span={12} label={t('settings.maintenance.title')}>
+          <Card span={6} label={t('settings.maintenance.title')}>
             <Maintenance />
           </Card>
         )}
