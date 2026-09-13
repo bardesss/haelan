@@ -41,17 +41,20 @@ describe('the banner', () => {
 })
 
 describe('the banner in the visitor\'s own language', () => {
-  const originalLanguage = Object.getOwnPropertyDescriptor(window.navigator, 'language')
-
-  // navigator.language is read-only by default; a data descriptor lets each test set it and the
-  // afterEach below restore exactly the descriptor happy-dom started with, rather than leaving a
-  // stubbed navigator behind for every test file that runs after this one in the same worker.
+  // navigator.language is read-only by default; a data descriptor lets each test set it. happy-dom
+  // defines `language` as a getter on Navigator.prototype rather than as an own property of
+  // window.navigator, so Object.getOwnPropertyDescriptor(window.navigator, 'language') reads
+  // undefined - there was never an own-property descriptor here for an `if (originalLanguage)`
+  // restore to run, which is why that guard never fired and left the stubbed value behind for
+  // every test file sharing this worker. setLanguage below shadows the prototype getter with an
+  // own data property, so deleting that own property in the teardown is what uncovers the
+  // prototype getter again, rather than restoring a descriptor that was never actually captured.
   function setLanguage(tag: string): void {
     Object.defineProperty(window.navigator, 'language', { value: tag, configurable: true })
   }
 
   afterEach(() => {
-    if (originalLanguage) Object.defineProperty(window.navigator, 'language', originalLanguage)
+    delete (navigator as unknown as Record<string, unknown>)['language']
   })
 
   it('renders Dutch for a Dutch browser, including the fidelity-limit sentence', () => {

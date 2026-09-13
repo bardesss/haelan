@@ -96,7 +96,7 @@ describe('loadFromBundle', () => {
     expect((error as ApiError).kind).toBe('unreachable')
   })
 
-  it('turns a body that will not parse into an ApiError, and not the same kind as unreachable', async () => {
+  it('turns a body that will not parse into a transient ApiError, not unreachable', async () => {
     // A corrupt or truncated fixture that still shipped with the build - the host answered, so
     // this is a different failure than the network never responding, and must not claim to be one.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -107,6 +107,9 @@ describe('loadFromBundle', () => {
 
     const error = await loadFromBundle('manifest.json').then(() => null, (thrown: unknown) => thrown)
     expect(error).toBeInstanceOf(ApiError)
-    expect((error as ApiError).kind).not.toBe('unreachable')
+    // The concrete kind client.ts's own comment documents for this failure, not merely "anything
+    // but unreachable": that weaker assertion would stay green even if this path regressed to a
+    // third, wrong kind instead of the two it is meant to choose between.
+    expect((error as ApiError).kind).toBe('transient')
   })
 })

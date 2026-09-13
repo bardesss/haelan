@@ -52,6 +52,14 @@ describe('with no base, which is what a real instance ships', () => {
 
 describe('under a base, which is how the demo is served', () => {
   beforeEach(() => { setBaseForTest('/demo/') })
+  // Co-located with the beforeEach that sets it, rather than left to the file's own top-level
+  // afterEach to catch: that outer hook resets the base too, but only as a side effect bundled in
+  // with unmounting the test root, declared far from the setBaseForTest call it undoes. Nothing
+  // stops a later edit to that shared hook from dropping the reset while leaving the unmount in
+  // place, and the "no base" describe above would keep passing regardless - it runs first in file
+  // order and never observes a leaked base until something after it does. A dedicated afterEach
+  // here makes the set/reset pair local and self-evident instead of relying on that ordering.
+  afterEach(() => { setBaseForTest('') })
 
   it('reports the app-relative path, not the browser one', () => {
     window.history.replaceState(null, '', '/demo/activity?range=week')
