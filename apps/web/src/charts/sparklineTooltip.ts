@@ -1,4 +1,5 @@
 import type { ECElementEvent } from 'echarts'
+import { escapeHtml, tip } from './base.js'
 import type { DayMarks } from './base.js'
 import type { Translate } from '../format.js'
 
@@ -52,13 +53,18 @@ export function sparklineTooltip(
 
   if (event.componentType === 'markPoint') {
     const mark = index === undefined ? undefined : marks.atValue[index]
-    return mark ? `${mark.date}<br/>${t('charts.absence.excluded')}` : ''
+    return mark ? tip`${mark.date}<br/>${t('charts.absence.excluded')}` : ''
   }
   if (event.componentType === 'markLine') {
     const mark = index === undefined ? undefined : marks.atDate[index]
     // `text` already has the excluded word folded in by dayMarks, so the canvas says the same
     // sentence the table's note cell does. Adding the word again here would say it twice.
-    return mark ? `${mark.date}<br/>${mark.text}` : ''
+    //
+    // This is the line the escaping exists for. `mark.text` is what a member of the household
+    // typed -- an override reason, a note, an event -- and echarts writes a formatter's return
+    // value into the tooltip element with innerHTML. Before `tip`, a note reading
+    // `<img src=x onerror=...>` was not text on hover, it was a tag the browser built.
+    return mark ? tip`${mark.date}<br/>${mark.text}` : ''
   }
 
   const date = index === undefined ? undefined : labels[index]
@@ -82,5 +88,12 @@ export function sparklineTooltip(
       label: t('charts.columns.trend'), value: format(trend?.[index] ?? null, absent),
     }))
   }
-  return [date, ...lines].join('<br/>')
+  // Each part escaped, then joined plainly, rather than assembled in one `tip` template: the
+  // number of lines varies with `hasTrend`, so there is no fixed template to tag. Same shape
+  // IntradayHeartRate uses for its own variable-length assembly, and the reason `tip`'s own doc
+  // comment gives for not feeding an already-built line back through it.
+  //
+  // `format` is the caller's own formatter here, so a metric whose display unit is produced
+  // outside this file still arrives as text rather than as markup.
+  return [date, ...lines].map(escapeHtml).join('<br/>')
 }
