@@ -37,7 +37,10 @@ export function renderPage(template, values) {
 export function releaseStamp(rootDir) {
   const { version } = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
   const changelog = readFileSync(join(rootDir, 'CHANGELOG.md'), 'utf8')
-  const escaped = version.replace(/\./g, '\\.')
+  // Escape every regex metacharacter: semver permits build metadata with a literal `+`
+  // (e.g. 1.16.0+build.5), and `+` is a regex quantifier, so the heading regex would fail
+  // to match a heading that is actually present if the version is not fully escaped.
+  const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const heading = new RegExp(`^## \\[${escaped}\\][^\\n]*\\((\\d{4}-\\d{2}-\\d{2})\\)`, 'm')
   const found = heading.exec(changelog)
   if (found === null) throw new Error(`no CHANGELOG.md entry for ${version}`)

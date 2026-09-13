@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { renderPage } from '../build-site.mjs'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { renderPage, releaseStamp } from '../build-site.mjs'
 
 describe('renderPage', () => {
   it('substitutes every slot it is given a value for', () => {
@@ -24,11 +27,6 @@ describe('renderPage', () => {
       .toThrow('nothing uses: stale')
   })
 })
-
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { releaseStamp } from '../build-site.mjs'
 
 describe('releaseStamp', () => {
   function fixture(changelog: string, version = '1.16.0'): string {
@@ -57,6 +55,21 @@ describe('releaseStamp', () => {
     const dir = fixture('# Changelog\n\n## [1.15.3](x) (2026-09-02)\n')
     try {
       expect(() => releaseStamp(dir)).toThrow('no CHANGELOG.md entry for 1.16.0')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('handles semver build metadata with + by escaping regex metacharacters', () => {
+    const dir = fixture([
+      '# Changelog',
+      '',
+      '## [1.16.0+build.5](https://github.com/bardesss/haelan/compare/v1.15.3...v1.16.0) (2026-09-13)',
+      '',
+      '## [1.15.3](https://github.com/bardesss/haelan/compare/v1.15.2...v1.15.3) (2026-09-02)',
+    ].join('\n'), '1.16.0+build.5')
+    try {
+      expect(releaseStamp(dir)).toEqual({ version: '1.16.0+build.5', releaseDate: '2026-09-13' })
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
