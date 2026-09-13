@@ -46,3 +46,36 @@ describe('the pages workflow', () => {
     expect(at('needs: build')).toBeGreaterThan(-1)
   })
 })
+
+const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+
+describe('the demo half of the pages workflow', () => {
+  it('captures, then builds the demo, then builds the site around it', () => {
+    // Order is the whole assertion: site:build copies apps/web/dist-demo, which demo:build
+    // writes, from fixtures demo:capture records. Any other order publishes a stale or empty
+    // demo and says nothing about it.
+    expect(at('demo:capture')).toBeGreaterThan(-1)
+    expect(at('demo:build')).toBeGreaterThan(at('demo:capture'))
+    expect(at('site:build')).toBeGreaterThan(at('demo:build'))
+    expect(at('upload-pages-artifact')).toBeGreaterThan(at('site:build'))
+  })
+
+  it('still uploads the assembled site, not the demo alone', () => {
+    expect(yaml).toContain('path: site/dist')
+  })
+})
+
+describe('the rehearsal job in ci.yml', () => {
+  it('exists, so a change to the capture chain is proved before it reaches a deploy', () => {
+    expect(ci).toContain('demo-rehearsal')
+    expect(ci).toContain('demo:all')
+  })
+
+  it('watches every path that can break the chain', () => {
+    // Each of these can change what a page asks for or what a route answers, which is what the
+    // fixtures are. A prefix dropped from this list is a break discovered after a release.
+    for (const prefix of ['demo/', 'apps/web/src/demo/', 'scripts/capture-demo', 'apps/server/src/routes/v1/']) {
+      expect(ci, prefix).toContain(prefix)
+    }
+  })
+})

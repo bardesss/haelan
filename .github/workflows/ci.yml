@@ -90,3 +90,46 @@ jobs:
             echo "theme.generated.css is a build output and must not be tracked"
             exit 1
           fi
+
+  # demo:capture seeds a year of generated data and reruns a rebuild over it, which costs minutes
+  # rather than seconds - too much to pay on every push. So this rehearses the chain pages.yml
+  # runs on every deploy (capture, then build, then site:build) only for a pull request whose diff
+  # can actually break it, and only proves it once rather than once per verify matrix leg.
+  demo-rehearsal:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+
+      - id: touched
+        # Four of these five are the brief's own list: the recorder and the capture script that
+        # drives it, the demo's own app-side code, and the routes whose response shapes the
+        # fixtures are. scripts/seed-demo.mjs is added because it is what the capture script
+        # spawns to build the throwaway instance in the first place - a break there fails
+        # demo:capture exactly as surely as a broken recorder does, and nothing under
+        # scripts/capture-demo* names it. apps/web/vite.demo.config.ts and apps/web/index.demo.html
+        # are added for the same reason on the build side: they are demo:build's own config and
+        # entry point, forced to live beside vite.config.ts and index.html rather than under
+        # src/demo/ (Vite resolves both by fixed name), and neither has a fast unit test the way
+        # copyDemo and writeCapture do - this rehearsal is the only thing that would ever catch a
+        # break in either.
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep -qE '^(demo/|apps/web/src/demo/|apps/web/vite\.demo\.config\.ts|apps/web/index\.demo\.html|scripts/capture-demo|scripts/seed-demo|apps/server/src/routes/v1/)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          # 26, matching pages.yml's build job: this rehearses that job's own chain, so it runs on
+          # the same runtime pages.yml deploys with rather than the verify matrix's three floors.
+          node-version: '26'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile && pnpm demo:all
+        if: steps.touched.outputs.run == 'true'
