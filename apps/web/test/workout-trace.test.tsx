@@ -9,7 +9,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { useSourceTrace } from '../src/data/useSourceTrace.js'
-import { flush, pumpUntil } from './flush.js'
+import { pumpUntil } from './flush.js'
 
 // The rule this file exists for, from the design: 189 of 198 measured sessions are answered by the
 // recording device, 2 by either, and 5 ONLY by another device — where pinning draws an empty chart
@@ -73,7 +73,8 @@ function Probe({ chosenSource, seen }: { chosenSource: string | null, seen: { cu
   return <span>{trace.points.length}</span>
 }
 
-function mount(node: ReactNode): { client: QueryClient, html: () => string } {
+/** The client is not handed back: it existed for flush(), and nothing here waits on the cache. */
+function mount(node: ReactNode): { html: () => string } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   client.setQueryData(queryKeys.session(), PERSON)
   act(() => {
@@ -83,7 +84,45 @@ function mount(node: ReactNode): { client: QueryClient, html: () => string } {
       </QueryClientProvider>,
     )
   })
-  return { client, html: () => container?.innerHTML ?? '' }
+  return { html: () => container?.innerHTML ?? '' }
+}
+
+/**
+ * Waits for the trace to have ANSWERED, rather than for the page to look settled.
+ *
+ * flush() is the wrong helper for this hook, and flush.test.tsx already names the reason as a
+ * KNOWN GAP: its settle condition is "nothing in flight, twice in a row, with the HTML unchanged",
+ * and every test below mounts a chain whose second request is gated on the first one's answer.
+ *
+ * Both halves of that condition are blind here. Between the pinned read resolving empty and React
+ * re-rendering with `blendedEnabled` true, nothing is in flight and the blended query is pending
+ * but not yet active, so flush() reads that window as settled and arms its `idleOnce` inside it.
+ * The HTML cannot separate the states either: the fallback's whole premise is that the pinned
+ * answer carried no points, so the probe renders `0` before the gate opens, while the blended
+ * request is in flight, and again right up to the render that finally replaces it. With `idleOnce`
+ * already armed, a single 5ms pump can then contain the entire blended fetch - start, resolve and
+ * all - and the sample at the end of it sees an idle client and identical HTML and returns, with
+ * `seen.current` still holding the render from before the fallback answered.
+ *
+ * Measured on this file: `--repeats 20` reproduced it three times in thirteen runs, and then not
+ * at all in the next seven, which is what a race on timer scheduling looks like rather than
+ * evidence it went away. Every failure was the same one - the fallback test, 'pinnedSource' where
+ * 'otherSources' was due - and dumping the cache at the point of failure showed BOTH window
+ * queries already success-and-idle, holding the right answer. The tree was one render behind, not
+ * the data, and a single extra pump after flush() returned recovered the right value every time.
+ * flush.test.tsx's own GatedChain fixture reproduces the same return deterministically.
+ *
+ * `isPending` is what closes it, because it is a property of the RENDERED trace rather than of the
+ * cache: the hook reports it true while the pinned read is pending and again while the fallback it
+ * gated is in flight, so it cannot go false on a cache that has settled ahead of the tree. That is
+ * precisely the fact flush() has no way to compute, and the remedy flush.test.tsx points callers
+ * at - wait for the thing you are about to assert about, not for "settled".
+ */
+async function answered(seen: { current: unknown }): Promise<void> {
+  await pumpUntil(
+    () => seen.current !== null && !(seen.current as { isPending: boolean }).isPending,
+    'the trace to answer',
+  )
 }
 
 describe('which source a workout trace asks for', () => {
@@ -91,8 +130,8 @@ describe('which source a workout trace asks for', () => {
     const restore = stub({ watch: [point('watch')] })
     try {
       const seen = { current: null as never }
-      const { client, html } = mount(<Probe chosenSource={null} seen={seen} />)
-      await flush(client, html)
+      mount(<Probe chosenSource={null} seen={seen} />)
+      await answered(seen)
       expect((seen.current as { traceSource: string }).traceSource).toBe('pinnedSource')
       expect(requested.filter((url) => url.includes('/intraday/window'))).toHaveLength(1)
     } finally { restore() }
@@ -103,8 +142,8 @@ describe('which source a workout trace asks for', () => {
     const restore = stub({ watch: [], '': [point('phone')] })
     try {
       const seen = { current: null as never }
-      const { client, html } = mount(<Probe chosenSource={null} seen={seen} />)
-      await flush(client, html)
+      mount(<Probe chosenSource={null} seen={seen} />)
+      await answered(seen)
       const trace = seen.current as { traceSource: string, points: unknown[] }
       expect(trace.traceSource).toBe('otherSources')
       expect(trace.points).toHaveLength(1)
@@ -115,8 +154,8 @@ describe('which source a workout trace asks for', () => {
     const restore = stub({ watch: [], '': [] })
     try {
       const seen = { current: null as never }
-      const { client, html } = mount(<Probe chosenSource={null} seen={seen} />)
-      await flush(client, html)
+      mount(<Probe chosenSource={null} seen={seen} />)
+      await answered(seen)
       const trace = seen.current as { traceSource: string, points: unknown[] }
       expect(trace.traceSource).toBe('pinnedSource')
       expect(trace.points).toHaveLength(0)
@@ -129,8 +168,8 @@ describe('which source a workout trace asks for', () => {
     const restore = stub({ phone: [], '': [point('watch')] })
     try {
       const seen = { current: null as never }
-      const { client, html } = mount(<Probe chosenSource="phone" seen={seen} />)
-      await flush(client, html)
+      mount(<Probe chosenSource="phone" seen={seen} />)
+      await answered(seen)
       const trace = seen.current as { traceSource: string, points: unknown[] }
       expect(trace.points).toHaveLength(0)
       expect(trace.traceSource).toBe('pinnedSource')
@@ -169,13 +208,18 @@ describe('retrying after the fallback itself failed', () => {
     }) as typeof fetch
     try {
       const seen = { current: null as never }
-      const { client, html } = mount(<Probe chosenSource={null} seen={seen} />)
-      await flush(client, html)
+      const { html } = mount(<Probe chosenSource={null} seen={seen} />)
+      await answered(seen)
       expect((seen.current as { isError: boolean }).isError).toBe(true)
       expect(blendedCalls).toBe(1)
 
       act(() => { (seen.current as { refetch: () => unknown }).refetch() })
-      await flush(client, html)
+      // Not answered() again: a refetch never returns the trace to pending, because both queries
+      // already carry a status (success and error), so "not pending" is true the whole way through
+      // and the wait would be over before either request had landed. The probe's own rendered
+      // count is the thing that does change, and reading it keeps the wait on a different channel
+      // from the hook fields asserted below.
+      await pumpUntil(() => html() === '<span>1</span>', 'the retried blended read to render')
 
       expect(blendedCalls).toBe(2)
       const trace = seen.current as { traceSource: string, points: unknown[], isError: boolean }
