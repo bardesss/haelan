@@ -69,7 +69,7 @@ export { AccountStore } from './store/accounts.ts'
 export type {
   AccountRow, AccountListRow, CreateAccountInput, LoginInput, LoginResult,
 } from './store/accounts.ts'
-export { SessionStore, SESSION_TTL_MS } from './store/sessions.ts'
+export { SessionStore, SESSION_TTL_MS, SESSION_LAST_SEEN_RESOLUTION_MS } from './store/sessions.ts'
 export { SettingsStore, setupStep } from './store/settings.ts'
 export type { InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps } from './store/settings.ts'
 export { CONSENT_PATHS } from './db/schema/accounts.ts'
