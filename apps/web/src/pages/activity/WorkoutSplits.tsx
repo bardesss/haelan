@@ -86,18 +86,29 @@ function SplitTable({ rows, label, typed }: {
  * is why only the laps table is ever labelled by its own type.
  */
 export function WorkoutSplits({ autoSplits, laps }: {
-  autoSplits: readonly FilledSplit[]
-  laps: readonly FilledSplit[]
+  autoSplits: readonly FilledSplit[] | undefined
+  laps: readonly FilledSplit[] | undefined
 }) {
   const { t } = useTranslation()
-  if (autoSplits.length === 0 && laps.length === 0) return null
+  // Defaulted here, once, rather than trusted from the caller: workoutSummary.ts's splitsFrom
+  // answers [] for an absent or non-array value on purpose ("an absent array reads the same as an
+  // empty one"), and this component used to get that guarantee for free by reading
+  // workoutDetail(...)'s own decode. Now that these arrive from the API response instead
+  // (WorkoutDetail.tsx passes query.data.autoSplits/laps), the field can simply be missing - an
+  // older cached response, a shape that predates this deploy, anything that never populated it -
+  // and workoutSummary.ts's own opening line says why that must not throw here: this app has no
+  // error boundary, so an unguarded `.length` on `undefined` would blank the entire workout page
+  // rather than just leaving the splits card off it. Do not "simplify" this default away.
+  const rows = autoSplits ?? []
+  const lapRows = laps ?? []
+  if (rows.length === 0 && lapRows.length === 0) return null
   return (
     <>
-      {autoSplits.length > 0 && (
-        <SplitTable rows={autoSplits} label={t('activity.workout.splits.autoLabel')} typed={false} />
+      {rows.length > 0 && (
+        <SplitTable rows={rows} label={t('activity.workout.splits.autoLabel')} typed={false} />
       )}
-      {laps.length > 0 && (
-        <SplitTable rows={laps} label={t('activity.workout.splits.lapLabel')} typed />
+      {lapRows.length > 0 && (
+        <SplitTable rows={lapRows} label={t('activity.workout.splits.lapLabel')} typed />
       )}
     </>
   )

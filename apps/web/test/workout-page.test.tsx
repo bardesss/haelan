@@ -9,6 +9,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
 import type { BanisterBasis } from '@haelan/core/cardio-load'
+import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
@@ -63,6 +64,12 @@ const BARE: WorkoutSession = {
 
 const BASIS: BanisterBasis = {
   restingBpm: 52, maxBpm: 181, maxBpmSource: 'providerZoneCeiling', k: 1.92, minutes: 45,
+}
+
+const SPLIT: FilledSplit = {
+  startMs: null, endMs: null, splitType: 'DISTANCE', activeDurationSeconds: 300,
+  distanceMeters: 1000, paceSecondsPerKm: 300, averageHeartRateBpm: 150,
+  averageHeartRateBpmSource: 'provider',
 }
 
 function stub(sessions: Record<string, WorkoutSession>): () => void {
@@ -363,6 +370,40 @@ describe('the workout stat tiles', () => {
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
       expect(edwardsTile?.querySelector('.value')?.textContent).toBe('0 TRIMP')
+    } finally { restore() }
+  })
+})
+
+// Fix round 2: WorkoutSplits used to read autoSplits/laps off workoutDetail(session.attrs), which
+// workoutSummary.ts's splitsFrom always answers as an array, absent-or-not. Once the page started
+// passing the API response's own autoSplits/laps instead, that guarantee stopped being free: RUN
+// and every fixture above it in this file carry neither field (they are plain WorkoutSession
+// objects, not WorkoutSessionDetail), and this app has no error boundary, so an unguarded
+// `.length` read on `undefined` blanked the whole page rather than only leaving the splits card
+// off it. These two cases pin both directions of the fix.
+describe('the splits card', () => {
+  it('renders a splits table when the session response carries filled splits', async () => {
+    const loaded = { ...RUN, autoSplits: [SPLIT], laps: [] }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.workout-splits')).not.toBeNull()
+      expect(html()).toContain('Automatic splits')
+    } finally { restore() }
+  })
+
+  it('still renders the rest of the page when the response carries no autoSplits or laps at all', async () => {
+    // RUN itself carries neither field - the exact shape (an older cached response, or any
+    // response predating this deploy) that used to throw inside WorkoutSplits and take the page
+    // with it.
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await flush(client, html)
+      expect(container?.querySelector('.workout-splits')).toBeNull()
+      expect(html()).toContain('Morning run')
+      expect(container?.querySelector('.workout-tiles')).not.toBeNull()
     } finally { restore() }
   })
 })
