@@ -15,7 +15,7 @@ import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
 import { deriveCardioLoadDay } from './cardioLoad.ts'
-import { deriveActivityBandsDay, mergeActivityBandsDay } from './activityBands.ts'
+import { deriveActivityBandsDay, expandBandExclusions, mergeActivityBandsDay } from './activityBands.ts'
 
 export interface DeriveDayInput {
   personId: string
@@ -196,10 +196,13 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     rows: applyToDay([...derived, ...merged], excluded),
   })
 
+  // Widened so an excluded level or an excluded peak total takes its overlap rows with it - see
+  // expandBandExclusions's own comment. Only the band rows need the wider set: cardioLoad already
+  // saw the unwidened `excluded` above, and every other family here has no such sibling to chase.
   const rows = applyToDay(
     [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceBands, ...mergedBands,
       ...perSourceExercise, ...mergedExercise, ...cardioLoad],
-    excluded,
+    expandBandExclusions(excluded),
   )
 
   // Everything we derive for this day goes, then comes back. Provider rows are excluded

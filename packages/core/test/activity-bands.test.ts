@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { deriveActivityBandsDay, mergeActivityBandsDay } from '../src/derive/activityBands.ts'
+import { mergeDay } from '../src/derive/merge.ts'
 import type { SampleLike } from '../src/derive/rollup.ts'
 import type { Priority } from '../src/derive/priority.ts'
+import { priorityFrom } from '../src/derive/priority.ts'
 
 const MINUTE = 60_000
 const BASE = Date.UTC(2026, 7, 17, 12, 0)
@@ -156,5 +158,42 @@ describe('mergeActivityBandsDay', () => {
 
   it('writes no merged rows when nothing overlaps', () => {
     expect(merged([at('watch', 'active_minutes_light', 0, 1)])).toEqual([])
+  })
+
+  // Pins the KNOWN LIMITATION documented on mergeActivityBandsDay above: a per-metric priority
+  // list can make mergeDay's per-metric winner disagree with this function's per-family winner,
+  // so the merged overlap it returns can exceed the merged level mergeDay returns for the same
+  // hour. This is not a bug to fix here - see the function comment for why family resolution is
+  // still correct - it is a behaviour this test keeps visible.
+  it('can produce an overlap that exceeds mergeDay\'s level, under a divergent per-metric priority list', () => {
+    // B is favoured for the level metric; A is favoured for everything else, peak included. Ties
+    // in mergeActivityBandsDay's family-wide rank break toward whichever source appears first in
+    // the rows, so A - listed first below - wins the family tie and takes the hour.
+    const priority = priorityFrom({
+      lists: new Map([
+        ['active_minutes_vigorous', ['B', 'A']],
+        ['active_zone_minutes_peak', ['A', 'B']],
+      ]),
+      sources: [{ id: 'A', kind: 'device' }, { id: 'B', kind: 'device' }],
+    })
+
+    // One hour: A recorded 8 vigorous minutes, all 8 also peak. B recorded 3 vigorous minutes and
+    // no peak data at all.
+    const rows: SampleLike[] = [
+      ...Array.from({ length: 8 }, (_, minute) => at('A', 'active_minutes_vigorous', minute, 1)),
+      ...Array.from({ length: 8 }, (_, minute) => at('A', 'active_zone_minutes_peak', minute, 2)),
+      ...Array.from({ length: 3 }, (_, minute) => at('B', 'active_minutes_vigorous', minute, 1)),
+    ]
+
+    const level = mergeDay({ personId: 'p1', localDate: '2026-08-17', rows, priority })
+    const overlap = mergeActivityBandsDay({ personId: 'p1', localDate: '2026-08-17', rows, priority })
+
+    // mergeDay resolves 'active_minutes_vigorous' on its own list and hands the hour to B.
+    expect(level.find((r) => r.metric === 'active_minutes_vigorous')?.value).toBe(3)
+    // mergeActivityBandsDay resolves the whole family together and hands the same hour to A,
+    // whose 8 overlap minutes are counted even though B, not A, won the level.
+    expect(overlap.find((r) => r.metric === 'active_minutes_vigorous_peak')?.value).toBe(8)
+    // The chart's clamp (apps/web bandSeries) is what keeps this from drawing a negative bar; the
+    // partition itself is broken for this hour, which is the limitation being pinned.
   })
 })

@@ -31,6 +31,34 @@ export const OVERLAP_BY_LEVEL: Readonly<Record<string, string>> = {
 export const BAND_FAMILY: readonly string[] = [...Object.keys(OVERLAP_BY_LEVEL), PEAK_METRIC]
 
 /**
+ * Widens a day_metric exclusion set so an excluded level or an excluded peak total takes its
+ * overlap rows with it.
+ *
+ * Without this, `applyToDay`'s exact-name filter lets `active_minutes_vigorous_peak` survive a
+ * `active_minutes_vigorous` exclusion: the level row is deleted, the web layer draws vigorous as a
+ * gap, and those very minutes get folded into the peak band instead - the excluded minutes
+ * reappear on the chart, just relabelled. Excluding `active_zone_minutes_peak` has the symmetric
+ * problem: it throws out the day's whole zone-peak reading, but all three level/peak overlaps -
+ * each one only meaningful as an intersection with that reading - survive untouched.
+ *
+ * cardio_load_edwards does not need this: it is computed after its own inputs already had
+ * `applyToDay` run over them (see deriveDay.ts), so an excluded zone metric is simply absent by
+ * the time the load is derived. The band rows have no equivalent second pass - they are derived
+ * from `kept`, before day_metric exclusion exists - so the exclusion set itself has to carry the
+ * family relationship instead.
+ */
+export function expandBandExclusions(excluded: ReadonlySet<string>): Set<string> {
+  const out = new Set(excluded)
+  for (const [level, overlap] of Object.entries(OVERLAP_BY_LEVEL)) {
+    if (excluded.has(level)) out.add(overlap)
+  }
+  if (excluded.has(PEAK_METRIC)) {
+    for (const overlap of Object.values(OVERLAP_BY_LEVEL)) out.add(overlap)
+  }
+  return out
+}
+
+/**
  * Counts, per level, the distinct clock minutes carrying both that level and a peak zone minute.
  *
  * Distinct minutes rather than rows, for two independent reasons. A peak sample's `value` is 2 in
@@ -109,6 +137,20 @@ export function deriveActivityBandsDay(input: {
  * An hour whose winner recorded levels but no zone data therefore contributes no peak minutes,
  * rather than borrowing a loser's. That is the same trade mergeDay already makes: a lower priority
  * source fills an hour only when the winner observed nothing in it at all.
+ *
+ * KNOWN LIMITATION: this makes the merged overlap and the merged level resolvable by different
+ * rules whenever a person configures a per-metric priority list. mergeDay (merge.ts) picks a
+ * winner per metric per hour, so a level metric and active_zone_minutes_peak can have different
+ * lists and therefore different winners in the same hour; this function picks one winner per hour
+ * for the family as a whole, on purpose (see above - the alternative invents minutes). When the
+ * two disagree, the merged level for an hour can come from a source that recorded fewer overlap
+ * minutes than the family winner did, so the merged overlap can exceed the merged level. The web
+ * layer's bandSeries clamps each band at zero for exactly this reason (see
+ * apps/web/test/activity-band-series.test.ts, "never returns a negative band") - the chart shows a
+ * plausible-looking bar rather than a negative one, but the true partition is broken for that hour.
+ * This is accepted rather than fixed by unifying the two resolutions: cross-source intersection
+ * for the family would fabricate overlap minutes no single device ever measured, which is a worse
+ * error than an occasional clamp on a chart most people never configure divergent lists for.
  */
 export function mergeActivityBandsDay(input: {
   personId: string

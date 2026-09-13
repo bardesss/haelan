@@ -40,8 +40,14 @@ describe('bandSeries', () => {
   })
 
   it('never returns a negative band', () => {
-    // Should not happen - an overlap cannot exceed its level - but if the two ever disagree the
-    // chart must not draw a bar below the axis.
+    // This does happen on the merged view: mergeDay resolves the winning source per metric per
+    // hour, but mergeActivityBandsDay deliberately resolves one winner per hour for the whole
+    // band family (activityBands.ts's own comment explains why - intersecting levels and peaks
+    // from different sources would invent a minute no device recorded). A person who configures a
+    // per-metric priority list that ranks sources differently for a level than for
+    // active_zone_minutes_peak can therefore get a merged level and a merged overlap chosen from
+    // different hours' winners, and the overlap can come out larger than the level it is supposed
+    // to be a subset of. The clamp below is the deliberate response to that, not a dead branch.
     const series = bandSeries(dense({
       active_minutes_light: [1],
       active_minutes_moderate: [0],
