@@ -44,13 +44,15 @@ function seedIntraday(h: Harness, input: {
 }
 
 let workoutCounter = 0
-function seedWorkout(h: Harness, input: { localDate: string, sourceId?: string, exerciseType?: string }): void {
+function seedWorkout(h: Harness, input: {
+  localDate: string, sourceId?: string, exerciseType?: string, attrs?: unknown,
+}): void {
   const sourceId = input.sourceId ?? 'watch'
   seedSource(h, sourceId)
   workoutCounter += 1
   const id = `workout-${workoutCounter}`
   const startMs = Date.parse(`${input.localDate}T09:00:00Z`) - OFFSET_MINUTES * 60_000
-  const attrs = input.exerciseType === undefined ? {} : { exerciseType: input.exerciseType }
+  const attrs = input.attrs ?? (input.exerciseType === undefined ? {} : { exerciseType: input.exerciseType })
   h.app.haelan.instance.db.insert(schema.sessions).values({
     id, personId: 'p1', sourceId, kind: 'exercise', externalId: id,
     startMs, startOffsetMinutes: OFFSET_MINUTES, endMs: startMs + 3_600_000, endOffsetMinutes: OFFSET_MINUTES,
@@ -187,6 +189,31 @@ describe('GET /sessions', () => {
     const response = await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31&type=NOT_A_REAL_TYPE')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.kind).toBe('config')
+  })
+
+  // The list route is a different question from the detail route directly below it in
+  // tier2.ts, and must not grow a per-row cardio load: that would open a heart rate trace for
+  // every session in the range. Zone durations full enough to answer 100 on the detail route
+  // (see v1-session-by-id.test.ts) are seeded here too, so a regression that lifted the detail
+  // route's computation into the shared session mapper - rather than adding it only in the
+  // detail handler - would still be caught.
+  it('does not put a cardio load on a session in the list', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, {
+      localDate: '2026-08-01',
+      attrs: {
+        exerciseType: 'RUNNING',
+        metricsSummary: {
+          heartRateZoneDurations: {
+            lightTime: '600s', moderateTime: '600s', vigorousTime: '600s', peakTime: '600s',
+          },
+        },
+      },
+    })
+
+    const body = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31')).json()
+    expect(body.items).toHaveLength(1)
+    expect(body.items[0].cardioLoad).toBeUndefined()
   })
 })
 

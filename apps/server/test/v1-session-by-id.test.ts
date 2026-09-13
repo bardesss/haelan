@@ -154,6 +154,29 @@ describe('GET /sessions/:sessionId', () => {
     expect((await get(harness, token, '/sessions/night1')).json().id).toBe('night1')
   })
 
+  it('carries the cardio load beside the session', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, {
+      id: 'run1',
+      attrs: {
+        exerciseType: 'RUNNING',
+        // 600s each -> 10 minutes each -> Edwards = 1*10 + 2*10 + 3*10 + 4*10 = 100.
+        metricsSummary: {
+          heartRateZoneDurations: {
+            lightTime: '600s', moderateTime: '600s', vigorousTime: '600s', peakTime: '600s',
+          },
+        },
+      },
+    })
+
+    const session = (await get(harness, token, '/sessions/run1')).json()
+
+    // The whole object, not just edwards: banister stays null with no heart rate profile seeded,
+    // and a load folded into `session` rather than carried beside it would still pass a
+    // one-field check.
+    expect(session.cardioLoad).toEqual({ edwards: 100, banister: null, banisterBasis: null })
+  })
+
   it('answers 404 for an ecg id, in the same envelope as an id that names nothing', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedOfKind(harness, { id: 'ecg1', kind: 'ecg' })

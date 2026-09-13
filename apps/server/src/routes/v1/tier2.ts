@@ -223,6 +223,12 @@ export function registerTier2Routes(app: FastifyInstance): void {
       return reply.code(statusFor('not_found'))
         .send(errorBody('not_found', 'no_such_session', `no session '${sessionId}'`))
     }
-    return sendHashed(reply, request, session)
+    // Beside the session rather than folded into it: `WorkoutSession` is also what the list route
+    // above answers, and a load computed per row there would open a heart rate trace for every
+    // session in a range. The detail read has exactly one session and can afford exactly one.
+    return sendHashed(reply, request, {
+      ...session,
+      cardioLoad: personQuery.cardioLoad({ sessionId }),
+    })
   })
 }
