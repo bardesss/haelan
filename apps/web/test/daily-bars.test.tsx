@@ -50,6 +50,14 @@ const values = [9_200_000, null, 8_600_000, 7_100_000]
 const km = (value: number | null, absent: string): string =>
   value === null ? absent : (value / 1_000_000).toFixed(1)
 
+/** The function useChart.ts actually passed to `chart.on('click', ...)`, i.e. `handleClick`. Same
+ *  idiom chart-marks.test.tsx's own `clickHandlerOf` uses for Sparkline/ActivityHeatmap/HeartRateRange. */
+function clickHandlerOf(stub: ReturnType<typeof chartStub>): (event: unknown) => void {
+  const call = stub.on.mock.calls.find(([event]) => event === 'click')
+  if (!call) throw new Error('chart.on was never called with "click"')
+  return call[1] as (event: unknown) => void
+}
+
 function mount(props: Partial<Parameters<typeof DailyBars>[0]> = {}) {
   act(() => {
     root!.render(
@@ -112,5 +120,16 @@ describe('DailyBars', () => {
     mount()
     expect(container!.querySelector('table')).not.toBeNull()
     expect(container!.textContent).toContain('2026-08-10')
+  })
+
+  // The wiring, not the pure function `dayPointDate` already covers on its own (chart-marks.test.tsx):
+  // that a real click reaching this chart's own handler actually calls back with the right date.
+  it('reports the label at the bar a genuine click landed on', () => {
+    const onPointClick = vi.fn()
+    mount({ onPointClick })
+    const handleClick = clickHandlerOf(chartStubs.at(-1)!)
+    handleClick({ componentType: 'series', dataIndex: 2 })
+    expect(onPointClick).toHaveBeenCalledTimes(1)
+    expect(onPointClick).toHaveBeenCalledWith('2026-08-12')
   })
 })

@@ -1,8 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, SYMBOL } from './base.js'
-import type { DayMarks } from './base.js'
+import { ANNOTATION_JOIN, chartBase, dayMarks, dayPointDate, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
@@ -10,21 +9,6 @@ import { formatMetricValue } from '../format.js'
 import { barLabelInterval } from './barAxis.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
-
-/**
- * Which local date a click on this bar chart landed on: a click on a bar reads `labels` by the
- * series' own dataIndex, and a click on one of the overlay marks reads the mark it actually hit
- * (markClickDate in base.ts says why an overlay cannot be resolved against `labels`). Undefined
- * for a click that hit neither, which is empty space. Same shape as Sparkline's own
- * `sparklinePointDate`, and for the identical reason: a plain function, exported and tested on its
- * own, because echarts renders to an SVG this project's render environment cannot hit-test.
- */
-export function dailyBarsPointDate(
-  labels: string[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
-): string | undefined {
-  if (event.componentType !== 'series') return markClickDate(marks, event)
-  return labels[event.dataIndex]
-}
 
 // A stable reference for a caller that omits annotations/excluded, the same device Sparkline's own
 // EMPTY constant is: a default parameter expression that is a fresh `[]` literal runs on every
@@ -116,7 +100,13 @@ export function DailyBars({
         name: axisUnit,
         nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize },
         splitLine: base.splitLine,
-        axisLabel: { ...base.axisLabel, formatter: (value: number) => format(value, '') },
+        // Through the ref, not the `format` closure above, for the same reason the tooltip
+        // formatter reads it: `format` depends on `formatValue` (a fresh arrow every render at
+        // both of this component's call sites) and `i18n.language`, neither of which is in
+        // `build`'s dependency array. Closing over `format` here would freeze the axis on
+        // whichever formatter existed when `build` was last rebuilt while the tooltip and the
+        // table stayed current, three channels the design says must never disagree.
+        axisLabel: { ...base.axisLabel, formatter: (value: number) => tooltipRef.current?.format(value, '') ?? '' },
       },
       series: [{
         type: 'bar' as const, data: values, itemStyle: { color: tokens.series },
@@ -142,7 +132,7 @@ export function DailyBars({
   }, [values, labels, marks, axisUnit])
 
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = dailyBarsPointDate(labels, marks, event)
+    const date = dayPointDate(labels, marks, event)
     if (date !== undefined) onPointClick?.(date)
   }, [labels, marks, onPointClick])
 

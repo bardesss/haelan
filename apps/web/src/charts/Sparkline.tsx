@@ -1,36 +1,13 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, STROKE, OPACITY, SYMBOL } from './base.js'
-import type { DayMarks } from './base.js'
+import { ANNOTATION_JOIN, chartBase, dayMarks, dayPointDate, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
-
-/**
- * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
- * series' own dataIndex, and a click on one of the overlay marks reads the mark it actually hit
- * (markClickDate in base.ts says why an overlay cannot be resolved against `labels`). Undefined
- * for a click that hit neither, which is empty space.
- *
- * An overlay click used to resolve to nothing at all. That was right while every mark sat on a
- * plotted point, since the click fell through to the point beneath it; an excluded day has no
- * point beneath it once the exclusion applies, and the mark is then the only thing there is to
- * click to undo it.
- *
- * A plain function, exported and tested on its own: echarts renders to an SVG this project's own
- * render environment cannot hit-test (see chart-marks.test.tsx's own note), so the
- * translation from a click event to a date is the one piece of this behaviour a test can reach.
- */
-export function sparklinePointDate(
-  labels: string[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
-): string | undefined {
-  if (event.componentType !== 'series') return markClickDate(marks, event)
-  return labels[event.dataIndex]
-}
 
 // A stable reference for a caller that omits annotations/excluded, the same device Dashboard.tsx's
 // own EMPTY constant uses: a default parameter expression that is a fresh `[]` literal runs on
@@ -219,7 +196,7 @@ export function Sparkline({
   }), [values, baseline, marks, episodic, trend, hasTrend])
 
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = sparklinePointDate(labels, marks, event)
+    const date = dayPointDate(labels, marks, event)
     if (date !== undefined) onPointClick?.(date)
   }, [labels, marks, onPointClick])
 

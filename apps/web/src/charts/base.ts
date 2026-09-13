@@ -1,3 +1,4 @@
+import type { ECElementEvent } from 'echarts'
 import type { ChartTokens } from './tokens.js'
 
 export const STROKE = {
@@ -204,6 +205,33 @@ export function markClickDate(
   if (event.componentType === 'markPoint') return marks.atValue[event.dataIndex]?.date
   if (event.componentType === 'markLine') return marks.atDate[event.dataIndex]?.date
   return undefined
+}
+
+/**
+ * Which local date a click on a day-indexed value chart landed on: a click on the series reads
+ * `labels` by its own dataIndex, and a click on one of the overlay marks reads the mark it
+ * actually hit (`markClickDate` above says why an overlay cannot be resolved against `labels`).
+ * Undefined for a click that hit neither, which is empty space.
+ *
+ * An overlay click used to resolve to nothing at all. That was right while every mark sat on a
+ * plotted point, since the click fell through to the point beneath it; an excluded day has no
+ * point beneath it once the exclusion applies, and the mark is then the only thing there is to
+ * click to undo it.
+ *
+ * A plain function, exported and tested on its own: echarts renders to an SVG this project's own
+ * render environment cannot hit-test (see chart-marks.test.tsx's own note), so the
+ * translation from a click event to a date is the one piece of this behaviour a test can reach.
+ *
+ * Shared by Sparkline and DailyBars (was `sparklinePointDate`, local to Sparkline.tsx, until
+ * DailyBars needed the identical logic): centralised here for the same reason `dayTooltip` was
+ * renamed off `sparklineTooltip` before it, so a second caller does not mean a second copy to
+ * keep in sync by hand.
+ */
+export function dayPointDate(
+  labels: string[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
+): string | undefined {
+  if (event.componentType !== 'series') return markClickDate(marks, event)
+  return labels[event.dataIndex]
 }
 
 type Inset = { left?: number; right?: number; top?: number; bottom?: number }

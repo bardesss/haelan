@@ -10,10 +10,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
-import { Sparkline, sparklinePointDate } from '../src/charts/Sparkline.js'
+import { Sparkline } from '../src/charts/Sparkline.js'
 import { ActivityHeatmap, heatmapClickDate } from '../src/charts/ActivityHeatmap.js'
 import { HeartRateRange, heartRateRangePointDate } from '../src/charts/HeartRateRange.js'
-import { dayMarks } from '../src/charts/base.js'
+import { dayMarks, dayPointDate } from '../src/charts/base.js'
 import { hrTooltip } from '../src/charts/hrTooltip.js'
 import type { DayMarks } from '../src/charts/base.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
@@ -508,11 +508,11 @@ describe('Sparkline', () => {
     expect(text).not.toContain('series0')
   })
 
-  describe('sparklinePointDate', () => {
+  describe('dayPointDate', () => {
     const noMarks: DayMarks = { atValue: [], atDate: [] }
 
     it('reads the local date off a genuine series click', () => {
-      expect(sparklinePointDate(labels, noMarks, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-02')
+      expect(dayPointDate(labels, noMarks, { componentType: 'series', dataIndex: 1 })).toBe('2026-08-02')
     })
 
     // The undo path for an applied exclusion, and the only one left: the day has no plotted point
@@ -523,14 +523,14 @@ describe('Sparkline', () => {
         dates: labels, values: appliedValues, excluded: ['2026-08-02'],
         annotations: [{ date: '2026-08-02', text: EXCLUDED_REASON }], excludedText: 'excluded',
       })
-      expect(sparklinePointDate(labels, marks, { componentType: 'markLine', dataIndex: 0 })).toBe('2026-08-02')
+      expect(dayPointDate(labels, marks, { componentType: 'markLine', dataIndex: 0 })).toBe('2026-08-02')
     })
 
     it('reads the local date off a click on the mark sitting over a day that still has its value', () => {
       const marks = dayMarks({
         dates: labels, values, excluded: ['2026-08-02'], annotations: [], excludedText: 'excluded',
       })
-      expect(sparklinePointDate(labels, marks, { componentType: 'markPoint', dataIndex: 0 })).toBe('2026-08-02')
+      expect(dayPointDate(labels, marks, { componentType: 'markPoint', dataIndex: 0 })).toBe('2026-08-02')
     })
 
     // An overlay's dataIndex counts into that overlay's own data array, which is much shorter than
@@ -538,8 +538,8 @@ describe('Sparkline', () => {
     // mark, and reporting a date for an index no mark occupies would report one for a click on
     // nothing at all.
     it('reports no date for an overlay index no mark occupies', () => {
-      expect(sparklinePointDate(labels, noMarks, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
-      expect(sparklinePointDate(labels, noMarks, { componentType: 'markLine', dataIndex: 0 })).toBeUndefined()
+      expect(dayPointDate(labels, noMarks, { componentType: 'markPoint', dataIndex: 0 })).toBeUndefined()
+      expect(dayPointDate(labels, noMarks, { componentType: 'markLine', dataIndex: 0 })).toBeUndefined()
     })
   })
 })
@@ -1235,7 +1235,7 @@ describe('HeartRateRange', () => {
 // The pure functions above prove the date arithmetic; they say nothing about whether a real click
 // ever reaches `onPointClick`, since neither Sparkline nor ActivityHeatmap calls them directly.
 // The actual path is chart.on('click', handleClick) -> the onClickRef useChart.ts keeps -> the `if
-// (date !== undefined)` guard each chart's own onClick wraps sparklinePointDate/heatmapClickDate
+// (date !== undefined)` guard each chart's own onClick wraps dayPointDate/heatmapClickDate
 // in. Dropping the third argument to useChart, or inverting that guard, would leave every test
 // above green. These tests mount for real (so the actual useEffect runs and actually calls
 // chart.on) and invoke the captured handler directly (so no coordinate ever needs resolving).

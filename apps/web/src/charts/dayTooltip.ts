@@ -7,8 +7,8 @@ import type { Translate } from '../format.js'
  * Everything the tooltip reads, handed in rather than closed over, so this stays a pure function a
  * test can reach: echarts renders to an SVG this project's render environment cannot hit-test
  * (chart-marks.test.tsx's own note), which makes the translation from an event to a string the one
- * piece of this behaviour a test can exercise at all. `sparklinePointDate` in Sparkline.tsx is
- * exported for exactly the same reason and this follows it.
+ * piece of this behaviour a test can exercise at all. `dayPointDate` in base.ts is exported for
+ * exactly the same reason and this follows it.
  */
 export interface DayTooltipInput {
   /** Dense over the range, one entry per calendar day, null where nothing was reported. */
