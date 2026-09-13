@@ -61,11 +61,17 @@ function NightTrace({ metric, night, chosenSource }: {
 
   // When the fallback fired, the basis says so and names both the pinned device (the one that
   // logged nothing) and the metric it was pinned for, since this card - unlike the workout page's
-  // single-metric one - shares its basis sentence across three different metrics.
+  // single-metric one - shares its basis sentence across three different metrics. The metric is
+  // named in words (sleep.night.traces.metricNames), not by its raw catalogue id: the spec holds
+  // this card and the workout page's own basis line to the same wording for the same metric, and
+  // 'heart_rate' sitting undeclined inside an otherwise Dutch sentence is exactly the kind of
+  // seam a reader of either language notices immediately. tileBasis (NightTiles.tsx), the other
+  // card on this page that interpolates a raw metric id, is not this same case: nothing else on
+  // any page repeats that sentence, so it carries no matching-wording constraint to violate.
   const basis = trace.traceSource === 'otherSources'
     ? t('sleep.night.traces.basisFellBack', {
       pinned: nameOf(trace.pinnedSourceId),
-      metric,
+      metric: t(`sleep.night.traces.metricNames.${metric}`),
       detail: intradayBasis(t, trace.reduction, trace.points.length),
     })
     : intradayBasis(t, trace.reduction, trace.points.length)
@@ -73,7 +79,7 @@ function NightTrace({ metric, night, chosenSource }: {
   return (
     <div className="night-trace">
       <Card span={12} label={label} basis={basis}>
-        <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} />
+        <IntradayHeartRate points={trace.points} reduction={trace.reduction} label={label} metric={metric} />
       </Card>
     </div>
   )
@@ -89,6 +95,12 @@ function NightTrace({ metric, night, chosenSource }: {
  * already sit in that grid as.
  */
 export function NightTraces({ night, chosenSource }: { night: Night, chosenSource: string | null }) {
+  // The three literal calls below and NIGHT_TRACE_METRICS above are the same list written out
+  // twice, kept in lockstep by hand rather than by a `.map()`: NightTrace's own comment explains
+  // why a hook cannot be called a variable number of times, so this list cannot be exported once
+  // and then iterated here the way an ordinary array of cards would be. Adding a metric to one
+  // without the other is exactly the drift writing both out by hand cannot itself prevent -
+  // update both together.
   return (
     <>
       <NightTrace metric="heart_rate" night={night} chosenSource={chosenSource} />

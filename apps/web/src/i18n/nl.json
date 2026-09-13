@@ -500,8 +500,13 @@
       "notStaged": "Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen."
     },
     "hrTooltip": {
-      "mean": "gemiddeld {{value}} bpm",
-      "range": "bereik {{min}} tot {{max}} bpm"
+      "mean": "gemiddeld {{value}} {{unit}}",
+      "range": "bereik {{min}} tot {{max}} {{unit}}"
+    },
+    "units": {
+      "bpm": "bpm",
+      "percent": "%",
+      "milliseconds": "ms"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
@@ -659,6 +664,11 @@
         "heart_rate": "Hartslag tijdens de nacht",
         "spo2": "Zuurstofsaturatie tijdens de nacht",
         "hrv": "Hartslagvariabiliteit tijdens de nacht",
+        "metricNames": {
+          "heart_rate": "hartslag",
+          "spo2": "zuurstofsaturatie",
+          "hrv": "hartslagvariabiliteit"
+        },
         "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
       }
     }

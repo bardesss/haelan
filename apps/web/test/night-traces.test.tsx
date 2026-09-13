@@ -141,12 +141,25 @@ describe('the overnight traces', () => {
     try {
       const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} />)
       await flush(client, html)
+      // No source names are stubbed, so nameOf('watch') falls back to the raw id itself
+      // (useSourceNames.ts's own fallback rule) - this is the sentence a reader with no alias set
+      // for `watch` actually sees. The metric is named in words ("heart rate"), not by its raw
+      // catalogue id: this is the exact defect a review found in an earlier version of this card -
+      // toContain('recorded no') passed identically whether the sentence said "heart rate" or
+      // "heart_rate", so it could not catch a wording regression, only presence. Asserting the
+      // full sentence, the same idiom workout-trace-card.test.tsx's own ".basis" assertion uses,
+      // is what actually pins the wording.
+      const expected = 'watch recorded no heart rate for this night, so this is every other device '
+        + 'instead; these 1 points are the readings'
       // All three metrics need the second, unpinned request here, which is exactly the shape the
       // previous test's own comment on Windows timer granularity describes - flush() can settle a
       // poll early on the cached "nothing in flight" state while the component's own re-render is
       // still queued behind it.
-      await pumpUntil(() => html().includes('recorded no'), 'the fallback basis line to render')
-      expect(html()).toContain('recorded no')
+      await pumpUntil(
+        () => container?.querySelector('.basis')?.textContent === expected,
+        'the fallback basis line to render',
+      )
+      expect(container?.querySelector('.basis')?.textContent).toBe(expected)
     } finally { restore() }
   })
 

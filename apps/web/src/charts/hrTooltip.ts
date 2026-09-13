@@ -23,5 +23,10 @@ export function hrTooltip(days: DayRow[], index: number | undefined, t: Translat
   const mean = formatMetricValue(day.hrMean, 'heart_rate', language, '')
   const min = formatMetricValue(day.hrMin, 'heart_rate', language, '')
   const max = formatMetricValue(day.hrMax, 'heart_rate', language, '')
-  return tip`${day.date}<br/>${t('charts.hrTooltip.mean', { value: mean })}<br/>${t('charts.hrTooltip.range', { min, max })}`
+  // The unit through t(), not a literal 'bpm' interpolated straight in: IntradayHeartRate.tsx
+  // (charts.hrTooltip's other reader, now shared with spo2 and hrv) made the same template take
+  // an explicit {{unit}} for exactly that reason - this file is heart_rate-only, so its own unit
+  // never varies, but the template it shares no longer bakes one in.
+  const unit = t('charts.units.bpm')
+  return tip`${day.date}<br/>${t('charts.hrTooltip.mean', { value: mean, unit })}<br/>${t('charts.hrTooltip.range', { min, max, unit })}`
 }

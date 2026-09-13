@@ -500,8 +500,13 @@
       "notStaged": "This night was not staged, so there is nothing to total."
     },
     "hrTooltip": {
-      "mean": "mean {{value}} bpm",
-      "range": "range {{min}} to {{max}} bpm"
+      "mean": "mean {{value}} {{unit}}",
+      "range": "range {{min}} to {{max}} {{unit}}"
+    },
+    "units": {
+      "bpm": "bpm",
+      "percent": "%",
+      "milliseconds": "ms"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
@@ -659,6 +664,11 @@
         "heart_rate": "Heart rate through the night",
         "spo2": "Blood oxygen through the night",
         "hrv": "Heart rate variability through the night",
+        "metricNames": {
+          "heart_rate": "heart rate",
+          "spo2": "blood oxygen",
+          "hrv": "heart rate variability"
+        },
         "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}"
       }
     }

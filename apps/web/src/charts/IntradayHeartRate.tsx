@@ -11,6 +11,24 @@ import type { Translate } from '../format.js'
 import type { IntradayPoint, IntradayResult } from '../data/useIntraday.js'
 import { useSession } from '../auth/session.js'
 import { useSourceNames } from '../data/useSourceNames.js'
+import { METRICS } from '@haelan/core/metrics'
+
+// This component's name predates M8c: it was heart-rate-only until the night page reused it for
+// spo2 and hrv (NightTraces.tsx), the same three - and only three - metrics
+// packages/core/src/derive/metrics.ts's own "Intraday series" comment names as the continuous
+// samples a card shows min/mean/max of. `metric` therefore defaults to 'heart_rate' so Dashboard's
+// existing caller, which never names one, keeps drawing exactly what it always drew.
+//
+// A lookup from METRICS[metric].unit to a catalogue key, not the raw unit id interpolated
+// directly: 'bpm', 'percent' and 'milliseconds' are METRICS' own internal vocabulary
+// (metrics.ts's own doc comment on `unit`), not display text in any language, the same reason
+// formatMetricValue takes a metric id and reads precision off the catalogue rather than being
+// handed a number the caller already rounded.
+const UNIT_LABEL_KEYS: Record<string, string> = {
+  bpm: 'charts.units.bpm',
+  percent: 'charts.units.percent',
+  milliseconds: 'charts.units.milliseconds',
+}
 
 type Props = {
   points: IntradayPoint[]
@@ -20,6 +38,13 @@ type Props = {
   // directly, the same object it separately hands `intradayBasis` below to build the card's basis.
   reduction: IntradayResult['reduction']
   label: string
+  /**
+   * Which catalogue entry `points`' min/mean/max are stored under - read for both the display
+   * precision (`formatMetricValue`) and the tooltip/table's unit text. Defaults to 'heart_rate',
+   * this component's only metric before NightTraces.tsx became its second caller, so Dashboard's
+   * own call site needs no change.
+   */
+  metric?: string
   // Handed the clicked point's own sourceId, utcMs and n, the three fields a sample scoped target
   // needs (AnnotatePanel.tsx's own AnnotateTarget), rather than a single localDate the way the
   // day_metric charts' onPointClick reports: a click here names one (source, minute) bucket, not
@@ -114,7 +139,9 @@ function timeOfDay(utcMs: number, timeZone: string, language: string): string {
 // caused here the same way useSourceNames' own nameOf memo comment describes for a different prop.
 const NO_EVENT_MARKS: readonly { atMs: number }[] = []
 
-export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO_EVENT_MARKS }: Props) {
+export function IntradayHeartRate({
+  points, label, metric = 'heart_rate', onPointClick, eventMarks = NO_EVENT_MARKS,
+}: Props) {
   const { t, i18n } = useTranslation()
   const session = useSession()
   const { nameOf } = useSourceNames()
@@ -124,6 +151,15 @@ export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO
   // statable zone to show it in meanwhile, not a guess the way the runtime's own machine zone would
   // be (timeOfDay's own comment on why that guess is never used here, loaded or not).
   const timezone = session.data?.timezone ?? 'UTC'
+
+  // Read once per render, not per formatMetricValue call: METRICS[metric] is the same lookup
+  // formatMetricValue itself does internally for precision, and translating a unit key is not free
+  // enough to repeat six times over. The `?? ''` fallback is unreachable for the three metrics this
+  // component is actually asked to draw (heart_rate, spo2, hrv, all present in UNIT_LABEL_KEYS via
+  // METRICS' own unit field) - kept only so an unrecognised metric renders no unit rather than a
+  // raw i18next key string.
+  const unitKey = UNIT_LABEL_KEYS[METRICS[metric]?.unit ?? '']
+  const unit = unitKey ? t(unitKey) : ''
 
   const series = useMemo(() => seriesBySource(points), [points])
 
@@ -174,12 +210,12 @@ export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO
             .map((p) => {
               const point = pointsBySeriesIndex.get(p.seriesIndex)![p.dataIndex]
               if (!point) return ''
-              const mean = formatMetricValue(point.mean, 'heart_rate', i18n.language, '')
-              const min = formatMetricValue(point.min, 'heart_rate', i18n.language, '')
-              const max = formatMetricValue(point.max, 'heart_rate', i18n.language, '')
+              const mean = formatMetricValue(point.mean, metric, i18n.language, '')
+              const min = formatMetricValue(point.min, metric, i18n.language, '')
+              const max = formatMetricValue(point.max, metric, i18n.language, '')
               return tip`${timeOfDay(point.utcMs, timezone, i18n.language)} ${nameOf(point.sourceId)}`
-                + tip`<br/>${t('charts.hrTooltip.mean', { value: mean })}`
-                + tip`<br/>${t('charts.hrTooltip.range', { min, max })}`
+                + tip`<br/>${t('charts.hrTooltip.mean', { value: mean, unit })}`
+                + tip`<br/>${t('charts.hrTooltip.range', { min, max, unit })}`
             })
             .filter((line) => line !== '')
           return lines.join('<br/><br/>')
@@ -237,7 +273,7 @@ export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO
         }]),
       ],
     }
-  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks])
+  }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks, metric, unit])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const seriesIndex = event.seriesIndex
@@ -266,9 +302,9 @@ export function IntradayHeartRate({ points, label, onPointClick, eventMarks = NO
           return [
             timeOfDay(p.utcMs, timezone, i18n.language),
             nameOf(p.sourceId),
-            formatMetricValue(p.min, 'heart_rate', i18n.language, absent),
-            formatMetricValue(p.mean, 'heart_rate', i18n.language, absent),
-            formatMetricValue(p.max, 'heart_rate', i18n.language, absent),
+            formatMetricValue(p.min, metric, i18n.language, absent),
+            formatMetricValue(p.mean, metric, i18n.language, absent),
+            formatMetricValue(p.max, metric, i18n.language, absent),
             p.excluded ? t('charts.absence.excluded') : '',
           ]
         }),

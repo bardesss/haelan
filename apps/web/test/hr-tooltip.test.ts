@@ -6,14 +6,19 @@ import type { Translate } from '../src/format.js'
 // A hand rolled stand-in for i18next's own t(), the same device dayAnnotations.test.ts's own
 // header comment explains: MESSAGES mirrors the real keys hrTooltip.ts reads
 // (charts.absence.notWorn, charts.absence.noReading, charts.hrTooltip.mean,
-// charts.hrTooltip.range), interpolated the same {{token}} way i18next itself does, so this file
-// asserts what hrTooltip actually asked t() for rather than pinning translated copy a locale file
-// is free to reword.
+// charts.hrTooltip.range, charts.units.bpm), interpolated the same {{token}} way i18next itself
+// does, so this file asserts what hrTooltip actually asked t() for rather than pinning translated
+// copy a locale file is free to reword. charts.hrTooltip.mean/range themselves no longer bake in
+// "bpm": IntradayHeartRate.tsx made the shared template take an explicit {{unit}} once it started
+// drawing spo2 and hrv too, so this file's own MESSAGES has to resolve charts.units.bpm the same
+// way the real catalogue does, or a real regression there (the wrong unit reaching hrTooltip.ts,
+// which is heart_rate-only and should always say "bpm") would pass here unnoticed.
 const MESSAGES: Record<string, string> = {
   'charts.absence.notWorn': 'not worn',
   'charts.absence.noReading': 'no reading',
-  'charts.hrTooltip.mean': 'mean {{value}} bpm',
-  'charts.hrTooltip.range': 'range {{min}} to {{max}} bpm',
+  'charts.hrTooltip.mean': 'mean {{value}} {{unit}}',
+  'charts.hrTooltip.range': 'range {{min}} to {{max}} {{unit}}',
+  'charts.units.bpm': 'bpm',
 }
 const t: Translate = (key, options) => {
   let text = MESSAGES[key] ?? key
