@@ -168,9 +168,12 @@ people who disagree rather than for people installing.
 | `HAELAN_DATA_DIR` | `/data` | Where the database, the key and the backups live |
 | `HAELAN_PORT` | `4235` | The port the server listens on |
 | `HAELAN_HOST` | `0.0.0.0` | The address it binds to |
-| `HAELAN_BACKUP_KEEP` | `7` | How many backups to keep; `0` turns backups off |
-| `HAELAN_BACKUP_INTERVAL_HOURS` | `24` | How often one is taken |
 | `HAELAN_ENCRYPTION_KEY` | generated | Holding the key yourself instead of in a file beside the database |
+
+Everything above has to be true before the server binds a port or opens the database, which is why
+it is here rather than on a settings screen. How many backups to keep and how often to take one are
+not: the process is already running by the time either matters, so both live in Settings, under
+Database maintenance, beside the buttons that take a backup and reclaim space.
 
 ### What is in the data directory
 
@@ -191,9 +194,9 @@ do not sum exactly to the total. Intraday heart rate is the bulk of it: a readin
 seconds, collapsed to three rows a minute.
 
 **Backups multiply it.** The default keeps seven daily copies, each a compacted copy of the whole
-database, so a 247 MB instance carries roughly **1.7 GB of backups** on top of it.
-`HAELAN_BACKUP_KEEP` changes how many are kept, and `0` turns backups off for an operator who backs
-the volume up some other way.
+database, so a 247 MB instance carries roughly **1.7 GB of backups** on top of it. Settings, under
+Database maintenance, changes how many are kept, and `0` turns backups off for an operator who
+backs the volume up some other way.
 
 **The boot vacuum needs headroom of its own.** It declines to run unless free disk exceeds the live
 content by 20%, because `VACUUM` builds a whole new file before the old one is replaced. It says so
@@ -237,9 +240,10 @@ back: `?range=week&on=2026-09-06`.
 ## Backups, and restoring one
 
 An instance takes a compacted copy of its database once a day into `backups/` inside the data
-directory, keeps the newest seven, and does it while the app is running. `HAELAN_BACKUP_KEEP` and
-`HAELAN_BACKUP_INTERVAL_HOURS` change that; `HAELAN_BACKUP_KEEP=0` turns it off for an operator who
-backs the volume up by other means. Settings shows when the last one was taken and can take one now.
+directory, keeps the newest seven, and does it while the app is running. Settings, under Database
+maintenance, changes how many are kept and how many hours pass between them, and setting the count
+to `0` turns backups off for an operator who backs the volume up by other means. The same screen
+shows when the last one was taken and can take one now.
 
 A file appears in `backups/` only after it has been written, opened, integrity-checked and
 row-counted against the live database. A copy that fails any of those keeps a `.part` extension,
@@ -431,12 +435,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 820 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 835 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 820 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 835 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

@@ -49,8 +49,12 @@ export interface WithServerOptions {
   v1TestExtra?: (app: FastifyInstance) => void
   /** See ServerDeps.onRouteForTest. Unset by every test but registeredRoutes below. */
   onRouteForTest?: (route: { method: string, url: string }) => void
-  /** See ServerDeps.backupKeep. Defaults to 7, the production default, below; a test about
-   * retention itself (HAELAN_BACKUP_KEEP=0 disabling the manual backup route) overrides it. */
+  /**
+   * How many backups this instance keeps, written onto the settings row completeSetup creates.
+   * Unset leaves the column null, which resolves to DEFAULT_BACKUP_KEEP - the state a household
+   * that never opened the Maintenance card is in. A test about retention itself (zero disabling
+   * the manual backup route) sets it.
+   */
   backupKeep?: number
   /** See ServerDeps.rebuildInFlight. Unset by every test but the one that exercises the two
    * maintenance routes declining while it is true. */
@@ -153,11 +157,9 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     limiter: options.limiter ?? { take: async () => {} },
     // The same temp directory openHaelan just opened below, matching what index.ts hands
     // buildServer in production - see ServerDeps.dataDir for why a route cannot read
-    // HAELAN_DATA_DIR itself. keep and intervalHours are config.ts's own defaults; no test here
-    // is about either number, so nothing narrows them further.
+    // HAELAN_DATA_DIR itself. Retention and the interval are not here at all any more: both are
+    // instance settings, which completeSetup writes when WithServerOptions.backupKeep asks it to.
     dataDir: dir,
-    backupKeep: options.backupKeep ?? 7,
-    backupIntervalHours: 24,
     rebuildInFlight: options.rebuildInFlight,
     // One window per type, not fourteen, by default. Enough to prove the walk moved and
     // recorded a cursor, which is all most server tests assert; the ordering of a longer walk
@@ -205,6 +207,13 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
     instance.credentials.putClient({
       clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: clock.nowMs,
     })
+    // After put(), which creates the row this can update, and only when the test asked: an unset
+    // option has to leave both columns null, since null is the state SettingsStore.seedBackupPolicy
+    // reads as "nobody has chosen yet" and a harness that wrote 7 into every fixture would hide
+    // any regression in that.
+    if (options.backupKeep !== undefined) {
+      settings.putBackupPolicy({ keep: options.backupKeep, intervalHours: 24 }, clock.nowMs)
+    }
     settings.markSetupComplete(clock.nowMs)
     setupComplete = true
   }

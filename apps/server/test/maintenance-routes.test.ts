@@ -33,10 +33,9 @@ describe('GET /api/settings/maintenance', () => {
     })
     expect(response.statusCode).toBe(200)
     const body = response.json()
-    // keep and intervalHours come from ServerDeps, not process.env (see harness.ts's own
-    // dataDir/backupKeep/backupIntervalHours) - asserted as the exact numbers the harness set,
-    // so a route that quietly started reading HAELAN_BACKUP_KEEP itself would fail this in a
-    // suite that never sets that variable.
+    // keep and intervalHours come from the settings row, not process.env - and this harness
+    // leaves both columns null, so these are the store's own defaults. A route that quietly
+    // started reading HAELAN_BACKUP_KEEP itself would fail this in a suite that never sets it.
     expect(body.keep).toBe(7)
     expect(body.intervalHours).toBe(24)
     expect(body.backups).toEqual([])
@@ -46,6 +45,95 @@ describe('GET /api/settings/maintenance', () => {
     expect(typeof body.bloat.fileBytes).toBe('number')
     expect(body.bloat.fileBytes).toBeGreaterThan(0)
     expect(body.bloat.freeFraction).toBe(0)
+  })
+})
+
+describe('PUT /api/settings/maintenance/backup-policy', () => {
+  it('answers forbidden for a non-admin session', async () => {
+    harness = await withServer()
+    await harness.addPerson({ id: 'p-outsider', displayName: 'Outsider', username: 'outsider' })
+    const token = await harness.signIn('outsider', 'a good long password')
+
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/maintenance/backup-policy',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { keep: 3, intervalHours: 12 },
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json().error.kind).toBe('forbidden')
+  })
+
+  it('saves both numbers and the status route reports them back', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const saved = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/maintenance/backup-policy',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { keep: 3, intervalHours: 12 },
+    })
+    expect(saved.statusCode).toBe(200)
+    expect(saved.json()).toEqual({ keep: 3, intervalHours: 12 })
+
+    const status = await harness.app.inject({
+      method: 'GET', url: '/api/settings/maintenance',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(status.json()).toMatchObject({ keep: 3, intervalHours: 12 })
+  })
+
+  // The point of moving these off HAELAN_BACKUP_KEEP: the buttons on the same card have to obey
+  // the number the household just typed, in the process that is already running, with no restart.
+  it('is what the backup button reads, in the same process, with no restart', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    await harness.app.inject({
+      method: 'PUT', url: '/api/settings/maintenance/backup-policy',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { keep: 0, intervalHours: 24 },
+    })
+    const response = await harness.app.inject({
+      method: 'POST', url: '/api/settings/maintenance/backup',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.json()).toEqual({ ran: false, reason: 'backups_disabled' })
+    expect(listBackups(harness.app.haelan.dataDir)).toHaveLength(0)
+  })
+
+  it('refuses a number outside the range, with the bound it missed rather than a bare 400', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/maintenance/backup-policy',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { keep: -1, intervalHours: 24 },
+    })
+    expect(response.statusCode).toBe(400)
+    const body = response.json()
+    expect(body.error.kind).toBe('config')
+    expect(body.error.message).toContain('0 to 365')
+    // Nothing written: the store threw before the update, so the status route still answers the
+    // default rather than a half-applied policy.
+    const status = await harness.app.inject({
+      method: 'GET', url: '/api/settings/maintenance',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(status.json()).toMatchObject({ keep: 7, intervalHours: 24 })
+  })
+
+  it('refuses a body that names only one of the two', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'PUT', url: '/api/settings/maintenance/backup-policy',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { keep: 3 },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
   })
 })
 
@@ -92,10 +180,10 @@ describe('POST /api/settings/maintenance/backup', () => {
     expect(response.statusCode).toBe(403)
   })
 
-  // README and config.ts both say HAELAN_BACKUP_KEEP=0 turns backups off; the tick already reads
-  // it that way (maintenance-tick.test.ts). Before this fix the button ignored the setting
-  // entirely, took a copy anyway, and pruneBackups(dir, 0) - which deletes nothing - left an
-  // operator who set this specifically to avoid unbounded growth with exactly that.
+  // Retention of zero turns backups off; the tick already reads it that way
+  // (maintenance-tick.test.ts). Before this fix the button ignored the setting entirely, took a
+  // copy anyway, and pruneBackups(dir, 0) - which deletes nothing - left an operator who set this
+  // specifically to avoid unbounded growth with exactly that.
   it('declines rather than writes a copy when retention is zero', async () => {
     harness = await withServer({ backupKeep: 0 })
     const token = await harness.signIn()

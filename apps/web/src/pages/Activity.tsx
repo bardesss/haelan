@@ -20,6 +20,7 @@ import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { SessionList } from './activity/SessionList.js'
 import { bandSeries } from './activity/bandSeries.js'
+import { TrainingLoadCard } from './activity/TrainingLoadCard.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
@@ -421,6 +422,11 @@ export function Activity() {
             exact call InsightCard's own default makes without a formatValue override. */}
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
           label={t('activity.insights.steps')} />
+
+        {/* `controls.to` rather than the whole range: this card is 7 days against 28 by the
+            metric's own definition, so the range picker moves only which day it is asked about,
+            never the width of either window. See useTrainingLoad for why that has to stay true. */}
+        <TrainingLoadCard on={controls.to} source={source} span={4} />
 
         {/* Below the tiles and the heatmap, reusing this same ControlRow rather than a rail item
             of its own (nine unlabelled icons already proved to be too many three days before this

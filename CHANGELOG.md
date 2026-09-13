@@ -9,6 +9,39 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.18.0](https://github.com/bardesss/haelan/compare/v1.17.1...v1.18.0) (2026-09-13)
+
+
+### Features
+
+* how many backups to keep, and how often, become settings rather than variables ([#205](https://github.com/bardesss/haelan/issues/205)) ([b2cd24b](https://github.com/bardesss/haelan/commit/b2cd24bb17f4db3537c2227975944f4ced980946)), closes [#150](https://github.com/bardesss/haelan/issues/150)
+
+## [1.17.1](https://github.com/bardesss/haelan/compare/v1.17.0...v1.17.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **server:** resolving a session stops being a write, so a boot rebuild cannot take the instance down ([#206](https://github.com/bardesss/haelan/issues/206)) ([47ac840](https://github.com/bardesss/haelan/commit/47ac840787cb17b64633e7ffc000212170cc009b))
+
+## [1.17.0](https://github.com/bardesss/haelan/compare/v1.16.1...v1.17.0) (2026-09-13)
+
+
+### Features
+
+* **web:** a weekly cardio load target and an acute to chronic workload ratio ([#203](https://github.com/bardesss/haelan/issues/203)) ([4f9b5a9](https://github.com/bardesss/haelan/commit/4f9b5a9095c575e977cdb901e2d3b7ac3e3dcf58))
+
+
+### Bug Fixes
+
+* **test:** flush() waits on progress, and can tell a settled page from one that never started ([#202](https://github.com/bardesss/haelan/issues/202)) ([b914b71](https://github.com/bardesss/haelan/commit/b914b71e511487a79708746de2a0b81d14cdfbfd)), closes [#193](https://github.com/bardesss/haelan/issues/193)
+
+## [1.16.1](https://github.com/bardesss/haelan/compare/v1.16.0...v1.16.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **test:** the trace card waits for the fallback, not for flush()'s guess ([#199](https://github.com/bardesss/haelan/issues/199)) ([ca4d6cb](https://github.com/bardesss/haelan/commit/ca4d6cbb8545d279a8b1b7843464b49c1de3207c))
+
 ## [1.16.0](https://github.com/bardesss/haelan/compare/v1.15.3...v1.16.0) (2026-09-13)
 
 

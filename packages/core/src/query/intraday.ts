@@ -7,6 +7,26 @@ import { parseSampleTarget, sampleTarget } from '../derive/targetKey.ts'
 import { thinBand } from './downsample.ts'
 import type { Thinned } from './downsample.ts'
 
+/**
+ * Intraday readers, written to draw a chart.
+ *
+ * Both of this module's display oriented decisions are right for drawing and wrong for arithmetic,
+ * and both have already been inherited by accident once (#191, #194):
+ *
+ * - **Sample scope exclusions are FLAGGED, not dropped.** `IntradayPoint.excluded` marks them,
+ *   because a chart needs the point in order to anchor an exclusion marker on it. A derived number
+ *   that keeps them counts readings their owner disowned. `query/sessionHeartRate.ts` drops them,
+ *   and says so where it does it.
+ * - **Points are THINNED to a caller supplied budget.** `thinBand`'s `minmax` bucketing keeps each
+ *   bucket's extremes, so any mean taken over the result is biased, and biased by an argument about
+ *   display: the same span answers a different number at `points: 50` than at `points: 300`.
+ *
+ * So a caller whose output is a stored or printed number does not reuse these readers without
+ * saying what it does about both. CONTRIBUTING.md states the rule, `query/sessionHeartRate.ts` is
+ * the worked example, and the reason the rule lives there rather than only here is that the next
+ * person to need it will be standing in one of those two files.
+ */
+
 const MINUTE_MS = 60_000
 const DEFAULT_POINTS = 500
 

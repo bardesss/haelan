@@ -1,7 +1,7 @@
 {
   "name": "haelan",
   "private": true,
-  "version": "1.16.0",
+  "version": "1.18.0",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.22.0",
   "type": "module",

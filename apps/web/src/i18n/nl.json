@@ -90,10 +90,22 @@
     "retry": "Opnieuw proberen"
   },
   "emptyState": {
-    "no_data": { "title": "Nog geen data", "detail": "Voor deze periode is niets geregistreerd." },
-    "not_worn": { "title": "Apparaat niet gedragen", "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren." },
-    "not_synced": { "title": "Wordt niet gesynchroniseerd", "detail": "Je hebt dit gegevenstype uitgezet. Zet het weer aan in Instellingen om het weer op te halen." },
-    "insufficient": { "title": "Onvoldoende data om samen te vatten", "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen." }
+    "no_data": {
+      "title": "Nog geen data",
+      "detail": "Voor deze periode is niets geregistreerd."
+    },
+    "not_worn": {
+      "title": "Apparaat niet gedragen",
+      "detail": "Er zijn dagen in deze periode, maar er droeg niemand een apparaat om ze te registreren."
+    },
+    "not_synced": {
+      "title": "Wordt niet gesynchroniseerd",
+      "detail": "Je hebt dit gegevenstype uitgezet. Zet het weer aan in Instellingen om het weer op te halen."
+    },
+    "insufficient": {
+      "title": "Onvoldoende data om samen te vatten",
+      "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen."
+    }
   },
   "insightCard": {
     "summary": "{{current}} gemiddeld ({{currentFrom}} tot en met {{currentTo}}) tegenover {{previous}} gemiddeld in de vorige periode ({{previousFrom}} tot en met {{previousTo}}), een verandering van {{delta}}.",
@@ -425,11 +437,20 @@
       "missingTitle": "Geen training gevonden",
       "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
       "tiles": {
-        "elapsed": "Verstreken", "moving": "In beweging", "distance": "Afstand", "pace": "Tempo",
-        "speed": "Snelheid", "calories": "Calorieën", "heartRate": "Hartslag",
-        "elevation": "Hoogtewinst", "steps": "Stappen", "activeZoneMinutes": "Actieve zoneminuten",
-        "vo2max": "VO2max", "swimLengths": "Baantjes",
-        "cardioLoadEdwards": "Cardiobelasting (Edwards)", "cardioLoadBanister": "Cardiobelasting (Banister)"
+        "elapsed": "Verstreken",
+        "moving": "In beweging",
+        "distance": "Afstand",
+        "pace": "Tempo",
+        "speed": "Snelheid",
+        "calories": "Calorieën",
+        "heartRate": "Hartslag",
+        "elevation": "Hoogtewinst",
+        "steps": "Stappen",
+        "activeZoneMinutes": "Actieve zoneminuten",
+        "vo2max": "VO2max",
+        "swimLengths": "Baantjes",
+        "cardioLoadEdwards": "Cardiobelasting (Edwards)",
+        "cardioLoadBanister": "Cardiobelasting (Banister)"
       },
       "basis": {
         "elapsed": "vanaf het eigen begin en einde van de sessie",
@@ -444,7 +465,10 @@
         "basis": "de eigen vier zones van de sessie, zoals het apparaat ze registreerde — niet de drie zones van actieve zoneminuten",
         "column": "Zone",
         "duration": "Duur",
-        "light": "Licht", "moderate": "Matig", "vigorous": "Intensief", "peak": "Piek"
+        "light": "Licht",
+        "moderate": "Matig",
+        "vigorous": "Intensief",
+        "peak": "Piek"
       },
       "trace": {
         "label": "Hartslag tijdens deze training",
@@ -452,18 +476,30 @@
         "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
       },
       "splits": {
-        "autoLabel": "Automatische tussentijden", "lapLabel": "Rondes", "lapLabelTyped": "Rondes ({{type}})",
-        "number": "#", "distance": "Afstand", "duration": "Duur", "pace": "Tempo", "heartRate": "Hartslag",
+        "autoLabel": "Automatische tussentijden",
+        "lapLabel": "Rondes",
+        "lapLabelTyped": "Rondes ({{type}})",
+        "number": "#",
+        "distance": "Afstand",
+        "duration": "Duur",
+        "pace": "Tempo",
+        "heartRate": "Hartslag",
         "filledFromTrace": "Hartslagen met † zijn niet per tussentijd of ronde opgeslagen; ze komen uit de hartslag van deze sessie over dat stuk.",
         "type": {
-          "MANUAL": "handmatig", "DURATION": "op duur", "DISTANCE": "op afstand",
-          "CALORIES": "op calorieën", "SPLIT_TYPE_UNSPECIFIED": "niet gespecificeerd"
+          "MANUAL": "handmatig",
+          "DURATION": "op duur",
+          "DISTANCE": "op afstand",
+          "CALORIES": "op calorieën",
+          "SPLIT_TYPE_UNSPECIFIED": "niet gespecificeerd"
         }
       },
       "dynamics": {
         "label": "Hardloopdynamiek",
-        "cadence": "Cadans", "stride": "Paslengte", "groundContact": "Grondcontact",
-        "oscillation": "Verticale oscillatie", "verticalRatio": "Verticale ratio"
+        "cadence": "Cadans",
+        "stride": "Paslengte",
+        "groundContact": "Grondcontact",
+        "oscillation": "Verticale oscillatie",
+        "verticalRatio": "Verticale ratio"
       },
       "comparison": {
         "label": "Vergeleken met je recente trainingen",
@@ -475,6 +511,15 @@
         "tooFewDetail_one": "{{count}} eerdere training van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken.",
         "tooFewDetail_other": "{{count}} eerdere trainingen van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken."
       }
+    },
+    "trainingLoad": {
+      "label": "Trainingsbelasting",
+      "basis": "laatste {{acuteDays}} dagen tegenover de {{chronicDays}} ervoor, {{worn}} dagen gedragen",
+      "basisNotEnough": "vereist {{needed}} gedragen dagen van {{total}}, en heeft er {{worn}}",
+      "notEnough": "Nog niet genoeg gedragen dagen om een week met een maand te vergelijken.",
+      "ratio": "{{ratio}}x je gebruikelijke",
+      "noUsual": "Nog geen gebruikelijke belasting om mee te vergelijken.",
+      "target": "Gebruikelijke week: {{target}}"
     }
   },
   "charts": {
@@ -667,11 +712,19 @@
       "missingTitle": "Geen nacht geregistreerd",
       "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd.",
       "tiles": {
-        "asleep": "Tijd in slaap", "inBed": "Tijd in bed", "efficiency": "Efficiëntie",
-        "deep": "Diep", "light": "Licht", "rem": "REM", "awake": "Tijd wakker", "naps": "Dutjes"
+        "asleep": "Tijd in slaap",
+        "inBed": "Tijd in bed",
+        "efficiency": "Efficiëntie",
+        "deep": "Diep",
+        "light": "Licht",
+        "rem": "REM",
+        "awake": "Tijd wakker",
+        "naps": "Dutjes"
       },
       "tileBasis": "op basis van {{metric}}, zoals deze nacht is afgeleid",
-      "stages": { "label": "Slaapfasen tijdens de nacht" },
+      "stages": {
+        "label": "Slaapfasen tijdens de nacht"
+      },
       "naps": {
         "none": "Geen dutjes geregistreerd op deze datum.",
         "list": "Dutjes:"
@@ -1020,7 +1073,11 @@
         "title": "Nog geen bronnen",
         "detail": "Er is nog geen data binnengekomen. Bronnen verschijnen hier na de eerste synchronisatie."
       },
-      "kind": { "device": "Apparaat", "app": "App", "manual": "Handmatig ingevoerd" },
+      "kind": {
+        "device": "Apparaat",
+        "app": "App",
+        "manual": "Handmatig ingevoerd"
+      },
       "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
     },
     "dataTypes": {
@@ -1031,7 +1088,12 @@
     },
     "members": {
       "title": "Leden",
-      "state": { "active": "Actief", "invited": "Uitgenodigd", "disabled": "Geschorst", "expired": "Uitnodiging verlopen" },
+      "state": {
+        "active": "Actief",
+        "invited": "Uitgenodigd",
+        "disabled": "Geschorst",
+        "expired": "Uitnodiging verlopen"
+      },
       "invite": "Nodig een lid uit",
       "displayName": "Naam",
       "timezoneInherited": "Het nieuwe lid begint in jouw eigen tijdzone. Diegene kan die zelf aanpassen in de eigen accountinstellingen zodra die binnen is.",
@@ -1079,6 +1141,16 @@
         "latest": "Laatste back-up {{date}} ({{size}} MB).",
         "retention": "Bewaart de laatste {{keep}}, elke {{hours}} uur gemaakt.",
         "off": "Back-ups staan uit voor deze instantie."
+      },
+      "policy": {
+        "keepLabel": "Aantal back-ups bewaren",
+        "keepHint": "0 zet back-ups uit, voor een huishouden dat het volume op een andere manier kopieert.",
+        "hoursLabel": "Uren tussen back-ups",
+        "hoursHint": "Er wordt een back-up gemaakt zodra dit verstreken is sinds de vorige.",
+        "save": "Back-upschema opslaan",
+        "saving": "Bezig met opslaan…",
+        "saved": "Opgeslagen. Het schema volgt dit vanaf de volgende controle.",
+        "failed": "Dat is niet opgeslagen: {{reason}}"
       },
       "backupNow": "Nu back-uppen",
       "backingUp": "Bezig met back-uppen…",

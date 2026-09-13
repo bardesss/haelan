@@ -5,7 +5,7 @@ import type { Root } from 'react-dom/client'
 import { act, useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import vitestConfig from '../../../vitest.config.js'
-import { flush, pumpUntil, HANG_BUDGET_MS } from './flush.js'
+import { flush, pumpUntil, HANG_BUDGET_MS, TOTAL_CEILING_MS } from './flush.js'
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
@@ -141,11 +141,63 @@ describe('the flush helpers', () => {
   })
 
   // The budget is only a hang detector if the runner does not kill the test first, and the
-  // runner's own budget is the number it has to stay under. Two of ours inside one of the
-  // runner's is the margin vitest.config.ts argues for everywhere else in this suite.
+  // runner's own budget is the number it has to stay under.
+  //
+  // It is the CEILING that has to fit, not HANG_BUDGET_MS. Since the no-progress budget started
+  // rolling, a slow but progressing page can legitimately spend everything up to the ceiling and
+  // still pass, so the ceiling is what bounds a passing flush and therefore what this has to
+  // measure. That is a real departure from the 2x margin vitest.config.ts argues for everywhere
+  // else, taken deliberately: ten seconds was the number that left 2x and also the number timing
+  // out settled pages on a busy machine, so keeping it would have been keeping the bug. What is
+  // left has to be enough for the throw and the report it carries, and no less.
   it('leaves the runner room to report the helpers own error', () => {
     const testTimeout = vitestConfig.test?.testTimeout
     expect(testTimeout).toBeTypeOf('number')
-    expect(HANG_BUDGET_MS * 2).toBeLessThanOrEqual(testTimeout as number)
+    expect(HANG_BUDGET_MS).toBeLessThan(TOTAL_CEILING_MS)
+    expect(TOTAL_CEILING_MS * 1.25).toBeLessThanOrEqual(testTimeout as number)
+  })
+
+  // The regression this whole change exists for. A click whose mutation and invalidated refetch
+  // both resolve inside the click's own act() leaves a page that is already finished: nothing in
+  // flight, nothing pending, and HTML that will never change again because it is already final.
+  // Arming on a witnessed in-flight moment cannot see any of that, so flush() used to read a
+  // settled page as one that never started and wait out its entire budget. Observed in a full
+  // suite run as `633 pumps, in flight on 0, waiting on a mounted query on 0, changed on 0`, and
+  // green in isolation, which is what a race on contention looks like.
+  it('returns on a page that had already settled before it was called', async () => {
+    const queryClient = new QueryClient()
+    await queryClient.fetchQuery({ queryKey: ['done'], queryFn: () => Promise.resolve('landed') })
+    await expect(flush(queryClient, () => '<span>landed</span>', 400)).resolves.toBeUndefined()
+  })
+
+  // A page still producing results is slow, not stuck, and the budget has to tell them apart or a
+  // busy machine fails passing tests. The HTML changes on every tick so flush can never call this
+  // settled, which leaves the budget as the only thing that can end it: a fixed one would end it
+  // at 200ms, and the assertion is that what ends it is the ceiling instead.
+  it('does not give up on a page that is still producing results', async () => {
+    const queryClient = new QueryClient()
+    let landed = 0
+    const timer = setInterval(() => {
+      landed += 1
+      queryClient.setQueryData([`result-${landed}`], landed)
+    }, 40)
+    try {
+      await expect(flush(queryClient, () => `<span>${landed}</span>`, 200, 900))
+        .rejects.toThrow(/the 900ms ceiling/)
+    } finally {
+      clearInterval(timer)
+    }
+    expect(landed).toBeGreaterThan(4)
+  })
+
+  // The other half of that choice, and the reason progress is a query result rather than anything
+  // cheaper to observe. A render loop redraws forever without any query settling; resetting the
+  // budget on the HTML changing would have disarmed the detector for exactly this page.
+  it('still gives up on a page that redraws forever without producing results', async () => {
+    const queryClient = new QueryClient()
+    await queryClient.fetchQuery({ queryKey: ['once'], queryFn: () => Promise.resolve('a') })
+    let redraws = 0
+    await expect(flush(queryClient, () => `<span>${redraws++}</span>`, 250, 9000))
+      .rejects.toThrow(/250ms without a query result/)
   })
 })

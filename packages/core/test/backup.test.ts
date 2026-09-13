@@ -179,8 +179,8 @@ describe('pruneBackups', () => {
 })
 
 describe('backupDecision', () => {
-  // The exact outcome an operator who set HAELAN_BACKUP_KEEP=0 to turn backups off is owed -
-  // README and config.ts both say zero means off, and the tick already reads it that way
+  // The exact outcome a household that set retention to zero to turn backups off is owed -
+  // the settings store and the README both say zero means off, and the tick reads it that way
   // (apps/server/test/maintenance-tick.test.ts, 'takes no backup at all when retention is
   // zero'). Declining here is what makes the manual "back up now" button agree with the
   // schedule instead of writing a copy retention would then have nothing to prune.

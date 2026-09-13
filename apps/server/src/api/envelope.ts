@@ -52,6 +52,25 @@ export function errorBody(kind: ErrorKind, code: string, message: string): ApiEr
 }
 
 /**
+ * Whether a throw is SQLite saying another connection holds the write lock.
+ *
+ * Read off `code` rather than the message: `code` is an enumerable own property better-sqlite3
+ * sets, so it survives the places an Error's message does not, and it does not move when SQLite
+ * rewords itself. Both families are matched by prefix because SQLite appends a sub-reason to
+ * either (`SQLITE_BUSY_SNAPSHOT`, `SQLITE_LOCKED_SHAREDCACHE`), and a list of exact codes is a
+ * list that goes stale silently - the one that gets missed reinstates the outage this exists to
+ * end.
+ *
+ * The lock this actually meets in production is the boot rebuild's: it rebuilds one person inside
+ * a single transaction from its own process, so on a household of one it is held for the whole
+ * rebuild.
+ */
+function isDatabaseBusy(error: unknown): boolean {
+  const code: unknown = (error as { code?: unknown } | null)?.code
+  return typeof code === 'string' && (code.startsWith('SQLITE_BUSY') || code.startsWith('SQLITE_LOCKED'))
+}
+
+/**
  * Maps whatever a core call threw to a response. ConfigError names the real problem, so its
  * message is the useful thing to show a caller. TransientError means retrying can work, which is
  * exactly what an unrecognised throw does not mean: that case is a bug in us, kept under its own
@@ -74,6 +93,18 @@ export function sendCoreError(reply: FastifyReply, error: unknown): FastifyReply
   }
   if (error instanceof TransientError) {
     return reply.code(statusFor('transient')).send(errorBody('transient', 'transient', error.detail))
+  }
+  // Ahead of the 500 below, and the one throw that is genuinely retryable without being a
+  // TransientError from core: a locked database is somebody else's write transaction, and it ends
+  // on its own. Under 'internal' - where it landed before, being unrecognised - a caller that
+  // branches on kind is told a deterministic bug in us, so it does not retry, and every write
+  // route answers a bare 500 for the length of a rebuild.
+  //
+  // The message is this file's own and never the driver's, for the same reason the 500 below
+  // discards it: a statement, a path or a row has no business in a response body.
+  if (isDatabaseBusy(error)) {
+    return reply.code(statusFor('transient'))
+      .send(errorBody('transient', 'database_busy', 'the instance is busy writing, so try again shortly'))
   }
   console.error(error)
   return reply.code(statusFor('internal')).send(errorBody('internal', 'internal_error', 'something went wrong'))
