@@ -38,18 +38,25 @@ export const BAND_FAMILY: readonly string[] = [...Object.keys(OVERLAP_BY_LEVEL),
  * summing it reports twice the clock time. And `samples` is keyed including the sample agg, so one
  * minute can legitimately arrive as more than one row; counting rows would inflate the overlap the
  * first time anything downsampled these metrics.
+ *
+ * Both guards below require a *positive* value, not merely a non-null one. A peak sample valued 0
+ * means zero peak minutes at that instant, so it must not enter the peak set at all; a level
+ * sample valued 0 means zero minutes at that level, so it must not count as an overlap even when
+ * the instant is in the peak set. Only null is skipped as "no reading" - a measured zero is a real
+ * fact about that minute, and treating it as if it had never been read is what let every day, peak
+ * activity or not, resolve an overlap it never had.
  */
 export function overlapMinutes(rows: readonly SampleLike[]): Map<string, number> {
   const peakMinutes = new Set<number>()
   for (const row of rows) {
-    if (row.metric === PEAK_METRIC && row.value !== null) peakMinutes.add(row.utcMs)
+    if (row.metric === PEAK_METRIC && row.value !== null && row.value > 0) peakMinutes.add(row.utcMs)
   }
 
   // level metric -> the distinct minutes at that level which were also peak
   const byLevel = new Map<string, Set<number>>()
   for (const row of rows) {
     const overlapMetric = OVERLAP_BY_LEVEL[row.metric]
-    if (overlapMetric === undefined || row.value === null) continue
+    if (overlapMetric === undefined || row.value === null || row.value <= 0) continue
     if (!peakMinutes.has(row.utcMs)) continue
     let minutes = byLevel.get(overlapMetric)
     if (!minutes) { minutes = new Set(); byLevel.set(overlapMetric, minutes) }

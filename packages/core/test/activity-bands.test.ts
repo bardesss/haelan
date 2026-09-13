@@ -55,6 +55,34 @@ describe('deriveActivityBandsDay', () => {
     expect(rows.map((r) => r.metric)).toEqual(['active_minutes_vigorous_peak'])
   })
 
+  it('does not count a minute where the peak sample is zero', () => {
+    // A peak sample valued 0 means zero peak minutes at that instant - it must not put the
+    // instant into the peak set at all, even though a level sample at the same minute is real.
+    const rows = derive([
+      sample('active_minutes_vigorous', 0, 1),
+      sample('active_zone_minutes_peak', 0, 0),
+    ])
+    expect(rows).toEqual([])
+  })
+
+  it('does not count a minute where the level sample is zero', () => {
+    // A level sample valued 0 means zero minutes at that level - it must not count as an overlap
+    // even though the instant is in the peak set.
+    const rows = derive([
+      sample('active_minutes_vigorous', 0, 0),
+      sample('active_zone_minutes_peak', 0, 2),
+    ])
+    expect(rows).toEqual([])
+  })
+
+  it('does not count a minute where both the level and peak samples are zero', () => {
+    const rows = derive([
+      sample('active_minutes_vigorous', 0, 0),
+      sample('active_zone_minutes_peak', 0, 0),
+    ])
+    expect(rows).toEqual([])
+  })
+
   it('ignores a non-peak zone minute', () => {
     const rows = derive([
       sample('active_minutes_vigorous', 0, 1),
