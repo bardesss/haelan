@@ -54,7 +54,7 @@ export function TrainingLoadCard({ on, source, span = 6 }: {
           worn: load.wornChronic, needed: MIN_WORN_CHRONIC, total: CHRONIC_DAYS,
         })}
       >
-        <p className="empty">{t('activity.trainingLoad.notEnough')}</p>
+        <p className="training-load-empty">{t('activity.trainingLoad.notEnough')}</p>
       </Card>
     )
   }
