@@ -1,5 +1,6 @@
-import { parseDayMetricTarget, parseSampleTarget } from '@haelan/core/target-key'
+import { parseDayMetricTarget, parseSampleTarget, parseSessionTarget } from '@haelan/core/target-key'
 import { ApiError } from '../api/apiError.js'
+import { DEMO_CLOCK_MS } from './instant.js'
 
 // Mirrors OverrideAction in apps/web/src/data/useAnnotations.ts, mirrored there by value for the
 // same reason this is: the enum has no browser safe subpath of its own.
@@ -79,6 +80,8 @@ const SOURCES_LIST = /^\/api\/v1\/p\/[^/]+\/sources$/
 const SOURCE_ALIAS = /^\/api\/v1\/p\/[^/]+\/sources\/([^/]+)\/alias$/
 const SERIES = /^\/api\/v1\/p\/[^/]+\/series$/
 const INTRADAY = /^\/api\/v1\/p\/[^/]+\/intraday(?:\/window)?$/
+const SESSIONS_LIST = /^\/api\/v1\/p\/[^/]+\/sessions$/
+const SESSION_ITEM = /^\/api\/v1\/p\/[^/]+\/sessions\/([^/]+)$/
 
 function splitUrl(url: string): { path: string, params: URLSearchParams } {
   const [path = '', search = ''] = url.split('?')
@@ -100,6 +103,9 @@ export function applyOverlay(url: string, body: unknown, overlay: Overlay): unkn
   if (SOURCES_LIST.test(path)) return composeSources(body, overlay)
   if (SERIES.test(path)) return composeSeries(body, overlay)
   if (INTRADAY.test(path)) return composeIntraday(params, body, overlay)
+  if (SESSIONS_LIST.test(path)) return composeSessionsList(body, overlay)
+  const sessionItem = path.match(SESSION_ITEM)
+  if (sessionItem) return composeSessionDetail(sessionItem[1]!, body, overlay)
   return body
 }
 
@@ -134,7 +140,11 @@ function writeNote(localDate: string, payload: unknown, overlay: Overlay): { id:
   // The id survives an edit to the same day: PUT is an upsert on (person, localDate) in the real
   // store too, so a note written twice is one row, not two.
   const id = overlay.notes.get(localDate)?.id ?? crypto.randomUUID()
-  overlay.notes.set(localDate, { id, localDate, body: body.body, updatedAtMs: Date.now() })
+  // DEMO_CLOCK_MS, not Date.now(): every captured row is stamped at the seed instant, and a demo
+  // build freezes the browser's own clock to it (frozenClock.ts) - but a unit test never installs
+  // that freeze, and importing the same constant this module's caller does is what keeps a note
+  // written here on the same clock as everything else in the demo, tested or not.
+  overlay.notes.set(localDate, { id, localDate, body: body.body, updatedAtMs: DEMO_CLOCK_MS })
   overlay.deletedNoteDates.delete(localDate)
   return { id }
 }
@@ -151,8 +161,13 @@ function composeNotes(params: URLSearchParams, body: unknown, overlay: Overlay):
   if (overlay.notes.size === 0 && overlay.deletedNoteDates.size === 0) return body
   const from = params.get('from') ?? ''
   const to = params.get('to') ?? ''
+  // A captured date also in `notes` is dropped, not kept alongside it: PUT is an upsert on
+  // (person, localDate) in the real store, one row per day, so a demo edit to an already
+  // captured day has to replace that day's row rather than add a second one beside it. Latent
+  // today because every captured notes body is empty (the household never wrote one), but it
+  // becomes real the moment a future seed adds notes of its own.
   const captured = (body as { items: { localDate: string }[] }).items
-    .filter((item) => !overlay.deletedNoteDates.has(item.localDate))
+    .filter((item) => !overlay.deletedNoteDates.has(item.localDate) && !overlay.notes.has(item.localDate))
   const written = [...overlay.notes.values()].filter((item) => item.localDate >= from && item.localDate <= to)
   return { items: [...captured, ...written] }
 }
@@ -378,6 +393,64 @@ function composeIntraday(params: URLSearchParams, body: unknown, overlay: Overla
     }
   }
   return clone
+}
+
+// ---- sessions -----------------------------------------------------------------------------------
+
+/**
+ * A session-scope exclusion has to be visible on `/sessions/:id` and on the matching row in
+ * `/sessions`, or excluding a workout looks like it did nothing: `useWriteOverride`'s `onSuccess`
+ * invalidates the `session` and `intraday-window` resources by name for exactly this write
+ * (useWorkoutSession.ts's own comment says why: its key carries a sessionId, not a from/to range,
+ * so `overlapsAffected` can never match it), which means the page refetches and, without this,
+ * redraws the identical captured row.
+ *
+ * This stays inside the fidelity limit rather than crossing it: `excluded` and `excludeReason`
+ * are fields the capture already carries (packages/core/src/query/sessions.ts serialises the
+ * reader's row unchanged), so this substitutes two recorded fields the same way `composeSources`
+ * substitutes a name - it does not recompute anything a real instance derives from the exclusion,
+ * the way a cardio load recompute would.
+ *
+ * Only ever one override, never a stack: `session` scope accepts only `exclude`
+ * (`OverrideStore.validate` refuses `correct` here), so the way a demo visitor undoes one is by
+ * removing the row, not by writing an opposing action - `removeOverride` already deletes it from
+ * `overlay.overrides`, and an id with no entry here answers with whatever the capture says, which
+ * is the correct un-excluded state to fall back to.
+ */
+function sessionOverrideFor(overlay: Overlay, sessionId: string): OverlayOverride | undefined {
+  for (const override of overlay.overrides.values()) {
+    if (override.scope !== 'session') continue
+    let target: string
+    try {
+      target = parseSessionTarget(override.targetKey)
+    } catch {
+      continue
+    }
+    if (target === sessionId) return override
+  }
+  return undefined
+}
+
+function excludedFieldsFor(override: OverlayOverride): { excluded: boolean, excludeReason: string | null } {
+  const excluded = override.action === 'exclude'
+  return { excluded, excludeReason: excluded ? override.reason : null }
+}
+
+function composeSessionDetail(sessionId: string, body: unknown, overlay: Overlay): unknown {
+  const override = sessionOverrideFor(overlay, sessionId)
+  if (!override) return body
+  return { ...(body as Record<string, unknown>), ...excludedFieldsFor(override) }
+}
+
+function composeSessionsList(body: unknown, overlay: Overlay): unknown {
+  const anySessionOverride = [...overlay.overrides.values()].some((o) => o.scope === 'session')
+  if (!anySessionOverride) return body
+  const typed = body as { items: Record<string, unknown>[] }
+  const items = typed.items.map((item) => {
+    const override = sessionOverrideFor(overlay, item['id'] as string)
+    return override ? { ...item, ...excludedFieldsFor(override) } : item
+  })
+  return { ...typed, items }
 }
 
 // ---- source aliases -----------------------------------------------------------------------------
