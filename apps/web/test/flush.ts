@@ -2,11 +2,30 @@ import { act } from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 
 /**
- * How long either helper below keeps pumping before calling it a hang. See flush()'s last two
- * paragraphs for why this is a duration rather than the count of attempts it used to be, and
- * why ten seconds.
+ * How long either helper below keeps pumping WITHOUT SEEING PROGRESS before calling it a hang. See
+ * flush()'s last three paragraphs for why this is a duration rather than the count of attempts it
+ * used to be, why ten seconds, and what counts as progress.
  */
 export const HANG_BUDGET_MS = 10_000
+
+/**
+ * The absolute ceiling on one flush(), progress or no progress.
+ *
+ * Something has to bound a page that keeps producing results forever (a refetch loop), or flush()
+ * never reaches its own throw and vitest's testTimeout kills the test instead. That costs the
+ * diagnostic message and leaves React mid-act(), so the next tests in the same file fail on
+ * "overlapping act() calls" having done nothing wrong - the exact failure the budget below the
+ * fold already exists to prevent.
+ *
+ * This deliberately spends most of the 2x margin under testTimeout that the old fixed budget kept,
+ * and the trade is worth stating rather than discovering. With a rolling budget a SLOW BUT
+ * PROGRESSING page can now legitimately run to this ceiling, so it is this number, not
+ * HANG_BUDGET_MS, that bounds a flush which goes on to pass. Ten seconds was the number that left
+ * 2x; it was also the number failing passing tests on a busy machine, which is the entire reason
+ * for the change, so keeping it would have been keeping the bug. Fifteen leaves 25%, which is room
+ * for the throw and the report it carries and no more.
+ */
+export const TOTAL_CEILING_MS = 15_000
 
 /**
  * Waits until a mounted tree has nothing in flight and has stopped changing, rather than a fixed
@@ -59,6 +78,17 @@ export const HANG_BUDGET_MS = 10_000
  * same file failed on "overlapping act() calls" having done nothing wrong. Throwing between
  * pumps, from outside act(), is what keeps a timeout the failure of one test.
  *
+ * The budget ROLLS, rather than running from the first pump: it is how long this helper will go
+ * without seeing a query produce a result, and every result restarts it. A fixed duration measures
+ * the machine rather than the code, so the same passing test fails under load and the failure reads
+ * as a product bug instead of a scheduling one. What makes a rolling budget safe is the choice of
+ * signal. Progress here is `dataUpdateCount + errorUpdateCount` across the cache, which only ever
+ * rises and rises exactly when a query settles, so it is the one thing a stuck page cannot
+ * counterfeit: a request in flight forever never increments it, and neither does a render loop or
+ * an animation. Resetting on `isFetching`, or on the HTML changing, would have disarmed the hang
+ * detector for precisely the two shapes it exists to catch. TOTAL_CEILING_MS above is the backstop
+ * for the one shape that CAN counterfeit it, a page refetching in a loop.
+ *
  * Note that the interval is not the thing to shrink: setTimeout(0) measured about 10ms here
  * against setTimeout(5)'s 14ms, so the per-pump floor is the platform's rather than this
  * number's, and 2000 pumps could not fit inside testTimeout at any interval. act() is not the
@@ -74,8 +104,14 @@ export async function flush(
   queryClient: QueryClient,
   getHtml: () => string,
   budgetMs = HANG_BUDGET_MS,
+  ceilingMs = TOTAL_CEILING_MS,
 ): Promise<void> {
   const inFlight = () => queryClient.isFetching() + queryClient.isMutating() > 0
+  // Every result every query in the cache has produced. Both counters only ever rise, and they
+  // rise exactly when a query settles, which is what makes this the progress signal the rolling
+  // budget can trust. See the header's paragraph on why the obvious alternatives cannot be.
+  const results = () => queryClient.getQueryCache().getAll()
+    .reduce((total, query) => total + query.state.dataUpdateCount + query.state.errorUpdateCount, 0)
   // A query some mounted component is waiting on that has never produced a result, whether or not
   // it is fetching right now. `status` is the result axis ('pending' until a first success or
   // error), as against `fetchStatus`, which is the in-flight axis `isFetching` above already
@@ -93,18 +129,41 @@ export async function flush(
   // settled page.
   const awaitingResult = () =>
     queryClient.getQueryCache().findAll({ type: 'active' }).some((q) => q.state.status === 'pending')
-  let sawFetch = inFlight()
+  // A LEVEL, not the edge `inFlight()` alone can offer. The guard below wants to know whether the
+  // page ever started, and witnessing it in flight is only one way to know that: a query that has
+  // already produced a result is proof it started, whether or not any pump happened to sample the
+  // moment it was running.
+  //
+  // That gap is what this arming closes, and it is not hypothetical. settings-maintenance.test.tsx
+  // clicks a button and then calls flush(), and under a full suite's contention the whole mutation
+  // and the refetch it invalidates can resolve inside the click's own act(). flush() then enters a
+  // page that has ALREADY settled: nothing in flight, nothing pending, and the HTML already in its
+  // final state, so it never changes either. Every branch below reads that as "never started" and
+  // the helper waits out its entire budget on a page that was finished before it was called. The
+  // report it produced said `633 pumps, in flight on 0, waiting on a mounted query on 0, changed
+  // on 0`, which is that shape exactly, and the same test passes in isolation because without the
+  // contention the mutation is still in flight when flush() takes its first sample.
+  let sawFetch = inFlight() || results() > 0
   let previous = getHtml()
   let idleOnce = false
   let pumps = 0
   let fetching = 0
   let gated = 0
   let changed = 0
+  let progressed = 0
   const started = performance.now()
-  const deadline = started + budgetMs
+  const ceiling = started + ceilingMs
+  let seenResults = results()
+  let lastProgress = started
   do {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
     pumps += 1
+    const landed = results()
+    if (landed > seenResults) {
+      seenResults = landed
+      lastProgress = performance.now()
+      progressed += 1
+    }
     if (inFlight()) {
       sawFetch = true
       idleOnce = false
@@ -135,17 +194,26 @@ export async function flush(
     if (current !== previous) changed += 1
     idleOnce = true
     previous = current
-  } while (performance.now() < deadline)
+  } while (performance.now() < Math.min(lastProgress + budgetMs, ceiling))
   // The counts, not just the sentence: "never settled" and "never started" are two different
   // failures and the sentence alone names neither, which is exactly how the animation race this
   // budget was losing stayed undiagnosed - the report it produced said nothing a reader could act
   // on. `fetching` still in step with `pumps` is a page stuck in flight; `changed` in step with
   // `pumps` while `fetching` stays at zero is a page that keeps redrawing after its data landed
   // (an animation, or a render loop); both at zero is a page that never started.
+  // Which budget ran out is the first thing a reader needs, because the two mean different things:
+  // the ceiling means a page that kept producing results and never settled, while the rolling
+  // budget means one that stopped producing them altogether. `progressed` separates the same two
+  // for anyone reading a log after the fact.
+  const elapsed = Math.round(performance.now() - started)
+  const ranOut = performance.now() >= ceiling
+    ? `the ${ceilingMs}ms ceiling`
+    : `${budgetMs}ms without a query result`
   throw new Error(
-    `flush() timed out after ${Math.round(performance.now() - started)}ms: the page never settled `
+    `flush() timed out after ${elapsed}ms (${ranOut}): the page never settled `
     + `(or never started changing at all) - ${pumps} pumps, in flight on ${fetching}, `
-    + `waiting on a mounted query on ${gated}, changed on ${changed}`,
+    + `waiting on a mounted query on ${gated}, changed on ${changed}, `
+    + `${progressed} query results`,
   )
 }
 
@@ -160,8 +228,12 @@ export async function flush(
  * state being sampled has to be a resting state, not a moment in a sequence, or this is just a
  * race with extra steps; a request stubbed to never resolve gives exactly that.
  *
- * `budgetMs` is the hang detector, on the same terms as flush()'s - and a `ready` that genuinely
- * never holds has to surface here, naming `what`, rather than as the runner's own timeout.
+ * `budgetMs` is the hang detector, and it is a FIXED duration rather than the rolling one flush()
+ * now uses. Not an oversight: a rolling budget needs a progress signal distinct from the thing
+ * being waited on, and here there is none. `ready` is the terminal condition, so "has progress
+ * happened" and "are we done" are the same question, and a budget that rolled on it would only
+ * ever reset on the pump that returns anyway. A `ready` that genuinely never holds has to surface
+ * here, naming `what`, rather than as the runner's own timeout.
  */
 export async function pumpUntil(
   ready: () => boolean,
