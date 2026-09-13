@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { sparklineTooltip } from '../src/charts/sparklineTooltip.js'
-import type { SparklineTooltipInput } from '../src/charts/sparklineTooltip.js'
+import { dayTooltip } from '../src/charts/dayTooltip.js'
+import type { DayTooltipInput } from '../src/charts/dayTooltip.js'
 import { dayMarks } from '../src/charts/base.js'
 import { formatMetricValue } from '../src/format.js'
 import type { Translate } from '../src/format.js'
 
 // A hand rolled stand-in for i18next's own t(), the same device hr-tooltip.test.ts uses: MESSAGES
 // mirrors the real keys this module reads, interpolated the same {{token}} way i18next does, so
-// this file asserts what sparklineTooltip actually asked t() for rather than pinning translated
+// this file asserts what dayTooltip actually asked t() for rather than pinning translated
 // copy a locale file is free to reword.
 const MESSAGES: Record<string, string> = {
   'charts.absence.noReading': 'no reading',
@@ -30,7 +30,7 @@ const annotations = [{ date: '2026-08-11', text: 'travelling' }, { date: '2026-0
 // test counts into exactly what it counts into in the app.
 const marks = dayMarks({ dates: labels, values, excluded, annotations, excludedText: 'excluded' })
 
-function input(overrides: Partial<SparklineTooltipInput> = {}): SparklineTooltipInput {
+function input(overrides: Partial<DayTooltipInput> = {}): DayTooltipInput {
   return {
     values, labels, excluded, annotations, marks,
     trend: undefined,
@@ -45,12 +45,12 @@ function input(overrides: Partial<SparklineTooltipInput> = {}): SparklineTooltip
 
 describe('the sparkline tooltip', () => {
   it('names the day and the value, labelled by the same header the table column carries', () => {
-    expect(sparklineTooltip(input(), { componentType: 'series', dataIndex: 0 }))
+    expect(dayTooltip(input(), { componentType: 'series', dataIndex: 0 }))
       .toBe('2026-08-10<br/>Steps: 9,000')
   })
 
   it('says no reading for a silent day rather than printing the literal null', () => {
-    const text = sparklineTooltip(input(), { componentType: 'series', dataIndex: 1 })
+    const text = dayTooltip(input(), { componentType: 'series', dataIndex: 1 })
     expect(text).toBe('2026-08-11<br/>Steps: no reading')
     expect(text).not.toContain('null')
   })
@@ -58,7 +58,7 @@ describe('the sparkline tooltip', () => {
   // The day the reader threw out gets the word for what they did, not the word for a device that
   // never reported. The same distinction the accessible table draws one element away.
   it('says excluded, not no reading, for a day the reader excluded', () => {
-    expect(sparklineTooltip(input(), { componentType: 'series', dataIndex: 3 }))
+    expect(dayTooltip(input(), { componentType: 'series', dataIndex: 3 }))
       .toBe('2026-08-13<br/>Steps: excluded')
   })
 
@@ -66,7 +66,7 @@ describe('the sparkline tooltip', () => {
   // into `values`. Indexing `values` on this number names whichever day sits at that small index -
   // here, index 0, a completely different day from the one being hovered.
   it('resolves a markLine through marks.atDate, not through the values array', () => {
-    expect(sparklineTooltip(input(), { componentType: 'markLine', dataIndex: 0 }))
+    expect(dayTooltip(input(), { componentType: 'markLine', dataIndex: 0 }))
       .toBe('2026-08-11<br/>travelling, ill')
   })
 
@@ -75,7 +75,7 @@ describe('the sparkline tooltip', () => {
       dates: labels, values: [9000, null, 8600, 7200], excluded: ['2026-08-13'],
       annotations: [], excludedText: 'excluded',
     })
-    expect(sparklineTooltip(input({ marks: stillPlotted }), { componentType: 'markPoint', dataIndex: 0 }))
+    expect(dayTooltip(input({ marks: stillPlotted }), { componentType: 'markPoint', dataIndex: 0 }))
       .toBe('2026-08-13<br/>excluded')
   })
 
@@ -83,7 +83,7 @@ describe('the sparkline tooltip', () => {
   // drops that row rather than rowing it "no reading". A tooltip that announced an absence there
   // would contradict, on the canvas, the rule the table follows beside it.
   it('says nothing at all for a silent day under episodic', () => {
-    expect(sparklineTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 4 }))
+    expect(dayTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 4 }))
       .toBe('')
   })
 
@@ -91,12 +91,12 @@ describe('the sparkline tooltip', () => {
   // keeps its table row: a canvas mark that keeps asserting something beside a tooltip gone quiet
   // denies the one day the reader actually touched.
   it('keeps the readout under episodic for a day that was excluded', () => {
-    expect(sparklineTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 3 }))
+    expect(dayTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 3 }))
       .toBe('2026-08-13<br/>Steps: excluded')
   })
 
   it('keeps the readout under episodic for a day that was annotated', () => {
-    expect(sparklineTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 1 }))
+    expect(dayTooltip(input({ episodic: true }), { componentType: 'series', dataIndex: 1 }))
       .toBe('2026-08-11<br/>Steps: no reading')
   })
 
@@ -104,32 +104,32 @@ describe('the sparkline tooltip', () => {
   // millimetres and hand-converts for display, so a tooltip reading the array through the default
   // formatter prints a seven digit millimetre count under a card headed in kilometres.
   it('uses the caller\'s own formatter, so a converted unit is not printed raw', () => {
-    const km: SparklineTooltipInput = input({
+    const km: DayTooltipInput = input({
       values: [5234567],
       labels: ['2026-08-10'],
       unit: 'Distance in kilometers',
       format: (value, absent) => value === null ? absent : `${(value / 1_000_000).toFixed(1)}`,
     })
-    expect(sparklineTooltip(km, { componentType: 'series', dataIndex: 0 }))
+    expect(dayTooltip(km, { componentType: 'series', dataIndex: 0 }))
       .toBe('2026-08-10<br/>Distance in kilometers: 5.2')
   })
 
   it('reports the trend on its own line, under the same name the table column carries', () => {
     const withTrend = input({ trend: [8800, null, 8700, null, null], hasTrend: true })
-    expect(sparklineTooltip(withTrend, { componentType: 'series', dataIndex: 0 }))
+    expect(dayTooltip(withTrend, { componentType: 'series', dataIndex: 0 }))
       .toBe('2026-08-10<br/>Steps: 9,000<br/>Trend: 8,800')
   })
 
   it('renders nothing for an index that is not a day', () => {
-    expect(sparklineTooltip(input(), { componentType: 'series', dataIndex: 99 })).toBe('')
-    expect(sparklineTooltip(input(), { componentType: 'series', dataIndex: undefined })).toBe('')
+    expect(dayTooltip(input(), { componentType: 'series', dataIndex: 99 })).toBe('')
+    expect(dayTooltip(input(), { componentType: 'series', dataIndex: undefined })).toBe('')
   })
 
   // Every word came from t() and none survived as a literal: a t() answering in a different
   // vocabulary must change every word in the output. The same proof hr-tooltip.test.ts uses.
   it('routes every word through t(), not a hardcoded literal', () => {
     const shoutingT: Translate = (key, options) => t(key, options).toUpperCase()
-    expect(sparklineTooltip(input({ t: shoutingT }), { componentType: 'series', dataIndex: 1 }))
+    expect(dayTooltip(input({ t: shoutingT }), { componentType: 'series', dataIndex: 1 }))
       .toBe('2026-08-11<br/>STEPS: NO READING')
   })
 })

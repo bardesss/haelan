@@ -25,8 +25,8 @@ const WEEKDAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const
  * directly on top of the absence dot for the same cell, so a click aimed at the mark a reader
  * wanted to undo landed on the mark and did nothing while a click a few pixels off worked.
  *
- * A plain function, exported and tested on its own for the same reason Sparkline's own
- * `sparklinePointDate` is: echarts renders to an SVG this project's render environment cannot
+ * A plain function, exported and tested on its own for the same reason base.ts's own
+ * `dayPointDate` is: echarts renders to an SVG this project's render environment cannot
  * hit-test, so the translation from a click event to a date is the one piece of this behaviour a
  * test can reach. See chart-marks.test.tsx.
  */

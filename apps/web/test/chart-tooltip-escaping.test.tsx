@@ -13,6 +13,7 @@ import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Sparkline } from '../src/charts/Sparkline.js'
+import { DailyBars } from '../src/charts/DailyBars.js'
 import { HeartRateRange } from '../src/charts/HeartRateRange.js'
 import { Spo2Range } from '../src/charts/Spo2Range.js'
 import { ActivityHeatmap } from '../src/charts/ActivityHeatmap.js'
@@ -138,6 +139,17 @@ describe('a day level chart tooltip', () => {
           <I18nProvider lng="en">
             <Sparkline values={[4000, 4200, 4100]} labels={dates} label="Steps" unit="steps"
               metric="steps" annotations={[{ date: '2026-08-02', text }]} excluded={[]} />
+          </I18nProvider>,
+        )
+      })
+      return { params: { componentType: 'markLine', dataIndex: 0 } }
+    },
+    DailyBars: (text: string) => {
+      act(() => {
+        root!.render(
+          <I18nProvider lng="en">
+            <DailyBars values={[4000, 4200, 4100]} labels={dates} label="Steps" unit="steps"
+              axisUnit="steps" metric="steps" annotations={[{ date: '2026-08-02', text }]} excluded={[]} />
           </I18nProvider>,
         )
       })

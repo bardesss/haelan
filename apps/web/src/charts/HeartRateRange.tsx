@@ -34,8 +34,8 @@ type Props = {
  * no max left once the exclusion applies, so nothing is drawn there for a click to fall through
  * to, and the mark is the only thing left to click to undo it.
  *
- * A plain function, exported and tested on its own, the same device Sparkline's own
- * `sparklinePointDate` and ActivityHeatmap's own `heatmapClickDate` are: echarts renders to an SVG
+ * A plain function, exported and tested on its own, the same device base.ts's own
+ * `dayPointDate` and ActivityHeatmap's own `heatmapClickDate` are: echarts renders to an SVG
  * this project's render environment cannot hit-test, so the translation from a click event to a
  * date is the one piece of this behaviour a test can reach. See chart-marks.test.tsx.
  */
