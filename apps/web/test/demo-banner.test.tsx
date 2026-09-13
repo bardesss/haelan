@@ -40,6 +40,38 @@ describe('the banner', () => {
   })
 })
 
+describe('the banner in the visitor\'s own language', () => {
+  const originalLanguage = Object.getOwnPropertyDescriptor(window.navigator, 'language')
+
+  // navigator.language is read-only by default; a data descriptor lets each test set it and the
+  // afterEach below restore exactly the descriptor happy-dom started with, rather than leaving a
+  // stubbed navigator behind for every test file that runs after this one in the same worker.
+  function setLanguage(tag: string): void {
+    Object.defineProperty(window.navigator, 'language', { value: tag, configurable: true })
+  }
+
+  afterEach(() => {
+    if (originalLanguage) Object.defineProperty(window.navigator, 'language', originalLanguage)
+  })
+
+  it('renders Dutch for a Dutch browser, including the fidelity-limit sentence', () => {
+    setLanguage('nl-NL')
+    act(() => { root?.render(<DemoBanner />) })
+    const text = container?.textContent ?? ''
+    expect(text).toMatch(/gegenereerd/i)   // not anyone's real health history
+    expect(text).toMatch(/herladen/i)      // writes live in this tab only
+    expect(text).toMatch(/afgeleid/i)      // the fidelity limit, in Dutch
+    expect(text).not.toMatch(/generated/i) // the English string must not also be present
+  })
+
+  it('falls back to English for any browser language that is not Dutch', () => {
+    setLanguage('fr-FR')
+    act(() => { root?.render(<DemoBanner />) })
+    const text = container?.textContent ?? ''
+    expect(text).toMatch(/generated/i)
+  })
+})
+
 describe('the actions a static demo cannot honour', () => {
   const transport = () => createDemoTransport(async () => ({ '/api/auth/me': 'me.json' }))
 
