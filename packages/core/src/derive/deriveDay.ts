@@ -15,6 +15,7 @@ import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
 import { deriveCardioLoadDay } from './cardioLoad.ts'
+import { deriveActivityBandsDay, mergeActivityBandsDay } from './activityBands.ts'
 
 export interface DeriveDayInput {
   personId: string
@@ -71,6 +72,22 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     rows: kept,
   })
   const merged = mergeDay({
+    personId: input.personId,
+    localDate: input.localDate,
+    rows: kept,
+    priority: input.priority,
+  })
+
+  // From the same kept rows as the rollup above: the day's samples are already in memory, filtered
+  // to this local date and override applied, so the intersection costs no extra query.
+  const bandSources = [...new Set(kept.map((row) => row.sourceId))]
+  const perSourceBands = bandSources.flatMap((source) => deriveActivityBandsDay({
+    personId: input.personId,
+    localDate: input.localDate,
+    source,
+    rows: kept.filter((row) => row.sourceId === source),
+  }))
+  const mergedBands = mergeActivityBandsDay({
     personId: input.personId,
     localDate: input.localDate,
     rows: kept,
@@ -180,8 +197,8 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   })
 
   const rows = applyToDay(
-    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceExercise,
-      ...mergedExercise, ...cardioLoad],
+    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceBands, ...mergedBands,
+      ...perSourceExercise, ...mergedExercise, ...cardioLoad],
     excluded,
   )
 

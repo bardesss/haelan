@@ -126,4 +126,39 @@ describe('deriveDayInto', () => {
     // and the merged row (this day has one source, so the merge is a no-op) read the same way.
     expect(Object.fromEntries(loadRows.map((r) => [r.source, r.value]))).toEqual({ watch: 20, merged: 20 })
   })
+
+  test('writes the activity band overlap rows for a day', () => {
+    const { db, personId, localDate } = seedDay()
+    const utcMs = Date.parse(`${localDate}T09:30:00Z`)
+    // One clock minute that is both vigorous and a peak zone minute. The peak sample is valued 2,
+    // because that is what the provider reports - it is a score, not a duration.
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_vigorous', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_zone_minutes_peak', utcMs, value: 2 })
+
+    deriveDayInto(db, { personId, localDate, ...tuning })
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      eq(daily.metric, 'active_minutes_vigorous_peak'),
+    )).all()
+    // One minute, counted once, under the source that recorded it and under the merged view.
+    expect(rows.map((row) => [row.source, row.value]).sort()).toEqual([['merged', 1], ['watch', 1]])
+  })
+
+  test('derives no band rows for a day whose levels never meet a peak minute', () => {
+    const { db, personId, localDate } = seedDay()
+    insertSample(db, {
+      personId, sourceId: 'watch', metric: 'active_minutes_vigorous',
+      utcMs: Date.parse(`${localDate}T09:30:00Z`), value: 1,
+    })
+
+    deriveDayInto(db, { personId, localDate, ...tuning })
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      eq(daily.metric, 'active_minutes_vigorous_peak'),
+    )).all()
+    // Absent, not zero.
+    expect(rows).toEqual([])
+  })
 })
