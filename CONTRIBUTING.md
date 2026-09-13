@@ -54,6 +54,32 @@ rewritten tree being byte-identical to the original and by the commit count and 
 `Co-Authored-By` line surviving. The merge references on pull requests #30 through #38 point at
 commits that rewrite left unreachable. There is no second exception.
 
+## The name, the mark and the tokens
+
+**The display name is Hælan. Everything anybody types is `haelan`.** The æ is the display spelling
+and nothing else: the package, the container image, the command, the repository and every
+instruction in the tool catalogue stay `haelan`, because those are the strings a reader has to
+reproduce. The name is not translated copy either, so it stays Hælan in every language rather than
+going through i18n.
+
+**Colour, spacing and type have one definition, in `packages/tokens`.** They live there as
+TypeScript and are emitted, today as CSS through `scripts/build-css.ts`, with light and dark
+resolved from the same values. Nothing downstream hard codes a colour: `apps/web/test/no-raw-color.test.ts`
+is what enforces that, and CI separately checks the generated stylesheet is not tracked. A surface written in another language gets its own emitted target
+from that package rather than a copied palette.
+
+**The mark is `assets/brand/mark.svg`, drawn once and painted by whatever holds it.** It takes
+`currentColor` and carries no fill or stroke of its own, which is why a single definition serves the
+rail, the sign in page and the setup card in both themes. `apps/web/test/brand-mark.test.tsx` pins
+that. A hard coded colour there is the regression that would quietly need a second asset back.
+
+**Voice: only what is shipped, and polished rather than salesy.** Documentation describes what works
+today, and anything unbuilt stays in the roadmap, labelled as such. A public repository listing
+unbuilt features as features spends trust it cannot get back. Where a smooth sentence and an
+unflattering accurate one disagree, the accurate one ships: the storage section names a realistic 2 GB,
+and the README says the one manual Google Cloud step cannot be made to disappear. If a draft needs a
+disclaimer to be true, rewrite the claim rather than adding the disclaimer.
+
 ## Pull request titles, and the release they cut
 
 **A pull request title is a conventional commit**, because merging squashes it onto master and
