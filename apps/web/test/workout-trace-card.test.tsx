@@ -16,7 +16,7 @@ import type { Session } from '../src/auth/session.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
 import { WorkoutTrace } from '../src/pages/activity/WorkoutTrace.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
-import { flush } from './flush.js'
+import { flush, pumpUntil } from './flush.js'
 
 // Task 4 review finding: WorkoutTrace.tsx itself had no test of its own, only the hook it calls.
 // This file covers the three behaviours section 3 of the design specifies at the card level: the
@@ -71,9 +71,16 @@ const point = (sourceId: string) => ({
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+/** Every `/intraday/window` request the stub has ANSWERED, in order, as the `source` query
+ *  parameter it carried ('' for a request that sent none - the blended, unpinned read). Recorded
+ *  where the answer is produced rather than where the request arrives, because the fact the first
+ *  test needs is that the fallback was asked *and* answered: a card that is absent because the
+ *  fallback came back empty and one that is absent because nothing ever asked look identical. */
+let windowAnswers: string[] = []
 
 beforeEach(() => {
   chartStubs.length = 0
+  windowAnswers = []
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
@@ -98,6 +105,7 @@ function stub(answers: Record<string, unknown[]>, sources: unknown[] = []): () =
     if (url.includes('/sources')) return json({ items: sources })
     if (url.includes('/intraday/window')) {
       const source = new URLSearchParams(url.split('?')[1] ?? '').get('source') ?? ''
+      windowAnswers.push(source)
       return json({ points: answers[source] ?? [], reduction: null })
     }
     return json({})
@@ -118,15 +126,56 @@ function mount(node: React.ReactElement): { client: QueryClient, html: () => str
   return { client, html: () => container?.innerHTML ?? '' }
 }
 
+/**
+ * Whether the card is still showing its loading placeholder (Loading.tsx renders
+ * `<p className="empty">`), which is the only card-level reading there is of `trace.isPending`.
+ *
+ * Two of the three tests below mount a GATED CHAIN - useSourceTrace's blended, unpinned read is
+ * `enabled` only once the pinned read has answered with zero points - and flush() is documented as
+ * unable to wait on one. flush.test.tsx pins that as a KNOWN GAP ("flush() returns early while a
+ * gate has not opened"): its settle condition is "nothing in flight, twice in a row, with the HTML
+ * unchanged", and between the pinned answer landing and React re-rendering with `blendedEnabled`
+ * true, nothing IS in flight and the blended query is pending but not yet active, so flush() can
+ * arm its `idleOnce` inside that window; the next 5ms pump can then contain the whole blended
+ * fetch, start to finish, and flush() returns with the tree one render behind the cache. The same
+ * chain measured one layer down, over workout-trace.test.tsx's own Probe, put the race at three
+ * failures in thirteen `--repeats 20` runs and then none in the next seven - which is what a race
+ * on timer scheduling looks like rather than evidence it is not there. flush.test.tsx's GatedChain
+ * fixture reproduces the early return deterministically.
+ *
+ * `isPending` is not reachable from out here, so the two tests wait on what the card makes of it -
+ * this placeholder going away, or the basis line appearing - rather than on "the page looks
+ * settled". Both are properties of the RENDERED tree, which is what closes the gap: a cache that
+ * has run ahead of the tree cannot satisfy either of them.
+ */
+const stillLoading = () => container?.querySelector('.empty') !== null
+
 describe('the workout trace card', () => {
   it('renders no card at all when nobody recorded anything, rather than an empty chart', async () => {
     const restore = stub({ watch: [], '': [] })
     try {
       const detail = workoutDetail({})
-      const { client, html } = mount(<WorkoutTrace session={SESSION} detail={detail} chosenSource={null} />)
-      await flush(client, html)
+      const { html } = mount(<WorkoutTrace session={SESSION} detail={detail} chosenSource={null} />)
+      // Both halves matter, and neither is the assertion below restated. An absent card is not
+      // evidence of anything on its own, because it is equally what a card whose fallback was
+      // never asked looks like: measured by deleting the rule outright (`blendedEnabled` forced
+      // false in useSourceTrace.ts, so only the pinned request is ever made), the version of this
+      // test that waited on flush() and asserted the empty HTML alone still passed, while the
+      // fallback test below correctly failed. So wait instead until the stub has ANSWERED an
+      // unpinned request - the fallback having been asked, which no amount of empty HTML shows -
+      // and until the placeholder has gone, which is the card itself agreeing the chain is done
+      // rather than the cache having run ahead of the tree.
+      await pumpUntil(
+        () => windowAnswers.includes('') && !stillLoading(),
+        'the unpinned fallback request to be answered and the card to stop loading',
+      )
+      // The pinned read first, then exactly one unpinned one: the fallback fired, asked without a
+      // source, and was not asked twice.
+      expect(windowAnswers).toEqual(['watch', ''])
       // Not just "no chart visible": nothing at all, the same absence WorkoutZones' own
-      // "no card at all when the session recorded no zones" test asserts for its own card.
+      // "no card at all when the session recorded no zones" test asserts for its own card. It is
+      // a real claim now that the two waits above have ruled out the loading card and the
+      // never-asked case, which are the other two ways this HTML could be empty.
       expect(html()).toBe('')
     } finally { restore() }
   })
@@ -138,8 +187,14 @@ describe('the workout trace card', () => {
     )
     try {
       const detail = workoutDetail({})
-      const { client, html } = mount(<WorkoutTrace session={SESSION} detail={detail} chosenSource={null} />)
-      await flush(client, html)
+      mount(<WorkoutTrace session={SESSION} detail={detail} chosenSource={null} />)
+      // The basis line exists only once the fallback has answered and the card has drawn the
+      // chart - the loading and error states carry no basis at all - so this waits for the tree
+      // to have caught up without restating the assertion below, which is about WHAT the line
+      // says. That is the difference between waiting and asserting here: returning early leaves
+      // `.basis` missing entirely, while the failure worth catching is a `.basis` that is present
+      // and says the wrong thing - the plain sentence, naming no fallback and no device.
+      await pumpUntil(() => container?.querySelector('.basis') !== null, 'the basis line')
       // The exact sentence, not a substring of it: the basis line has to both say the fallback
       // fired and name the pinned device (the one that logged nothing), not the source that
       // actually answered.
