@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.20.0](https://github.com/bardesss/haelan/compare/v1.19.0...v1.20.0) (2026-09-13)
+
+
+### Features
+
+* **site:** a landing page, published to GitHub Pages on every release ([#212](https://github.com/bardesss/haelan/issues/212)) ([b716193](https://github.com/bardesss/haelan/commit/b7161938a9ea4e2933806d41ef055a98ab7a9762))
+
 ## [1.19.0](https://github.com/bardesss/haelan/compare/v1.18.0...v1.19.0) (2026-09-13)
 
 
