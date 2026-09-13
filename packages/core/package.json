@@ -13,6 +13,7 @@
     "./baseline-window": "./src/query/baseline.ts",
     "./metric-data-type": "./src/api/metricDataType.ts",
     "./workout-summary": "./src/api/workoutSummary.ts",
+    "./cardio-load": "./src/api/cardioLoad.ts",
     "./workout-comparison": "./src/api/workoutComparison.ts"
   },
   "scripts": {

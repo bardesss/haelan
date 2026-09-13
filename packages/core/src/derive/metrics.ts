@@ -152,6 +152,18 @@ export const METRICS: Record<string, MetricSpec> = {
   workout_count: { aggs: ['count'], precision: 0, direction: 'neutral', unit: 'count' },
   workout_minutes: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'minutes' },
 
+  // Haelan's own cardio load, derived from the day's zone minutes rather than from a data type:
+  // Google Health shows a cardio load number and the v4 API exposes none, so there is nothing to
+  // sync and this is computed here. Named for its model because there are two - Edwards from zone
+  // minutes, Banister from a heart rate trace - and they are different numbers. Banister
+  // deliberately has no entry here and never will: it runs per workout only (a whole day has no
+  // readable lower bound, see api/cardioLoad.ts), so no daily row can ever carry it and a spec
+  // for it would describe a rollup that cannot exist.
+  //
+  // 'neutral', not 'up'. A training load is not better when it is higher; managing it is the
+  // entire reason anyone tracks one.
+  cardio_load_edwards: { aggs: ['sum'], precision: 0, direction: 'neutral', unit: 'trimp' },
+
   // Task 8: the ECG session's own averaged rate, written to samples via alsoTargets rather than
   // derived from sessions the way sleep/workout are - unlike those two, ecg is a real DATA_TYPES
   // metric (catalogue.ts's 'electrocardiogram' entry, target 'sessions'), so it needs an entry here for
