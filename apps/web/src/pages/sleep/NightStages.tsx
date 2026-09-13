@@ -18,6 +18,14 @@ import type { Night } from '../../data/useNights.js'
  * Hypnogram's own stageTotals sums them, and rounding each boundary before that sum compounds into
  * minutes of drift against derive/sleep.ts's own single-rounded figure. Sleep.tsx's own comment on
  * the same conversion explains the mechanism at length.
+ *
+ * The hypnogram itself is absent, not an empty chart, when the night carries no staged segments:
+ * an empty chart would read as a night containing no deep, light or REM sleep at all. But the card
+ * around it stays, and so do the nap line and the excluded-session note - neither depends on there
+ * being a segment to draw, and a source can record a real span with real naps and never stage a
+ * single one of it (stageOf's own comment names exactly this case: ASLEEP and RESTLESS are
+ * recognised by the derive layer and staged by nobody). Dropping the whole card for that source
+ * would throw its nap times away along with the chart that legitimately has nothing to draw.
  */
 export function NightStages({ night }: { night: Night }) {
   const { t } = useTranslation()
@@ -26,10 +34,6 @@ export function NightStages({ night }: { night: Night }) {
     .map((s) => ({ stage: stageOf(s.stage), startMs: s.startMs - night.startMs, endMs: s.endMs - night.startMs }))
     .filter((s): s is { stage: Stage, startMs: number, endMs: number } => s.stage !== null),
   [night])
-
-  // Absent, not an empty chart: a night with a span but no staged segments has nothing to draw, and
-  // an empty hypnogram would read as a night containing no deep, light or REM sleep at all.
-  if (segments.length === 0) return null
 
   const bedMinutes = inWindow(
     localMinutesOf(night.localDate, night.startMs, night.startOffsetMinutes), WIDE_WINDOW)
@@ -45,11 +49,13 @@ export function NightStages({ night }: { night: Night }) {
 
   return (
     <Card span={12} label={t('sleep.night.stages.label')}>
-      <Hypnogram
-        segments={segments}
-        startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
-        label={t('sleep.night.stages.label')}
-      />
+      {segments.length > 0 && (
+        <Hypnogram
+          segments={segments}
+          startLabel={t('common.bedLabel', { time: formatClock(bedMinutes) })}
+          label={t('sleep.night.stages.label')}
+        />
+      )}
       {/* The label comes from the catalogue; the times themselves are appended in plain JS rather
           than handed to t() as an interpolation option, the same split Hypnogram's own totals row
           uses for stage label plus formatDuration (Hypnogram.tsx, stageTotals' own render). A

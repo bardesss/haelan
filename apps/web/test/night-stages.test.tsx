@@ -17,10 +17,31 @@ const segment = (stage: string, fromMinutes: number, toMinutes: number) => ({
 })
 
 describe('the night stages card', () => {
-  it('renders nothing at all when the night carries no staged segments', () => {
-    // A device that recorded a span but no stages leaves nothing for a hypnogram to draw, and an
-    // empty chart would claim a night with no deep, light or REM sleep in it.
-    expect(renderToStaticMarkup(<NightStages night={BASE} />)).toBe('')
+  // A device that recorded a span but no stages leaves nothing for a hypnogram to draw, and an
+  // empty chart would claim a night with no deep, light or REM sleep in it - so the chart itself
+  // is absent. The card around it is not: this used to return null outright, which dropped the nap
+  // line and the excluded-session note along with the chart, even though neither one depends on
+  // there being a segment to draw.
+  it('renders no hypnogram, but still the card and its nap line, when the night carries no staged segments', () => {
+    const html = renderToStaticMarkup(<NightStages night={BASE} />)
+    expect(html).toContain('sleep.night.naps.none')
+    // No stage label anywhere: the accessible table a Hypnogram renders is the one place a stage
+    // label would appear (see the next test's own comment on why that table, not the raw segment
+    // string, is what has to be checked), so its absence is what actually distinguishes "no
+    // hypnogram" from "a hypnogram with nothing staged to show".
+    expect(html).not.toContain('sleep.stage.')
+  })
+
+  // The real case stageOf's own comment names: a source can record a whole night's worth of naps
+  // and exclusions and never stage a single segment of it (ASLEEP and RESTLESS are recognised by
+  // the derive layer and staged by nobody). Both figures come from the night object directly, not
+  // from the segments the hypnogram draws, so losing the hypnogram must not lose these too.
+  it('keeps the nap line and the excluded-session note when the night carries no staged segments', () => {
+    const night = { ...BASE, naps: [Date.UTC(2026, 7, 3, 12, 30)], excludedSessions: ['s2', 's3'] }
+    const html = renderToStaticMarkup(<NightStages night={night} />)
+    expect(html).toContain('14:30')
+    expect(html).toContain('sleep.sleepStages.nightExcludedSessions')
+    expect(html).not.toContain('sleep.stage.')
   })
 
   it('drops a segment nobody staged rather than drawing it as light sleep', () => {

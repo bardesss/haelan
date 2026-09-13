@@ -278,7 +278,7 @@ describe('the workout page\'s own ?source= parameter', () => {
   // Final review finding: this page used to read `?source=` straight off the URL, never through
   // resolveSource (controls/source.ts) the way every sibling page does. A source id that names no
   // device this person has - a stale or foreign link, or one this person removed since - became a
-  // non-null EXPLICIT choice, which suppresses useWorkoutTrace's own fallback rule
+  // non-null EXPLICIT choice, which suppresses useSourceTrace's own fallback rule
   // (WorkoutTrace.tsx's own comment on it). The pinned request for a source that never recorded
   // this workout comes back empty, the fallback that would otherwise answer it never fires, and the
   // trace card vanishes - reading as "no heart rate was recorded for this workout", the exact false

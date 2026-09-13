@@ -13,7 +13,7 @@ import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { Night } from '../src/data/useNights.js'
-import { NightTraces } from '../src/pages/sleep/NightTraces.js'
+import { NightTraces, NIGHT_TRACE_METRICS } from '../src/pages/sleep/NightTraces.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush, pumpUntil } from './flush.js'
 
@@ -160,6 +160,22 @@ describe('the overnight traces', () => {
         'the fallback basis line to render',
       )
       expect(container?.querySelector('.basis')?.textContent).toBe(expected)
+    } finally { restore() }
+  })
+
+  // NightTraces.tsx's own comment on NIGHT_TRACE_METRICS admits the metric list is written out
+  // twice - the exported constant and the three literal <NightTrace> calls - with nothing at the
+  // type level holding the two copies in step. This is what actually catches that drift: adding a
+  // fourth metric to one without the other would either leave a card this test never sees drawn
+  // (NIGHT_TRACE_METRICS grew but the JSX did not) or fail count-mismatched the other way around.
+  it('renders one card per metric in NIGHT_TRACE_METRICS when every one of them recorded something', async () => {
+    const restore = stub({
+      'heart_rate|watch': [point('watch')], 'spo2|watch': [point('watch')], 'hrv|watch': [point('watch')],
+    })
+    try {
+      const { client, html } = mount(<NightTraces night={NIGHT} chosenSource={null} />)
+      await flush(client, html)
+      expect(container?.querySelectorAll('.night-trace')).toHaveLength(NIGHT_TRACE_METRICS.length)
     } finally { restore() }
   })
 

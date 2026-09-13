@@ -10,6 +10,7 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import type { Night } from '../src/data/useNights.js'
 import { NightList } from '../src/pages/sleep/NightList.js'
+import { nightPath } from '../src/pages/sleep/NightRow.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 
 let container: HTMLDivElement | null = null
@@ -74,7 +75,10 @@ const html = () => container?.innerHTML ?? ''
 describe('the night list', () => {
   it('links each night to its own page, by date', () => {
     mount(clientWith([night('2026-08-03', 'watch', 8)]), <NightList controls={CONTROLS} />)
-    expect(container?.querySelector('a')?.getAttribute('href')).toBe('/sleep/night/2026-08-03')
+    // nightPath itself, not a hand written literal: NightRow.tsx's own comment on it claims this
+    // spelling is "shared by the row that links there and the tests that assert it", which was
+    // false until this import made it true.
+    expect(container?.querySelector('a')?.getAttribute('href')).toBe(nightPath('2026-08-03'))
   })
 
   it('shows one row per date even when two sources reported the same night', () => {
@@ -96,7 +100,11 @@ describe('the night list', () => {
     expect(html()).toContain('No nights in this period')
   })
 
-  it('names each night\'s source and its time asleep', () => {
+  // Renamed from "... and its time asleep": '8h 00m' here is the night's own span (endMs - startMs,
+  // bed to wake), not a derived time-asleep figure - NightRow.tsx's own comment says time asleep is
+  // deliberately not shown on this row at all, since the list has no /series request of its own to
+  // read it from. The old title asserted a claim this row does not make.
+  it('names each night\'s source and its time in bed', () => {
     mount(clientWith([night('2026-08-03', 'watch', 8)]), <NightList controls={CONTROLS} />)
     // nameOf falls back to the id when no alias is known, which is what an empty sources list means.
     const row = container?.querySelector('.night-row')?.textContent ?? ''

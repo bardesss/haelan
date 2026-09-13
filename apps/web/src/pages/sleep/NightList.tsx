@@ -22,8 +22,11 @@ export function NightList({ controls }: { controls: PageControlsState }) {
   const { t, i18n } = useTranslation()
   const query = useNights({ from: controls.from, to: controls.to, source: controls.source })
 
+  // No spread before reverse(): oneNightPerDate already returns a fresh array
+  // ([...byDate.values()].sort(...), data/nights.ts), so there is no shared reference here for an
+  // in-place reverse() to corrupt.
   const nights = useMemo(
-    () => [...oneNightPerDate(query.data?.items ?? [])].reverse(),
+    () => oneNightPerDate(query.data?.items ?? []).reverse(),
     [query.data],
   )
 

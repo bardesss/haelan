@@ -156,8 +156,15 @@ export function IntradayHeartRate({
   // formatMetricValue itself does internally for precision, and translating a unit key is not free
   // enough to repeat six times over. The `?? ''` fallback is unreachable for the three metrics this
   // component is actually asked to draw (heart_rate, spo2, hrv, all present in UNIT_LABEL_KEYS via
-  // METRICS' own unit field) - kept only so an unrecognised metric renders no unit rather than a
-  // raw i18next key string.
+  // METRICS' own unit field), and it does not stand in as a guard for some fourth, unrecognised
+  // metric either: formatMetricValue throws for any metric absent from METRICS (its own doc
+  // comment explains why), and this component's own `rows` a few dozen lines below calls it once
+  // per point in the same render, with no gate of its own. Whenever `points` is non-empty, a metric
+  // unrecognised enough to actually need this fallback would already have thrown building that
+  // table before "no unit" was ever the answer a reader saw; when `points` is empty there is no
+  // table cell, and hence no reader, for the fallback's answer to reach either. Left as `?? ''`
+  // rather than removed anyway, because an object index returning undefined is not something the
+  // type checker can see is dead the way it can see formatMetricValue's own throw.
   const unitKey = UNIT_LABEL_KEYS[METRICS[metric]?.unit ?? '']
   const unit = unitKey ? t(unitKey) : ''
 

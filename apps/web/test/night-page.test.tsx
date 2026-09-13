@@ -34,7 +34,7 @@ const PERSON: Session = {
   baseUrl: 'http://localhost:4235',
 }
 
-export const NIGHT: Night = {
+const NIGHT: Night = {
   localDate: '2026-08-03', sourceId: 'watch', sessionIds: ['s1'],
   // 23:15 to 07:02 local (offset +120), the span the spec names: a night is not a local date.
   startMs: Date.UTC(2026, 7, 2, 21, 15), endMs: Date.UTC(2026, 7, 3, 5, 2),
@@ -162,7 +162,10 @@ describe('the night tiles', () => {
         ?.querySelector('.value')?.textContent
       expect(valueOf('Time asleep')).toBe('7h 27m')
       expect(valueOf('Time in bed')).toBe('7h 47m')
-      expect(valueOf('Efficiency')).toBe('96')
+      // Unit-carrying, not the bare number: StatTile's own unit prop puts a space before it
+      // ("96 %"), the same rendering Sleep.tsx's own efficiency tile already uses for this exact
+      // metric - the two surfaces used to disagree about what the headline number even was.
+      expect(valueOf('Efficiency')).toBe('96 %')
       expect(valueOf('Deep')).toBe('1h 02m')
       expect(valueOf('Time awake')).toBe('0h 20m')
       expect(valueOf('Naps')).toBe('1')
@@ -191,7 +194,42 @@ describe('the night tiles', () => {
       await flush(client, html)
       const tiles = [...(container?.querySelectorAll('.night-tiles .card') ?? [])]
       const efficiency = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Efficiency')
-      expect(efficiency?.querySelector('.value')?.textContent).toBe('104')
+      // '104 %', not '104': the unit carries through the switch to formatMetricValue exactly the
+      // same as the non-clamped figure does, since neither is a change formatMetricValue makes.
+      expect(efficiency?.querySelector('.value')?.textContent).toBe('104 %')
+    } finally { restore() }
+  })
+
+  it('says the request failed, not that this night has no sleep at all, when the tiles\' own series request errors', async () => {
+    // A failed /series is not the same statement as a night with no time asleep, no deep sleep and
+    // no efficiency - the exact false-by-omission claim NightTraces.tsx and NightStages.tsx each
+    // already argue against in their own comments, applying identically here: groups.pointsOf
+    // reads an errored query's undefined data the same way it reads an empty one, so without an
+    // explicit isError gate every tile would just vanish rather than say what actually happened.
+    const restore = (() => {
+      const original = globalThis.fetch
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        const json = (body: unknown) =>
+          new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+        if (url.includes('/api/auth/me')) return json(PERSON)
+        if (url.includes('/sleep/nights')) return json({ items: [NIGHT], cursor: null })
+        if (url.includes('/series')) {
+          return new Response(JSON.stringify({ error: { code: 'internal' } }),
+            { status: 500, headers: { 'content-type': 'application/json' } })
+        }
+        if (url.includes('/intraday/window')) return json({ points: [], reduction: null })
+        if (url.includes('/sources')) return json({ items: [] })
+        return json({})
+      }) as typeof fetch
+      return () => { globalThis.fetch = original }
+    })()
+    try {
+      const { client, html } = mount(<NightDetail />)
+      await flush(client, html)
+      expect(container?.querySelectorAll('.night-tiles')).toHaveLength(0)
+      expect(html()).toContain('This did not load.')
+      expect(html()).not.toContain('Nothing has been recorded for this period.')
     } finally { restore() }
   })
 })

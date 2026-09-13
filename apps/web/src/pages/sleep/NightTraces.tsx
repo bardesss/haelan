@@ -98,9 +98,10 @@ export function NightTraces({ night, chosenSource }: { night: Night, chosenSourc
   // The three literal calls below and NIGHT_TRACE_METRICS above are the same list written out
   // twice, kept in lockstep by hand rather than by a `.map()`: NightTrace's own comment explains
   // why a hook cannot be called a variable number of times, so this list cannot be exported once
-  // and then iterated here the way an ordinary array of cards would be. Adding a metric to one
-  // without the other is exactly the drift writing both out by hand cannot itself prevent -
-  // update both together.
+  // and then iterated here the way an ordinary array of cards would be. Nothing at the type level
+  // keeps the two in step - night-traces.test.tsx's own card-count assertion, checked against
+  // NIGHT_TRACE_METRICS.length rather than a hardcoded 3, is what actually catches a metric added
+  // to (or dropped from) one without the other. Update both together, and keep that test passing.
   return (
     <>
       <NightTrace metric="heart_rate" night={night} chosenSource={chosenSource} />

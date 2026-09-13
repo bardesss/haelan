@@ -2,10 +2,11 @@ import { useTranslation } from '../../i18n/index.js'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { Card } from '../../components/Card.js'
+import { ErrorState } from '../../components/ErrorState.js'
 import { StatTile } from '../../components/StatTile.js'
 import { useMetricGroups } from '../../data/useMetricGroups.js'
 import type { MetricGroup } from '../../data/useMetricGroups.js'
-import { formatDuration, formatNumber } from '../../format.js'
+import { formatDuration, formatMetricValue } from '../../format.js'
 
 /**
  * Exactly the metrics Sleep already requests for this date, and no figure computed here.
@@ -54,30 +55,58 @@ export function NightTiles({ localDate, source }: { localDate: string, source: s
   const { t, i18n } = useTranslation()
   const groups = useMetricGroups(GROUPS, { from: localDate, to: localDate, source })
 
+  // Every other tile group on this page's siblings (and every MetricCard-backed card on every
+  // other page) gates on its own query's isError before ever reading its points: an errored query
+  // has isPending false and data undefined, the identical shape to a query that succeeded and
+  // simply has nothing for this night, so without this check a failed /series request renders as
+  // "this night has no time asleep, no deep sleep, no efficiency" - the false claim NightTraces.tsx
+  // and NightStages.tsx both argue against in their own comments, applying identically here. All
+  // three groups are retried together, not just whichever one happened to fail, the same shape
+  // NotesList.tsx's own multi-query retry uses: a reader clicking "Try again" wants every figure on
+  // this row back, not a partial retry that leaves a second group silently stale.
+  if (groups.queries.some((query) => query.isError)) {
+    return <Card span={12}><ErrorState onRetry={() => { for (const query of groups.queries) void query.refetch() }} /></Card>
+  }
+
   const valueFor = (metric: string) => valueOf(groups.pointsOf(metric))
-  const tiles = [
+  // Typed explicitly, rather than inferred from the literal array below, because only one of the
+  // eight entries carries `unit` (efficiency): without this annotation TypeScript narrows the
+  // array to a union of "has unit" and "has no unit" shapes, and the flatMap below would then need
+  // its own type guard just to read `tile.unit` at all.
+  const sources: { key: string, metric: string, duration: boolean, unit?: string }[] = [
     { key: 'asleep', metric: 'sleep_asleep_minutes', duration: true },
     { key: 'inBed', metric: 'sleep_in_bed_minutes', duration: true },
-    { key: 'efficiency', metric: 'sleep_efficiency', duration: false },
+    // unit: reuses Sleep.tsx's own key for the identical figure rather than adding a second one -
+    // see the precision comment below for why the value itself still comes from this page's own
+    // request rather than Sleep's.
+    { key: 'efficiency', metric: 'sleep_efficiency', duration: false, unit: 'sleep.units.percentShort' },
     { key: 'deep', metric: 'sleep_deep_minutes', duration: true },
     { key: 'light', metric: 'sleep_light_minutes', duration: true },
     { key: 'rem', metric: 'sleep_rem_minutes', duration: true },
     { key: 'awake', metric: 'sleep_awake_minutes', duration: true },
     { key: 'naps', metric: 'sleep_nap_count', duration: false },
-  ].flatMap((tile) => {
+  ]
+  // The explicit `: {...}[]` return annotation, not left to inference, is what keeps `text` on the
+  // result: without it TypeScript widens the two flatMap branches (`[]` and `[{...tile, text}]`)
+  // back down to `typeof sources[number]`, which is missing `text` and breaks `tile.text` below.
+  const tiles = sources.flatMap((tile): (typeof tile & { text: string })[] => {
     const value = valueFor(tile.metric)
     // Absent, never empty: this night having no row for a metric is not the same statement as a
     // recorded zero, so the tile disappears instead of printing one.
     if (value === null) return []
     return [{
       ...tile,
-      // Efficiency (and the nap count) print through formatNumber, not formatMetricValue: the
-      // figure is shown exactly as derived, never clamped. Overlapping sleep sessions can push
-      // sleep_efficiency above 100, which is a known derivation gap pinned by
+      // formatMetricValue, not a hardcoded literal precision: sleep_efficiency and sleep_nap_count
+      // both declare precision 0 in the catalogue, which is exactly the number a threaded literal
+      // here used to repeat by hand - the identical drift format.ts's own comment on
+      // formatMetricValue names Sleep.tsx's hardcoded 0 for. formatMetricValue does not clamp
+      // (it is formatNumber(value, METRICS[metric].precision, ...) and nothing else), so the
+      // figure is still shown exactly as derived: overlapping sleep sessions can push
+      // sleep_efficiency above 100, a known derivation gap pinned by
       // packages/core/test/sleep-derive.test.ts ("KNOWN GAP: overlapping sessions within a night
-      // double count toward asleep and efficiency"). Clamping here would hide a real defect
+      // double count toward asleep and efficiency"), and clamping here would hide that real defect
       // behind a plausible-looking figure, on the one surface that shows it most prominently.
-      text: tile.duration ? formatDuration(value) : formatNumber(value, 0, i18n.language, ''),
+      text: tile.duration ? formatDuration(value) : formatMetricValue(value, tile.metric, i18n.language, ''),
     }]
   })
 
@@ -88,6 +117,7 @@ export function NightTiles({ localDate, source }: { localDate: string, source: s
       {tiles.map((tile) => (
         <Card key={tile.key} span={3}>
           <StatTile label={t(`sleep.night.tiles.${tile.key}`)} value={tile.text}
+            unit={tile.unit ? t(tile.unit) : undefined}
             basis={t('sleep.night.tileBasis', { metric: tile.metric })} />
         </Card>
       ))}
