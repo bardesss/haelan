@@ -5,6 +5,12 @@ name: Pages
 # must not be able to add a third way for it to half-finish, and a failed deploy here must not be
 # able to hold up a release. The worst case this shape allows is a site one version behind, which
 # a manual run fixes.
+# `release: published` fires when release.yml's "The release stops being a draft" step flips
+# the draft, which runs under `secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN`. GitHub does
+# not start workflow runs from events attributed to the default GITHUB_TOKEN, so on the `||`
+# fallback - a state that token has actually been in - that PATCH still publishes the release, but
+# this workflow does not run: no red run, no annotation, the published page just stays on the
+# previous version until someone runs workflow_dispatch by hand.
 on:
   release:
     types: [published]
@@ -29,6 +35,9 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
+          # 26, not release.yml's 24: this job builds the static site, not the published image, so
+          # there is no reason to match the image's runtime. It matches what development runs on
+          # and what ci.yml's matrix already exercises on every push instead.
           node-version: '26'
           cache: pnpm
 

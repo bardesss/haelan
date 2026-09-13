@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 export function renderPage(template, values) {
   const used = new Set()
   const out = template.replace(/\{\{(\w+)\}\}/g, (_match, name) => {
-    if (!(name in values)) throw new Error(`no value for {{${name}}}`)
+    if (!Object.hasOwn(values, name)) throw new Error(`no value for {{${name}}}`)
     used.add(name)
     return values[name]
   })

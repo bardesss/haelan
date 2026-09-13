@@ -1,7 +1,8 @@
 ﻿node_modules/
 dist/
-# The assembled landing page. Built by `pnpm site:build` from site/ and published by pages.yml;
-# the sources are tracked and the assembly is not.
+# The assembled landing page. Already covered by `dist/` above; spelled out anyway so a reader
+# scanning this file sees that the assembly (built by `pnpm site:build` from site/ and published
+# by pages.yml) is deliberately untracked, not merely caught in passing.
 site/dist/
 *.sqlite
 *.sqlite-wal
