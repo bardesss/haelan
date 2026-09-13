@@ -34,13 +34,22 @@ export function registerAuth(app: FastifyInstance): void {
   })
 
   app.decorate('requireSession', async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    // Declined for the length of a boot rebuild. resolve() moves a lastSeen timestamp nothing
+    // reads, and a rebuild holds SQLite's write lock for its whole run (one person, one
+    // transaction, its own process), so attempting that write here buys nothing and costs the
+    // full busy_timeout - five seconds asleep on the thread every other request is queued behind.
+    // SessionStore's own guard means the session still resolves either way; this is about not
+    // spending the wait. rebuildInFlight is the flag index.ts already keeps for the maintenance
+    // routes, read the same way they read it.
+    const touch = app.haelan.rebuildInFlight?.() !== true
+
     // The header wins when present: a native client that sent one meant it, and a stale cookie
     // riding along on the same connection must not silently decide who the caller is. Only a
     // cookie failure clears the cookie, so a bearer caller never logs out a browser session that
     // happens to share the connection.
     const bearer = bearerToken(request.headers.authorization)
     if (bearer !== null) {
-      const accountId = app.haelan.stores.sessions.resolve(bearer, app.haelan.now())
+      const accountId = app.haelan.stores.sessions.resolve(bearer, app.haelan.now(), { touch })
       if (!accountId) {
         return reply.code(401).send(errorBody('unauthorized', 'no_session', 'sign in required'))
       }
@@ -48,7 +57,7 @@ export function registerAuth(app: FastifyInstance): void {
       return
     }
     const raw = request.cookies[SESSION_COOKIE]
-    const accountId = raw ? app.haelan.stores.sessions.resolve(raw, app.haelan.now()) : null
+    const accountId = raw ? app.haelan.stores.sessions.resolve(raw, app.haelan.now(), { touch }) : null
     if (!accountId) {
       clearSessionCookie(reply)
       return reply.code(401).send(errorBody('unauthorized', 'no_session', 'sign in required'))
