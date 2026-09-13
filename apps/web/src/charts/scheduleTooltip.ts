@@ -1,6 +1,7 @@
 import { formatClock } from '../format.js'
 import type { Translate } from '../format.js'
 import type { Night } from './schedule.js'
+import { escapeHtml, tip } from './base.js'
 
 /**
  * One hovered night, or one hovered nap, said the way the accessible table's own row says it.
@@ -29,7 +30,7 @@ export function scheduleTooltip(
   if (event.seriesType === 'scatter') {
     const at = typeof value?.[1] === 'number' ? value[1] : undefined
     if (at === undefined) return ''
-    return `${night.date}<br/>${t('charts.tooltip.line', {
+    return tip`${night.date}<br/>${t('charts.tooltip.line', {
       label: t('charts.columns.naps'), value: formatClock(at),
     })}`
   }
@@ -45,5 +46,5 @@ export function scheduleTooltip(
     t('charts.tooltip.line', {
       label: t('charts.columns.woke'), value: night.wake === null ? absent : formatClock(night.wake),
     }),
-  ].join('<br/>')
+  ].map(escapeHtml).join('<br/>')
 }
