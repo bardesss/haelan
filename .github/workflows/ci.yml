@@ -115,7 +115,15 @@ jobs:
         # copyDemo and writeCapture do - this rehearsal is the only thing that would ever catch a
         # break in either.
         run: |
-          if git diff --name-only origin/${{ github.base_ref }}...HEAD \
+          # Captured into a variable and checked before it is ever piped into grep. `if cmd |
+          # grep -q ...` suspends errexit for the whole pipeline, so a git diff that itself fails
+          # (an unknown revision, a base ref renamed mid-flight) would otherwise fall straight
+          # into grep's "no match" branch and report run=false - a gate that cannot tell "nothing
+          # touched the chain" from "I could not look" is not a gate, it is this job going green
+          # having proved nothing, which is exactly the failure mode it exists to catch.
+          touched=$(git diff --name-only origin/${{ github.base_ref }}...HEAD) \
+            || { echo "::error::could not diff against the base branch"; exit 1; }
+          if echo "$touched" \
             | grep -qE '^(demo/|apps/web/src/demo/|apps/web/vite\.demo\.config\.ts|apps/web/index\.demo\.html|scripts/capture-demo|scripts/seed-demo|apps/server/src/routes/v1/)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else

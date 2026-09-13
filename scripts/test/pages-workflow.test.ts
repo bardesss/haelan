@@ -47,7 +47,12 @@ describe('the pages workflow', () => {
   })
 })
 
+// Normalised the same way `yaml` is above, and for the same reason: this checkout has ci.yml in
+// CRLF, today's assertions on it are substring checks that happen not to span a newline, and the
+// first line-anchored assertion added to this block would fail on Windows exactly as
+// milestone one's did before `yaml` got this same treatment.
 const ci = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  .replace(/\r\n/g, '\n')
 
 describe('the demo half of the pages workflow', () => {
   it('captures, then builds the demo, then builds the site around it', () => {
@@ -75,6 +80,21 @@ describe('the rehearsal job in ci.yml', () => {
     // Each of these can change what a page asks for or what a route answers, which is what the
     // fixtures are. A prefix dropped from this list is a break discovered after a release.
     for (const prefix of ['demo/', 'apps/web/src/demo/', 'scripts/capture-demo', 'apps/server/src/routes/v1/']) {
+      expect(ci, prefix).toContain(prefix)
+    }
+  })
+
+  it('also watches the three paths the plan\'s own list left out', () => {
+    // scripts/seed-demo.mjs is what capture-demo.mjs spawns to build the throwaway instance in
+    // the first place - a break there fails demo:capture as surely as a broken recorder does, and
+    // nothing under scripts/capture-demo* names it. apps/web/vite.demo.config.ts and
+    // apps/web/index.demo.html are demo:build's own config and entry point, forced to live beside
+    // vite.config.ts and index.html rather than under src/demo/ (Vite resolves both by fixed
+    // name). None of the three has a fast unit test the way copyDemo and writeCapture do, so this
+    // rehearsal is the only thing that would ever catch a break in one of them - which is exactly
+    // why a prefix dropped from here, unlike the four above, would go unnoticed by every other
+    // test in this repository too.
+    for (const prefix of ['scripts/seed-demo', 'apps/web/vite.demo.config.ts', 'apps/web/index.demo.html']) {
       expect(ci, prefix).toContain(prefix)
     }
   })
