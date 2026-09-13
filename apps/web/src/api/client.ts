@@ -1,21 +1,12 @@
-export type ApiErrorKind =
-  | 'unauthorized' | 'forbidden' | 'not_found' | 'setup_incomplete'
-  | 'config' | 'transient' | 'internal' | 'unreachable'
-
-export class ApiError extends Error {
-  readonly kind: ApiErrorKind
-  readonly status: number | null
-
-  // Declared and assigned rather than written as constructor parameter properties: Node's type
-  // stripping is strip-only and rejects parameter properties, the same reason HaelanError in
-  // packages/core/src/errors.ts is written this way.
-  constructor(kind: ApiErrorKind, status: number | null, message: string) {
-    super(message)
-    this.kind = kind
-    this.status = status
-    this.name = 'ApiError'
-  }
-}
+// Moved to apiError.ts so the demo transport (apps/web/src/demo/client.ts) can throw and be
+// caught as this exact class without importing this module - this module's own specifier is what
+// the demo build's Vite plugin redirects to the demo transport, so a demo import here would
+// recurse. Re-exported so every existing `import { ApiError } from '../api/client.js'` still
+// works unchanged.
+export { ApiError } from './apiError.js'
+export type { ApiErrorKind } from './apiError.js'
+import { ApiError } from './apiError.js'
+import type { ApiErrorKind } from './apiError.js'
 
 const KIND_BY_STATUS: Record<number, ApiErrorKind> = {
   401: 'unauthorized',

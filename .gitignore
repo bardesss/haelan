@@ -39,6 +39,10 @@ demo-data/
 # and this directory must never ship in one of those).
 demo/capture/out/
 
+# `pnpm demo:build`'s own output (vite.demo.config.ts's outDir). Not `dist/`, so the pattern above
+# does not already cover it, and it is exactly as regenerable as a real instance's own `dist/`.
+apps/web/dist-demo/
+
 # Local editor and agent state: settings.local.json, a scheduled-task lock, worktree bookkeeping,
 # and a launch.json naming this machine's dev servers. None of it describes the project, and
 # settings.local.json is the kind of file that carries local paths into a public repository.
