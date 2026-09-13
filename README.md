@@ -12,6 +12,7 @@ API v4.** One household, one instance, no telemetry, no hosted offering.
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/bardesss/haelan?sort=semver)](https://github.com/bardesss/haelan/releases)
 [![Container image](https://img.shields.io/badge/ghcr.io-haelan-blue?logo=docker)](https://github.com/bardesss/haelan/pkgs/container/haelan)
+[![Site](https://img.shields.io/badge/site-bardesss.github.io%2Fhaelan-blue)](https://bardesss.github.io/haelan/)
 
 The reason it is self-hosted is structural rather than ideological. Google caps an unverified
 OAuth client at 100 users, and clearing verification for health scopes needs a paid third-party
