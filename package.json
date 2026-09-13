@@ -20,7 +20,8 @@
     "docs:tools": "node --experimental-strip-types scripts/generate-tools-doc.mjs",
     "site:build": "pnpm --filter @haelan/tokens build:css && node scripts/build-site.mjs",
     "demo:capture": "node scripts/capture-demo.mjs",
-    "demo:build": "pnpm --filter @haelan/tokens build:css && pnpm --filter @haelan/web exec vite build --config vite.demo.config.ts"
+    "demo:build": "pnpm --filter @haelan/tokens build:css && pnpm --filter @haelan/web exec vite build --config vite.demo.config.ts",
+    "demo:all": "pnpm demo:capture && pnpm demo:build && pnpm site:build"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
