@@ -12,6 +12,10 @@ export interface SourceTrace {
   pinnedSourceId: string
   isPending: boolean
   isError: boolean
+  // Read only by ErrorState's own not_found branch (see its comment) - WorkoutTrace.tsx and
+  // NightTraces.tsx both hand this straight to ErrorState the same way every other card's own
+  // query does.
+  error: unknown
   refetch: () => unknown
 }
 
@@ -88,6 +92,9 @@ export function useSourceTrace(args: {
     // the "no heart rate recorded" claim this hook exists to never make.
     isPending: pinned.isPending || (blendedEnabled && blended.isPending),
     isError: pinned.isError || blended.isError,
+    // Whichever actually failed - see Dashboard.tsx's identical heartRateError comment for why a
+    // composite of two requests has to name one concrete error rather than just an OR'd boolean.
+    error: pinned.error ?? blended.error,
     // `blendedEnabled`, not `fellBack`: a Retry click after the blended read itself failed (rather
     // than merely "hasn't succeeded yet") must still retry it, or the card is stuck showing an
     // error a second click can never clear. See the comment on `blendedEnabled` above.

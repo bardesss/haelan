@@ -41,7 +41,11 @@ import type { SeriesPoint } from '../data/useSeries.js'
  */
 export function MetricCard({ metric, query, points, span, label, basisPlacement, basisKey, basisWornKey, basisValues, oneDayRange, after, children }: {
   metric: string
-  query: { isError: boolean, isPending: boolean, refetch: () => unknown }
+  // error is optional and read only by ErrorState's own not_found branch (see its comment): a
+  // caller building a composite query out of several requests (the heart rate range and spo2
+  // range cards) has to name one explicitly, since ORing several isError flags together loses
+  // which request actually failed.
+  query: { isError: boolean, isPending: boolean, refetch: () => unknown, error?: unknown }
   points: SeriesPoint[]
   span: number
   label?: string
@@ -105,7 +109,7 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // errored query has isPending false and data undefined, which is exactly the shape emptyStateFor
   // reads as "no data yet".
   if (query.isError) {
-    return <Card span={span} label={label}><ErrorState onRetry={() => void query.refetch()} />{after}</Card>
+    return <Card span={span} label={label}><ErrorState onRetry={() => void query.refetch()} error={query.error} />{after}</Card>
   }
   // Nothing has been asked yet, so there is nothing to state. format() over an empty array is a
   // claim ("0 bpm"), and a basis line counting against a total nobody has checked is another.

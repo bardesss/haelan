@@ -30,7 +30,7 @@ export function NightList({ controls }: { controls: PageControlsState }) {
     [query.data],
   )
 
-  if (query.isError) return <ErrorState onRetry={() => void query.refetch()} />
+  if (query.isError) return <ErrorState onRetry={() => void query.refetch()} error={query.error} />
   if (query.isPending) return <Loading />
   if (nights.length === 0) {
     return <EmptyState title={t('sleep.nights.emptyTitle')} detail={t('sleep.nights.emptyDetail')} />

@@ -40,6 +40,9 @@ export interface SourceNames {
   sources: NamedSource[]
   isPending: boolean
   isError: boolean
+  // Read only by ErrorState's own not_found branch (see its comment) - SourceNames.tsx has to
+  // reach through this narrowed shape to hand ErrorState the underlying query's error.
+  error: unknown
 }
 
 export function useSourceNames(): SourceNames {
@@ -68,8 +71,9 @@ export function useSourceNames(): SourceNames {
       sources,
       isPending: query.isPending,
       isError: query.isError,
+      error: query.error,
     }
-  }, [items, query.isPending, query.isError])
+  }, [items, query.isPending, query.isError, query.error])
 }
 
 export function useRenameSource(): UseMutationResult<{ name: string }, ApiError, { sourceId: string, alias: string }> {

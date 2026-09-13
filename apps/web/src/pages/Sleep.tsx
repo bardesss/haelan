@@ -407,7 +407,7 @@ export function Sleep() {
           basis={nights.isError || lastNight === null
             ? undefined
             : t('sleep.sleepStages.basis', { date: lastNight.localDate })}>
-          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} />
+          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} error={nights.error} />
             : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (
@@ -430,7 +430,7 @@ export function Sleep() {
           basis={lastSeries.isError || scheduleNights.length === 0
             ? undefined
             : t('sleep.sleepSchedule.basis', { count: drawnNights })}>
-          {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} />
+          {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} error={lastSeries.error} />
             : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (

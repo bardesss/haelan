@@ -46,7 +46,7 @@ function NightTrace({ metric, night, chosenSource }: {
   if (trace.isError) {
     return (
       <div className="night-trace">
-        <Card span={12} label={label}><ErrorState onRetry={() => trace.refetch()} /></Card>
+        <Card span={12} label={label}><ErrorState onRetry={() => trace.refetch()} error={trace.error} /></Card>
       </div>
     )
   }

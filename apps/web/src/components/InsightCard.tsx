@@ -41,7 +41,9 @@ import type { Insight } from '../data/useInsight.js'
  */
 export function InsightCard({ insight, query, metric, span, label, formatValue, formatDelta }: {
   insight: Insight | undefined
-  query: { isError: boolean, isPending: boolean, refetch: () => unknown }
+  // Optional, same reason MetricCard's own query prop carries it: only ErrorState's not_found
+  // branch reads it.
+  query: { isError: boolean, isPending: boolean, refetch: () => unknown, error?: unknown }
   metric: string
   span: number
   label?: string
@@ -65,7 +67,7 @@ export function InsightCard({ insight, query, metric, span, label, formatValue, 
   const { t, i18n } = useTranslation()
 
   if (query.isError) {
-    return <Card span={span} label={label}><ErrorState onRetry={() => void query.refetch()} /></Card>
+    return <Card span={span} label={label}><ErrorState onRetry={() => void query.refetch()} error={query.error} /></Card>
   }
   if (query.isPending || insight === undefined) {
     return <Card span={span} label={label}><Loading /></Card>

@@ -73,7 +73,7 @@ export function Members() {
     return (
       <ErrorState onRetry={() => {
         void queryClient.refetchQueries({ queryKey: membersKey(), exact: true })
-      }} />
+      }} error={query.error} />
     )
   }
 

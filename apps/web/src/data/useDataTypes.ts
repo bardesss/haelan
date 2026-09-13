@@ -28,6 +28,10 @@ export interface DataTypes {
   items: DataTypeChoice[]
   isPending: boolean
   isError: boolean
+  // Read only by ErrorState's own not_found branch (see its comment) - DataTypes.tsx has to reach
+  // through this narrowed shape to hand ErrorState the underlying query's error, the same reason
+  // useSourceNames.ts's SourceNames carries one too.
+  error: unknown
 }
 
 export function useDataTypes(): DataTypes {
@@ -45,6 +49,7 @@ export function useDataTypes(): DataTypes {
     items: query.data?.items ?? [],
     isPending: query.isPending,
     isError: query.isError,
+    error: query.error,
   }
 }
 

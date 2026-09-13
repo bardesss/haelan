@@ -33,7 +33,7 @@ export function TrainingLoadCard({ on, source, span = 6 }: {
   if (query.isError) {
     return (
       <Card span={span} label={t('activity.trainingLoad.label')}>
-        <ErrorState onRetry={() => void query.refetch()} />
+        <ErrorState onRetry={() => void query.refetch()} error={query.error} />
       </Card>
     )
   }
