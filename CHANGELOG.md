@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.15.1](https://github.com/bardesss/haelan/compare/v1.15.0...v1.15.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **ci:** cut the release with the workflow's own token, not the PAT ([#184](https://github.com/bardesss/haelan/issues/184)) ([dd66111](https://github.com/bardesss/haelan/commit/dd6611155283ad12aac217b39937e39a450332e0))
+* **ci:** the release is a draft until its image is on the registry ([#183](https://github.com/bardesss/haelan/issues/183)) ([1b6e3ec](https://github.com/bardesss/haelan/commit/1b6e3ec154402f46d3f57418caa921dca8bfc149))
+
 ## [1.15.0](https://github.com/bardesss/haelan/compare/v1.14.1...v1.15.0) (2026-09-13)
 
 
