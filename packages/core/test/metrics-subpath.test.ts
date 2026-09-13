@@ -40,16 +40,14 @@ describe('the @haelan/core/metrics subpath', () => {
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
     // dragging argon2 along behind it. ./cardio-load, ./coverage-signal, ./target-key,
     // ./baseline-window, ./metric-data-type, ./workout-summary and ./workout-comparison are the
-    // other seven browser-safe entry points; coverage-signal-subpath.test.ts, target-key-subpath.test.ts,
-    // baseline-window-subpath.test.ts, metric-data-type-subpath.test.ts, workout-summary.test.ts
-    // and workout-comparison-subpath.test.ts carry their own guarantees, each a different shape:
-    // the first four modules are not import-free, so each of those tests allow-lists the specific
-    // imports it carries; workout-summary.test.ts allow-lists an empty list, the same contract
-    // this file's own module holds itself to, and workout-comparison-subpath.test.ts allow-lists
-    // the one import workoutComparison.ts makes, into workout-summary.ts. api/cardioLoad.ts is
-    // import-free the same way this module is, which is what let Task 1 add it to this package's
-    // exports without a comparable test of its own - the guarantee it needs is this one's, not a
-    // new file repeating it.
+    // other seven browser-safe entry points; cardio-load.test.ts, coverage-signal-subpath.test.ts,
+    // target-key-subpath.test.ts, baseline-window-subpath.test.ts, metric-data-type-subpath.test.ts,
+    // workout-summary.test.ts and workout-comparison-subpath.test.ts carry their own guarantees,
+    // each a different shape: the middle four modules are not import-free, so each of those tests
+    // allow-lists the specific imports it carries; workout-summary.test.ts and cardio-load.test.ts's
+    // own 'stays importable from a browser bundle' block both allow-list an empty list, the same
+    // contract this file's own module holds itself to, and workout-comparison-subpath.test.ts
+    // allow-lists the one import workoutComparison.ts makes, into workout-summary.ts.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
       './target-key', './workout-comparison', './workout-summary',

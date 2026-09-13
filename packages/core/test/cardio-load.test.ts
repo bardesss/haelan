@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { edwardsLoad, ageAt, banisterLoad, coefficientFor } from '../src/api/cardioLoad.ts'
 
@@ -96,5 +98,25 @@ describe('Banister TRIMP', () => {
 
   it('answers null for no minutes at all, not a load of zero', () => {
     expect(banisterLoad([], { restingBpm: 60, maxBpm: 180, k: 1.92 })).toBeNull()
+  })
+})
+
+// Matches an `import` statement of any shape, and also an `export ... from '...'` re-export, which
+// pulls a module in exactly as surely as an import does but carries no `import` keyword. Lifted
+// from workout-summary.test.ts, which uses the same scan for the same guarantee; a bare
+// `export interface` or `export function` line has no `from '...'` clause and does not match.
+const IMPORT_LINE = /^(?:import\s.*|export\s.*\bfrom\s*['"].*)$/gm
+
+describe('cardioLoad.ts stays importable from a browser bundle', () => {
+  // An allow-list with nothing on it, rather than a name check for '../db/'. The file's own header
+  // comment says it imports nothing from ../db/ and must not start, but a check for that one path
+  // would slide past a transitive pull through any other module, native or not. Zero imports is
+  // the only guarantee metrics-subpath.test.ts's package.json assertion can lean on: the ./cardio-
+  // load subpath is exported straight at this file, so the file itself has to carry its own proof
+  // rather than metrics-subpath.test.ts's scan of derive/metrics.ts standing in for it.
+  it('imports nothing at all, which is what makes it bundler-proof', () => {
+    const source = readFileSync(fileURLToPath(new URL('../src/api/cardioLoad.ts', import.meta.url)), 'utf8')
+    const importLines = [...source.matchAll(IMPORT_LINE)].map((m) => m[0])
+    expect(importLines, 'cardioLoad.ts must import nothing').toEqual([])
   })
 })
