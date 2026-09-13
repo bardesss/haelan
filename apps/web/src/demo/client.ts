@@ -29,7 +29,17 @@ export function createDemoTransport(loadJson: LoadJson): DemoTransport {
   let manifest: Promise<Record<string, string>> | null = null
 
   function loadManifest(): Promise<Record<string, string>> {
-    if (manifest === null) manifest = loadJson('manifest.json') as Promise<Record<string, string>>
+    if (manifest === null) {
+      manifest = (loadJson('manifest.json') as Promise<Record<string, string>>).catch((error: unknown) => {
+        // A transient failure must not become a permanent one. Caching the rejected promise
+        // forever would fail every later read for a reason that may already have gone away (the
+        // static host hiccuped once), with nothing short of a full page reload able to recover -
+        // clearing the cache here lets the next read retry from scratch, while the success path
+        // above still shares one promise across every reader that arrives before it settles.
+        manifest = null
+        throw error
+      })
+    }
     return manifest
   }
 
@@ -61,18 +71,47 @@ export function createDemoTransport(loadJson: LoadJson): DemoTransport {
   return { apiGet, apiSend }
 }
 
-// The path the demo build's fixtures land at (vite.demo.config.ts's demoFixtures plugin copies
-// demo/capture/out/ there). Relative to BASE_URL rather than the origin root, so the demo still
-// resolves its own fixtures when served under a sub-path (/haelan/demo/ today).
-async function loadFromBundle(file: string): Promise<unknown> {
-  const response = await fetch(`${import.meta.env.BASE_URL}demo-api/${file}`)
+/**
+ * Fetches one fixture file from the built bundle, relative to BASE_URL rather than the origin
+ * root so the demo still resolves its own fixtures when served under a sub-path (/haelan/demo/
+ * today). vite.demo.config.ts's demoFixtures plugin is what puts them at demo-api/ in the first
+ * place.
+ *
+ * Exported, not just used to build the module-level transport below, so
+ * apps/web/test/demo-client.test.ts can drive it directly against a stubbed `fetch` and prove
+ * both failure paths land on `ApiError`: a thrown fetch (the network, or here the static host,
+ * never answering) and a response that arrives but will not parse are two different failures and
+ * must not collapse into the same kind, but neither may propagate as a raw error - every caller's
+ * `instanceof ApiError` narrowing (queryClient.tsx's retry predicate, Shell.tsx's error branch) has
+ * to see one of the two, exactly as api/client.ts's own apiSend guarantees for a real instance.
+ */
+export async function loadFromBundle(file: string): Promise<unknown> {
+  const url = `${import.meta.env.BASE_URL}demo-api/${file}`
+  let response: Response
+  try {
+    response = await fetch(url)
+  } catch {
+    // Mirrors api/client.ts's identical catch: a thrown fetch is never a status, so it must not
+    // be folded into the response-based handling below.
+    throw new ApiError('unreachable', null, `failed to reach demo fixture ${file}`)
+  }
+
   if (!response.ok) {
     // Not a status this transport ever answers with for a captured response - reaching here means
     // the fixture files themselves failed to ship, which is a build problem, not a "not in the
     // demo" one.
-    throw new ApiError('unreachable', null, `failed to load demo fixture ${file} (${response.status})`)
+    throw new ApiError('unreachable', response.status, `failed to load demo fixture ${file} (${response.status})`)
   }
-  return response.json()
+
+  try {
+    return await response.json()
+  } catch {
+    // The host answered but the body would not parse - a corrupt or truncated fixture shipped
+    // with the build. Not the network failure above, and not the "nobody recorded this" miss
+    // readCaptured throws for a genuine manifest gap, so it gets the kind api/client.ts uses for
+    // the same shape of failure: an answer that arrived but cannot be trusted.
+    throw new ApiError('transient', response.status, `demo fixture ${file} did not parse`)
+  }
 }
 
 const defaultTransport = createDemoTransport(loadFromBundle)

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { ApiError } from '../src/api/apiError.js'
-import { createDemoTransport } from '../src/demo/client.js'
+import { createDemoTransport, loadFromBundle } from '../src/demo/client.js'
 
 const MANIFEST = {
   '/api/auth/me': 'me.json',
@@ -58,5 +58,55 @@ describe('the demo transport', () => {
     await counted.apiGet('/api/auth/me')
     await counted.apiGet('/api/auth/me')
     expect(loads).toBe(1)
+  })
+
+  it('retries the manifest after a failed load, instead of caching the rejection forever', async () => {
+    // A cached rejected promise would fail every read for the rest of the session on a problem
+    // that may have already gone away - this proves the second read gets a fresh attempt rather
+    // than the first attempt's stale failure.
+    let attempts = 0
+    const flaky = createDemoTransport(async (file: string) => {
+      if (file === 'manifest.json') {
+        attempts += 1
+        if (attempts === 1) throw new Error('transient host hiccup')
+        return MANIFEST
+      }
+      return FILES[file]
+    })
+
+    await expect(flaky.apiGet('/api/auth/me')).rejects.toThrow('transient host hiccup')
+    const body = await flaky.apiGet<{ personId: string }>('/api/auth/me')
+    expect(body.personId).toBe('demo')
+    expect(attempts).toBe(2)
+  })
+})
+
+describe('loadFromBundle', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('turns a thrown fetch into an unreachable ApiError, not a raw error', async () => {
+    // An ad blocker, an aborted navigation, or the static host simply not answering - a thrown
+    // fetch is never a status, and api/client.ts's own apiSend treats it the same way.
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('network request failed')))
+
+    const error = await loadFromBundle('manifest.json').then(() => null, (thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).kind).toBe('unreachable')
+  })
+
+  it('turns a body that will not parse into an ApiError, and not the same kind as unreachable', async () => {
+    // A corrupt or truncated fixture that still shipped with the build - the host answered, so
+    // this is a different failure than the network never responding, and must not claim to be one.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.reject(new SyntaxError('Unexpected end of JSON input')),
+    }))
+
+    const error = await loadFromBundle('manifest.json').then(() => null, (thrown: unknown) => thrown)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).kind).not.toBe('unreachable')
   })
 })
