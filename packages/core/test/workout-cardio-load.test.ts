@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson, insertSample } from '../src/testing/fixtures.ts'
+import { createTestDatabase, seedPerson, insertSample, seedOverride } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readWorkoutCardioLoad } from '../src/query/workoutDerived.ts'
 import { readSession } from '../src/query/sessions.ts'
@@ -8,6 +8,9 @@ import { PeopleStore } from '../src/store/people.ts'
 import { sessions, sources, daily } from '../src/db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../src/derive/rollup.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
+import { sampleTarget } from '../src/derive/targetKey.ts'
+import { banisterLoad } from '../src/api/cardioLoad.ts'
+import type { MinuteBpm } from '../src/api/cardioLoad.ts'
 
 // The session on 2026-09-12, which is also the date the "falls back to 220 minus age" case needs:
 // a person born 1985-03-04 turns 41 that day, and 220 - 41 = 179.
@@ -99,6 +102,46 @@ describe('a workout cardio load', () => {
       k: 1.92,
       minutes: 80,
     })
+  })
+
+  // IMPORTANT 2. readSessionHeartRateMinutes drops a sample-scope exclusion rather than merely
+  // flagging it the way readIntradayWindow does for a chart (query/intraday.ts's own `excluded`
+  // marker). Before that fix, an excluded minute still reached this sum: this test seeds the same
+  // 80-minute, 100+i bpm trace `seedHeartRate` always does, excludes one minute inside it, and
+  // checks both that the reported minute count fell by exactly one and that the sum differs from
+  // what banisterLoad would answer over the full, unfiltered trace.
+  it('drops an excluded minute from the Banister sum, not merely flags it', () => {
+    seedPersonAndSource()
+    const session = seedWorkout(FULL_ZONE_ATTRS)
+    seedHeartRate()
+    new PeopleStore(t.db).setBirthDate('p1', '1985-03-04')
+    new PeopleStore(t.db).setSex('p1', 'male')
+    seedDaily('resting_heart_rate', 52, PROVIDER_SOURCE)
+    seedDaily('heart_rate_zone_peak_max_bpm', 185, PROVIDER_SOURCE)
+
+    const allMinutes: MinuteBpm[] = Array.from({ length: SESSION_MINUTES }, (_, i) => ({
+      utcMs: START_MS + i * 60_000, bpm: 100 + i,
+    }))
+    const params = { restingBpm: 52, maxBpm: 185, k: 1.92 }
+    // What the sum would be with every seeded minute included - the number a caller would get if
+    // the exclusion were merely flagged rather than dropped.
+    const includedLoad = banisterLoad(allMinutes, params)!
+
+    // Minute 40 (140 bpm): the reading the person threw out.
+    const excludedAtMs = START_MS + 40 * 60_000
+    seedOverride(t.db, {
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: excludedAtMs }),
+    })
+
+    const load = readWorkoutCardioLoad(t.db, { personId: 'p1', session })!
+    expect(load.banisterBasis?.minutes).toBe(SESSION_MINUTES - 1)
+    const expectedLoad = banisterLoad(
+      allMinutes.filter((m) => m.utcMs !== excludedAtMs),
+      params,
+    )!
+    expect(load.banister).toBeCloseTo(expectedLoad, 10)
+    expect(load.banister).not.toBeCloseTo(includedLoad, 5)
   })
 
   it('falls back to 220 minus age when the day has no peak zone ceiling', () => {

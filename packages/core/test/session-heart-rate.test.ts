@@ -109,6 +109,33 @@ describe('the session heart rate reader', () => {
     expect(result.traceSource).toBe('pinnedSource')
   })
 
+  // MINOR 9. Every other fixture in this file writes min = mean = max for a minute (the same
+  // pattern the beforeEach block above uses), which cannot distinguish "reads mean" from "reads
+  // min" or "reads max" - a reader that quietly switched to preferring max would still pass every
+  // other test here. 'ring' carries no heart rate anywhere else in this file, so seeding one
+  // minute of genuinely distinct values on it cannot collide with the shared fixture above.
+  it('reads the mean aggregate for a minute whose min, mean and max genuinely differ', () => {
+    const distinctAt = START + 500 * MINUTE
+    insertSample(test.db, {
+      personId: 'p1', sourceId: 'ring', metric: 'heart_rate',
+      utcMs: distinctAt, tzOffsetMinutes: OFFSET, agg: 'min', value: 90,
+    })
+    insertSample(test.db, {
+      personId: 'p1', sourceId: 'ring', metric: 'heart_rate',
+      utcMs: distinctAt, tzOffsetMinutes: OFFSET, agg: 'mean', value: 110,
+    })
+    insertSample(test.db, {
+      personId: 'p1', sourceId: 'ring', metric: 'heart_rate',
+      utcMs: distinctAt, tzOffsetMinutes: OFFSET, agg: 'max', value: 130,
+    })
+
+    const result = readSessionHeartRateMinutes(test.db, {
+      personId: 'p1', startMs: distinctAt, endMs: distinctAt, sessionSourceId: 'ring',
+    })
+
+    expect(result.minutes).toEqual([{ utcMs: distinctAt, bpm: 110 }])
+  })
+
   it('answers no minutes when nobody recorded a heart rate in the span', () => {
     const result = readSessionHeartRateMinutes(test.db, {
       personId: 'p1', startMs: FAR_LATER, endMs: FAR_LATER + MINUTE, sessionSourceId: 'watch',

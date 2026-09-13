@@ -1,10 +1,11 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson, insertSample } from '../src/testing/fixtures.ts'
+import { createTestDatabase, seedPerson, insertSample, seedOverride } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { readWorkoutSplits } from '../src/query/workoutDerived.ts'
 import { readSession } from '../src/query/sessions.ts'
 import type { WorkoutSession } from '../src/query/sessions.ts'
 import { sessions, sources } from '../src/db/schema/index.ts'
+import { sampleTarget } from '../src/derive/targetKey.ts'
 
 const OFFSET = 120
 const MIN = 60_000
@@ -85,6 +86,25 @@ describe('a workout\'s splits, filled', () => {
     expect(autoSplits).toHaveLength(2)
     expect(autoSplits.every((s) => s.averageHeartRateBpm !== null)).toBe(true)
     expect(autoSplits.every((s) => s.averageHeartRateBpmSource === 'trace')).toBe(true)
+  })
+
+  // IMPORTANT 2. readSessionHeartRateMinutes drops a sample-scope exclusion rather than merely
+  // flagging it the way readIntradayWindow does for a chart. Minute 0 (100 bpm, the split's own
+  // lowest reading) is excluded here: dropping it moves the mean of the remaining four minutes
+  // (101, 102, 103, 104) to 102.5, which rounds to 103 - distinguishable from the unfiltered
+  // mean of 102 an arithmetic run like this one would otherwise hide behind a symmetric drop.
+  it("drops an excluded minute from a filled split's mean, not merely flags it", () => {
+    seedPersonAndSource()
+    const session = seedWorkout(START + 80 * MIN, { splits: [rawSplit(0, 5)] })
+    seedHeartRate(80)
+    seedOverride(t.db, {
+      personId: 'p1', scope: 'sample',
+      targetKey: sampleTarget({ source: 'watch', metric: 'heart_rate', utcMs: START }),
+    })
+
+    const { autoSplits } = readWorkoutSplits(t.db, { personId: 'p1', session })
+    expect(autoSplits[0]!.averageHeartRateBpm).toBe(103)
+    expect(autoSplits[0]!.averageHeartRateBpm).not.toBe(102)
   })
 
   it('fills laps on the same terms', () => {

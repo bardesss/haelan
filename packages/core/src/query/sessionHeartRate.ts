@@ -74,6 +74,16 @@ export function readSessionHeartRateMinutes(db: DbOrTx, input: {
   // the three together describe one minute rather than three readings.
   const minutes: MinuteBpm[] = result.points
     .filter((point) => point.mean !== null)
+    // readIntradayWindow marks a sample-scope exclusion on the point (`excluded: true`) rather
+    // than dropping it, because a chart needs the point to anchor a marker on - that is a display
+    // decision, stated on IntradayPoint itself. A correction already flows through correctly by
+    // the time a point reaches here: readIntradayWindow substitutes the corrected value before
+    // this reader ever sees it, so nothing further is needed for that action. But this reader
+    // feeds a *number* - a Banister sum, a split's filled mean - and a number gets one answer, not
+    // one for the chart and a different one for the tile beside it (derive/cardioLoad.ts's own
+    // comment on not producing a second answer to the same question). A reading the person
+    // excluded is not corrected, it is disowned, so it is dropped here rather than merely flagged.
+    .filter((point) => !point.excluded)
     .map((point) => ({ utcMs: point.utcMs, bpm: point.mean! }))
     // Belt and braces, not a fix for anything broken today: readWindow's own final line already
     // sorts by utcMs before returning (query/intraday.ts, the `.sort` on `perSourcePoints.flat()`).

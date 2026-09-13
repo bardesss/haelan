@@ -5,7 +5,7 @@ import type { ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 
 /**
- * What PUT /api/profile answers: the three fields as they were stored, and whether the timezone
+ * What PUT /api/profile answers: the five fields as they were stored, and whether the timezone
  * write left this person's derived rows waiting on a rebuild.
  *
  * `rebuildPending` is a fact about the instance rather than about the request, which is why it is
@@ -31,11 +31,11 @@ export interface ProfileEdit {
 }
 
 /**
- * The caller's own name, username and timezone. No query beside it: GET /api/auth/me already
- * carries all three, and a second route answering the same values is a second thing to keep in
- * step. That is also why this invalidates the session key rather than one of its own - the Shell,
- * the rail and every day boundary the browser resolves read the session, and a rename that left
- * them showing the old name would look like the save had failed.
+ * The caller's own display name, username, timezone, birth date and sex. No query beside it: GET
+ * /api/auth/me already carries all five, and a second route answering the same values is a second
+ * thing to keep in step. That is also why this invalidates the session key rather than one of its
+ * own - the Shell, the rail and every day boundary the browser resolves read the session, and a
+ * rename that left them showing the old name would look like the save had failed.
  */
 export function useSaveProfile(): UseMutationResult<SavedProfile, ApiError, ProfileEdit> {
   const queryClient = useQueryClient()

@@ -59,9 +59,12 @@ export function readWorkoutCardioLoad(db: DbOrTx, input: {
 /**
  * A workout's splits and laps with their heart rate filled in from the session's own trace.
  *
- * Lives beside readWorkoutCardioLoad rather than in a module of its own because the two want the
- * same two expensive things - the decoded detail and the unthinned minute series - and splitting
- * them would read the trace twice for one page.
+ * Lives beside readWorkoutCardioLoad because the two want the same two expensive things - the
+ * decoded detail and the unthinned minute series - though each is called separately by every
+ * current caller (tier2.ts's session-detail route calls both, `get_workout` calls both), so the
+ * window is in fact read twice, and `sessionById`/`workoutDetail` three times over, for one
+ * detail request. Measured small enough not to matter yet; sharing a module is what makes it easy
+ * to fix in one place if that ever changes, not a claim that it already has been.
  *
  * Laps get the same treatment as splits. No archived payload in this household carries a lap
  * (measured 2026-09-11: zero across 197 sessions, every splitType DISTANCE), so that half is
@@ -137,17 +140,29 @@ function readBanister(db: DbOrTx, input: { personId: string, session: WorkoutSes
  * devices reported it, and picking a device would make the load depend on which watch happened to
  * be worn. Falls back to the provider's own reconciled row, which is where a resting heart rate
  * usually lives for a household that has only ever had one device.
+ *
+ * Filtered on `agg` too, even though `resting_heart_rate` and `heart_rate_zone_peak_max_bpm` both
+ * declare `aggs: ['last']` today (derive/metrics.ts) and so cannot yet collide with anything: a
+ * metric that gained a second aggregate later would otherwise let this function pick whichever
+ * one sqlite happened to return first, silently.
  */
 function dailyValue(db: DbOrTx, personId: string, localDate: string, metric: string): number | null {
   const rows = db.select().from(daily).where(and(
     eq(daily.personId, personId),
     eq(daily.localDate, localDate),
     eq(daily.metric, metric),
+    eq(daily.agg, 'last'),
   )).all()
   for (const source of [MERGED_SOURCE, PROVIDER_SOURCE]) {
     const row = rows.find((r) => r.source === source && r.value !== null)
     if (row) return row.value
   }
+  // Neither the merged row nor the provider's own reconciled row: some other source's row exists
+  // instead (a device the priority list has not reconciled, or a household with no `merged`/
+  // `provider` convention for this metric at all). Answering the first non-null one sqlite
+  // returns is an arbitrary choice among sources, not a wrong one - a single-device household has
+  // exactly one row here anyway - but it is a choice, and the two branches above are tried first
+  // so it is never reached when a better answer exists.
   const any = rows.find((r) => r.value !== null)
   return any?.value ?? null
 }

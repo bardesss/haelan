@@ -30,6 +30,16 @@ describe('dataTypeForMetric', () => {
     expect(dataTypeForMetric('workout_minutes')).toBe('exercise')
   })
 
+  // cardio_load_edwards is derived from the four time-in-heart-rate-zone metrics after exclusions
+  // and source priority are already applied (derive/cardioLoad.ts), not read from the catalogue,
+  // so the loop that builds this map from DATA_TYPES never sees it on its own. Named by hand for
+  // the same reason sleep and exercise are: without an entry, turning off time-in-heart-rate-zone
+  // would make a page showing cardio load say "nothing has been recorded" instead of "you turned
+  // this off".
+  it('maps cardio_load_edwards to the data type it is derived from', () => {
+    expect(dataTypeForMetric('cardio_load_edwards')).toBe('time-in-heart-rate-zone')
+  })
+
   // Derived from the catalogue rather than written out, so a type added tomorrow is covered.
   it('covers every metric every catalogue entry declares', () => {
     for (const type of DATA_TYPES) {

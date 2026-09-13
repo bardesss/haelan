@@ -14,9 +14,6 @@ export interface ZoneMinutes {
   peakMinutes: number | null
 }
 
-// 1, 2, 3, 4 by zone rank. Edwards' own weights, unchanged.
-const EDWARDS_WEIGHTS = [1, 2, 3, 4] as const
-
 /**
  * Edwards TRIMP: one weight per heart rate zone, times the minutes spent in it.
  *
@@ -27,14 +24,23 @@ const EDWARDS_WEIGHTS = [1, 2, 3, 4] as const
  * and nothing else recorded is a load of 30. Every zone absent is not a load of zero, it is no
  * load recorded, and answering null rather than 0 is what lets the daily derive write no row at
  * all instead of a zero nobody measured. A recorded zero survives as a zero, from either case.
+ *
+ * The weight sits beside its own minutes in one literal - Edwards' own 1, 2, 3, 4 by zone rank,
+ * unchanged - rather than in a same-length array looked up by index, so there is no index lookup
+ * whose bounds have to be trusted rather than checked.
  */
 export function edwardsLoad(zones: ZoneMinutes): number | null {
-  const minutes = [zones.lightMinutes, zones.moderateMinutes, zones.vigorousMinutes, zones.peakMinutes]
-  if (minutes.every((value) => value === null)) return null
+  const weighted = [
+    { weight: 1, minutes: zones.lightMinutes },
+    { weight: 2, minutes: zones.moderateMinutes },
+    { weight: 3, minutes: zones.vigorousMinutes },
+    { weight: 4, minutes: zones.peakMinutes },
+  ]
+  if (weighted.every(({ minutes }) => minutes === null)) return null
   let load = 0
-  for (const [index, value] of minutes.entries()) {
-    if (value === null) continue
-    load += EDWARDS_WEIGHTS[index]! * value
+  for (const { weight, minutes } of weighted) {
+    if (minutes === null) continue
+    load += weight * minutes
   }
   return load
 }

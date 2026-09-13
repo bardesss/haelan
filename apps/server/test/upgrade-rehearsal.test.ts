@@ -371,12 +371,25 @@ describe('the upgrade path', () => {
           const addedRows = db.$client.prepare(
             `select ${quoted(addedCols)} from ${t} order by id`,
           ).all() as Record<string, unknown>[]
-          const backfilled = addedRows.some((row) => addedCols.some((c) => row[c] !== null))
+          // `some()` over an empty array is `false`, the same value a genuinely clean table
+          // produces - so a tier-1 table this fixture leaves empty would pass the check below
+          // having measured nothing at all. `people` happens to carry the one row this file seeds,
+          // which is the only reason this has never gone quiet before now. Asserted with the table
+          // name, so an empty table fails loudly here rather than the backfill check silently
+          // proving nothing three lines down.
+          expect(addedRows.length, `${t}: no pre-existing rows to check for a backfill on ${addedCols.join(', ')}`)
+            .toBeGreaterThan(0)
+          // Every (row, column) pair that came back non-null, not a collapsed boolean: a failure
+          // here names exactly which row and which added column carried a value, rather than only
+          // that the table failed the check somewhere.
+          const backfilled = addedRows.flatMap((row, rowIndex) => addedCols
+            .filter((c) => row[c] !== null)
+            .map((c) => ({ row: rowIndex, column: c, value: row[c] })))
           expect(
             backfilled,
             `${t}: migration since ${LAST_OLD_TAG} added ${addedCols.join(', ')} and backfilled `
             + 'a pre-existing row with a non-null value',
-          ).toBe(false)
+          ).toEqual([])
         }
       }
       // The deliberate part. 0016 drops `samples` rather than translating 1.6 million rows inside
