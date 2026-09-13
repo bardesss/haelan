@@ -41,9 +41,10 @@ catching them is a standing part of how the project is built rather than a past 
 
 ![The Dashboard](assets/screenshots/dashboard.png)
 
-![Sleep](assets/screenshots/sleep.png)
+![Activity](assets/screenshots/activity.png)
 
-<sub>Dashboard, Sleep, and [Recovery](assets/screenshots/recovery.png). All three are the demo data
+<sub>Dashboard and Activity above; [Sleep](assets/screenshots/sleep.png) and
+[Recovery](assets/screenshots/recovery.png) as well. All four are the demo data
 `scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
 
 ## What it does
@@ -226,10 +227,12 @@ HAELAN_DATA_DIR=./demo-data pnpm start
 Sign in as `demo` with the password `demodemo`. That password is printed by the script and
 written down here on purpose: it is correct for a throwaway directory and wrong for anything else,
 and the script refuses to run against a directory that already holds a database. The data comes
-from a fixed seed, so the data behind the screenshots above regenerates identically. The images
-themselves were taken on the week ending 2026-09-06, which is where the demo's data ends; a fresh
-boot opens on the current month instead, and you would have to walk back to that week to frame the
-same pictures.
+from a fixed seed, so the data behind the screenshots above regenerates identically. Dashboard,
+Sleep and Recovery were taken on the week ending 2026-09-06, which is where the demo's data ends;
+Activity was taken on August 2026, because a month is where its bar charts thin their date labels
+and a week is not. A fresh boot opens on the current month instead, so you would have to walk back
+to frame the same pictures. The range and the day both live in the URL, which is the quickest way
+back: `?range=week&on=2026-09-06`.
 
 ## Backups, and restoring one
 

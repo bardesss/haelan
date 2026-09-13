@@ -18,6 +18,12 @@ probe/findings/token-log.jsonl
 # in content, since the seed is synthetic, and still a database committed to a public repository
 # by accident. The glob covers the next one too.
 .local-*/
+# ...except the one this repository's own README tells you to create. "Try it without a Google
+# account" runs `seed-demo.mjs ./demo-data`, and the glob above is dot-prefixed, so the single
+# directory every reader of the README is instructed to make was the one case it did not cover.
+# Found by a `git add -A` that staged demo-data/instance.key while updating the screenshots those
+# same instructions produce.
+demo-data/
 
 # Linked worktrees. Kept out of the tree they live in: a git add -A from the repository root
 # would otherwise record one as an embedded repository and commit a gitlink nobody wanted.
