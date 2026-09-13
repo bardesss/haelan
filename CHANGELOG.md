@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.14.0](https://github.com/bardesss/haelan/compare/v1.13.0...v1.14.0) (2026-09-13)
+
+
+### Features
+
+* **web:** the night page, and M8 closes with it ([#174](https://github.com/bardesss/haelan/issues/174)) ([f2bd818](https://github.com/bardesss/haelan/commit/f2bd818d0938e0955fb1ff7d0351ee082c2db3e0))
+
 ## [1.13.0](https://github.com/bardesss/haelan/compare/v1.12.1...v1.13.0) (2026-09-12)
 
 
