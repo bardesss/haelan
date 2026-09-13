@@ -3,8 +3,9 @@
 //
 // Usage: pnpm site:build
 
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Fills every {{slot}} in `template` from `values`.
@@ -45,4 +46,54 @@ export function releaseStamp(rootDir) {
   const found = heading.exec(changelog)
   if (found === null) throw new Error(`no CHANGELOG.md entry for ${version}`)
   return { version, releaseDate: found[1] }
+}
+
+// Source path relative to the repository root, then the path it is published at. The table is
+// here rather than derived from the page's own markup: a build that discovers its inputs by
+// parsing HTML would silently publish nothing when a tag was mistyped, and the test in
+// scripts/test/site-assets.test.ts checks the two agree from the other direction.
+const ASSETS = [
+  ['packages/tokens/dist/theme.css', 'theme.css'],
+  ['site/site.css', 'site.css'],
+  ['assets/brand/mark.svg', 'mark.svg'],
+  ['apps/web/public/favicon.svg', 'favicon.svg'],
+  ['apps/web/public/favicon.ico', 'favicon.ico'],
+  ['apps/web/public/apple-touch-icon.png', 'apple-touch-icon.png'],
+]
+
+/**
+ * Writes the whole published site into `outDir` and reports the paths it wrote.
+ *
+ * theme.css has to exist before this runs - `pnpm --filter @haelan/tokens build:css` is its
+ * producer and the `site:build` script chains the two, so a bare `node scripts/build-site.mjs`
+ * against a clean checkout fails here rather than publishing a page with no palette.
+ */
+export function buildSite(rootDir, outDir) {
+  const written = []
+  const put = (from, to) => {
+    const target = join(outDir, to)
+    mkdirSync(dirname(target), { recursive: true })
+    copyFileSync(join(rootDir, from), target)
+    written.push(to)
+  }
+
+  const template = readFileSync(join(rootDir, 'site/index.html'), 'utf8')
+  mkdirSync(outDir, { recursive: true })
+  writeFileSync(join(outDir, 'index.html'), renderPage(template, releaseStamp(rootDir)))
+  written.push('index.html')
+
+  for (const [from, to] of ASSETS) put(from, to)
+  for (const shot of readdirSync(join(rootDir, 'assets/screenshots'))) {
+    if (shot.endsWith('.png')) put(`assets/screenshots/${shot}`, `screenshots/${shot}`)
+  }
+
+  return written
+}
+
+// Run directly (pnpm site:build), not imported by a test.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const rootDir = fileURLToPath(new URL('..', import.meta.url))
+  const outDir = join(rootDir, 'site/dist')
+  const written = buildSite(rootDir, outDir)
+  console.log(`wrote ${written.length} files into ${outDir}`)
 }

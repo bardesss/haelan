@@ -1,5 +1,8 @@
 ﻿node_modules/
 dist/
+# The assembled landing page. Built by `pnpm site:build` from site/ and published by pages.yml;
+# the sources are tracked and the assembly is not.
+site/dist/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
