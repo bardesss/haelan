@@ -1,0 +1,73 @@
+/* The landing page. Colours come from @haelan/tokens via theme.css, which is linked before this
+   file and defines every custom property used here for both themes. Spacing and radii use the
+   --space-* / --radius-* scale from packages/tokens/src/primitives.ts wherever a literal value
+   matches one of its steps exactly; a value with no matching step (a breakpoint, an odd padding)
+   stays a literal rem so a future change to the scale can't silently reflow this page. */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 var(--space-6) 4rem;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+header, section, footer { max-width: 44rem; margin: 0 auto; }
+
+.hero { padding: 4rem 0 2rem; text-align: center; }
+.hero h1 { font-size: 2.5rem; margin: var(--space-2) 0; letter-spacing: -0.01em; }
+.lede { color: var(--text-secondary); font-size: 1.125rem; }
+
+.actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; margin: 2rem 0 var(--space-4); }
+.button {
+  display: inline-block;
+  padding: 0.625rem var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  text-decoration: none;
+  background: var(--surface-card);
+}
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface-page); }
+.button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.small-screen-note { color: var(--text-muted); font-size: 0.9375rem; }
+
+h2 { margin-top: 3rem; font-size: var(--font-size-lg); }
+h3 { margin-top: 1.75rem; font-size: 1.125rem; color: var(--text-secondary); }
+p { color: var(--text-secondary); }
+a { color: var(--accent); }
+
+.shots { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+.shots h2, .shots .caption { grid-column: 1 / -1; }
+.shots figure { margin: 0; }
+.shots img { width: 100%; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: block; }
+.shots figcaption { color: var(--text-muted); font-size: 0.875rem; padding-top: 0.375rem; }
+.caption { color: var(--text-faint); font-size: 0.875rem; }
+
+pre {
+  background: var(--surface-inset);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  overflow-x: auto;
+}
+code { font-family: var(--font-mono); font-size: 0.875rem; }
+
+footer { margin-top: 4rem; padding-top: var(--space-6); border-top: 1px solid var(--border-subtle); }
+footer p { color: var(--text-muted); font-size: 0.875rem; }
+
+/* One column on a phone, where the screenshots are the whole point of the visit. */
+@media (max-width: 40rem) {
+  .shots { grid-template-columns: 1fr; }
+  .hero { padding-top: 2.5rem; }
+  .hero h1 { font-size: 2rem; }
+}
+
+/* The dashboard's own small-screen layout is M7; above that width the note is not true. */
+@media (min-width: 40.0625rem) {
+  .small-screen-note { display: none; }
+}

@@ -52,7 +52,11 @@ jobs:
       # half: a pull request opened by `app/github-actions` gets CI runs that land in
       # `action_required` and never start, so the required checks never report and it sits
       # blocked until somebody presses "Approve and run" by hand. A release cut by GITHUB_TOKEN
-      # has no such problem, because nothing in this repository triggers on `release`.
+      # has no such problem: cutting a release only creates a draft, and a draft never fires
+      # `release: published` -- the event pages.yml listens for. That event only fires later,
+      # from this same workflow's own "The release stops being a draft" step, under its own
+      # RELEASE_PLEASE_TOKEN-or-GITHUB_TOKEN fallback (see pages.yml's `on:` block for what
+      # happens when that fallback fires).
       - name: Cut the release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: rp

@@ -17,7 +17,8 @@
     "dev:server": "pnpm --filter @haelan/server dev",
     "start": "node --experimental-strip-types apps/server/src/index.ts",
     "check:enums": "node --experimental-strip-types scripts/check-enum-drift.mjs",
-    "docs:tools": "node --experimental-strip-types scripts/generate-tools-doc.mjs"
+    "docs:tools": "node --experimental-strip-types scripts/generate-tools-doc.mjs",
+    "site:build": "pnpm --filter @haelan/tokens build:css && node scripts/build-site.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
