@@ -54,6 +54,36 @@ rewritten tree being byte-identical to the original and by the commit count and 
 `Co-Authored-By` line surviving. The merge references on pull requests #30 through #38 point at
 commits that rewrite left unreachable. There is no second exception.
 
+## A reader that feeds a number says what it honours
+
+A reader written to draw a chart and later reused to produce a number silently inherits decisions
+that were only ever right for drawing. That happened twice in one branch (#191), and both times it
+was the same defect. `readSession` served sleep as well as exercise, so a cardio load summed a
+Banister exponential over a sleeping person's span and answered 65.10 TRIMP for a 480 minute night,
+with a basis that made the figure look fully accounted for. `readWindow` flags sample scope
+exclusions rather than dropping them, deliberately, because a chart needs the point in order to
+anchor an exclusion marker on it; a derived number that keeps them counts readings their owner
+disowned, and one page ended up showing three answers to a single question.
+
+So a reader whose output is stored or printed as a number states three things in its own header:
+
+- **Which session kinds it honours**, and what it does with the others. A detail page knows what it
+  asked for. A derived number has no such context and will sum whatever it is handed.
+- **Which override actions it honours.** `exclude` and `correct` are separate decisions, and a
+  reader may legitimately want one and not the other. Naming both is what makes it a choice rather
+  than an accident.
+- **Whether it is thinned**, and if so, that no derived number may be computed from it. A point
+  budget is an argument about display, and a number that moves when a chart's budget moves is not
+  measuring anything.
+
+`query/sessionHeartRate.ts` states all three and is the worked example. The two display oriented
+decisions it guards against both live in `query/intraday.ts`, which carries a note pointing back
+here, because that is where someone reaching for them will be standing.
+
+Neither defect was caught by a task level review. Both took a whole branch reviewer reading the
+spec's own argument back against the code, which is a gate too late, and too expensive to run, to
+be the one that catches this class.
+
 ## The name, the mark and the tokens
 
 **The display name is Hælan. Everything anybody types is `haelan`.** The æ is the display spelling
