@@ -375,10 +375,12 @@ describe('the Activity page', () => {
   // reading ("5,234,567") in its accessible table, under a column header (activity.units.distance)
   // that reads "Distance in kilometers". A sighted reader saw the correct "5.2 km" headline while a
   // screen reader landing on the sparkline's own table got a number six figures longer, under a
-  // header naming a unit that number was never in. range/on pinned to the stub's own date so the
-  // sparkline's dense series actually carries a row for it, rather than depending on whatever "this
-  // month" resolves to on the machine running the test.
-  it('shows the distance sparkline table in kilometers too, not the raw stored millimeters', async () => {
+  // header naming a unit that number was never in. The card now draws a DailyBars rather than a
+  // Sparkline (this milestone's own promotion), whose table is built the same way off the same
+  // dense series, so the defect and the fix both still apply. range/on pinned to the stub's own
+  // date so that dense series actually carries a row for it, rather than depending on whatever
+  // "this month" resolves to on the machine running the test.
+  it('shows the distance bar chart\'s table in kilometers too, not the raw stored millimeters', async () => {
     window.history.replaceState(null, '', '/activity?range=month&on=2026-08-15')
     const restore = stubActivityValues({ distance: 5_234_567 })
     const { client, tree } = withQuery(<Activity />)
@@ -523,5 +525,46 @@ describe('the Activity page', () => {
   // of it: a test carrying its own list would keep passing after someone edited the page's.
   it('draws a bar chart for exactly the promoted metrics', () => {
     expect([...BAR_METRICS]).toEqual(['distance', 'floors'])
+  })
+
+  // The whole-branch review's own finding: the test above checks the CONTENTS of an exported
+  // constant, not that Activity.tsx:276's ternary actually reads it to choose what to draw.
+  // Deleting that ternary (or reverting both cards' span back to 4) left the rest of this suite
+  // green. This test mounts the real page and reads something only DailyBars produces, so it
+  // cannot pass the same way: `useChart`'s own inline host height (130 for DailyBars, 34 for
+  // Sparkline -- useChart.ts's returned `style`) and the `span 6` on the two promoted cards'
+  // `.card` element (Card.tsx), against a card that stayed a Sparkline at span 4.
+  //
+  // Confirmed by removing the ternary at Activity.tsx:276 (`BAR_METRICS.has(metric) ? <DailyBars
+  // .../> : <Sparkline .../>` collapsed to always `<Sparkline .../>`) and watching this test fail:
+  // "expected '34px' to be '130px'" on the Distance assertion, restored afterwards.
+  it('draws a DailyBars host, not a Sparkline one, on the promoted distance and floors cards', async () => {
+    const restore = stubActivity([])
+    const { client, tree } = withQuery(<Activity />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const cardFor = (label: string): HTMLElement => {
+      const card = [...container!.querySelectorAll('.card')]
+        .find((c) => c.querySelector('.label')?.textContent === label)
+      if (!card) throw new Error(`no card for ${label}`)
+      return card as HTMLElement
+    }
+    const hostHeightOf = (card: HTMLElement): string =>
+      (card.querySelector('[role="img"]') as HTMLElement | null)?.style.height ?? ''
+
+    const distanceCard = cardFor('Distance')
+    const floorsCard = cardFor('Floors climbed')
+    const activeEnergyCard = cardFor('Active energy')
+
+    expect(hostHeightOf(distanceCard)).toBe('130px')
+    expect(hostHeightOf(floorsCard)).toBe('130px')
+    // The control: a card BAR_METRICS does not name, still drawing the 34px Sparkline it always
+    // has, so this test would fail the same way if DailyBars' host were simply always 130px tall.
+    expect(hostHeightOf(activeEnergyCard)).toBe('34px')
+
+    expect(distanceCard.style.gridColumn).toBe('span 6')
+    expect(floorsCard.style.gridColumn).toBe('span 6')
+    expect(activeEnergyCard.style.gridColumn).toBe('span 4')
+    restore()
   })
 })

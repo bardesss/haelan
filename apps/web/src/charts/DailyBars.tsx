@@ -1,12 +1,12 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, dayPointDate, SYMBOL } from './base.js'
+import { chartBase, dayMarks, dayPointDate, dayTableRows, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
-import { barLabelInterval } from './barAxis.js'
+import { barLabelInterval, barDateLabels } from './barAxis.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
@@ -20,7 +20,7 @@ const EMPTY = Object.freeze([]) as never[]
 // starts at zero, because a bar's length IS its value and a truncated axis misstates the ratio
 // between two days.
 export function DailyBars({
-  values, labels, label, unit, axisUnit, metric, formatValue,
+  values, labels, label, unit, axisUnit, metric, formatValue, minInterval,
   height = 130, annotations = EMPTY, excluded = EMPTY, onPointClick,
 }: {
   // Dense over the range the reader asked for, one entry per calendar day, with null where nothing
@@ -38,6 +38,18 @@ export function DailyBars({
   // below runs the caller's own `formatValue` for that reason.
   metric: string
   formatValue?: (value: number | null, absent: string) => string
+  // The smallest step the caller's own `formatValue` can tell apart, wired straight to echarts'
+  // `yAxis.minInterval`. Optional, and left to the caller rather than derived here from
+  // `METRICS[metric].precision`: echarts picks tick steps off the STORED scale, but the axis
+  // label runs the DISPLAY formatter, and nothing stops a tick step finer than that formatter can
+  // resolve -- floors at a small range ticks at 0/0.5/1 and the shared formatter, which has no
+  // fractional floor to show, prints "0 | 0 | 0 | 1 | 1 | 1", three gridlines all labelled zero.
+  // The catalogue's own precision cannot fix this from inside the chart: distance is stored in
+  // millimetres at precision 0, so that reasoning would hand a millimetre-scale minInterval to the
+  // one metric whose kilometre formatter (one decimal) needs none. Only the caller, who wrote the
+  // formatter, knows what it can resolve; Activity.tsx passes 1 for floors and leaves this unset
+  // for distance.
+  minInterval?: number
   height?: number
   annotations?: { date: string; text: string }[]
   excluded?: string[]
@@ -89,7 +101,10 @@ export function DailyBars({
         type: 'category' as const,
         // Dates, not array positions: this axis is labelled, so what it carries is what a reader
         // reads. Sparkline can hand echarts indices precisely because its axis is hidden.
-        data: labels.map((date) => date.slice(8)),
+        // barDateLabels switches to MM-DD once the range crosses into a second calendar month, so
+        // a quarter or a year of labels does not repeat the same handful of day-of-month numbers
+        // with nothing to tell them apart (barAxis.ts's own doc comment has the measurements).
+        data: barDateLabels(labels),
         ...base.labelledAxis,
         axisLabel: { ...base.axisLabel, interval: barLabelInterval(labels.length) },
       },
@@ -97,6 +112,10 @@ export function DailyBars({
         type: 'value' as const,
         // Zero, always. See the test, and section 3 of the design.
         min: 0,
+        // The smallest step the caller's own formatter can resolve (see the `minInterval` prop's
+        // own comment): left undefined for a caller that does not pass one, which is what
+        // `yAxis.minInterval` already does when omitted.
+        minInterval,
         name: axisUnit,
         nameTextStyle: { color: base.axisLabel.color, fontSize: base.axisLabel.fontSize },
         splitLine: base.splitLine,
@@ -129,7 +148,7 @@ export function DailyBars({
             ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) },
       }],
     }
-  }, [values, labels, marks, axisUnit])
+  }, [values, labels, marks, axisUnit, minInterval])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
@@ -141,24 +160,9 @@ export function DailyBars({
     <ChartFigure label={label} host={host} style={style}
       table={{
         columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
-        rows: values.map((v, i) => {
-          const date = labels[i] ?? String(i)
-          const isExcluded = excluded.includes(date)
-          // "excluded", not "no reading", for a day the reader threw out: there was a reading, and
-          // the day is blank because of something they did rather than because the device never
-          // reported. "no reading" is the honest cell only for the second of those.
-          const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-          const cell = format(v, absent)
-          return [date, cell,
-            [isExcluded ? t('charts.absence.excluded') : '',
-              // filter, not find: several annotations can land on the same date now that day
-              // level marks join the per-metric ones, and a single find() here would silently
-              // show only the first and drop the rest. ANNOTATION_JOIN, not a second ', ' literal:
-              // annotationsByDate (base.ts) reads the same constant, so a table cell and a canvas
-              // label built from the same annotations array cannot drift apart on separator alone.
-              annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
-              .filter(Boolean).join(ANNOTATION_JOIN)]
-        }),
+        // dayTableRows (base.ts): the row builder Sparkline's own accessible table uses, without
+        // its trend column and episodic filtering, neither of which this chart draws.
+        rows: dayTableRows({ values, labels, excluded, annotations, format, t }),
       }} />
   )
 }

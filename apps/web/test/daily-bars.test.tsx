@@ -70,7 +70,7 @@ function mount(props: Partial<Parameters<typeof DailyBars>[0]> = {}) {
   })
   const stub = chartStubs.at(-1)!
   return stub.setOption.mock.calls[0]![0] as {
-    yAxis: { min?: number, scale?: boolean, name?: string, axisLabel?: { formatter?: (v: number) => string } },
+    yAxis: { min?: number, scale?: boolean, name?: string, minInterval?: number, axisLabel?: { formatter?: (v: number) => string } },
     xAxis: { data?: unknown[], axisLabel?: { interval?: number } },
     series: { type?: string, data?: unknown[], markPoint?: { data?: unknown[] }, markLine?: { data?: unknown[] } }[],
   }
@@ -100,6 +100,20 @@ describe('DailyBars', () => {
     const option = mount()
     expect(option.yAxis.axisLabel!.formatter!(9_200_000)).toBe('9.2')
     expect(option.yAxis.name).toBe('km')
+  })
+
+  // Finding 1 of the whole-branch review: echarts picks tick steps off the STORED scale and the
+  // axis label runs the DISPLAY formatter, so nothing stops a tick step finer than the formatter
+  // can resolve. Floors at a small range ticked at half-floor steps and the shared formatter (no
+  // fractional floor to show) printed "0 | 0 | 0 | 1 | 1 | 1", three gridlines all labelled zero.
+  // The caller, not this chart, knows what its own formatter can tell apart, so this prop is
+  // handed straight to `yAxis.minInterval` rather than derived from the catalogue's precision.
+  it('passes the caller\'s minInterval straight to the value axis', () => {
+    expect(mount({ minInterval: 1 }).yAxis.minInterval).toBe(1)
+  })
+
+  it('leaves the value axis minInterval unset when the caller does not pass one', () => {
+    expect(mount().yAxis.minInterval).toBeUndefined()
   })
 
   it('thins the date labels by the point count', () => {

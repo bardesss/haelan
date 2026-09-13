@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, dayPointDate, STROKE, OPACITY, SYMBOL } from './base.js'
+import { chartBase, dayMarks, dayPointDate, dayTableRows, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
@@ -214,47 +214,9 @@ export function Sparkline({
           columns: hasTrend
             ? [t('charts.columns.date'), unit, t('charts.columns.trend'), t('charts.columns.note')]
             : [t('charts.columns.date'), unit, t('charts.columns.note')],
-          // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
-          // reader did to it either) is not a row this table states anything about, so it is
-          // dropped rather than rowed with a "no reading" cell the spec says would train a reader
-          // to ignore what that phrase means on every other chart. An excluded or annotated day
-          // keeps its row even with no value left: `marks.atDate` below still draws a markLine for
-          // it regardless of `episodic`, and a table gone quiet beside a canvas mark that keeps
-          // asserting something would deny the one day the reader actually acted on to a
-          // table-only reader. `!episodic` short-circuits the other two clauses for every existing
-          // caller, so the added checks never run outside episodic mode.
-          rows: values
-            .map((v, i) => [v, i] as const)
-            .filter(([v, i]) => {
-              if (!episodic || v !== null) return true
-              const date = labels[i] ?? String(i)
-              return excluded.includes(date) || annotations.some((a) => a.date === date)
-            })
-            .map(([v, i]) => {
-              const date = labels[i] ?? String(i)
-              const isExcluded = excluded.includes(date)
-              // "excluded", not "no reading", for a day the reader threw out: there was a reading,
-              // and the day is blank because of something they did rather than because the device
-              // never reported. "no reading" is the honest cell only for the second of those.
-              const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              const cell = format(v, absent)
-              // The same formatter the reading cell goes through, since the trend is a smoothed
-              // reading and carries the identical unit: Weight's own kilogram conversion (its
-              // `formatValue`) has to reach this cell too, or a table would print grams beside
-              // kilograms under a header naming one of them. Null where trendOf had nothing to
-              // smooth for that day, which reads as the same absence word the reading cell already
-              // carries rather than as a number the line never had.
-              return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
-                [isExcluded ? t('charts.absence.excluded') : '',
-                  // filter, not find: several annotations (an override reason, a note, an event) can
-                  // land on the same date now that day level marks join the per-metric ones, and a
-                  // single find() here would silently show only the first and drop the rest.
-                  // ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate (base.ts) reads the
-                  // same constant, so a table cell and a canvas label built from the same annotations
-                  // array cannot drift apart on separator alone.
-                  annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
-                  .filter(Boolean).join(ANNOTATION_JOIN)]
-            }),
+          // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
+          // neither the trend column nor the episodic filter, so both default off there.
+          rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can
