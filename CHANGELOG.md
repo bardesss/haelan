@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.15.3](https://github.com/bardesss/haelan/compare/v1.15.2...v1.15.3) (2026-09-13)
+
+
+### Bug Fixes
+
+* **web:** active zone minutes are a score, so stop calling them minutes ([#195](https://github.com/bardesss/haelan/issues/195)) ([04ec6b0](https://github.com/bardesss/haelan/commit/04ec6b0cb5ec2a386b0b53b3c1a377478ee3f18c))
+
 ## [1.15.2](https://github.com/bardesss/haelan/compare/v1.15.1...v1.15.2) (2026-09-13)
 
 
