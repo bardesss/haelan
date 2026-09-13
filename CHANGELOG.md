@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.16.0](https://github.com/bardesss/haelan/compare/v1.15.3...v1.16.0) (2026-09-13)
+
+
+### Features
+
+* Haelan's own cardio load, and the per-split heart rate the watch never wrote ([#191](https://github.com/bardesss/haelan/issues/191)) ([dd4a15a](https://github.com/bardesss/haelan/commit/dd4a15afc2d8837d2a46f5a94bf8294572354192))
+
+
+### Bug Fixes
+
+* **test:** the source-trace tests wait for the render, not for flush()'s guess ([#197](https://github.com/bardesss/haelan/issues/197)) ([d13c41c](https://github.com/bardesss/haelan/commit/d13c41c647568e7439d60054220367c69955074d))
+
 ## [1.15.3](https://github.com/bardesss/haelan/compare/v1.15.2...v1.15.3) (2026-09-13)
 
 
