@@ -37,6 +37,16 @@ const publishSteps = (() => {
 
 const indexOf = (needle: string) => publishSteps.findIndex(step => step.label.includes(needle))
 
+// The release-please job, as raw text. Scoped for the same reason the publish job is: the two
+// release-please invocations below differ only in two lines each, and a file-wide search would
+// match either one.
+const releasePleaseJob = (() => {
+  const start = lines.findIndex(line => /^ {2}release-please:/.test(line))
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex(line => /^ {2}\S/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n')
+})()
+
 const releaseConfig = JSON.parse(
   readFileSync(new URL('../../release-please-config.json', import.meta.url), 'utf8'),
 ) as { packages: Record<string, { draft?: boolean; 'force-tag-creation'?: boolean }> }
@@ -153,6 +163,56 @@ describe('the release workflow', () => {
     // `v1.2.3` produces an image carrying only `latest` with the job still green.
     expect(yaml).toContain('value=${{ needs.release-please.outputs.version }}')
     expect(yaml).not.toContain('value=${{ needs.release-please.outputs.tag }}')
+  })
+
+  it('cuts the release with a token that can create a git ref', () => {
+    // `force-tag-creation` creates the tag with an explicit createRef, and the PAT cannot: the
+    // first run after drafting landed failed with `Resource not accessible by personal access
+    // token` against the create-a-reference endpoint, and cut no release at all. The workflow's
+    // own GITHUB_TOKEN can, under the `contents: write` this file declares -- permissions that
+    // can be read here rather than in a secret nobody can read back.
+    //
+    // So the pass that cuts the release takes GITHUB_TOKEN, and it must not quietly go back to
+    // the PAT the next time somebody tidies these two invocations into one.
+    const cut = /- name: Cut the release\n(?:.*\n)*?\s+token: (.+)\n/.exec(releasePleaseJob)
+    expect(cut, 'the release-cutting invocation is gone or renamed').not.toBeNull()
+    expect(cut?.[1].trim()).toBe('${{ secrets.GITHUB_TOKEN }}')
+  })
+
+  it('opens the release pull request with the PAT, and only that half', () => {
+    // The PAT exists for one reason: a pull request opened by `app/github-actions` gets CI runs
+    // that land in `action_required` and never start, so the required checks never report and it
+    // sits blocked until somebody approves the run by hand. That applies to the pull request and
+    // to nothing else, which is why the release half above does not use it.
+    const pr = /- name: Open or refresh the release pull request\n(?:.*\n)*?\s+token: (.+)\n/.exec(
+      releasePleaseJob,
+    )
+    expect(pr, 'the pull-request invocation is gone or renamed').not.toBeNull()
+    expect(pr?.[1].trim()).toBe('${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}')
+  })
+
+  it('splits release-please into two passes that each skip the other half', () => {
+    // Without the skips the two invocations would each do both halves, which is not merely
+    // wasteful: the second would cut releases with the PAT, which is the 403 again.
+    expect(releasePleaseJob).toContain('skip-github-pull-request: true')
+    expect(releasePleaseJob).toContain('skip-github-release: true')
+
+    // And in this order. The pull-request pass rebuilds release-please's picture of the
+    // repository from scratch, and the tag the release pass creates is what stops it finding the
+    // release before last and proposing a version that re-releases work already released. That
+    // is #127's failure, and running these two the other way round reproduces it.
+    const cut = releasePleaseJob.indexOf('skip-github-pull-request: true')
+    const pr = releasePleaseJob.indexOf('skip-github-release: true')
+    expect(cut).toBeLessThan(pr)
+  })
+
+  it('grants the token the label write that release-please needs after cutting', () => {
+    // The comment and the autorelease labels release-please writes on the release pull request
+    // go to issue endpoints even though the subject is a pull request. This is not cosmetic: the
+    // label is how release-please knows that pull request is finished with, so failing it leaves
+    // the pull request `autorelease: pending` and every later run tries to release it again.
+    // 1.15.0 was released and then left pending exactly that way.
+    expect(yaml).toContain('issues: write')
   })
 
   it('names the release by id rather than by tag when publishing it', () => {

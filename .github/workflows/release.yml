@@ -12,6 +12,12 @@ permissions:
   contents: write
   pull-requests: write
   packages: write
+  # For the comment and the autorelease labels release-please writes on the release pull request
+  # once it has cut the release. Those are issue endpoints even when the subject is a pull
+  # request, and them failing is not cosmetic: the label is how release-please knows the pull
+  # request is done with, so a failure there leaves it `autorelease: pending` and every later run
+  # tries to release it again. That is what happened to 1.15.0.
+  issues: write
 
 # Not cancel-in-progress: killing a publish partway through, after amd64 pushed and before arm64
 # does, is worse than making the second run wait for the first.
@@ -31,16 +37,46 @@ jobs:
       # step that needed it has run.
       release_id: ${{ steps.rp.outputs.id }}
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+      # release-please is invoked twice, once per half of what it does, because the two halves
+      # want different tokens and the single invocation could only have one.
+      #
+      # Cutting the release needs a token that can create a git ref, since `force-tag-creation`
+      # creates the tag itself rather than letting GitHub create it when the draft is published.
+      # The PAT could not: the first run after drafting landed died on
+      # `Resource not accessible by personal access token` against
+      # `https://docs.github.com/rest/git/refs#create-a-reference`, with no release cut. The
+      # workflow's own GITHUB_TOKEN can, under the `contents: write` declared above, and its
+      # permissions are visible in this file rather than in a secret nobody can read back.
+      #
+      # Opening the release pull request is the half that actually needs the PAT, and only that
+      # half: a pull request opened by `app/github-actions` gets CI runs that land in
+      # `action_required` and never start, so the required checks never report and it sits
+      # blocked until somebody presses "Approve and run" by hand. A release cut by GITHUB_TOKEN
+      # has no such problem, because nothing in this repository triggers on `release`.
+      - name: Cut the release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: rp
         with:
-          # A PAT rather than GITHUB_TOKEN, because a release pull request opened by
-          # `app/github-actions` gets CI runs that land in `action_required` and never start, so
-          # the required checks never report and the pull request sits blocked until somebody
-          # presses "Approve and run" by hand. The `||` keeps releases working before the secret
-          # exists: an unset secret is the empty string, which is falsy. It needs contents:write
-          # and pull-requests:write on this repository and nothing else.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          skip-github-pull-request: true
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # Second, and after the pass above, which is load bearing rather than incidental. This pass
+      # rebuilds release-please's picture of the repository from scratch, and what it finds
+      # decides which commits the next release pull request claims. The tag the pass above
+      # created is what stops it finding the release before last and proposing a version that
+      # re-releases work already released -- the failure #127 produced at every run and #135
+      # reverted the draft to escape.
+      #
+      # The `||` keeps releases working before the secret exists: an unset secret is the empty
+      # string, which is falsy. The PAT needs contents:write and pull-requests:write on this
+      # repository and nothing else.
+      - name: Open or refresh the release pull request
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
+        with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          skip-github-release: true
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
