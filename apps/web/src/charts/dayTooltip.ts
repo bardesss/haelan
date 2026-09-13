@@ -10,7 +10,7 @@ import type { Translate } from '../format.js'
  * piece of this behaviour a test can exercise at all. `sparklinePointDate` in Sparkline.tsx is
  * exported for exactly the same reason and this follows it.
  */
-export interface SparklineTooltipInput {
+export interface DayTooltipInput {
   /** Dense over the range, one entry per calendar day, null where nothing was reported. */
   values: readonly (number | null)[]
   /** The local dates `values` are indexed by. The x axis carries array positions, not dates. */
@@ -34,7 +34,7 @@ export interface SparklineTooltipInput {
 }
 
 /**
- * The tooltip for one hovered point or overlay mark, as the HTML string echarts' formatter returns.
+ * The tooltip for a day's readout or overlay mark, as the HTML string echarts' formatter returns.
  *
  * A mark's own `tooltip.trigger` defaults to `'item'` (MarkPointModel/MarkLineModel both set it in
  * their own defaultOption) and overrides the chart's `'axis'` trigger, so a hover on a mark reaches
@@ -44,8 +44,8 @@ export interface SparklineTooltipInput {
  * through `marks` first, the same list `build` drew the marks from, is what keeps the two from
  * disagreeing; HeartRateRange.tsx carries the same branch for the same reason.
  */
-export function sparklineTooltip(
-  input: SparklineTooltipInput,
+export function dayTooltip(
+  input: DayTooltipInput,
   event: Pick<ECElementEvent, 'componentType'> & { dataIndex?: number },
 ): string {
   const { marks, labels, values, excluded, annotations, trend, hasTrend, episodic, unit, format, t } = input

@@ -7,8 +7,8 @@ import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
-import { sparklineTooltip } from './sparklineTooltip.js'
-import type { SparklineTooltipInput } from './sparklineTooltip.js'
+import { dayTooltip } from './dayTooltip.js'
+import type { DayTooltipInput } from './dayTooltip.js'
 
 /**
  * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
@@ -153,7 +153,7 @@ export function Sparkline({
   // dependency array those would dispose and re-initialise the chart on every render, which is the
   // exact defect chart-lifecycle.test.tsx guards. The formatter runs on hover, long after the
   // option was set, so reading the ref at that moment hands it the current values anyway.
-  const tooltipRef = useRef<SparklineTooltipInput | null>(null)
+  const tooltipRef = useRef<DayTooltipInput | null>(null)
   useLayoutEffect(() => {
     tooltipRef.current = {
       values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t,
@@ -171,7 +171,7 @@ export function Sparkline({
         const p = Array.isArray(params) ? params[0] : params
         const current = tooltipRef.current
         if (!p || !current) return ''
-        return sparklineTooltip(current, p as Parameters<typeof sparklineTooltip>[1])
+        return dayTooltip(current, p as Parameters<typeof dayTooltip>[1])
       },
     },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },

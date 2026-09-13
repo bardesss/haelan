@@ -487,7 +487,7 @@ describe('Sparkline', () => {
   // mark hover now goes through the real formatter instead of drawing nothing. It must still not
   // leak an internal id: MarkLineModel's own `tooltip.trigger` defaults to 'item' and reports a
   // dataIndex counting into `marks.atDate`, never into `values`, so the formatter has to resolve
-  // through `marks` (as sparklineTooltip does; sparkline-tooltip.test.ts covers that resolution on
+  // through `marks` (as dayTooltip does; day-tooltip.test.ts covers that resolution on
   // its own) rather than through whatever echarts would otherwise name the point with. Calls the
   // real `tooltip.formatter` off the real setOption argument with the params object echarts would
   // pass, the same device the ActivityHeatmap and HeartRateRange tooltip blocks in this file use,
