@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { ConfigError, TransientError } from '@haelan/core'
+import { describe, it, expect, afterEach } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { ConfigError, TransientError, openHaelan } from '@haelan/core'
 import { statusFor, errorBody, sendCoreError } from '../src/api/envelope.ts'
 
 const fakeReply = () => {
@@ -11,6 +14,12 @@ const fakeReply = () => {
   }
   return reply
 }
+
+let cleanup: (() => void) | null = null
+// Guarded on the handle rather than wrapped in try/catch: an rmSync that threw here - EPERM from a
+// SQLite handle Windows has not finished releasing - would replace the assertion error with its
+// own and hide which behaviour actually broke.
+afterEach(() => { if (cleanup !== null) { cleanup(); cleanup = null } })
 
 describe('the error envelope', () => {
   it('maps each kind to its status', () => {
@@ -82,5 +91,63 @@ describe('the error envelope', () => {
     const reply = fakeReply()
     sendCoreError(reply as never, new TransientError('the API answered 429'))
     expect(reply.sent.status).toBe(503)
+  })
+
+  /**
+   * A real SQLITE_BUSY, produced the only way one can be: by a second connection holding the write
+   * lock while this one tries to write. Not a hand-built Error carrying a `code`, because the
+   * mapping under test reads a better-sqlite3 error and a stand-in would pass whatever shape the
+   * mapping happened to expect.
+   *
+   * This is the boot rebuild's shape exactly. It rebuilds one person inside a single transaction
+   * from its own process, so on a household of one it holds this lock for the whole rebuild, and
+   * every write route that lands in that window throws this.
+   */
+  const realBusyError = (): unknown => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-busy-'))
+    cleanup = () => rmSync(dir, { recursive: true, force: true })
+    const a = openHaelan(dir, {})
+    const b = openHaelan(dir, {})
+    try {
+      b.db.$client.pragma('busy_timeout = 50')
+      a.db.$client.exec('begin immediate')
+      // Any write at all needs the lock, so a table of this test's own is used rather than one of
+      // the schema's: it keeps the probe from breaking the day a column gains a constraint, and a
+      // statement that failed for a schema reason would produce the wrong error entirely.
+      b.db.$client.exec('create table busy_probe (x)')
+      throw new Error('the write was supposed to be refused and was not')
+    } catch (error) {
+      // Asserted here rather than trusted, because this helper silently producing some other
+      // SqliteError is exactly how these two tests would go on passing while testing nothing.
+      expect((error as Error).message).toContain('database is locked')
+      return error
+    } finally {
+      a.db.$client.exec('rollback')
+      a.close()
+      b.close()
+    }
+  }
+
+  // 'transient', not 'internal'. The kind is the whole of what a caller is told about whether to
+  // try again, and a locked database is the textbook case where trying again works: the lock ends
+  // when the rebuild commits. Left under 'internal' - which is where an unrecognised throw lands,
+  // and where this one landed in 1.16.0 - every write route answers a bare 500 for the length of a
+  // rebuild, which the web client does not retry and the reader sees as "gave no answer".
+  it('maps a locked database to 503, since the lock ends when the rebuild commits', () => {
+    const reply = fakeReply()
+    sendCoreError(reply as never, realBusyError())
+    expect(reply.sent.status).toBe(503)
+    expect(reply.sent.body).toMatchObject({ error: { kind: 'transient' } })
+  })
+
+  // The message says the instance is busy and says nothing else. A path, a statement or a row
+  // reaching a caller is what the 'internal' branch above is careful to prevent, and a new branch
+  // that echoed the driver's own message would walk straight past that care.
+  it('says the instance is busy without echoing what the driver said', () => {
+    const reply = fakeReply()
+    const error = realBusyError()
+    sendCoreError(reply as never, error)
+    expect(JSON.stringify(reply.sent.body)).not.toContain('haelan.sqlite')
+    expect(JSON.stringify(reply.sent.body)).not.toContain('busy_probe')
   })
 })

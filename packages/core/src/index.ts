@@ -69,7 +69,7 @@ export { AccountStore } from './store/accounts.ts'
 export type {
   AccountRow, AccountListRow, CreateAccountInput, LoginInput, LoginResult,
 } from './store/accounts.ts'
-export { SessionStore, SESSION_TTL_MS } from './store/sessions.ts'
+export { SessionStore, SESSION_TTL_MS, SESSION_LAST_SEEN_RESOLUTION_MS } from './store/sessions.ts'
 export {
   SettingsStore, setupStep, DEFAULT_BACKUP_KEEP, DEFAULT_BACKUP_INTERVAL_HOURS,
 } from './store/settings.ts'
