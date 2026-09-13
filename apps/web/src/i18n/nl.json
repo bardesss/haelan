@@ -298,7 +298,8 @@
       "spm": "spm",
       "ms": "ms",
       "cm": "cm",
-      "percent": "%"
+      "percent": "%",
+      "trimp": "TRIMP"
     },
     "insights": {
       "steps": "Stappen, deze periode tegenover de vorige"
@@ -416,13 +417,16 @@
         "elapsed": "Verstreken", "moving": "In beweging", "distance": "Afstand", "pace": "Tempo",
         "speed": "Snelheid", "calories": "Calorieën", "heartRate": "Hartslag",
         "elevation": "Hoogtewinst", "steps": "Stappen", "activeZoneMinutes": "Actieve zoneminuten",
-        "vo2max": "VO2max", "swimLengths": "Baantjes"
+        "vo2max": "VO2max", "swimLengths": "Baantjes",
+        "cardioLoadEdwards": "Cardiobelasting (Edwards)", "cardioLoadBanister": "Cardiobelasting (Banister)"
       },
       "basis": {
         "elapsed": "vanaf het eigen begin en einde van de sessie",
         "moving": "actieve duur, zoals het apparaat die registreerde",
         "provider": "zoals de provider het registreerde",
-        "pool": "zoals de provider het registreerde, in een baan van {{meters}} m"
+        "pool": "zoals de provider het registreerde, in een baan van {{meters}} m",
+        "haelanEdwards": "Haelans eigen getal, uit de hartslagzones van deze sessie. Niet het getal dat Google Health laat zien.",
+        "haelanBanister": "Haelans eigen getal, uit de hartslag van deze sessie tegen een rust van {{restingBpm}} en een maximum van {{maxBpm}} bpm. Niet het getal dat Google Health laat zien."
       },
       "zones": {
         "label": "Tijd in hartslagzones",

@@ -4,6 +4,7 @@ import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
 import { sourceParam } from '../controls/source.js'
+import type { CardioLoad } from '@haelan/core/cardio-load'
 
 // `attrs` is the provider's payload, kept whole and unparsed. The one decoder allowed to look
 // inside it is packages/core/src/api/workoutSummary.ts, reached here through the
@@ -21,6 +22,13 @@ export interface WorkoutSession {
    *  (packages/core/src/query/sessions.ts), so this and excludeReason reach the client for free. */
   excluded: boolean
   excludeReason: string | null
+}
+
+/** The by-id route (GET /p/:personId/sessions/:sessionId) carries this beside every other session
+ *  field; the list route deliberately does not, which is why this extends WorkoutSession rather
+ *  than being folded into it. */
+export interface WorkoutSessionDetail extends WorkoutSession {
+  cardioLoad: CardioLoad | null
 }
 
 /**

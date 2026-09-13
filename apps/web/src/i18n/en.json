@@ -298,7 +298,8 @@
       "spm": "spm",
       "ms": "ms",
       "cm": "cm",
-      "percent": "%"
+      "percent": "%",
+      "trimp": "TRIMP"
     },
     "insights": {
       "steps": "Steps, this period against the last"
@@ -416,13 +417,16 @@
         "elapsed": "Elapsed", "moving": "Moving", "distance": "Distance", "pace": "Pace",
         "speed": "Speed", "calories": "Calories", "heartRate": "Heart rate",
         "elevation": "Elevation gain", "steps": "Steps", "activeZoneMinutes": "Active zone minutes",
-        "vo2max": "VO2max", "swimLengths": "Lengths"
+        "vo2max": "VO2max", "swimLengths": "Lengths",
+        "cardioLoadEdwards": "Cardio load (Edwards)", "cardioLoadBanister": "Cardio load (Banister)"
       },
       "basis": {
         "elapsed": "from the session's own start and end",
         "moving": "active duration, as the device recorded it",
         "provider": "as the provider recorded it",
-        "pool": "as the provider recorded it, in a {{meters}} m pool"
+        "pool": "as the provider recorded it, in a {{meters}} m pool",
+        "haelanEdwards": "Haelan's own figure, from this session's heart rate zones. Not the number Google Health shows.",
+        "haelanBanister": "Haelan's own figure, from this session's heart rate against a resting {{restingBpm}} and a maximum {{maxBpm}} bpm. Not the number Google Health shows."
       },
       "zones": {
         "label": "Time in heart rate zones",
