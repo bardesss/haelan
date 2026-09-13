@@ -121,6 +121,12 @@ request. Merging **that** is what publishes. The image is built, both architectu
 and only then does the release stop being a draft, so a release page never points at an image
 that failed to reach the registry.
 
+If that job goes red the release stays a draft, which is the intended outcome rather than a
+half-finished one: nobody browsing sees a version whose image is missing. Fix the cause and re-run
+the job, because publishing the draft by hand from the Releases page produces exactly the release
+pointing at nothing that the ordering is there to prevent. The git tag exists either way, and is
+meant to -- Release Please cannot find its own previous release without it.
+
 ## If you are working with a coding agent
 
 Welcome, and held to the same bar. Not a lower one, and not a separate one. haelan is itself built
