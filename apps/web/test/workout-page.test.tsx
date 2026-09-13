@@ -319,7 +319,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toContain('Cardio load (Edwards)')
       expect(labels).toContain('Cardio load (Banister)')
@@ -337,7 +337,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toContain('Cardio load (Edwards)')
       expect(labels).not.toContain('Cardio load (Banister)')
@@ -349,7 +349,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).not.toContain('Cardio load (Edwards)')
       expect(labels).not.toContain('Cardio load (Banister)')
@@ -364,7 +364,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
       expect(edwardsTile?.querySelector('.basis')?.textContent).toBe(
@@ -378,7 +378,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const banisterTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Banister)')
       expect(banisterTile?.querySelector('.basis')?.textContent).toBe(
@@ -395,7 +395,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
       expect(edwardsTile?.querySelector('.value')?.textContent).toBe('0 TRIMP')
@@ -416,7 +416,7 @@ describe('the splits card', () => {
     const restore = stub({ run1: loaded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.workout-splits')).not.toBeNull()
       expect(html()).toContain('Automatic splits')
     } finally { restore() }
@@ -429,7 +429,7 @@ describe('the splits card', () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.workout-splits')).toBeNull()
       expect(html()).toContain('Morning run')
       expect(container?.querySelector('.workout-tiles')).not.toBeNull()
