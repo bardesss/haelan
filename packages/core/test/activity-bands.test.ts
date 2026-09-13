@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { deriveActivityBandsDay } from '../src/derive/activityBands.ts'
+import { deriveActivityBandsDay, mergeActivityBandsDay } from '../src/derive/activityBands.ts'
 import type { SampleLike } from '../src/derive/rollup.ts'
+import type { Priority } from '../src/derive/priority.ts'
 
 const MINUTE = 60_000
 const BASE = Date.UTC(2026, 7, 17, 12, 0)
@@ -79,5 +80,53 @@ describe('deriveActivityBandsDay', () => {
     expect(row).toMatchObject({
       personId: 'p1', localDate: '2026-08-17', source: 'watch', agg: 'sum', coverage: null, sourceMix: null,
     })
+  })
+})
+
+function at(sourceId: string, metric: string, minute: number, value: number): SampleLike {
+  return { sourceId, metric, utcMs: BASE + minute * MINUTE, tzOffsetMinutes: 120, agg: 'raw', value, n: 1 }
+}
+
+// Lower wins. 'watch' beats 'phone' for every metric.
+const priority: Priority = { rank: (_metric, sourceId) => (sourceId === 'watch' ? 0 : 1) }
+
+function merged(rows: SampleLike[]) {
+  return mergeActivityBandsDay({ personId: 'p1', localDate: '2026-08-17', rows, priority })
+}
+
+describe('mergeActivityBandsDay', () => {
+  it('counts an overlap the winning source recorded on its own', () => {
+    const rows = merged([
+      at('watch', 'active_minutes_vigorous', 0, 1),
+      at('watch', 'active_zone_minutes_peak', 0, 2),
+    ])
+    expect(rows.find((r) => r.metric === 'active_minutes_vigorous_peak')?.value).toBe(1)
+    expect(rows[0]?.source).toBe('merged')
+  })
+
+  it('never intersects across sources within an hour', () => {
+    // The winner recorded the level, a loser recorded the peak minute. A cross-device match here
+    // would claim the two watches described the same minute of effort. They did not.
+    const rows = merged([
+      at('watch', 'active_minutes_vigorous', 0, 1),
+      at('phone', 'active_zone_minutes_peak', 0, 2),
+    ])
+    expect(rows).toEqual([])
+  })
+
+  it('lets a lower priority source own an hour the winner said nothing about', () => {
+    // 12:00 UTC is hour 14 local at +120; 23:00 UTC is hour 1 of the next local day, so use 13:00.
+    const rows = merged([
+      at('watch', 'active_minutes_vigorous', 0, 1),
+      at('watch', 'active_zone_minutes_peak', 0, 2),
+      at('phone', 'active_minutes_light', 60, 1),
+      at('phone', 'active_zone_minutes_peak', 60, 2),
+    ])
+    expect(rows.find((r) => r.metric === 'active_minutes_vigorous_peak')?.value).toBe(1)
+    expect(rows.find((r) => r.metric === 'active_minutes_light_peak')?.value).toBe(1)
+  })
+
+  it('writes no merged rows when nothing overlaps', () => {
+    expect(merged([at('watch', 'active_minutes_light', 0, 1)])).toEqual([])
   })
 })

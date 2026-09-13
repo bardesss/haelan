@@ -1,5 +1,9 @@
 import type { DailyRow, SampleLike } from './rollup.ts'
+import { MERGED_SOURCE } from './rollup.ts'
 import { DERIVATION_VERSION } from './version.ts'
+import { encodeMix } from './merge.ts'
+import { localHourOf } from './localDay.ts'
+import type { Priority } from './priority.ts'
 
 /**
  * Which clock minutes are counted by both activity-minute families.
@@ -81,6 +85,77 @@ export function deriveActivityBandsDay(input: {
       coverage: null,
       // Only ever set on a merged row, and set by mergeActivityBandsDay rather than here.
       sourceMix: null,
+      derivationVersion: DERIVATION_VERSION,
+    }))
+}
+
+/**
+ * The merged view of the day's bands.
+ *
+ * Resolves a winning source per local hour for the family as a whole, then runs the same
+ * intersection over that hour's rows from that source alone. mergeDay's per metric resolution
+ * cannot be reused here: it can hand one hour's activity levels to one device and that hour's peak
+ * minutes to another, and intersecting across that invents a minute neither device described. This
+ * is mergeSleepDay's shape, for mergeSleepDay's reason - a band is one fact and must come from one
+ * recorder.
+ *
+ * An hour whose winner recorded levels but no zone data therefore contributes no peak minutes,
+ * rather than borrowing a loser's. That is the same trade mergeDay already makes: a lower priority
+ * source fills an hour only when the winner observed nothing in it at all.
+ */
+export function mergeActivityBandsDay(input: {
+  personId: string
+  localDate: string
+  rows: readonly SampleLike[]
+  priority: Priority
+}): DailyRow[] {
+  const family = new Set(BAND_FAMILY)
+
+  // local hour -> source -> that source's rows in the hour
+  const byHour = new Map<number, Map<string, SampleLike[]>>()
+  for (const row of input.rows) {
+    if (!family.has(row.metric) || row.value === null) continue
+    const hour = localHourOf(row.utcMs, row.tzOffsetMinutes)
+    let bySource = byHour.get(hour)
+    if (!bySource) { bySource = new Map(); byHour.set(hour, bySource) }
+    const bucket = bySource.get(row.sourceId)
+    if (bucket) bucket.push(row)
+    else bySource.set(row.sourceId, [row])
+  }
+
+  const winning: SampleLike[] = []
+  const hoursWon = new Map<string, number>()
+  for (const [, bySource] of byHour) {
+    let bestSource: string | null = null
+    let bestRank = Number.POSITIVE_INFINITY
+    for (const sourceId of bySource.keys()) {
+      // The family's best rank across its four metrics, so a list configured on any one of them is
+      // respected without one metric's list silently deciding for the other three. Ties break on
+      // the source id so a rebuild is deterministic.
+      const rank = Math.min(...BAND_FAMILY.map((metric) => input.priority.rank(metric, sourceId)))
+      if (rank < bestRank || (rank === bestRank && bestSource !== null && sourceId < bestSource)) {
+        bestRank = rank
+        bestSource = sourceId
+      }
+    }
+    if (bestSource === null) continue
+    winning.push(...bySource.get(bestSource)!)
+    hoursWon.set(bestSource, (hoursWon.get(bestSource) ?? 0) + 1)
+  }
+
+  const counts = overlapMinutes(winning)
+  const mix = encodeMix([...hoursWon].map(([source, hours]) => ({ source, hours })))
+  return Object.values(OVERLAP_BY_LEVEL)
+    .filter((metric) => counts.has(metric))
+    .map((metric) => ({
+      personId: input.personId,
+      localDate: input.localDate,
+      metric,
+      agg: 'sum' as const,
+      source: MERGED_SOURCE,
+      value: counts.get(metric)!,
+      coverage: null,
+      sourceMix: mix,
       derivationVersion: DERIVATION_VERSION,
     }))
 }
