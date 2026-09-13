@@ -443,6 +443,7 @@
       "splits": {
         "autoLabel": "Automatic splits", "lapLabel": "Laps", "lapLabelTyped": "Laps ({{type}})",
         "number": "#", "distance": "Distance", "duration": "Duration", "pace": "Pace", "heartRate": "Heart rate",
+        "filledFromTrace": "Heart rates marked † were not recorded per split; they are this session's own heart rate over that split's window.",
         "type": {
           "MANUAL": "manual", "DURATION": "by duration", "DISTANCE": "by distance",
           "CALORIES": "by calories", "SPLIT_TYPE_UNSPECIFIED": "unspecified"

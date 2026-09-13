@@ -1,5 +1,5 @@
 import { useTranslation } from '../../i18n/index.js'
-import type { WorkoutDetail, WorkoutSplit } from '@haelan/core/workout-summary'
+import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { Card } from '../../components/Card.js'
 import { formatNumber } from '../../format.js'
 import { formatPace } from './pace.js'
@@ -15,7 +15,7 @@ import { formatPace } from './pace.js'
  * against a future device that records one.
  */
 function SplitTable({ rows, label, typed }: {
-  rows: readonly WorkoutSplit[]
+  rows: readonly FilledSplit[]
   label: string
   // Only the laps table is ever labelled by its own type - see WorkoutSplits below for why.
   typed: boolean
@@ -27,6 +27,17 @@ function SplitTable({ rows, label, typed }: {
   // says the second without claiming the first.
   const cell = (value: number | null, render: (value: number) => string): string =>
     value === null ? t('common.absent') : render(value)
+
+  // A filled cell and a cell the watch sent are different claims about a kilometre - see
+  // splitHeartRate.ts's own comment on FilledSplit. The dagger marks the weaker claim inline,
+  // right on the number a reader would otherwise take as the watch's own; the footnote below the
+  // table says once what it means, rather than repeating an explanation on every marked cell.
+  const heartRateCell = (row: FilledSplit): string => {
+    if (row.averageHeartRateBpm === null) return t('common.absent')
+    const marker = row.averageHeartRateBpmSource === 'trace' ? '†' : ''
+    return `${formatNumber(row.averageHeartRateBpm, 0, language, '')}${marker} ${t('activity.units.bpm')}`
+  }
+  const anyFilled = rows.some((row) => row.averageHeartRateBpmSource === 'trace')
 
   const splitType = rows[0]?.splitType ?? null
   const cardLabel = typed && splitType !== null
@@ -54,11 +65,14 @@ function SplitTable({ rows, label, typed }: {
               <td>{cell(row.distanceMeters, (v) => `${formatNumber(v / 1000, 2, language, '')} ${t('activity.units.km')}`)}</td>
               <td>{cell(row.activeDurationSeconds, (v) => `${formatNumber(Math.round(v / 60), 0, language, '')} ${t('activity.units.min')}`)}</td>
               <td>{cell(row.paceSecondsPerKm, (v) => `${formatPace(v, language)} ${t('activity.units.paceSuffix')}`)}</td>
-              <td>{cell(row.averageHeartRateBpm, (v) => `${formatNumber(v, 0, language, '')} ${t('activity.units.bpm')}`)}</td>
+              <td>{heartRateCell(row)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+      {/* Only when THIS table filled a row - a table of provider values must not carry a note
+       *  about a fill that did not happen. */}
+      {anyFilled && <p className="workout-splits-footnote">{t('activity.workout.splits.filledFromTrace')}</p>}
     </Card>
   )
 }
@@ -71,16 +85,19 @@ function SplitTable({ rows, label, typed }: {
  * one thing distinguishing "the person pressed lap" from a future device's other lap kinds - which
  * is why only the laps table is ever labelled by its own type.
  */
-export function WorkoutSplits({ detail }: { detail: WorkoutDetail }) {
+export function WorkoutSplits({ autoSplits, laps }: {
+  autoSplits: readonly FilledSplit[]
+  laps: readonly FilledSplit[]
+}) {
   const { t } = useTranslation()
-  if (detail.autoSplits.length === 0 && detail.laps.length === 0) return null
+  if (autoSplits.length === 0 && laps.length === 0) return null
   return (
     <>
-      {detail.autoSplits.length > 0 && (
-        <SplitTable rows={detail.autoSplits} label={t('activity.workout.splits.autoLabel')} typed={false} />
+      {autoSplits.length > 0 && (
+        <SplitTable rows={autoSplits} label={t('activity.workout.splits.autoLabel')} typed={false} />
       )}
-      {detail.laps.length > 0 && (
-        <SplitTable rows={detail.laps} label={t('activity.workout.splits.lapLabel')} typed />
+      {laps.length > 0 && (
+        <SplitTable rows={laps} label={t('activity.workout.splits.lapLabel')} typed />
       )}
     </>
   )

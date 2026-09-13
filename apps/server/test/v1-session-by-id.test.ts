@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { schema } from '@haelan/core'
+import { insertSample, schema } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -175,6 +175,38 @@ describe('GET /sessions/:sessionId', () => {
     // and a load folded into `session` rather than carried beside it would still pass a
     // one-field check.
     expect(session.cardioLoad).toEqual({ edwards: 100, banister: null, banisterBasis: null })
+  })
+
+  it('carries autoSplits and laps beside the session, filled from the trace where the provider left them null', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    const startMs = Date.parse('2026-08-18T09:00:00Z') - OFFSET_MINUTES * 60_000
+    seedWorkout(harness, {
+      id: 'run1',
+      attrs: {
+        exerciseType: 'RUNNING',
+        splits: [{
+          startTime: new Date(startMs).toISOString(),
+          endTime: new Date(startMs + 5 * 60_000).toISOString(),
+          splitType: 'DISTANCE', activeDuration: '300s',
+          metricsSummary: { distanceMillimeters: 1_000_000, averagePaceSecondsPerMeter: 0.3 },
+          // No averageHeartRateBeatsPerMinute: the provider left this split's own heart rate null.
+        }],
+      },
+    })
+    // One reading a minute across the split's window, mean 170.
+    for (let i = 0; i < 5; i += 1) {
+      insertSample(harness.app.haelan.instance.db, {
+        personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
+        utcMs: startMs + i * 60_000, tzOffsetMinutes: OFFSET_MINUTES, agg: 'mean', value: 170,
+      })
+    }
+
+    const session = (await get(harness, token, '/sessions/run1')).json()
+
+    expect(session.autoSplits).toHaveLength(1)
+    expect(session.autoSplits[0].averageHeartRateBpm).toBe(170)
+    expect(session.autoSplits[0].averageHeartRateBpmSource).toBe('trace')
+    expect(session.laps).toEqual([])
   })
 
   it('answers 404 for an ecg id, in the same envelope as an id that names nothing', async () => {

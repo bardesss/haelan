@@ -427,6 +427,7 @@ One workout in full: the session's own span and source, workoutSummary's headlin
   - **distanceMeters** (number, nullable)
   - **paceSecondsPerKm** (number, nullable)
   - **averageHeartRateBpm** (number, nullable)
+  - **averageHeartRateBpmSource** ('provider' | 'trace', nullable) — `provider` is the number the recording device wrote onto this split. `trace` means the device wrote none and this is the mean of the session's own heart rate over this split's window - the same reading, filled in, never the session average substituted for a missing one. Null means no heart rate was recorded in this split's window at all.
 - **laps** (array of object)
   - **startMs** (number, nullable)
   - **endMs** (number, nullable)
@@ -435,6 +436,7 @@ One workout in full: the session's own span and source, workoutSummary's headlin
   - **distanceMeters** (number, nullable)
   - **paceSecondsPerKm** (number, nullable)
   - **averageHeartRateBpm** (number, nullable)
+  - **averageHeartRateBpmSource** ('provider' | 'trace', nullable) — `provider` is the number the recording device wrote onto this split. `trace` means the device wrote none and this is the mean of the session's own heart rate over this split's window - the same reading, filled in, never the session average substituted for a missing one. Null means no heart rate was recorded in this split's window at all.
 - **events** (array of object)
   - **atMs** (number, nullable)
   - **kind** (string, nullable)

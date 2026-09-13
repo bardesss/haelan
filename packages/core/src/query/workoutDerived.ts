@@ -5,6 +5,8 @@ import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { workoutDetail } from '../api/workoutSummary.ts'
 import { edwardsLoad, banisterLoad, coefficientFor, ageAt } from '../api/cardioLoad.ts'
 import type { CardioLoad } from '../api/cardioLoad.ts'
+import { fillSplitHeartRate } from '../api/splitHeartRate.ts'
+import type { FilledSplit } from '../api/splitHeartRate.ts'
 import { readSessionHeartRateMinutes } from './sessionHeartRate.ts'
 import type { WorkoutSession } from './sessions.ts'
 
@@ -43,6 +45,39 @@ export function readWorkoutCardioLoad(db: DbOrTx, input: {
     edwards,
     banister: banister?.value ?? null,
     banisterBasis: banister?.basis ?? null,
+  }
+}
+
+/**
+ * A workout's splits and laps with their heart rate filled in from the session's own trace.
+ *
+ * Lives beside readWorkoutCardioLoad rather than in a module of its own because the two want the
+ * same two expensive things - the decoded detail and the unthinned minute series - and splitting
+ * them would read the trace twice for one page.
+ *
+ * Laps get the same treatment as splits. No archived payload in this household carries a lap
+ * (measured 2026-09-11: zero across 197 sessions, every splitType DISTANCE), so that half is
+ * written for the v4 schema rather than on evidence - the same footing the lap table itself
+ * already stands on.
+ */
+export function readWorkoutSplits(db: DbOrTx, input: {
+  personId: string
+  session: WorkoutSession
+}): { autoSplits: FilledSplit[], laps: FilledSplit[] } {
+  const detail = workoutDetail(input.session.attrs)
+  // Four workouts in five record neither, so the trace is not read for them at all.
+  if (detail.autoSplits.length === 0 && detail.laps.length === 0) {
+    return { autoSplits: [], laps: [] }
+  }
+  const { minutes } = readSessionHeartRateMinutes(db, {
+    personId: input.personId,
+    startMs: input.session.startMs,
+    endMs: input.session.endMs,
+    sessionSourceId: input.session.sourceId,
+  })
+  return {
+    autoSplits: fillSplitHeartRate(detail.autoSplits, minutes),
+    laps: fillSplitHeartRate(detail.laps, minutes),
   }
 }
 

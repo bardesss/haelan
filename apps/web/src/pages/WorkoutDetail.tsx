@@ -134,7 +134,7 @@ export function WorkoutDetail() {
         <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
         <WorkoutZones detail={detail} />
         <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
-        <WorkoutSplits detail={detail} />
+        <WorkoutSplits autoSplits={query.data.autoSplits} laps={query.data.laps} />
         <WorkoutDynamics detail={detail} />
         <WorkoutComparison session={query.data} />
       </div>

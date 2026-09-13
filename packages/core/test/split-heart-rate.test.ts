@@ -89,6 +89,16 @@ describe('filling a split heart rate', () => {
   it('answers an empty list for no splits', () => {
     expect(fillSplitHeartRate([], minutes([170]))).toEqual([])
   })
+
+  // Every other seeded case above lands on an exact integer mean, so Math.round's own behaviour
+  // has had zero coverage until now. Four points averaging to 176.5 - (174 + 175 + 177 + 180) / 4 -
+  // is a mean JavaScript's own float arithmetic represents exactly (176.5 has an exact binary
+  // fraction), so this pins Math.round's up-on-.5 rule rather than a float-precision accident.
+  it('rounds a fractional mean the way Math.round does, half up', () => {
+    const [filled] = fillSplitHeartRate([split(0, 4)], minutes([174, 175, 177, 180]))
+    expect(filled!.averageHeartRateBpm).toBe(177)
+    expect(filled!.averageHeartRateBpmSource).toBe('trace')
+  })
 })
 
 // The ninth browser-safe entry point. splitHeartRate.ts is not import-free the way cardioLoad.ts

@@ -443,6 +443,7 @@
       "splits": {
         "autoLabel": "Automatische tussentijden", "lapLabel": "Rondes", "lapLabelTyped": "Rondes ({{type}})",
         "number": "#", "distance": "Afstand", "duration": "Duur", "pace": "Tempo", "heartRate": "Hartslag",
+        "filledFromTrace": "Hartslagen met † zijn niet per ronde opgeslagen; ze komen uit de hartslag van deze sessie over dat stuk.",
         "type": {
           "MANUAL": "handmatig", "DURATION": "op duur", "DISTANCE": "op afstand",
           "CALORIES": "op calorieën", "SPLIT_TYPE_UNSPECIFIED": "niet gespecificeerd"

@@ -91,6 +91,12 @@ const WORKOUT_SPLIT = z.object({
   distanceMeters: z.number().nullable(),
   paceSecondsPerKm: z.number().nullable(),
   averageHeartRateBpm: z.number().nullable(),
+  averageHeartRateBpmSource: z.enum(['provider', 'trace']).nullable().describe(
+    '`provider` is the number the recording device wrote onto this split. `trace` means the device '
+    + 'wrote none and this is the mean of the session\'s own heart rate over this split\'s window - '
+    + 'the same reading, filled in, never the session average substituted for a missing one. Null '
+    + 'means no heart rate was recorded in this split\'s window at all.',
+  ),
 })
 
 const WORKOUT_EVENT = z.object({ atMs: z.number().nullable(), kind: z.string().nullable() })
@@ -244,6 +250,9 @@ export const getWorkout = defineTool({
 
     const detail = workoutDetail(session.attrs)
     const cardioLoad = q.cardioLoad({ sessionId: args.sessionId })
+    // Never null here: sessionById above already found the session, and workoutSplits cannot
+    // answer null for an id sessionById just answered a row for.
+    const splits = q.workoutSplits({ sessionId: args.sessionId })!
     const points = budgetFor(args.points, DEFAULT_INTRADAY_POINTS)
     const metrics = args.metrics ?? [DEFAULT_TRACE_METRIC]
 
@@ -268,8 +277,8 @@ export const getWorkout = defineTool({
       totalSwimLengths: detail.totalSwimLengths,
       zones: detail.zones,
       mobility: detail.mobility,
-      autoSplits: detail.autoSplits,
-      laps: detail.laps,
+      autoSplits: splits.autoSplits,
+      laps: splits.laps,
       events: detail.events,
       cardioLoad,
       trace: metrics.map((metric) => {
