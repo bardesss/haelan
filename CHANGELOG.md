@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.15.2](https://github.com/bardesss/haelan/compare/v1.15.1...v1.15.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* **server:** the boot rebuild runs in its own process, not a thread that can crash the server ([#187](https://github.com/bardesss/haelan/issues/187)) ([7c57c15](https://github.com/bardesss/haelan/commit/7c57c15c64393dbd9b1561a35b605c64d3c14521))
+
 ## [1.15.1](https://github.com/bardesss/haelan/compare/v1.15.0...v1.15.1) (2026-09-13)
 
 
