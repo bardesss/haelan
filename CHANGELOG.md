@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.17.0](https://github.com/bardesss/haelan/compare/v1.16.1...v1.17.0) (2026-09-13)
+
+
+### Features
+
+* **web:** a weekly cardio load target and an acute to chronic workload ratio ([#203](https://github.com/bardesss/haelan/issues/203)) ([4f9b5a9](https://github.com/bardesss/haelan/commit/4f9b5a9095c575e977cdb901e2d3b7ac3e3dcf58))
+
+
+### Bug Fixes
+
+* **test:** flush() waits on progress, and can tell a settled page from one that never started ([#202](https://github.com/bardesss/haelan/issues/202)) ([b914b71](https://github.com/bardesss/haelan/commit/b914b71e511487a79708746de2a0b81d14cdfbfd)), closes [#193](https://github.com/bardesss/haelan/issues/193)
+
 ## [1.16.1](https://github.com/bardesss/haelan/compare/v1.16.0...v1.16.1) (2026-09-13)
 
 
