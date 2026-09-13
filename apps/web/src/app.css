@@ -214,6 +214,14 @@ body {
 .empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
+/* The training load card's own three. Its gate is NOT .empty: .empty means a metric card had no
+   data to draw, while this says a DERIVED statistic has not enough worn days to be computed yet,
+   which is a statement about the archive rather than about the card. activity.test.tsx asserts on
+   .empty meaning only the first of those, and it is right to. */
+.training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
+.training-load-ratio { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
+.training-load-target { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
+
 /* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
    muted caption like .basis rather than as the padded, body sized block .empty is. */

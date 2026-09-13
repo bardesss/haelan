@@ -1,4 +1,4 @@
-import { edwardsLoad } from '../api/cardioLoad.ts'
+import { edwardsLoad, CARDIO_LOAD_METRIC } from '../api/cardioLoad.ts'
 import type { DailyRow } from './rollup.ts'
 import { DERIVATION_VERSION } from './version.ts'
 
@@ -21,7 +21,7 @@ const ZONE_METRICS = {
   peakMinutes: 'time_in_heart_rate_zone_peak_minutes',
 } as const
 
-export const CARDIO_LOAD_METRIC = 'cardio_load_edwards'
+export { CARDIO_LOAD_METRIC }
 
 export function deriveCardioLoadDay(input: {
   personId: string

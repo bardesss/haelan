@@ -36,11 +36,11 @@ describe('the @haelan/core/metrics subpath', () => {
   it('is published, and points at the catalogue module', () => {
     const pkg = JSON.parse(read('../package.json')) as { exports: Record<string, string> }
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
-    // The barrel is still the only other way in besides the nine named subpaths. `exports`
+    // The barrel is still the only other way in besides the ten named subpaths. `exports`
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
     // dragging argon2 along behind it. ./cardio-load, ./coverage-signal, ./target-key,
-    // ./baseline-window, ./metric-data-type, ./workout-summary, ./workout-comparison and
-    // ./split-heart-rate are the other eight browser-safe entry points; cardio-load.test.ts,
+    // ./baseline-window, ./metric-data-type, ./workout-summary, ./workout-comparison,
+    // ./split-heart-rate and ./training-load are the other nine browser-safe entry points; cardio-load.test.ts,
     // coverage-signal-subpath.test.ts, target-key-subpath.test.ts, baseline-window-subpath.test.ts,
     // metric-data-type-subpath.test.ts, workout-summary.test.ts, workout-comparison-subpath.test.ts
     // and split-heart-rate.test.ts carry their own guarantees, each a different shape: the middle
@@ -52,7 +52,8 @@ describe('the @haelan/core/metrics subpath', () => {
     // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
-      './split-heart-rate', './target-key', './workout-comparison', './workout-summary',
+      './split-heart-rate', './target-key', './training-load', './workout-comparison',
+      './workout-summary',
     ])
   })
 
