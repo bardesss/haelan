@@ -33,6 +33,12 @@ demo-data/
 # would otherwise record one as an embedded repository and commit a gitlink nobody wanted.
 .worktrees/
 
+# The demo capture's own output: a manifest plus one JSON file per recorded response, regenerated
+# by `pnpm demo:capture` on every deploy (Task 3's own comment on why it lives outside
+# apps/web/public/ - Vite copies public/ verbatim into every build, including a real instance's,
+# and this directory must never ship in one of those).
+demo/capture/out/
+
 # Local editor and agent state: settings.local.json, a scheduled-task lock, worktree bookkeeping,
 # and a launch.json naming this machine's dev servers. None of it describes the project, and
 # settings.local.json is the kind of file that carries local paths into a public repository.
