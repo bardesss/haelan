@@ -12,7 +12,7 @@
     "build": "pnpm --filter @haelan/web build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit && tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/server/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit && tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/server/tsconfig.json --noEmit && tsc -p demo/capture/tsconfig.json --noEmit",
     "dev": "pnpm --filter @haelan/web dev",
     "dev:server": "pnpm --filter @haelan/server dev",
     "start": "node --experimental-strip-types apps/server/src/index.ts",
