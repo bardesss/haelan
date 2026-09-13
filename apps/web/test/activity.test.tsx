@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { Activity } from '../src/pages/Activity.js'
+import { Activity, BAR_METRICS } from '../src/pages/Activity.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Insight } from '../src/data/useInsight.js'
@@ -517,5 +517,11 @@ describe('the Activity page', () => {
     expect(params.get('metric')).toBe('steps')
     expect(params.get('agg')).toBe('sum')
     restore()
+  })
+
+  // The named list the design calls for, asserted against the page's own export rather than a copy
+  // of it: a test carrying its own list would keep passing after someone edited the page's.
+  it('draws a bar chart for exactly the promoted metrics', () => {
+    expect([...BAR_METRICS]).toEqual(['distance', 'floors'])
   })
 })

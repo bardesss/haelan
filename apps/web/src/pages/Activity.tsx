@@ -14,6 +14,7 @@ import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
+import { DailyBars } from '../charts/DailyBars.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { SessionList } from './activity/SessionList.js'
@@ -69,6 +70,19 @@ const GROUPS: readonly MetricGroup[] = [
   { agg: 'sum', metrics: SUM_METRICS, covers: REQUESTS.sum },
   { agg: 'count', metrics: COUNT_METRICS, covers: REQUESTS.count },
 ]
+
+/**
+ * The cards that draw a labelled bar chart rather than a sparkline.
+ *
+ * A named list the page owns, not a rule derived from the catalogue. Every metric declared `sum`
+ * would promote roughly thirteen cards at once and decide for pages nobody has looked at; this is
+ * two cards, chosen and reviewable. Both are device-reported daily quantities that vary day to
+ * day, and a bar reads as "this much, that day" where a line implies something continuous between
+ * the points that a daily total is not.
+ *
+ * Exported for its own test: a list a test keeps a copy of is a list that stops matching the page.
+ */
+export const BAR_METRICS = new Set(['distance', 'floors'])
 
 const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
@@ -259,7 +273,17 @@ export function Activity() {
         {(basis, oneDayRange) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            {oneDayRange ? <ChartNote /> : (
+            {oneDayRange ? <ChartNote /> : BAR_METRICS.has(metric) ? (
+              <DailyBars values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)}
+                // The short unit names the value axis ("km", "floors"), falling back to the long
+                // column header rather than to an empty string: every metric in BAR_METRICS has a
+                // short unit today, and a future promotion without one should draw a clumsy axis
+                // name a reader can see rather than an unnamed axis nobody notices.
+                axisUnit={t(shortUnitKey ?? unitKey)}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
+            ) : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
@@ -285,7 +309,7 @@ export function Activity() {
           )}
         </Card>
 
-        {card('distance', 4, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
+        {card('distance', 6, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
           'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km', 'higher-is-better',
           // distance is stored in millimeters (METRICS.distance, precision 0); this card displays
           // the period's total as kilometers with one decimal, a precision the catalogue's own
@@ -303,7 +327,7 @@ export function Activity() {
           // caught. `v === null` first: a day with no reading stays a day with no reading, not
           // `null / 1_000_000` becoming 0 and reading as a real zero-kilometer day.
           (v, absent) => formatNumber(v === null ? null : v / 1_000_000, 1, i18n.language, absent))}
-        {card('floors', 4, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
+        {card('floors', 6, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
           'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort', 'higher-is-better')}
         {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',
           'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
