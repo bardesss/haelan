@@ -114,6 +114,21 @@ const H = 3_600_000
 const BEDTIME = Date.UTC(2026, 7, 1, 22, 0)
 
 /**
+ * One session, with zero offsets and empty attrs by default. Shared by `seedToolData` below and
+ * by any other fixture that just needs a session to exist at a given span and local date -
+ * `attrs` is the one thing worth varying, for a case that needs zones, splits or laps on it.
+ */
+export function insertSession(
+  db: DbOrTx, id: string, personId: string, sourceId: string, kind: 'sleep' | 'exercise',
+  startMs: number, endMs: number, localDate: string, attrs: Record<string, unknown> = {},
+): void {
+  db.insert(schema.sessions).values({
+    id, personId, sourceId, kind, externalId: id, startMs, startOffsetMinutes: 0,
+    endMs, endOffsetMinutes: 0, localDate, attrs: JSON.stringify(attrs), rawPayloadId: null,
+  }).run()
+}
+
+/**
  * Seeds alice and bart with a source, daily rows, a sample, a session of each kind, a note and an
  * event apiece — every shape the five tool families in CATALOGUE read from — with values that
  * identify whose they are, so a leak is visible in the JSON rather than merely possible.
@@ -161,18 +176,10 @@ export function seedToolData(db: DbOrTx): void {
     agg: 'mean', value: 176,
   })
 
-  const insertSession = (
-    id: string, personId: string, sourceId: string, kind: 'sleep' | 'exercise',
-    startMs: number, endMs: number, localDate: string,
-  ) =>
-    db.insert(schema.sessions).values({
-      id, personId, sourceId, kind, externalId: id, startMs, startOffsetMinutes: 0,
-      endMs, endOffsetMinutes: 0, localDate, attrs: '{}', rawPayloadId: null,
-    }).run()
-  insertSession('alice-run', 'alice', 'alice-watch', 'exercise', NINE_AM, NINE_AM + H, '2026-08-01')
-  insertSession('bart-run', 'bart', 'bart-watch', 'exercise', NINE_AM, NINE_AM + H, '2026-08-01')
-  insertSession('alice-night', 'alice', 'alice-watch', 'sleep', BEDTIME, BEDTIME + 8 * H, '2026-08-02')
-  insertSession('bart-night', 'bart', 'bart-watch', 'sleep', BEDTIME, BEDTIME + 8 * H, '2026-08-02')
+  insertSession(db, 'alice-run', 'alice', 'alice-watch', 'exercise', NINE_AM, NINE_AM + H, '2026-08-01')
+  insertSession(db, 'bart-run', 'bart', 'bart-watch', 'exercise', NINE_AM, NINE_AM + H, '2026-08-01')
+  insertSession(db, 'alice-night', 'alice', 'alice-watch', 'sleep', BEDTIME, BEDTIME + 8 * H, '2026-08-02')
+  insertSession(db, 'bart-night', 'bart', 'bart-watch', 'sleep', BEDTIME, BEDTIME + 8 * H, '2026-08-02')
 
   new NoteStore(db).put({ personId: 'alice', localDate: '2026-08-01', body: 'alice-note-sentinel', nowMs: 0 })
   new NoteStore(db).put({ personId: 'bart', localDate: '2026-08-01', body: 'bart-note-sentinel', nowMs: 0 })
