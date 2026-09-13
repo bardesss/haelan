@@ -20,7 +20,7 @@ describe('MaintenanceTick', () => {
       const instance = openHaelan(dir, {})
       try {
         const tick = new MaintenanceTick({
-          instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => 1_770_000_000_000,
         })
         expect(tick.dueNow()).toBe(true)
       } finally { instance.close() }
@@ -33,7 +33,7 @@ describe('MaintenanceTick', () => {
       try {
         let nowMs = 1_770_000_000_000
         const tick = new MaintenanceTick({
-          instance, dir, keep: 7, intervalHours: 24, now: () => nowMs,
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => nowMs,
         })
         expect(tick.runIfDue()).not.toBeNull()
         expect(tick.dueNow()).toBe(false)
@@ -46,12 +46,34 @@ describe('MaintenanceTick', () => {
     })
   })
 
+  // The reason the policy is a function rather than two numbers captured at construction: both
+  // were HAELAN_BACKUP_KEEP and HAELAN_BACKUP_INTERVAL_HOURS, and a household turning backups off
+  // on the Maintenance card must not have to restart the container for this schedule to notice.
+  it('follows a policy that changes under it, without being rebuilt', () => {
+    withDir((dir) => {
+      const instance = openHaelan(dir, {})
+      try {
+        let policy = { keep: 7, intervalHours: 24 }
+        const tick = new MaintenanceTick({
+          instance, dir, policy: () => policy, now: () => 1_770_000_000_000,
+        })
+        expect(tick.dueNow()).toBe(true)
+        policy = { keep: 0, intervalHours: 24 }
+        expect(tick.dueNow()).toBe(false)
+        expect(tick.runIfDue()).toBeNull()
+        expect(listBackups(dir)).toHaveLength(0)
+      } finally { instance.close() }
+    })
+  })
+
   it('keeps only what retention allows as it goes', () => {
     withDir((dir) => {
       const instance = openHaelan(dir, {})
       try {
         let nowMs = 1_770_000_000_000
-        const tick = new MaintenanceTick({ instance, dir, keep: 2, intervalHours: 24, now: () => nowMs })
+        const tick = new MaintenanceTick({
+          instance, dir, policy: () => ({ keep: 2, intervalHours: 24 }), now: () => nowMs,
+        })
         for (let day = 0; day < 4; day += 1) {
           tick.runIfDue()
           nowMs += 25 * 3_600_000
@@ -61,7 +83,7 @@ describe('MaintenanceTick', () => {
     })
   })
 
-  // keep: 0 is how an operator who backs the volume up by other means turns this off. It must
+  // A policy of keep 0 is how an operator who backs the volume up by other means turns this off. It must
   // mean "do not take backups", not "take one and immediately delete it", which would spend the
   // disk and the time and leave nothing.
   it('takes no backup at all when retention is zero', () => {
@@ -69,7 +91,7 @@ describe('MaintenanceTick', () => {
       const instance = openHaelan(dir, {})
       try {
         const tick = new MaintenanceTick({
-          instance, dir, keep: 0, intervalHours: 24, now: () => 1_770_000_000_000,
+          instance, dir, policy: () => ({ keep: 0, intervalHours: 24 }), now: () => 1_770_000_000_000,
         })
         expect(tick.dueNow()).toBe(false)
         expect(tick.runIfDue()).toBeNull()
@@ -90,7 +112,7 @@ describe('MaintenanceTick', () => {
       const instance = openHaelan(dir, {})
       try {
         const tick = new MaintenanceTick({
-          instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => 1_770_000_000_000,
         })
         vi.useFakeTimers()
         try {
@@ -122,7 +144,7 @@ describe('MaintenanceTick', () => {
       try {
         writeFileSync(join(dir, 'backups'), 'not a directory')
         const tick = new MaintenanceTick({
-          instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => 1_770_000_000_000,
         })
         expect(() => tick.runIfDue()).not.toThrow()
         expect(tick.runIfDue()).toBeNull()
@@ -145,7 +167,7 @@ describe('MaintenanceTick', () => {
       const instance = openHaelan(dir, {})
       instance.db.$client.close()
       const tick = new MaintenanceTick({
-        instance, dir, keep: 7, intervalHours: 24, now: () => 1_770_000_000_000,
+        instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => 1_770_000_000_000,
       })
       vi.useFakeTimers()
       try {
@@ -203,7 +225,7 @@ describe('the call log prune', () => {
       try {
         const accountId = seedCallLog(instance, CALL_LOG_NOW)
         const tick = new MaintenanceTick({
-          instance, dir, keep: 7, intervalHours: 24, now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
+          instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
         })
         expect(tick.pruneCallLog()).toBe(1)
         expect(new McpCallLog(instance.db).listForAccount(accountId, 10).map((c) => c.id)).toEqual(['new'])
@@ -216,10 +238,10 @@ describe('the call log prune', () => {
       const instance = openHaelan(dir, {})
       try {
         seedCallLog(instance, CALL_LOG_NOW)
-        // Built with keep: 0. runIfDue() returns null without reaching anything; the prune still
+        // Built with a policy of keep 0. runIfDue() returns null without reaching anything; the prune still
         // runs, which is the whole reason it is not inside that gate.
         const tick = new MaintenanceTick({
-          instance, dir, keep: 0, intervalHours: 24, now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
+          instance, dir, policy: () => ({ keep: 0, intervalHours: 24 }), now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
         })
         expect(tick.dueNow()).toBe(false)
         expect(tick.pruneCallLog()).toBe(1)
@@ -235,7 +257,7 @@ describe('the call log prune', () => {
       const instance = openHaelan(dir, {})
       seedCallLog(instance, CALL_LOG_NOW)
       const tick = new MaintenanceTick({
-        instance, dir, keep: 7, intervalHours: 24, now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
+        instance, dir, policy: () => ({ keep: 7, intervalHours: 24 }), now: () => CALL_LOG_NOW + MCP_CALL_LOG_TTL_MS + 1,
       })
       // Close the database under the tick, then prune. This is called from inside a bare
       // setInterval with no process.on('uncaughtException') anywhere in this app, so an escaping

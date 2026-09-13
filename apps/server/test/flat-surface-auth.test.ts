@@ -147,6 +147,7 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   // buttons that change either. Admin like the rest of /api/settings, and no `why` because the type
   // only asks for one where the answer is less than admin.
   { route: 'GET /api/settings/maintenance', auth: 'admin' },
+  { route: 'PUT /api/settings/maintenance/backup-policy', auth: 'admin' },
   { route: 'POST /api/settings/maintenance/backup', auth: 'admin' },
   { route: 'POST /api/settings/maintenance/reclaim', auth: 'admin' },
 

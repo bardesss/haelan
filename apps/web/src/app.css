@@ -276,7 +276,8 @@ body {
    annotate-note below: Maintenance.tsx tracks its two mutations' failures separately, so each
    needs its own class for a test to find without colliding with the other when both happen to
    render, while looking identical to every other inline field error in this app. */
-.field-error, .form-error, .maintenance-backup-error, .maintenance-reclaim-error {
+.field-error, .form-error, .maintenance-backup-error, .maintenance-reclaim-error,
+.maintenance-policy-error {
   font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
 }
 .form-error {
@@ -691,11 +692,20 @@ body {
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
   margin: var(--space-2) 0;
 }
+/* The two retention numbers. Side by side on anything wider than a phone, because they are read
+   as one sentence ("keep this many, this often") rather than as two unrelated settings, and
+   stacked below that, where two number fields on one row leave neither wide enough to read. */
+.maintenance-policy { display: flex; flex-wrap: wrap; gap: 0 var(--space-4); margin: 0; }
+.maintenance-policy > .field { flex: 1 1 12rem; margin-bottom: var(--space-2); }
+.maintenance-policy > .form-actions { flex-basis: 100%; margin-top: var(--space-2); }
+.maintenance-policy > .maintenance-policy-error,
+.maintenance-policy > .maintenance-policy-result { flex-basis: 100%; }
+
 /* What either button did, once it resolves: neutral rather than alarmed even for a declined
    reclaim, since vacuumIfBloated's own contract treats a decline as a correct outcome and not a
    failure (packages/core/src/db/vacuum.ts) -- the same muted inset box annotate-note uses for an
    equally uneventful report. */
-.maintenance-backup-result, .maintenance-reclaim-result {
+.maintenance-backup-result, .maintenance-reclaim-result, .maintenance-policy-result {
   font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;

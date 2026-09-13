@@ -1,11 +1,19 @@
 import { backupDecision, listBackups, McpCallLog, pruneBackups, runBackup } from '@haelan/core'
-import type { BackupFile, Instance } from '@haelan/core'
+import type { BackupFile, BackupPolicy, Instance } from '@haelan/core'
 
 export interface MaintenanceTickDeps {
   instance: Instance
   dir: string
-  keep: number
-  intervalHours: number
+  /**
+   * Read on every tick rather than captured once at boot, because both numbers are instance
+   * settings now (packages/core/src/store/settings.ts) and a household that turns backups off on
+   * the Maintenance card must not have to restart the container for the schedule to notice.
+   *
+   * A function rather than the store itself so a test can state a policy without a settings row -
+   * there is none until the wizard reaches its instance-url step, and this schedule starts before
+   * that. Production passes `() => instance.settings.backupPolicy()`.
+   */
+  policy: () => BackupPolicy
   now: () => number
 }
 
@@ -29,10 +37,11 @@ export class MaintenanceTick {
   constructor(deps: MaintenanceTickDeps) { this.#deps = deps }
 
   dueNow(): boolean {
-    if (this.#deps.keep <= 0) return false
+    const { keep, intervalHours } = this.#deps.policy()
+    if (keep <= 0) return false
     const [newest] = listBackups(this.#deps.dir)
     if (!newest) return true
-    return this.#deps.now() - newest.takenAtMs >= this.#deps.intervalHours * 3_600_000
+    return this.#deps.now() - newest.takenAtMs >= intervalHours * 3_600_000
   }
 
   /**
@@ -60,13 +69,14 @@ export class MaintenanceTick {
       // reaches this branch in practice - dueNow() above already declined for it - but
       // backupDecision checks it too, since the manual route reaches this same gate with no
       // dueNow() in front of it.
-      const decision = backupDecision(this.#deps.instance.db, this.#deps.dir, this.#deps.keep)
+      const { keep } = this.#deps.policy()
+      const decision = backupDecision(this.#deps.instance.db, this.#deps.dir, keep)
       if (!decision.run) {
         console.log(`maintenance: backup due, but declined - ${decision.reason}`)
         return null
       }
       const file = runBackup({ db: this.#deps.instance.db, dir: this.#deps.dir, nowMs: this.#deps.now() })
-      pruneBackups(this.#deps.dir, this.#deps.keep)
+      pruneBackups(this.#deps.dir, keep)
       return file
     } catch (error) {
       console.error(`maintenance: backup failed, ${error instanceof Error ? error.message : String(error)}`)
@@ -79,7 +89,7 @@ export class MaintenanceTick {
    * old. One place that answers "what is past its horizon" rather than two.
    *
    * Its own method rather than a line inside `runIfDue`, because that returns early whenever a
-   * backup is not due - and `HAELAN_BACKUP_KEEP=0` makes it never due at all. Folded in there, the
+   * backup is not due - and retention set to zero makes it never due at all. Folded in there, the
    * call log would grow forever on exactly the instances that turned backups off.
    *
    * Caught for the same reason `runIfDue` is: this is called from inside a bare `setInterval` with

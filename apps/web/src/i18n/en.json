@@ -1071,6 +1071,16 @@
         "retention": "Keeps the last {{keep}}, taken every {{hours}} hours.",
         "off": "Backups are switched off for this instance."
       },
+      "policy": {
+        "keepLabel": "Backups to keep",
+        "keepHint": "0 turns backups off, for a household that copies the volume some other way.",
+        "hoursLabel": "Hours between backups",
+        "hoursHint": "A backup is taken once this long has passed since the last one.",
+        "save": "Save backup schedule",
+        "saving": "Saving…",
+        "saved": "Saved. The schedule follows it from the next check.",
+        "failed": "That did not save: {{reason}}"
+      },
       "backupNow": "Back up now",
       "backingUp": "Backing up…",
       "backupResult": "Saved {{name}} ({{size}} MB).",

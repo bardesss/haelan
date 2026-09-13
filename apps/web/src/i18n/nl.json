@@ -1071,6 +1071,16 @@
         "retention": "Bewaart de laatste {{keep}}, elke {{hours}} uur gemaakt.",
         "off": "Back-ups staan uit voor deze instantie."
       },
+      "policy": {
+        "keepLabel": "Aantal back-ups bewaren",
+        "keepHint": "0 zet back-ups uit, voor een huishouden dat het volume op een andere manier kopieert.",
+        "hoursLabel": "Uren tussen back-ups",
+        "hoursHint": "Er wordt een back-up gemaakt zodra dit verstreken is sinds de vorige.",
+        "save": "Back-upschema opslaan",
+        "saving": "Bezig met opslaan…",
+        "saved": "Opgeslagen. Het schema volgt dit vanaf de volgende controle.",
+        "failed": "Dat is niet opgeslagen: {{reason}}"
+      },
       "backupNow": "Nu back-uppen",
       "backingUp": "Bezig met back-uppen…",
       "backupResult": "{{name}} opgeslagen ({{size}} MB).",

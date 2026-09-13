@@ -70,8 +70,12 @@ export type {
   AccountRow, AccountListRow, CreateAccountInput, LoginInput, LoginResult,
 } from './store/accounts.ts'
 export { SessionStore, SESSION_TTL_MS } from './store/sessions.ts'
-export { SettingsStore, setupStep } from './store/settings.ts'
-export type { InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps } from './store/settings.ts'
+export {
+  SettingsStore, setupStep, DEFAULT_BACKUP_KEEP, DEFAULT_BACKUP_INTERVAL_HOURS,
+} from './store/settings.ts'
+export type {
+  InstanceSettingsRow, PutSettingsInput, SetupStep, SetupDeps, BackupPolicy,
+} from './store/settings.ts'
 export { CONSENT_PATHS } from './db/schema/accounts.ts'
 export type { ConsentPath } from './db/schema/accounts.ts'
 export { buildConsentUrl, exchangeAuthorizationCode, probeAccess, SCOPES } from './api/oauth.ts'

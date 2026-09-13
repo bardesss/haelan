@@ -7,6 +7,7 @@ import { buildServer } from './app.ts'
 import { runBootSequence } from './rebuild.ts'
 import { rebuildInWorkerIfNeeded } from './rebuildInWorker.ts'
 import { MaintenanceTick } from './maintenance/tick.ts'
+import { seedBackupPolicyFromEnv } from './maintenance/backupPolicySeed.ts'
 import { sweepStaleProjections } from './mcp/sweepProjections.ts'
 
 // Cheap and non-fatal, and first: a crash mid sql_query leaves its projection - a plaintext copy
@@ -26,6 +27,11 @@ const config = readConfig(process.env)
 // the last one a log should leave ambiguous.
 const dataDir = resolve(config.dataDir)
 const instance = openHaelan(dataDir)
+// Right after the migration that added the two columns, and before anything reads them: the last
+// thing HAELAN_BACKUP_KEEP and HAELAN_BACKUP_INTERVAL_HOURS do is hand their value to the settings
+// row once, so an instance that already had backups switched off stays switched off. See
+// maintenance/backupPolicySeed.ts.
+seedBackupPolicyFromEnv(instance, process.env, Date.now())
 
 // The built bundle sits beside the server in the workspace and in the image. Absent during a
 // server only dev run, where Vite serves the app on its own port and proxies back here, so a
@@ -43,8 +49,6 @@ const app = buildServer({
   now: Date.now,
   fetch: globalThis.fetch,
   dataDir,
-  backupKeep: config.backupKeep,
-  backupIntervalHours: config.backupIntervalHours,
   rebuildInFlight: () => rebuildInFlight,
   ...(existsSync(join(webRoot, 'index.html')) ? { webRoot } : {}),
 })
@@ -53,8 +57,7 @@ const app = buildServer({
 // below - a vacuum and a backup both open their own connection to the same file, and only the
 // rebuild worker's own completion says that file is free of a second writer.
 const maintenance = new MaintenanceTick({
-  instance, dir: dataDir, keep: config.backupKeep, intervalHours: config.backupIntervalHours,
-  now: Date.now,
+  instance, dir: dataDir, policy: () => instance.settings.backupPolicy(), now: Date.now,
 })
 
 // Assigned after listen. Declared here so shutdown can wait on it: a rebuild holds a write

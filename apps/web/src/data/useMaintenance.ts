@@ -25,6 +25,16 @@ export interface CompletedBackup {
   bytes: number
 }
 
+/**
+ * How many completed backups this instance keeps and how many hours it leaves between them.
+ * `keep` 0 turns backups off. Mirrors BackupPolicy in packages/core/src/store/settings.ts, which
+ * this cannot import for the reason DatabaseBloat above gives.
+ */
+export interface BackupPolicy {
+  keep: number
+  intervalHours: number
+}
+
 /** What GET /api/settings/maintenance answers: the figures a household needs to judge both units. */
 export interface MaintenanceStatus {
   bloat: DatabaseBloat
@@ -112,6 +122,28 @@ export function useReclaimSpace(): UseMutationResult<VacuumOutcome, ApiError, vo
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => apiSend<VacuumOutcome>('POST', '/api/settings/maintenance/reclaim'),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: maintenanceKey() })
+    },
+  })
+}
+
+/**
+ * The two retention numbers, saved together. Both go in one request because the server writes
+ * them together for a reason that outlives this screen: null in either column is what the
+ * one-time seed from the old HAELAN_BACKUP_KEEP / HAELAN_BACKUP_INTERVAL_HOURS variables reads as
+ * "nobody has chosen yet" (SettingsStore.seedBackupPolicy), so half a policy is a policy a
+ * leftover variable can still overwrite.
+ *
+ * Rejects rather than resolves on a value out of range - unlike the two mutations above, whose
+ * declines are ordinary 200s. A number the store refused is not an outcome to report, it is a
+ * field to correct, and `save.error.message` carries the bound that was missed.
+ */
+export function useSaveBackupPolicy(): UseMutationResult<BackupPolicy, ApiError, BackupPolicy> {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (policy: BackupPolicy) =>
+      apiSend<BackupPolicy>('PUT', '/api/settings/maintenance/backup-policy', policy),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: maintenanceKey() })
     },

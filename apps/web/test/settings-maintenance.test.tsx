@@ -102,8 +102,13 @@ const RESTORE_DETAIL = "Your health data is safe and still here. This instance j
 
 const text = (selector: string): string => container!.querySelector(selector)?.textContent ?? ''
 
-const buttonLabels = (): string[] =>
-  [...container!.querySelectorAll('.form-actions button')].map((b) => b.textContent ?? '')
+// Scoped to the card's own action row rather than every .form-actions in the tree: the backup
+// schedule form below the retention line carries one of its own, and an unscoped selector would
+// put its Save button first in this list and hand it to every click() below.
+const cardButtons = (): HTMLButtonElement[] =>
+  [...container!.querySelectorAll<HTMLButtonElement>('.maintenance > .form-actions button')]
+
+const buttonLabels = (): string[] => cardButtons().map((b) => b.textContent ?? '')
 
 /**
  * Stands in for the two POST routes (apps/server/src/routes/maintenance.ts): backup answers
@@ -133,6 +138,17 @@ function mockMaintenanceApi(backupResult: BackupOutcome, reclaimResult: VacuumOu
 
 function click(el: Element): void {
   act(() => { el.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+}
+
+// A controlled number input: React listens on the bubbling 'input' event, and setting .value
+// directly bypasses its own value tracker, so the setter has to be reached through the prototype
+// the way every other controlled-input test in this suite does.
+function type(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  act(() => {
+    setter?.call(input, value)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
 }
 
 describe('the maintenance section', () => {
@@ -173,7 +189,7 @@ describe('the maintenance section', () => {
     expect(buttonLabels()).toEqual(['Back up now', 'Reclaim space'])
   })
 
-  // HAELAN_BACKUP_KEEP=0 means backups are off everywhere in the code (backupDecision declines
+  // Retention set to zero means backups are off everywhere in the code (backupDecision declines
   // every write); the screen used to render "Keeps the last 0, taken every 24 hours" -- a
   // schedule that does not exist -- and leave Back up now enabled, so the only way to learn
   // backups were off was to press it and read the decline.
@@ -203,7 +219,7 @@ describe('the maintenance section', () => {
     )
     const client = mountSection(status({}))
 
-    click(container!.querySelector('.form-actions button')!)
+    click(cardButtons()[0]!)
     await flush(client, () => container!.innerHTML)
     api.restore()
 
@@ -225,7 +241,7 @@ describe('the maintenance section', () => {
     )
     const client = mountSection(status({}))
 
-    const reclaimButton = [...container!.querySelectorAll('.form-actions button')][1]!
+    const reclaimButton = cardButtons()[1]!
     click(reclaimButton)
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -251,7 +267,7 @@ describe('the maintenance section', () => {
     )
     const client = mountSection(status({}))
 
-    const reclaimButton = [...container!.querySelectorAll('.form-actions button')][1]!
+    const reclaimButton = cardButtons()[1]!
     click(reclaimButton)
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -274,7 +290,7 @@ describe('the maintenance section', () => {
     )
     const client = mountSection(status({}))
 
-    const reclaimButton = [...container!.querySelectorAll('.form-actions button')][1]!
+    const reclaimButton = cardButtons()[1]!
     click(reclaimButton)
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -294,7 +310,7 @@ describe('the maintenance section', () => {
     )
   })
 
-  // The backup button's own decline, now that the route can answer one (HAELAN_BACKUP_KEEP=0):
+  // The backup button's own decline, now that the route can answer one (retention set to zero):
   // an actionable sentence rather than the bare enum, the same standard the reclaim decline above
   // is held to.
   it('shows an actionable sentence, not the bare enum, when a backup is declined because retention is off', async () => {
@@ -304,7 +320,7 @@ describe('the maintenance section', () => {
     )
     const client = mountSection(status({}))
 
-    click(container!.querySelector('.form-actions button')!)
+    click(cardButtons()[0]!)
     await flush(client, () => container!.innerHTML)
     api.restore()
 
@@ -331,5 +347,84 @@ describe('the maintenance section', () => {
   it('says nothing about credentials when they can be read', () => {
     mountSettingsAs({ credentialsUnreadable: false })
     expect(text('.maintenance-credentials')).toBe('')
+  })
+})
+
+/**
+ * The backup schedule, which was HAELAN_BACKUP_KEEP and HAELAN_BACKUP_INTERVAL_HOURS until issue
+ * 150 moved both onto the settings row. One form, one button, both numbers: the server writes
+ * them together because null in either column is what the one-time environment seed reads as
+ * "nobody has chosen yet", so half a policy is a policy a leftover variable can still overwrite.
+ */
+describe('the backup schedule form', () => {
+  const fields = (): HTMLInputElement[] =>
+    [...container!.querySelectorAll<HTMLInputElement>('.maintenance-policy input')]
+  const saveButton = (): HTMLButtonElement =>
+    container!.querySelector<HTMLButtonElement>('.maintenance-policy button')!
+
+  it('shows the numbers this instance actually has, not a hardcoded default', () => {
+    mountSection(status({ keep: 3, intervalHours: 12 }))
+    expect(fields().map((f) => f.value)).toEqual(['3', '12'])
+  })
+
+  it('offers nothing to save until a number actually changes', () => {
+    mountSection(status({ keep: 7, intervalHours: 24 }))
+    expect(saveButton().disabled).toBe(true)
+    type(fields()[0]!, '3')
+    expect(saveButton().disabled).toBe(false)
+  })
+
+  // An empty field is a legitimate state mid-edit, not a zero. Submitting it would send NaN, which
+  // the route rejects, so the button refuses it here instead of spending a round trip on it.
+  it('refuses to submit a field the reader has emptied', () => {
+    mountSection(status({ keep: 7, intervalHours: 24 }))
+    type(fields()[0]!, '')
+    expect(saveButton().disabled).toBe(true)
+  })
+
+  it('sends both numbers in one request and says the save landed', async () => {
+    const requests: { method: string, url: string, body: unknown }[] = []
+    const original = globalThis.fetch
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      requests.push({ method, url, body: init?.body === undefined ? null : JSON.parse(String(init.body)) })
+      const payload = method === 'GET' ? status({ keep: 3, intervalHours: 12 }) : { keep: 3, intervalHours: 12 }
+      return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } })
+    }) as typeof fetch
+
+    const client = mountSection(status({ keep: 7, intervalHours: 24 }))
+    type(fields()[0]!, '3')
+    type(fields()[1]!, '12')
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    globalThis.fetch = original
+
+    expect(requests).toContainEqual({
+      method: 'PUT',
+      url: '/api/settings/maintenance/backup-policy',
+      body: { keep: 3, intervalHours: 12 },
+    })
+    expect(text('.maintenance-policy-result')).toBe('Saved. The schedule follows it from the next check.')
+  })
+
+  // The server's own message, not a sentence of this panel's: a refused number comes back naming
+  // the bound it missed, and that is the only thing telling the reader what to type instead.
+  it('shows the reason the server gave when a number is refused', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = (async () => new Response(
+      JSON.stringify({ error: { kind: 'config', code: 'config', message: 'backups to keep must be a whole number from 0 to 365, got 400' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    )) as typeof fetch
+
+    const client = mountSection(status({ keep: 7, intervalHours: 24 }))
+    type(fields()[0]!, '400')
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    globalThis.fetch = original
+
+    expect(text('.maintenance-policy-error')).toBe(
+      'That did not save: backups to keep must be a whole number from 0 to 365, got 400',
+    )
   })
 })
