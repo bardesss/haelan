@@ -60,8 +60,11 @@ Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep
 nap detection, resting heart rate and HRV, SpO2 with its confidence interval, an activity heatmap
 and a workout list, and a page behind every workout in that list: splits, heart rate zones, running
 dynamics, the trace from the device that recorded it, and the exclude control that used to exist
-only on the server. There is also an intraday chart, a weight trend, and period-over-period insight
-cards that withhold themselves, each with its own reason, when the data behind them is thin.
+only on the server. Sleep carries the same kind of page behind every night: its stages, the naps
+outside that night's span, the overnight heart rate, SpO2 and HRV traces, and an exclude control
+for each session the night was assembled from. There is also an intraday chart, a weight trend, and
+period-over-period insight cards that withhold themselves, each with its own reason, when the data
+behind them is thin.
 English and Dutch throughout. Nutrition is the one page with nothing on it: this household has
 never logged food, and the API's Food type carries no timestamp to file a meal under, so the page
 says so rather than inventing a data model to have something to draw.
