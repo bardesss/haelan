@@ -288,6 +288,8 @@
       "kcalShort": "kcal",
       "minutes": "Minuten",
       "min": "min",
+      "activeZoneMinutes": "Actieve zoneminuten",
+      "activeZoneMinutesShort": "AZM",
       "workouts": "Work-outs",
       "workoutsShort": "work-outs",
       "bpm": "bpm",
@@ -352,19 +354,19 @@
       "chartLabel": "Dagelijkse minuten intensieve activiteit in {{period}}"
     },
     "activeZoneMinutesFatBurn": {
-      "label": "Vetverbrandingszone-minuten",
+      "label": "Actieve zoneminuten, vetverbranding",
       "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse vetverbrandingszone-minuten in {{period}}"
+      "chartLabel": "Dagelijkse actieve zoneminuten (vetverbranding) in {{period}}"
     },
     "activeZoneMinutesCardio": {
-      "label": "Cardiozone-minuten",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse cardiozone-minuten in {{period}}"
+      "label": "Actieve zoneminuten, cardio",
+      "basis": "som, één minuut telt dubbel, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse actieve zoneminuten (cardio) in {{period}}"
     },
     "activeZoneMinutesPeak": {
-      "label": "Piekzone-minuten",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse piekzone-minuten in {{period}}"
+      "label": "Actieve zoneminuten, piek",
+      "basis": "som, één minuut telt dubbel, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse actieve zoneminuten (piek) in {{period}}"
     },
     "workoutCount": {
       "label": "Work-outs",

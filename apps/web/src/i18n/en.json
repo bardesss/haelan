@@ -288,6 +288,8 @@
       "kcalShort": "kcal",
       "minutes": "Minutes",
       "min": "min",
+      "activeZoneMinutes": "Active Zone Minutes",
+      "activeZoneMinutesShort": "AZM",
       "workouts": "Workouts",
       "workoutsShort": "workouts",
       "bpm": "bpm",
@@ -352,19 +354,19 @@
       "chartLabel": "Daily vigorous activity minutes through {{period}}"
     },
     "activeZoneMinutesFatBurn": {
-      "label": "Fat burn zone minutes",
+      "label": "Fat burn Active Zone Minutes",
       "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily fat burn zone minutes through {{period}}"
+      "chartLabel": "Daily fat burn Active Zone Minutes through {{period}}"
     },
     "activeZoneMinutesCardio": {
-      "label": "Cardio zone minutes",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily cardio zone minutes through {{period}}"
+      "label": "Cardio Active Zone Minutes",
+      "basis": "sum, one minute counts twice, {{reported}} of {{total}} days",
+      "chartLabel": "Daily cardio Active Zone Minutes through {{period}}"
     },
     "activeZoneMinutesPeak": {
-      "label": "Peak zone minutes",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "chartLabel": "Daily peak zone minutes through {{period}}"
+      "label": "Peak Active Zone Minutes",
+      "basis": "sum, one minute counts twice, {{reported}} of {{total}} days",
+      "chartLabel": "Daily peak Active Zone Minutes through {{period}}"
     },
     "workoutCount": {
       "label": "Workouts",
