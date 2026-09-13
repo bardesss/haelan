@@ -1,0 +1,53 @@
+name: Pages
+
+# Its own workflow rather than a job inside release.yml, deliberately. That pipeline has already
+# produced an orphaned release and a version whose image never reached the registry; a site deploy
+# must not be able to add a third way for it to half-finish, and a failed deploy here must not be
+# able to hold up a release. The worst case this shape allows is a site one version behind, which
+# a manual run fixes.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Not cancel-in-progress: a half-finished Pages deployment is worse than a queued one.
+concurrency:
+  group: pages
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Builds the token stylesheet first: the site copies packages/tokens/dist/theme.css, which
+      # does not exist in a fresh checkout.
+      - run: pnpm site:build
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
