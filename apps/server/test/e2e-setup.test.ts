@@ -39,10 +39,9 @@ async function listeningServer(options: { webRoot?: string } = {}): Promise<{
     },
     limiter: { take: async () => {} },
     // The same directory openHaelan just opened above, matching what index.ts hands buildServer
-    // in production. This suite is not about backups; the defaults are config.ts's own.
+    // in production. This suite is not about backups; retention and the interval are instance
+    // settings now, left unwritten here, which is the default this wizard would leave behind.
     dataDir: dir,
-    backupKeep: 7,
-    backupIntervalHours: 24,
     backfillBatchDays: 2,
     // This suite builds the server directly rather than through harness.ts, so without this it
     // runs at the production SPRINT_DAYS (90) against a batch of 2 - 45 passes needed against

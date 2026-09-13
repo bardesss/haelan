@@ -46,10 +46,6 @@ export interface ServerDeps {
    * built from this file's own harness could ever point somewhere else.
    */
   dataDir: string
-  /** How many completed backups `POST .../backup` keeps after pruning. Mirrors `config.backupKeep`. */
-  backupKeep: number
-  /** Reported by `GET .../maintenance` alongside `backupKeep`. Mirrors `config.backupIntervalHours`. */
-  backupIntervalHours: number
   /**
    * True while a second connection to the database file might still exist - specifically, while
    * index.ts's boot rebuild worker holds its own. `routes/maintenance.ts` reads this before either

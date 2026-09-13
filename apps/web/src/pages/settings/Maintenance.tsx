@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import type { FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from '../../i18n/index.js'
 import { useSession } from '../../auth/session.js'
@@ -5,7 +7,7 @@ import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { formatNumber } from '../../format.js'
 import {
-  maintenanceKey, useBackupNow, useMaintenanceStatus, useReclaimSpace,
+  maintenanceKey, useBackupNow, useMaintenanceStatus, useReclaimSpace, useSaveBackupPolicy,
 } from '../../data/useMaintenance.js'
 import type { BackupDeclineReason, VacuumDeclineReason } from '../../data/useMaintenance.js'
 
@@ -40,8 +42,8 @@ const RECLAIM_DECLINE_KEY: Record<VacuumDeclineReason, string> = {
 /**
  * The backup route's own three reasons. not_enough_disk and rebuild_in_progress share their
  * sentence with the reclaim table above -- the same fact, whichever button asked -- and
- * backups_disabled is the one specific to this button: HAELAN_BACKUP_KEEP=0, which README and
- * config.ts both say turns backups off.
+ * backups_disabled is the one specific to this button: retention set to 0 on the form below,
+ * which is how a household turns backups off.
  */
 const BACKUP_DECLINE_KEY: Record<BackupDeclineReason, string> = {
   backups_disabled: 'settings.maintenance.declined.backupsDisabled',
@@ -52,12 +54,15 @@ const BACKUP_DECLINE_KEY: Record<BackupDeclineReason, string> = {
 /**
  * What the database file is costing, and the two levers a household has over it: a backup taken
  * on demand rather than waiting for the nightly one, and a vacuum run outside the once-per-boot
- * schedule. Reads as SourceNames.tsx's sibling: one query for the figures, one mutation per
- * button, and the last mutation's own result rendered inline once it resolves rather than folded
- * into a toast that would be gone before a reader who left the tab in the background ever saw it.
+ * schedule, plus the schedule itself: how many copies to keep and how long to leave between
+ * them, which were HAELAN_BACKUP_KEEP and HAELAN_BACKUP_INTERVAL_HOURS until they became settings
+ * a household can change without restarting the container. Reads as SourceNames.tsx's sibling:
+ * one query for the figures, one mutation per button, and the last mutation's own result rendered
+ * inline once it resolves rather than folded into a toast that would be gone before a reader who
+ * left the tab in the background ever saw it.
  *
  * Admin only, mounted the same way Members.tsx is: Settings.tsx's own guard on
- * session.data?.isAdmin, which is also who the three routes this file calls accept -- everyone
+ * session.data?.isAdmin, which is also who the four routes this file calls accept -- everyone
  * else already gets 'forbidden' from the server regardless of what renders here.
  */
 export function Maintenance() {
@@ -67,6 +72,13 @@ export function Maintenance() {
   const status = useMaintenanceStatus()
   const backup = useBackupNow()
   const reclaim = useReclaimSpace()
+  const savePolicy = useSaveBackupPolicy()
+  // Null until the reader types, so each field follows the server's value through a save and an
+  // invalidation without a second effect to push it back. Strings rather than numbers: a number
+  // input mid-edit is legitimately empty, and storing that as NaN would make a half-typed field
+  // indistinguishable from one the reader has not touched.
+  const [keepDraft, setKeepDraft] = useState<string | null>(null)
+  const [hoursDraft, setHoursDraft] = useState<string | null>(null)
 
   if (status.isPending) return <Loading />
   if (status.isError) {
@@ -79,6 +91,29 @@ export function Maintenance() {
 
   const { bloat, backups, keep, intervalHours, vacuumBlocked } = status.data
   const latest = backups[0] ?? null
+  const keepValue = keepDraft ?? String(keep)
+  const hoursValue = hoursDraft ?? String(intervalHours)
+  const nextKeep = Number(keepValue)
+  const nextHours = Number(hoursValue)
+  // Whole numbers only, and the same floors the store enforces. The server is still the authority
+  // - it answers the ceilings too, and its message names the bound that was missed - but a button
+  // that submits a value this screen can already see is impossible would only spend a round trip
+  // to be told so.
+  //
+  // The emptiness check is not redundant with the rest: Number('') is 0, and 0 is a legitimate
+  // retention meaning "turn backups off". Without it, clearing the field and saving would switch
+  // this household's backups off without anybody having typed a zero.
+  const wholeAtLeast = (raw: string, value: number, floor: number): boolean =>
+    raw.trim() !== '' && Number.isInteger(value) && value >= floor
+  const policyValid = wholeAtLeast(keepValue, nextKeep, 0) && wholeAtLeast(hoursValue, nextHours, 1)
+  const policyChanged = nextKeep !== keep || nextHours !== intervalHours
+
+  const savePolicySubmit = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault()
+    savePolicy.mutate({ keep: nextKeep, intervalHours: nextHours }, {
+      onSuccess: () => { setKeepDraft(null); setHoursDraft(null) },
+    })
+  }
 
   return (
     <div className="maintenance">
@@ -109,7 +144,7 @@ export function Maintenance() {
           })}
         </p>
       )}
-      {/* keep === 0 is HAELAN_BACKUP_KEEP=0, README's and config.ts's own "turn backups off" --
+      {/* keep === 0 is the form below set to zero, which is this instance's "turn backups off" --
           backupDecision declines every write this instance would otherwise make, so
           "Keeps the last 0, taken every N hours" described a schedule that does not exist and a
           household had no way to learn backups were off short of pressing the button below and
@@ -119,6 +154,51 @@ export function Maintenance() {
           ? t('settings.maintenance.backups.off')
           : t('settings.maintenance.backups.retention', { keep, hours: intervalHours })}
       </p>
+
+      {/* Both numbers in one form with one button, because the server writes them together on
+          purpose: see useSaveBackupPolicy for why half a policy is a policy an environment
+          variable left behind in a compose file can still overwrite. */}
+      <form className="maintenance-policy" onSubmit={savePolicySubmit}>
+        <label className="field">
+          <span className="label">{t('settings.maintenance.policy.keepLabel')}</span>
+          <input
+            className="input" type="number" min={0} step={1} inputMode="numeric"
+            value={keepValue} onChange={(e) => setKeepDraft(e.currentTarget.value)}
+          />
+          <span className="field-hint">{t('settings.maintenance.policy.keepHint')}</span>
+        </label>
+        <label className="field">
+          <span className="label">{t('settings.maintenance.policy.hoursLabel')}</span>
+          <input
+            className="input" type="number" min={1} step={1} inputMode="numeric"
+            value={hoursValue} onChange={(e) => setHoursDraft(e.currentTarget.value)}
+          />
+          <span className="field-hint">{t('settings.maintenance.policy.hoursHint')}</span>
+        </label>
+        <div className="form-actions">
+          <button
+            type="submit" className="button"
+            disabled={savePolicy.isPending || !policyValid || !policyChanged}
+          >
+            {savePolicy.isPending
+              ? t('settings.maintenance.policy.saving')
+              : t('settings.maintenance.policy.save')}
+          </button>
+        </div>
+        {/* The server's own message, not a sentence of this panel's: a refused number comes back
+            naming the bound it missed, and replacing that with "that did not work" would throw
+            away the only thing telling the reader what to type instead. */}
+        {savePolicy.isError && (
+          <p className="field-error maintenance-policy-error" role="alert">
+            {t('settings.maintenance.policy.failed', { reason: savePolicy.error.message })}
+          </p>
+        )}
+        {savePolicy.isSuccess && !savePolicy.isPending && (
+          <p className="maintenance-policy-result" role="status">
+            {t('settings.maintenance.policy.saved')}
+          </p>
+        )}
+      </form>
 
       {/* The one reason worth telling a household before they click, not after: the route's own
           vacuumBlocked answers true only for not_enough_disk, so this reaches for the identical

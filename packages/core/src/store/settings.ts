@@ -8,6 +8,36 @@ import type { CredentialStore } from './credentials.ts'
 
 const ROW_ID = 'default'
 
+/** What an instance keeps and how often it takes one when nobody has said otherwise. */
+export const DEFAULT_BACKUP_KEEP = 7
+export const DEFAULT_BACKUP_INTERVAL_HOURS = 24
+// Ceilings rather than an open integer, which is what the environment variables these replaced
+// had. A settings field is typed into by hand, and the two ways to get it wrong are a stray digit
+// that fills the volume with copies and one that pushes the next backup past any horizon anybody
+// would notice. A year of dailies and a year between backups are both past anything this is for.
+const MAX_BACKUP_KEEP = 365
+const MAX_BACKUP_INTERVAL_HOURS = 8760
+
+/** How many completed backups to keep, and the hours between them. `keep` 0 turns backups off. */
+export interface BackupPolicy {
+  keep: number
+  intervalHours: number
+}
+
+function assertKeep(keep: number): void {
+  // Zero is not an oversight: it is how a household that backs the volume up by other means turns
+  // this off, so the floor is zero rather than the one the interval below has.
+  if (!Number.isInteger(keep) || keep < 0 || keep > MAX_BACKUP_KEEP) {
+    throw new ConfigError(`backups to keep must be a whole number from 0 to ${MAX_BACKUP_KEEP}, got ${keep}`)
+  }
+}
+
+function assertIntervalHours(hours: number): void {
+  if (!Number.isInteger(hours) || hours < 1 || hours > MAX_BACKUP_INTERVAL_HOURS) {
+    throw new ConfigError(`hours between backups must be a whole number from 1 to ${MAX_BACKUP_INTERVAL_HOURS}, got ${hours}`)
+  }
+}
+
 export interface InstanceSettingsRow {
   baseUrl: string
   consentPath: ConsentPath
@@ -16,6 +46,9 @@ export interface InstanceSettingsRow {
   setupCompletedAtMs: number | null
   sessionOverlapRatio: number
   nightGapMinutes: number
+  /** Null until somebody chooses. See the column's own comment for why that state exists. */
+  backupKeep: number | null
+  backupIntervalHours: number | null
 }
 
 export interface PutSettingsInput {
@@ -42,6 +75,22 @@ export class SettingsStore {
       setupCompletedAtMs: row.setupCompletedAtMs ?? null,
       sessionOverlapRatio: row.sessionOverlapRatio,
       nightGapMinutes: row.nightGapMinutes,
+      backupKeep: row.backupKeep ?? null,
+      backupIntervalHours: row.backupIntervalHours ?? null,
+    }
+  }
+
+  /**
+   * The two backup numbers with their nulls resolved, which is what every caller that actually
+   * takes or schedules a backup wants. Total on purpose: there is no settings row at all until
+   * the wizard writes one, and the maintenance tick starts before that, so "no row" has to mean
+   * the defaults rather than a crash or a skipped schedule.
+   */
+  backupPolicy(): BackupPolicy {
+    const row = this.get()
+    return {
+      keep: row?.backupKeep ?? DEFAULT_BACKUP_KEEP,
+      intervalHours: row?.backupIntervalHours ?? DEFAULT_BACKUP_INTERVAL_HOURS,
     }
   }
 
@@ -78,6 +127,55 @@ export class SettingsStore {
   putBackfillHorizon(days: number, nowMs: number): void {
     this.#db.update(instanceSettings).set({ backfillHorizonDays: days, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  /**
+   * Both numbers together, because the Maintenance card saves them together: writing one at a
+   * time would leave the other null, and null is the state the one-time environment seed below
+   * reads as "nobody has chosen yet". A half-chosen policy would get half-overwritten on the next
+   * boot by a variable the household thought they had already replaced.
+   */
+  putBackupPolicy(policy: BackupPolicy, nowMs: number): void {
+    assertKeep(policy.keep)
+    assertIntervalHours(policy.intervalHours)
+    this.#db.update(instanceSettings)
+      .set({ backupKeep: policy.keep, backupIntervalHours: policy.intervalHours, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  /**
+   * Writes a value into whichever of the two columns is still null and leaves the rest alone,
+   * returning what it actually wrote.
+   *
+   * This is how `HAELAN_BACKUP_KEEP=0` survives becoming a setting. An instance that was already
+   * running with backups off would otherwise come back from the migration keeping seven daily
+   * copies of a database its operator deliberately never wanted copied, with nothing to tell them
+   * until the volume filled. Once a column holds a number - whether from this seed or from the
+   * card - it is never seeded again, so the setting wins from then on and an environment variable
+   * left behind in a compose file stops mattering.
+   */
+  seedBackupPolicy(seed: Partial<BackupPolicy>, nowMs: number): Partial<BackupPolicy> {
+    const row = this.get()
+    // No row means setup has not reached the instance-url step. Nothing to seed onto, and
+    // nothing lost: the columns are still null when the wizard does write it, so the next boot
+    // seeds them then.
+    if (!row) return {}
+    const written: Partial<BackupPolicy> = {}
+    if (row.backupKeep === null && seed.keep !== undefined) {
+      assertKeep(seed.keep)
+      written.keep = seed.keep
+    }
+    if (row.backupIntervalHours === null && seed.intervalHours !== undefined) {
+      assertIntervalHours(seed.intervalHours)
+      written.intervalHours = seed.intervalHours
+    }
+    if (written.keep === undefined && written.intervalHours === undefined) return {}
+    this.#db.update(instanceSettings).set({
+      ...(written.keep === undefined ? {} : { backupKeep: written.keep }),
+      ...(written.intervalHours === undefined ? {} : { backupIntervalHours: written.intervalHours }),
+      updatedAtMs: nowMs,
+    }).where(eq(instanceSettings.id, ROW_ID)).run()
+    return written
   }
 
   putSessionOverlapRatio(ratio: number, nowMs: number): void {

@@ -104,9 +104,9 @@ export type BackupDecision =
  * section 1 makes B and C one unit precisely so there is a single disk-margin comparison to
  * disagree with itself.
  *
- * `keep <= 0` is decided here rather than left to `pruneBackups`: an operator who sets
- * `HAELAN_BACKUP_KEEP=0` to turn backups off, the way the README and config.ts's own floor say
- * they can, would otherwise still get a full compacted copy written on every tick and every
+ * `keep <= 0` is decided here rather than left to `pruneBackups`: an operator who sets retention
+ * to zero to turn backups off, the way the Maintenance settings card and this store's own floor
+ * say they can, would otherwise still get a full compacted copy written on every tick and every
  * click, with only retention - which deletes nothing at `keep` 0 - standing between them and an
  * unbounded folder. That is the exact growth the button's own prune call exists to prevent; this
  * is what makes the setting mean what it says everywhere it is read, not only on the schedule.

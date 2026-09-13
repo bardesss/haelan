@@ -79,6 +79,15 @@ export const instanceSettings = sqliteTable('instance_settings', {
   // this. A wake long enough for the watch to end a session and start another is ordinary, and
   // reporting only the longer piece would lose the rest of the night every time it happens.
   nightGapMinutes: integer('night_gap_minutes').notNull().default(120),
+  // How many completed backups the folder keeps, and how long between them. Nullable with no
+  // default, unlike every other column above, and that is what makes the one-time seed from the
+  // old HAELAN_BACKUP_KEEP / HAELAN_BACKUP_INTERVAL_HOURS variables possible: null means nobody
+  // has chosen yet, so an instance that was already running with backups switched off can be
+  // handed its own value once rather than silently starting to keep seven. A default here would
+  // erase that distinction the moment the migration ran. Reads resolve null through
+  // DEFAULT_BACKUP_KEEP / DEFAULT_BACKUP_INTERVAL_HOURS in store/settings.ts.
+  backupKeep: integer('backup_keep'),
+  backupIntervalHours: integer('backup_interval_hours'),
   setupCompletedAtMs: integer('setup_completed_at_ms'),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })

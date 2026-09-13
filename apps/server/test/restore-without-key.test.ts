@@ -59,8 +59,6 @@ async function restoredWithoutTheKey(): Promise<{
     fetch: async () => { throw new Error('nothing here should reach Google') },
     limiter: { take: async () => {} },
     dataDir: dir,
-    backupKeep: 7,
-    backupIntervalHours: 24,
     backfillBatchDays: 1,
     sprintDays: 2,
   })
