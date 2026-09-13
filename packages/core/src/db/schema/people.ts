@@ -23,6 +23,21 @@ export const people = sqliteTable('people', {
   displayName: text('display_name').notNull(),
   // Day boundaries are computed here, not in UTC. Spec invariant 3.
   timezone: text('timezone').notNull(),
+  // A birthday, never an age. An age stored is an age that is wrong within the year, and every
+  // reader of this column wants the age at the moment its number is computed - which is what
+  // api/cardioLoad.ts's `ageAt` takes two local dates for.
+  //
+  // Null is load-bearing: with either of these absent, Banister answers null rather than a number
+  // standing on a guess.
+  //
+  // Neither column invalidates a derived row, which is unusual for this table and is the reason it
+  // is written down here. The only stored cardio load is Edwards, which reads zone minutes and
+  // nothing else; Banister runs at read time on a workout. So these two are written like
+  // display_name and not like timezone, which clears the derivation stamp in the same statement.
+  // A future change that makes a stored metric depend on either column takes on that obligation at
+  // the same moment.
+  birthDate: text('birth_date'),
+  sex: text('sex', { enum: ['male', 'female'] }),
   // What this person's tiers 2 and 3 were built with. Per person rather than instance wide,
   // because that is what makes an interrupted rebuild resumable: a person carrying the current
   // numbers is already done. Null on a database whose data predates M2e, which is the case the

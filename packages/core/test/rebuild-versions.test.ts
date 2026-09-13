@@ -9,6 +9,8 @@ const person = (over: Partial<PersonRow> = {}): PersonRow => ({
   id: 'p1',
   displayName: 'Ada',
   timezone: 'Europe/Amsterdam',
+  birthDate: null,
+  sex: null,
   builtMappingVersion: MAPPING_VERSION,
   builtDerivationVersion: DERIVATION_VERSION,
   ...over,
