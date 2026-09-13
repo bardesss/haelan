@@ -40,7 +40,10 @@ describe('buildSite', () => {
 
   it('writes every local file the page asks for', () => {
     // The point of this test: a renamed screenshot or a moved favicon becomes a red run here
-    // rather than a broken image on the published page, which nothing else would catch.
+    // rather than a broken image on the published page, which nothing else would catch -- for
+    // the `href`/`src` of a double-quoted `<link>`, `<script>` or `<img>`, which is everything
+    // the page currently uses. It does not see `srcset`, single-quoted attributes, or a
+    // stylesheet's `url()`; a `srcset` would need this regex extended, not just this comment.
     const html = readFileSync(join(out, 'index.html'), 'utf8')
     const referenced = [...html.matchAll(/<(?:link|script|img)\b[^>]*\b(?:href|src)="([^"]+)"/g)]
       .map((match) => match[1])

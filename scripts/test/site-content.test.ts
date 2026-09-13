@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { emitCss } from '../../packages/tokens/src/emit.js'
+import { resolveSemantic } from '../../packages/tokens/src/semantic.js'
 
 const root = new URL('../../', import.meta.url)
 const html = readFileSync(new URL('site/index.html', root), 'utf8')
@@ -43,8 +44,24 @@ describe('the landing page', () => {
     const compose = readFileSync(new URL('compose.yaml', root), 'utf8')
     const image = /image:\s*(\S+)/.exec(compose)![1]
     const ports = /ports:\s*\[([^\]]+)\]/.exec(compose)![1].replace(/['"]/g, '')
+    // The bracket in the pattern is what keeps this matching the service's inline `volumes:`
+    // rather than the named-volume declaration below it, which has no brackets at all.
+    const volumes = /volumes:\s*\[([^\]]+)\]/.exec(compose)![1].replace(/['"]/g, '')
+    const restart = /restart:\s*(\S+)/.exec(compose)![1]
     expect(html).toContain(image)
     expect(html).toContain(ports.trim())
+    expect(html).toContain(volumes.trim())
+    expect(html).toContain(restart)
+  })
+
+  it('keeps the theme-color metas in sync with the token palette', () => {
+    // These two hex values are copied from the app rather than referenced, since a <meta
+    // content> attribute cannot hold a CSS custom property - the one place on the page where a
+    // colour can drift from the palette with nothing else here to notice.
+    const dark = /<meta name="theme-color" content="(#[0-9A-Fa-f]{6})" media="\(prefers-color-scheme: dark\)"/.exec(html)![1]
+    const light = /<meta name="theme-color" content="(#[0-9A-Fa-f]{6})" media="\(prefers-color-scheme: light\)"/.exec(html)![1]
+    expect(dark).toBe(resolveSemantic('dark')['surface-page'])
+    expect(light).toBe(resolveSemantic('light')['surface-page'])
   })
 
   it('uses only custom properties the token stylesheet defines', () => {
