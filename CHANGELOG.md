@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.19.0](https://github.com/bardesss/haelan/compare/v1.18.0...v1.19.0) (2026-09-13)
+
+
+### Features
+
+* **web:** four bands of active minutes that actually partition the day ([#210](https://github.com/bardesss/haelan/issues/210)) ([5f3a891](https://github.com/bardesss/haelan/commit/5f3a89141662344b76a19711b22ed5a1b943797d))
+
 ## [1.18.0](https://github.com/bardesss/haelan/compare/v1.17.1...v1.18.0) (2026-09-13)
 
 
