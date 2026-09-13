@@ -1,0 +1,123 @@
+<!doctype html>
+<!-- No data-theme: theme.css follows the reader's system and dark is its fallback, exactly as
+     the app's own index.html documents. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hælan — a local mirror for your own health data</title>
+    <meta name="description" content="A self-hosted dashboard and local mirror for your own health data, built on the Google Health API v4. One household, one instance, no telemetry." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.ico" sizes="48x48 32x32 16x16" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <meta name="theme-color" content="#0A0E17" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F5F7FB" media="(prefers-color-scheme: light)" />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <img class="mark" src="mark.svg" alt="" width="72" height="72" />
+      <h1>Hælan</h1>
+      <p class="lede">
+        <em>Hælan</em> is Old English for "to heal, to make whole" — the root of both
+        <em>heal</em> and <em>health</em>. A self-hosted dashboard and local mirror for your own
+        health data, built on the Google Health API v4. One household, one instance, no telemetry,
+        no hosted offering.
+      </p>
+      <p class="actions">
+        <a class="button primary" href="https://github.com/bardesss/haelan#try-it-without-a-google-account">Try it without a Google account</a>
+        <a class="button" href="https://github.com/bardesss/haelan">Source on GitHub</a>
+      </p>
+      <p class="small-screen-note">
+        The dashboard is built for a desktop screen. A small-screen layout is on the roadmap and is
+        not here yet — the screenshots below are the honest preview from a phone.
+      </p>
+    </header>
+
+    <section class="disclosure">
+      <h2>Written by an AI agent</h2>
+      <p>
+        Every line of haelan was written by a coding agent, with a human deciding what got built,
+        what got rejected, and what got merged. That is stated here rather than in a footnote
+        because you are considering pointing this at your own health record.
+      </p>
+      <p>
+        Nothing merges without tests, and every pull request is reviewed by a second agent and by a
+        human. It is also true that no security professional has audited this, and that it has one
+        household's worth of production use.
+      </p>
+    </section>
+
+    <section class="shots">
+      <h2>What it looks like</h2>
+      <figure><img src="screenshots/dashboard.png" alt="The dashboard" loading="lazy" /><figcaption>Dashboard</figcaption></figure>
+      <figure><img src="screenshots/activity.png" alt="The activity page" loading="lazy" /><figcaption>Activity</figcaption></figure>
+      <figure><img src="screenshots/sleep.png" alt="The sleep page" loading="lazy" /><figcaption>Sleep</figcaption></figure>
+      <figure><img src="screenshots/recovery.png" alt="The recovery page" loading="lazy" /><figcaption>Recovery</figcaption></figure>
+      <p class="caption">All four show the demo data the seed script generates, not anybody's real health history.</p>
+    </section>
+
+    <section class="what">
+      <h2>What it does</h2>
+      <h3>A complete local mirror</h3>
+      <p>
+        Your whole history in one SQLite file, kept past Google's retention windows and surviving
+        you losing access to the API. Intraday samples have a shelf life at the source, so a mirror
+        is the only place minute-level history stays available at that resolution.
+      </p>
+      <h3>Eight pages of it</h3>
+      <p>
+        Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes — sleep with
+        stages, workouts with per-split heart rate, and the numbers annotated where a reading is
+        wrong.
+      </p>
+      <h3>Your data, answerable</h3>
+      <p>
+        An MCP server over the same mirror, so an agent you trust can answer questions about your
+        own history. The tool catalogue is generated from what ships, in
+        <a href="https://github.com/bardesss/haelan/blob/master/TOOLS.md">TOOLS.md</a>.
+      </p>
+    </section>
+
+    <section class="why">
+      <h2>Why it is self-hosted</h2>
+      <p>
+        The reason is structural rather than ideological. Google caps an unverified OAuth client at
+        100 users, and clearing verification for health scopes needs a paid third-party security
+        assessment. A hosted dashboard therefore stalls at a hundred signups no matter how good it
+        is. An instance whose only users are the people who own its OAuth client never meets that
+        cap. The cost is that every household brings its own Google Cloud project; the benefit is
+        that no ceiling exists.
+      </p>
+    </section>
+
+    <section class="install">
+      <h2>Run it</h2>
+      <pre><code>services:
+  haelan:
+    image: ghcr.io/bardesss/haelan:latest
+    ports: ['4235:4235']
+    volumes: ['haelan-data:/data']
+    restart: unless-stopped
+volumes:
+  haelan-data:</code></pre>
+      <p>
+        Then open the instance and follow the setup wizard, which walks through the Google Cloud
+        project and the OAuth client it needs. The
+        <a href="https://github.com/bardesss/haelan#readme">README</a> is the full account,
+        including a configuration reference for people who disagree with the defaults.
+      </p>
+    </section>
+
+    <footer>
+      <p>
+        Version {{version}}, released {{releaseDate}} —
+        <a href="https://github.com/bardesss/haelan/releases">releases</a>,
+        <a href="https://github.com/bardesss/haelan/blob/master/CHANGELOG.md">changelog</a>,
+        <a href="https://github.com/bardesss/haelan/blob/master/ROADMAP.md">roadmap</a>.
+      </p>
+      <p>AGPL-3.0-only. No telemetry: this page loads nothing from anyone but the host serving it, and neither does the app.</p>
+    </footer>
+  </body>
+</html>
