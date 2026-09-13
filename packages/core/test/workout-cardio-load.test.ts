@@ -143,6 +143,42 @@ describe('a workout cardio load', () => {
     expect(load.edwards).toBe(100)
   })
 
+  // Both, not either. The case above leaves both fields null, which an `&&` guard would refuse
+  // exactly as an `||` guard does - it proves nothing about which operator is written. Only a
+  // profile with one field set and the other missing tells the two apart.
+  it('answers no Banister with a birthday but no sex', () => {
+    seedPersonAndSource()
+    const session = seedWorkout(FULL_ZONE_ATTRS)
+    seedHeartRate()
+    seedDaily('resting_heart_rate', 52, MERGED_SOURCE)
+    seedDaily('heart_rate_zone_peak_max_bpm', 185, MERGED_SOURCE)
+    new PeopleStore(t.db).setBirthDate('p1', '1985-03-04')
+    // No setSex: k has nothing to come from, so a load computed anyway would be a number nobody
+    // can account for.
+
+    const load = readWorkoutCardioLoad(t.db, { personId: 'p1', session })!
+    expect(load.banister).toBeNull()
+    expect(load.banisterBasis).toBeNull()
+    expect(load.edwards).toBe(100)
+  })
+
+  // The mirror of the case above: sex alone is just as insufficient, because the 220 - age
+  // fallback still needs a birthday even when the zone ceiling is missing too.
+  it('answers no Banister with a sex but no birthday', () => {
+    seedPersonAndSource()
+    const session = seedWorkout(FULL_ZONE_ATTRS)
+    seedHeartRate()
+    seedDaily('resting_heart_rate', 52, MERGED_SOURCE)
+    seedDaily('heart_rate_zone_peak_max_bpm', 185, MERGED_SOURCE)
+    new PeopleStore(t.db).setSex('p1', 'male')
+    // No setBirthDate: no age to compute and no k to withhold it for.
+
+    const load = readWorkoutCardioLoad(t.db, { personId: 'p1', session })!
+    expect(load.banister).toBeNull()
+    expect(load.banisterBasis).toBeNull()
+    expect(load.edwards).toBe(100)
+  })
+
   it('answers no Banister without a resting heart rate for the day', () => {
     seedPersonAndSource()
     const session = seedWorkout(FULL_ZONE_ATTRS)
