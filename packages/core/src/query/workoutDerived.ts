@@ -25,6 +25,14 @@ export function readWorkoutCardioLoad(db: DbOrTx, input: {
   personId: string
   session: WorkoutSession
 }): CardioLoad | null {
+  // readSession deliberately serves sleep rows as well as exercise ones (sessions.ts's own
+  // comment), but a cardio load has no meaning for a night: banisterLoad's own comment explains
+  // that its unfloored exponential, summed over hours just above resting, comes to roughly 70
+  // TRIMP of doing nothing - which is exactly what a sedentary night measures, almost to the
+  // point. The session's kind was never the thing wrong here; the number was. Null is the
+  // correct cardio load for a night, not a thin one.
+  if (input.session.kind !== 'exercise') return null
+
   const detail = workoutDetail(input.session.attrs)
   const zones = detail.zones
   const toMinutes = (seconds: number | null) => (seconds === null ? null : seconds / SECONDS_PER_MINUTE)
@@ -64,6 +72,11 @@ export function readWorkoutSplits(db: DbOrTx, input: {
   personId: string
   session: WorkoutSession
 }): { autoSplits: FilledSplit[], laps: FilledSplit[] } {
+  // Same guard as readWorkoutCardioLoad, and for the same reason: a sleep session's attrs carry no
+  // exercise splits to fill, and filling a lap's heart rate from a night's trace would be an
+  // answer to a question nobody asked of a health record it was never asked about before.
+  if (input.session.kind !== 'exercise') return { autoSplits: [], laps: [] }
+
   const detail = workoutDetail(input.session.attrs)
   // Four workouts in five record neither, so the trace is not read for them at all.
   if (detail.autoSplits.length === 0 && detail.laps.length === 0) {

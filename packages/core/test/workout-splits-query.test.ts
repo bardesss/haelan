@@ -135,4 +135,23 @@ describe('a workout\'s splits, filled', () => {
     const result = readWorkoutSplits(t.db, { personId: 'p1', session })
     expect(result).toEqual({ autoSplits: [], laps: [] })
   })
+
+  // CRITICAL 1's other half. readSession deliberately serves 'sleep' rows as well as 'exercise'
+  // ones, and this reader has to refuse a sleep session for the same reason readWorkoutCardioLoad
+  // does: a night has no exercise splits to fill. Attrs carry a split and heart rate is seeded
+  // across the whole span, so an empty answer here is the kind guard firing before the trace is
+  // ever read, not the "recorded neither" early return above answering for an unrelated reason.
+  it('answers empty arrays for a sleep session, even one whose attrs carry a split', () => {
+    seedPersonAndSource()
+    t.db.insert(sessions).values({
+      id: 'n1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'n1',
+      startMs: START, startOffsetMinutes: OFFSET, endMs: START + 480 * MIN, endOffsetMinutes: OFFSET,
+      localDate: '2026-09-13', attrs: JSON.stringify({ splits: [rawSplit(0, 5)] }), rawPayloadId: null,
+    }).run()
+    const session = readSession(t.db, { personId: 'p1', sessionId: 'n1' })!
+    seedHeartRate(480)
+
+    const result = readWorkoutSplits(t.db, { personId: 'p1', session })
+    expect(result).toEqual({ autoSplits: [], laps: [] })
+  })
 })

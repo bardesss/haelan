@@ -230,4 +230,52 @@ describe('a workout cardio load', () => {
     const load = readWorkoutCardioLoad(t.db, { personId: 'p1', session })!
     expect(load).toEqual({ edwards: 100, banister: null, banisterBasis: null })
   })
+
+  // CRITICAL 1. readSession deliberately serves 'sleep' rows as well as 'exercise' ones
+  // (sessions.ts's own comment), and before this branch's guard nothing here ever asked which one
+  // it had been handed: a 480-minute night, resting 52, ceiling 185, heart rate 62-71, answered
+  // roughly 65 TRIMP - banisterLoad's own comment on why Banister never runs for a whole day
+  // reproduced almost exactly, on a health record, over the most sedentary span a person has. The
+  // session's kind was never wrong; the number was. Nothing before this task ever mounted a sleep
+  // session against this reader at all - the full profile and a night's worth of heart rate are
+  // seeded here specifically so a null answer is the guard firing, not an absent input upstream of
+  // it.
+  describe('for a sleep session', () => {
+    const NIGHT_MINUTES = 480
+
+    function seedNight(): WorkoutSession {
+      t.db.insert(sessions).values({
+        id: 'n1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'n1',
+        startMs: START_MS, startOffsetMinutes: OFFSET,
+        endMs: START_MS + NIGHT_MINUTES * 60_000, endOffsetMinutes: OFFSET,
+        localDate: LOCAL_DATE, attrs: '{}', rawPayloadId: null,
+      }).run()
+      return readSession(t.db, { personId: 'p1', sessionId: 'n1' })!
+    }
+
+    // One reading a minute, 62-71 bpm repeating: the resting-adjacent range the finding's own
+    // reproduction names, over the night's full span.
+    function seedNightHeartRate(): void {
+      for (let i = 0; i < NIGHT_MINUTES; i += 1) {
+        for (const agg of ['min', 'mean', 'max'] as const) {
+          insertSample(t.db, {
+            personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
+            utcMs: START_MS + i * 60_000, tzOffsetMinutes: OFFSET, agg, value: 62 + (i % 10),
+          })
+        }
+      }
+    }
+
+    it('answers null rather than a Banister sum over the night, with a full profile present', () => {
+      seedPersonAndSource()
+      const session = seedNight()
+      seedNightHeartRate()
+      new PeopleStore(t.db).setBirthDate('p1', '1985-03-04')
+      new PeopleStore(t.db).setSex('p1', 'male')
+      seedDaily('resting_heart_rate', 52, PROVIDER_SOURCE)
+      seedDaily('heart_rate_zone_peak_max_bpm', 185, PROVIDER_SOURCE)
+
+      expect(readWorkoutCardioLoad(t.db, { personId: 'p1', session })).toBeNull()
+    })
+  })
 })
