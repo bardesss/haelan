@@ -7,6 +7,8 @@ import { DEFAULT_NIGHT_GAP_MINUTES } from '../src/derive/sleep.ts'
 import { DEFAULT_OVERLAP_RATIO } from '../src/derive/sessionOverlap.ts'
 import { downsampleToMinute } from '../src/api/downsample.ts'
 import type { SampleRow } from '../src/api/mapSamples.ts'
+import type { OverrideLike } from '../src/derive/overrides.ts'
+import { dayMetricTarget } from '../src/derive/targetKey.ts'
 
 import { createTestDatabase, insertSample, seedDerivableDay } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
@@ -31,6 +33,11 @@ const tuning = {
   overlapRatio: DEFAULT_OVERLAP_RATIO,
   nowMs: 1,
 }
+
+// Same shape overrides.test.ts builds an OverrideLike from directly, rather than going through
+// OverrideStore: deriveDayInto takes the plain array, and this is the plainest way to make one.
+const exclude = (scope: OverrideLike['scope'], targetKey: string): OverrideLike =>
+  ({ scope, targetKey, action: 'exclude', correctedValue: null })
 
 describe('deriveDayInto', () => {
   test('writes a day\'s derived rows through the handle it is given', () => {
@@ -88,5 +95,35 @@ describe('deriveDayInto', () => {
     const rows = db.select().from(daily)
       .where(and(eq(daily.personId, personId), eq(daily.localDate, localDate))).all()
     expect(rows).toEqual([])
+  })
+
+  // The load stands on the zone minutes. Excluding one zone and keeping another must leave the
+  // load computed from what actually survived - not the tautology of filtering the input in the
+  // test itself, but the real wiring: excludedMetrics reading a real override, applyToDay
+  // dropping the light zone's row before deriveCardioLoadDay ever sees it.
+  test('excludes a thrown-out zone from the cardio load it stamps into the day', () => {
+    const { db, personId, localDate } = seedDay()
+
+    const zoneAt = (zone: string, value: number) => ({
+      personId, sourceId: 'watch', metric: `time_in_heart_rate_zone_${zone}_minutes`,
+      utcMs: Date.parse(`${localDate}T09:00:00Z`), value,
+    })
+    insertSample(db, zoneAt('light', 10))
+    insertSample(db, zoneAt('moderate', 10))
+
+    const overrides: OverrideLike[] = [
+      exclude('day_metric', dayMetricTarget({ localDate, metric: 'time_in_heart_rate_zone_light_minutes' })),
+    ]
+
+    db.transaction((tx) => deriveDayInto(tx, { personId, localDate, ...tuning, overrides }))
+
+    const loadRows = db.select().from(daily).where(and(
+      eq(daily.personId, personId), eq(daily.localDate, localDate), eq(daily.metric, 'cardio_load_edwards'),
+    )).all()
+
+    // Edwards weighs moderate minutes at 2, so 10 surviving moderate minutes alone is a load of
+    // 20 - the 10 excluded light minutes, weighted at 1, never reach it. Both the per source row
+    // and the merged row (this day has one source, so the merge is a no-op) read the same way.
+    expect(Object.fromEntries(loadRows.map((r) => [r.source, r.value]))).toEqual({ watch: 20, merged: 20 })
   })
 })

@@ -14,6 +14,7 @@ import type { SleepSessionLike } from './sleep.ts'
 import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
+import { deriveCardioLoadDay } from './cardioLoad.ts'
 
 export interface DeriveDayInput {
   personId: string
@@ -167,8 +168,20 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
   })
 
   const excluded = excludedMetrics(personOverrides, input.localDate)
+
+  // Computed from the zone rows that survive exclusion, not from the ones before it. A person who
+  // threw out a day's zone minutes threw out the load computed from them, and reading the
+  // unfiltered list here would leave the load standing on numbers no longer on any chart.
+  // applyToDay is a pure filter, so running it twice costs one pass and cannot differ from itself.
+  const cardioLoad = deriveCardioLoadDay({
+    personId: input.personId,
+    localDate: input.localDate,
+    rows: applyToDay([...derived, ...merged], excluded),
+  })
+
   const rows = applyToDay(
-    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceExercise, ...mergedExercise],
+    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceExercise,
+      ...mergedExercise, ...cardioLoad],
     excluded,
   )
 
