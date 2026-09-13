@@ -1,6 +1,32 @@
 import { ApiError } from '../api/apiError.js'
 import { canonicalUrl } from './canonicalUrl.js'
 import { applyOverlay, createOverlay, writeThrough } from './overlay.js'
+import { detectDemoLang } from './lang.js'
+
+/**
+ * What a demo visitor reads when they trigger an action this static build has no meaning for
+ * (signing out, a sync run, backup, reclaim, or any write `writeThrough` does not implement).
+ *
+ * Localised, and never the raw method/path: four settings surfaces interpolate this straight into
+ * their own `{{reason}}` copy (settings.profile.failed, settings.mcp.failed,
+ * settings.mcp.revokeFailed, settings.members.resetFailed - the seeded session carries
+ * `isAdmin: true`, so a demo visitor can reach every one of them), the same way the rest of a
+ * Dutch reader's page is Dutch, and `PUT /api/v1/p/demo/profile` is not a sentence in either
+ * language a reader asked to read. DemoBanner.tsx is translated for the identical reason; the two
+ * share `detectDemoLang` (lang.ts) rather than each keeping their own copy of the detection.
+ */
+const DEMO_REFUSAL_REASON: Record<'en' | 'nl', string> = {
+  en: 'this demo has no server behind it, so nothing was actually changed',
+  nl: 'deze demo heeft geen server erachter, dus er is niets echt gewijzigd',
+}
+
+/** In the visitor's own language. Exported so entry.tsx's own click handler - the download link
+ *  ControlRow renders as a plain `<a href="/api/...">`, never through apiSend at all - can show
+ *  the identical refusal a sync run gets, rather than inventing a second wording for the same
+ *  fact. */
+export function demoRefusalMessage(): string {
+  return DEMO_REFUSAL_REASON[detectDemoLang()]
+}
 
 export { ApiError } from '../api/apiError.js'
 export type { ApiErrorKind } from '../api/apiError.js'
@@ -83,7 +109,7 @@ export function createDemoTransport(loadJson: LoadJson): DemoTransport {
         // affectedRangeFor throws for a malformed target key, for instance - is a real write that
         // was attempted and rejected, and must reach the caller unchanged.
         if (error instanceof ApiError && error.kind === 'not_found') {
-          throw new ApiError('config', 400, `this demo cannot perform ${method} ${path} - it has no server behind it to change`)
+          throw new ApiError('config', 400, DEMO_REFUSAL_REASON[detectDemoLang()])
         }
         throw error
       }
