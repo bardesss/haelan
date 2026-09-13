@@ -361,6 +361,27 @@ describe('the Sleep page', () => {
     restore()
   })
 
+  // Task 2 review: NightList used to be handed the page's own raw `controls`, not `resolved` like
+  // every other query here. stubSleep's /series points carry no sourceMix, so `sources` (built off
+  // that response, above) is always empty here, which makes any URL source but the sentinel itself
+  // "a source this person's series responses have never reported" - exactly the stale-link and
+  // removed-device case Activity.tsx's own SessionList mount guards against by reading `resolved`
+  // too. Against the raw-`controls` version this fails: the nights query NightList issued carried
+  // `source=phantom-device` literally, disagreeing with the all-sources view every other card and
+  // the control row itself were showing.
+  it('resolves an unrecognised source to all sources before asking for nights, the same as every other request here', async () => {
+    const urls: string[] = []
+    const restore = stubSleep(urls)
+    window.history.replaceState(null, '', '/sleep?source=phantom-device')
+    const { client, tree } = withQuery(<Sleep />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const nights = urls.filter((u) => u.includes('/sleep/nights'))
+    expect(nights.length > 0, urls.join('\n')).toBe(true)
+    for (const url of nights) expect(url).not.toContain('source=')
+    restore()
+  })
+
   // Only three requests regardless of eleven cards: /series takes one agg per call, and this page
   // groups its metrics into sum, last and count, the same REQUESTS/under('agg') shape Recovery.tsx
   // and Activity.tsx already use.

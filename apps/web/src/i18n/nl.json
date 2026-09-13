@@ -500,8 +500,13 @@
       "notStaged": "Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen."
     },
     "hrTooltip": {
-      "mean": "gemiddeld {{value}} bpm",
-      "range": "bereik {{min}} tot {{max}} bpm"
+      "mean": "gemiddeld {{value}} {{unit}}",
+      "range": "bereik {{min}} tot {{max}} {{unit}}"
+    },
+    "units": {
+      "bpm": "bpm",
+      "percent": "%",
+      "milliseconds": "ms"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
@@ -629,6 +634,49 @@
       "label": "Slaapschema",
       "basis_one": "bedtijd en wektijd, {{count}} nacht",
       "basis_other": "bedtijd en wektijd, {{count}} nachten"
+    },
+    "nights": {
+      "label": "Nachten",
+      "count_one": "{{count}} geregistreerde nacht in deze periode",
+      "count_other": "{{count}} geregistreerde nachten in deze periode",
+      "basis": "één rij per datum, waarbij de langste opname wint als twee apparaten dezelfde nacht rapporteerden",
+      "clock": "{{bed}} tot {{wake}}",
+      "excluded_one": "{{count}} sessie uitgesloten",
+      "excluded_other": "{{count}} sessies uitgesloten",
+      "emptyTitle": "Geen nachten in deze periode",
+      "emptyDetail": "Er is niets geregistreerd, of de synchronisatie heeft deze datums nog niet bereikt."
+    },
+    "night": {
+      "when": "{{bed}} tot {{wake}} · {{source}}",
+      "missingTitle": "Geen nacht geregistreerd",
+      "missingDetail": "Voor deze datum is geen slaap van deze bron geregistreerd. Mogelijk is er nog niet gesynchroniseerd.",
+      "tiles": {
+        "asleep": "Tijd in slaap", "inBed": "Tijd in bed", "efficiency": "Efficiëntie",
+        "deep": "Diep", "light": "Licht", "rem": "REM", "awake": "Tijd wakker", "naps": "Dutjes"
+      },
+      "tileBasis": "op basis van {{metric}}, zoals deze nacht is afgeleid",
+      "stages": { "label": "Slaapfasen tijdens de nacht" },
+      "naps": {
+        "none": "Geen dutjes geregistreerd op deze datum.",
+        "list": "Dutjes:"
+      },
+      "traces": {
+        "heart_rate": "Hartslag tijdens de nacht",
+        "spo2": "Zuurstofsaturatie tijdens de nacht",
+        "hrv": "Hartslagvariabiliteit tijdens de nacht",
+        "metricNames": {
+          "heart_rate": "hartslag",
+          "spo2": "zuurstofsaturatie",
+          "hrv": "hartslagvariabiliteit"
+        },
+        "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+      },
+      "sessions": {
+        "label": "Sessies in deze nacht",
+        "basis": "een nacht wordt samengesteld uit deze registraties; door er een uit te sluiten wordt de nacht opnieuw afgeleid zonder die registratie",
+        "exclude": "Uitsluiten of notitie toevoegen",
+        "excluded": "Uitgesloten"
+      }
     }
   },
   "setup": {

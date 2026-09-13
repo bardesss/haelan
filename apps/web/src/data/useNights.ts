@@ -63,16 +63,28 @@ export function nightsPath(personId: string, range: { from: string, to: string, 
   return `/api/v1/p/${personId}/sleep/nights?${params.toString()}`
 }
 
+/**
+ * `options.enabled` is separate from `range` the way useSessions' own is: whether a caller wants
+ * the request at all is not a fact about which range to fetch, and folding it into `range` would
+ * put it in the cache key and cycle the entry every time it flipped.
+ *
+ * Its one caller so far is NightDetail, which has no date to ask for until the route parameter
+ * itself has resolved: without this half of the guard, an undefined `localDate` there computes an
+ * empty `{ from: '', to: '' }` range and this hook would fire that as a real request the moment
+ * personId alone was ready, `?from=&to=`, rather than waiting on the route's own fact to also be
+ * true.
+ */
 export function useNights(
   range: { from: string, to: string, source: string },
+  options?: { enabled?: boolean },
 ): UseQueryResult<{ items: Night[], cursor: string | null }> {
   const session = useSession()
   const personId = session.data?.personId
   return useQuery({
     queryKey: queryKeys.resource(personId ?? '', 'sleep-nights', range),
-    // Without this the hook would request /api/v1/p/undefined/sleep/nights on first render, which
+    // Without the personId half this requests /api/v1/p/undefined/sleep/nights on first render, which
     // the server answers 404 for and which then sits in the cache under a key naming no person.
-    enabled: personId !== undefined,
+    enabled: personId !== undefined && (options?.enabled ?? true),
     queryFn: () => apiGet<{ items: Night[], cursor: string | null }>(nightsPath(personId!, range)),
   })
 }

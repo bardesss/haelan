@@ -500,8 +500,13 @@
       "notStaged": "This night was not staged, so there is nothing to total."
     },
     "hrTooltip": {
-      "mean": "mean {{value}} bpm",
-      "range": "range {{min}} to {{max}} bpm"
+      "mean": "mean {{value}} {{unit}}",
+      "range": "range {{min}} to {{max}} {{unit}}"
+    },
+    "units": {
+      "bpm": "bpm",
+      "percent": "%",
+      "milliseconds": "ms"
     },
     "tooltip": {
       "line": "{{label}}: {{value}}"
@@ -629,6 +634,49 @@
       "label": "Sleep schedule",
       "basis_one": "bed and wake time, {{count}} night",
       "basis_other": "bed and wake time, {{count}} nights"
+    },
+    "nights": {
+      "label": "Nights",
+      "count_one": "{{count}} recorded night in this period",
+      "count_other": "{{count}} recorded nights in this period",
+      "basis": "one row per date, the longer recording winning when two devices reported the same night",
+      "clock": "{{bed}} to {{wake}}",
+      "excluded_one": "{{count}} session excluded",
+      "excluded_other": "{{count}} sessions excluded",
+      "emptyTitle": "No nights in this period",
+      "emptyDetail": "Nothing was recorded, or the sync has not reached these dates yet."
+    },
+    "night": {
+      "when": "{{bed}} to {{wake}} · {{source}}",
+      "missingTitle": "No night recorded",
+      "missingDetail": "This date has no sleep from this source. It may not have synced yet.",
+      "tiles": {
+        "asleep": "Time asleep", "inBed": "Time in bed", "efficiency": "Efficiency",
+        "deep": "Deep", "light": "Light", "rem": "REM", "awake": "Time awake", "naps": "Naps"
+      },
+      "tileBasis": "from {{metric}}, as this night was derived",
+      "stages": { "label": "Stages through the night" },
+      "naps": {
+        "none": "No naps recorded on this date.",
+        "list": "Naps:"
+      },
+      "traces": {
+        "heart_rate": "Heart rate through the night",
+        "spo2": "Blood oxygen through the night",
+        "hrv": "Heart rate variability through the night",
+        "metricNames": {
+          "heart_rate": "heart rate",
+          "spo2": "blood oxygen",
+          "hrv": "heart rate variability"
+        },
+        "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}"
+      },
+      "sessions": {
+        "label": "Sessions in this night",
+        "basis": "a night is assembled from these recordings; excluding one re-derives the night without it",
+        "exclude": "Exclude or add a note",
+        "excluded": "Excluded"
+      }
     }
   },
   "setup": {

@@ -76,11 +76,17 @@ afterEach(() => {
  *
  * `eventMarks` defaults to none: every existing caller of this helper wants the plain per-source
  * option, and only the series-order test below needs the appended events series at all.
+ *
+ * `metric` defaults to unset, matching every existing caller of this helper - Dashboard's own
+ * heart_rate call site - so the component falls back to its own default; NightTraces.tsx's
+ * spo2/hrv cards are the only reason this parameter exists at all (the "metric-specific
+ * formatting" tests below).
  */
 function optionForPoints(
   points: IntradayPoint[],
   namedSources: NamedSource[],
   eventMarks: readonly { atMs: number }[] = [],
+  metric?: string,
 ): EChartsOption {
   const session: Session = {
     personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC', connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
@@ -92,7 +98,8 @@ function optionForPoints(
     root!.render(
       <I18nProvider lng="en">
         <QueryClientProvider client={client}>
-          <IntradayHeartRate points={points} reduction={null} label="Heart rate" eventMarks={eventMarks} />
+          <IntradayHeartRate points={points} reduction={null} label="Heart rate"
+            eventMarks={eventMarks} metric={metric} />
         </QueryClientProvider>
       </I18nProvider>,
     )
@@ -258,6 +265,50 @@ describe('source names in the intraday heart rate chart', () => {
     const html = formatter([{ seriesName: 'My watch', seriesIndex: 2, dataIndex: 0 }])
     expect(html).toContain('My watch')
     expect(html).not.toContain('src-hex-id')
+  })
+})
+
+// Task 6 review finding: every formatMetricValue call in IntradayHeartRate.tsx and both
+// charts.hrTooltip catalogue strings were hardcoded to heart_rate, so an spo2 or hrv trace
+// (NightTraces.tsx, the reason this chart takes a `metric` prop at all) rendered at heart rate's
+// own precision (0 decimals) and said "bpm" in the tooltip and the accessible table regardless of
+// what it was actually showing. spo2's own catalogue entry (packages/core/src/derive/metrics.ts)
+// is precision 1, unit percent - the case this section pins.
+describe('IntradayHeartRate formats by its own metric, not always heart_rate', () => {
+  // Every field given its own non-integer value, rounding in different directions, so a fix that
+  // only handled one of the three (or only the tooltip, or only the table) would not pass this.
+  const SPO2_POINT: IntradayPoint =
+    { sourceId: 'watch', utcMs: 0, min: 94.24, mean: 96.5, max: 98.71, n: 1, excluded: false }
+
+  it("rounds to spo2's own precision and names its own unit in the tooltip, not heart rate's", () => {
+    const option = optionForPoints([SPO2_POINT], [], [], 'spo2')
+    const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter
+    const html = formatter([{ seriesIndex: 2, dataIndex: 0 }])
+    // spo2's own precision (one decimal) and unit ("%") - heart_rate's own precision (zero
+    // decimals) and "bpm" would instead read "mean 97 bpm" and "range 94 to 99 bpm" here.
+    expect(html).toContain('mean 96.5 %')
+    expect(html).toContain('range 94.2 to 98.7 %')
+  })
+
+  it("rounds the accessible table to spo2's own precision too, not just the tooltip", () => {
+    optionForPoints([SPO2_POINT], [], [], 'spo2')
+    const table = container!.querySelector('table.sr-only')!
+    // Row cells after the row header (time, rendered as <th scope="row">): source, minimum, mean,
+    // maximum, note, in that order (IntradayHeartRate.tsx's own `rows` builder).
+    const cells = [...table.querySelectorAll('td')].map((td) => td.textContent)
+    expect(cells[1]).toBe('94.2')
+    expect(cells[2]).toBe('96.5')
+    expect(cells[3]).toBe('98.7')
+  })
+
+  it('still rounds to heart_rate\'s own precision and says "bpm" when no metric is given', () => {
+    // Dashboard's own call site never names a metric - this is the default this whole fix must
+    // not disturb.
+    const option = optionForPoints(
+      [{ sourceId: 'watch', utcMs: 0, min: 55, mean: 60.4, max: 65, n: 1, excluded: false }], [],
+    )
+    const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter
+    expect(formatter([{ seriesIndex: 2, dataIndex: 0 }])).toContain('mean 60 bpm')
   })
 })
 

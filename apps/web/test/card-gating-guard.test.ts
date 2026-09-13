@@ -25,11 +25,12 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 // wraps exactly one query over a resource that carries no metric and no points, so there is
 // nothing for MetricCard's own `metric`/`points` contract to gate. SessionList.tsx is in the same
 // position and is simply never seen here, since it lives one directory down in pages/activity/ and
-// this guard only reads pages/ itself; WorkoutDetail.tsx (M8b) cannot borrow that same exemption by
-// address, because it is the route's own top-level page - routes.tsx names it directly, the same as
-// every other entry in pages/ - so it sits exactly where this guard looks and needs to be excused
-// by name instead.
-const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx'])
+// this guard only reads pages/ itself; WorkoutDetail.tsx (M8b) and NightDetail.tsx (M8c, gated on
+// useNights rather than a metric and its points, the same shape) cannot borrow that same exemption
+// by address, because each is a route's own top-level page - routes.tsx names it directly, the same
+// as every other entry in pages/ - so it sits exactly where this guard looks and needs to be
+// excused by name instead.
+const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx'])
 
 // What this actually checks, read honestly: not "no card hand rolls gating" (it is file
 // granularity, so a page hand rolling two of its eight cards and routing the other six through

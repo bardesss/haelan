@@ -9,6 +9,7 @@ import { Nutrition } from './pages/Nutrition.js'
 import { Notes } from './pages/Notes.js'
 import { Settings } from './pages/Settings.js'
 import { WorkoutDetail } from './pages/WorkoutDetail.js'
+import { NightDetail } from './pages/NightDetail.js'
 
 /** `rail` names the rail item a route belongs under, for the routes the rail cannot list itself.
  *  A parameterised path can never be a rail destination (there is no session id to link to), and
@@ -16,6 +17,7 @@ import { WorkoutDetail } from './pages/WorkoutDetail.js'
 export interface Route { path: string, element: ReactNode, rail?: string }
 
 export const WORKOUT_ROUTE = '/activity/:sessionId'
+export const NIGHT_ROUTE = '/sleep/night/:localDate'
 
 // `/` renders Dashboard because it is the Dashboard, which is a different thing from every other
 // entry here, each of which owns one page component. `/settings` was the exception to that until
@@ -38,4 +40,5 @@ export const ROUTES: readonly Route[] = [
   { path: '/notes', element: <Notes /> },
   { path: '/settings', element: <Settings /> },
   { path: WORKOUT_ROUTE, element: <WorkoutDetail />, rail: '/activity' },
+  { path: NIGHT_ROUTE, element: <NightDetail />, rail: '/sleep' },
 ]

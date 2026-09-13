@@ -8,7 +8,7 @@ import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { useWorkoutTrace } from '../src/data/useWorkoutTrace.js'
+import { useSourceTrace } from '../src/data/useSourceTrace.js'
 import { flush, pumpUntil } from './flush.js'
 
 // The rule this file exists for, from the design: 189 of 198 measured sessions are answered by the
@@ -64,7 +64,7 @@ function stub(answers: Record<string, unknown[]>): () => void {
 }
 
 function Probe({ chosenSource, seen }: { chosenSource: string | null, seen: { current: unknown } }) {
-  const trace = useWorkoutTrace({
+  const trace = useSourceTrace({
     metric: 'heart_rate',
     startMs: Date.UTC(2026, 7, 3, 6, 0), endMs: Date.UTC(2026, 7, 3, 6, 54),
     sessionSourceId: 'watch', chosenSource,

@@ -4,7 +4,7 @@ import { Card } from '../../components/Card.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { IntradayHeartRate, intradayBasis } from '../../charts/IntradayHeartRate.js'
-import { useWorkoutTrace } from '../../data/useWorkoutTrace.js'
+import { useSourceTrace } from '../../data/useSourceTrace.js'
 import { useSourceNames } from '../../data/useSourceNames.js'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
 import type { WorkoutSession } from '../../data/useSessions.js'
@@ -16,7 +16,7 @@ const PAUSE = 'PAUSE'
 
 /**
  * The workout's heart rate trace, pinned to the device that recorded the workout unless that
- * device logged nothing in the window (useWorkoutTrace's own comment measures and justifies the
+ * device logged nothing in the window (useSourceTrace's own comment measures and justifies the
  * fallback rule) - plus a marker at each PAUSE instant, never shading, since the archive supplies
  * one end of a pause and never the other (IntradayHeartRate's own comment on eventMarks).
  */
@@ -27,7 +27,7 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
 }) {
   const { t } = useTranslation()
   const { nameOf } = useSourceNames()
-  const trace = useWorkoutTrace({
+  const trace = useSourceTrace({
     metric: TRACE_METRIC, startMs: session.startMs, endMs: session.endMs,
     sessionSourceId: session.sourceId, chosenSource,
   })
@@ -54,7 +54,7 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
     return <Card span={12} label={t('activity.workout.trace.label')}><Loading /></Card>
   }
   // Absent, not an empty chart: nobody recorded a heart rate in this window, and the fallback has
-  // already been tried (useWorkoutTrace's own rule), so there is nothing to draw and no claim to
+  // already been tried (useSourceTrace's own rule), so there is nothing to draw and no claim to
   // make about it beyond the card not being there.
   if (trace.points.length === 0) return null
 

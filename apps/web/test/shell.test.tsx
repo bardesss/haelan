@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Sidebar, RAIL_PATHS } from '../src/components/Sidebar.js'
-import { ROUTES } from '../src/routes.js'
+import { ROUTES, NIGHT_ROUTE } from '../src/routes.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Sleep } from '../src/pages/Sleep.js'
@@ -12,6 +12,7 @@ import { Nutrition } from '../src/pages/Nutrition.js'
 import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
+import { NightDetail } from '../src/pages/NightDetail.js'
 
 describe('the navigation rail', () => {
   it('links to a real path rather than to a fragment, so a link can be opened in a new tab', () => {
@@ -51,7 +52,7 @@ describe('the route table', () => {
   it('has an entry for every page the design names', () => {
     expect(ROUTES.map((r) => r.path).sort()).toEqual(
       ['/', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition', '/recovery',
-        '/settings', '/sleep', '/weight'].sort(),
+        '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
     )
   })
 
@@ -87,6 +88,7 @@ describe('the route table', () => {
       '/notes': Notes,
       '/settings': Settings,
       '/activity/:sessionId': WorkoutDetail,
+      [NIGHT_ROUTE]: NightDetail,
     }
     for (const route of ROUTES) {
       const element = route.element as { type: unknown }

@@ -4,7 +4,7 @@ import { ALL_SOURCES } from '../controls/source.js'
 
 export type TraceSource = 'pinnedSource' | 'otherSources'
 
-export interface WorkoutTrace {
+export interface SourceTrace {
   points: IntradayPoint[]
   reduction: IntradayResult['reduction']
   traceSource: TraceSource
@@ -16,8 +16,10 @@ export interface WorkoutTrace {
 }
 
 /**
- * Which source a workout's trace asks for. The route takes startMs, endMs and source and NO session
- * id, so it has no recording device to default to and cannot make this choice; the caller must.
+ * Which source an intraday trace over a span asks for. The window route takes startMs, endMs and
+ * source and NO session id, so it has no recording device to default to and cannot make this
+ * choice; the caller must, from whatever span and source it already has to hand - a workout's own
+ * session, or a night assembled per (localDate, sourceId).
  *
  * Measured 2026-09-12 across 198 exercise sessions, counting which sources hold heart_rate inside
  * each session's span: 189 own device only, 2 own and another, 5 ANOTHER DEVICE ONLY, 2 with no
@@ -34,15 +36,23 @@ export interface WorkoutTrace {
  * `get_workout` (apps/server/src/mcp/tools/workouts.ts) implements the same rule and reports which
  * branch ran in its own `traceSource` field. The two surfaces must not diverge: this hook's four
  * cases are the same four that tool's tests pin.
+ *
+ * The workout page (WorkoutTrace.tsx) was this hook's first caller, keyed on a session's own span
+ * and its own recording device. The night page (NightTraces.tsx) is its second: a Night is
+ * assembled per (localDate, sourceId), so its own source is exactly as capable of having recorded
+ * nothing as a workout's is, and the rule above applies unchanged - only the span and the source it
+ * is pinned to differ. Renamed from useWorkoutTrace to useSourceTrace for that reason, rather than
+ * giving the night page its own copy: two copies of a source-fallback rule is how the two surfaces
+ * come to disagree about it.
  */
-export function useWorkoutTrace(args: {
+export function useSourceTrace(args: {
   metric: string
   startMs: number
   endMs: number
   sessionSourceId: string
   /** The source the reader named, or null when they named none. */
   chosenSource: string | null
-}): WorkoutTrace {
+}): SourceTrace {
   const pinnedSourceId = args.chosenSource ?? args.sessionSourceId
   const pinned = useIntradayWindow({
     metric: args.metric, startMs: args.startMs, endMs: args.endMs, source: pinnedSourceId,

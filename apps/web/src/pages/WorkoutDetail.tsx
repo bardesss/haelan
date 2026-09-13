@@ -106,14 +106,14 @@ export function WorkoutDetail() {
   }
 
   // The reader's own choice, when they arrived carrying one; null otherwise. Read from the URL
-  // rather than from a control row: this page has none, and useWorkoutTrace's fallback rule turns
+  // rather than from a control row: this page has none, and useSourceTrace's fallback rule turns
   // on whether the READER chose a source, which only the URL can say here.
   //
   // Routed through resolveSource, like every sibling page (Activity.tsx, Dashboard.tsx, Health.tsx,
   // Recovery.tsx, Sleep.tsx, Weight.tsx): a link can name a source this person does not have, and a
   // source can be removed after a link was made, and both must read as the all-sources view, not as
   // an explicit (and therefore unfalling-back) choice of a device that will never answer. Final
-  // review finding - as shipped, an unknown source id suppressed useWorkoutTrace's fallback rule and
+  // review finding - as shipped, an unknown source id suppressed useSourceTrace's fallback rule and
   // made the trace card vanish, which reads as "no heart rate was recorded", the exact false claim
   // that rule exists to prevent.
   const chosenSourceParam = readQuery(route.split('?')[1] ?? '').get('source')
