@@ -32,7 +32,7 @@ afterEach(() => {
 
 const SESSION: Session = {
   personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
-  timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false,
+  timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false,
   baseUrl: 'http://localhost:4235',
 }
 
@@ -87,6 +87,7 @@ function click(el: Element): void {
 }
 
 const fields = (): HTMLInputElement[] => [...container!.querySelectorAll('input')] as HTMLInputElement[]
+const sexSelect = (): HTMLSelectElement => container!.querySelector('select') as HTMLSelectElement
 const saveButton = (): HTMLButtonElement => container!.querySelector('form button[type="submit"]') as HTMLButtonElement
 const passwordForm = (): Element => container!.querySelectorAll('form')[1]!
 
@@ -114,9 +115,10 @@ const json = (status: number, payload: unknown) =>
   new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
 
 describe('the profile section', () => {
-  it('shows the session\'s own name, username and time zone', () => {
+  it('shows the session\'s own name, username, time zone, birthday and sex', () => {
     mountSection()
-    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', ''])
+    expect(fields().map((f) => f.value)).toEqual(['Robin', 'robin', 'Europe/Amsterdam', '', '', ''])
+    expect(sexSelect().value).toBe('')
   })
 
   // Written after a catalogue key landed under the wrong section and this panel rendered
@@ -126,7 +128,75 @@ describe('the profile section', () => {
     mountSection()
     expect(container!.innerHTML).not.toMatch(/\bsettings\.[a-zA-Z][a-zA-Z.]*\b/)
     expect([...container!.querySelectorAll('.field .label')].map((n) => n.textContent))
-      .toEqual(['Name', 'Username', 'Time zone', 'Current password', 'New password'])
+      .toEqual(['Name', 'Username', 'Time zone', 'Birthday', 'Sex', 'Current password', 'New password'])
+  })
+
+  // The sentence that justifies asking for either field in the first place - not decoration, the
+  // deliverable this task exists for.
+  it('says what the two fields are for', () => {
+    mountSection()
+    expect(container!.textContent).toContain('Used only to compute your cardio load. Nothing else reads them, and you can clear them at any time.')
+  })
+
+  // Unlike the timezone control directly above them: nothing derived reads either field, so no
+  // warning is owed regardless of what either control holds.
+  it('carries no rebuild warning for either the birthday or the sex control', () => {
+    mountSection()
+    type(fields()[3]!, '1985-03-04')
+    act(() => {
+      sexSelect().value = 'male'
+      sexSelect().dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    expect(container!.querySelector('.profile-warning')).toBeNull()
+  })
+
+  it('saves a birthday and a sex with the rest of the profile', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: '1985-03-04', sex: 'male', rebuildPending: false,
+    }))
+    const client = mountSection()
+
+    type(fields()[3]!, '1985-03-04')
+    act(() => {
+      sexSelect().value = 'male'
+      sexSelect().dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]).toMatchObject({
+      method: 'PUT',
+      url: '/api/profile',
+      body: { birthDate: '1985-03-04', sex: 'male' },
+    })
+  })
+
+  it('clears a stored birthday and sex back to null', async () => {
+    const api = mockProfileApi(() => json(200, {
+      displayName: 'Robin', username: 'robin', timezone: 'Europe/Amsterdam',
+      birthDate: null, sex: null, rebuildPending: false,
+    }))
+    const client = mountSection({ birthDate: '1985-03-04', sex: 'male' })
+
+    expect(fields()[3]!.value).toBe('1985-03-04')
+    expect(sexSelect().value).toBe('male')
+
+    type(fields()[3]!, '')
+    act(() => {
+      sexSelect().value = ''
+      sexSelect().dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    click(saveButton())
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    expect(api.requests[0]).toMatchObject({
+      method: 'PUT',
+      url: '/api/profile',
+      body: { birthDate: null, sex: null },
+    })
   })
 
   it('offers nothing to save until something is actually different', () => {
@@ -212,8 +282,8 @@ describe('changing your own password', () => {
     const api = mockProfileApi(() => new Response(null, { status: 204 }))
     const client = mountSection()
 
-    type(fields()[3]!, 'a good long password')
-    type(fields()[4]!, 'an even better password')
+    type(fields()[4]!, 'a good long password')
+    type(fields()[5]!, 'an even better password')
     click(passwordForm().querySelector('button[type="submit"]')!)
     await flush(client, () => container!.innerHTML)
     api.restore()
@@ -225,7 +295,7 @@ describe('changing your own password', () => {
     })
     expect(container!.querySelector('.profile-result')?.textContent).toContain('still signed in')
     // Cleared on success, so neither password is left sitting in a field on a shared screen.
-    expect([fields()[3]!.value, fields()[4]!.value]).toEqual(['', ''])
+    expect([fields()[4]!.value, fields()[5]!.value]).toEqual(['', ''])
   })
 
   it('names the wrong current password rather than echoing a bare refusal', async () => {
@@ -234,20 +304,20 @@ describe('changing your own password', () => {
     }))
     const client = mountSection()
 
-    type(fields()[3]!, 'not my password')
-    type(fields()[4]!, 'an even better password')
+    type(fields()[4]!, 'not my password')
+    type(fields()[5]!, 'an even better password')
     click(passwordForm().querySelector('button[type="submit"]')!)
     await flush(client, () => container!.innerHTML)
     api.restore()
 
     expect(container!.querySelector('.field-error')?.textContent).toBe('That is not your current password.')
     // Still in the field, because the next thing the reader does is correct it.
-    expect(fields()[3]!.value).toBe('not my password')
+    expect(fields()[4]!.value).toBe('not my password')
   })
 
   it('hides both password fields from the screen', () => {
     mountSection()
-    expect([fields()[3]!.type, fields()[4]!.type]).toEqual(['password', 'password'])
+    expect([fields()[4]!.type, fields()[5]!.type]).toEqual(['password', 'password'])
   })
 
   /**

@@ -177,6 +177,8 @@ describe('ErrorBoundary', () => {
       username: 'wilma',
       isAdmin: false,
       timezone: 'Europe/Amsterdam',
+      birthDate: null,
+      sex: null,
       connected: true,
       credentialsUnreadable: false,
       baseUrl: 'http://localhost:4235',

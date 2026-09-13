@@ -206,7 +206,7 @@ describe('IntradayHeartRate tooltip', () => {
   function mount(sourceName: string) {
     const session: Session = {
       personId: 'p1', displayName: 'Wilma', username: 'wilma', isAdmin: false, timezone: 'UTC',
-      connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+      birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
     }
     const sources: NamedSource[] = [{
       id: 's1', externalId: 'x1', displayName: 'Watch', alias: sourceName, name: sourceName,

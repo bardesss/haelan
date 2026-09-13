@@ -8,6 +8,10 @@ export interface Session {
   username: string
   isAdmin: boolean
   timezone: string
+  // The two inputs the cardio load model needs and nothing else in the app reads. Both clearable:
+  // `null` is a real, storable state here, not an absent value standing in for one.
+  birthDate: string | null
+  sex: 'male' | 'female' | null
   // Whether this person has a usable Google connection right now - a non-revoked refresh token,
   // not merely a credentials row. A revoked person and a never-connected person both need the
   // same connect control to get moving again, so this one boolean is correct for both.

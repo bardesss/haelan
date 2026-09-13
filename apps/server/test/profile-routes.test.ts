@@ -149,6 +149,56 @@ describe('PUT /api/profile', () => {
   })
 })
 
+describe('PUT /api/profile birthday and sex', () => {
+  it('saves both', async () => {
+    await saveProfile(adminToken, { birthDate: '1985-03-04', sex: 'male' })
+    expect((await me(adminToken)).json()).toMatchObject({ birthDate: '1985-03-04', sex: 'male' })
+  })
+
+  // Three different answers, not two. Absent is "leave it", null is "clear it", a string is "set
+  // it" - and the existing three fields on this route have only the first and last, because a name
+  // and a timezone cannot be cleared. These two can.
+  it('treats an absent field as untouched and an explicit null as a clear', async () => {
+    await saveProfile(adminToken, { birthDate: '1985-03-04', sex: 'male' })
+    await saveProfile(adminToken, { displayName: 'Sam' })
+    expect((await me(adminToken)).json().birthDate).toBe('1985-03-04')
+
+    await saveProfile(adminToken, { birthDate: null })
+    expect((await me(adminToken)).json().birthDate).toBeNull()
+    expect((await me(adminToken)).json().sex).toBe('male')
+  })
+
+  it('refuses a birthday that is not a date', async () => {
+    const response = await saveProfile(adminToken, { birthDate: '4 March 1985' })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('refuses a sex outside the two the coefficient table has', async () => {
+    const response = await saveProfile(adminToken, { sex: 'other' })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('refuses a birthDate sent as something other than text or null', async () => {
+    const response = await saveProfile(adminToken, { birthDate: 42 })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  // Unlike the timezone on the same route, which clears the derivation stamp and costs a rebuild.
+  it('reports no pending rebuild', async () => {
+    const response = await saveProfile(adminToken, { birthDate: '1985-03-04' })
+    expect(response.statusCode).toBe(200)
+    expect(response.json().rebuildPending).toBe(false)
+    expect(person('p1')!.builtDerivationVersion).toEqual(expect.any(Number))
+  })
+
+  it('carries both on /api/auth/me for a person who has set neither', async () => {
+    expect((await me(adminToken)).json()).toMatchObject({ birthDate: null, sex: null })
+  })
+})
+
 describe('PUT /api/profile/password', () => {
   const NEW_PASSWORD = 'an even better password'
 

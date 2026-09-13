@@ -92,6 +92,10 @@ export function registerAuth(app: FastifyInstance): void {
       isAdmin: account.isAdmin,
       // The browser resolves the person's today from this rather than from its own clock's zone.
       timezone: person?.timezone ?? 'UTC',
+      // The two inputs the cardio load model needs and nothing else in the app reads. Both are
+      // computed at read time from these, so neither carries the timezone's rebuild machinery.
+      birthDate: person?.birthDate ?? null,
+      sex: person?.sex ?? null,
       // Whether this person has a *usable* Google connection - a credentials row whose token was
       // never revoked, matching listConnectedPeople's own predicate. A revoked row is not a
       // connection in any sense the UI cares about: it cannot sync, so it must show the same

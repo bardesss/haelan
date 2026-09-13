@@ -66,6 +66,8 @@ export function Profile() {
     displayName: session.data.displayName,
     username: session.data.username,
     timezone: session.data.timezone,
+    birthDate: session.data.birthDate,
+    sex: session.data.sex,
   }
   const value = draft ?? current
   const edit = (patch: Partial<ProfileEdit>): void => setDraft({ ...value, ...patch })
@@ -77,6 +79,8 @@ export function Profile() {
   const changed = value.displayName !== current.displayName
     || value.username !== current.username
     || zoneWouldMove
+    || value.birthDate !== current.birthDate
+    || value.sex !== current.sex
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
@@ -126,6 +130,31 @@ export function Profile() {
         {zoneWouldMove && (
           <p className="profile-warning" role="alert">{t('settings.profile.timezoneWarning')}</p>
         )}
+
+        {/* No rebuild warning on either control below, unlike the timezone one above: both are
+            read only by the cardio load calculation, computed at read time, so nothing derived
+            goes stale when either changes. Both are clearable back to an empty value - an
+            explicit `null` in the draft, not the absent field the other three controls send. */}
+        <label className="field">
+          <span className="label">{t('settings.profile.birthDate')}</span>
+          <input className="input" type="date" value={value.birthDate ?? ''}
+            onChange={(e) => edit({ birthDate: e.currentTarget.value === '' ? null : e.currentTarget.value })} />
+        </label>
+
+        <label className="field">
+          <span className="label">{t('settings.profile.sex')}</span>
+          <select className="input" value={value.sex ?? ''}
+            onChange={(e) => edit({ sex: e.currentTarget.value === '' ? null : e.currentTarget.value as 'male' | 'female' })}>
+            <option value="">{t('settings.profile.sexUnset')}</option>
+            <option value="male">{t('settings.profile.sexMale')}</option>
+            <option value="female">{t('settings.profile.sexFemale')}</option>
+          </select>
+        </label>
+
+        {/* This sentence is the reason the two controls above are allowed to exist at all: a
+            health app asking for a birthday and a sex without saying why is worse than the
+            feature it is collected for is worth. */}
+        <p className="field-hint">{t('settings.profile.cardioLoadHelp')}</p>
 
         <div className="form-actions">
           <button type="submit" className="button button-primary" disabled={save.isPending || !changed}>

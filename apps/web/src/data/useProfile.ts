@@ -17,6 +17,8 @@ export interface SavedProfile {
   displayName: string
   username: string
   timezone: string
+  birthDate: string | null
+  sex: 'male' | 'female' | null
   rebuildPending: boolean
 }
 
@@ -24,6 +26,8 @@ export interface ProfileEdit {
   displayName: string
   username: string
   timezone: string
+  birthDate: string | null
+  sex: 'male' | 'female' | null
 }
 
 /**
