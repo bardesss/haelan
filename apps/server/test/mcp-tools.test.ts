@@ -595,6 +595,47 @@ describe('get_workout', () => {
     expect(out.laps).toEqual([])
   })
 
+  // WORKOUT_SPLIT is this tool's own zod schema, a different surface from the REST route's plain
+  // object spread (v1-session-by-id.test.ts already covers that one) - a schema that dropped or
+  // mis-named averageHeartRateBpmSource would pass every other test in this file while answering
+  // an agent a split with no way to tell a filled cell from the watch's own number.
+  it('fills a split the provider left null from the trace, and leaves one it sent alone', () => {
+    seedRun({
+      metricsSummary: { caloriesKcal: 400 },
+      splits: [
+        {
+          // Half-open [start, end): minutes 0-4 of seedHeartRate's ten, values 120..124, mean 122.
+          startTime: new Date(START).toISOString(),
+          endTime: new Date(START + 5 * 60_000).toISOString(),
+          splitType: 'DISTANCE', activeDuration: '300s',
+          metricsSummary: { distanceMillimeters: 1_000_000, averagePaceSecondsPerMeter: 0.3 },
+          // No averageHeartRateBeatsPerMinute: the provider left this split's own reading null.
+        },
+        {
+          startTime: new Date(START + 5 * 60_000).toISOString(),
+          endTime: new Date(END).toISOString(),
+          splitType: 'DISTANCE', activeDuration: '300s',
+          metricsSummary: {
+            distanceMillimeters: 1_000_000, averagePaceSecondsPerMeter: 0.3,
+            averageHeartRateBeatsPerMinute: '165',
+          },
+        },
+      ],
+    })
+    seedHeartRate()
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      autoSplits: { averageHeartRateBpm: number | null, averageHeartRateBpmSource: string | null }[]
+    }
+
+    expect(out.autoSplits).toHaveLength(2)
+    expect(out.autoSplits[0]!.averageHeartRateBpm).toBe(122)
+    expect(out.autoSplits[0]!.averageHeartRateBpmSource).toBe('trace')
+    // The watch's own number always wins - unchanged, not re-averaged over the trace.
+    expect(out.autoSplits[1]!.averageHeartRateBpm).toBe(165)
+    expect(out.autoSplits[1]!.averageHeartRateBpmSource).toBe('provider')
+  })
+
   it('answers a tool error, not an empty object, for a session id that names nothing', () => {
     expect(() => tool('get_workout').run(q(), { sessionId: 'does-not-exist' })).toThrow(ConfigError)
   })

@@ -192,12 +192,13 @@ describe('GET /sessions', () => {
   })
 
   // The list route is a different question from the detail route directly below it in
-  // tier2.ts, and must not grow a per-row cardio load: that would open a heart rate trace for
-  // every session in the range. Zone durations full enough to answer 100 on the detail route
-  // (see v1-session-by-id.test.ts) are seeded here too, so a regression that lifted the detail
-  // route's computation into the shared session mapper - rather than adding it only in the
-  // detail handler - would still be caught.
-  it('does not put a cardio load on a session in the list', async () => {
+  // tier2.ts, and must not grow a per-row cardio load or a per-row filled split: either would
+  // open a heart rate trace for every session in the range. Zone durations full enough to answer
+  // 100 on the detail route (see v1-session-by-id.test.ts) are seeded here too, so a regression
+  // that lifted the detail route's computation into the shared session mapper - rather than
+  // adding it only in the detail handler - would still be caught. autoSplits/laps get the same
+  // pin as cardioLoad, for the same reason and beside it, rather than in a test of their own.
+  it('does not put a cardio load or filled splits on a session in the list', async () => {
     harness = await withServer(); const token = await harness.signIn()
     seedWorkout(harness, {
       localDate: '2026-08-01',
@@ -214,6 +215,8 @@ describe('GET /sessions', () => {
     const body = (await get(harness, token, '/sessions?kind=exercise&from=2026-08-01&to=2026-08-31')).json()
     expect(body.items).toHaveLength(1)
     expect(body.items[0].cardioLoad).toBeUndefined()
+    expect(body.items[0].autoSplits).toBeUndefined()
+    expect(body.items[0].laps).toBeUndefined()
   })
 })
 
