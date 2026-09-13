@@ -15,9 +15,11 @@ import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
 import { DailyBars } from '../charts/DailyBars.js'
+import { StackedDailyBars } from '../charts/StackedDailyBars.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { SessionList } from './activity/SessionList.js'
+import { bandSeries } from './activity/bandSeries.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
@@ -53,6 +55,7 @@ export const REQUESTS = {
   sum: [
     'steps', 'distance', 'floors', 'total_calories', 'active_energy',
     'active_minutes_light', 'active_minutes_moderate', 'active_minutes_vigorous',
+    'active_minutes_light_peak', 'active_minutes_moderate_peak', 'active_minutes_vigorous_peak',
     'active_zone_minutes_fat_burn', 'active_zone_minutes_cardio', 'active_zone_minutes_peak',
     'workout_minutes',
   ],
@@ -193,6 +196,34 @@ export function Activity() {
     // itself is rebuilt every render and is not worth tracking.
   }, [rangeDates, sumSeries.data, metricGroups.queryForAgg('count').data])
 
+  // Literal t() calls, one per band, rather than a template built from `key`: catalogue-usage.test.ts's
+  // own isReferenced can only tell a dynamic lookup from an orphan key when the fixed part of the
+  // template sits immediately before the interpolated segment (ControlRow's own
+  // `controlRow.ranges.${key}` is its one example), and "band" plus a capitalised `key` does not
+  // fit that shape. Four literal keys are also just as many keys as the four bands, so nothing is
+  // lost by naming them instead of computing them.
+  const bandName = (key: string): string => {
+    switch (key) {
+      case 'light': return t('activity.activityBands.bandLight')
+      case 'moderate': return t('activity.activityBands.bandModerate')
+      case 'vigorous': return t('activity.activityBands.bandVigorous')
+      default: return t('activity.activityBands.bandPeak')
+    }
+  }
+
+  // Stable array identity, for the reason the sparklines memo just above states: useChart keys its
+  // rebuild on `build`, so a freshly constructed array every render disposes and reinitialises the
+  // chart. Keyed on sparklines, which is itself memoised.
+  const bands = useMemo(() => bandSeries(sparklines, bandName), [sparklines, t])
+
+  // The same reported/total shape every basis line on this page states, hand built because this
+  // card is a bare Card rather than a MetricCard: reported counts the days active_minutes_light
+  // itself answered, the same metric StackedDailyBars' own `metric` prop formats by, and total is
+  // every calendar day in range, the same denominator every other basis line here uses.
+  const bandsBasis = t('activity.activityBands.basis', {
+    reported: metricGroups.pointsOf('active_minutes_light').length,
+    total: rangeDates.length,
+  })
 
   // Daily steps heatmap, moved here from Dashboard.tsx rather than copied: same dense-by-date
   // treatment (a day nothing reported still gets a calendar cell, drawn as an absence dot, instead
@@ -356,6 +387,12 @@ export function Activity() {
           'activity.activeMinutesModerate.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
           'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
+
+        <Card span={12} label={t('activity.activityBands.label')} basis={bandsBasis}>
+          <StackedDailyBars series={bands} labels={rangeDates} metric="active_minutes_light"
+            label={t('activity.activityBands.chartLabel', { period })}
+            unit={t('activity.units.minutes')} axisUnit={t('activity.units.min')} />
+        </Card>
 
         {/* These three are labelled AZM rather than minutes, unlike the activity levels above,
             because the number is a score: a cardio or peak minute is worth two. Measured in

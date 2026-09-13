@@ -353,6 +353,15 @@
       "basis": "sum, {{reported}} of {{total}} days",
       "chartLabel": "Daily vigorous activity minutes through {{period}}"
     },
+    "activityBands": {
+      "label": "Active minutes by intensity",
+      "basis": "sum, {{reported}} of {{total}} days",
+      "chartLabel": "Daily active minutes by intensity through {{period}}",
+      "bandLight": "Light",
+      "bandModerate": "Moderate",
+      "bandVigorous": "Vigorous",
+      "bandPeak": "Peak"
+    },
     "activeZoneMinutesFatBurn": {
       "label": "Fat burn Active Zone Minutes",
       "basis": "sum, {{reported}} of {{total}} days",

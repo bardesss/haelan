@@ -353,6 +353,15 @@
       "basis": "som, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse minuten intensieve activiteit in {{period}}"
     },
+    "activityBands": {
+      "label": "Actieve minuten per intensiteit",
+      "basis": "som, {{reported}} van {{total}} dagen",
+      "chartLabel": "Dagelijkse actieve minuten per intensiteit in {{period}}",
+      "bandLight": "Licht",
+      "bandModerate": "Gemiddeld",
+      "bandVigorous": "Intensief",
+      "bandPeak": "Piek"
+    },
     "activeZoneMinutesFatBurn": {
       "label": "Actieve zoneminuten, vetverbranding",
       "basis": "som, {{reported}} van {{total}} dagen",
