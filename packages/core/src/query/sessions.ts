@@ -8,6 +8,14 @@ import { workoutSummary } from '../api/workoutSummary.ts'
 // underlying rows for kind 'sleep', but a workout list is its most interesting caller.
 export interface WorkoutSession {
   id: string
+  /**
+   * 'sleep' or 'exercise', never 'ecg': both readers below only ever hand back a row of one of
+   * these two kinds (readSessions filters on it, readSession's own inArray excludes the third).
+   * Carried here rather than left implicit because workoutDerived.ts's readWorkoutCardioLoad and
+   * readWorkoutSplits need to refuse a sleep session on sight - a cardio load computed over a
+   * night is a wrong number, not a differently-typed right one.
+   */
+  kind: 'sleep' | 'exercise'
   sourceId: string
   startMs: number
   endMs: number
@@ -128,6 +136,10 @@ function toWorkoutSession(
 ): WorkoutSession {
   return {
     id: row.id,
+    // Cast rather than widened: the column's own type is the three-kind SessionKind, but both
+    // callers of this function (readSessions' kind equality filter, readSession's inArray) only
+    // ever hand it a 'sleep' or 'exercise' row, and an 'ecg' row never reaches here to disprove it.
+    kind: row.kind as 'sleep' | 'exercise',
     sourceId: row.sourceId,
     startMs: row.startMs,
     endMs: row.endMs,

@@ -28,5 +28,9 @@
  *    same numbers - and the bump is here anyway, because tier 3 standing over an empty tier 2 is
  *    the exact state a stamp exists to prevent, and a mapping bump alone would say the layer below
  *    moved while leaving these rows claiming to have been derived from it.
+ * 8: the cardio load family arrives - `cardio_load_edwards`, derived from the day's zone minutes
+ *    rather than from any data type, because Google Health shows a cardio load number and the v4
+ *    API exposes none. A day derived under 7 has no such row. Nothing else about what deriveDay
+ *    computes changed.
  */
-export const DERIVATION_VERSION = 7
+export const DERIVATION_VERSION = 8

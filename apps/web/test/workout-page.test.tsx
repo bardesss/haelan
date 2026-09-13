@@ -8,6 +8,8 @@ import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
+import type { BanisterBasis } from '@haelan/core/cardio-load'
+import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { pumpUntil } from './flush.js'
@@ -37,7 +39,7 @@ afterEach(() => {
 
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false,
-  timezone: 'Europe/Amsterdam', connected: true, credentialsUnreadable: false,
+  timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false,
   baseUrl: 'http://localhost:4235',
 }
 
@@ -58,6 +60,16 @@ export const RUN: WorkoutSession = {
 /** A session carrying nothing but its span: every optional card must be absent. */
 const BARE: WorkoutSession = {
   ...RUN, id: 'bare', attrs: { exerciseType: 'WALKING' },
+}
+
+const BASIS: BanisterBasis = {
+  restingBpm: 52, maxBpm: 181, maxBpmSource: 'providerZoneCeiling', k: 1.92, minutes: 45,
+}
+
+const SPLIT: FilledSplit = {
+  startMs: null, endMs: null, splitType: 'DISTANCE', activeDurationSeconds: 300,
+  distanceMeters: 1000, paceSecondsPerKm: 300, averageHeartRateBpm: 150,
+  averageHeartRateBpmSource: 'provider',
 }
 
 function stub(sessions: Record<string, WorkoutSession>): () => void {
@@ -299,6 +311,128 @@ describe('the workout stat tiles', () => {
       // Elapsed is always computable from the span, so the section is present with exactly one tile.
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toEqual(['Elapsed'])
+    } finally { restore() }
+  })
+
+  it('shows both cardio load tiles when both models ran', async () => {
+    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: 84, banisterBasis: BASIS } }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toContain('Cardio load (Edwards)')
+      expect(labels).toContain('Cardio load (Banister)')
+      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
+      const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
+      const banisterTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Banister)')
+      // Whole-cell assertions, not substrings: '100' alone would also match a cell reading '1004'.
+      expect(edwardsTile?.querySelector('.value')?.textContent).toBe('100 TRIMP')
+      expect(banisterTile?.querySelector('.value')?.textContent).toBe('84 TRIMP')
+    } finally { restore() }
+  })
+
+  it('shows only Edwards when Banister could not run', async () => {
+    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: null, banisterBasis: null } }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).toContain('Cardio load (Edwards)')
+      expect(labels).not.toContain('Cardio load (Banister)')
+    } finally { restore() }
+  })
+
+  it('shows neither when the session carried no load at all', async () => {
+    const loaded = { ...RUN, cardioLoad: null }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
+      expect(labels).not.toContain('Cardio load (Edwards)')
+      expect(labels).not.toContain('Cardio load (Banister)')
+    } finally { restore() }
+  })
+
+  // The basis is the reason these tiles are safe to show at all. Google Health shows a cardio load
+  // too, and a reader comparing the two numbers has to be able to see that this one is ours - so the
+  // exact copy is asserted whole here, not just checked for containing "Haelan".
+  it('says the number is Haelan\'s own, not the provider\'s', async () => {
+    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: null, banisterBasis: null } }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
+      const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
+      expect(edwardsTile?.querySelector('.basis')?.textContent).toBe(
+        'Haelan\'s own figure, from this session\'s heart rate zones. Not the number Google Health shows.',
+      )
+    } finally { restore() }
+  })
+
+  it('names the resting and maximum bpm the Banister figure was computed against', async () => {
+    const loaded = { ...RUN, cardioLoad: { edwards: 100, banister: 84, banisterBasis: BASIS } }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
+      const banisterTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Banister)')
+      expect(banisterTile?.querySelector('.basis')?.textContent).toBe(
+        'Haelan\'s own figure, from this session\'s heart rate against a resting 52 and a maximum 181 bpm. '
+        + 'Not the number Google Health shows.',
+      )
+    } finally { restore() }
+  })
+
+  it('prints a recorded Edwards zero rather than dropping the tile', async () => {
+    // Same rule as the steps zero test above, for the field this task adds: a recorded 0 is a fact,
+    // not an absence, and cardioLoad?.edwards == null must not treat 0 as null via truthiness.
+    const loaded = { ...RUN, cardioLoad: { edwards: 0, banister: null, banisterBasis: null } }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
+      const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
+      expect(edwardsTile?.querySelector('.value')?.textContent).toBe('0 TRIMP')
+    } finally { restore() }
+  })
+})
+
+// Fix round 2: WorkoutSplits used to read autoSplits/laps off workoutDetail(session.attrs), which
+// workoutSummary.ts's splitsFrom always answers as an array, absent-or-not. Once the page started
+// passing the API response's own autoSplits/laps instead, that guarantee stopped being free: RUN
+// and every fixture above it in this file carry neither field (they are plain WorkoutSession
+// objects, not WorkoutSessionDetail), and this app has no error boundary, so an unguarded
+// `.length` read on `undefined` blanked the whole page rather than only leaving the splits card
+// off it. These two cases pin both directions of the fix.
+describe('the splits card', () => {
+  it('renders a splits table when the session response carries filled splits', async () => {
+    const loaded = { ...RUN, autoSplits: [SPLIT], laps: [] }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-splits')).not.toBeNull()
+      expect(html()).toContain('Automatic splits')
+    } finally { restore() }
+  })
+
+  it('still renders the rest of the page when the response carries no autoSplits or laps at all', async () => {
+    // RUN itself carries neither field - the exact shape (an older cached response, or any
+    // response predating this deploy) that used to throw inside WorkoutSplits and take the page
+    // with it.
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-splits')).toBeNull()
+      expect(html()).toContain('Morning run')
+      expect(container?.querySelector('.workout-tiles')).not.toBeNull()
     } finally { restore() }
   })
 })

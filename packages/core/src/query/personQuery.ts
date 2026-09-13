@@ -23,6 +23,9 @@ import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
+import { readWorkoutCardioLoad, readWorkoutSplits } from './workoutDerived.ts'
+import type { CardioLoad } from '../api/cardioLoad.ts'
+import type { FilledSplit } from '../api/splitHeartRate.ts'
 import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
 import { readChanges } from './changes.ts'
@@ -379,6 +382,30 @@ export class PersonQuery {
   sessionById(input: { sessionId: string }): WorkoutSession | null {
     if (input.sessionId.trim() === '') throw new ConfigError('sessionId is required')
     return readSession(this.#db, { personId: this.#personId, sessionId: input.sessionId })
+  }
+
+  /**
+   * One workout's cardio load, Haelan's own number rather than Google's.
+   *
+   * Null for a session id naming nothing, which is the same answer `sessionById` gives and for the
+   * same reason: this reader cannot tell an unknown id from somebody else's, and must not.
+   */
+  cardioLoad(input: { sessionId: string }): CardioLoad | null {
+    const session = this.sessionById(input)
+    if (session === null) return null
+    return readWorkoutCardioLoad(this.#db, { personId: this.#personId, session })
+  }
+
+  /**
+   * A workout's automatic splits and recorded laps, heart rate filled in from the session's own
+   * trace where the provider left it null. Null for a session id naming nothing, the same answer
+   * `cardioLoad` gives and for the same reason: this reader cannot tell an unknown id from
+   * somebody else's, and must not.
+   */
+  workoutSplits(input: { sessionId: string }): { autoSplits: FilledSplit[], laps: FilledSplit[] } | null {
+    const session = this.sessionById(input)
+    if (session === null) return null
+    return readWorkoutSplits(this.#db, { personId: this.#personId, session })
   }
 
   /**

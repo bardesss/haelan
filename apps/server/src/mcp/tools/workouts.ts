@@ -91,6 +91,12 @@ const WORKOUT_SPLIT = z.object({
   distanceMeters: z.number().nullable(),
   paceSecondsPerKm: z.number().nullable(),
   averageHeartRateBpm: z.number().nullable(),
+  averageHeartRateBpmSource: z.enum(['provider', 'trace']).nullable().describe(
+    '`provider` is the number the recording device wrote onto this split. `trace` means the device '
+    + 'wrote none and this is the mean of the session\'s own heart rate over this split\'s window - '
+    + 'the same reading, filled in, never the session average substituted for a missing one. Null '
+    + 'means no heart rate was recorded in this split\'s window at all.',
+  ),
 })
 
 const WORKOUT_EVENT = z.object({ atMs: z.number().nullable(), kind: z.string().nullable() })
@@ -108,6 +114,33 @@ const MOBILITY = z.object({
   groundContactTimeSeconds: z.number().nullable(),
   verticalOscillationMeters: z.number().nullable(),
   verticalRatio: z.number().nullable(),
+}).nullable()
+
+// Haelan's own number, and the schema says so where an agent will read it. Google Health shows a
+// cardio load and the v4 API exposes no data type for it, so this is the same model family on its
+// own scale - it will not match the figure in their app and an agent must not present it as
+// theirs. `banisterBasis` is what lets an agent account for the number rather than only repeat it.
+const CARDIO_LOAD = z.object({
+  edwards: z.number().nullable().describe(
+    'Edwards TRIMP: 1*light + 2*moderate + 3*vigorous + 4*peak, in minutes, from this session\'s '
+    + 'own zone clocks. Null when the session recorded no zones.',
+  ),
+  banister: z.number().nullable().describe(
+    'Banister TRIMP summed over this session\'s heart rate. Null unless the person has recorded a '
+    + 'birthday and a sex, the day has a resting heart rate, and somebody recorded a heart rate in '
+    + 'the session\'s span.',
+  ),
+  banisterBasis: z.object({
+    restingBpm: z.number(),
+    maxBpm: z.number(),
+    maxBpmSource: z.enum(['providerZoneCeiling', 'ageFormula']),
+    k: z.number(),
+    minutes: z.number(),
+  }).nullable().describe(
+    'What produced the Banister number, so it can be explained rather than only repeated. '
+    + '`providerZoneCeiling` means the maximum is the provider\'s own peak zone ceiling for that '
+    + 'day; `ageFormula` means 220 minus age, used only when the day has no ceiling.',
+  ),
 }).nullable()
 
 // Named for what a reader needs to know without re-reading the tool description: `pinnedSource`
@@ -155,7 +188,12 @@ export const getWorkout = defineTool({
     + 'and `trace[].traceSource` says so - rare, but an empty trace from the recording device is not '
     + 'proof nobody\'s heart rate was recorded. That fallback never fires when `source` was given: '
     + 'a specific request gets a specific answer, empty or not. Splits and laps answer empty arrays, '
-    + 'not null, on the four sessions in five that recorded neither. A `sessionId` naming no '
+    + 'not null, on the four sessions in five that recorded neither. '
+    + 'cardioLoad is Haelan\'s own figure, not Google\'s: Google Health shows a cardio load number and '
+    + 'the API exposes no data type for it, so this is the same model family (TRIMP) computed from '
+    + 'heart rate this instance already stores, on its own scale. It will not equal the number in '
+    + 'their app, whose coefficients are unpublished - do not present it as theirs. '
+    + 'A `sessionId` naming no '
     + 'session, somebody else\'s session, or an ECG row all answer the same tool error rather than '
     + 'an empty object, because those are different statements about a health record and only the '
     + 'error is true of all three. displayName and notes are free text from the provider, and '
@@ -200,6 +238,7 @@ export const getWorkout = defineTool({
     laps: z.array(WORKOUT_SPLIT),
     events: z.array(WORKOUT_EVENT),
     trace: z.array(TRACE),
+    cardioLoad: CARDIO_LOAD,
   },
   run: (q, args) => {
     const session = q.sessionById({ sessionId: args.sessionId })
@@ -210,6 +249,10 @@ export const getWorkout = defineTool({
     if (session === null) throw new ConfigError(`no session '${args.sessionId}'`)
 
     const detail = workoutDetail(session.attrs)
+    const cardioLoad = q.cardioLoad({ sessionId: args.sessionId })
+    // Never null here: sessionById above already found the session, and workoutSplits cannot
+    // answer null for an id sessionById just answered a row for.
+    const splits = q.workoutSplits({ sessionId: args.sessionId })!
     const points = budgetFor(args.points, DEFAULT_INTRADAY_POINTS)
     const metrics = args.metrics ?? [DEFAULT_TRACE_METRIC]
 
@@ -234,9 +277,10 @@ export const getWorkout = defineTool({
       totalSwimLengths: detail.totalSwimLengths,
       zones: detail.zones,
       mobility: detail.mobility,
-      autoSplits: detail.autoSplits,
-      laps: detail.laps,
+      autoSplits: splits.autoSplits,
+      laps: splits.laps,
       events: detail.events,
+      cardioLoad,
       trace: metrics.map((metric) => {
         // Pinned to the recording device by default. `intraday` and `sleepNights` deliberately
         // blend every source reporting in their span, because a calendar day or a night can be

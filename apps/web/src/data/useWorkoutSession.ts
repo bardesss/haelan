@@ -3,7 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { apiGet } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
-import type { WorkoutSession } from './useSessions.js'
+import type { WorkoutSessionDetail } from './useSessions.js'
 
 /**
  * Exported so the request shape can be asserted without mounting a component, the same reason
@@ -44,7 +44,7 @@ export function sessionPath(personId: string, sessionId: string): string {
  * touched this resource, which is how the workout page - the first browser surface able to exclude
  * a session - stops reporting a stale `excluded: false` after the reader just excluded it.
  */
-export function useWorkoutSession(sessionId: string | undefined): UseQueryResult<WorkoutSession> {
+export function useWorkoutSession(sessionId: string | undefined): UseQueryResult<WorkoutSessionDetail> {
   const session = useSession()
   const personId = session.data?.personId
   return useQuery({
@@ -53,6 +53,6 @@ export function useWorkoutSession(sessionId: string | undefined): UseQueryResult
     // which the server answers 404 for and which then sits in the cache under a key naming no
     // person and no session.
     enabled: personId !== undefined && sessionId !== undefined,
-    queryFn: () => apiGet<WorkoutSession>(sessionPath(personId!, sessionId!)),
+    queryFn: () => apiGet<WorkoutSessionDetail>(sessionPath(personId!, sessionId!)),
   })
 }

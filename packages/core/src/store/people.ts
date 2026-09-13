@@ -9,6 +9,8 @@ export interface PersonRow {
   id: string
   displayName: string
   timezone: string
+  birthDate: string | null
+  sex: 'male' | 'female' | null
   builtMappingVersion: number | null
   builtDerivationVersion: number | null
 }
@@ -34,7 +36,10 @@ export class PeopleStore {
    * would never be un-skipped either. Stamping here is what makes "needs a rebuild" mean "has
    * rows built by something older" rather than "has rows, or does not, we cannot tell".
    */
-  create(input: Omit<PersonRow, 'builtMappingVersion' | 'builtDerivationVersion'> & { nowMs: number }): PersonRow {
+  create(
+    input: Omit<PersonRow, 'birthDate' | 'sex' | 'builtMappingVersion' | 'builtDerivationVersion'>
+      & { nowMs: number },
+  ): PersonRow {
     this.#db.insert(people).values({
       id: input.id,
       displayName: input.displayName,
@@ -47,6 +52,8 @@ export class PeopleStore {
       id: input.id,
       displayName: input.displayName,
       timezone: input.timezone,
+      birthDate: null,
+      sex: null,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
     }
@@ -59,6 +66,8 @@ export class PeopleStore {
         id: row.id,
         displayName: row.displayName,
         timezone: row.timezone,
+        birthDate: row.birthDate ?? null,
+        sex: row.sex ?? null,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }
@@ -71,6 +80,8 @@ export class PeopleStore {
         id: row.id,
         displayName: row.displayName,
         timezone: row.timezone,
+        birthDate: row.birthDate ?? null,
+        sex: row.sex ?? null,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }))
@@ -116,6 +127,40 @@ export class PeopleStore {
       .set({ timezone, builtDerivationVersion: null })
       .where(eq(people.id, id))
       .run()
+  }
+
+  /**
+   * A birthday, or null to clear it.
+   *
+   * Cheap, like setDisplayName and unlike setTimezone: nothing derived reads this column. See the
+   * schema's own comment for why that is true and what would make it stop being true.
+   */
+  setBirthDate(id: string, birthDate: string | null): void {
+    if (birthDate !== null) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+        throw new ConfigError(`a birthday must be written YYYY-MM-DD, got '${birthDate}'`)
+      }
+      // Checked against a real calendar, not only against the shape: '1985-02-31' matches the
+      // pattern above and is not a day.
+      const parsed = new Date(`${birthDate}T00:00:00Z`)
+      if (Number.isNaN(parsed.getTime()) || !parsed.toISOString().startsWith(birthDate)) {
+        throw new ConfigError(`'${birthDate}' is not a date`)
+      }
+      // A birthday in the future is a typo every time, and it would make `ageAt` answer null and
+      // Banister answer nothing, with no message saying why.
+      if (parsed.getTime() > Date.now()) {
+        throw new ConfigError('a birthday cannot be in the future')
+      }
+    }
+    this.#db.update(people).set({ birthDate }).where(eq(people.id, id)).run()
+  }
+
+  /** Read for one thing only: Banister's coefficient, 1.92 or 1.67. Null to clear it. */
+  setSex(id: string, sex: 'male' | 'female' | null): void {
+    if (sex !== null && sex !== 'male' && sex !== 'female') {
+      throw new ConfigError(`sex must be 'male' or 'female'`)
+    }
+    this.#db.update(people).set({ sex }).where(eq(people.id, id)).run()
   }
 
   /**

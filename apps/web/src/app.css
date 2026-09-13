@@ -193,6 +193,9 @@ body {
 .workout-splits { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
 .workout-splits th { text-align: left; color: var(--text-muted); font-weight: 600; padding: var(--space-1) 0; }
 .workout-splits td { padding: var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
+/* The dagger footnote under a table where at least one row was filled from the trace - see
+   WorkoutSplits.tsx's own comment on why it never appears under a table of provider values. */
+.workout-splits-footnote { margin: var(--space-2) 0 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 /* WorkoutDynamics.tsx's own tile row - up to five StatTiles, fewer when a session recorded fewer
    of the five fields, wrapping onto a second row on a narrow viewport rather than compressing. */
 .workout-dynamics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }

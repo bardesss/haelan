@@ -131,10 +131,10 @@ export function WorkoutDetail() {
         </button>
       </div>
       <div className="grid">
-        <WorkoutTiles session={query.data} detail={detail} />
+        <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
         <WorkoutZones detail={detail} />
         <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
-        <WorkoutSplits detail={detail} />
+        <WorkoutSplits autoSplits={query.data.autoSplits} laps={query.data.laps} />
         <WorkoutDynamics detail={detail} />
         <WorkoutComparison session={query.data} />
       </div>

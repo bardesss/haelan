@@ -223,6 +223,18 @@ export function registerTier2Routes(app: FastifyInstance): void {
       return reply.code(statusFor('not_found'))
         .send(errorBody('not_found', 'no_such_session', `no session '${sessionId}'`))
     }
-    return sendHashed(reply, request, session)
+    // Beside the session rather than folded into it: `WorkoutSession` is also what the list route
+    // above answers, and a load computed per row there would open a heart rate trace for every
+    // session in a range. The detail read has exactly one session and can afford exactly one.
+    // workoutSplits carries the same reasoning - a per-row fill on the list route would open a
+    // heart rate trace for every session in a date range - so it stays here beside cardioLoad,
+    // never on /sessions.
+    return sendHashed(reply, request, {
+      ...session,
+      cardioLoad: personQuery.cardioLoad({ sessionId }),
+      // Never null here: `session` above already resolved this exact id, and workoutSplits cannot
+      // answer null for an id sessionById just answered a row for.
+      ...personQuery.workoutSplits({ sessionId })!,
+    })
   })
 }

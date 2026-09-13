@@ -2,7 +2,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { errorBody, sendCoreError, statusFor } from '../api/envelope.ts'
 import { isKnownTimezone } from './setup.ts'
 
-interface ProfileBody { displayName?: unknown, username?: unknown, timezone?: unknown }
+interface ProfileBody {
+  displayName?: unknown
+  username?: unknown
+  timezone?: unknown
+  birthDate?: unknown
+  sex?: unknown
+}
 interface PasswordBody { currentPassword?: unknown, newPassword?: unknown }
 
 /**
@@ -36,7 +42,7 @@ export function registerProfile(app: FastifyInstance): void {
         return reply.code(statusFor('not_found')).send(errorBody('not_found', 'no_such_person', 'this account has no person row'))
       }
 
-      const { displayName, username, timezone } = request.body ?? {}
+      const { displayName, username, timezone, birthDate, sex } = request.body ?? {}
       // Each field is optional and absent means untouched, so a client can save one control
       // without restating the other two. A present field must still be a string: `undefined` and
       // `null` are different answers here, and treating the second as "leave it" would let a
@@ -49,6 +55,14 @@ export function registerProfile(app: FastifyInstance): void {
       if (typeof timezone === 'string' && !isKnownTimezone(timezone)) {
         return reply.code(statusFor('config')).send(errorBody('config', 'config', `unknown timezone ${timezone}`))
       }
+      // Three answers rather than two, unlike the three fields above. A name and a timezone cannot
+      // be cleared, so there `null` is a client mistake; these two can be, so `null` is a real
+      // instruction and only `undefined` means untouched.
+      for (const [name, value] of [['birthDate', birthDate], ['sex', sex]] as const) {
+        if (value !== undefined && value !== null && typeof value !== 'string') {
+          return reply.code(statusFor('config')).send(errorBody('config', 'config', `${name} must be text or null`))
+        }
+      }
 
       // The zone comparison is against what is stored, not against whether the field was sent.
       // Saving the form unchanged sends all three every time, and a timezone write costs this
@@ -60,6 +74,8 @@ export function registerProfile(app: FastifyInstance): void {
       // Before the timezone write rather than after: a taken username throws, and the throw has to
       // land before anything has marked this person for an eleven minute rebuild they did not get.
       if (typeof username === 'string') stores().accounts.setUsername(account.id, username)
+      if (birthDate !== undefined) stores().people.setBirthDate(person.id, birthDate as string | null)
+      if (sex !== undefined) stores().people.setSex(person.id, sex as 'male' | 'female' | null)
       if (zoneMoved) stores().people.setTimezone(person.id, timezone)
 
       const saved = stores().people.get(person.id)!
@@ -68,6 +84,8 @@ export function registerProfile(app: FastifyInstance): void {
         displayName: saved.displayName,
         username: savedAccount.username,
         timezone: saved.timezone,
+        birthDate: saved.birthDate,
+        sex: saved.sex,
         // What the caller is owed rather than what happened: nothing rebuilds on this request. The
         // derivation stamp is cleared, which is what the boot rebuild reads, so this says "your
         // history is being re-derived from the archive the next time this instance starts" and the

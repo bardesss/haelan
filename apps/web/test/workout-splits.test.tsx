@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { workoutDetail } from '@haelan/core/workout-summary'
+import type { WorkoutSplit } from '@haelan/core/workout-summary'
+import { fillSplitHeartRate } from '@haelan/core/split-heart-rate'
+import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutZones, zoneRows, SESSION_ZONE_KEYS } from '../src/pages/activity/WorkoutZones.js'
 import { WorkoutSplits } from '../src/pages/activity/WorkoutSplits.js'
 import { WorkoutDynamics } from '../src/pages/activity/WorkoutDynamics.js'
@@ -96,15 +99,33 @@ const dynamicsTile = (html: string, key: string): { value: string, unit: string 
   return match ? { value: match[1]!, unit: match[2] ?? '' } : null
 }
 
+/**
+ * Runs a decoded WorkoutSplit[] through the real fillSplitHeartRate with no trace minutes at all,
+ * so a provider value stays 'provider' and an absent one stays null - the same shape
+ * readWorkoutSplits hands the component in production, without hand-building a FilledSplit for
+ * every fixture below. Task 11's own suite (split-heart-rate.test.ts) already covers the fill
+ * logic itself; this file is only testing what WorkoutSplits does with the result.
+ */
+function fill(rows: readonly WorkoutSplit[]): FilledSplit[] {
+  return fillSplitHeartRate(rows, [])
+}
+
+function renderWorkout(props: { autoSplits?: readonly FilledSplit[], laps?: readonly FilledSplit[] }): string {
+  return renderToStaticMarkup(
+    <WorkoutSplits autoSplits={props.autoSplits ?? []} laps={props.laps ?? []} />,
+  )
+}
+
 describe('the splits card', () => {
   // Four workouts in five have no splits at all: 37 of 197 measured. The absent state is the
   // common case, not the exception, which is why it is asserted first.
   it('renders nothing for the four sessions in five that recorded neither', () => {
-    expect(renderToStaticMarkup(<WorkoutSplits detail={workoutDetail({})} />)).toBe('')
+    expect(renderWorkout({})).toBe('')
   })
 
   it('renders the provider\'s automatic splits when the session carries them', () => {
-    const html = renderToStaticMarkup(<WorkoutSplits detail={workoutDetail({ splits: [split(), split()] })} />)
+    const detail = workoutDetail({ splits: [split(), split()] })
+    const html = renderWorkout({ autoSplits: fill(detail.autoSplits) })
     expect(labelsIn(html)).toEqual(['activity.workout.splits.autoLabel'])
     expect(html.match(/<table/g) ?? []).toHaveLength(1)
   })
@@ -114,7 +135,7 @@ describe('the splits card', () => {
     // this household has ever written a lap (0 of 197, every splitType DISTANCE), so this is mapped
     // for the schema rather than on evidence - and it still must not fold into the other table.
     const detail = workoutDetail({ splits: [split()], splitSummaries: [split({ splitType: 'MANUAL' })] })
-    const html = renderToStaticMarkup(<WorkoutSplits detail={detail} />)
+    const html = renderWorkout({ autoSplits: fill(detail.autoSplits), laps: fill(detail.laps) })
     expect(labelsIn(html)).toEqual([
       'activity.workout.splits.autoLabel',
       'activity.workout.splits.lapLabelTyped',
@@ -124,21 +145,22 @@ describe('the splits card', () => {
   })
 
   it('renders a lap table alone when only laps were recorded, labelled by their own type', () => {
-    const html = renderToStaticMarkup(<WorkoutSplits detail={workoutDetail({ splitSummaries: [split()] })} />)
+    const detail = workoutDetail({ splitSummaries: [split()] })
+    const html = renderWorkout({ laps: fill(detail.laps) })
     expect(labelsIn(html)).toEqual(['activity.workout.splits.lapLabelTyped'])
     expect(html.match(/<table/g) ?? []).toHaveLength(1)
   })
 
   it('falls back to the untyped label when a recorded lap carries no split type at all', () => {
-    const html = renderToStaticMarkup(
-      <WorkoutSplits detail={workoutDetail({ splitSummaries: [split({ splitType: null })] })} />,
-    )
+    const detail = workoutDetail({ splitSummaries: [split({ splitType: null })] })
+    const html = renderWorkout({ laps: fill(detail.laps) })
     expect(labelsIn(html)).toEqual(['activity.workout.splits.lapLabel'])
   })
 
   it('leaves a cell out rather than printing a zero for a split that recorded nothing there', () => {
     const bare = { startTime: '2026-08-03T06:00:00Z', endTime: '2026-08-03T06:05:00Z' }
-    const html = renderToStaticMarkup(<WorkoutSplits detail={workoutDetail({ splits: [bare] })} />)
+    const detail = workoutDetail({ splits: [bare] })
+    const html = renderWorkout({ autoSplits: fill(detail.autoSplits) })
     // Final review finding: `not.toContain('>0<')` was the only assertion here, and it can never
     // fail. Every value cell already appends a unit after its number (`0.00 km`, `0 min`, `0 bpm`),
     // so the literal text `>0<` is unreachable for ANY input, recorded-zero or absent alike - a
@@ -155,7 +177,8 @@ describe('the splits card', () => {
       startTime: '2026-08-03T06:00:00Z', endTime: '2026-08-03T06:05:00Z',
       metricsSummary: { distanceMillimeters: 0 },
     }
-    const html = renderToStaticMarkup(<WorkoutSplits detail={workoutDetail({ splits: [zeroDistance] })} />)
+    const detail = workoutDetail({ splits: [zeroDistance] })
+    const html = renderWorkout({ autoSplits: fill(detail.autoSplits) })
     const cells = cellsIn(html)
     // The same conversion SplitTable performs (millimetres to km, two decimal places) through the
     // same formatNumber it calls, so this expectation tracks the runtime's own number formatting
@@ -164,6 +187,55 @@ describe('the splits card', () => {
     // The other three cells recorded nothing at all, and stay absent - a recorded zero in one
     // field must not turn every field on the row into a zero.
     expect(cells.slice(2)).toEqual([ABSENT, ABSENT, ABSENT])
+  })
+})
+
+// A minimal FilledSplit fixture, decoded-shape rather than provider-shape (unlike `split()`
+// above), since these cases are testing what the component does with an already-filled row, not
+// the decoder. startMs/endMs are null throughout: fillSplitHeartRate is not in play here (the
+// fixtures below set averageHeartRateBpmSource directly), and the table never reads either field.
+const FILLED_SPLIT: FilledSplit = {
+  startMs: null, endMs: null, splitType: 'DISTANCE', activeDurationSeconds: 300,
+  distanceMeters: 1000, paceSecondsPerKm: 300, averageHeartRateBpm: null, averageHeartRateBpmSource: null,
+}
+
+describe('marking a heart rate filled from the trace', () => {
+  it('marks a heart rate filled from the trace, and says so once under the table', () => {
+    const html = renderWorkout({
+      autoSplits: [{ ...FILLED_SPLIT, averageHeartRateBpm: 176, averageHeartRateBpmSource: 'trace' }],
+    })
+    // The whole cell, never a substring: getByText/toContain('176') would also match the unmarked
+    // cell the next test renders, and would not have caught the marker's absence.
+    expect(cellsIn(html).at(-1)).toBe('176† activity.units.bpm')
+    expect(html).toContain('activity.workout.splits.filledFromTrace')
+  })
+
+  it('does not mark a heart rate the watch sent, and carries no footnote for it', () => {
+    const html = renderWorkout({
+      autoSplits: [{ ...FILLED_SPLIT, averageHeartRateBpm: 176, averageHeartRateBpmSource: 'provider' }],
+    })
+    expect(cellsIn(html).at(-1)).toBe('176 activity.units.bpm')
+    expect(html).not.toContain('activity.workout.splits.filledFromTrace')
+  })
+
+  // The footnote is per table, not per page: a table of provider values must not carry a note
+  // about a fill that did not happen anywhere in it.
+  it('carries no footnote under a table where nothing was filled', () => {
+    const html = renderWorkout({
+      autoSplits: [{ ...FILLED_SPLIT, averageHeartRateBpm: 150, averageHeartRateBpmSource: 'provider' }],
+      laps: [{ ...FILLED_SPLIT, averageHeartRateBpm: 160, averageHeartRateBpmSource: 'provider' }],
+    })
+    expect(html).not.toContain('activity.workout.splits.filledFromTrace')
+  })
+
+  // The mirror of the case above: one table filled and the other not must not let the filled
+  // table's footnote leak onto the table that has nothing to explain.
+  it('foots only the table that actually filled a row, not its sibling', () => {
+    const html = renderWorkout({
+      autoSplits: [{ ...FILLED_SPLIT, averageHeartRateBpm: 176, averageHeartRateBpmSource: 'trace' }],
+      laps: [{ ...FILLED_SPLIT, averageHeartRateBpm: 160, averageHeartRateBpmSource: 'provider' }],
+    })
+    expect(html.match(/activity\.workout\.splits\.filledFromTrace/g) ?? []).toHaveLength(1)
   })
 })
 

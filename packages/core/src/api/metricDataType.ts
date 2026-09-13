@@ -37,6 +37,15 @@ for (const type of DATA_TYPES) {
 for (const metric of SLEEP_METRICS) DATA_TYPE_BY_METRIC.set(metric, 'sleep')
 for (const metric of ['workout_count', 'workout_minutes']) DATA_TYPE_BY_METRIC.set(metric, 'exercise')
 
+// cardio_load_edwards (derive/cardioLoad.ts) is a third metric with no catalogue entry of its
+// own to inherit a data type from: it is derived from the four time-in-heart-rate-zone metrics
+// after they have already had exclusions and source priority applied, not read from the catalogue
+// directly, so the loop above never sees it. Mapped to the type it is derived from rather than
+// left absent, for the same reason this whole file exists: without an entry here, turning off
+// time-in-heart-rate-zone would make a page showing cardio load say "nothing has been recorded"
+// instead of "you turned this off" - false, and the exact failure mode this map exists to prevent.
+DATA_TYPE_BY_METRIC.set('cardio_load_edwards', 'time-in-heart-rate-zone')
+
 /**
  * Which catalogue entry produces a metric, or null when none does.
  *

@@ -3,11 +3,12 @@ import fc from 'fast-check'
 import { z } from 'zod'
 import {
   PersonQuery, createTestDatabase, seedPerson, schema, DERIVATION_VERSION, insertSample,
-  NoteStore, EventStore, ConfigError,
+  NoteStore, EventStore, ConfigError, PeopleStore,
 } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
 import { CATALOGUE } from '../src/mcp/catalogue.ts'
 import { budgetFor, MAX_POINTS, DEFAULT_DAILY_POINTS } from '../src/mcp/contract.ts'
+import { insertSession } from './mcp-fixtures.ts'
 
 let test: TestDatabase
 beforeEach(() => {
@@ -594,8 +595,130 @@ describe('get_workout', () => {
     expect(out.laps).toEqual([])
   })
 
+  // WORKOUT_SPLIT is this tool's own zod schema, a different surface from the REST route's plain
+  // object spread (v1-session-by-id.test.ts already covers that one) - a schema that dropped or
+  // mis-named averageHeartRateBpmSource would pass every other test in this file while answering
+  // an agent a split with no way to tell a filled cell from the watch's own number.
+  it('fills a split the provider left null from the trace, and leaves one it sent alone', () => {
+    seedRun({
+      metricsSummary: { caloriesKcal: 400 },
+      splits: [
+        {
+          // Half-open [start, end): minutes 0-4 of seedHeartRate's ten, values 120..124, mean 122.
+          startTime: new Date(START).toISOString(),
+          endTime: new Date(START + 5 * 60_000).toISOString(),
+          splitType: 'DISTANCE', activeDuration: '300s',
+          metricsSummary: { distanceMillimeters: 1_000_000, averagePaceSecondsPerMeter: 0.3 },
+          // No averageHeartRateBeatsPerMinute: the provider left this split's own reading null.
+        },
+        {
+          startTime: new Date(START + 5 * 60_000).toISOString(),
+          endTime: new Date(END).toISOString(),
+          splitType: 'DISTANCE', activeDuration: '300s',
+          metricsSummary: {
+            distanceMillimeters: 1_000_000, averagePaceSecondsPerMeter: 0.3,
+            averageHeartRateBeatsPerMinute: '165',
+          },
+        },
+      ],
+    })
+    seedHeartRate()
+
+    const out = tool('get_workout').run(q(), { sessionId: 'run-x' }) as {
+      autoSplits: { averageHeartRateBpm: number | null, averageHeartRateBpmSource: string | null }[]
+    }
+
+    expect(out.autoSplits).toHaveLength(2)
+    expect(out.autoSplits[0]!.averageHeartRateBpm).toBe(122)
+    expect(out.autoSplits[0]!.averageHeartRateBpmSource).toBe('trace')
+    // The watch's own number always wins - unchanged, not re-averaged over the trace.
+    expect(out.autoSplits[1]!.averageHeartRateBpm).toBe(165)
+    expect(out.autoSplits[1]!.averageHeartRateBpmSource).toBe('provider')
+  })
+
   it('answers a tool error, not an empty object, for a session id that names nothing', () => {
     expect(() => tool('get_workout').run(q(), { sessionId: 'does-not-exist' })).toThrow(ConfigError)
+  })
+})
+
+describe('get_workout cardio load', () => {
+  // 600s each -> 10 minutes each -> Edwards = 1*10 + 2*10 + 3*10 + 4*10 = 100.
+  const ZONE_ATTRS = {
+    metricsSummary: {
+      heartRateZoneDurations: {
+        lightTime: '600s', moderateTime: '600s', vigorousTime: '600s', peakTime: '600s',
+      },
+    },
+  }
+
+  function seedCardioHeartRate(startMs: number): void {
+    for (let i = 0; i < 10; i += 1) {
+      for (const agg of ['min', 'mean', 'max'] as const) {
+        insertSample(test.db, {
+          personId: 'robin', sourceId: 'watch', metric: 'heart_rate',
+          utcMs: startMs + i * 60_000, tzOffsetMinutes: 120, agg, value: 120 + i,
+        })
+      }
+    }
+  }
+
+  it('answers both models for a session with zones and a heart rate profile', () => {
+    const start = Date.UTC(2026, 7, 20, 7, 0)
+    const end = start + 10 * 60_000
+    insertSession(
+      test.db, 'session-with-zones', 'robin', 'watch', 'exercise', start, end, '2026-08-20', ZONE_ATTRS,
+    )
+    seedCardioHeartRate(start)
+    new PeopleStore(test.db).setBirthDate('robin', '1985-03-04')
+    new PeopleStore(test.db).setSex('robin', 'male')
+    seedDaily({ localDate: '2026-08-20', metric: 'resting_heart_rate', agg: 'last', value: 52 })
+    seedDaily({ localDate: '2026-08-20', metric: 'heart_rate_zone_peak_max_bpm', agg: 'last', value: 185 })
+
+    const out = tool('get_workout').run(q(), { sessionId: 'session-with-zones' }) as {
+      cardioLoad: {
+        edwards: number | null
+        banister: number | null
+        banisterBasis: { maxBpmSource: string } | null
+      } | null
+    }
+
+    expect(out.cardioLoad?.edwards).toBe(100)
+    expect(out.cardioLoad?.banister).toBeGreaterThan(0)
+    expect(out.cardioLoad?.banisterBasis?.maxBpmSource).toBe('providerZoneCeiling')
+  })
+
+  it('answers null for a session neither model could run on', () => {
+    const start = Date.UTC(2026, 7, 21, 7, 0)
+    const end = start + 10 * 60_000
+    // No zones in attrs, no birthday/sex, no resting heart rate, no heart rate samples: neither
+    // Edwards nor Banister has anything to run on.
+    insertSession(test.db, 'session-without-zones', 'robin', 'watch', 'exercise', start, end, '2026-08-21')
+
+    const out = tool('get_workout').run(q(), { sessionId: 'session-without-zones' }) as {
+      cardioLoad: unknown
+    }
+
+    expect(out.cardioLoad).toBeNull()
+  })
+
+  it('says which maximum produced the Banister number', () => {
+    const start = Date.UTC(2026, 7, 22, 7, 0)
+    const end = start + 10 * 60_000
+    insertSession(
+      test.db, 'session-no-ceiling', 'robin', 'watch', 'exercise', start, end, '2026-08-22', ZONE_ATTRS,
+    )
+    seedCardioHeartRate(start)
+    new PeopleStore(test.db).setBirthDate('robin', '1985-03-04')
+    new PeopleStore(test.db).setSex('robin', 'male')
+    seedDaily({ localDate: '2026-08-22', metric: 'resting_heart_rate', agg: 'last', value: 52 })
+    // No heart_rate_zone_peak_max_bpm row for this day: the age formula is the only maximum
+    // available, exercising the branch a peak-zone ceiling would otherwise hide.
+
+    const out = tool('get_workout').run(q(), { sessionId: 'session-no-ceiling' }) as {
+      cardioLoad: { banisterBasis: { maxBpmSource: string } | null } | null
+    }
+
+    expect(out.cardioLoad?.banisterBasis?.maxBpmSource).toBe('ageFormula')
   })
 })
 
