@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.18.0](https://github.com/bardesss/haelan/compare/v1.17.1...v1.18.0) (2026-09-13)
+
+
+### Features
+
+* how many backups to keep, and how often, become settings rather than variables ([#205](https://github.com/bardesss/haelan/issues/205)) ([b2cd24b](https://github.com/bardesss/haelan/commit/b2cd24bb17f4db3537c2227975944f4ced980946)), closes [#150](https://github.com/bardesss/haelan/issues/150)
+
 ## [1.17.1](https://github.com/bardesss/haelan/compare/v1.17.0...v1.17.1) (2026-09-13)
 
 
