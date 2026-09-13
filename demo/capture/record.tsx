@@ -24,7 +24,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from '../../apps/web/src/Shell.js'
 import { navigate } from '../../apps/web/src/router.js'
 import { ROUTES, WORKOUT_ROUTE, NIGHT_ROUTE } from '../../apps/web/src/routes.js'
-import { RANGE_KEYS, addDays, stepAnchor } from '../../apps/web/src/controls/range.js'
+import { RANGE_KEYS, addDays, datesFor, stepAnchor } from '../../apps/web/src/controls/range.js'
 import { ALL_SOURCES } from '../../apps/web/src/controls/source.js'
 import { sourcesIn } from '../../apps/web/src/data/pageShell.js'
 import { CHART_VARS } from '../../apps/web/src/charts/tokens.js'
@@ -234,37 +234,66 @@ describe('the capture sweep', () => {
       }
     }
 
-    // Ruling B, dimension 2: one step back per range preset, so "previous week"/"previous month"
-    // are in the manifest too - every route that reads a range at all, at the default source.
+    // Ruling B, dimension 2: one step back AND two steps back per range preset, so "previous
+    // week"/"previous month" are in the manifest, and so is the anchor one more click past them -
+    // every route that reads a range at all, at the default source. Two steps, not one: the
+    // critical review's own finding is that ControlRow's back chevron reaches a nothing-recorded
+    // anchor in exactly two clicks (record.tsx used to step the anchor back only once), and the
+    // fix is to widen the sweep to match rather than to paper over the third click's miss.
     for (const route of ROUTES) {
       if (route.path.includes(':') || !usesPageControls(route.path)) continue
       for (const range of RANGE_KEYS) {
-        await mount(`${route.path}?range=${range}&on=${stepAnchor(range, DEMO_DATE, -1)}`)
+        let anchor = DEMO_DATE
+        for (let step = 0; step < 2; step += 1) {
+          anchor = stepAnchor(range, anchor, -1)
+          await mount(`${route.path}?range=${range}&on=${anchor}`)
+        }
       }
     }
 
-    // Detail pages: the most recent real ids and dates the seed produced, not the oldest. The
-    // route answers ascending by startMs (sessions.ts's own comment: a deterministic order for a
-    // snapshot), so a plain `limit` grabs the OLDEST rows in a 365-day seed - a year before
-    // anything the demo's own default view ever lists, unreachable without stepping the anchor
-    // back into a day this sweep never otherwise visits. No `limit` on either call below for the
-    // same reason: finding the recent end of an ascending list needs the whole list, or a second
-    // round trip through however many pages exist first.
-    const sessionsReply = await server.fetch(
-      `/api/v1/p/${server.personId}/sessions?kind=exercise&from=${wideFrom}&to=${DEMO_DATE}`,
-    )
-    const { items: allSessions } = await sessionsReply.json() as { items: WorkoutSession[] }
-    expect(allSessions.length, 'the seed produced no exercise sessions to capture a detail page for')
+    // Detail pages: every night and session the default Week and Month lists actually show,
+    // rather than a fixed handful of the most recent. The critical review's own finding: the Sleep
+    // list's default Week view lists 7 nights while a hardcoded slice(0, 5) captured a detail page
+    // for only 5 of them, leaving the other 2 one click away from a manifest miss that used to
+    // render as "the instance returned an error" - and a night's own detail page issues its own,
+    // single-day {from: localDate, to: localDate} query, a different canonical url from the list's
+    // own {from, to} range, so being IN the list response is not enough to make its detail page
+    // reachable. Week and Month, not just one: Activity's and Sleep's own default range is
+    // whichever a visitor lands on, and the two are exactly the presets ControlRow's segmented
+    // control (RANGE_KEYS) offers a click away from each other with no anchor step at all.
+    const weekWindow = datesFor('week', DEMO_DATE)
+    const monthWindow = datesFor('month', DEMO_DATE)
+
+    async function sessionsIn(range: { from: string, to: string }): Promise<WorkoutSession[]> {
+      const reply = await server.fetch(
+        `/api/v1/p/${server.personId}/sessions?kind=exercise&from=${range.from}&to=${range.to}`,
+      )
+      const { items } = await reply.json() as { items: WorkoutSession[] }
+      return items
+    }
+
+    async function nightsIn(range: { from: string, to: string }): Promise<Night[]> {
+      const reply = await server.fetch(
+        `/api/v1/p/${server.personId}/sleep/nights?from=${range.from}&to=${range.to}`,
+      )
+      const { items } = await reply.json() as { items: Night[] }
+      return items
+    }
+
+    // Deduplicated by id/localDate, not concatenated: the Month window contains the Week window's
+    // own days whenever the anchor's week does not cross a month boundary, and mounting the same
+    // detail page twice would only cost time, not coverage - but this way it costs neither.
+    const sessions = [...new Map(
+      [...await sessionsIn(weekWindow), ...await sessionsIn(monthWindow)].map((s) => [s.id, s]),
+    ).values()]
+    expect(sessions.length, 'the seed produced no exercise sessions in the default week/month views')
       .toBeGreaterThan(0)
-    const sessions = [...allSessions].sort((a, b) => b.startMs - a.startMs).slice(0, 5)
     for (const session of sessions) await mount(WORKOUT_ROUTE.replace(':sessionId', session.id))
 
-    const nightsReply = await server.fetch(
-      `/api/v1/p/${server.personId}/sleep/nights?from=${wideFrom}&to=${DEMO_DATE}`,
-    )
-    const { items: allNights } = await nightsReply.json() as { items: Night[] }
-    expect(allNights.length, 'the seed produced no nights to capture a detail page for').toBeGreaterThan(0)
-    const nights = [...allNights].sort((a, b) => b.startMs - a.startMs).slice(0, 5)
+    const nights = [...new Map(
+      [...await nightsIn(weekWindow), ...await nightsIn(monthWindow)].map((n) => [n.localDate, n]),
+    ).values()]
+    expect(nights.length, 'the seed produced no nights in the default week/month views').toBeGreaterThan(0)
     for (const night of nights) await mount(NIGHT_ROUTE.replace(':localDate', night.localDate))
 
     // The manifest itself still has to be non-empty (writeCapture's own refusal), which is a

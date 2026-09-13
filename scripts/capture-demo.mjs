@@ -20,19 +20,21 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * Measured 2026-09-13, seeding the default 365 days, after the sweep widened to cover every
- * source option and one step back per range preset (the controller's ruling on Task 3's review):
- * 496 files, 6 732 996 bytes (6.4 MB), 59.1s wall clock (seed + rebuild + the whole sweep). Up from
- * the pre-widening measurement (226 files, 2 421 605 bytes) but still comfortably inside the
- * spec's under-40 MB bracket, so the demo keeps the full 365 day span rather than trimming
- * intraday to 90 days or cutting the seed to 180.
+ * Measured 2026-09-13, seeding the default 365 days, after the final review round widened the
+ * sweep a second time: two anchor steps back per range preset instead of one (the critical finding
+ * that the ControlRow back chevron reached a nothing-recorded anchor in exactly two clicks), and
+ * every night and session the default Week and Month lists actually show instead of a hardcoded
+ * five of each. 680 files, 7 380 571 bytes (7.0 MB), 79.9s wall clock (seed + rebuild + the whole
+ * sweep) - up from the prior widening's measurement (496 files, 6 732 996 bytes, 59.1s), and still
+ * comfortably inside the spec's under-40 MB bracket, so the demo keeps the full 365 day span
+ * rather than trimming intraday to 90 days or cutting the seed to 180.
  *
- * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (6 732 996 * 1.5 ~= 10 099 494): a ceiling
- * that catches a runaway (a route that starts recording every source separately, say, or a metric
- * catalogue that grows sharply), not one that trips on the ordinary growth a new card or a new day
- * of seeded data adds.
+ * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (7 380 571 * 1.5 = 11 070 856.5, rounded up):
+ * a ceiling that catches a runaway (a route that starts recording every source separately, say, or
+ * a metric catalogue that grows sharply), not one that trips on the ordinary growth a new card or
+ * a new day of seeded data adds.
  */
-const MAX_CAPTURE_BYTES = 10_099_494
+const MAX_CAPTURE_BYTES = 11_070_857
 
 /**
  * Writes one JSON file per recorded response into `outDir`, plus a manifest mapping each response's
