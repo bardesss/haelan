@@ -100,9 +100,13 @@ not a duration. The two diverge sharply: on the hardest civil day in the window 
 is 1.85 times the number of zone minutes of clock time it describes.
 
 So summing `active_zone_minutes_fat_burn + _cardio + _peak` yields a number whose unit is not
-minutes, even though `metrics.ts` declares all three as `unit: 'minutes'`. Whether haelan should
-sum the raw values (a score) or count the points (clock minutes) is a product decision, but they
-are different numbers and only one belongs on an axis labelled minutes.
+minutes. `metrics.ts` declared all three as `unit: 'minutes'` when this was measured, and the
+Activity page rendered each as a card reading "zone minutes", so two of those three cards were
+showing a wearer twice the number they named. Fixed alongside this finding by keeping the score
+and correcting what it is called: the doubling is Fitbit's own Active Zone Minutes and is the
+figure their app reports, so the cards now say AZM rather than minutes. Counting clock minutes
+instead was the alternative, and was rejected because it would disagree with the wearer's own
+watch.
 
 ### What the proposed total would print
 

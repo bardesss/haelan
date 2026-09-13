@@ -357,12 +357,15 @@ export function Activity() {
         {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
           'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
 
+        {/* These three are labelled AZM rather than minutes, unlike the activity levels above,
+            because the number is a score: a cardio or peak minute is worth two. Measured in
+            probe/findings/activity-minute-overlap.md; see the note in metrics.ts. */}
         {card('active_zone_minutes_fat_burn', 4, 'activity.activeZoneMinutesFatBurn.label', 'activity.activeZoneMinutesFatBurn.basis', 'activity.activeZoneMinutesFatBurn.basis',
-          'activity.activeZoneMinutesFatBurn.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
+          'activity.activeZoneMinutesFatBurn.chartLabel', 'activity.units.activeZoneMinutes', 'activity.units.activeZoneMinutesShort', 'higher-is-better')}
         {card('active_zone_minutes_cardio', 4, 'activity.activeZoneMinutesCardio.label', 'activity.activeZoneMinutesCardio.basis', 'activity.activeZoneMinutesCardio.basis',
-          'activity.activeZoneMinutesCardio.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
+          'activity.activeZoneMinutesCardio.chartLabel', 'activity.units.activeZoneMinutes', 'activity.units.activeZoneMinutesShort', 'higher-is-better')}
         {card('active_zone_minutes_peak', 4, 'activity.activeZoneMinutesPeak.label', 'activity.activeZoneMinutesPeak.basis', 'activity.activeZoneMinutesPeak.basis',
-          'activity.activeZoneMinutesPeak.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
+          'activity.activeZoneMinutesPeak.chartLabel', 'activity.units.activeZoneMinutes', 'activity.units.activeZoneMinutesShort', 'higher-is-better')}
 
         {card('workout_count', 4, 'activity.workoutCount.label', 'activity.workoutCount.basis', 'activity.workoutCount.basis',
           'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort', 'neutral')}

@@ -219,7 +219,13 @@ export const DATA_TYPES: readonly DataType[] = [
   // metric with an ordinary rollup, same as the activity level above. The natural key collision
   // this deferral originally feared was measured on this branch and does not occur: no interval
   // in the sample carried more than one zone, per probe/findings/field-map.md.
-  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'minutes', '', {
+  // The unit is 'active_zone_minutes', not 'minutes', and the difference is measured rather than
+  // pedantic: probe/findings/activity-minute-overlap.md found valuePath's number is a score, not a
+  // duration. A fat burn minute is worth 1 and a cardio or peak minute is worth 2, with no
+  // exception across the sampled points, so summing this metric counts a wearer's clock minutes
+  // twice for two of the three zones. That doubling is Fitbit's own Active Zone Minutes and is
+  // what their app reports, so the number is kept and the unit stops calling it minutes.
+  listable('active-zone-minutes', 'activeZoneMinutes', 'interval.start_time', ACTIVITY, 'active_zone_minutes', 'active_zone_minutes', '', {
     tier: 'intraday',
     subDimension: {
       keyPath: 'heartRateZone',

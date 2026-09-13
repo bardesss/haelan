@@ -47,9 +47,13 @@ export const METRICS: Record<string, MetricSpec> = {
   active_minutes_light: { ...TOTAL, unit: 'minutes' },
   active_minutes_moderate: { ...TOTAL, unit: 'minutes' },
   active_minutes_vigorous: { ...TOTAL, unit: 'minutes' },
-  active_zone_minutes_fat_burn: { ...TOTAL, unit: 'minutes' },
-  active_zone_minutes_cardio: { ...TOTAL, unit: 'minutes' },
-  active_zone_minutes_peak: { ...TOTAL, unit: 'minutes' },
+  // Not 'minutes', unlike the three above, and the asymmetry is the point. An activity level
+  // point is worth exactly one minute; a zone point is worth 1 in fat burn and 2 in cardio and
+  // peak, so the sum is Fitbit's Active Zone Minutes score rather than time on a clock. See the
+  // note on the catalogue entry and probe/findings/activity-minute-overlap.md.
+  active_zone_minutes_fat_burn: { ...TOTAL, unit: 'active_zone_minutes' },
+  active_zone_minutes_cardio: { ...TOTAL, unit: 'active_zone_minutes' },
+  active_zone_minutes_peak: { ...TOTAL, unit: 'active_zone_minutes' },
 
   // Intraday series: min, mean and max are three different readings of the same day and a card
   // shows all three. p50 is carried because a mean over a day with one glitching hour is not
