@@ -70,7 +70,24 @@ export function createDemoTransport(loadJson: LoadJson): DemoTransport {
     // The recorder only ever captured GETs (a sweep of pages, not of writes), so a write has no
     // manifest entry to answer from and goes to the overlay instead - the one thing in this
     // transport that can actually change between two reads.
-    if (method !== 'GET') return writeThrough(method, path, body, overlay) as T
+    if (method !== 'GET') {
+      try {
+        return writeThrough(method, path, body, overlay) as T
+      } catch (error) {
+        // writeThrough's own 404 ('not_found') means the method and path matched none of Task 6's
+        // overlay writes - which is every action this static build has no meaning for: signing
+        // out, kicking off a sync, running backup or reclaim, and anything the app grows that
+        // neither this file nor overlay.ts has been taught since. Recast, not left as a 404: a
+        // reader hitting "not found" on a button they can see on screen would read as a bug, and
+        // this is a refusal, not a missing route. Any other thrown error - the 400s
+        // affectedRangeFor throws for a malformed target key, for instance - is a real write that
+        // was attempted and rejected, and must reach the caller unchanged.
+        if (error instanceof ApiError && error.kind === 'not_found') {
+          throw new ApiError('config', 400, `this demo cannot perform ${method} ${path} - it has no server behind it to change`)
+        }
+        throw error
+      }
+    }
     return readCaptured<T>(path)
   }
 

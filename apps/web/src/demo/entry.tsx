@@ -1,5 +1,6 @@
 import { installFrozenClock } from './frozenClock.js'
 import { DEMO_CLOCK_MS } from './instant.js'
+import { mountDemoBanner } from './DemoBanner.js'
 
 // DEMO_CLOCK_MS, not DEMO_INSTANT_MS. The recorder swept every page with its DOM clock pinned to
 // DEMO_CLOCK_MS (instant.ts: the last millisecond of the last day the seed actually wrote data
@@ -9,6 +10,12 @@ import { DEMO_CLOCK_MS } from './instant.js'
 // nobody recorded, opening the demo on a page of "not in the demo" cards with nothing obviously
 // wrong.
 installFrozenClock(DEMO_CLOCK_MS)
+
+// Its own root, appended to document.body ahead of main.js's own createRoot(document.getElementById
+// ('root')) call below: mounting it here, rather than adding it to Shell.tsx, keeps the product's
+// component tree exactly what a real instance ships. See DemoBanner.tsx's own comment for why this
+// banner does not go through I18nProvider either.
+mountDemoBanner()
 
 // Dynamic, and after the clock: a static import would be hoisted above the call above it.
 await import('../main.js')
