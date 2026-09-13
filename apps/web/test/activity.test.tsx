@@ -254,18 +254,24 @@ describe('the Activity page', () => {
     restore()
   })
 
-  // Not "one request per card": /series takes one agg for a whole call, so cards sharing an agg
-  // ride together. Two aggs on this page (sum and count, workout_count being the one metric whose
-  // only aggregate is count), so two requests regardless of how many cards draw from them.
-  it('batches by agg, so the request count is the number of distinct aggs', async () => {
+  // Not "one request per card": /series takes one agg and one range for a whole call, so cards
+  // sharing both ride together. Two aggs on this page (sum and count, workout_count being the one
+  // metric whose only aggregate is count) over the page's range, plus the training load card,
+  // whose 28 day window is fixed by ACWR's own definition and so cannot ride with a range the
+  // reader picks. Batching is still what this asserts: no two requests may share an agg AND a
+  // range, which is the property that breaks the moment a card starts fetching for itself.
+  it('batches by agg and range, so no two requests ask the same question', async () => {
     const urls: string[] = []
     const restore = stubActivity(urls)
     const { client, tree } = withQuery(<Activity />)
     mount(tree)
     await flush(client, () => container!.innerHTML)
     const series = urls.filter((u) => u.includes('/series'))
-    const aggs = new Set(series.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg')))
-    expect(series).toHaveLength(aggs.size)
+    const questions = new Set(series.map((u) => {
+      const params = new URLSearchParams(u.split('?')[1] ?? '')
+      return `${params.get('agg')}|${params.get('from')}|${params.get('to')}`
+    }))
+    expect(series).toHaveLength(questions.size)
     restore()
   })
 

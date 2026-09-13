@@ -155,8 +155,15 @@ describe('the overnight traces', () => {
       // previous test's own comment on Windows timer granularity describes - flush() can settle a
       // poll early on the cached "nothing in flight" state while the component's own re-render is
       // still queued behind it.
+      //
+      // The wait is for the line to EXIST, not for it to already say the sentence: waiting on the
+      // sentence and then asserting the same sentence is a condition that can only ever time out,
+      // never fail, and a timeout says "the fallback basis line to render" whatever the line
+      // actually said. Existence and wording are two different claims, and the card carries no
+      // basis at all until the fallback has answered - there is no state where this returns on a
+      // line that is still going to change.
       await pumpUntil(
-        () => container?.querySelector('.basis')?.textContent === expected,
+        () => container?.querySelector('.basis') !== null,
         'the fallback basis line to render',
       )
       expect(container?.querySelector('.basis')?.textContent).toBe(expected)
