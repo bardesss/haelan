@@ -21,7 +21,7 @@ export interface BootRebuildDeps {
  * household of one, which a self hosted personal dashboard mostly is: with a single person there
  * is no "between" for it to fall in, so the entire rebuild runs inside one turn regardless, and
  * that was measured at about fifteen minutes on real data. What actually keeps the caller
- * reachable during that time is running this whole function off the main thread, which is what
+ * reachable during that time is running this whole function in another process, which is what
  * rebuildInWorker.ts now does; this function's own shape is unchanged and is still what atomicity
  * within a person rests on, since nobody ever reads a person whose tier 2 and tier 3 disagree.
  */
