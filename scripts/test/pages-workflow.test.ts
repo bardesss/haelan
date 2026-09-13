@@ -5,8 +5,15 @@ import { describe, it, expect } from 'vitest'
 // what these assertions care about - which triggers exist, which permissions are granted, and
 // what order the steps run in - is legible without one. release-workflow-order.test.ts reads
 // release.yml the same way and says why.
+// Newlines normalised on the way in. The file is stored with LF and checks out that way on CI,
+// but git converts it to CRLF on a Windows checkout with core.autocrlf set, and the trigger
+// assertion below spells its line breaks as literal \n - so it could not match, and this file
+// failed for anyone who cloned the repository on Windows while passing for whoever wrote it and
+// on every CI leg. Normalising here rather than writing \r?\n into each pattern keeps the
+// assertions readable and cannot be forgotten by the next one added.
 const yaml = readFileSync(new URL('../../.github/workflows/pages.yml', import.meta.url), 'utf8')
-const lines = yaml.split(/\r?\n/)
+  .replace(/\r\n/g, '\n')
+const lines = yaml.split('\n')
 const at = (needle: string) => lines.findIndex((line) => line.includes(needle))
 
 describe('the pages workflow', () => {
