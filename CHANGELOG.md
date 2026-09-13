@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.16.1](https://github.com/bardesss/haelan/compare/v1.16.0...v1.16.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **test:** the trace card waits for the fallback, not for flush()'s guess ([#199](https://github.com/bardesss/haelan/issues/199)) ([ca4d6cb](https://github.com/bardesss/haelan/commit/ca4d6cbb8545d279a8b1b7843464b49c1de3207c))
+
 ## [1.16.0](https://github.com/bardesss/haelan/compare/v1.15.3...v1.16.0) (2026-09-13)
 
 
