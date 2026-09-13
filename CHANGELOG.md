@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.17.1](https://github.com/bardesss/haelan/compare/v1.17.0...v1.17.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **server:** resolving a session stops being a write, so a boot rebuild cannot take the instance down ([#206](https://github.com/bardesss/haelan/issues/206)) ([47ac840](https://github.com/bardesss/haelan/commit/47ac840787cb17b64633e7ffc000212170cc009b))
+
 ## [1.17.0](https://github.com/bardesss/haelan/compare/v1.16.1...v1.17.0) (2026-09-13)
 
 
