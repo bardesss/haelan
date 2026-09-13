@@ -3,3 +3,4 @@
 // `.d.mts` beside it without needing `allowJs` anywhere in the program. Keep it in sync with
 // what build-site.mjs exports.
 export function renderPage(template: string, values: Record<string, string>): string
+export function releaseStamp(rootDir: string): { version: string, releaseDate: string }

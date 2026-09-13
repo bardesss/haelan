@@ -3,6 +3,9 @@
 //
 // Usage: pnpm site:build
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 /**
  * Fills every {{slot}} in `template` from `values`.
  *
@@ -21,4 +24,22 @@ export function renderPage(template, values) {
   const unused = Object.keys(values).filter((name) => !used.has(name))
   if (unused.length > 0) throw new Error(`values nothing uses: ${unused.join(', ')}`)
   return out
+}
+
+/**
+ * What the page says about the release it was built from: the version in package.json, and the
+ * date release-please stamped on that version's heading in CHANGELOG.md.
+ *
+ * The changelog rather than the release event, so that a build on a laptop and a build in the
+ * workflow produce the same bytes. A missing entry throws rather than falling back to today:
+ * "today" would be the build date wearing a release date's clothes.
+ */
+export function releaseStamp(rootDir) {
+  const { version } = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
+  const changelog = readFileSync(join(rootDir, 'CHANGELOG.md'), 'utf8')
+  const escaped = version.replace(/\./g, '\\.')
+  const heading = new RegExp(`^## \\[${escaped}\\][^\\n]*\\((\\d{4}-\\d{2}-\\d{2})\\)`, 'm')
+  const found = heading.exec(changelog)
+  if (found === null) throw new Error(`no CHANGELOG.md entry for ${version}`)
+  return { version, releaseDate: found[1] }
 }

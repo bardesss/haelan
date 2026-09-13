@@ -24,3 +24,41 @@ describe('renderPage', () => {
       .toThrow('nothing uses: stale')
   })
 })
+
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { releaseStamp } from '../build-site.mjs'
+
+describe('releaseStamp', () => {
+  function fixture(changelog: string, version = '1.16.0'): string {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-site-'))
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ version }))
+    writeFileSync(join(dir, 'CHANGELOG.md'), changelog)
+    return dir
+  }
+
+  it('reads the version from package.json and its date from the changelog', () => {
+    const dir = fixture([
+      '# Changelog',
+      '',
+      '## [1.16.0](https://github.com/bardesss/haelan/compare/v1.15.3...v1.16.0) (2026-09-13)',
+      '',
+      '## [1.15.3](https://github.com/bardesss/haelan/compare/v1.15.2...v1.15.3) (2026-09-02)',
+    ].join('\n'))
+    try {
+      expect(releaseStamp(dir)).toEqual({ version: '1.16.0', releaseDate: '2026-09-13' })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to guess when the changelog has no entry for the version', () => {
+    const dir = fixture('# Changelog\n\n## [1.15.3](x) (2026-09-02)\n')
+    try {
+      expect(() => releaseStamp(dir)).toThrow('no CHANGELOG.md entry for 1.16.0')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
