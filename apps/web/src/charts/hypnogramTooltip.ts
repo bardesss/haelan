@@ -2,6 +2,7 @@ import type { Stage } from '../fixtures/july.js'
 import { formatDuration } from '../format.js'
 import type { Translate } from '../format.js'
 import { STAGE_LABEL_KEY } from './stage.js'
+import { tip } from './base.js'
 
 const MINUTE_MS = 60_000
 
@@ -34,5 +35,5 @@ export function hypnogramTooltip(
     label: t(STAGE_LABEL_KEY[segment.stage]),
     value: formatDuration((segment.endMs - segment.startMs) / MINUTE_MS),
   })
-  return `${span}<br/>${stage}`
+  return tip`${span}<br/>${stage}`
 }

@@ -10,7 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import type { WorkoutSession } from '../src/data/useSessions.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
-import { flush } from './flush.js'
+import { pumpUntil } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
 // this, the same reason chart-lifecycle.test.tsx sets them. Only the source-resolution case below
@@ -101,6 +101,35 @@ function stubSessionError(status: number): () => void {
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Waits for the page to have left its loading state, then for everything else to settle.
+ *
+ * `flush()` alone is not enough here, and this file is where that cost a day. Every case below
+ * mounts `WorkoutDetail` cold, so the session request is gated behind `useSession`'s own - the
+ * query is `enabled: personId !== undefined` and `personId` arrives from `/api/auth/me`. Until
+ * that gate opens there is nothing in flight and the page says "Loading", which is exactly what
+ * `flush()` reads as a settled page: it wants one in-flight period, then two quiet samples whose
+ * HTML matches. Two pumps inside that window and it returns, and the assertion underneath reads a
+ * page that never loaded. CI on Node 26 did precisely that; locally it reproduces about once in
+ * 550 runs, which is what makes it worth removing rather than re-running.
+ *
+ * Two conditions, and no `flush()` at all. The first is the one every case here shares; the second
+ * is what `flush()` was actually being relied on for, said directly. `flush()` cannot be layered
+ * after the first: its own guard requires the fetch count to have left zero at least once while it
+ * is watching, and by the time the page has left its loading state every request has already
+ * finished, so it throws "never started" - measured, 858 pumps with nothing in flight. That guard
+ * is right for what it guards; it just makes the helper unusable once the waiting is over.
+ *
+ * See flush.test.tsx's KNOWN GAP case for the mechanism this replaces, pinned there.
+ */
+async function settled(client: QueryClient, html: () => string): Promise<void> {
+  await pumpUntil(() => !html().includes('>Loading<'), 'the workout page to leave its loading state')
+  await pumpUntil(
+    () => client.isFetching() + client.isMutating() === 0,
+    'the page to have nothing left in flight',
+  )
+}
+
 function mount(node: ReactNode): { client: QueryClient, html: () => string } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
@@ -120,7 +149,7 @@ describe('the workout page', () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(html()).toContain('Morning run')
     } finally { restore() }
   })
@@ -129,7 +158,7 @@ describe('the workout page', () => {
     const restore = stub({ run1: { ...RUN, attrs: { ...(RUN.attrs as object), displayName: undefined } } })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(html()).toContain('Running')
     } finally { restore() }
   })
@@ -138,7 +167,7 @@ describe('the workout page', () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.workout-gps')?.textContent).toBe(
         'A GPS route was recorded for this workout. This API does not return route points, so there is no map.',
       )
@@ -150,7 +179,7 @@ describe('the workout page', () => {
     const restore = stub({ bare: BARE })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.workout-gps')).toBeNull()
     } finally { restore() }
   })
@@ -160,7 +189,7 @@ describe('the workout page', () => {
     const restore = stub({ run1: excluded })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.workout-excluded')?.textContent)
         .toBe('Excluded: strap slipped')
     } finally { restore() }
@@ -170,7 +199,7 @@ describe('the workout page', () => {
     const restore = stub({ run1: { ...RUN, excluded: true, excludeReason: null } })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.workout-excluded')?.textContent).toBe('Excluded')
     } finally { restore() }
   })
@@ -195,7 +224,7 @@ describe('the workout page', () => {
     const restore = stubSessionError(404)
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.card .empty')).not.toBeNull()
       expect(html()).toContain('No such workout')
     } finally { restore() }
@@ -205,7 +234,7 @@ describe('the workout page', () => {
     const restore = stubSessionError(500)
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.card .empty')).not.toBeNull()
       expect(html()).toContain('This did not load.')
     } finally { restore() }
@@ -218,7 +247,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toContain('Elapsed')
       expect(labels).toContain('Moving')
@@ -230,7 +259,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: equal })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toContain('Elapsed')
       expect(labels).not.toContain('Moving')
@@ -241,7 +270,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toEqual(['Elapsed', 'Moving', 'Distance', 'Calories'])
     } finally { restore() }
@@ -254,7 +283,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ run1: zeroed })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const steps = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Steps')
       expect(steps?.querySelector('.value')?.textContent).toBe('0')
@@ -266,7 +295,7 @@ describe('the workout stat tiles', () => {
     const restore = stub({ bare: BARE })
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       // Elapsed is always computable from the span, so the section is present with exactly one tile.
       const labels = [...(container?.querySelectorAll('.workout-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toEqual(['Elapsed'])
@@ -316,7 +345,7 @@ describe('the workout page\'s own ?source= parameter', () => {
     }) as typeof fetch
     try {
       const { client, html } = mount(<WorkoutDetail />)
-      await flush(client, html)
+      await settled(client, html)
       // Absent entirely would be the old, wrong behaviour (WorkoutTrace.tsx's own rule for nobody
       // recorded anything); present with the fallback's own basis line, naming the pinned device
       // that answered empty, is what an unrecognised source id must read as instead.

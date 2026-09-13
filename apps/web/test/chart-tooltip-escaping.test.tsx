@@ -12,6 +12,7 @@ import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Sparkline } from '../src/charts/Sparkline.js'
 import { HeartRateRange } from '../src/charts/HeartRateRange.js'
 import { Spo2Range } from '../src/charts/Spo2Range.js'
 import { ActivityHeatmap } from '../src/charts/ActivityHeatmap.js'
@@ -119,11 +120,29 @@ const DAY = (date: string, over: Partial<DayRow> = {}): DayRow =>
   ({ date, steps: 4000, hrMin: 55, hrMean: 62, hrMax: 90, sleepMinutes: 420, worn: true, ...over })
 
 describe('a day level chart tooltip', () => {
-  // The three charts that draw a markLine/markPoint tooltip carrying annotation text. Each is
+  // Every chart that draws a markLine/markPoint tooltip carrying annotation text. Each is
   // mounted with one annotation on the middle day and nothing excluded, so the mark this test
   // hovers is the annotation's own and its dataIndex is 0 on every one of them.
+  //
+  // This list said "the three charts" and named three of the four. `Sparkline` draws both a
+  // markPoint and a markLine carrying exactly this text, on six pages, and was the chart the
+  // escaping work was prompted by -- it went unescaped for the whole of the release this file
+  // was added in, because the list was written from the charts in front of someone rather than
+  // from the set. The guard below now derives the property from source, so a fifth chart cannot
+  // be missed the same way.
   const dates = ['2026-08-01', '2026-08-02', '2026-08-03']
   const mounts = {
+    Sparkline: (text: string) => {
+      act(() => {
+        root!.render(
+          <I18nProvider lng="en">
+            <Sparkline values={[4000, 4200, 4100]} labels={dates} label="Steps" unit="steps"
+              metric="steps" annotations={[{ date: '2026-08-02', text }]} excluded={[]} />
+          </I18nProvider>,
+        )
+      })
+      return { params: { componentType: 'markLine', dataIndex: 0 } }
+    },
     HeartRateRange: (text: string) => {
       act(() => {
         root!.render(
