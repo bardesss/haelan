@@ -26,11 +26,15 @@ beforeEach(() => {
       id, personId: 'p1', externalId: id, displayName: id, kind: 'device', createdAtMs: 0,
     }).run()
   }
-  // 400 minutes of heart rate on 'watch', one reading a minute: past the 300-point default budget
-  // every charting caller uses, so the budget-independence test below can tell a real, unthinned
-  // read apart from a thinned one. Heart rate is stored downsampled to the minute, so each minute
-  // needs all three of min/mean/max written (the pattern intraday-window.test.ts uses).
-  for (let i = 0; i < 400; i += 1) {
+  // 700 minutes of heart rate on 'watch', one reading a minute: comfortably past readWindow's own
+  // DEFAULT_POINTS = 500 (query/intraday.ts), which is what actually applies here since this
+  // reader queries one source at a time (perSource = max(2, floor(500 / 1)) = 500 with no
+  // `points` given). 400 was tried first and was wrong: it is under 500, so thinBand's
+  // "nothing to do" branch (points.length <= target) fires with or without NO_THINNING, and the
+  // test could not have told a real unthinned read apart from an accidentally-default one. Heart
+  // rate is stored downsampled to the minute, so each minute needs all three of min/mean/max
+  // written (the pattern intraday-window.test.ts uses).
+  for (let i = 0; i < 700; i += 1) {
     for (const agg of ['min', 'mean', 'max'] as const) {
       insertSample(test.db, {
         personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
@@ -70,17 +74,20 @@ describe('the session heart rate reader', () => {
   // a chart's budget moves.
   //
   // This is the only test in the suite that would notice if someone "simplified" this reader into
-  // reusing the thinned trace: 400 minutes are seeded in the window, past the 300-point default
-  // budget every charting caller uses, so 400 stored minutes coming back as 400 points is the
-  // proof that no thinning happened. (A companion assertion calling the reader twice with the
-  // same arguments and comparing the results was dropped - that only proves the function is
-  // deterministic, not that it is unthinned.)
+  // reusing the thinned trace, or dropped `points: NO_THINNING` from the `read` helper - the most
+  // natural way anyone would ever break this. The number to beat is readWindow's own
+  // DEFAULT_POINTS = 500 (query/intraday.ts): this reader queries one source at a time, so an
+  // accidental default gives thinBand a target of max(2, floor(500 / 1)) = 500, and 700 seeded
+  // minutes coming back as 700 points is proof nothing was thinned against that budget. (A
+  // companion assertion calling the reader twice with the same arguments and comparing the
+  // results was dropped - that only proves the function is deterministic, not that it is
+  // unthinned.)
   it('returns every stored minute, past the point budget any chart would ask for', () => {
     const result = readSessionHeartRateMinutes(test.db, {
-      personId: 'p1', startMs: START, endMs: START + 400 * MINUTE, sessionSourceId: 'watch',
+      personId: 'p1', startMs: START, endMs: START + 700 * MINUTE, sessionSourceId: 'watch',
     })
-    expect(result.minutes).toHaveLength(400)
-    expect(result.minutes.length).toBeGreaterThan(300)
+    expect(result.minutes).toHaveLength(700)
+    expect(result.minutes.length).toBeGreaterThan(500)
   })
 
   it('falls back to every other source when the recording device logged nothing', () => {
@@ -109,7 +116,16 @@ describe('the session heart rate reader', () => {
     expect(result.minutes).toEqual([])
   })
 
-  it('is sorted oldest first', () => {
+  // Pins the reader's OWN output contract - chronological, oldest first - not which module
+  // currently guarantees it. readWindow already sorts its own result by utcMs today
+  // (query/intraday.ts, the final `.sort` on `perSourcePoints.flat()`), so this module's own
+  // `.sort()` in sessionHeartRate.ts is presently redundant; it stays as a stated defense because
+  // later readers (a split's window, a running sum over a session) depend on strict chronological
+  // order and this module would rather guarantee that itself than depend on another module's
+  // internal ordering staying true. This test would pass identically whichever of the two sorts
+  // produced the order - it is not evidence that sessionHeartRate.ts's own `.sort()` does
+  // anything today, only that the final output is chronological.
+  it('answers minutes in chronological order', () => {
     const { minutes } = readSessionHeartRateMinutes(test.db, {
       personId: 'p1', startMs: START, endMs: NINETY_END, sessionSourceId: 'watch',
     })

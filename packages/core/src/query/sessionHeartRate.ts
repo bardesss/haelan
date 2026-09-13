@@ -75,10 +75,13 @@ export function readSessionHeartRateMinutes(db: DbOrTx, input: {
   const minutes: MinuteBpm[] = result.points
     .filter((point) => point.mean !== null)
     .map((point) => ({ utcMs: point.utcMs, bpm: point.mean! }))
-    // readWindow pivots per source into a Map and concatenates the sources afterwards, so the
-    // array it returns is ordered per source and not overall. Every consumer here reads the series
-    // as a timeline - a split's window, a sum over a session - so it is sorted once, here, rather
-    // than by each of them.
+    // Belt and braces, not a fix for anything broken today: readWindow's own final line already
+    // sorts by utcMs before returning (query/intraday.ts, the `.sort` on `perSourcePoints.flat()`).
+    // Every consumer here reads the series as a strict timeline - a split's window, a running sum
+    // over a session - and this module would rather state that requirement once, itself, than have
+    // it hold only because another module's internal pivot-then-concatenate happens to sort its
+    // own output today. If readWindow's ordering guarantee ever changed, this line is what keeps
+    // that change from becoming a silent bug here.
     .sort((a, b) => a.utcMs - b.utcMs)
 
   const sources = new Set(result.points.map((point) => point.sourceId))
