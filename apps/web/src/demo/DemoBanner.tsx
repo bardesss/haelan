@@ -1,32 +1,33 @@
 import { createRoot } from 'react-dom/client'
 import { DEMO_CLOCK_MS } from './instant.js'
+import { detectDemoLang } from './lang.js'
+import type { DemoLang } from './lang.js'
 
 // Marks the host `<div>` mountDemoBanner appends to document.body, so a second call (StrictMode's
 // double-invoked effects, or entry.tsx running twice under HMR) can tell one is already there
 // instead of stacking a second banner on top of it.
 const HOST_ATTR = 'data-demo-banner'
 
-// Two strings, not a route through i18n/index.tsx: this banner is not part of the product Shell
-// renders (see entry.tsx's own comment - it mounts into a host element outside main.tsx's tree,
-// before I18nProvider exists), and i18n/index.tsx builds its own private i18next instance with no
-// ambient singleton this component could read without one. But a demo visitor's browser is a real
-// Dutch or English browser either way (the app itself ships both locales for exactly that reader),
-// so the banner still has to speak the language the rest of the page renders in - only the
-// machinery for getting there is smaller than standing up a second provider for three sentences.
-type BannerLang = 'en' | 'nl'
-
-const BANNER_TEXT: Record<BannerLang, (dateLabel: string) => string> = {
+// Two strings, not a route through i18n/index.tsx - see lang.ts's own header comment for why, and
+// for why the visitor's language still has to be read: client.ts's demo refusal message now reads
+// it too, which is why the detection itself moved out to its own module rather than staying
+// private here.
+const BANNER_TEXT: Record<DemoLang, (dateLabel: string) => string> = {
   en: (dateLabel) => `This is a demo. The data is generated, not anyone’s real health ` +
     `history, and it ends on ${dateLabel}. Anything you write here lives only in this browser ` +
     `tab — a reload resets it. Excluding a day or a session does change what you see, the ` +
     `same as a real instance; what does not follow is a recompute, so a figure derived from ` +
     `that data upstream — cardio load, a baseline, an insight — keeps the value it ` +
-    `was recorded with.`,
-  // Kept to the same three claims as the English above, including the third sentence's
-  // distinction (an exclusion does change the page; a recompute does not follow it) - the one the
-  // review that required this file called out as easy to soften in translation. "cardiobelasting"
-  // and "afgeleid" are not translator's choices made here for the first time: both already appear
-  // in nl.json (settings.cardioLoadHelp, setup's timezoneWarning) for exactly these concepts, and
+    `was recorded with. It also only holds a recorded slice of the archive, not the whole of ` +
+    `it, so wandering past what was captured — another period back, another night — shows ` +
+    `nothing rather than something broken.`,
+  // Kept to the same claims as the English above, including the third sentence's distinction (an
+  // exclusion does change the page; a recompute does not follow it) - the one the review that
+  // required this file called out as easy to soften in translation - and now the fourth, the
+  // coverage edge the review that widened the sweep still requires naming: a slice was recorded,
+  // not the archive, and stepping outside it is silence, not a fault. "cardiobelasting" and
+  // "afgeleid" are not translator's choices made here for the first time: both already appear in
+  // nl.json (settings.cardioLoadHelp, setup's timezoneWarning) for exactly these concepts, and
   // "je"/"jouw" throughout nl.json is this app's own register, not "u" - matched here rather than
   // introducing a second one.
   nl: (dateLabel) => `Dit is een demo. De gegevens zijn gegenereerd, niet iemands echte ` +
@@ -34,29 +35,18 @@ const BANNER_TEXT: Record<BannerLang, (dateLabel: string) => string> = {
     `alleen in dit tabblad bestaan — herladen zet het terug. Een dag of sessie uitsluiten ` +
     `verandert wél wat je ziet, net als bij een echte installatie; wat niet volgt, is een ` +
     `herberekening: een cijfer dat van die gegevens is afgeleid — cardiobelasting, een ` +
-    `baseline, een inzicht — behoudt de waarde waarmee het is vastgelegd.`,
+    `baseline, een inzicht — behoudt de waarde waarmee het is vastgelegd. Ook bevat de demo ` +
+    `maar een opgenomen deel van het archief, niet het geheel; verder terugbladeren dan is ` +
+    `vastgelegd — nog een periode terug, nog een nacht — toont niets, geen storing.`,
 }
 
-// Intl locale to format DEMO_CLOCK_MS's date in, one per BannerLang - kept alongside BANNER_TEXT
+// Intl locale to format DEMO_CLOCK_MS's date in, one per DemoLang - kept alongside BANNER_TEXT
 // rather than derived from it, so a date embedded mid-sentence never ends up in a script the rest
 // of that sentence isn't written in.
-const DATE_LOCALE: Record<BannerLang, string> = { en: 'en-US', nl: 'nl-NL' }
-
-/**
- * The same detection i18n/index.tsx's own initI18n uses for its `lng` default - copied rather
- * than imported because that function lives inside the module this banner deliberately does not
- * pull in (see the comment on BANNER_TEXT above). Only 'en' and 'nl' exist as banner strings
- * (en.json/nl.json are the app's only two locales), so anything else - or no navigator at all,
- * true for a test environment that never sets one - falls back to English exactly the way
- * i18next's own `fallbackLng: 'en'` does for the product.
- */
-function detectBannerLang(): BannerLang {
-  const tag = typeof navigator === 'undefined' ? 'en' : navigator.language.split('-')[0]
-  return tag === 'nl' ? 'nl' : 'en'
-}
+const DATE_LOCALE: Record<DemoLang, string> = { en: 'en-US', nl: 'nl-NL' }
 
 export function DemoBanner() {
-  const lang = detectBannerLang()
+  const lang = detectDemoLang()
   const dateLabel = new Date(DEMO_CLOCK_MS).toLocaleDateString(DATE_LOCALE[lang], {
     timeZone: 'Europe/Amsterdam',
     year: 'numeric',
