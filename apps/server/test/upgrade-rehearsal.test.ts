@@ -26,7 +26,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ASLEEP_STAGES, DATABASE_FILENAME, DeriveQueue, EventStore, NoteStore, OverrideStore,
   PeopleStore, RawArchive, SourceRegistry, closeDatabase, listBackups, openDatabase, openHaelan,
-  readSamples, runBackup, runRebuild, seedArchive, seedPerson, vacuumIfBloated,
+  readSamples, runBackup, runRebuild, seedArchive, vacuumIfBloated,
 } from '@haelan/core'
 import type { Database, SampleText } from '@haelan/core'
 import { sampleTarget } from '@haelan/core/target-key'
@@ -86,6 +86,13 @@ type Rows = Record<string, unknown[]>
 const rowsOf = (db: Database, tables: readonly string[]): Rows => Object.fromEntries(
   tables.map((t) => [t, db.$client.prepare(`select * from ${t} order by id`).all()]),
 )
+
+// sqlite's own column list for a table, in declaration order. Read from the database itself
+// rather than from either schema module, so that "which columns are new" below is answered by
+// what the two databases actually contain and not by a list this file would otherwise have to
+// keep in sync by hand.
+const columnsOf = (db: Database, table: string): string[] =>
+  (db.$client.prepare(`pragma table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
 
 const countOf = (db: Database, table: string): number =>
   (db.$client.prepare(`select count(*) as n from ${table}`).get() as { n: number }).n
@@ -224,7 +231,19 @@ describe('the upgrade path', () => {
       // ---- 1. An instance as it stood before the upgrade -----------------------------------
       const old = buildOldDatabase(dir, LAST_OLD_TAG)
       const closeOld = track(() => closeDatabase(old))
-      seedPerson(old, PERSON)
+      // Not `seedPerson`: that shared fixture inserts through head's `people` schema, and
+      // drizzle's sqlite insert always lists every column the schema module declares, filling in
+      // NULL or a default for whatever `.values()` left out (see `buildInsertQuery` in
+      // `drizzle-orm/sqlite-core/dialect.js`). `old` only has the columns `LAST_OLD_TAG` created.
+      // The two lists happened to match for as long as every column `people` ever gained landed
+      // at or before `LAST_OLD_TAG` - `built_mapping_version`/`built_derivation_version` in 0006,
+      // `ref` in 0015 itself - so this is the first migration to add a column after the cutoff,
+      // and the first row here that has to be a raw insert for the same reason `oldSamples`,
+      // `daily`, `sessions` and `observations` below already are: naming only the columns that
+      // existed at `LAST_OLD_TAG`.
+      old.$client.prepare(
+        'insert into people (id, display_name, timezone, created_at_ms) values (?, ?, ?, ?)',
+      ).run(PERSON, PERSON, 'Europe/Amsterdam', 0)
 
       // Resolved through the real registry rather than spelled out here, because a source id is
       // derived from the person and the payload's descriptor precisely so that a rebuild
@@ -307,6 +326,11 @@ describe('the upgrade path', () => {
       ).run(PERSON, sourceId, SOURCE_ALIAS, NOW)
 
       const tier1Before = rowsOf(old, TIER_1)
+      // Read while `old` is still the pre-migration file, so step 2's comparison below can tell
+      // "a column the migration added" from "a column that was already there" from the databases
+      // themselves rather than from a list this file would have to update by hand every time
+      // `people` or another TIER_1 table gains one.
+      const tier1OldColumns = Object.fromEntries(TIER_1.map((t) => [t, columnsOf(old, t)]))
       closeOld()
 
       // ---- 2. The boot a user actually gets ------------------------------------------------
@@ -316,7 +340,45 @@ describe('the upgrade path', () => {
 
       // Row for row, not table by table: a migration that rewrote a note's body or dropped an
       // event's offset would leave every count intact.
-      expect(rowsOf(db, TIER_1)).toEqual(tier1Before)
+      //
+      // Asymmetric on purpose, because migration 0018 is the first one since this file was
+      // written to add a column to a TIER_1 table, and `select *` on both sides would otherwise
+      // go blind the moment one exists: the after-rows would carry it and the before-rows would
+      // not, so a plain toEqual would fail for a reason that has nothing to do with data loss.
+      // Stopping at the intersection of old and new columns would dodge that, but it would also
+      // let a migration that added a column and silently backfilled it with the wrong value pass
+      // this test forever - and "did tier 1 survive untouched" is the one question this line
+      // exists to answer. So it checks both halves instead. `tier1OldColumns` came from `old`
+      // itself before it closed, which is what makes a column the migration *dropped* fail here
+      // too: it simply is not in that list, so the projection below still expects it and sqlite
+      // throws no such column.
+      for (const t of TIER_1) {
+        const oldCols = tier1OldColumns[t]!
+        const newCols = columnsOf(db, t)
+        const addedCols = newCols.filter((c) => !oldCols.includes(c))
+        const quoted = (cols: string[]): string => cols.map((c) => `\`${c}\``).join(', ')
+
+        // Half one: every column the old database had, identical after the upgrade.
+        const projected = db.$client.prepare(
+          `select ${quoted(oldCols)} from ${t} order by id`,
+        ).all()
+        expect(projected, `${t}: a column present before the upgrade changed`).toEqual(tier1Before[t])
+
+        // Half two: every column the migration added is null on a row that predates it. Anything
+        // else is a backfill, and a backfill touching tier 1 is exactly what this test refuses to
+        // let through silently.
+        if (addedCols.length > 0) {
+          const addedRows = db.$client.prepare(
+            `select ${quoted(addedCols)} from ${t} order by id`,
+          ).all() as Record<string, unknown>[]
+          const backfilled = addedRows.some((row) => addedCols.some((c) => row[c] !== null))
+          expect(
+            backfilled,
+            `${t}: migration since ${LAST_OLD_TAG} added ${addedCols.join(', ')} and backfilled `
+            + 'a pre-existing row with a non-null value',
+          ).toBe(false)
+        }
+      }
       // The deliberate part. 0016 drops `samples` rather than translating 1.6 million rows inside
       // a migration transaction, and the rebuild below is what refills it.
       expect(countOf(db, 'samples')).toBe(0)
