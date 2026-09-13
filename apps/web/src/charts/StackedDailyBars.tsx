@@ -157,22 +157,24 @@ export function StackedDailyBars({
 
   const { host, style } = useChart(build, height)
 
+  // dayTableRows (base.ts) called once per band, each call producing that band's own `[date,
+  // cell, note]` rows with nothing this chart draws into the note column (no excluded days, no
+  // annotations -- see this component's own doc comment on why). Computed once here, outside the
+  // date loop below, rather than once per (band, date) pair: `rows` below only ever indexes each
+  // band's own precomputed rows by `i`, it never rebuilds one.
+  const perBandRows = clamped.map((band) =>
+    dayTableRows({ values: band.values, labels, excluded: EMPTY, annotations: EMPTY, format, t }))
+
   return (
     <ChartFigure label={label} host={host} style={style}
       table={{
         columns: [t('charts.columns.date'), ...clamped.map((band) => `${band.name} (${unit})`)],
-        // dayTableRows (base.ts) called once per band, each producing `[date, cell, note]` with
-        // nothing this chart draws into the note column (no excluded days, no annotations -- see
-        // this component's own doc comment on why), then reassembled into one row per date with one
+        // One row per date, reassembled from every band's own precomputed rows above into one
         // value column per band. The shape `dayTableRows` itself produces is DailyBars' own
-        // single-value-column one; the extension to N columns has to happen here, at the one caller
-        // that actually needs it, rather than inside a helper every other day-indexed chart also
-        // calls with a single value column of its own.
-        rows: labels.map((date, i) => [
-          date,
-          ...clamped.map((band) =>
-            dayTableRows({ values: band.values, labels, excluded: EMPTY, annotations: EMPTY, format, t })[i]![1]!),
-        ]),
+        // single-value-column one; the extension to N columns has to happen here, at the one
+        // caller that actually needs it, rather than inside a helper every other day-indexed
+        // chart also calls with a single value column of its own.
+        rows: labels.map((date, i) => [date, ...perBandRows.map((bandRows) => bandRows[i]![1]!)]),
       }} />
   )
 }
