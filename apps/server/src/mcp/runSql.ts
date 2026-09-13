@@ -103,13 +103,14 @@ export async function runSql(
     return await new Promise<SqlResult>((resolve, reject) => {
       child = fork(join(here, 'sqlWorker.ts'), [], {
         // Forked children inherit execArgv by default, which is enough in production where
-        // index.ts is started with --experimental-strip-types. It is not enough under vitest:
-        // that process has an empty execArgv, and the child would still run a .ts file only on a
-        // Node that strips types with no flag - which is 23.6 and later, while this repo's floor
-        // is 22.13. Passed explicitly rather than relying on a default this repo does not
-        // guarantee. The same reasoning, verbatim, as rebuildInWorker.ts, carried over from the
-        // worker_threads version of this file - fork()'s execArgv option works exactly the same
-        // way a Worker's construction option did.
+        // index.ts is started with --experimental-strip-types. It is not always enough under a
+        // test runner, whose execArgv is its own business: under vitest 5 it is
+        // --experimental-import-meta-resolve, a --require of vitest's warning suppressor and two
+        // --conditions, and under vitest 4, when this comment first claimed the list was empty, it
+        // was. Neither contains the strip flag, and without it the child would run a .ts file only
+        // on a Node that strips types with no flag - which is 23.6 and later, while this repo's
+        // floor is 22.13. Passed explicitly rather than relying on a default this repo does not
+        // guarantee. The same reasoning, verbatim, as rebuildInWorker.ts.
         execArgv: [
           ...(process.execArgv.includes('--experimental-strip-types')
             ? process.execArgv

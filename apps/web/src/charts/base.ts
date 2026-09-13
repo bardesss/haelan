@@ -1,4 +1,6 @@
+import type { ECElementEvent } from 'echarts'
 import type { ChartTokens } from './tokens.js'
+import type { Translate } from '../format.js'
 
 export const STROKE = {
   sparkline: 1.6,
@@ -204,6 +206,90 @@ export function markClickDate(
   if (event.componentType === 'markPoint') return marks.atValue[event.dataIndex]?.date
   if (event.componentType === 'markLine') return marks.atDate[event.dataIndex]?.date
   return undefined
+}
+
+/**
+ * Which local date a click on a day-indexed value chart landed on: a click on the series reads
+ * `labels` by its own dataIndex, and a click on one of the overlay marks reads the mark it
+ * actually hit (`markClickDate` above says why an overlay cannot be resolved against `labels`).
+ * Undefined for a click that hit neither, which is empty space.
+ *
+ * An overlay click used to resolve to nothing at all. That was right while every mark sat on a
+ * plotted point, since the click fell through to the point beneath it; an excluded day has no
+ * point beneath it once the exclusion applies, and the mark is then the only thing there is to
+ * click to undo it.
+ *
+ * A plain function, exported and tested on its own: echarts renders to an SVG this project's own
+ * render environment cannot hit-test (see chart-marks.test.tsx's own note), so the
+ * translation from a click event to a date is the one piece of this behaviour a test can reach.
+ *
+ * Shared by Sparkline and DailyBars (was `sparklinePointDate`, local to Sparkline.tsx, until
+ * DailyBars needed the identical logic): centralised here for the same reason `dayTooltip` was
+ * renamed off `sparklineTooltip` before it, so a second caller does not mean a second copy to
+ * keep in sync by hand.
+ */
+export function dayPointDate(
+  labels: string[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
+): string | undefined {
+  if (event.componentType !== 'series') return markClickDate(marks, event)
+  return labels[event.dataIndex]
+}
+
+/**
+ * The accessible table rows for a day-indexed value chart: one row per day, `[date, formatted
+ * value, ...optional trend, note]`. Sparkline and DailyBars each built this by hand -- verbatim
+ * but for the trend column and the `episodic` filter, neither of which DailyBars draws -- which
+ * is the third time this branch has pulled a piece of Sparkline out to a shared function rather
+ * than let a second, byte-identical copy sit beside it (`dayTooltip.ts` and `dayPointDate` above
+ * are the other two).
+ *
+ * `episodic`, `trend` and `hasTrend` all default to off, which is every caller but Weight's
+ * weight card: see Sparkline's own comments on these three props for what each means and why only
+ * one metric on the whole dashboard needs them.
+ */
+export function dayTableRows(input: {
+  values: readonly (number | null)[]
+  labels: readonly string[]
+  excluded: readonly string[]
+  annotations: readonly { date: string; text: string }[]
+  format: (value: number | null, absent: string) => string
+  t: Translate
+  episodic?: boolean
+  trend?: readonly (number | null)[]
+  hasTrend?: boolean
+}): (string | number)[][] {
+  const { values, labels, excluded, annotations, format, t, episodic = false, trend, hasTrend = false } = input
+  return values
+    .map((v, i) => [v, i] as const)
+    // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
+    // reader did to it either) is not a row this table states anything about, so it is dropped
+    // rather than rowed with a "no reading" cell the spec says would train a reader to ignore what
+    // that phrase means on every other chart. An excluded or annotated day keeps its row even with
+    // no value left, since the canvas still draws a markLine for it regardless of `episodic`.
+    // `!episodic` short-circuits the other two clauses for every non-episodic caller.
+    .filter(([v, i]) => {
+      if (!episodic || v !== null) return true
+      const date = labels[i] ?? String(i)
+      return excluded.includes(date) || annotations.some((a) => a.date === date)
+    })
+    .map(([v, i]) => {
+      const date = labels[i] ?? String(i)
+      const isExcluded = excluded.includes(date)
+      // "excluded", not "no reading", for a day the reader threw out: there was a reading, and the
+      // day is blank because of something they did rather than because the device never reported.
+      // "no reading" is the honest cell only for the second of those.
+      const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
+      const cell = format(v, absent)
+      return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
+        [isExcluded ? t('charts.absence.excluded') : '',
+          // filter, not find: several annotations can land on the same date now that day level
+          // marks join the per-metric ones, and a single find() here would silently show only the
+          // first and drop the rest. ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate
+          // above reads the same constant, so a table cell and a canvas label built from the same
+          // annotations array cannot drift apart on separator alone.
+          annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
+          .filter(Boolean).join(ANNOTATION_JOIN)]
+    })
 }
 
 type Inset = { left?: number; right?: number; top?: number; bottom?: number }

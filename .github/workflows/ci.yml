@@ -37,7 +37,48 @@ jobs:
 
       - run: pnpm typecheck
 
-      - run: pnpm test
+      # A vitest worker that dies on a signal reports the signal and nothing else: no stack, no
+      # faulting frame, nothing saying which of the three hundred files mattered or what it was
+      # doing. v1.14.1's publish job died exactly that way - one SIGSEGV, 302 files green, no
+      # evidence - and the only reason the cause was ever found was a core dump taken by hand
+      # afterwards. It pointed at V8's WebAssembly engine, reached through the type stripper every
+      # worker thread was instantiating; rebuildWorker.ts carries the account, and that particular
+      # trigger is gone now the rebuild runs in a forked process.
+      #
+      # This stays anyway, because what cost the time was not that crash in particular. It was
+      # that a crash here says nothing at all, and the next one will be something else. Cores are
+      # off by default on the runners, so it would be just as silent. It costs nothing on a green
+      # run: setting core_pattern is one write, the ulimit is free, and gdb is installed only
+      # after a failure. /mnt is the runner's large temp disk - a Node core is several gigabytes,
+      # and / does not have room for one.
+      - name: Let a crash leave a core behind
+        run: |
+          sudo mkdir -p /mnt/cores
+          sudo chmod 1777 /mnt/cores
+          echo '/mnt/cores/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
+
+      # ulimit is per shell, so it has to be raised in the same step that runs the suite. Joined
+      # with && rather than split over a `run: |` block on purpose: release-workflow-order.test.ts
+      # reads each step by the line that opens it, and `pnpm test` moving onto a line below the
+      # step's name is invisible to it - which reads there as the workflow having stopped running
+      # the suite at all.
+      - run: ulimit -c unlimited && pnpm test
+
+      - name: Backtrace whatever crashed
+        if: failure()
+        run: |
+          shopt -s nullglob
+          cores=(/mnt/cores/core.*)
+          if [ ${#cores[@]} -eq 0 ]; then
+            echo "No core file, so the suite failed rather than crashed - read the test output above."
+            exit 0
+          fi
+          sudo apt-get update -qq && sudo apt-get install -y -qq gdb
+          for core in "${cores[@]}"; do
+            echo "::group::$core"
+            gdb -q -batch -ex 'thread apply all bt 40' "$(command -v node)" "$core" 2>&1 | tail -120
+            echo "::endgroup::"
+          done
 
       # Runs the token stylesheet generation through its prebuild hook, so a
       # broken emitter fails here rather than in someone's browser.

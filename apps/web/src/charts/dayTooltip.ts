@@ -1,4 +1,5 @@
 import type { ECElementEvent } from 'echarts'
+import { escapeHtml, tip } from './base.js'
 import type { DayMarks } from './base.js'
 import type { Translate } from '../format.js'
 
@@ -6,10 +7,10 @@ import type { Translate } from '../format.js'
  * Everything the tooltip reads, handed in rather than closed over, so this stays a pure function a
  * test can reach: echarts renders to an SVG this project's render environment cannot hit-test
  * (chart-marks.test.tsx's own note), which makes the translation from an event to a string the one
- * piece of this behaviour a test can exercise at all. `sparklinePointDate` in Sparkline.tsx is
- * exported for exactly the same reason and this follows it.
+ * piece of this behaviour a test can exercise at all. `dayPointDate` in base.ts is exported for
+ * exactly the same reason and this follows it.
  */
-export interface SparklineTooltipInput {
+export interface DayTooltipInput {
   /** Dense over the range, one entry per calendar day, null where nothing was reported. */
   values: readonly (number | null)[]
   /** The local dates `values` are indexed by. The x axis carries array positions, not dates. */
@@ -33,7 +34,7 @@ export interface SparklineTooltipInput {
 }
 
 /**
- * The tooltip for one hovered point or overlay mark, as the HTML string echarts' formatter returns.
+ * The tooltip for a day's readout or overlay mark, as the HTML string echarts' formatter returns.
  *
  * A mark's own `tooltip.trigger` defaults to `'item'` (MarkPointModel/MarkLineModel both set it in
  * their own defaultOption) and overrides the chart's `'axis'` trigger, so a hover on a mark reaches
@@ -43,8 +44,8 @@ export interface SparklineTooltipInput {
  * through `marks` first, the same list `build` drew the marks from, is what keeps the two from
  * disagreeing; HeartRateRange.tsx carries the same branch for the same reason.
  */
-export function sparklineTooltip(
-  input: SparklineTooltipInput,
+export function dayTooltip(
+  input: DayTooltipInput,
   event: Pick<ECElementEvent, 'componentType'> & { dataIndex?: number },
 ): string {
   const { marks, labels, values, excluded, annotations, trend, hasTrend, episodic, unit, format, t } = input
@@ -52,13 +53,18 @@ export function sparklineTooltip(
 
   if (event.componentType === 'markPoint') {
     const mark = index === undefined ? undefined : marks.atValue[index]
-    return mark ? `${mark.date}<br/>${t('charts.absence.excluded')}` : ''
+    return mark ? tip`${mark.date}<br/>${t('charts.absence.excluded')}` : ''
   }
   if (event.componentType === 'markLine') {
     const mark = index === undefined ? undefined : marks.atDate[index]
     // `text` already has the excluded word folded in by dayMarks, so the canvas says the same
     // sentence the table's note cell does. Adding the word again here would say it twice.
-    return mark ? `${mark.date}<br/>${mark.text}` : ''
+    //
+    // This is the line the escaping exists for. `mark.text` is what a member of the household
+    // typed -- an override reason, a note, an event -- and echarts writes a formatter's return
+    // value into the tooltip element with innerHTML. Before `tip`, a note reading
+    // `<img src=x onerror=...>` was not text on hover, it was a tag the browser built.
+    return mark ? tip`${mark.date}<br/>${mark.text}` : ''
   }
 
   const date = index === undefined ? undefined : labels[index]
@@ -82,5 +88,12 @@ export function sparklineTooltip(
       label: t('charts.columns.trend'), value: format(trend?.[index] ?? null, absent),
     }))
   }
-  return [date, ...lines].join('<br/>')
+  // Each part escaped, then joined plainly, rather than assembled in one `tip` template: the
+  // number of lines varies with `hasTrend`, so there is no fixed template to tag. Same shape
+  // IntradayHeartRate uses for its own variable-length assembly, and the reason `tip`'s own doc
+  // comment gives for not feeding an already-built line back through it.
+  //
+  // `format` is the caller's own formatter here, so a metric whose display unit is produced
+  // outside this file still arrives as text rather than as markup.
+  return [date, ...lines].map(escapeHtml).join('<br/>')
 }

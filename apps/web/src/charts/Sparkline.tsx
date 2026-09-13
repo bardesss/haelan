@@ -1,36 +1,13 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from './useChart.js'
-import { ANNOTATION_JOIN, chartBase, dayMarks, markClickDate, STROKE, OPACITY, SYMBOL } from './base.js'
-import type { DayMarks } from './base.js'
+import { chartBase, dayMarks, dayPointDate, dayTableRows, STROKE, OPACITY, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
 import { formatMetricValue } from '../format.js'
-import { sparklineTooltip } from './sparklineTooltip.js'
-import type { SparklineTooltipInput } from './sparklineTooltip.js'
-
-/**
- * Which local date a click on this sparkline landed on: a click on the line reads `labels` by the
- * series' own dataIndex, and a click on one of the overlay marks reads the mark it actually hit
- * (markClickDate in base.ts says why an overlay cannot be resolved against `labels`). Undefined
- * for a click that hit neither, which is empty space.
- *
- * An overlay click used to resolve to nothing at all. That was right while every mark sat on a
- * plotted point, since the click fell through to the point beneath it; an excluded day has no
- * point beneath it once the exclusion applies, and the mark is then the only thing there is to
- * click to undo it.
- *
- * A plain function, exported and tested on its own: echarts renders to an SVG this project's own
- * render environment cannot hit-test (see chart-marks.test.tsx's own note), so the
- * translation from a click event to a date is the one piece of this behaviour a test can reach.
- */
-export function sparklinePointDate(
-  labels: string[], marks: DayMarks, event: Pick<ECElementEvent, 'componentType' | 'dataIndex'>,
-): string | undefined {
-  if (event.componentType !== 'series') return markClickDate(marks, event)
-  return labels[event.dataIndex]
-}
+import { dayTooltip } from './dayTooltip.js'
+import type { DayTooltipInput } from './dayTooltip.js'
 
 // A stable reference for a caller that omits annotations/excluded, the same device Dashboard.tsx's
 // own EMPTY constant uses: a default parameter expression that is a fresh `[]` literal runs on
@@ -153,7 +130,7 @@ export function Sparkline({
   // dependency array those would dispose and re-initialise the chart on every render, which is the
   // exact defect chart-lifecycle.test.tsx guards. The formatter runs on hover, long after the
   // option was set, so reading the ref at that moment hands it the current values anyway.
-  const tooltipRef = useRef<SparklineTooltipInput | null>(null)
+  const tooltipRef = useRef<DayTooltipInput | null>(null)
   useLayoutEffect(() => {
     tooltipRef.current = {
       values, labels, excluded, annotations, marks, trend, hasTrend, episodic, unit, format, t,
@@ -171,7 +148,7 @@ export function Sparkline({
         const p = Array.isArray(params) ? params[0] : params
         const current = tooltipRef.current
         if (!p || !current) return ''
-        return sparklineTooltip(current, p as Parameters<typeof sparklineTooltip>[1])
+        return dayTooltip(current, p as Parameters<typeof dayTooltip>[1])
       },
     },
     xAxis: { type: 'category' as const, show: false, data: values.map((_, i) => i) },
@@ -219,7 +196,7 @@ export function Sparkline({
   }), [values, baseline, marks, episodic, trend, hasTrend])
 
   const onClick = useCallback((event: ECElementEvent) => {
-    const date = sparklinePointDate(labels, marks, event)
+    const date = dayPointDate(labels, marks, event)
     if (date !== undefined) onPointClick?.(date)
   }, [labels, marks, onPointClick])
 
@@ -237,47 +214,9 @@ export function Sparkline({
           columns: hasTrend
             ? [t('charts.columns.date'), unit, t('charts.columns.trend'), t('charts.columns.note')]
             : [t('charts.columns.date'), unit, t('charts.columns.note')],
-          // Filtered before the map, not after: under episodic a SILENT day (no value, nothing the
-          // reader did to it either) is not a row this table states anything about, so it is
-          // dropped rather than rowed with a "no reading" cell the spec says would train a reader
-          // to ignore what that phrase means on every other chart. An excluded or annotated day
-          // keeps its row even with no value left: `marks.atDate` below still draws a markLine for
-          // it regardless of `episodic`, and a table gone quiet beside a canvas mark that keeps
-          // asserting something would deny the one day the reader actually acted on to a
-          // table-only reader. `!episodic` short-circuits the other two clauses for every existing
-          // caller, so the added checks never run outside episodic mode.
-          rows: values
-            .map((v, i) => [v, i] as const)
-            .filter(([v, i]) => {
-              if (!episodic || v !== null) return true
-              const date = labels[i] ?? String(i)
-              return excluded.includes(date) || annotations.some((a) => a.date === date)
-            })
-            .map(([v, i]) => {
-              const date = labels[i] ?? String(i)
-              const isExcluded = excluded.includes(date)
-              // "excluded", not "no reading", for a day the reader threw out: there was a reading,
-              // and the day is blank because of something they did rather than because the device
-              // never reported. "no reading" is the honest cell only for the second of those.
-              const absent = t(isExcluded ? 'charts.absence.excluded' : 'charts.absence.noReading')
-              const cell = format(v, absent)
-              // The same formatter the reading cell goes through, since the trend is a smoothed
-              // reading and carries the identical unit: Weight's own kilogram conversion (its
-              // `formatValue`) has to reach this cell too, or a table would print grams beside
-              // kilograms under a header naming one of them. Null where trendOf had nothing to
-              // smooth for that day, which reads as the same absence word the reading cell already
-              // carries rather than as a number the line never had.
-              return [date, cell, ...(hasTrend ? [format(trend?.[i] ?? null, absent)] : []),
-                [isExcluded ? t('charts.absence.excluded') : '',
-                  // filter, not find: several annotations (an override reason, a note, an event) can
-                  // land on the same date now that day level marks join the per-metric ones, and a
-                  // single find() here would silently show only the first and drop the rest.
-                  // ANNOTATION_JOIN, not a second ', ' literal: annotationsByDate (base.ts) reads the
-                  // same constant, so a table cell and a canvas label built from the same annotations
-                  // array cannot drift apart on separator alone.
-                  annotations.filter((a) => a.date === date).map((a) => a.text).join(ANNOTATION_JOIN)]
-                  .filter(Boolean).join(ANNOTATION_JOIN)]
-            }),
+          // dayTableRows (base.ts): shared with DailyBars' own accessible table, which needs
+          // neither the trend column nor the episodic filter, so both default off there.
+          rows: dayTableRows({ values, labels, excluded, annotations, format, t, episodic, trend, hasTrend }),
         }} />
       {/* The band itself is drawn on the chart's canvas (markArea above), which a test cannot
           query. Same deliberate, invisible seam as HeartRateRange's own sentinel, so a test can

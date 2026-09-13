@@ -9,7 +9,7 @@ import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
 import type { Night } from '../src/data/useNights.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
-import { flush } from './flush.js'
+import { pumpUntil } from './flush.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -86,6 +86,28 @@ function stub(
   return () => { globalThis.fetch = original }
 }
 
+/**
+ * Waits for the page to have left its loading state, then for nothing to be left in flight.
+ *
+ * The same two conditions workout-page.test.tsx waits on, for the same reason and against the same
+ * defect: `NightDetail` reaches its data through a query gated on `personId`, which arrives from
+ * `useSession`'s own request, and `flush()` reads the window between the two as a settled page -
+ * nothing in flight, and the same "Loading" on screen either side of it. CI caught this file on
+ * Node 24 with `expected undefined to be 'Monday, August 3'`, which is that window: the title
+ * element the assertion reaches for does not exist yet, because the page never loaded.
+ *
+ * `flush()` cannot be layered underneath these: its guard needs the fetch count to leave zero
+ * while it is watching, and by the time the page has left its loading state everything has already
+ * resolved, so it throws "never started". See flush.test.tsx's KNOWN GAP case for the mechanism.
+ */
+async function settled(client: QueryClient, html: () => string): Promise<void> {
+  await pumpUntil(() => !html().includes('>Loading<'), 'the night page to leave its loading state')
+  await pumpUntil(
+    () => client.isFetching() + client.isMutating() === 0,
+    'the page to have nothing left in flight',
+  )
+}
+
 function mount(node: ReactNode): { client: QueryClient, html: () => string } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
@@ -104,7 +126,7 @@ describe('the night page', () => {
     const restore = stub([NIGHT])
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       // formatSessionDateHeading carries no year (weekday, day, month only) - the same heading
       // SessionList and NightRow already render - so this names the cell rather than a substring
       // that happened to include a year nothing here ever prints.
@@ -116,7 +138,7 @@ describe('the night page', () => {
     const restore = stub([NIGHT])
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.night-when')?.textContent).toBe('23:15 to 07:02 · watch')
     } finally { restore() }
   })
@@ -125,7 +147,7 @@ describe('the night page', () => {
     const restore = stub([])
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(html()).toContain('No night recorded')
     } finally { restore() }
   })
@@ -140,7 +162,7 @@ describe('the night page', () => {
     const restore = stub([NIGHT, phone], {}, [{ id: 'phone', name: 'phone' }])
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelector('.night-when')?.textContent).toBe('23:15 to 00:15 · phone')
     } finally { restore() }
   })
@@ -155,7 +177,7 @@ describe('the night tiles', () => {
     })
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const tiles = [...(container?.querySelectorAll('.night-tiles .card') ?? [])]
       const valueOf = (label: string) => tiles
         .find((tile) => tile.querySelector('.label')?.textContent === label)
@@ -176,7 +198,7 @@ describe('the night tiles', () => {
     const restore = stub([NIGHT], { sleep_asleep_minutes: 447 })
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const labels = [...(container?.querySelectorAll('.night-tiles .label') ?? [])].map((n) => n.textContent)
       expect(labels).toEqual(['Time asleep'])
     } finally { restore() }
@@ -191,7 +213,7 @@ describe('the night tiles', () => {
     const restore = stub([NIGHT], { sleep_efficiency: 104 })
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       const tiles = [...(container?.querySelectorAll('.night-tiles .card') ?? [])]
       const efficiency = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Efficiency')
       // '104 %', not '104': the unit carries through the switch to formatMetricValue exactly the
@@ -226,7 +248,7 @@ describe('the night tiles', () => {
     })()
     try {
       const { client, html } = mount(<NightDetail />)
-      await flush(client, html)
+      await settled(client, html)
       expect(container?.querySelectorAll('.night-tiles')).toHaveLength(0)
       expect(html()).toContain('This did not load.')
       expect(html()).not.toContain('Nothing has been recorded for this period.')

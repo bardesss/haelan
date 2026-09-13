@@ -9,6 +9,37 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.15.2](https://github.com/bardesss/haelan/compare/v1.15.1...v1.15.2) (2026-09-13)
+
+
+### Bug Fixes
+
+* **server:** the boot rebuild runs in its own process, not a thread that can crash the server ([#187](https://github.com/bardesss/haelan/issues/187)) ([7c57c15](https://github.com/bardesss/haelan/commit/7c57c15c64393dbd9b1561a35b605c64d3c14521))
+
+## [1.15.1](https://github.com/bardesss/haelan/compare/v1.15.0...v1.15.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **ci:** cut the release with the workflow's own token, not the PAT ([#184](https://github.com/bardesss/haelan/issues/184)) ([dd66111](https://github.com/bardesss/haelan/commit/dd6611155283ad12aac217b39937e39a450332e0))
+* **ci:** the release is a draft until its image is on the registry ([#183](https://github.com/bardesss/haelan/issues/183)) ([1b6e3ec](https://github.com/bardesss/haelan/commit/1b6e3ec154402f46d3f57418caa921dca8bfc149))
+
+## [1.15.0](https://github.com/bardesss/haelan/compare/v1.14.1...v1.15.0) (2026-09-13)
+
+
+### Features
+
+* **web:** distance and floors draw a labelled bar chart, side by side ([#181](https://github.com/bardesss/haelan/issues/181)) ([bf5620c](https://github.com/bardesss/haelan/commit/bf5620c3675c26bccb8d192716bf15b8d52e19f9))
+
+## [1.14.1](https://github.com/bardesss/haelan/compare/v1.14.0...v1.14.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **test:** the workout and night pages wait for a condition, not for flush()'s guess ([#180](https://github.com/bardesss/haelan/issues/180)) ([5345129](https://github.com/bardesss/haelan/commit/534512982d53bb63980246b03c17ad9367378baa))
+* **web:** the sparkline tooltip escapes the note a reader typed ([#177](https://github.com/bardesss/haelan/issues/177)) ([c5e2ee3](https://github.com/bardesss/haelan/commit/c5e2ee3d4830c1cfb58daca41e8bd534294d151f))
+* **web:** the workout page's zone chart draws something ([#179](https://github.com/bardesss/haelan/issues/179)) ([39e4f72](https://github.com/bardesss/haelan/commit/39e4f72be118a48fe0f4e1db615324185244333d))
+
 ## [1.14.0](https://github.com/bardesss/haelan/compare/v1.13.0...v1.14.0) (2026-09-13)
 
 

@@ -76,11 +76,29 @@ export async function flush(
   budgetMs = HANG_BUDGET_MS,
 ): Promise<void> {
   const inFlight = () => queryClient.isFetching() + queryClient.isMutating() > 0
+  // A query some mounted component is waiting on that has never produced a result, whether or not
+  // it is fetching right now. `status` is the result axis ('pending' until a first success or
+  // error), as against `fetchStatus`, which is the in-flight axis `isFetching` above already
+  // covers.
+  //
+  // `type: 'active'` is react-query's "some observer has this ENABLED", which is the distinction
+  // that matters here. A query parked behind a gate that never opens - a filter the reader has not
+  // set, a card the page does not show - is pending forever by design, and counting those would
+  // turn this helper's budget into a hang on every page that has one. Measured: counting every
+  // observed pending query instead of only the enabled ones times out 20+ tests in this suite.
+  //
+  // What this DOES catch is the window between a gate opening and react-query issuing the request
+  // it gates: enabled, pending, not yet fetching, with the page still showing whatever it showed
+  // before. `isFetching` above reads zero there, and the two checks below would take that for a
+  // settled page.
+  const awaitingResult = () =>
+    queryClient.getQueryCache().findAll({ type: 'active' }).some((q) => q.state.status === 'pending')
   let sawFetch = inFlight()
   let previous = getHtml()
   let idleOnce = false
   let pumps = 0
   let fetching = 0
+  let gated = 0
   let changed = 0
   const started = performance.now()
   const deadline = started + budgetMs
@@ -91,6 +109,20 @@ export async function flush(
       sawFetch = true
       idleOnce = false
       fetching += 1
+      previous = getHtml()
+      continue
+    }
+    // Nothing in flight, but something mounted is still waiting for its first result: the page is
+    // between two dependent queries rather than done. This is the gap that made this helper lie.
+    // `useWorkoutSession` is `enabled: personId !== undefined`, and `personId` comes from
+    // `useSession`'s own request, so the second query cannot start until the first has resolved
+    // AND React has re-rendered with it. In that window the fetch count is zero and the HTML is
+    // whatever it was before - "Loading", on both sides - which is exactly what the two checks
+    // below accept as settled. CI on Node 26 put two pumps inside it and the workout page's test
+    // read Loading off a page flush() had just called finished.
+    if (awaitingResult()) {
+      idleOnce = false
+      gated += 1
       previous = getHtml()
       continue
     }
@@ -113,7 +145,7 @@ export async function flush(
   throw new Error(
     `flush() timed out after ${Math.round(performance.now() - started)}ms: the page never settled `
     + `(or never started changing at all) - ${pumps} pumps, in flight on ${fetching}, `
-    + `changed on ${changed}`,
+    + `waiting on a mounted query on ${gated}, changed on ${changed}`,
   )
 }
 

@@ -14,6 +14,7 @@ import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
+import { DailyBars } from '../charts/DailyBars.js'
 import { ActivityHeatmap } from '../charts/ActivityHeatmap.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { SessionList } from './activity/SessionList.js'
@@ -69,6 +70,33 @@ const GROUPS: readonly MetricGroup[] = [
   { agg: 'sum', metrics: SUM_METRICS, covers: REQUESTS.sum },
   { agg: 'count', metrics: COUNT_METRICS, covers: REQUESTS.count },
 ]
+
+/**
+ * The cards that draw a labelled bar chart rather than a sparkline.
+ *
+ * A named list the page owns, not a rule derived from the catalogue. Every metric declared `sum`
+ * would promote roughly thirteen cards at once and decide for pages nobody has looked at; this is
+ * two cards, chosen and reviewable. Both are device-reported daily quantities that vary day to
+ * day, and a bar reads as "this much, that day" where a line implies something continuous between
+ * the points that a daily total is not.
+ *
+ * Exported for its own test: a list a test keeps a copy of is a list that stops matching the page.
+ */
+export const BAR_METRICS = new Set(['distance', 'floors'])
+
+/**
+ * The smallest step each promoted card's own formatter can tell apart, handed straight to
+ * DailyBars' `minInterval` prop. See that prop's own doc comment for why this lives with the
+ * caller rather than being derived inside the chart from `METRICS[metric].precision`: floors'
+ * shared formatter (formatMetricValue's catalogue default) has no fractional floor to print, so a
+ * tick step finer than 1 draws several gridlines all labelled the same whole number -- measured on
+ * this branch's own review as "0 | 0 | 0 | 1 | 1 | 1" at a small range. distance's kilometre
+ * formatter (one decimal, converted from the stored millimetres) needs no floor, and the
+ * catalogue's own stored-unit precision for distance (0, in millimetres) would give the wrong
+ * answer if applied here, which is exactly why this is a value the page states rather than one the
+ * chart looks up.
+ */
+const BAR_MIN_INTERVAL: Partial<Record<string, number>> = { floors: 1 }
 
 const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
@@ -139,9 +167,9 @@ export function Activity() {
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
-  // Every calendar day in the range, the axis the sparklines below are built along as well as the
-  // denominator every basis line counts against. Declared ahead of them rather than after, which is
-  // where it used to sit, because they are built against it now.
+  // Every calendar day in the range, the axis the sparklines and bar charts below are built along
+  // as well as the denominator every basis line counts against. Declared ahead of them rather than
+  // after, which is where it used to sit, because they are built against it now.
   const rangeDates = useMemo(() => datesBetween(controls.from, controls.to), [controls.from, controls.to])
 
   // Stable array identities for the reason every sibling page's own copy of this memo states:
@@ -215,8 +243,9 @@ export function Activity() {
       : t('activity.dailySteps.basis', stated)
   }
 
-  // Every sparkline tile on this page shares one shape: a metric, a sum over the period, and a
-  // basis line stating how many of the range's calendar days answered. Parameterised on
+  // Every tile on this page shares one shape, sparkline or bar chart alike: a metric, a sum over
+  // the period, and a basis line stating how many of the range's calendar days answered.
+  // Parameterised on
   // basisWornKey rather than always deriving it from basisKey, the same choice Recovery.tsx's own
   // card() makes, because MetricCard picks between the two by the metric's own coverage signal
   // (coverageIsWearSignal) and not every metric here carries one: steps, distance and
@@ -237,14 +266,15 @@ export function Activity() {
     // catalogue's stored unit (format.ts's own comment on formatNumber says why), so that one call
     // site hands in its own formatter instead of taking the default.
     format: (total: number) => string = (total) => formatMetricValue(total, metric, i18n.language, ''),
-    // The Sparkline's own accessible table cell, separately from `format` above: `format` runs once
-    // on the period's own total, `sparkFormat` runs once per day on `spark.values`, which stay in
-    // the metric's stored unit regardless of what `format` displays (Sparkline's own `metric` prop
-    // comment explains why the chart itself never converts). Undefined for every card but distance,
-    // which otherwise repeats the exact defect an M3e review caught: a table cell reading raw
-    // millimeters beside a "Distance in kilometers" column header, while the headline above it
-    // already converted. Sparkline falls back to formatMetricValue(v, metric, ...) when this is
-    // omitted, the same default `format` above takes.
+    // The chart's own accessible table cell -- Sparkline's `formatValue` prop for every card but
+    // distance and floors, DailyBars' prop of the same name for those two -- separately from
+    // `format` above: `format` runs once on the period's own total, `sparkFormat` runs once per day
+    // on `spark.values`, which stay in the metric's stored unit regardless of what `format`
+    // displays (Sparkline's own `metric` prop comment explains why neither chart itself converts).
+    // Undefined for every card but distance, which otherwise repeats the exact defect an M3e review
+    // caught: a table cell reading raw millimeters beside a "Distance in kilometers" column header,
+    // while the headline above it already converted. Both charts fall back to
+    // formatMetricValue(v, metric, ...) when this is omitted, the same default `format` above takes.
     sparkFormat?: (value: number | null, absent: string) => string,
   ) => {
     const points = metricGroups.pointsOf(metric)
@@ -259,7 +289,17 @@ export function Activity() {
         {(basis, oneDayRange) => (
           <StatTile label={t(labelKey)} value={format(total)} unit={shortUnitKey && t(shortUnitKey)}
             basis={basis} delta={deltaFor(t, metric, values(points), polarity)}>
-            {oneDayRange ? <ChartNote /> : (
+            {oneDayRange ? <ChartNote /> : BAR_METRICS.has(metric) ? (
+              <DailyBars values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
+                label={t(chartLabelKey, { period })} unit={t(unitKey)}
+                // The short unit names the value axis ("km", "floors"), falling back to the long
+                // column header rather than to an empty string: every metric in BAR_METRICS has a
+                // short unit today, and a future promotion without one should draw a clumsy axis
+                // name a reader can see rather than an unnamed axis nobody notices.
+                axisUnit={t(shortUnitKey ?? unitKey)} minInterval={BAR_MIN_INTERVAL[metric]}
+                annotations={annotations} excluded={excluded}
+                onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric })} />
+            ) : (
               <Sparkline values={spark.values} labels={spark.labels} metric={metric} formatValue={sparkFormat}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}
@@ -285,7 +325,7 @@ export function Activity() {
           )}
         </Card>
 
-        {card('distance', 4, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
+        {card('distance', 6, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
           'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km', 'higher-is-better',
           // distance is stored in millimeters (METRICS.distance, precision 0); this card displays
           // the period's total as kilometers with one decimal, a precision the catalogue's own
@@ -303,7 +343,7 @@ export function Activity() {
           // caught. `v === null` first: a day with no reading stays a day with no reading, not
           // `null / 1_000_000` becoming 0 and reading as a real zero-kilometer day.
           (v, absent) => formatNumber(v === null ? null : v / 1_000_000, 1, i18n.language, absent))}
-        {card('floors', 4, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
+        {card('floors', 6, 'activity.floors.label', 'activity.floors.basis', 'activity.floors.basis',
           'activity.floors.chartLabel', 'activity.units.floors', 'activity.units.floorsShort', 'higher-is-better')}
         {card('total_calories', 4, 'activity.totalCalories.label', 'activity.totalCalories.basis', 'activity.totalCalories.basis',
           'activity.totalCalories.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}

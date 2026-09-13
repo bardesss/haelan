@@ -32,7 +32,7 @@ const instance = openHaelan(dataDir)
 // missing dist is a normal state rather than a failure.
 const webRoot = resolve(join(dirname(fileURLToPath(import.meta.url)), '../../web/dist'))
 // True from before the boot rebuild starts until rebuildInWorkerIfNeeded settles, which is the
-// only window in which a second connection - the worker thread, on rebuildWorker.ts's own thread
+// only window in which a second connection - the rebuild worker, in rebuildWorker.ts's own process
 // - might actually be open on haelan.sqlite. The reclaim and backup routes read it through
 // ServerDeps.rebuildInFlight to decline rather than run against a file a second writer might
 // still be advancing; see routes/maintenance.ts for why declining beats correcting the comment
@@ -88,12 +88,12 @@ console.log(`data directory ${dataDir}`)
 // rebuild ran to completion inside a single turn of the event loop and Fastify answered nothing,
 // not even an error, for as long as fifteen minutes on real data. rebuildIfNeeded's `await
 // setImmediate()` opens a gap between people, which is real but only helps a household of more
-// than one, and this instance had one person. rebuildInWorker moves the whole loop onto its own
-// thread (see rebuildWorker.ts), which is what actually keeps this thread free to serve however
-// many people there are; WAL lets its write transaction sit alongside this thread's reads
-// (packages/core/src/db/open.ts). The ...IfNeeded variant spawns that thread only when somebody
-// needs rebuilding, so an ordinary restart pays neither the spawn nor the chance of failing to
-// spawn. The rest of the ordering (before the runner, and never rejecting) lives in
+// than one, and this instance had one person. rebuildInWorker moves the whole loop into its own
+// process (see rebuildWorker.ts, which carries the reason it is a process and not a thread), and
+// that is what actually keeps this thread free to serve however many people there are; WAL lets
+// its write transaction sit alongside this process's reads (packages/core/src/db/open.ts). The
+// ...IfNeeded variant spawns that process only when somebody needs rebuilding, so an ordinary
+// restart pays neither the spawn nor the chance of failing to spawn. The rest of the ordering (before the runner, and never rejecting) lives in
 // runBootSequence itself, in rebuild.ts, where a test can hold a mutation against it; this is
 // wiring only.
 rebuilding = runBootSequence({
