@@ -10,6 +10,7 @@ import { NightHeader } from './sleep/NightHeader.js'
 import { NightTiles } from './sleep/NightTiles.js'
 import { NightStages } from './sleep/NightStages.js'
 import { NightTraces } from './sleep/NightTraces.js'
+import { NightSessions } from './sleep/NightSessions.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
@@ -69,6 +70,7 @@ export function NightDetail() {
         <NightTiles localDate={night.localDate} source={source} />
         <NightStages night={night} />
         <NightTraces night={night} chosenSource={chosenSource} />
+        <NightSessions night={night} />
       </div>
     </>
   )

@@ -670,6 +670,12 @@
           "hrv": "hartslagvariabiliteit"
         },
         "basisFellBack": "{{pinned}} registreerde geen {{metric}} voor deze nacht, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+      },
+      "sessions": {
+        "label": "Sessies in deze nacht",
+        "basis": "een nacht wordt samengesteld uit deze registraties; door er een uit te sluiten wordt de nacht opnieuw afgeleid zonder die registratie",
+        "exclude": "Uitsluiten of notitie toevoegen",
+        "excluded": "Uitgesloten"
       }
     }
   },

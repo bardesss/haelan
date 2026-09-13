@@ -670,6 +670,12 @@
           "hrv": "heart rate variability"
         },
         "basisFellBack": "{{pinned}} recorded no {{metric}} for this night, so this is every other device instead; {{detail}}"
+      },
+      "sessions": {
+        "label": "Sessions in this night",
+        "basis": "a night is assembled from these recordings; excluding one re-derives the night without it",
+        "exclude": "Exclude or add a note",
+        "excluded": "Excluded"
       }
     }
   },
