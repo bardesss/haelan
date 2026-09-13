@@ -1,5 +1,6 @@
 import { ApiError } from '../api/apiError.js'
 import { canonicalUrl } from './canonicalUrl.js'
+import { applyOverlay, createOverlay, writeThrough } from './overlay.js'
 
 export { ApiError } from '../api/apiError.js'
 export type { ApiErrorKind } from '../api/apiError.js'
@@ -28,6 +29,11 @@ export function createDemoTransport(loadJson: LoadJson): DemoTransport {
   // timing rather than being true by construction.
   let manifest: Promise<Record<string, string>> | null = null
 
+  // One overlay per transport, not one per module: apps/web/test/demo-overlay.test.ts and
+  // demo-client.test.ts each build their own transport and must not see each other's writes, the
+  // same isolation createDemoTransport already gives the manifest cache above.
+  const overlay = createOverlay()
+
   function loadManifest(): Promise<Record<string, string>> {
     if (manifest === null) {
       manifest = (loadJson('manifest.json') as Promise<Record<string, string>>).catch((error: unknown) => {
@@ -52,15 +58,19 @@ export function createDemoTransport(loadJson: LoadJson): DemoTransport {
       // never captured must fail the same way a real 404 would, not hang or return nothing.
       throw new ApiError('not_found', 404, `the demo has no recorded response for ${path}`)
     }
-    return loadJson(file) as Promise<T>
+    const captured = await loadJson(file)
+    // Composed over the captured response, not in place of it: a write this session made (a
+    // note, an exclusion, a rename) has to show up the moment the page that wrote it refetches,
+    // which is exactly what invalidateAffected and invalidateResource (useAnnotations.ts) expect
+    // a refetch to answer.
+    return applyOverlay(path, captured, overlay) as T
   }
 
-  async function apiSend<T>(method: string, path: string, _body?: unknown): Promise<T> {
-    // The recorder only ever captured GETs (a sweep of pages, not of writes). A write reaching
-    // this far is a miss until Task 6's overlay layers on top of this transport.
-    if (method !== 'GET') {
-      throw new ApiError('not_found', 404, `the demo has no recorded response for ${method} ${path}`)
-    }
+  async function apiSend<T>(method: string, path: string, body?: unknown): Promise<T> {
+    // The recorder only ever captured GETs (a sweep of pages, not of writes), so a write has no
+    // manifest entry to answer from and goes to the overlay instead - the one thing in this
+    // transport that can actually change between two reads.
+    if (method !== 'GET') return writeThrough(method, path, body, overlay) as T
     return readCaptured<T>(path)
   }
 
