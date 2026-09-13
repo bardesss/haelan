@@ -1,8 +1,9 @@
-// The sweep: mounts every page of the real app against a real, seeded instance (through
-// startCaptureServer's app.inject() bridge, no port and no network) and records what each one
-// asked for. This is what makes the demo's coverage a fact about the running app rather than a
-// hand-written list - see the spec's own note on why the coverage guarantee follows from the
-// sweep instead of from a separate list test.
+// The sweep: mounts every unparameterised page of the real app, under every range preset, one
+// step back, every source option, and a handful of real detail pages, against a real seeded
+// instance (through startCaptureServer's app.inject() bridge, no port and no network), and records
+// what each one asked for. This is what makes the demo's coverage a fact about the running app
+// rather than a hand-written list - see the spec's own note on why the coverage guarantee follows
+// from the sweep instead of from a separate list test.
 //
 // Run only through demo/capture/vitest.config.ts (`pnpm demo:capture`, scripts/capture-demo.mjs's
 // own job), never through `pnpm test`: this file sits outside every include glob that config
@@ -15,7 +16,7 @@
 // small JSON file at HAELAN_DEMO_REPORT_FILE rather than a marked console line - capture-demo.mjs's
 // own comment on why explains the race a stdout line lost silently on Windows.
 import { writeFileSync } from 'node:fs'
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -23,15 +24,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from '../../apps/web/src/Shell.js'
 import { navigate } from '../../apps/web/src/router.js'
 import { ROUTES, WORKOUT_ROUTE, NIGHT_ROUTE } from '../../apps/web/src/routes.js'
-import { RANGE_KEYS, addDays } from '../../apps/web/src/controls/range.js'
+import { RANGE_KEYS, addDays, stepAnchor } from '../../apps/web/src/controls/range.js'
+import { ALL_SOURCES } from '../../apps/web/src/controls/source.js'
+import { sourcesIn } from '../../apps/web/src/data/pageShell.js'
 import { CHART_VARS } from '../../apps/web/src/charts/tokens.js'
-import { DEMO_INSTANT_MS } from '../../apps/web/src/demo/instant.js'
+import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.js'
 import { flush } from '../../apps/web/test/flush.js'
 import { startCaptureServer } from './server.js'
 import type { CaptureServer } from './server.js'
 import { writeCapture } from '../../scripts/capture-demo.mjs'
 import type { WorkoutSession } from '../../apps/web/src/data/useSessions.js'
 import type { Night } from '../../apps/web/src/data/useNights.js'
+import type { MetricSeries } from '../../apps/web/src/data/useSeries.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" the
 // moment a chart-bearing card draws - every page test under apps/web/test that mounts a real page
@@ -55,12 +59,25 @@ if (dataDir === undefined || outDir === undefined || reportFile === undefined) {
   )
 }
 
-// The Amsterdam calendar date DEMO_INSTANT_MS closes, derived rather than duplicated: instant.ts's
-// own DEMO_END_DATE is private, and re-declaring the string here a second time is exactly the
-// drift its own header comment warns about. DEMO_INSTANT_MS is exactly Amsterdam local midnight
-// opening that date (localMidnightMs), so formatting it back in that zone recovers the date with
-// no rounding to worry about.
-const DEMO_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(DEMO_INSTANT_MS)
+// The Amsterdam calendar date the pinned clock (below) reads as "today" - DEMO_CLOCK_MS, not
+// DEMO_INSTANT_MS: instant.ts's own comment explains why the archive's exclusive close is the
+// wrong instant to read a calendar day off of. Derived rather than a second copy of a date string,
+// for the same reason instant.ts derives DEMO_CLOCK_MS itself rather than being handed one.
+const DEMO_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(DEMO_CLOCK_MS)
+
+// The routes whose ControlRow offers a real source picker (Dashboard.tsx through Weight.tsx all
+// build `sources` from distinctSources and pass it down). Notes has a ControlRow but no sources
+// (its own comment: a note is not read off a device); Settings and Nutrition have no ControlRow at
+// all - routes.tsx's own table names every unparameterised path, and this is that table minus
+// those three.
+const SOURCE_ROUTES = new Set(['/', '/activity', '/sleep', '/recovery', '/health', '/weight'])
+
+/** Whether `path` reads range/anchor from the url at all. Settings and Nutrition are the two
+ *  routes in ROUTES that do not (mount()'s own guard comment on Settings, and Nutrition.tsx's own
+ *  comment on why it has no data hook to read a range for in the first place). */
+function usesPageControls(path: string): boolean {
+  return path !== '/settings' && path !== '/nutrition'
+}
 
 let server: CaptureServer
 let restoreFetch: () => void
@@ -70,26 +87,51 @@ beforeAll(async () => {
   const original = globalThis.fetch
   globalThis.fetch = server.fetch
   restoreFetch = () => { globalThis.fetch = original }
-  // Every request this sweep makes reads "now" as the same pinned instant the seed closed its
-  // archive on - apiGet/apiSend never call Date.now() themselves, but the pages that call them
-  // do (usePageControls' default anchor, sync status' "how long ago"), and a real clock here would
-  // make a capture recorded today disagree with one recorded next month over what "today" means.
+  // Pinned for real: usePageControls' default anchor and historicalTo both read `new Date()`
+  // directly, and so does useSyncStatus' "how long ago" - none of them go through apiGet/apiSend,
+  // so swapping fetch above does nothing for them. Left unpinned, every url keyed on "today"
+  // (insights, baselines) would carry whatever day this happened to run rather than the seed's own
+  // last day, missing on replay against Task 5's own frozen clock and drifting to a new set of keys
+  // on every future capture run besides. `vi.setSystemTime` alone, without `vi.useFakeTimers()`
+  // first, fakes only `Date` and leaves real timers running - flush()'s own setTimeout-based
+  // polling needs those to keep firing.
+  vi.setSystemTime(DEMO_CLOCK_MS)
 }, 120_000)
 
 afterAll(() => {
+  vi.useRealTimers()
   restoreFetch()
   server.close()
 })
 
 /**
- * How many queries in `client`'s cache have ever landed a real result. Counts `dataUpdateCount`
- * only, not `errorUpdateCount`: a query that only ever 400s or 404s contributed nothing to
- * `server.recorded` either (captureFetch's own refusals throw before it ever calls
+ * Whether `key` belongs to one of the three queries every page's own ControlRow reads
+ * (useSession, useSyncStatus, useSourceNames - the third by the resource name its own query key
+ * carries, `sources`, not to be confused with a page's locally computed `sources` prop). Moving
+ * from one page to a different one remounts ControlRow (two different pages' control rows are two
+ * different fiber positions, never the same component persisting across the switch), which
+ * refetches these three regardless of whether the page underneath fetched anything of its own -
+ * confirmed against the installed react-query, a bare remount grows the count by two. A guard
+ * built on the raw total could not tell that apart from the page's own real fetch, which is
+ * exactly the hole recording was chosen to close: a page that issues no requests of its own would
+ * still show "growth" on the first mount after a route change.
+ */
+function isChromeQuery(key: readonly unknown[]): boolean {
+  if (key[0] === 'session') return true
+  return key[0] === 'person' && (key[2] === 'sync-status' || key[2] === 'sources')
+}
+
+/**
+ * How many of `client`'s own, non-chrome queries have ever landed a real result. Counts
+ * `dataUpdateCount` only, not `errorUpdateCount`: a query that only ever 400s or 404s contributed
+ * nothing to `server.recorded` either (captureFetch's own refusals throw before it ever calls
  * `recorded.set`), so counting errors here would call a page that talks to the server and gets
  * nothing back the same "recorded something" that a page which actually got data is.
  */
 function successfulLandings(client: QueryClient): number {
-  return client.getQueryCache().getAll().reduce((total, query) => total + query.state.dataUpdateCount, 0)
+  return client.getQueryCache().getAll()
+    .filter((query) => !isChromeQuery(query.queryKey as readonly unknown[]))
+    .reduce((total, query) => total + query.state.dataUpdateCount, 0)
 }
 
 describe('the capture sweep', () => {
@@ -101,19 +143,19 @@ describe('the capture sweep', () => {
 
     /**
      * Pushes `path` into history, mounts the real App tree fresh, and waits for it to settle,
-     * then asserts the mount actually landed at least one successful query result.
+     * then asserts the mount actually landed at least one successful non-chrome query result.
      *
      * That guard is `successfulLandings` growing, not `server.recorded.size` growing: several
      * pages' own annotation overlays (Dashboard's day-annotations panel among them) ask for notes
      * and events over the exact same {from, to} this sweep's own Notes visit uses (both read the
      * same anchor and the same RANGE_KEYS), so by the time /notes is swept every one of its own
      * urls can already be in the manifest from an earlier page - a real, working page, recording
-     * nothing NEW while still fetching and rendering correctly. `server.recorded.size` cannot
-     * tell that apart from a page whose query silently never fired at all, which is the actual
-     * hole this guard exists to catch; `successfulLandings` can, since a real fetch (new url or
-     * not) always bumps a query's own `dataUpdateCount` on success. flush() throws on a tree that
-     * never starts or never settles - that throw is left to propagate, per this task's own rule
-     * that a page which will not settle is the finding, not something to catch and paper over.
+     * nothing NEW while still fetching and rendering correctly. `server.recorded.size` cannot tell
+     * that apart from a page whose query silently never fired at all, which is the actual hole
+     * this guard exists to catch; `successfulLandings` can, since a real fetch (new url or not)
+     * always bumps a query's own `dataUpdateCount` on success. flush() throws on a tree that never
+     * starts or never settles - that throw is left to propagate, per this task's own rule that a
+     * page which will not settle is the finding, not something to catch and paper over.
      */
     async function mount(path: string, { expectGrowth = true } = {}): Promise<void> {
       const before = successfulLandings(client)
@@ -146,38 +188,83 @@ describe('the capture sweep', () => {
 
       for (const [index, range] of RANGE_KEYS.entries()) {
         await mount(`${route.path}?range=${range}&on=${DEMO_DATE}`, {
-          // Growth is only required on a route's first visit. Settings.tsx is the one page here
-          // that reads no range at all (unlike every other route, it never calls
-          // usePageControls), so its own resources are already fully known after the first of its
-          // five range mounts - the same query keys, already fresh, are not owed a fetch just
-          // because the URL's ignored `range` changed, and requiring one would fail a page that
-          // is behaving exactly as designed. Nutrition never lands anything, even on its first
-          // visit: it renders one static sentence and calls no data hook at all (Nutrition.tsx's
-          // own comment - the household never logged food, so there is nothing here to ask a
-          // server for), which is the one route in this table where that is correct rather than
-          // the hole this guard exists to catch.
-          expectGrowth: route.path !== '/nutrition' && index === 0,
+          // Checked on every range, not only the first: a breakage confined to one preset (the
+          // Year view, say) would otherwise go unnoticed. Settings is the one exception that still
+          // needs one: unlike every other route here, it never calls usePageControls, so its five
+          // range mounts genuinely ask for the same, already-fresh resources every time once the
+          // first has run - only that first mount is owed new activity. Nutrition never lands
+          // anything, on any visit, by design: it renders one static sentence and calls no data
+          // hook at all (Nutrition.tsx's own comment - the household never logged food, so there
+          // is nothing here to ask a server for).
+          expectGrowth: route.path !== '/nutrition' && (route.path !== '/settings' || index === 0),
         })
       }
     }
 
-    // Detail pages: real ids and dates the seed actually produced, not invented ones. The range is
-    // the seed's own full span so this finds sessions and nights regardless of where in the year
-    // they happen to fall, and MAX_RANGE_DAYS (3660) comfortably covers it at any span this script
-    // seeds.
-    const from = addDays(DEMO_DATE, -(seededDays - 1))
-    const sessionsReply = await server.fetch(
-      `/api/v1/p/${server.personId}/sessions?kind=exercise&from=${from}&to=${DEMO_DATE}&limit=5`,
+    const wideFrom = addDays(DEMO_DATE, -(seededDays - 1))
+
+    // Real source ids this seed produced, discovered from the server rather than guessed at:
+    // `sourcesIn` is the exact parser the control row itself uses on a merged row's sourceMix, so
+    // this asks the same question the app does instead of hardcoding what today's fixtures happen
+    // to be named. heart_rate/mean, omitting `source`, is the one request in this whole sweep
+    // guaranteed to carry a real mix on every point that has one at all (rollup.ts writes
+    // sourceMix null on every per-source row; only a merged row - the all-sources sentinel query -
+    // carries one, per pageShell.ts's own comment on distinctSources).
+    const mixReply = await server.fetch(
+      `/api/v1/p/${server.personId}/series?agg=mean&metric=heart_rate&from=${wideFrom}&to=${DEMO_DATE}`,
     )
-    const { items: sessions } = await sessionsReply.json() as { items: WorkoutSession[] }
-    expect(sessions.length, 'the seed produced no exercise sessions to capture a detail page for').toBeGreaterThan(0)
+    const mixBody = await mixReply.json() as Record<string, MetricSeries>
+    const discoveredSources = new Set<string>()
+    for (const series of Object.values(mixBody)) {
+      for (const point of series.points) {
+        for (const source of sourcesIn(point.sourceMix)) discoveredSources.add(source)
+      }
+    }
+    discoveredSources.delete(ALL_SOURCES)
+    expect(discoveredSources.size, 'the seed produced no per-source rows to discover a picker option from')
+      .toBeGreaterThan(0)
+
+    // Ruling B, dimension 1: every source option a picker actually offers, not only the default
+    // (ALL_SOURCES itself is already covered by the grid above).
+    for (const path of SOURCE_ROUTES) {
+      for (const range of RANGE_KEYS) {
+        for (const source of discoveredSources) {
+          await mount(`${path}?range=${range}&on=${DEMO_DATE}&source=${source}`)
+        }
+      }
+    }
+
+    // Ruling B, dimension 2: one step back per range preset, so "previous week"/"previous month"
+    // are in the manifest too - every route that reads a range at all, at the default source.
+    for (const route of ROUTES) {
+      if (route.path.includes(':') || !usesPageControls(route.path)) continue
+      for (const range of RANGE_KEYS) {
+        await mount(`${route.path}?range=${range}&on=${stepAnchor(range, DEMO_DATE, -1)}`)
+      }
+    }
+
+    // Detail pages: the most recent real ids and dates the seed produced, not the oldest. The
+    // route answers ascending by startMs (sessions.ts's own comment: a deterministic order for a
+    // snapshot), so a plain `limit` grabs the OLDEST rows in a 365-day seed - a year before
+    // anything the demo's own default view ever lists, unreachable without stepping the anchor
+    // back into a day this sweep never otherwise visits. No `limit` on either call below for the
+    // same reason: finding the recent end of an ascending list needs the whole list, or a second
+    // round trip through however many pages exist first.
+    const sessionsReply = await server.fetch(
+      `/api/v1/p/${server.personId}/sessions?kind=exercise&from=${wideFrom}&to=${DEMO_DATE}`,
+    )
+    const { items: allSessions } = await sessionsReply.json() as { items: WorkoutSession[] }
+    expect(allSessions.length, 'the seed produced no exercise sessions to capture a detail page for')
+      .toBeGreaterThan(0)
+    const sessions = [...allSessions].sort((a, b) => b.startMs - a.startMs).slice(0, 5)
     for (const session of sessions) await mount(WORKOUT_ROUTE.replace(':sessionId', session.id))
 
     const nightsReply = await server.fetch(
-      `/api/v1/p/${server.personId}/sleep/nights?from=${from}&to=${DEMO_DATE}&limit=5`,
+      `/api/v1/p/${server.personId}/sleep/nights?from=${wideFrom}&to=${DEMO_DATE}`,
     )
-    const { items: nights } = await nightsReply.json() as { items: Night[] }
-    expect(nights.length, 'the seed produced no nights to capture a detail page for').toBeGreaterThan(0)
+    const { items: allNights } = await nightsReply.json() as { items: Night[] }
+    expect(allNights.length, 'the seed produced no nights to capture a detail page for').toBeGreaterThan(0)
+    const nights = [...allNights].sort((a, b) => b.startMs - a.startMs).slice(0, 5)
     for (const night of nights) await mount(NIGHT_ROUTE.replace(':localDate', night.localDate))
 
     // The manifest itself still has to be non-empty (writeCapture's own refusal), which is a
@@ -193,5 +280,5 @@ describe('the capture sweep', () => {
     // A synchronous file write, not a marked console line - see this file's own header comment
     // and capture-demo.mjs's own comment on reportFile for the stdout race a line could lose.
     writeFileSync(reportFile, JSON.stringify(report))
-  }, 20 * 60_000)
+  }, 30 * 60_000)
 })

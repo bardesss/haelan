@@ -1,9 +1,9 @@
 /**
- * The instant the demo pins both clocks to: the recorder's server clock (`demo/capture/server.ts`)
- * and, later, the browser's own clock (Task 5's demo entry). Both sides answer requests against
- * this same "now" so the recorded manifest and the replayed demo can never disagree about what
- * "today" means - a live clock on either side would make the default range depend on which day
- * someone happened to run the capture or open the demo.
+ * The instant the seeded archive's server clock is pinned to (`demo/capture/server.ts`'s own
+ * `now`): the archive's exclusive close, the first instant with no data behind it. Nothing that
+ * needs a *calendar day* should read this one directly - see DEMO_CLOCK_MS below, which is what
+ * both the recorder's DOM clock and, later, the browser's own clock (Task 5's demo entry) are
+ * pinned to, and why the two are not the same instant.
  *
  * `scripts/seed-demo.mjs` is the authority for this arithmetic: it anchors the seeded archive's
  * exclusive end at `localMidnightMs(DEMO_END_DATE)` (see its own comment, and
@@ -45,10 +45,25 @@ function amsterdamOffsetSeconds(ms: number): number {
 // The Amsterdam local-midnight instant that opens civil date `dateStr` (YYYY-MM-DD), in UTC
 // milliseconds - the same value scripts/seed-demo.mjs:84 computes as `endMs`. Exported for the
 // pin test described above, not for any other caller: everything else in this module only ever
-// needs DEMO_INSTANT_MS.
+// needs DEMO_INSTANT_MS or DEMO_CLOCK_MS.
 export function localMidnightMs(dateStr: string): number {
   const utcMidnight = Date.parse(`${dateStr}T00:00:00Z`)
   return utcMidnight - amsterdamOffsetSeconds(utcMidnight) * 1000
 }
 
 export const DEMO_INSTANT_MS = localMidnightMs(DEMO_END_DATE)
+
+/**
+ * The instant to freeze a clock to when what matters is *which calendar day it reads as*, not the
+ * archive's own bookkeeping: one millisecond before DEMO_INSTANT_MS, the last millisecond of the
+ * last day the seed actually wrote data for.
+ *
+ * DEMO_INSTANT_MS cannot serve that purpose, and did not: it is the archive's exclusive close, the
+ * first instant *without* data, and DEMO_END_DATE happens to be a Monday - so a clock pinned to it
+ * reads `new Date()` as a day nothing was ever seeded for, and computes the current Week as
+ * DEMO_END_DATE..DEMO_END_DATE+6, entirely past the last real row. The demo's own default Day and
+ * Week views opened empty because of exactly this, on data that runRebuild had genuinely written.
+ * Stepping back one millisecond crosses into the last real day without needing a second date
+ * string to keep in sync with DEMO_END_DATE by hand.
+ */
+export const DEMO_CLOCK_MS = DEMO_INSTANT_MS - 1

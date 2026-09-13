@@ -14,23 +14,25 @@
 
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
- * Measured 2026-09-13, seeding the default 365 days: 226 files, 2 421 605 bytes (2.3 MB), 43.9s
- * wall clock (seed + rebuild + the whole sweep). That is comfortably inside the spec's under-40 MB
- * bracket, so the demo keeps the full 365 day span rather than trimming intraday to 90 days or
- * cutting the seed to 180.
+ * Measured 2026-09-13, seeding the default 365 days, after the sweep widened to cover every
+ * source option and one step back per range preset (the controller's ruling on Task 3's review):
+ * 496 files, 6 732 996 bytes (6.4 MB), 59.1s wall clock (seed + rebuild + the whole sweep). Up from
+ * the pre-widening measurement (226 files, 2 421 605 bytes) but still comfortably inside the
+ * spec's under-40 MB bracket, so the demo keeps the full 365 day span rather than trimming
+ * intraday to 90 days or cutting the seed to 180.
  *
- * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (2 421 605 * 1.5 ~= 3 632 408): a ceiling
+ * MAX_CAPTURE_BYTES is roughly 1.5x that measurement (6 732 996 * 1.5 ~= 10 099 494): a ceiling
  * that catches a runaway (a route that starts recording every source separately, say, or a metric
  * catalogue that grows sharply), not one that trips on the ordinary growth a new card or a new day
  * of seeded data adds.
  */
-const MAX_CAPTURE_BYTES = 3_632_408
+const MAX_CAPTURE_BYTES = 10_099_494
 
 /**
  * Writes one JSON file per recorded response into `outDir`, plus a manifest mapping each response's
@@ -46,12 +48,19 @@ const MAX_CAPTURE_BYTES = 3_632_408
  * Refuses an empty capture rather than writing a manifest with nothing in it: that manifest would
  * still exist, still parse, and would publish a demo where every single page answers "not in the
  * demo" - a broken sweep that looks, from the file system, exactly like a successful one.
+ *
+ * Clears `outDir` first. Every file name is a hash of its url, so a rerun that still asks the same
+ * questions overwrites the same names - but a sweep that asks fewer or different questions than
+ * last time (a route renamed, a page that stopped fetching something) would otherwise leave last
+ * run's files behind, unreferenced by the new manifest.json and invisible to it, while Task 5's
+ * build still copies the whole directory and the byte count this file measures counts them too.
  */
 export function writeCapture(outDir, recorded) {
   if (recorded.size === 0) {
     throw new Error('writeCapture refuses to write an empty capture: the sweep recorded nothing')
   }
 
+  rmSync(outDir, { recursive: true, force: true })
   mkdirSync(outDir, { recursive: true })
 
   const manifest = {}
@@ -126,6 +135,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       throw new Error(`the recorder failed - see its own output above for which page and why: ${error.message}`)
     }
 
+    if (!existsSync(reportFile)) {
+      throw new Error(
+        'the recorder exited without writing a report - it should have written one at '
+        + `${reportFile} as its very last step, so either it never reached that step or something `
+        + 'removed the file after; see its own output above for what actually ran',
+      )
+    }
     const report = JSON.parse(readFileSync(reportFile, 'utf8'))
 
     const elapsedMs = Math.round(performance.now() - startedMs)

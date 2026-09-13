@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localMidnightMs as demoLocalMidnightMs } from '../src/demo/instant.js'
+import { localMidnightMs as demoLocalMidnightMs, DEMO_INSTANT_MS, DEMO_CLOCK_MS } from '../src/demo/instant.js'
 // A deliberate cross-package deep import, not '@haelan/core': `localMidnightMs` is a testing-only
 // helper the package's public index does not re-export, and this test's whole point is to reach
 // past apps/web/src/demo/instant.ts's own reimplementation and check it against the real thing.
@@ -36,5 +36,26 @@ describe('the demo instant agrees with the seed it is copied from', () => {
 
   it.each(dates)('agrees with the seed for %s', (date) => {
     expect(demoLocalMidnightMs(date)).toBe(seedLocalMidnightMs(date))
+  })
+})
+
+/**
+ * DEMO_CLOCK_MS exists because DEMO_INSTANT_MS cannot be what a clock is pinned to: it is the
+ * archive's exclusive close, the first instant with no data, and DEMO_END_DATE (2026-09-07) is a
+ * Monday, so a clock reading it as "now" put the demo's own default Day and Week views entirely
+ * past the last row the seed ever wrote (this suite's own controller review caught it against the
+ * recorded manifest, not against this test - nothing here exercised the pinned-clock path before).
+ * Pinned here as an exact relationship, not just "close to DEMO_INSTANT_MS": a future edit that
+ * quietly changed the offset (a whole day, an hour) would still "look pinned" without this.
+ */
+describe('DEMO_CLOCK_MS', () => {
+  it('is exactly one millisecond before the archive\'s exclusive close', () => {
+    expect(DEMO_CLOCK_MS).toBe(DEMO_INSTANT_MS - 1)
+  })
+
+  it('formats to the day before DEMO_END_DATE in Amsterdam time, not the same day', () => {
+    const format = (ms: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(ms)
+    expect(format(DEMO_CLOCK_MS)).toBe('2026-09-06')
+    expect(format(DEMO_INSTANT_MS)).toBe('2026-09-07')
   })
 })
