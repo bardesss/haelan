@@ -32,5 +32,11 @@
  *    rather than from any data type, because Google Health shows a cardio load number and the v4
  *    API exposes none. A day derived under 7 has no such row. Nothing else about what deriveDay
  *    computes changed.
+ * 9: the activity band overlap arrives - active_minutes_{light,moderate,vigorous}_peak, the count
+ *    of clock minutes carrying both an activity level and a peak heart rate zone. A day derived
+ *    under 8 has no such rows, so the four band chart would draw its peak band empty and its other
+ *    three bands as unsplit totals: wrong rather than absent, which is what makes this bump
+ *    necessary rather than optional. probe/findings/activity-minute-overlap.md measured why the
+ *    intersection has to be stored at all.
  */
-export const DERIVATION_VERSION = 8
+export const DERIVATION_VERSION = 9

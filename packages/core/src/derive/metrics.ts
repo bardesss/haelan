@@ -55,6 +55,15 @@ export const METRICS: Record<string, MetricSpec> = {
   active_zone_minutes_cardio: { ...TOTAL, unit: 'active_zone_minutes' },
   active_zone_minutes_peak: { ...TOTAL, unit: 'active_zone_minutes' },
 
+  // The intersection of the two families above, measured in
+  // probe/findings/activity-minute-overlap.md: clock minutes at one activity level that were also
+  // a peak zone minute. Stored rather than the four finished bands, because three of those would
+  // duplicate active_minutes_* on every day with no peak minute and give a day two answers. The
+  // chart subtracts these to get its first three bands and sums them for the fourth.
+  active_minutes_light_peak: { ...TOTAL, unit: 'minutes' },
+  active_minutes_moderate_peak: { ...TOTAL, unit: 'minutes' },
+  active_minutes_vigorous_peak: { ...TOTAL, unit: 'minutes' },
+
   // Intraday series: min, mean and max are three different readings of the same day and a card
   // shows all three. p50 is carried because a mean over a day with one glitching hour is not
   // the middle of anything. count is the basis a reading is shown against, not a metric in its

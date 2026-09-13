@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { deriveDayInto } from '../src/derive/deriveDay.ts'
 import { daily } from '../src/db/schema/index.ts'
 import { priorityFrom } from '../src/derive/priority.ts'
@@ -125,5 +125,108 @@ describe('deriveDayInto', () => {
     // 20 - the 10 excluded light minutes, weighted at 1, never reach it. Both the per source row
     // and the merged row (this day has one source, so the merge is a no-op) read the same way.
     expect(Object.fromEntries(loadRows.map((r) => [r.source, r.value]))).toEqual({ watch: 20, merged: 20 })
+  })
+
+  test('writes the activity band overlap rows for a day', () => {
+    const { db, personId, localDate } = seedDay()
+    const utcMs = Date.parse(`${localDate}T09:30:00Z`)
+    // One clock minute that is both vigorous and a peak zone minute. The peak sample is valued 2,
+    // because that is what the provider reports - it is a score, not a duration.
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_vigorous', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_zone_minutes_peak', utcMs, value: 2 })
+
+    deriveDayInto(db, { personId, localDate, ...tuning })
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      eq(daily.metric, 'active_minutes_vigorous_peak'),
+    )).all()
+    // One minute, counted once, under the source that recorded it and under the merged view.
+    expect(rows.map((row) => [row.source, row.value]).sort()).toEqual([['merged', 1], ['watch', 1]])
+  })
+
+  test('derives no band rows for a day whose levels never meet a peak minute', () => {
+    const { db, personId, localDate } = seedDay()
+    insertSample(db, {
+      personId, sourceId: 'watch', metric: 'active_minutes_vigorous',
+      utcMs: Date.parse(`${localDate}T09:30:00Z`), value: 1,
+    })
+
+    deriveDayInto(db, { personId, localDate, ...tuning })
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      eq(daily.metric, 'active_minutes_vigorous_peak'),
+    )).all()
+    // Absent, not zero.
+    expect(rows).toEqual([])
+  })
+
+  // A reader excluding a level's own minutes must not leave that level's overlap standing: the
+  // web layer draws the excluded level as a gap and would otherwise put its very minutes into the
+  // peak band, making the exclusion visibly reappear on the chart.
+  test('excluding a level metric excludes its _peak overlap too', () => {
+    const { db, personId, localDate } = seedDay()
+    const utcMs = Date.parse(`${localDate}T09:30:00Z`)
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_vigorous', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_zone_minutes_peak', utcMs, value: 2 })
+
+    const overrides: OverrideLike[] = [
+      exclude('day_metric', dayMetricTarget({ localDate, metric: 'active_minutes_vigorous' })),
+    ]
+
+    db.transaction((tx) => deriveDayInto(tx, { personId, localDate, ...tuning, overrides }))
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      eq(daily.metric, 'active_minutes_vigorous_peak'),
+    )).all()
+    expect(rows).toEqual([])
+  })
+
+  // Excluding the whole-day peak-zone total is a reader saying none of that day's zone-minute
+  // data is trustworthy - all three level/peak overlaps rest on it and must go with it.
+  test('excluding active_zone_minutes_peak excludes all three level _peak overlaps', () => {
+    const { db, personId, localDate } = seedDay()
+    const utcMs = Date.parse(`${localDate}T09:30:00Z`)
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_light', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_moderate', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_vigorous', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_zone_minutes_peak', utcMs, value: 2 })
+
+    const overrides: OverrideLike[] = [
+      exclude('day_metric', dayMetricTarget({ localDate, metric: 'active_zone_minutes_peak' })),
+    ]
+
+    db.transaction((tx) => deriveDayInto(tx, { personId, localDate, ...tuning, overrides }))
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      inArray(daily.metric, [
+        'active_minutes_light_peak', 'active_minutes_moderate_peak', 'active_minutes_vigorous_peak',
+      ]),
+    )).all()
+    expect(rows).toEqual([])
+  })
+
+  // Guard against over-correcting: an exclusion of a metric outside the band family must not
+  // touch the _peak overlap rows at all.
+  test('excluding an unrelated metric leaves the _peak overlap rows alone', () => {
+    const { db, personId, localDate } = seedDay()
+    const utcMs = Date.parse(`${localDate}T09:30:00Z`)
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_minutes_vigorous', utcMs, value: 1 })
+    insertSample(db, { personId, sourceId: 'watch', metric: 'active_zone_minutes_peak', utcMs, value: 2 })
+
+    const overrides: OverrideLike[] = [
+      exclude('day_metric', dayMetricTarget({ localDate, metric: 'heart_rate' })),
+    ]
+
+    db.transaction((tx) => deriveDayInto(tx, { personId, localDate, ...tuning, overrides }))
+
+    const rows = db.select().from(daily).where(and(
+      eq(daily.personId, personId),
+      eq(daily.metric, 'active_minutes_vigorous_peak'),
+    )).all()
+    expect(rows.map((row) => [row.source, row.value]).sort()).toEqual([['merged', 1], ['watch', 1]])
   })
 })

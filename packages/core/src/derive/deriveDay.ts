@@ -15,6 +15,7 @@ import { mergeSleepDay } from './sleepMerge.ts'
 import { deriveExerciseDay } from './exercise.ts'
 import type { ExerciseSessionLike } from './exercise.ts'
 import { deriveCardioLoadDay } from './cardioLoad.ts'
+import { deriveActivityBandsDay, expandBandExclusions, mergeActivityBandsDay } from './activityBands.ts'
 
 export interface DeriveDayInput {
   personId: string
@@ -71,6 +72,22 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     rows: kept,
   })
   const merged = mergeDay({
+    personId: input.personId,
+    localDate: input.localDate,
+    rows: kept,
+    priority: input.priority,
+  })
+
+  // From the same kept rows as the rollup above: the day's samples are already in memory, filtered
+  // to this local date and override applied, so the intersection costs no extra query.
+  const bandSources = [...new Set(kept.map((row) => row.sourceId))]
+  const perSourceBands = bandSources.flatMap((source) => deriveActivityBandsDay({
+    personId: input.personId,
+    localDate: input.localDate,
+    source,
+    rows: kept.filter((row) => row.sourceId === source),
+  }))
+  const mergedBands = mergeActivityBandsDay({
     personId: input.personId,
     localDate: input.localDate,
     rows: kept,
@@ -179,10 +196,13 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     rows: applyToDay([...derived, ...merged], excluded),
   })
 
+  // Widened so an excluded level or an excluded peak total takes its overlap rows with it - see
+  // expandBandExclusions's own comment. Only the band rows need the wider set: cardioLoad already
+  // saw the unwidened `excluded` above, and every other family here has no such sibling to chase.
   const rows = applyToDay(
-    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceExercise,
-      ...mergedExercise, ...cardioLoad],
-    excluded,
+    [...derived, ...merged, ...perSourceSleep, ...mergedSleep, ...perSourceBands, ...mergedBands,
+      ...perSourceExercise, ...mergedExercise, ...cardioLoad],
+    expandBandExclusions(excluded),
   )
 
   // Everything we derive for this day goes, then comes back. Provider rows are excluded

@@ -111,4 +111,17 @@ describe('the metric catalogue', () => {
     expect(METRICS['active_energy']?.unit).toBe(METRICS['total_calories']?.unit)
     expect(METRICS['active_minutes_light']?.unit).toBe('minutes')
   })
+
+  it('declares the three activity band overlap metrics as summable minutes', () => {
+    for (const metric of [
+      'active_minutes_light_peak',
+      'active_minutes_moderate_peak',
+      'active_minutes_vigorous_peak',
+    ]) {
+      expect(METRICS[metric], metric).toBeDefined()
+      expect(METRICS[metric]!.unit, metric).toBe('minutes')
+      expect(METRICS[metric]!.aggs, metric).toEqual(['sum'])
+      expect(METRICS[metric]!.precision, metric).toBe(0)
+    }
+  })
 })
