@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.14.1](https://github.com/bardesss/haelan/compare/v1.14.0...v1.14.1) (2026-09-13)
+
+
+### Bug Fixes
+
+* **test:** the workout and night pages wait for a condition, not for flush()'s guess ([#180](https://github.com/bardesss/haelan/issues/180)) ([5345129](https://github.com/bardesss/haelan/commit/534512982d53bb63980246b03c17ad9367378baa))
+* **web:** the sparkline tooltip escapes the note a reader typed ([#177](https://github.com/bardesss/haelan/issues/177)) ([c5e2ee3](https://github.com/bardesss/haelan/commit/c5e2ee3d4830c1cfb58daca41e8bd534294d151f))
+* **web:** the workout page's zone chart draws something ([#179](https://github.com/bardesss/haelan/issues/179)) ([39e4f72](https://github.com/bardesss/haelan/commit/39e4f72be118a48fe0f4e1db615324185244333d))
+
 ## [1.14.0](https://github.com/bardesss/haelan/compare/v1.13.0...v1.14.0) (2026-09-13)
 
 
