@@ -56,6 +56,11 @@ export interface Overlay {
   // capture can already carry an alias on a source this session clears, and only a stored null
   // can override that captured value back out at read time.
   aliases: Map<string, string | null>
+  // sessionId -> the localDate its own captured detail read answered with, recorded by
+  // composeSessionDetail on every read regardless of whether that session carries an override -
+  // see affectedRangeFor's own comment for why a session-scope write needs this and has nowhere
+  // else to get it from.
+  sessionLocalDates: Map<string, string>
 }
 
 export function createOverlay(): Overlay {
@@ -67,6 +72,7 @@ export function createOverlay(): Overlay {
     overrides: new Map(),
     deletedOverrideIds: new Set(),
     aliases: new Map(),
+    sessionLocalDates: new Map(),
   }
 }
 
@@ -229,34 +235,66 @@ function composeEvents(params: URLSearchParams, body: unknown, overlay: Overlay)
 // ---- overrides --------------------------------------------------------------------------------
 
 /**
- * The range a `day_metric` write touches, or null for every other scope.
+ * The range a `day_metric` or `session` write touches, or null when neither applies or the date
+ * needed to answer isn't known yet.
  *
- * Null is not a shortfall here the way it can be on a real instance (annotations.ts's own comment
- * on `WriteResult.affected`): resolving a `sample` or `session` target for real needs the
- * captured row it points at - the sample's own offset, or the session's local date - and
- * `writeThrough` was never handed the captured data to look either up in. It is not a gap this
- * task is closing: `useWriteOverride`'s `onSuccess` already invalidates the `session` and
- * `intraday-window` resources by name for a session scoped write, unconditionally, precisely
- * because it cannot trust `affected` to carry a session's range either, so a session exclusion
- * still refetches and redraws without this function ever answering a range for it.
+ * `day_metric` reads its date straight out of the target key. `session` cannot: the real route
+ * resolves the session's own `localDate` from its store, but `WriteOverrideInput` (the payload a
+ * demo write actually receives) carries only `{ scope, targetKey, action, reason,
+ * correctedValue }` - no date - so this function has no captured row of its own to look one up in
+ * either. `composeSessionDetail`'s own read path is what closes that gap: every `/sessions/:id`
+ * read this session has made (unconditionally, whether or not that session carries an override)
+ * leaves its `localDate` in `overlay.sessionLocalDates`, keyed by sessionId, and this function
+ * reads it back by the same key `parseSessionTarget` pulls out of the write's own target key.
+ * AnnotatePanel's one caller for `scope: 'session'` (WorkoutDetail.tsx) always mounts the page,
+ * and so always makes that read, before a reader can ever reach the button that writes this
+ * override - so in practice the id is always there by the time this runs. A session this overlay
+ * has never read (in principle reachable if a future caller wrote this scope from somewhere that
+ * never fetched the session itself) still answers null rather than guessing, the same as `sample`
+ * always does below: `useWriteOverride`'s `onSuccess` invalidates the `session` and
+ * `intraday-window` resources by name unconditionally for exactly this scope, precisely because it
+ * cannot fully trust `affected` here either, so the workout page's own excluded flag still
+ * refetches and redraws even on that null. What null no longer costs, now that the common case
+ * answers a real range, is the `/sessions` LIST staying stale: `invalidateAffected` matches a
+ * cached query by scanning its key for a string `from`/`to` overlapping this range, which
+ * `invalidateResource(..., 'session')` above never reaches because the list's own resource name is
+ * `'sessions'` (useSessions.ts), not `'session'` (useWorkoutSession.ts) - the exact mismatch a
+ * demo visitor who excludes a workout and returns to Activity within `staleTime` used to see as a
+ * row that forgot it was just excluded.
+ *
+ * `sample` has no equivalent read path to close the same way: nothing in this app reads one
+ * intraday sample by itself the way `/sessions/:id` reads one session, so there is no captured
+ * body this module could record an instant off before a `sample` write needs one.
  */
-function affectedRangeFor(scope: string, targetKey: string): AffectedRange | null {
-  if (scope !== 'day_metric') return null
-  try {
-    const { localDate } = parseDayMetricTarget(targetKey)
-    return { from: localDate, to: localDate }
-  } catch {
-    // Mirrors annotations.ts's own route: a malformed target throws before anything is written,
-    // and the shared 400 it answers with is the right answer for a demo write too.
-    throw new ApiError('config', 400, `malformed day_metric target key: ${targetKey}`)
+function affectedRangeFor(scope: string, targetKey: string, overlay: Overlay): AffectedRange | null {
+  if (scope === 'day_metric') {
+    try {
+      const { localDate } = parseDayMetricTarget(targetKey)
+      return { from: localDate, to: localDate }
+    } catch {
+      // Mirrors annotations.ts's own route: a malformed target throws before anything is written,
+      // and the shared 400 it answers with is the right answer for a demo write too.
+      throw new ApiError('config', 400, `malformed day_metric target key: ${targetKey}`)
+    }
   }
+  if (scope === 'session') {
+    let sessionId: string
+    try {
+      sessionId = parseSessionTarget(targetKey)
+    } catch {
+      return null
+    }
+    const localDate = overlay.sessionLocalDates.get(sessionId)
+    return localDate === undefined ? null : { from: localDate, to: localDate }
+  }
+  return null
 }
 
 function addOverride(payload: unknown, overlay: Overlay): { id: string, affected: AffectedRange | null, applied: boolean } {
   const body = payload as {
     scope: string, targetKey: string, action: OverrideAction, reason: string, correctedValue?: number
   }
-  const affected = affectedRangeFor(body.scope, body.targetKey)
+  const affected = affectedRangeFor(body.scope, body.targetKey, overlay)
   const id = crypto.randomUUID()
   overlay.overrides.set(id, {
     id, scope: body.scope, targetKey: body.targetKey, action: body.action, reason: body.reason,
@@ -275,7 +313,7 @@ function removeOverride(overrideId: string, overlay: Overlay): { id: string, aff
   // Only an override this session itself wrote can answer a real range - see affectedRangeFor's
   // own comment for why an id this overlay never saw (a captured row, if the demo ever seeds one)
   // cannot. The list composition below still drops it either way.
-  const affected = existing ? affectedRangeFor(existing.scope, existing.targetKey) : null
+  const affected = existing ? affectedRangeFor(existing.scope, existing.targetKey, overlay) : null
   return { id: overrideId, affected, applied: true }
 }
 
@@ -437,6 +475,12 @@ function excludedFieldsFor(override: OverlayOverride): { excluded: boolean, excl
 }
 
 function composeSessionDetail(sessionId: string, body: unknown, overlay: Overlay): unknown {
+  // Recorded on every read, whether or not this session carries an override (yet): see
+  // affectedRangeFor's own comment for why a session-scope write has no date of its own to send,
+  // and why this is where one has to come from instead.
+  const localDate = (body as { localDate?: unknown }).localDate
+  if (typeof localDate === 'string') overlay.sessionLocalDates.set(sessionId, localDate)
+
   const override = sessionOverrideFor(overlay, sessionId)
   if (!override) return body
   return { ...(body as Record<string, unknown>), ...excludedFieldsFor(override) }

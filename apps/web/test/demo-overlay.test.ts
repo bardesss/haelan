@@ -313,6 +313,34 @@ describe('a session-scope exclusion', () => {
     const detail = applyOverlay(detailUrl, REAL_SESSION_DETAIL, overlay) as typeof REAL_SESSION_DETAIL
     expect(detail).toEqual(REAL_SESSION_DETAIL)
   })
+
+  it("answers the write's own affected range once the session's date has been read, so invalidateAffected reaches the /sessions list", () => {
+    // The real order a visitor's browser actually produces: WorkoutDetail mounts and reads the
+    // session (which is what composeSessionDetail's own read-path recording exists for) before
+    // AnnotatePanel can ever be opened to write an exclusion against it. WriteOverrideInput
+    // carries no localDate of its own (useAnnotations.ts's own type), so without that prior read
+    // this has nothing to answer with.
+    const overlay = createOverlay()
+    applyOverlay(detailUrl, REAL_SESSION_DETAIL, overlay)
+
+    const written = writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
+      scope: 'session', targetKey: sessionTarget(SESSION_ID), action: 'exclude', reason: 'GPS lost signal',
+    }, overlay) as { affected: { from: string, to: string } | null }
+
+    // Not decoration: this is the exact range invalidateAffected (useAnnotations.ts) scans every
+    // cached query's own {from, to} key params against, which is how a demo visitor returning to
+    // Activity within staleTime sees the session they just excluded actually struck through in the
+    // list, not merely on the detail page invalidateResource(..., 'session') already covers.
+    expect(written.affected).toEqual({ from: '2026-09-06', to: '2026-09-06' })
+  })
+
+  it('answers null, not a guess, for a session this overlay has never read', () => {
+    const overlay = createOverlay()
+    const written = writeThrough('POST', `/api/v1/p/${PERSON}/overrides`, {
+      scope: 'session', targetKey: sessionTarget(SESSION_ID), action: 'exclude', reason: 'x',
+    }, overlay) as { affected: unknown }
+    expect(written.affected).toBeNull()
+  })
 })
 
 describe('notes upsert semantics', () => {
