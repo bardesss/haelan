@@ -1,6 +1,7 @@
 import { installFrozenClock } from './frozenClock.js'
 import { DEMO_CLOCK_MS } from './instant.js'
 import { mountDemoBanner } from './DemoBanner.js'
+import { demoRefusalMessage } from './client.js'
 
 // DEMO_CLOCK_MS, not DEMO_INSTANT_MS. The recorder swept every page with its DOM clock pinned to
 // DEMO_CLOCK_MS (instant.ts: the last millisecond of the last day the seed actually wrote data
@@ -16,6 +17,32 @@ installFrozenClock(DEMO_CLOCK_MS)
 // component tree exactly what a real instance ships. See DemoBanner.tsx's own comment for why this
 // banner does not go through I18nProvider either.
 mountDemoBanner()
+
+/**
+ * ControlRow's "download totals" link (apps/web/src/components/ControlRow.tsx) renders a plain
+ * `<a href="/api/v1/p/.../export?...">` - a real file download in a real instance, so it is
+ * deliberately a link rather than a fetch call, and it never goes through apiSend at all. On Pages
+ * that href is not base-prefixed (it is not an app route withBase would know to rewrite) and the
+ * path itself does not exist, so an unhandled click navigates the whole tab to a 404 with only the
+ * browser's own Back button to recover - the demo's primary chrome throwing a visitor out of it,
+ * on every rail page. A capture-phase listener on the document, added here rather than by changing
+ * ControlRow itself, is what catches it before the browser acts on the href: no product file needs
+ * to know the demo exists for this one fix. `closest`, not a direct tag check, because the actual
+ * click target is usually the icon or the label text inside the anchor, not the anchor element
+ * itself.
+ */
+document.addEventListener('click', (event) => {
+  const anchor = (event.target as Element | null)?.closest?.('a[href^="/api/"]')
+  if (anchor === null || anchor === undefined) return
+  event.preventDefault()
+  // window.alert, not a page-level error state: this fires from a global listener with no
+  // component of its own to hold a message in, the same reason installFrozenClock and
+  // mountDemoBanner above work outside React rather than inside it. The wording is the identical
+  // refusal a sync run gets (demoRefusalMessage, shared with client.ts's own writeThrough catch),
+  // so a visitor reads one consistent explanation for every action this static build cannot
+  // honour, not a second, differently worded one invented just for this button.
+  window.alert(demoRefusalMessage())
+}, true)
 
 // Dynamic, and after the clock: a static import would be hoisted above the call above it.
 await import('../main.js')
