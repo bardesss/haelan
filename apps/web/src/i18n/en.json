@@ -90,10 +90,22 @@
     "retry": "Try again"
   },
   "emptyState": {
-    "no_data": { "title": "No data yet", "detail": "Nothing has been recorded for this period." },
-    "not_worn": { "title": "Device not worn", "detail": "There are days here, but nothing was wearing a device to record them." },
-    "not_synced": { "title": "Not being synced", "detail": "You turned this data type off. Turn it back on in Settings to start fetching it." },
-    "insufficient": { "title": "Not enough data to summarise", "detail": "There are too few days here to say anything useful yet." }
+    "no_data": {
+      "title": "No data yet",
+      "detail": "Nothing has been recorded for this period."
+    },
+    "not_worn": {
+      "title": "Device not worn",
+      "detail": "There are days here, but nothing was wearing a device to record them."
+    },
+    "not_synced": {
+      "title": "Not being synced",
+      "detail": "You turned this data type off. Turn it back on in Settings to start fetching it."
+    },
+    "insufficient": {
+      "title": "Not enough data to summarise",
+      "detail": "There are too few days here to say anything useful yet."
+    }
   },
   "insightCard": {
     "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
@@ -416,11 +428,20 @@
       "missingTitle": "No such workout",
       "missingDetail": "This link names a workout that is not in your data.",
       "tiles": {
-        "elapsed": "Elapsed", "moving": "Moving", "distance": "Distance", "pace": "Pace",
-        "speed": "Speed", "calories": "Calories", "heartRate": "Heart rate",
-        "elevation": "Elevation gain", "steps": "Steps", "activeZoneMinutes": "Active zone minutes",
-        "vo2max": "VO2max", "swimLengths": "Lengths",
-        "cardioLoadEdwards": "Cardio load (Edwards)", "cardioLoadBanister": "Cardio load (Banister)"
+        "elapsed": "Elapsed",
+        "moving": "Moving",
+        "distance": "Distance",
+        "pace": "Pace",
+        "speed": "Speed",
+        "calories": "Calories",
+        "heartRate": "Heart rate",
+        "elevation": "Elevation gain",
+        "steps": "Steps",
+        "activeZoneMinutes": "Active zone minutes",
+        "vo2max": "VO2max",
+        "swimLengths": "Lengths",
+        "cardioLoadEdwards": "Cardio load (Edwards)",
+        "cardioLoadBanister": "Cardio load (Banister)"
       },
       "basis": {
         "elapsed": "from the session's own start and end",
@@ -435,7 +456,10 @@
         "basis": "the session's own four zones, as the device recorded them — not the three active zone minutes zones",
         "column": "Zone",
         "duration": "Duration",
-        "light": "Light", "moderate": "Moderate", "vigorous": "Vigorous", "peak": "Peak"
+        "light": "Light",
+        "moderate": "Moderate",
+        "vigorous": "Vigorous",
+        "peak": "Peak"
       },
       "trace": {
         "label": "Heart rate through this workout",
@@ -443,18 +467,30 @@
         "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
       },
       "splits": {
-        "autoLabel": "Automatic splits", "lapLabel": "Laps", "lapLabelTyped": "Laps ({{type}})",
-        "number": "#", "distance": "Distance", "duration": "Duration", "pace": "Pace", "heartRate": "Heart rate",
+        "autoLabel": "Automatic splits",
+        "lapLabel": "Laps",
+        "lapLabelTyped": "Laps ({{type}})",
+        "number": "#",
+        "distance": "Distance",
+        "duration": "Duration",
+        "pace": "Pace",
+        "heartRate": "Heart rate",
         "filledFromTrace": "Heart rates marked † were not recorded per split; they are this session's own heart rate over that split's window.",
         "type": {
-          "MANUAL": "manual", "DURATION": "by duration", "DISTANCE": "by distance",
-          "CALORIES": "by calories", "SPLIT_TYPE_UNSPECIFIED": "unspecified"
+          "MANUAL": "manual",
+          "DURATION": "by duration",
+          "DISTANCE": "by distance",
+          "CALORIES": "by calories",
+          "SPLIT_TYPE_UNSPECIFIED": "unspecified"
         }
       },
       "dynamics": {
         "label": "Running dynamics",
-        "cadence": "Cadence", "stride": "Stride length", "groundContact": "Ground contact",
-        "oscillation": "Vertical oscillation", "verticalRatio": "Vertical ratio"
+        "cadence": "Cadence",
+        "stride": "Stride length",
+        "groundContact": "Ground contact",
+        "oscillation": "Vertical oscillation",
+        "verticalRatio": "Vertical ratio"
       },
       "comparison": {
         "label": "Against your recent workouts",
@@ -466,6 +502,15 @@
         "tooFewDetail_one": "{{count}} earlier workout of this type in the last 90 days; three are needed to compare.",
         "tooFewDetail_other": "{{count}} earlier workouts of this type in the last 90 days; three are needed to compare."
       }
+    },
+    "trainingLoad": {
+      "label": "Training load",
+      "basis": "last {{acuteDays}} days against the {{chronicDays}} before them, {{worn}} days worn",
+      "basisNotEnough": "needs {{needed}} worn days of {{total}}, and has {{worn}}",
+      "notEnough": "Not enough worn days yet to compare a week against a month.",
+      "ratio": "{{ratio}}x your usual",
+      "noUsual": "No usual load to compare against yet.",
+      "target": "Usual week: {{target}}"
     }
   },
   "charts": {
@@ -658,11 +703,19 @@
       "missingTitle": "No night recorded",
       "missingDetail": "This date has no sleep from this source. It may not have synced yet.",
       "tiles": {
-        "asleep": "Time asleep", "inBed": "Time in bed", "efficiency": "Efficiency",
-        "deep": "Deep", "light": "Light", "rem": "REM", "awake": "Time awake", "naps": "Naps"
+        "asleep": "Time asleep",
+        "inBed": "Time in bed",
+        "efficiency": "Efficiency",
+        "deep": "Deep",
+        "light": "Light",
+        "rem": "REM",
+        "awake": "Time awake",
+        "naps": "Naps"
       },
       "tileBasis": "from {{metric}}, as this night was derived",
-      "stages": { "label": "Stages through the night" },
+      "stages": {
+        "label": "Stages through the night"
+      },
       "naps": {
         "none": "No naps recorded on this date.",
         "list": "Naps:"
@@ -1011,7 +1064,11 @@
         "title": "No sources yet",
         "detail": "Nothing has reported data yet. Sources appear here after the first sync."
       },
-      "kind": { "device": "Device", "app": "App", "manual": "Entered by hand" },
+      "kind": {
+        "device": "Device",
+        "app": "App",
+        "manual": "Entered by hand"
+      },
       "saveFailed": "That did not save. Try again."
     },
     "dataTypes": {
@@ -1022,7 +1079,12 @@
     },
     "members": {
       "title": "Members",
-      "state": { "active": "Active", "invited": "Invited", "disabled": "Suspended", "expired": "Invite expired" },
+      "state": {
+        "active": "Active",
+        "invited": "Invited",
+        "disabled": "Suspended",
+        "expired": "Invite expired"
+      },
       "invite": "Invite a member",
       "displayName": "Name",
       "timezoneInherited": "The new member starts in your own time zone. They can change it in their own account settings once they are in.",

@@ -29,6 +29,14 @@ export interface ZoneMinutes {
  * unchanged - rather than in a same-length array looked up by index, so there is no index lookup
  * whose bounds have to be trusted rather than checked.
  */
+/**
+ * The daily row `deriveCardioLoadDay` writes, named here beside the calculation rather than in the
+ * derive that stores it: a reader in `apps/web` may import from `api/` and not from `derive/`, and
+ * a second copy of this string in the web is exactly the drift that would let a card and a derive
+ * disagree about which metric they mean.
+ */
+export const CARDIO_LOAD_METRIC = 'cardio_load_edwards'
+
 export function edwardsLoad(zones: ZoneMinutes): number | null {
   const weighted = [
     { weight: 1, minutes: zones.lightMinutes },
