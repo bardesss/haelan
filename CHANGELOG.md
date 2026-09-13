@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.15.0](https://github.com/bardesss/haelan/compare/v1.14.1...v1.15.0) (2026-09-13)
+
+
+### Features
+
+* **web:** distance and floors draw a labelled bar chart, side by side ([#181](https://github.com/bardesss/haelan/issues/181)) ([bf5620c](https://github.com/bardesss/haelan/commit/bf5620c3675c26bccb8d192716bf15b8d52e19f9))
+
 ## [1.14.1](https://github.com/bardesss/haelan/compare/v1.14.0...v1.14.1) (2026-09-13)
 
 
