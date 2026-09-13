@@ -25,6 +25,11 @@ jobs:
       released: ${{ steps.rp.outputs.release_created }}
       version: ${{ steps.rp.outputs.version }}
       tag: ${{ steps.rp.outputs.tag_name }}
+      # The release is cut as a draft and published at the end of `publish`, and this is what
+      # names it there. The id rather than the tag: `repos/.../releases/tags/{tag}` does not
+      # return drafts, so anything that looks a release up by tag finds nothing until after the
+      # step that needed it has run.
+      release_id: ${{ steps.rp.outputs.id }}
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: rp
@@ -39,7 +44,9 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Only on a release, and everything here has to pass before the release stops being a draft.
+  # Only on a release. Everything here has to pass before the release stops being a draft, which
+  # is the last step in the job, so a failure anywhere leaves a draft nobody browsing can see
+  # rather than a finished-looking release page pointing at an image that was never pushed.
   publish:
     needs: release-please
     if: needs.release-please.outputs.released == 'true'
@@ -136,19 +143,77 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-      # There used to be a step here that published a draft release once the image was in the
-      # registry, so a release page could never point at an image that failed to publish. It is
-      # gone, and the reason is worth keeping rather than quietly dropping.
+      # This is what makes the release exist for anyone who is not a maintainer, and it is
+      # deliberately the last thing the job does. Until it runs the release is a draft: invisible
+      # on the Releases page, not returned as `latest`, not in the Atom feed.
       #
-      # A draft release carries no git tag, and release-please finds its own previous releases by
-      # tag. With `draft: true` it never found one: every run reported "No latest release found"
-      # and recomputed the version by walking all 217 commits in this repository's history. That
-      # history always contains a `feat:`, so every run proposed at least a minor bump, and
-      # merging a release opened another release for no changes. 1.2.0, 1.3.0 and a proposed
-      # 1.4.0 were produced that way, each containing only its own release commit.
+      # Drafting was tried once before, in #127, and reverted in #135 because it made the version
+      # number fiction. The cause was precise and is worth writing down rather than leaving to be
+      # rediscovered a third time. GitHub does not create a draft's git tag until the draft is
+      # published, and release-please drops every release whose tag does not resolve -- its
+      # release search is literally `releases.filter(release => !!release.tagCommit)`, and the
+      # fallback that recovers a release the search missed looks it up by tag as well. So with a
+      # lazily-tagged draft release-please found no previous release at all: it backfilled one
+      # from the manifest with `sha: ''`, never matched that sha while walking history, and
+      # recomputed the version from all 217 commits in the repository. That history always holds
+      # a `feat:`, so every run proposed a minor bump and merging a release opened another
+      # release containing only its own release commit. 1.2.0, 1.3.0 and a proposed 1.4.0 came
+      # out that way.
       #
-      # So the ordering guarantee was real and the mechanism that bought it made the version
-      # number fiction, which is the worse of the two. What is left is a window of about seven
-      # minutes between the release existing and the image reaching the registry. A failure in it
-      # is loud, a red run, and recoverable by rerunning or deleting the release, where a version
-      # computed from the wrong base is neither.
+      # What is different now is `force-tag-creation: true` in release-please-config.json.
+      # release-please creates the git tag itself, with an explicit createRef, before it creates
+      # the release -- so the tag exists from the moment the draft does, both of its lookups
+      # resolve, and the ordering guarantee costs nothing. The option exists upstream for exactly
+      # this: "particularly useful when `draft` is enabled, because GitHub does not create a Git
+      # tag for draft releases until they are published."
+      #
+      # The two settings are one mechanism and neither works alone. `draft` without
+      # `force-tag-creation` is #127 again; `force-tag-creation` without `draft` is a tag
+      # release-please would have created anyway. Both are pinned together in
+      # scripts/test/release-workflow-order.test.ts.
+      - name: The release stops being a draft
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.release-please.outputs.release_id }}
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          # Asserted rather than assumed: an empty id makes the URL below `/releases/`, which is
+          # the list endpoint, and a PATCH to it would fail in a way that reads like a permissions
+          # problem rather than like a missing output.
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::error::release-please reported no release id for ${TAG}"
+            exit 1
+          fi
+          # make_latest explicitly: it is applied when a release is published, and this release
+          # was created as a draft, so leaving it to the default risks publishing a release the
+          # Releases page still does not call the latest one.
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false -f make_latest=true \
+            --jq '"published \(.tag_name) (draft=\(.draft)): \(.html_url)"'
+
+      # A failure above is correct behaviour -- the draft stays a draft -- but it is quiet. The
+      # release page looks like nothing happened because to everyone except a maintainer nothing
+      # did, and the red run is one line in a list of runs. Say plainly what state the repository
+      # is in, because the wrong recovery is available and tempting: publishing the draft by hand
+      # from the Releases UI produces exactly the release-pointing-at-no-image that this ordering
+      # exists to prevent.
+      - name: Say what a failure left behind
+        if: failure()
+        env:
+          TAG: ${{ needs.release-please.outputs.tag }}
+        run: |
+          {
+            echo "## ${TAG} is tagged, but not released"
+            echo
+            echo "This job did not finish, so the image for \`${TAG}\` may not be on"
+            echo "\`ghcr.io/${GITHUB_REPOSITORY}\`. The release is still a draft: nobody browsing"
+            echo "the Releases page can see it, and \`latest\` still points at the previous version."
+            echo
+            echo "The git tag \`${TAG}\` **does** exist. That is deliberate -- release-please cannot"
+            echo "find its own previous release without it, and a missing tag is how the version"
+            echo "numbers became fiction in #127. Leave the tag alone."
+            echo
+            echo "To recover: fix the cause and re-run this job. Its last step publishes the draft."
+            echo "Do **not** publish the draft by hand from the Releases page -- that is precisely the"
+            echo "release-pointing-at-a-missing-image this ordering exists to prevent."
+          } >> "$GITHUB_STEP_SUMMARY"
