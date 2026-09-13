@@ -47,4 +47,14 @@ describe('the capture server', () => {
     await expect(server.fetch(`/api/v1/p/${server.personId}/series`)).rejects.toThrow(/400/)
     expect([...server.recorded.keys()].some((url) => url.endsWith('/series'))).toBe(false)
   })
+
+  it('refuses a 200 whose body is not JSON, rather than recording it as if it were', async () => {
+    // /export?format=csv is a real route that legitimately answers 200 with a CSV body - the
+    // only place in this API's surface that does, which is exactly why it is the right route to
+    // prove this refusal against rather than a route built to fail on purpose.
+    const url = `/api/v1/p/${server.personId}/export`
+      + '?format=csv&metric=steps&agg=sum&from=2026-09-01&to=2026-09-07'
+    await expect(server.fetch(url)).rejects.toThrow()
+    expect([...server.recorded.keys()].some((key) => key.includes('/export'))).toBe(false)
+  })
 })

@@ -13,6 +13,12 @@
  * handful of lines it needs are reproduced here rather than imported. Keep the two in sync: if
  * either changes, the other has to change with it, or the demo's default range ends up one day off
  * its own data.
+ *
+ * `localMidnightMs` below is exported (the constant alone would not do) so
+ * `apps/web/test/demo-instant.test.ts` can call it directly against a sweep of dates and assert it
+ * agrees with the seed's own `localMidnightMs`, including on the DST boundary dates a single
+ * shared constant could never exercise. That test is what keeps this deliberate duplication safe -
+ * a comment naming the seed as authority does not, on its own, catch a future edit to either side.
  */
 
 // The seed's own fixed end date (scripts/seed-demo.mjs), copied rather than imported for the same
@@ -37,8 +43,10 @@ function amsterdamOffsetSeconds(ms: number): number {
 }
 
 // The Amsterdam local-midnight instant that opens civil date `dateStr` (YYYY-MM-DD), in UTC
-// milliseconds - the same value scripts/seed-demo.mjs:84 computes as `endMs`.
-function localMidnightMs(dateStr: string): number {
+// milliseconds - the same value scripts/seed-demo.mjs:84 computes as `endMs`. Exported for the
+// pin test described above, not for any other caller: everything else in this module only ever
+// needs DEMO_INSTANT_MS.
+export function localMidnightMs(dateStr: string): number {
   const utcMidnight = Date.parse(`${dateStr}T00:00:00Z`)
   return utcMidnight - amsterdamOffsetSeconds(utcMidnight) * 1000
 }

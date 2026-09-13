@@ -86,10 +86,14 @@ export async function startCaptureServer(dataDir: string): Promise<CaptureServer
     personId,
     recorded,
     close: () => {
-      // Not awaited: app.close() tears down Fastify's own bookkeeping, but nothing here ever
-      // listen()s, so there is no socket for a caller to wait on. instance.close() below is the
-      // part that matters for cleanup ordering - see the test's own comment on why it must run
-      // before rmSync.
+      // Not awaited: CaptureServer.close() is synchronous by contract (Task 3 calls it the same
+      // way the test's afterAll does, with nothing to await), and nothing here ever listen()s, so
+      // there is no socket for a caller to wait on. instance.close() below is the part that
+      // matters for cleanup ordering - see the test's own comment on why it must run before
+      // rmSync. Firing app.close() first and returning before it settles is safe only because
+      // this server registers no onClose hook that touches the database (registerStatic, the one
+      // route family that might, never runs here since webRoot is unset) - if a future change
+      // adds one, instance.close() below could race it.
       void app.close()
       instance.close()
     },
