@@ -102,6 +102,13 @@ body {
 }
 .rail-dialog::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
 .rail-dialog .rail { width: 100%; height: 100%; position: static; }
+/* <dialog> makes the page behind inert for focus and for pointer targeting, and says nothing at
+   all about scrolling: a wheel or a drag over the backdrop still scrolls the document underneath.
+   The drawer is 280px of a 375px screen, so the strip beside it is a live scroll surface under an
+   open modal. Locked from the element's own open state rather than from a class React has to
+   remember to remove, so a dialog closed by Escape - which never tells React anything - unlocks
+   the page by the same declaration that locked it. */
+html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 
 /* The rail is out of the flow below the breakpoint, so the flex row that held it and .main side
    by side has one child left and would stretch the top bar next to the content. */

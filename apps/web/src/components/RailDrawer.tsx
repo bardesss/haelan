@@ -69,8 +69,12 @@ export function RailDrawer({ active, person, onSignOut, signOutError }: {
   return (
     <>
       <div className="top-bar">
+        {/* aria-haspopup, not aria-expanded. aria-expanded describes a region this button shows
+            and hides in place, next to itself, and a screen reader announcing "collapsed" invites
+            the reader to look there for it. What this opens is a modal dialog that takes the whole
+            page over, which is what haspopup="dialog" says. */}
         <button ref={opener} type="button" className="icon-button" data-testid="rail-open"
-          aria-expanded={open} aria-label={t('sidebar.openMenu')} onClick={() => setOpen(true)}>
+          aria-haspopup="dialog" aria-label={t('sidebar.openMenu')} onClick={() => setOpen(true)}>
           <Icon name="menu" />
         </button>
         <div className="brand"><BrandMark />Hælan</div>
