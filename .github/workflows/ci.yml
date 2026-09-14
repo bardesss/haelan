@@ -165,14 +165,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Keyed on everything that decides what the fixtures contain: the recorder, the scripts that
-      # build the throwaway instance, the routes whose shapes are recorded, and core, which is what
-      # derives the values in them. A miss rebuilds them, which is the cost demo-rehearsal already
-      # pays; a hit is seconds.
+      # build the throwaway instance, the routes whose shapes are recorded, core, which is what
+      # derives the values in them, and apps/web/src - the recorder mounts real app code and
+      # records exactly what each mounted page fetches, so a page gaining or dropping a query
+      # changes the manifest as surely as a route change does. A miss rebuilds them, which is the
+      # cost demo-rehearsal already pays; a hit is seconds.
       - id: fixtures
         uses: actions/cache@v4
         with:
           path: demo/capture/out
-          key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**') }}
+          key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**', 'apps/web/src/**') }}
 
       - run: pnpm demo:capture
         if: steps.fixtures.outputs.cache-hit != 'true'
