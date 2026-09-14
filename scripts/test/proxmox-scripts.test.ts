@@ -64,7 +64,13 @@ describe('the Proxmox LXC installer', () => {
   it('installs the Node major the shipped image runs', () => {
     // engines is a floor and the Dockerfile is the verified runtime, so the floor is the weaker
     // claim of the two. The container gets what the image gets.
-    const image = /^FROM node:(\d+)-slim/m.exec(dockerfile)?.[1]
+    //
+    // The tag suffix is matched loosely on purpose. What the container has to agree with is the
+    // Node major, not the base distribution: the image moved from -slim to -alpine and the LXC
+    // stays Debian, which is fine, while a silent disagreement about the major is not. Pinning
+    // the suffix here meant this read `undefined` the moment the base changed, and `undefined`
+    // is what the assertion below exists to catch.
+    const image = /^FROM node:(\d+)-[a-z0-9.]+/m.exec(dockerfile)?.[1]
     const floor = Number(/(\d+)/.exec(pkg.engines.node)?.[1])
 
     expect(image).toBeDefined()
