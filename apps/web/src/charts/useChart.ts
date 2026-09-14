@@ -43,7 +43,8 @@ export function useChart(
 
   useEffect(() => {
     if (!host.current) return
-    const chart = echarts.init(host.current, undefined, { renderer: 'svg' })
+    const element = host.current
+    const chart = echarts.init(element, undefined, { renderer: 'svg' })
     const handleClick = (event: ECElementEvent) => onClickRef.current?.(event)
     chart.on('click', handleClick)
     // Read per render rather than once: the preference can change while the page is open, and
@@ -61,14 +62,24 @@ export function useChart(
     const scheme = window.matchMedia('(prefers-color-scheme: light)')
     scheme.addEventListener('change', render)
     motion.addEventListener('change', render)
-    const resize = () => chart.resize()
-    window.addEventListener('resize', resize)
+    // The chart's own container, not the window. A `resize` listener runs *during* the resize
+    // event, while the document still carries the layout it is about to leave: crossing the
+    // breakpoint upward - a tablet rotating portrait to landscape - every chart measured a
+    // `.layout-phone` `.main` that was still full-bleed, because useIsPhone's state change had not
+    // re-rendered yet, and then kept that width once the 186px rail came back. Every page scrolled
+    // sideways afterwards and only a *further* resize corrected it, which a rotation never sends.
+    //
+    // A ResizeObserver is delivered after layout, carrying the container's settled size, so it
+    // cannot read a mode that is already gone. Deliberately not a timeout: a delay long enough
+    // today is a race nobody can see being lost tomorrow.
+    const sizeObserver = new ResizeObserver(() => chart.resize())
+    sizeObserver.observe(element)
 
     return () => {
       observer.disconnect()
+      sizeObserver.disconnect()
       scheme.removeEventListener('change', render)
       motion.removeEventListener('change', render)
-      window.removeEventListener('resize', resize)
       chart.dispose()
     }
   }, [build])
