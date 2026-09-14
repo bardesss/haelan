@@ -2,7 +2,17 @@ packages:
   - 'packages/*'
   - 'apps/*'
 allowBuilds:
-  better-sqlite3: true
+  # better-sqlite3 is deliberately false. v13 ships prebuilt binaries inside its own npm tarball
+  # (prebuilds/, eight platforms including musl), having moved to the N-API and dropped
+  # prebuild-install. It has no install script, but it does still ship a binding.gyp, and both npm
+  # and pnpm apply an implicit `node-gyp rebuild` to any package with a binding.gyp and no install
+  # script. Allowing that build compiles from source and uses the result instead of the shipped
+  # prebuild - minutes of install time, a C++ toolchain required on every machine, and a binary
+  # nobody tested in place of one upstream did. Turning it off is what makes the prebuild win.
+  #
+  # This is not what made 13.0.3 fail CI three times; that was the engines floor being one patch
+  # release below NAPI_VERSION=10. See the comment on the node matrix in .github/workflows/ci.yml.
+  better-sqlite3: false
   esbuild: true
 overrides:
   # The deprecated @esbuild-kit chain, reached only through drizzle-kit, pins esbuild 0.18,

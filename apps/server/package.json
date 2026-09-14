@@ -13,7 +13,7 @@
     "@fastify/static": "^10.1.2",
     "@haelan/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "better-sqlite3": "^12.2.0",
+    "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.3",
     "zod": "^4.6.2"
   },

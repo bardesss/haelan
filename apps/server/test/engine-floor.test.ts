@@ -8,10 +8,10 @@ import { describe, it, expect } from 'vitest'
 //
 // `import.meta.main` reads like the obvious way to gate an entry point, which is why it arrived
 // here once and will be offered again by anyone modernising these files on a machine where it
-// works. It landed in Node 22.18; package.json declares `"node": ">=22.13"`. Below 22.18 it is
+// works. It landed in Node 22.18; package.json declares `"node": ">=22.14"`. Below 22.18 it is
 // `undefined`, so the gate is silently false and the entry simply never runs - `mcp.ts` served
 // nothing and exited with an empty stdout, and `pnpm docs:tools` wrote no TOOLS.md and exited 0.
-// Neither said a word about why. CI's 22.13 leg is what caught it; this is what names it.
+// Neither said a word about why. CI's floor leg is what caught it; this is what names it.
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url))
 const ROOTS = ['apps/server/src', 'packages/core/src', 'scripts']
@@ -19,7 +19,7 @@ const EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.mjs', '.cjs', '.js']
 const NEEDLE = 'import.meta.main'
 
 const GUIDANCE = [
-  '`import.meta.main` landed in Node 22.18, and package.json declares "node": ">=22.13".',
+  '`import.meta.main` landed in Node 22.18, and package.json declares "node": ">=22.14".',
   'On the floor it is `undefined`, so the gate is silently false and the entry never runs.',
   'Use the portable form instead:',
   '',
