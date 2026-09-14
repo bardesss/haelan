@@ -23,7 +23,7 @@ msg_info "Building Haelan"
 cd /opt/haelan
 $STD pnpm install --frozen-lockfile
 # Builds apps/web/dist and nothing else. The server is TypeScript that Node runs directly through
-# type stripping, which is also why NODE_VERSION is 24 rather than the 22.13 floor in engines.
+# type stripping, which is also why NODE_VERSION is 24 rather than the 22.14 floor in engines.
 $STD pnpm build
 msg_ok "Built Haelan"
 

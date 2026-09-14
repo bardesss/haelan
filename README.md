@@ -500,7 +500,7 @@ HAELAN_DATA_DIR=./.local-data pnpm start
 root too. The server prints the resolved absolute path at boot, so there is never a question
 about which database an instance opened.
 
-Node 22.13 or later. The suite runs against temporary SQLite databases and needs no credentials:
+Node 22.14 or later. The suite runs against temporary SQLite databases and needs no credentials:
 every payload it reads is synthetic, and the one test that speaks HTTP speaks it to a stub on
 localhost.
 

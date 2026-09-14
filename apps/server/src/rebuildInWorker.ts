@@ -90,7 +90,7 @@ export function rebuildInWorker(
       // --experimental-import-meta-resolve, a --require of vitest's warning suppressor and two
       // --conditions, and under vitest 4 it was empty. Neither contains the strip flag, and
       // without it the child runs a .ts file only on a Node that strips types with no flag at all
-      // - which is 23.6 and later, while this repo's declared floor is 22.13. So it is passed
+      // - which is 23.6 and later, while this repo's declared floor is 22.14. So it is passed
       // explicitly rather than relying on a default this repo does not guarantee.
       execArgv: process.execArgv.includes('--experimental-strip-types')
         ? process.execArgv

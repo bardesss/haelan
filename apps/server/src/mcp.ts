@@ -119,7 +119,7 @@ export async function serve(argv: readonly string[], env: NodeJS.ProcessEnv): Pr
 }
 
 // Not `import.meta.main`, which says this in one word and is the wrong word here: it landed in
-// Node 22.18, and this package's engines floor is >=22.13, where it is plain `undefined`. The gate
+// Node 22.18, and this package's engines floor is >=22.14, where it is plain `undefined`. The gate
 // would be silently false - this process would start, serve nothing, and exit with an empty
 // stdout, a failure that reads as a protocol bug rather than a version one. Keep the path
 // comparison until the floor moves past 22.18; `test/engine-floor.test.ts` holds that.

@@ -109,7 +109,7 @@ export async function runSql(
         // --conditions, and under vitest 4, when this comment first claimed the list was empty, it
         // was. Neither contains the strip flag, and without it the child would run a .ts file only
         // on a Node that strips types with no flag - which is 23.6 and later, while this repo's
-        // floor is 22.13. Passed explicitly rather than relying on a default this repo does not
+        // floor is 22.14. Passed explicitly rather than relying on a default this repo does not
         // guarantee. The same reasoning, verbatim, as rebuildInWorker.ts.
         execArgv: [
           ...(process.execArgv.includes('--experimental-strip-types')

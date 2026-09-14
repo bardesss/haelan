@@ -233,7 +233,7 @@ function secretReader(): { read: (label: string) => Promise<string>, close: () =
   }
 }
 
-// Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.13,
+// Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.14,
 // where it is `undefined` and this gate would be silently false. That matters most here - this is
 // the tool somebody runs when they are locked out, and it would print nothing and exit 0. Keep the
 // path comparison until the floor moves past 22.18; `test/engine-floor.test.ts` holds that.

@@ -7,9 +7,11 @@ allowBuilds:
   # prebuild-install. It has no install script, but it does still ship a binding.gyp, and both npm
   # and pnpm apply an implicit `node-gyp rebuild` to any package with a binding.gyp and no install
   # script. Allowing that build compiles from source and uses the result instead of the shipped
-  # prebuild, which is how 13.0.3 first arrived: a source build that passed on Node 24 and 26 and
-  # produced a module that crashed the vitest workers on 22.13. Turning the build off is what makes
-  # the prebuild win, and it takes the install from minutes to seconds with no toolchain.
+  # prebuild - minutes of install time, a C++ toolchain required on every machine, and a binary
+  # nobody tested in place of one upstream did. Turning it off is what makes the prebuild win.
+  #
+  # This is not what made 13.0.3 fail CI three times; that was the engines floor being one patch
+  # release below NAPI_VERSION=10. See the comment on the node matrix in .github/workflows/ci.yml.
   better-sqlite3: false
   esbuild: true
 overrides:

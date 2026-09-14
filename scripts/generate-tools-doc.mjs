@@ -199,7 +199,7 @@ export function render() {
   return lines.join('\n')
 }
 
-// Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.13,
+// Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.14,
 // where it is `undefined` and this gate would be silently false - `pnpm docs:tools` would exit 0
 // having written nothing, and the drift test would then fail on a TOOLS.md nobody could regenerate.
 // Keep the path comparison until the floor moves past 22.18; the guard that holds this is

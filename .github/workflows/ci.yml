@@ -15,13 +15,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.13 is the engines floor, set by pnpm 11 rather than by our own code,
-        # and 26 is what development runs on. Testing both means the floor is
-        # verified rather than asserted: the first CI run caught it declared as
-        # 22.6, which pnpm refuses to install on. 24 is what the published
-        # image runs, so by the same argument the shipped runtime is verified
-        # rather than asserted.
-        node: ['22.13', '24', '26']
+        # 22.14 is the engines floor and 26 is what development runs on. Testing
+        # both means the floor is verified rather than asserted: the first CI run
+        # caught it declared as 22.6, which pnpm refuses to install on. 24 is what
+        # the published image runs, so by the same argument the shipped runtime is
+        # verified rather than asserted.
+        #
+        # The floor was 22.13, set by pnpm 11. better-sqlite3 13 raised it: its
+        # addon is built with NAPI_VERSION=10, and NODE_API_SUPPORTED_VERSION_MAX
+        # is 9 in 22.13 and 10 from 22.14 on. Below 22.14 Node does not refuse the
+        # addon, it segfaults inside napi_module_register_by_symbol while loading
+        # it, so every test that opens a database dies with SIGSEGV and nothing
+        # says why. This leg is what proves the floor is the real one.
+        node: ['22.14', '24', '26']
 
     steps:
       - uses: actions/checkout@v7
