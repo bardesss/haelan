@@ -52,6 +52,13 @@ export const primitives = {
   duration: { fast: '120ms', slow: '240ms' },
   ease: { standard: 'cubic-bezier(0.2, 0, 0, 1)' },
   text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px' },
+  // Three weights and three leadings, counted off both stylesheets rather than invented: app.css
+  // used 600 thirteen times and 700 three times; site.css used 700, 600 and 650. The leadings were
+  // 1.5, 1.6 and 1.4 in the app, and the landing page's 1.7 for the same job as the app's 1.6 is
+  // the drift a token prevents. 650 has one consumer today, kept because a three-step scale with a
+  // hole in it is worse than a lightly used step.
+  weight: { medium: '600', semibold: '650', bold: '700' },
+  leading: { tight: '1.4', normal: '1.5', relaxed: '1.6' },
   font: {
     sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     mono: 'ui-monospace, "Cascadia Mono", Consolas, monospace',

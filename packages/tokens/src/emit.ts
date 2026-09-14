@@ -24,6 +24,11 @@ function scales(): string[] {
     ...Object.entries(primitives.space).map(([k, v]) => `--space-${k}: ${v};`),
     ...Object.entries(primitives.radius).map(([k, v]) => `--radius-${k}: ${v};`),
     ...Object.entries(primitives.text).map(([k, v]) => `--font-size-${k}: ${v};`),
+    ...Object.entries(primitives.weight).map(([k, v]) => `--weight-${k}: ${v};`),
+    ...Object.entries(primitives.leading).map(([k, v]) => `--leading-${k}: ${v};`),
+    // One definition for both themes: var(--accent) is resolved by the browser at the point of
+    // use, so this follows whichever theme is active. Two callers on the landing page today.
+    `--accent-wash: color-mix(in oklab, var(--accent) 22%, transparent);`,
     `--font-sans: ${primitives.font.sans};`,
     `--font-mono: ${primitives.font.mono};`,
     ...Object.entries(primitives.duration).map(([k, v]) => `--duration-${k}: ${v};`),

@@ -72,4 +72,25 @@ describe('css emitter', () => {
     expect(css).toContain('--space-8: 48px;')
     expect(css).toContain('--space-9: 64px;')
   })
+
+  // font-weight: 650 and line-height: 1.25 sat as bare literals in two stylesheets that had no
+  // way to agree with each other, and did not: the app set 1.6 for body prose where the landing
+  // page set 1.7.
+  it('emits a weight and line-height vocabulary', () => {
+    expect(css).toContain('--weight-medium: 600;')
+    expect(css).toContain('--weight-semibold: 650;')
+    expect(css).toContain('--weight-bold: 700;')
+    expect(css).toContain('--leading-tight: 1.4;')
+    expect(css).toContain('--leading-normal: 1.5;')
+    expect(css).toContain('--leading-relaxed: 1.6;')
+  })
+
+  // Emitted with the scales rather than the semantic layer because it is an expression over
+  // another custom property, not a palette reference: var(--accent) resolves at use, so one
+  // definition is correct in both themes.
+  it('emits the accent wash once, for both themes', () => {
+    expect(css).toContain('--accent-wash: color-mix(in oklab, var(--accent) 22%, transparent);')
+    const light = css.slice(css.indexOf("[data-theme='light']"))
+    expect(light, 'the wash must not be redefined per theme').not.toContain('--accent-wash:')
+  })
 })

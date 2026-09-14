@@ -58,9 +58,9 @@ body {
 .rail-collapsed .rail-item svg { opacity: 1; }
 .rail-group { font-size: var(--font-size-micro); letter-spacing: .15em; text-transform: uppercase; color: var(--text-faint); padding: var(--space-3) var(--space-3) var(--space-1); }
 .rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px var(--space-3); border-radius: 7px; font-size: var(--font-size-sm); color: var(--text-secondary); text-decoration: none; }
-.rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: 600; }
+.rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: var(--weight-medium); }
 .brand-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 16px 12px; }
-.brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; }
+.brand { display: flex; align-items: center; gap: 7px; font-weight: var(--weight-bold); font-size: var(--font-size-sm); letter-spacing: .01em; }
 /* The one element that survives the rail collapsing, since `label()` sends the wordmark to
    sr-only and the row would otherwise be left holding nothing but the chevron. Sized here rather
    than on the svg so each surface below can ask for its own without touching the component. */
@@ -79,7 +79,7 @@ body {
 .avatar {
   width: 19px; height: 19px; flex: none; border-radius: 50%;
   display: grid; place-items: center; text-transform: uppercase;
-  font-size: var(--font-size-micro); font-weight: 600;
+  font-size: var(--font-size-micro); font-weight: var(--weight-medium);
   /* A decorative tint, not an interaction state: nothing about this element hovers, selects or
      disables. Left as color-mix on purpose (M3a review finding 1). */
   background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-primary);
@@ -91,7 +91,7 @@ body {
 .segmented { display: flex; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .segment { appearance: none; border: 0; background: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-muted); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
 .segment:hover { color: var(--text-primary); }
-.segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: 600; }
+.segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: var(--weight-medium); }
 
 .stepper { display: flex; align-items: center; padding: 2px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .stepper-label { font-size: var(--font-size-xs); color: var(--text-secondary); padding: 0 var(--space-2); min-width: 96px; text-align: center; }
@@ -199,7 +199,7 @@ body {
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */
 .workout-splits { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
-.workout-splits th { text-align: left; color: var(--text-muted); font-weight: 600; padding: var(--space-1) 0; }
+.workout-splits th { text-align: left; color: var(--text-muted); font-weight: var(--weight-medium); padding: var(--space-1) 0; }
 .workout-splits td { padding: var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
 /* The dagger footnote under a table where at least one row was filled from the trace - see
    WorkoutSplits.tsx's own comment on why it never appears under a table of provider values. */
@@ -212,33 +212,33 @@ body {
    since each row is a full sentence rather than a value under a column header. */
 .workout-comparison { margin: 0; padding-left: var(--space-4); }
 
-.label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
-.value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
-.basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
+.value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
+.basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
 .delta[data-tone='good'] { color: var(--positive); }
 .delta[data-tone='bad'] { color: var(--negative); }
 .delta[data-tone='neutral'] { color: var(--text-secondary); }
-.empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
+.empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
 /* The training load card's own three. Its gate is NOT .empty: .empty means a metric card had no
    data to draw, while this says a DERIVED statistic has not enough worn days to be computed yet,
    which is a statement about the archive rather than about the card. activity.test.tsx asserts on
    .empty meaning only the first of those, and it is right to. */
-.training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
+.training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 .training-load-ratio { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
 .training-load-target { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
 
 /* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
    muted caption like .basis rather than as the padded, body sized block .empty is. */
-.chart-note { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.chart-note { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 
 /* Hypnogram.tsx's own per-stage totals row (or its not-staged state), sitting directly beneath
    the chart it summarises. Same small, muted caption treatment as .chart-note, a distinct rule
    rather than a shared class because the two components have nothing else in common to couple. */
-.hypnogram-totals { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.hypnogram-totals { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 
 /* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
    .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
@@ -267,7 +267,7 @@ body {
 /* The sentence an insight card exists to print, not a caption beside a value: unlike .basis
    (muted, font-size-xs) this is the whole content of the card, so it reads at body size in the
    primary text colour rather than as a subordinate line under something else. */
-.insight-summary { font-size: var(--font-size-sm); color: var(--text-primary); line-height: 1.5; margin: var(--space-1) 0 0; }
+.insight-summary { font-size: var(--font-size-sm); color: var(--text-primary); line-height: var(--leading-normal); margin: var(--space-1) 0 0; }
 
 /* A card's own entry point to its detail page, so the reader who wants more than the summary
    has somewhere to go without hunting the rail for it. */
@@ -286,7 +286,7 @@ body {
 }
 .input:hover { border-color: var(--text-faint); }
 .input::placeholder { color: var(--text-faint); }
-.field-hint { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; }
+.field-hint { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); }
 /* maintenance-backup-error and maintenance-reclaim-error carry the identical rule, added to the
    selector list rather than duplicated, the same reason annotate-note-withheld sits beside
    annotate-note below: Maintenance.tsx tracks its two mutations' failures separately, so each
@@ -294,7 +294,7 @@ body {
    render, while looking identical to every other inline field error in this app. */
 .field-error, .form-error, .maintenance-backup-error, .maintenance-reclaim-error,
 .maintenance-policy-error {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
 }
 .form-error {
   background: color-mix(in srgb, var(--negative) 10%, transparent);
@@ -311,29 +311,29 @@ body {
 .choice:has(input:checked) { border-color: var(--border-chosen); background: var(--surface-chosen); }
 .choice input { margin-top: 3px; flex: none; accent-color: var(--accent); }
 .choice-title { font-size: var(--font-size-sm); color: var(--text-primary); display: block; }
-.choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; display: block; margin-top: var(--space-1); }
+.choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); display: block; margin-top: var(--space-1); }
 
 /* The wizard. No rail: there is no dashboard to navigate to until this finishes, so the whole
    viewport is the one thing being asked for. */
 .setup-shell { min-height: 100vh; display: flex; justify-content: center; padding: var(--space-6) var(--space-4); }
 .setup-column { width: 100%; max-width: 640px; }
-.setup-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
+.setup-brand { display: flex; align-items: center; gap: 7px; font-weight: var(--weight-bold); font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
 
 /* The steps are a real sequence the server derives from what is in the database, so showing
    position states a fact rather than decorating one. */
 .setup-rail { display: flex; gap: var(--space-1); margin-bottom: var(--space-5); list-style: none; padding: 0; }
 .setup-rail li { flex: 1; font-size: var(--font-size-micro); color: var(--text-faint); padding-top: var(--space-2); border-top: 2px solid var(--border-subtle); }
-.setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: 600; }
+.setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: var(--weight-medium); }
 /* A progress marker, not an interaction state: it records a step already completed and nobody
    hovers, selects or disables it. Left as color-mix on purpose (M3a review finding 1). */
 .setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 .setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
-.setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-4); }
-.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; padding-left: var(--space-5); margin: 0 0 var(--space-4); }
+.setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-4); }
+.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
 .setup-instructions li { margin-bottom: var(--space-2); }
 .setup-instructions li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
+.setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-relaxed); background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
 .setup-uris { margin-bottom: var(--space-4); }
 .setup-scopes { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .setup-scopes .copy-value { display: block; }
@@ -344,7 +344,7 @@ body {
 .copy-field { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
 .copy-field .label { flex: none; width: 148px; }
 .copy-value { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-primary); background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 6px var(--space-2); flex: 1; overflow-x: auto; white-space: nowrap; }
-.setup-rejected { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; border-left: 2px solid var(--negative); padding: var(--space-1) 0 var(--space-1) var(--space-3); margin: var(--space-2) 0; }
+.setup-rejected { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-relaxed); border-left: 2px solid var(--negative); padding: var(--space-1) 0 var(--space-1) var(--space-3); margin: var(--space-2) 0; }
 .setup-rejected code { font-family: var(--font-mono); color: var(--text-faint); text-decoration: line-through; }
 
 .setup-progress { list-style: none; padding: 0; margin: 0; }
@@ -429,7 +429,7 @@ body {
   padding: var(--space-4); width: min(420px, 100%); max-height: 90vh; overflow-y: auto;
 }
 .annotate-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
-.annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: 600; }
+.annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: var(--weight-medium); }
 /* The applied:false report: the write is saved, only the re-derive has not caught up, which is
    not an error state and does not borrow form-error's negative tone. Reused as-is by
    OverrideList.tsx for the same report after a removal, not copied under a second name.
@@ -438,7 +438,7 @@ body {
    duplicated under it, so the two can never drift in appearance; it exists as its own class only
    so annotate-panel.test.tsx can find this one message without it colliding with notYetApplied's,
    which can render at the same time. */
-.annotate-note, .annotate-note-withheld { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
+.annotate-note, .annotate-note-withheld { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
 
 /* The overrides management list (OverrideList.tsx) and the notes and events list
    (pages/notes/NotesList.tsx): both a table with a row per record and a remove control, so both
@@ -446,7 +446,7 @@ body {
    borrowed from .setup-progress's own list rather than invented fresh. */
 .override-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
-.override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
 .override-table tbody tr:last-child td { border-bottom: 0; }
 
 /* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
@@ -477,7 +477,7 @@ body {
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
 }
 .member-row:last-child { border-bottom: 0; }
-.member-name { color: var(--text-primary); font-weight: 600; flex: 1; min-width: 120px; }
+.member-name { color: var(--text-primary); font-weight: var(--weight-medium); flex: 1; min-width: 120px; }
 .member-state { color: var(--text-secondary); font-size: var(--font-size-xs); }
 /* A disabled account is not a wrong value the way .delta's bad tone is, only an inactive one, so
    this reads as .source-name-kind's own faint, no-alarm treatment rather than borrowing --negative. */
@@ -525,7 +525,7 @@ body {
 /* The prominent half of the line now that the date is gone: font-weight 600 is the same weight
    .rail-item[aria-current='page'] and .segment[aria-pressed='true'] already use for "this one is
    the point", not a new value invented for this row. */
-.session-row-type { color: var(--text-primary); font-weight: 600; }
+.session-row-type { color: var(--text-primary); font-weight: var(--weight-medium); }
 /* The secondary half beside it: text-secondary and font-size-xs are the same pairing
    .stepper-label already uses for a label that supports the element next to it rather than
    standing on its own. */
@@ -564,7 +564,7 @@ body {
    one every .session-row already carries between rows within a day). */
 .session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 .session-date-group { min-width: 0; }
-.session-date-heading { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary); margin: 0 0 var(--space-1); }
+.session-date-heading { font-size: var(--font-size-xs); font-weight: var(--weight-medium); color: var(--text-secondary); margin: 0 0 var(--space-1); }
 
 /* NightList.tsx/NightRow.tsx: the night list Sleep gains in M8c, mirroring SessionList/SessionRow
    above one date at a time rather than one session at a time. .night-list and .night-groups carry
@@ -581,7 +581,7 @@ body {
 .night-row:last-child { border-bottom: 0; }
 .night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
-.night-row-duration { color: var(--text-primary); font-weight: 600; }
+.night-row-duration { color: var(--text-primary); font-weight: var(--weight-medium); }
 .night-row-source { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .night-row-excluded { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); }
@@ -599,10 +599,10 @@ body {
    that would undersell what is about to go wrong -- but under its own class rather than .form-error
    itself: this card holds no form, and a class named for one should not have to answer for a screen
    that never submits anything. */
-.connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
+.connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-3); }
 .connect-action { margin-top: var(--space-2); }
 .connect-warning {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
@@ -627,18 +627,18 @@ body {
   border-top: 1px solid var(--border-subtle);
 }
 .profile-subhead {
-  font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary);
+  font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary);
   margin: 0 0 var(--space-2);
 }
 .profile-warning {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
   margin: var(--space-3) 0 0;
 }
 .profile-result, .member-reset-result {
-  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
@@ -675,7 +675,7 @@ body {
    stretching this section past the card, the same reason .session-list carries it. */
 .instance-url { min-width: 0; }
 .instance-url-warning {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
@@ -685,7 +685,7 @@ body {
    a saved address is an uneventful report and the sentence that mattered was read before the
    click. */
 .instance-url-result {
-  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
@@ -695,14 +695,14 @@ body {
    .source-name-row or .member-row do. */
 .maintenance { display: flex; flex-direction: column; gap: var(--space-1); }
 .maintenance-bloat, .maintenance-backups, .maintenance-credentials {
-  font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0;
+  font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0;
 }
-.maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; margin: 0 0 var(--space-2); }
+.maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); margin: 0 0 var(--space-2); }
 /* The one fact worth a household's attention before they click reclaim: the same negative toned
    box .connect-warning uses above for a fact just as actionable (a redirect that cannot land, a
    reclaim that cannot run safely). */
 .maintenance-blocked {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
@@ -722,7 +722,7 @@ body {
    failure (packages/core/src/db/vacuum.ts) -- the same muted inset box annotate-note uses for an
    equally uneventful report. */
 .maintenance-backup-result, .maintenance-reclaim-result, .maintenance-policy-result {
-  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
