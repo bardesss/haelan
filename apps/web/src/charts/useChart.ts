@@ -146,7 +146,13 @@ export function useChart(
   // A new `build` is new data - a different range, a different metric, a refetch that moved a
   // value - and the point the reader tapped belongs to the data that is gone. React bails out when
   // the value is already null, so a chart that was never tapped pays nothing for this.
-  useEffect(() => {
+  //
+  // useLayoutEffect, matching pointRef above rather than the init effect below. A passive effect
+  // would leave one painted frame carrying the previous data's `tappedName` while `pointRef` has
+  // already been swapped for the new data's resolver, so a tap landing inside that frame would run
+  // the new resolver against the old event. Nobody can hit a sub-16ms window on purpose; it is
+  // closed here by construction rather than argued away.
+  useLayoutEffect(() => {
     setTapped(null)
     setTappedName(null)
   }, [build])

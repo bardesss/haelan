@@ -4,7 +4,7 @@
 // and clicks a real button, the same reason chart-lifecycle.test.tsx needs it.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
-import { act } from 'react'
+import { act, useCallback } from 'react'
 import * as echarts from 'echarts/core'
 import type { ECElementEvent, EChartsOption } from 'echarts'
 import { useChart } from '../src/charts/useChart.js'
@@ -54,33 +54,42 @@ afterEach(() => {
   window.matchMedia = realMatchMedia as typeof window.matchMedia
 })
 
+// Module scope, so each is the same reference on every render with it: useChart keys its
+// init/dispose effect on `build`, which is what chart-lifecycle.test.tsx guards on the production
+// charts. Handing the probe the second array is what a range or metric change looks like from
+// inside a chart - new data, and so a new `build`.
 const DAYS = ['2026-09-01', '2026-09-02']
+const LATER_DAYS = ['2026-10-05', '2026-10-06']
 
-// Module scope, so it is the same reference on every render: useChart keys its init/dispose effect
-// on `build`, which is what chart-lifecycle.test.tsx guards on the production charts.
-const build = (): EChartsOption => ({
-  xAxis: { type: 'category', data: DAYS },
-  yAxis: { type: 'value' },
-  series: [{ type: 'bar', data: [1, 2] }],
-})
-
-function Probe({ onClick }: { onClick: (event: ECElementEvent) => void }) {
+function Probe({ days, onClick }: { days: string[]; onClick: (event: ECElementEvent) => void }) {
+  // Memoised over `days`, exactly as every production chart memoises `build` over its own data.
+  const build = useCallback((): EChartsOption => ({
+    xAxis: { type: 'category', data: days },
+    yAxis: { type: 'value' },
+    series: [{ type: 'bar', data: days.map((_, index) => index + 1) }],
+  }), [days])
   const { host, style, tap } = useChart(build, 60, {
     onClick,
-    describe: (event) => DAYS[event.dataIndex],
+    describe: (event) => days[event.dataIndex],
   })
   return (
     <ChartFigure label="probe" host={host} style={style} tap={tap}
-      table={{ columns: ['Date'], rows: DAYS.map((date) => [date]) }} />
+      table={{ columns: ['Date'], rows: days.map((date) => [date]) }} />
   )
+}
+
+function renderProbe(days: string[], clicks: ECElementEvent[]): void {
+  act(() => {
+    root!.render(
+      <I18nProvider lng="en"><Probe days={days} onClick={(event) => clicks.push(event)} /></I18nProvider>,
+    )
+  })
 }
 
 function mount(isPhone: boolean): ECElementEvent[] {
   const clicks: ECElementEvent[] = []
   pretendPhone(isPhone)
-  act(() => {
-    root!.render(<I18nProvider lng="en"><Probe onClick={(event) => clicks.push(event)} /></I18nProvider>)
-  })
+  renderProbe(DAYS, clicks)
   return clicks
 }
 
@@ -159,5 +168,37 @@ describe('a tap on a chart', () => {
     // A second tap moves the selection rather than adding to it.
     tapPoint(0)
     expect(annotateControl()!.textContent).toContain('2026-09-01')
+  })
+
+  // The one behaviour with nothing else standing behind it. A stored tap is an `ECElementEvent`,
+  // which names a point by `dataIndex` and nothing else, so replaying it against data the chart no
+  // longer draws would annotate whichever day now happens to sit at that index - a reader taps
+  // 2 September, changes the range, presses the control and corrects an October day instead.
+  //
+  // useChart's reset keyed on `build` is the whole of what prevents that, and every other case in
+  // this file passes with it deleted. Verified by deleting it: the other five stayed green and
+  // this one failed at `control.disabled`, still armed over a September day under a chart that had
+  // moved to October.
+  it('forgets the tapped point when the chart is handed new data', () => {
+    const clicks = mount(true)
+    tapPoint(1)
+    expect(annotateControl()!.textContent).toContain('2026-09-02')
+
+    // A new range: a fresh array, so a fresh `build`, which is how a data change reaches useChart
+    // from every chart in the app.
+    renderProbe(LATER_DAYS, clicks)
+
+    const control = annotateControl()
+    expect(control!.disabled).toBe(true)
+    expect(control!.textContent).toContain('Tap a point')
+    expect(control!.textContent).not.toContain('2026-09-02')
+
+    // And the selection that replaces it comes from the new data, not the old: proof the reset
+    // cleared the stored event rather than only the label rendered from it.
+    tapPoint(0)
+    expect(annotateControl()!.textContent).toContain('2026-10-05')
+    act(() => { annotateControl()!.click() })
+    expect(clicks).toHaveLength(1)
+    expect(clicks[0]?.dataIndex).toBe(0)
   })
 })
