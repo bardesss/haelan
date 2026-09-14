@@ -193,7 +193,16 @@ export function Sparkline({
           data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
             ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
     ],
-  }), [values, baseline, marks, episodic, trend, hasTrend])
+    // `labels` is in this list even though nothing above reads it, and it is not dead weight.
+    // useChart keys its stale-tap reset on `build`'s identity, and the resolvers below (onClick,
+    // describe) index into `labels` - so a `labels` that can change without `build` changing is a
+    // stored tap replayed against data the chart no longer draws, the exact defect 75878d3 exists
+    // to prevent. That never happened only because denseSeries (data/useSeries.ts) returns
+    // `labels` and `values` from one call, so their identities move together, and because `marks`
+    // is memoised over `labels` as well; both are facts about today's call sites, not about this
+    // component. Memoise `labels` separately anywhere and the bug returns with every test green.
+    // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
+  }), [values, labels, baseline, marks, episodic, trend, hasTrend])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
