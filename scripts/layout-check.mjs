@@ -63,7 +63,6 @@ if (!existsSync(join(DIST, 'index.html'))) {
 const server = await startServer()
 const base = `http://127.0.0.1:${server.address().port}`
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: PHONE })
 
 function routeUrl(route) {
   // route '/' must land on '/haelan/demo/', not '/haelan/demo' (no trailing slash) - the latter
@@ -72,50 +71,70 @@ function routeUrl(route) {
   return route === '/' ? `${base}${DEMO_PREFIX}/` : `${base}${DEMO_PREFIX}${route}`
 }
 
-for (const route of ROUTES) {
-  await page.goto(routeUrl(route), { waitUntil: 'networkidle' })
-  await page.waitForSelector('main', { timeout: 10_000 })
-  const { scrollWidth, clientWidth } = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }))
-  check(scrollWidth <= clientWidth, `${route} is ${scrollWidth}px wide in a ${clientWidth}px viewport`)
+// Everything that can throw - a stuck page.goto, a selector that never appears, a page.evaluate
+// against a page that never loaded - runs inside this block, so a crash still reaches the finally
+// below rather than skipping it. Without this, an uncaught exception here would leak the Chromium
+// child process and the still-listening server: the exact wedged-CI failure mode this check
+// exists to catch, just relocated into the check itself.
+let crashError = null
+try {
+  const page = await browser.newPage({ viewport: PHONE })
+
+  for (const route of ROUTES) {
+    await page.goto(routeUrl(route), { waitUntil: 'networkidle' })
+    await page.waitForSelector('main', { timeout: 10_000 })
+    const { scrollWidth, clientWidth } = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }))
+    check(scrollWidth <= clientWidth, `${route} is ${scrollWidth}px wide in a ${clientWidth}px viewport`)
+  }
+
+  // The drawer, on one route rather than all nine: it is the same component every time, and what
+  // is being checked is the behaviour, not the page under it.
+  await page.goto(routeUrl('/'), { waitUntil: 'networkidle' })
+  const hamburger = page.locator('[data-testid="rail-open"]')
+  check(await hamburger.isVisible().catch(() => false), 'no hamburger on a phone viewport')
+  if (await hamburger.isVisible().catch(() => false)) {
+    await hamburger.click()
+    const dialog = page.locator('dialog.rail-dialog')
+    check(await dialog.isVisible(), 'the drawer did not open')
+    const links = await page.locator('dialog.rail-dialog .rail-item').count()
+    check(links >= ROUTES.length, `the drawer holds ${links} items, fewer than the ${ROUTES.length} routes`)
+    await page.keyboard.press('Escape')
+    check(!(await dialog.isVisible()), 'Escape did not close the drawer')
+    check(
+      await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'rail-open'),
+      'focus did not return to the hamburger',
+    )
+  }
+
+  // The rail foot, at the size that reproduced the defect. Above the breakpoint, so this is the
+  // rail rather than the drawer.
+  await page.setViewportSize(SHORT)
+  await page.goto(routeUrl('/'), { waitUntil: 'networkidle' })
+  await page.waitForSelector('.rail-foot', { timeout: 10_000 })
+  const footVisible = await page.evaluate(() => {
+    const rail = document.querySelector('.rail')
+    const foot = document.querySelector('.rail-foot')
+    if (!rail || !foot) return false
+    return foot.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom + 1
+  })
+  check(footVisible, 'the rail foot sits below the fold of its own scroller at 900x380')
+} catch (err) {
+  crashError = err
+} finally {
+  // Each close runs independently: a failed browser.close() must not skip server.close(), and
+  // vice versa - both are resources of this process and both must go regardless of the other.
+  await browser.close().catch((err) => console.error('layout:check: browser.close() failed:', err))
+  await new Promise((done) => server.close(done)).catch(() => {})
 }
 
-// The drawer, on one route rather than all nine: it is the same component every time, and what is
-// being checked is the behaviour, not the page under it.
-await page.goto(routeUrl('/'), { waitUntil: 'networkidle' })
-const hamburger = page.locator('[data-testid="rail-open"]')
-check(await hamburger.isVisible().catch(() => false), 'no hamburger on a phone viewport')
-if (await hamburger.isVisible().catch(() => false)) {
-  await hamburger.click()
-  const dialog = page.locator('dialog.rail-dialog')
-  check(await dialog.isVisible(), 'the drawer did not open')
-  const links = await page.locator('dialog.rail-dialog .rail-item').count()
-  check(links >= ROUTES.length, `the drawer holds ${links} items, fewer than the ${ROUTES.length} routes`)
-  await page.keyboard.press('Escape')
-  check(!(await dialog.isVisible()), 'Escape did not close the drawer')
-  check(
-    await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'rail-open'),
-    'focus did not return to the hamburger',
-  )
+if (crashError) {
+  console.error('layout:check crashed before finishing its checks:')
+  console.error(crashError?.stack ?? String(crashError))
+  process.exit(1)
 }
-
-// The rail foot, at the size that reproduced the defect. Above the breakpoint, so this is the rail
-// rather than the drawer.
-await page.setViewportSize(SHORT)
-await page.goto(routeUrl('/'), { waitUntil: 'networkidle' })
-await page.waitForSelector('.rail-foot')
-const footVisible = await page.evaluate(() => {
-  const rail = document.querySelector('.rail')
-  const foot = document.querySelector('.rail-foot')
-  if (!rail || !foot) return false
-  return foot.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom + 1
-})
-check(footVisible, 'the rail foot sits below the fold of its own scroller at 900x380')
-
-await browser.close()
-server.close()
 
 if (failures.length > 0) {
   console.error(`layout:check found ${failures.length} problem(s):`)
