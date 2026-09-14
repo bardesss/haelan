@@ -1,74 +1,273 @@
-/* The landing page. Colours come from @haelan/tokens via theme.css, which is linked before this
-   file and defines every custom property used here for both themes. Spacing and radii use the
-   --space-* / --radius-* scale from packages/tokens/src/primitives.ts wherever a literal value
-   matches one of its steps exactly; a value with no matching step (a breakpoint, an odd padding)
-   stays a literal rem so a future change to the scale can't silently reflow this page. */
+/* The landing page.
+ *
+ * Colour, spacing, radii and the two font stacks all come from @haelan/tokens via theme.css, so
+ * this page and the app cannot drift apart and both themes come free. What the tokens do not
+ * carry is a poster scale: --font-size-xl is 34px, correct for a dense dashboard and far too
+ * quiet for a headline, so the display sizes below are defined here and nowhere else. They are
+ * the only values on this page that are not a token, and scripts/test/site-content.test.ts
+ * enforces exactly that - every var() must resolve either to a token or to one of these.
+ *
+ * No webfont, on purpose: the page loads nothing from a third party, which rules out the usual
+ * way a marketing page gets its personality. It comes instead from weight and tracking on the
+ * display sizes, and from --font-mono on every label and caption - the register of a tool that
+ * deals in measurements.
+ */
+
+:root {
+  --display-xl: clamp(2.4rem, 5.4vw, 4.1rem);
+  --display-lg: clamp(1.6rem, 2.6vw, 2.1rem);
+  --display-md: clamp(1.15rem, 1.6vw, 1.35rem);
+  --lede: clamp(1.05rem, 1.4vw, 1.2rem);
+  --measure: 34rem;
+  --page: 76rem;
+  --gutter: clamp(var(--space-4), 4vw, calc(var(--space-6) * 2));
+}
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  padding: 0 var(--space-6) 4rem;
   background: var(--surface-page);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  font-size: var(--font-size-md);
   line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
 }
 
-header, section, footer { max-width: 44rem; margin: 0 auto; }
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:focus-visible, .button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: var(--radius-sm); }
 
-.hero { padding: 4rem 0 2rem; text-align: center; }
-.hero h1 { font-size: 2.5rem; margin: var(--space-2) 0; letter-spacing: -0.01em; }
-.lede { color: var(--text-secondary); font-size: 1.125rem; }
+/* Mono, uppercase, wide: the label voice for every section, and the one typographic device the
+   page repeats. It reads as an instrument panel rather than a brochure, which is what this is. */
+.eyebrow {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.eyebrow .mark { display: block; }
 
-.actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; margin: 2rem 0 var(--space-4); }
+h1 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--display-xl);
+  line-height: 1.04;
+  letter-spacing: -.03em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+h2 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--display-md);
+  line-height: 1.25;
+  letter-spacing: -.01em;
+  font-weight: 650;
+}
+p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
+
 .button {
-  display: inline-block;
-  padding: 0.625rem var(--space-5);
+  display: inline-flex; align-items: center;
+  padding: calc(var(--space-3) + 2px) var(--space-5);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  text-decoration: none;
+  border-radius: var(--radius-lg);
   background: var(--surface-card);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
+.button:hover { background: var(--surface-hover); }
 .button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface-page); }
-.button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.button.primary:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
 
-.small-screen-note { color: var(--text-muted); font-size: 0.9375rem; }
-.demo-note { color: var(--text-muted); font-size: 0.9375rem; margin-top: 0; }
+/* ---- hero ---------------------------------------------------------------- */
 
-h2 { margin-top: 3rem; font-size: var(--font-size-lg); }
-h3 { margin-top: 1.75rem; font-size: 1.125rem; color: var(--text-secondary); }
-p { color: var(--text-secondary); }
-a { color: var(--accent); }
+/* One ambient wash, anchored behind the screenshot, mixed from the accent rather than from a
+   colour of its own so it holds in both themes and cannot drift from the palette. It sits behind
+   the hero only: the page gets one atmospheric moment, near the thing it is pointing at, and the
+   rest stays flat. color-mix with transparent rather than an rgba() literal is what keeps the
+   no-raw-colour rule true here. */
+.hero {
+  position: relative;
+  display: grid;
+  gap: var(--gutter);
+  align-items: center;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: clamp(var(--space-6), 8vw, calc(var(--space-6) * 3)) var(--gutter) var(--space-6);
+}
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: -20% -10% 10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(55rem 34rem at 78% 12%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 68%),
+    radial-gradient(38rem 30rem at 8% 0%, color-mix(in oklab, var(--accent-soft) 10%, transparent), transparent 62%);
+}
+.hero-text { max-width: var(--measure); }
+.lede { font-size: var(--lede); color: var(--text-secondary); text-wrap: pretty; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: var(--space-6) 0 var(--space-3); }
+.actions-note { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 
-.shots { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-.shots h2, .shots .caption { grid-column: 1 / -1; }
-.shots figure { margin: 0; }
-.shots img { width: 100%; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); display: block; }
-.shots figcaption { color: var(--text-muted); font-size: 0.875rem; padding-top: 0.375rem; }
-.caption { color: var(--text-faint); font-size: 0.875rem; }
-
-pre {
-  background: var(--surface-inset);
+/* The shot sits in an inset frame rather than floating: the app is a dense dark surface and needs
+   an edge to stop against, and the same inset is what the cards below use. */
+.hero-shot img {
+  display: block; width: 100%; height: auto;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  background: var(--surface-inset);
+}
+
+@media (min-width: 60rem) {
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+  /* Bleeds past the right gutter so the dashboard reads as a window onto something larger,
+     rather than a centred thumbnail of it. */
+  .hero-shot { margin-right: calc(var(--gutter) * -1); }
+}
+
+/* ---- the day ribbon ------------------------------------------------------ */
+
+/* The page's one loud element. 91 days of the demo's own steps, one bar each, full bleed: the
+   argument the project rests on is that a day is either kept or gone, and a wall of days makes
+   it without a sentence. Everything else on the page stays quiet so this can be the thing you
+   remember. */
+.days { padding: var(--space-6) 0 clamp(var(--space-6), 6vw, calc(var(--space-6) * 2)); }
+.ribbon {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: clamp(70px, 9vw, 120px);
+  padding: 0 var(--gutter);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  background: var(--surface-rail);
+  overflow: hidden;
+}
+.ribbon i {
+  flex: 1 1 0;
+  min-width: 2px;
+  /* Solid at the top, thinning towards the baseline: the days read as standing up out of the
+     record rather than as a printed bar chart, and the wall gains depth without another colour. */
+  background: linear-gradient(to top, color-mix(in oklab, var(--accent) 45%, transparent), var(--accent));
+  border-radius: 1px 1px 0 0;
+  /* The quietest days would otherwise read as gaps in the record, which is the opposite of what
+     this element says. */
+  min-height: 3px;
+}
+.ribbon-caption {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: baseline;
+  max-width: var(--page); margin: var(--space-4) auto 0; padding: 0 var(--gutter);
+}
+.ribbon-title { font-size: var(--font-size-md); color: var(--text-primary); font-weight: 600; }
+.ribbon-range {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro);
+  letter-spacing: .06em;
+  color: var(--text-faint);
+}
+
+/* ---- three cards --------------------------------------------------------- */
+
+.what {
+  display: grid; gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  max-width: var(--page); margin: 0 auto; padding: 0 var(--gutter);
+}
+.card {
+  padding: var(--space-6);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+}
+.card p:last-child { margin-bottom: 0; }
+.card p { font-size: var(--font-size-sm); }
+
+/* ---- the cap ------------------------------------------------------------- */
+
+.why {
+  display: grid; gap: var(--gutter); align-items: start;
+  max-width: var(--page); margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) auto;
+  padding: var(--space-6) var(--gutter);
+  background: var(--surface-inset);
+  border-block: 1px solid var(--border-subtle);
+}
+/* The number is the argument: a hosted haelan stops at a hundred people, so it is not offered.
+   Set as a figure rather than written into the sentence, because it is the whole reason for the
+   shape of the project. */
+.cap-number {
+  margin: 0;
+  font-size: clamp(3.5rem, 9vw, 6rem);
+  line-height: .9;
+  letter-spacing: -.04em;
+  font-weight: 700;
+  color: var(--accent);
+}
+.why-text { max-width: var(--measure); }
+.why-text p { font-size: var(--font-size-sm); }
+.why-cost { margin-bottom: 0; color: var(--text-muted); }
+
+@media (min-width: 60rem) {
+  .why { grid-template-columns: auto minmax(0, 1fr); padding-block: clamp(var(--space-6), 5vw, calc(var(--space-6) * 2)); }
+}
+
+/* ---- run it -------------------------------------------------------------- */
+
+.run {
+  display: grid; gap: var(--gutter); align-items: start;
+  max-width: var(--page); margin: 0 auto; padding: 0 var(--gutter);
+}
+.run-text { max-width: var(--measure); }
+.run-text p { font-size: var(--font-size-sm); margin-bottom: 0; }
+.run pre {
+  margin: 0; padding: var(--space-5);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   overflow-x: auto;
 }
-code { font-family: var(--font-mono); font-size: 0.875rem; }
+.run code { font-family: var(--font-mono); font-size: var(--font-size-xs); line-height: 1.7; color: var(--text-secondary); }
 
-footer { margin-top: 4rem; padding-top: var(--space-6); border-top: 1px solid var(--border-subtle); }
-footer p { color: var(--text-muted); font-size: 0.875rem; }
-
-/* One column on a phone, where the screenshots are the whole point of the visit. */
-@media (max-width: 40rem) {
-  .shots { grid-template-columns: 1fr; }
-  .hero { padding-top: 2.5rem; }
-  .hero h1 { font-size: 2rem; }
+@media (min-width: 60rem) {
+  .run { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
 }
 
-/* The dashboard's own small-screen layout is M7; above that width the note is not true. */
-@media (min-width: 40.0625rem) {
-  .small-screen-note { display: none; }
+/* ---- gallery ------------------------------------------------------------- */
+
+.gallery { max-width: var(--page); margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) auto 0; padding: 0 var(--gutter); }
+.gallery-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.gallery figure { margin: 0; }
+.gallery img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inset);
+}
+.gallery figcaption {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono); font-size: var(--font-size-micro);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint);
+}
+.gallery-note { margin: var(--space-4) 0 0; font-size: var(--font-size-xs); color: var(--text-faint); }
+
+/* ---- footer -------------------------------------------------------------- */
+
+footer {
+  max-width: var(--page);
+  margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) auto 0;
+  padding: var(--space-6) var(--gutter) calc(var(--space-6) * 2);
+  border-top: 1px solid var(--border-subtle);
+}
+.footer-cta { margin-bottom: var(--space-5); }
+.footer-meta { margin: 0 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .button { transition: none; }
 }
