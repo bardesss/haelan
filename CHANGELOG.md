@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.22.1](https://github.com/bardesss/haelan/compare/v1.22.0...v1.22.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* the LXC data directory takes the name upstream documents ([#231](https://github.com/bardesss/haelan/issues/231)) ([e966c42](https://github.com/bardesss/haelan/commit/e966c429ac34ac41e02c7f44e709df36b5a9f900))
+
 ## [1.22.0](https://github.com/bardesss/haelan/compare/v1.21.3...v1.22.0) (2026-09-14)
 
 
