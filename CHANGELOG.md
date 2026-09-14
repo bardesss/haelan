@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.22.2](https://github.com/bardesss/haelan/compare/v1.22.1...v1.22.2) (2026-09-14)
+
+
+### Bug Fixes
+
+* the container asks testers to report somewhere that carries the script ([#235](https://github.com/bardesss/haelan/issues/235)) ([b962b4a](https://github.com/bardesss/haelan/commit/b962b4a71aab36b2c67bf9654fcfe5235ae28cc0))
+
 ## [1.22.1](https://github.com/bardesss/haelan/compare/v1.22.0...v1.22.1) (2026-09-14)
 
 
