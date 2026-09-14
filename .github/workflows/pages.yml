@@ -5,15 +5,31 @@ name: Pages
 # must not be able to add a third way for it to half-finish, and a failed deploy here must not be
 # able to hold up a release. The worst case this shape allows is a site one version behind, which
 # a manual run fixes.
-# `release: published` fires when release.yml's "The release stops being a draft" step flips
-# the draft, which runs under `secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN`. GitHub does
-# not start workflow runs from events attributed to the default GITHUB_TOKEN, so on the `||`
-# fallback - a state that token has actually been in - that PATCH still publishes the release, but
-# this workflow does not run: no red run, no annotation, the published page just stays on the
-# previous version until someone runs workflow_dispatch by hand.
+# On push rather than on `release: published`, which this workflow tried first and which never
+# once worked. Both of its failure modes are recorded here because either alone would have been
+# enough, and fixing only one would have looked like a fix:
+#
+#   - v1.20.0 did start a run, and the deploy job was rejected in one second: "Tag v1.20.0 is not
+#     allowed to deploy to github-pages due to environment protection rules." The github-pages
+#     environment allows exactly one ref, the branch master, and a release run's ref is the tag.
+#   - v1.21.0 started no run at all. The draft is published by release.yml under
+#     `secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN`, and GitHub starts no workflow from an
+#     event attributed to the default GITHUB_TOKEN. That fallback is a state the token has been in
+#     before.
+#
+# Every deploy this site has ever had was a workflow_dispatch by hand. A push to master has
+# neither problem: the run's ref is master, which the environment allows, and a push is nobody's
+# token.
+#
+# The objection this shape was designed against - that deploying on push publishes a page claiming
+# a release that has not been cut - does not hold. The page's version and date come from
+# package.json and CHANGELOG.md (see releaseStamp in scripts/build-site.mjs), and release-please
+# moves those only in a release commit, so a build from any master commit names the last release
+# truthfully. The cost is a deploy per merge instead of per release, which is a minute and a half
+# of Actions.
 on:
-  release:
-    types: [published]
+  push:
+    branches: [master]
   workflow_dispatch:
 
 permissions:

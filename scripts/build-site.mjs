@@ -135,6 +135,11 @@ export function buildSite(rootDir, outDir) {
   writeFileSync(join(outDir, 'index.html'), renderPage(template, releaseStamp(rootDir)))
   written.push('index.html')
 
+  // The site root's own 404, which Pages serves for every missing path anywhere under the site -
+  // including inside /demo/, because it ignores a 404.html in a subdirectory. The demo's deep
+  // links depend on the redirect this file carries; site/404.html says why at length.
+  put('site/404.html', '404.html')
+
   for (const [from, to] of ASSETS) put(from, to)
   for (const shot of readdirSync(join(rootDir, 'assets/screenshots'))) {
     if (shot.endsWith('.png')) put(`assets/screenshots/${shot}`, `screenshots/${shot}`)

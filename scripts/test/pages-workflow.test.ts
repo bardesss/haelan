@@ -17,13 +17,24 @@ const lines = yaml.split('\n')
 const at = (needle: string) => lines.findIndex((line) => line.includes(needle))
 
 describe('the pages workflow', () => {
-  it('deploys on a published release and on demand, and on nothing else', () => {
-    expect(yaml).toMatch(/^on:\n(?:.*\n)*?\s{2}release:\n\s{4}types: \[published\]/m)
+  it('deploys on a push to master and on demand, and on nothing else', () => {
+    expect(yaml).toMatch(/^on:\n(?:.*\n)*?\s{2}push:\n\s{4}branches: \[master\]/m)
     expect(yaml).toContain('workflow_dispatch:')
-    // Never on push. A site deploy riding every commit to master would publish a page claiming a
-    // release that has not been cut, and would put this workflow in the path of the release
-    // pipeline, which is the thing the spec keeps it out of.
-    expect(lines.some((line) => /^\s{2}push:/.test(line))).toBe(false)
+    // Not on `release: published`, which this file asserted until the first real deploys proved it
+    // cannot work: a release run's ref is the tag, and the github-pages environment allows only
+    // the branch master, so v1.20.0's deploy was rejected outright; and v1.21.0 started no run at
+    // all, because the draft is published under a token GitHub starts no workflows from. Every
+    // deploy the site has ever had was a dispatch by hand. The workflow's own comment carries the
+    // full account.
+    expect(lines.some((line) => /^\s{2}release:/.test(line))).toBe(false)
+  })
+
+  it('still names the reason it does not trust the release event', () => {
+    // The two failures above are the kind of thing that gets "tidied" out of a comment by someone
+    // who reads the trigger and assumes push was the obvious choice all along. It was not: this
+    // workflow tried the other shape first and it never once deployed.
+    expect(yaml).toMatch(/environment protection rules/)
+    expect(yaml).toMatch(/GITHUB_TOKEN/)
   })
 
   it('asks for exactly the permissions Pages needs', () => {

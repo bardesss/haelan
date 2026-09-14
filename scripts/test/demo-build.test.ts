@@ -2,7 +2,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { copyDemo } from '../build-site.mjs'
+import { fileURLToPath } from 'node:url'
+import { buildSite, copyDemo } from '../build-site.mjs'
+import { ensurePalette } from './palette.js'
 
 function fakeDemoDist(): string {
   const dir = mkdtempSync(join(tmpdir(), 'haelan-demo-dist-'))
@@ -31,6 +33,30 @@ describe('copyDemo', () => {
       expect(written.every((path) => !path.includes('\\'))).toBe(true)
     } finally {
       rmSync(from, { recursive: true, force: true })
+      rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('publishes the site root 404 where Pages actually looks for it', () => {
+    // buildSite rather than copyDemo: the root 404 belongs to the landing site and ships whether
+    // or not a demo build exists, while the redirect inside it is what the demo's deep links need.
+    // Pages ignores a 404.html in a subdirectory, which is what the first real deploy proved.
+    // buildSite copies packages/tokens/dist/theme.css, which is a build artifact that does not
+    // exist on CI (pnpm test runs ahead of pnpm build) or on a fresh clone. Without this the test
+    // passes on a machine that has built once and fails everywhere else - which is exactly how it
+    // first went red.
+    ensurePalette()
+    const out = mkdtempSync(join(tmpdir(), 'haelan-site-root404-'))
+    try {
+      const written = buildSite(fileURLToPath(new URL('../../', import.meta.url)), out)
+      expect(written).toContain('404.html')
+
+      // Distinct from the landing page: a root 404 that was a copy of index.html would answer
+      // every mistyped address with the front page under a 404 status.
+      const notFound = readFileSync(join(out, '404.html'), 'utf8')
+      expect(notFound).not.toBe(readFileSync(join(out, 'index.html'), 'utf8'))
+      expect(notFound).toContain('/demo/')
+    } finally {
       rmSync(out, { recursive: true, force: true })
     }
   })
