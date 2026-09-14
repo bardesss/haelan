@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.21.2](https://github.com/bardesss/haelan/compare/v1.21.1...v1.21.2) (2026-09-14)
+
+
+### Bug Fixes
+
+* **demo:** let the demo's clock run, so charts draw ([#224](https://github.com/bardesss/haelan/issues/224)) ([4bbc84c](https://github.com/bardesss/haelan/commit/4bbc84c29104f5b8d3e99c2adef60301e4362cf9))
+
 ## [1.21.1](https://github.com/bardesss/haelan/compare/v1.21.0...v1.21.1) (2026-09-14)
 
 
