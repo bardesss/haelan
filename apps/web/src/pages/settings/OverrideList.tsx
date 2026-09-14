@@ -187,7 +187,7 @@ export function OverrideList() {
 
   return (
     <>
-      {query.isError ? <ErrorState onRetry={() => void query.refetch()} />
+      {query.isError ? <ErrorState onRetry={() => void query.refetch()} error={query.error} />
         : query.isPending ? <Loading />
         : items.length === 0 ? (
           <EmptyState title={t('settings.overrides.empty.title')} detail={t('settings.overrides.empty.detail')} />

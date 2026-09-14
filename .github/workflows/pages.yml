@@ -43,6 +43,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Seeds a throwaway directory, boots a real instance against it and records what every page
+      # asks for. Minutes rather than seconds - it runs a rebuild over a year of generated data -
+      # which is why it lives here and not in ci.yml's default path.
+      - run: pnpm demo:capture
+
+      - run: pnpm demo:build
+
       # Builds the token stylesheet first: the site copies packages/tokens/dist/theme.css, which
       # does not exist in a fresh checkout.
       - run: pnpm site:build

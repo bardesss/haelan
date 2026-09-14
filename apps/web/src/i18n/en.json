@@ -87,7 +87,9 @@
   "errorState": {
     "title": "This did not load.",
     "detail": "The instance answered with an error, so there is nothing to draw here. That is not a statement about your record.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "notCapturedTitle": "Outside the demo's recorded slice.",
+    "notCapturedDetail": "Nothing failed here. The demo only captured part of the archive, and this is beyond it."
   },
   "emptyState": {
     "no_data": {

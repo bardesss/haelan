@@ -15,6 +15,7 @@ import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { EmptyState } from '../components/EmptyState.js'
+import { ApiError } from '../api/client.js'
 
 /**
  * One night, everything recorded about it.
@@ -50,7 +51,23 @@ export function NightDetail() {
   const chosenSource = source === ALL_SOURCES ? null : source
 
   if (query.isError) {
-    return <div className="grid"><Card span={12}><ErrorState onRetry={() => void query.refetch()} /></Card></div>
+    // Mirrors WorkoutDetail.tsx's own branch, and inert for the same reason (see ErrorState.tsx's
+    // own comment): a real /sleep/nights miss answers 200 with an empty `items` array
+    // (apps/server/src/routes/v1/tier2.ts's own route never throws not_found for a range with no
+    // rows), so `night === null` below is what a real instance's empty range actually reaches.
+    // This branch is live only in the demo, where a manifest miss on this exact {from, to} throws
+    // ApiError('not_found') - reachable a click away from the Sleep list's own default range,
+    // which the capture sweep does not exhaustively cover night by night.
+    const notFound = query.error instanceof ApiError && query.error.kind === 'not_found'
+    return (
+      <div className="grid">
+        <Card span={12}>
+          {notFound
+            ? <EmptyState title={t('sleep.night.missingTitle')} detail={t('sleep.night.missingDetail')} />
+            : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
+        </Card>
+      </div>
+    )
   }
   if (query.isPending) return <div className="grid"><Card span={12}><Loading /></Card></div>
   if (night === null) {

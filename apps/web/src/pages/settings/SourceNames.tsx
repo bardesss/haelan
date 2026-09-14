@@ -29,7 +29,7 @@ export function SourceNames() {
   const { t } = useTranslation()
   const session = useSession()
   const queryClient = useQueryClient()
-  const { sources, isPending, isError } = useSourceNames()
+  const { sources, isPending, isError, error } = useSourceNames()
 
   if (isPending) return <Loading />
   if (isError) {
@@ -42,7 +42,7 @@ export function SourceNames() {
       <ErrorState onRetry={() => {
         const personId = session.data?.personId
         if (personId !== undefined) void queryClient.refetchQueries({ queryKey: sourceNamesKey(personId), exact: true })
-      }} />
+      }} error={error} />
     )
   }
   if (sources.length === 0) {

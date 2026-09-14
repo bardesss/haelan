@@ -48,7 +48,7 @@ export function WorkoutTrace({ session, detail, chosenSource }: {
 
   if (trace.isError) {
     return <Card span={12} label={t('activity.workout.trace.label')}>
-      <ErrorState onRetry={() => trace.refetch()} /></Card>
+      <ErrorState onRetry={() => trace.refetch()} error={trace.error} /></Card>
   }
   if (trace.isPending) {
     return <Card span={12} label={t('activity.workout.trace.label')}><Loading /></Card>

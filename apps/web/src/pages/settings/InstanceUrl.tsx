@@ -38,7 +38,7 @@ export function InstanceUrl() {
     return (
       <ErrorState onRetry={() => {
         void queryClient.refetchQueries({ queryKey: instanceUrlKey(), exact: true })
-      }} />
+      }} error={query.error} />
     )
   }
 

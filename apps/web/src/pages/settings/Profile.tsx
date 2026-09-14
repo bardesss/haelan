@@ -58,7 +58,7 @@ export function Profile() {
     return (
       <ErrorState onRetry={() => {
         void queryClient.refetchQueries({ queryKey: queryKeys.session(), exact: true })
-      }} />
+      }} error={session.error} />
     )
   }
 

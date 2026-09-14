@@ -3,7 +3,15 @@
 //
 // Usage: pnpm site:build
 
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -62,6 +70,51 @@ const ASSETS = [
 ]
 
 /**
+ * Recursively copies every file under `dir` into `into`, returning the published (web) path of
+ * each one written, joined with `/` regardless of platform.
+ */
+function copyTree(dir, into, publishedPrefix, written) {
+  mkdirSync(into, { recursive: true })
+  for (const entry of readdirSync(dir)) {
+    const from = join(dir, entry)
+    const to = join(into, entry)
+    const published = `${publishedPrefix}/${entry}`
+    if (statSync(from).isDirectory()) {
+      copyTree(from, to, published, written)
+    } else {
+      copyFileSync(from, to)
+      written.push(published)
+    }
+  }
+}
+
+/**
+ * Publishes the demo bundle from `fromDir` (Task 5's `apps/web/dist-demo`) under
+ * `<outDir>/demo/`, and reports the paths it wrote.
+ *
+ * GitHub Pages has no SPA fallback, so a deep link into the demo (or a refresh inside it) hits
+ * Pages' own 404 page unless a 404.html exists to catch it. Copying the demo's index.html there
+ * is the standard trick: Pages serves 404.html for any unknown path, and because it is the same
+ * document the demo's own router then takes over and renders the right screen.
+ *
+ * Returns `[]` and writes nothing when `fromDir` does not exist, so a checkout that never ran
+ * `demo:build` still gets the landing page on its own - exactly what milestone one shipped.
+ */
+export function copyDemo(fromDir, outDir) {
+  if (!existsSync(fromDir)) return []
+
+  const written = []
+  const demoDir = join(outDir, 'demo')
+  copyTree(fromDir, demoDir, 'demo', written)
+
+  const index = readFileSync(join(demoDir, 'index.html'), 'utf8')
+  writeFileSync(join(demoDir, '404.html'), index)
+  written.push('demo/404.html')
+
+  return written
+}
+
+/**
  * Writes the whole published site into `outDir` and reports the paths it wrote.
  *
  * theme.css has to exist before this runs - `pnpm --filter @haelan/tokens build:css` is its
@@ -86,6 +139,8 @@ export function buildSite(rootDir, outDir) {
   for (const shot of readdirSync(join(rootDir, 'assets/screenshots'))) {
     if (shot.endsWith('.png')) put(`assets/screenshots/${shot}`, `screenshots/${shot}`)
   }
+
+  written.push(...copyDemo(join(rootDir, 'apps/web/dist-demo'), outDir))
 
   return written
 }

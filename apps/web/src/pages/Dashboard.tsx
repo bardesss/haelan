@@ -482,6 +482,10 @@ export function Dashboard() {
   // baseline omission it depends on, now live in MetricCard: this composite query is only built
   // here because MetricCard takes one query object, not three.
   const heartRateFailed = meanSeries.isError || minHrSeries.isError || maxHrSeries.isError
+  // Whichever of the three actually failed - MetricCard's own not_found branch (ErrorState) needs
+  // one concrete error to read a kind off, and a demo manifest miss on any of the three throws the
+  // same ApiError('not_found') regardless of which query it lands on.
+  const heartRateError = meanSeries.error ?? minHrSeries.error ?? maxHrSeries.error
   const retryHeartRate = () => {
     void meanSeries.refetch()
     void minHrSeries.refetch()
@@ -652,7 +656,7 @@ export function Dashboard() {
           // stages and flagged days cards already use for a query MetricCard cannot gate on.
           <Card span={8} label={t('dashboard.heartRateRange.label')}
             basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
-            {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} />
+            {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} error={intraday.error} />
               : intraday.isPending ? <Loading />
               // Checked ahead of the real no-data branch below, the same precedence emptyStateFor
               // gives excludedTypes over both of its own no_data and not_worn checks: an excluded
@@ -674,7 +678,7 @@ export function Dashboard() {
           </Card>
         ) : (
           <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
-            query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate }}
+            query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate, error: heartRateError }}
             points={meanHrPoints}
             basisKey={heartRateBasisKey} basisWornKey={heartRateBasisKey} basisValues={{ on: controls.historicalTo }}>
             {() => (
@@ -699,7 +703,7 @@ export function Dashboard() {
             flagged days in the period renders the empty state honestly rather than falsely: it
             says nothing is flagged, not that nothing could be. */}
         <Card span={4} label={t('dashboard.flaggedDays.label')}>
-          {overridesQuery.events.isError ? <ErrorState onRetry={() => void overridesQuery.events.refetch()} />
+          {overridesQuery.events.isError ? <ErrorState onRetry={() => void overridesQuery.events.refetch()} error={overridesQuery.events.error} />
             : overridesQuery.events.isPending ? <Loading />
             : flaggedDates.length === 0 ? (
               <EmptyState title={t('dashboard.flaggedDays.emptyTitle')} detail={t('dashboard.flaggedDays.emptyDetail')} />
@@ -725,7 +729,7 @@ export function Dashboard() {
           basis={nights.isError || lastNight === null
             ? undefined
             : t('dashboard.sleepStages.basis', { date: lastNight.localDate })}>
-          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} />
+          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} error={nights.error} />
             : nights.isPending ? <Loading /> : lastNight === null ? (
             <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
           ) : (

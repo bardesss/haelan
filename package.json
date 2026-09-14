@@ -12,13 +12,16 @@
     "build": "pnpm --filter @haelan/web build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit && tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/server/tsconfig.json --noEmit",
+    "typecheck": "tsc -p packages/tokens/tsconfig.json --noEmit && tsc -p packages/core/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/server/tsconfig.json --noEmit && tsc -p demo/capture/tsconfig.json --noEmit",
     "dev": "pnpm --filter @haelan/web dev",
     "dev:server": "pnpm --filter @haelan/server dev",
     "start": "node --experimental-strip-types apps/server/src/index.ts",
     "check:enums": "node --experimental-strip-types scripts/check-enum-drift.mjs",
     "docs:tools": "node --experimental-strip-types scripts/generate-tools-doc.mjs",
-    "site:build": "pnpm --filter @haelan/tokens build:css && node scripts/build-site.mjs"
+    "site:build": "pnpm --filter @haelan/tokens build:css && node scripts/build-site.mjs",
+    "demo:capture": "node scripts/capture-demo.mjs",
+    "demo:build": "pnpm --filter @haelan/tokens build:css && pnpm --filter @haelan/web exec vite build --config vite.demo.config.ts",
+    "demo:all": "pnpm demo:capture && pnpm demo:build && pnpm site:build"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",

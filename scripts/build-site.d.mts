@@ -4,4 +4,5 @@
 // what build-site.mjs exports.
 export function renderPage(template: string, values: Record<string, string>): string
 export function releaseStamp(rootDir: string): { version: string, releaseDate: string }
+export function copyDemo(fromDir: string, outDir: string): string[]
 export function buildSite(rootDir: string, outDir: string): string[]

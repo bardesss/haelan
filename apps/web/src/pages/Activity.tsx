@@ -349,7 +349,7 @@ export function Activity() {
       <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
       <div className="grid">
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
-          {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} />
+          {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} error={stepsQuery.error} />
             : stepsQuery.isPending ? <Loading /> : (
             <ActivityHeatmap days={heatmapDays} max={maxSteps} label={t('activity.dailySteps.chartLabel', { period })}
               annotations={stepsAnnotations} excluded={stepsOverrides.excluded}

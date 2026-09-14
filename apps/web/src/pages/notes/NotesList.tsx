@@ -97,7 +97,7 @@ export function NotesList({ range }: { range: AnnotationRange }) {
 
   return (
     <>
-      {isError ? <ErrorState onRetry={retry} />
+      {isError ? <ErrorState onRetry={retry} error={notesQuery.error ?? eventsQuery.error} />
         : isPending ? <Loading />
         : rows.length === 0 ? (
           <EmptyState title={t('notes.empty.title')} detail={t('notes.empty.detail')} />

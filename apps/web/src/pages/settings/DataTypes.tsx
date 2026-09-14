@@ -19,7 +19,7 @@ export function DataTypes() {
   const { t } = useTranslation()
   const session = useSession()
   const queryClient = useQueryClient()
-  const { items, isPending, isError } = useDataTypes()
+  const { items, isPending, isError, error } = useDataTypes()
   const setDataTypes = useSetDataTypes()
 
   if (isPending) return <Loading />
@@ -28,7 +28,7 @@ export function DataTypes() {
       <ErrorState onRetry={() => {
         const personId = session.data?.personId
         if (personId !== undefined) void queryClient.refetchQueries({ queryKey: dataTypesKey(personId), exact: true })
-      }} />
+      }} error={error} />
     )
   }
 

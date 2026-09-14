@@ -89,7 +89,7 @@ export function WorkoutDetail() {
         <Card span={12}>
           {notFound
             ? <EmptyState title={t('activity.workout.missingTitle')} detail={t('activity.workout.missingDetail')} />
-            : <ErrorState onRetry={() => void query.refetch()} />}
+            : <ErrorState onRetry={() => void query.refetch()} error={query.error} />}
         </Card>
       </div>
     )

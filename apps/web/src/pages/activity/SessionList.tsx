@@ -109,7 +109,7 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
     return result
   }, [filtered])
 
-  if (query.isError) return <ErrorState onRetry={() => void query.refetch()} />
+  if (query.isError) return <ErrorState onRetry={() => void query.refetch()} error={query.error} />
   if (query.isPending) return <Loading />
 
   // An empty range and a filter matching nothing are different claims with different remedies

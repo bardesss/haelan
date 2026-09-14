@@ -61,7 +61,7 @@ export function McpTokens() {
 
   if (tokens.isPending) return <Loading />
   if (tokens.isError || tokens.data === undefined) {
-    return <ErrorState onRetry={() => { void tokens.refetch() }} />
+    return <ErrorState onRetry={() => { void tokens.refetch() }} error={tokens.error} />
   }
 
   const rows = tokens.data.tokens
@@ -158,7 +158,7 @@ export function McpTokens() {
   // card whose job is to detect an attack rather than prevent one, and "No calls yet." over a
   // dropped request would tell the one reader checking for a leaked token that nothing happened.
   function CallsList() {
-    if (calls.isError) return <ErrorState onRetry={() => { void calls.refetch() }} />
+    if (calls.isError) return <ErrorState onRetry={() => { void calls.refetch() }} error={calls.error} />
     if (calls.data === undefined || calls.data.calls.length === 0) {
       return <p className="field-hint">{t('settings.mcp.callsEmpty')}</p>
     }

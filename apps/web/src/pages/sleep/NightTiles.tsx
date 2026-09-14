@@ -65,7 +65,12 @@ export function NightTiles({ localDate, source }: { localDate: string, source: s
   // NotesList.tsx's own multi-query retry uses: a reader clicking "Try again" wants every figure on
   // this row back, not a partial retry that leaves a second group silently stale.
   if (groups.queries.some((query) => query.isError)) {
-    return <Card span={12}><ErrorState onRetry={() => { for (const query of groups.queries) void query.refetch() }} /></Card>
+    return (
+      <Card span={12}>
+        <ErrorState onRetry={() => { for (const query of groups.queries) void query.refetch() }}
+          error={groups.queries.find((query) => query.isError)?.error} />
+      </Card>
+    )
   }
 
   const valueFor = (metric: string) => valueOf(groups.pointsOf(metric))

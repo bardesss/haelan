@@ -164,6 +164,8 @@ export function Health() {
   // last of them has, and has failed if any of them did. Same composite shape Dashboard.tsx builds
   // for its own heart rate range card, for the same reason (MetricCard takes one query, not four).
   const spo2Failed = meanSpo2.isError || minSpo2.isError || maxSpo2.isError || countSpo2.isError
+  // Whichever of the four actually failed - see Dashboard.tsx's identical heartRateError comment.
+  const spo2Error = meanSpo2.error ?? minSpo2.error ?? maxSpo2.error ?? countSpo2.error
   const spo2Pending = meanSpo2.isPending || minSpo2.isPending || maxSpo2.isPending || countSpo2.isPending
   const retrySpo2 = () => {
     void meanSpo2.refetch()
@@ -237,7 +239,7 @@ export function Health() {
             reused for both props, the same completeness Dashboard's own steps tile keeps for a
             plain key its own wear signal never reaches either. */}
         <MetricCard metric="spo2" span={8} label={t('health.spo2Range.label')} basisPlacement="header"
-          query={{ isError: spo2Failed, isPending: spo2Pending, refetch: retrySpo2 }}
+          query={{ isError: spo2Failed, isPending: spo2Pending, refetch: retrySpo2, error: spo2Error }}
           points={meanSpo2Points}
           basisKey="health.spo2Range.basis" basisWornKey="health.spo2Range.basisWorn"
           basisValues={{ total: rangeDates.length, readings: spo2Readings }}

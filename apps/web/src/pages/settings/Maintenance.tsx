@@ -85,7 +85,7 @@ export function Maintenance() {
     return (
       <ErrorState onRetry={() => {
         void queryClient.refetchQueries({ queryKey: maintenanceKey(), exact: true })
-      }} />
+      }} error={status.error} />
     )
   }
 

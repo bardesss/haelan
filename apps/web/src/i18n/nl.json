@@ -87,7 +87,9 @@
   "errorState": {
     "title": "Dit kon niet worden geladen.",
     "detail": "De instantie gaf een foutmelding, dus hier valt niets te tekenen. Dat zegt niets over jouw gegevens.",
-    "retry": "Opnieuw proberen"
+    "retry": "Opnieuw proberen",
+    "notCapturedTitle": "Buiten het opgenomen deel van de demo.",
+    "notCapturedDetail": "Hier is niets misgegaan. De demo heeft maar een deel van het archief vastgelegd, en dit valt daarbuiten."
   },
   "emptyState": {
     "no_data": {
