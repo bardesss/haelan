@@ -116,10 +116,17 @@ body {
   background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-primary);
 }
 
+/* Every box in the control row wraps, at every width. .controls itself always did; its two flex
+   children did not, and a flex container that cannot wrap has a min-content width equal to the sum
+   of its children - 497px for the range buttons and the actions together. Above the breakpoint the
+   rail is back and .main's padding is 40px, so that row did not fit until 703px and the band from
+   621 to 702 scrolled sideways on every page. Wrapping drops each child's min-content to its
+   widest single item instead of the sum, which costs nothing where there is already room: the row
+   stays one line wherever one line fits, and the band fixes itself with no third breakpoint. */
 .controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
-.controls-end { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.controls-end { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-wrap: wrap; }
 
-.segmented { display: flex; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.segmented { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .segment { appearance: none; border: 0; background: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-muted); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
 .segment:hover { color: var(--text-primary); }
 .segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: var(--weight-medium); }
@@ -771,7 +778,7 @@ body {
 
   .segmented { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); }
   .segment {
-    min-width: 0; padding: 5px 4px; text-align: center;
+    min-width: 0; padding: 5px var(--space-1); text-align: center;
     font-size: var(--font-size-micro);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
