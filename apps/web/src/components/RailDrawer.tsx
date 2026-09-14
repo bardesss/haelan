@@ -53,7 +53,18 @@ export function RailDrawer({ active, person, onSignOut, signOutError }: {
   // Focus goes back where it came from. The browser does not do this for a dialog that is closed
   // by Escape, and a reader who opened the menu with a keyboard would otherwise be returned to the
   // top of the document.
-  useEffect(() => { if (!open) opener.current?.focus({ preventScroll: true }) }, [open])
+  //
+  // Guarded against the very first run: a useEffect fires once after the initial render no matter
+  // what its dependency array holds, and `open` starts false, so with no guard this looked exactly
+  // like the true-to-false transition after a close and refocused the hamburger on every mount -
+  // a phone page load, or crossing the breakpoint downward, since Shell swaps Sidebar for
+  // RailDrawer by remounting. mounted starts false and flips (and stays) true after that first
+  // effect run, so the mount itself is skipped and only a real open-to-closed transition refocuses.
+  const mounted = useRef(false)
+  useEffect(() => {
+    if (mounted.current && !open) opener.current?.focus({ preventScroll: true })
+    mounted.current = true
+  }, [open])
 
   return (
     <>

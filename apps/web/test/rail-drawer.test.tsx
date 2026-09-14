@@ -50,7 +50,19 @@ describe('the rail drawer', () => {
     expect(container!.querySelector('dialog')?.hasAttribute('open')).toBe(false)
   })
 
-  it('opens on click and closes on Escape', () => {
+  // A plain mount is not a close: the hamburger's own focus-return effect watches `open`, which
+  // starts false, and a useEffect always runs once after the first render regardless of its
+  // dependency array. Without a mount guard that false-on-mount looks identical to the
+  // true-to-false transition after Escape, and every phone page load silently focuses the menu
+  // button before the reader does anything - an unexpected focus ring, and a screen reader
+  // announcing "menu button" unprompted on a page the reader never touched.
+  it('does not steal focus on mount', () => {
+    render()
+    const button = container!.querySelector<HTMLButtonElement>('[data-testid="rail-open"]')!
+    expect(document.activeElement).not.toBe(button)
+  })
+
+  it('opens on click and closes on Escape, returning focus to the hamburger', () => {
     render()
     const button = container!.querySelector<HTMLButtonElement>('[data-testid="rail-open"]')!
     act(() => { button.click() })
@@ -61,6 +73,9 @@ describe('the rail drawer', () => {
       container!.querySelector('dialog')!.close()
     })
     expect(container!.querySelector('dialog')?.hasAttribute('open')).toBe(false)
+    // The one case the mount guard must not break: a real close still has to send focus back to
+    // the control that opened it.
+    expect(document.activeElement).toBe(button)
   })
 
   // The whole rail, not a reduced phone menu: the same nine destinations, the resources links, the
