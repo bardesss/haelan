@@ -1,10 +1,16 @@
 # syntax=docker/dockerfile:1
 
-# Debian slim rather than Alpine, deliberately: @node-rs/argon2 publishes glibc prebuilds and no
-# musl ones, so Alpine would fall back to compiling from source and put python3 and a C++ toolchain
-# in this image permanently. Note that better-sqlite3 is no longer a reason for this: since v13 it
-# ships musl prebuilds too. argon2 alone still decides it, so check that one before revisiting.
-FROM node:24-slim AS build
+# Alpine, now that it costs nothing. This was Debian slim because the two native dependencies
+# published glibc prebuilds only, so Alpine meant compiling from source and carrying python3 and a
+# C++ toolchain in the image permanently. Both have since fixed that:
+#
+#   - better-sqlite3 13 bundles prebuilds/linuxmusl-{x64,arm64}.node in its own tarball.
+#   - @node-rs/argon2 2.2.1 publishes @node-rs/argon2-linux-{x64,arm64}-musl, and both are already
+#     resolved in pnpm-lock.yaml, so pnpm picks the musl variant here with no lockfile change.
+#
+# So nothing compiles in this image. If a third native dependency arrives, check that it ships musl
+# builds before adding it, or this goes back to Debian rather than growing a toolchain.
+FROM node:24-alpine AS build
 WORKDIR /app
 RUN corepack enable
 
@@ -22,7 +28,7 @@ RUN pnpm build
 
 # A second install into a clean tree, production only. Cheaper and far more predictable than
 # pruning the first one, and it is what decides the size of the shipped image.
-FROM node:24-slim AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 RUN corepack enable
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
@@ -52,7 +58,7 @@ COPY apps/server/package.json apps/server/
 # bundled them into apps/web/dist, and nothing in the runtime image ever imports them again.
 RUN pnpm install --filter @haelan/server... --no-frozen-lockfile --prod --config.autoInstallPeers=false
 
-FROM node:24-slim AS runtime
+FROM node:24-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -70,7 +76,7 @@ COPY apps/server/package.json apps/server/
 COPY apps/server/src apps/server/src
 COPY --from=build /app/apps/web/dist apps/web/dist
 
-# node:24-slim ships an unprivileged `node` user. /data is the only path the process writes, and
+# node:24-alpine ships an unprivileged `node` user, same as the slim image did. /data is the only path the process writes, and
 # it is a volume, so its ownership has to be set before the volume is declared.
 #
 # /app used to be chowned to node too, which meant the process could rewrite its own source
