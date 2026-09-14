@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.23.0](https://github.com/bardesss/haelan/compare/v1.22.3...v1.23.0) (2026-09-14)
+
+
+### Features
+
+* the landing page's screenshots open full size, and cannot drift from the README ([#239](https://github.com/bardesss/haelan/issues/239)) ([4e5e65b](https://github.com/bardesss/haelan/commit/4e5e65b9ccd7b6d89dfde36102cadd4300dd600b))
+
 ## [1.22.3](https://github.com/bardesss/haelan/compare/v1.22.2...v1.22.3) (2026-09-14)
 
 
