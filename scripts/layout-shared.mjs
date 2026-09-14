@@ -43,6 +43,37 @@ export const SETTLE_MS = 500
 export const TOUCH_MIN = 44
 
 /**
+ * WCAG 2.5.8 Target Size (Minimum) exempts a target "in a sentence or whose size is otherwise
+ * constrained by the line-height of non-target text" - an inline link sitting inside a paragraph
+ * of running text (GoogleStep.tsx's console link, wrapped in a sentence: "...visit
+ * <a>console.cloud.google.com</a> and...") is exactly that case, and forcing it to a 44px box
+ * would change how the sentence sets rather than fix anything.
+ *
+ * Three conditions, all of them load bearing:
+ *  - `isAnchor` - only an <a>, never a button or `[role="button"]` styled to look like one.
+ *  - `inlineDisplay` - only when the link's own computed `display` is `inline`, not a block or
+ *    flex link dressed up as a button.
+ *  - a word-count floor on `siblingText`, the text the element enclosing the link carries besides
+ *    the link itself. The first version of this stopped at "some non-empty sibling text," which a
+ *    breadcrumb separator ("› ") or a list marker ("* ") satisfies without being a sentence in any
+ *    sense WCAG means - that shape would have been silently exempted, a real discrete tap target
+ *    dropped from the sweep rather than measured and passed. The floor is words, not characters:
+ *    an arbitrary character minimum is exactly as easily satisfied by a padded separator and
+ *    exactly as easily wrong for a genuinely short sentence ("See <a>details</a>."), while more
+ *    than one word is the actual minimum shape a sentence can take.
+ *
+ * A pure function of already-extracted facts rather than of the DOM, on purpose: `smallTargets`
+ * below still has to read `isAnchor`/`inlineDisplay`/`siblingText` out of a live page, but the
+ * decision itself takes plain values so it can be imported and exercised directly by a test
+ * without a browser.
+ */
+export function isExemptInlineLink({ isAnchor, inlineDisplay, siblingText }) {
+  if (!isAnchor || !inlineDisplay) return false
+  const wordCount = siblingText.trim().split(/\s+/).filter((word) => word.length > 0).length
+  return wordCount >= 2
+}
+
+/**
  * Every interactive control inside `root` (the whole document when it is null) whose smaller
  * dimension is under `TOUCH_MIN`, as `{ tag, cls, where, w, h }`.
  *
@@ -64,52 +95,50 @@ export const TOUCH_MIN = 44
  *
  * `root` is what scopes that second pass to the drawer: the page behind it is still laid out and
  * still measurable, and re-reporting it would double every failure the first pass already names.
+ *
+ * The DOM read (inside `page.evaluate`, which Playwright serialises to run in the browser and so
+ * cannot call back out to `isExemptInlineLink` above) is kept to raw fact-gathering only; the
+ * exemption decision itself runs back on this side, against plain data, which is what keeps that
+ * decision testable.
  */
-export const smallTargets = (page, root) => page.evaluate(({ min, root }) => {
-  const scope = root === null ? document : document.querySelector(root)
-  if (scope === null) return [{ tag: 'missing', cls: root, w: 0, h: 0 }]
-  const interactive = 'a[href], button, input, select, textarea, [role="button"]'
-  return [...scope.querySelectorAll(interactive)]
-    .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
-    // WCAG 2.5.8 Target Size (Minimum) carries an explicit exception for a target "in a sentence
-    // or whose size is otherwise constrained by the line-height of non-target text" - an inline
-    // link sitting inside a paragraph of running text (GoogleStep.tsx's console link, wrapped in a
-    // sentence: "...visit <a>console.cloud.google.com</a> and...") is exactly that case, and
-    // forcing it to a 44px box would change how the sentence sets rather than fix anything. Kept
-    // narrow on purpose, on both conditions the standard names: only an <a> whose own computed
-    // display is inline (not a block or flex link styled to look like a button), and only when the
-    // element enclosing it carries text of its own besides the link - a parent whose only content
-    // is the link is a card or button-like wrapper, not a sentence, and does not qualify.
-    .filter((el) => {
-      if (el.tagName.toLowerCase() !== 'a') return true
-      if (getComputedStyle(el).display !== 'inline') return true
-      const parent = el.parentElement
-      if (parent === null) return true
-      const siblingText = [...parent.childNodes]
-        .filter((node) => node !== el)
-        .map((node) => node.textContent ?? '')
-        .join('')
-        .trim()
-      return siblingText.length === 0
-    })
-    .map((el) => {
-      // A checkbox or radio's own box stays small by design (DataTypePicker.tsx and
-      // InstanceUrlStep.tsx each wrap one in a <label> that also carries its name) - the label is
-      // what a reader actually taps, so that is what gets measured here instead of the input
-      // alone.
-      const target = el.matches('input[type="checkbox"], input[type="radio"]') ? (el.closest('label') ?? el) : el
-      const r = target.getBoundingClientRect()
-      const owner = el.closest('[class]')
-      return {
-        tag: el.tagName.toLowerCase(),
-        cls: String(el.className).slice(0, 30),
-        where: owner === null ? '' : String(owner.className).split(/\s+/)[0],
-        w: Math.round(r.width),
-        h: Math.round(r.height),
-      }
-    })
-    .filter((t) => Math.min(t.w, t.h) < min)
-}, { min: TOUCH_MIN, root: root ?? null })
+export const smallTargets = async (page, root) => {
+  const candidates = await page.evaluate(({ root }) => {
+    const scope = root === null ? document : document.querySelector(root)
+    if (scope === null) return [{ tag: 'missing', cls: root, where: '', w: 0, h: 0, isAnchor: false, inlineDisplay: false, siblingText: '' }]
+    const interactive = 'a[href], button, input, select, textarea, [role="button"]'
+    return [...scope.querySelectorAll(interactive)]
+      .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
+      .map((el) => {
+        // A checkbox or radio's own box stays small by design (DataTypePicker.tsx and
+        // InstanceUrlStep.tsx each wrap one in a <label> that also carries its name) - the label
+        // is what a reader actually taps, so that is what gets measured here instead of the
+        // input alone.
+        const target = el.matches('input[type="checkbox"], input[type="radio"]') ? (el.closest('label') ?? el) : el
+        const r = target.getBoundingClientRect()
+        const owner = el.closest('[class]')
+        const isAnchor = el.tagName.toLowerCase() === 'a'
+        const parent = el.parentElement
+        const siblingText = isAnchor && parent !== null
+          ? [...parent.childNodes].filter((node) => node !== el).map((node) => node.textContent ?? '').join('')
+          : ''
+        return {
+          tag: el.tagName.toLowerCase(),
+          cls: String(el.className).slice(0, 30),
+          where: owner === null ? '' : String(owner.className).split(/\s+/)[0],
+          w: Math.round(r.width),
+          h: Math.round(r.height),
+          isAnchor,
+          inlineDisplay: isAnchor && parent !== null && getComputedStyle(el).display === 'inline',
+          siblingText,
+        }
+      })
+  }, { root: root ?? null })
+
+  return candidates
+    .filter((c) => !isExemptInlineLink(c))
+    .filter((c) => Math.min(c.w, c.h) < TOUCH_MIN)
+    .map(({ tag, cls, where, w, h }) => ({ tag, cls, where, w, h }))
+}
 
 export const describeTargets = (targets) =>
   targets.slice(0, 5).map((t) => `${t.where === '' ? '' : `.${t.where} `}${t.tag}.${t.cls} ${t.w}x${t.h}`).join(', ')
