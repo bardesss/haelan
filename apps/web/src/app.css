@@ -68,7 +68,17 @@ body {
 .rail-toggle { flex: none; }
 .rail-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
 .rail-item[aria-current='page'] svg { opacity: 1; color: var(--accent); }
-.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: var(--space-2); }
+/* Sticky to the bottom of the rail's own scroller. The rail is viewport tall with overflow-y:auto,
+   so on a short viewport (a landscape phone at 380px, where the rail holds 712px of content) the
+   account and sign-out sat 437px below the fold of a nested scroller with nothing saying so. They
+   are now always on screen and the nav scrolls behind them. The background is what stops the nav
+   showing through as it passes underneath. */
+.rail-foot {
+  margin-top: auto; padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  position: sticky; bottom: 0; background: var(--surface-rail);
+}
 /* Same border as rail-foot's own top edge, reused on purpose rather than a different weight: the
    resources links sit inside the foot (rail-foot's border already marks the foot off from the nav
    above), and this second one below them marks them off as their own group rather than blending
