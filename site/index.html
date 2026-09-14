@@ -16,6 +16,11 @@
     <link rel="stylesheet" href="site.css" />
   </head>
   <body>
+    <!-- Full width, while the header inside it stays capped at the page measure: the ambient wash
+         is painted on this wrapper so it reaches both edges of the viewport. Painted on the
+         centred header instead, it stopped where the column stopped and left a dark band down
+         each side of a wide screen. -->
+    <div class="hero-wrap">
     <header class="hero">
       <div class="hero-text">
         <p class="eyebrow"><img class="mark" src="mark.svg" alt="" width="20" height="20" />Hælan</p>
@@ -43,6 +48,7 @@
         <img src="screenshots/dashboard.png" alt="The haelan dashboard: daily steps, resting heart rate, sleep and recovery, with charts for the month." loading="eager" />
       </div>
     </header>
+    </div>
 
     <!-- The one loud element on the page, and the argument the whole project rests on: a day is
          either kept or it is gone. Ninety-one real days out of the demo's own seeded archive,
@@ -85,6 +91,9 @@
       </div>
     </section>
 
+    <!-- Full width for the same reason as the hero wrapper: a tinted band that stops at the page
+         measure reads as a floating box with cut edges, not as a band. -->
+    <div class="band">
     <section class="why">
       <p class="cap-number" aria-hidden="true">100</p>
       <div class="why-text">
@@ -101,6 +110,7 @@
         </p>
       </div>
     </section>
+    </div>
 
     <section class="run">
       <div class="run-text">

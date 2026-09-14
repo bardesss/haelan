@@ -91,6 +91,19 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
    the hero only: the page gets one atmospheric moment, near the thing it is pointing at, and the
    rest stays flat. color-mix with transparent rather than an rgba() literal is what keeps the
    no-raw-colour rule true here. */
+/* The wash goes on the wrapper, which is the full width of the viewport; the header inside it
+   stays capped at the page measure. Painted on the header itself, the gradient stopped where that
+   column stopped and left a dark band down each side of a wide screen. */
+.hero-wrap { position: relative; overflow: hidden; }
+.hero-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(65rem 40rem at 72% 8%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(50rem 34rem at 12% 0%, color-mix(in oklab, var(--accent-soft) 10%, transparent), transparent 66%);
+}
 .hero {
   position: relative;
   display: grid;
@@ -99,16 +112,6 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
   max-width: var(--page);
   margin: 0 auto;
   padding: clamp(var(--space-6), 8vw, calc(var(--space-6) * 3)) var(--gutter) var(--space-6);
-}
-.hero::before {
-  content: '';
-  position: absolute;
-  inset: -20% -10% 10%;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(55rem 34rem at 78% 12%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 68%),
-    radial-gradient(38rem 30rem at 8% 0%, color-mix(in oklab, var(--accent-soft) 10%, transparent), transparent 62%);
 }
 .hero-text { max-width: var(--measure); }
 .lede { font-size: var(--lede); color: var(--text-secondary); text-wrap: pretty; }
@@ -192,12 +195,17 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 
 /* ---- the cap ------------------------------------------------------------- */
 
-.why {
-  display: grid; gap: var(--gutter); align-items: start;
-  max-width: var(--page); margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) auto;
-  padding: var(--space-6) var(--gutter);
+/* The tint belongs to the band, which runs edge to edge; the content inside keeps the page
+   measure. The other way round it reads as a floating box with cut edges rather than a band. */
+.band {
+  margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) 0;
   background: var(--surface-inset);
   border-block: 1px solid var(--border-subtle);
+}
+.why {
+  display: grid; gap: var(--gutter); align-items: start;
+  max-width: var(--page); margin: 0 auto;
+  padding: var(--space-6) var(--gutter);
 }
 /* The number is the argument: a hosted haelan stops at a hundred people, so it is not offered.
    Set as a figure rather than written into the sentence, because it is the whole reason for the
