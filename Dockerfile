@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# Debian slim rather than Alpine, deliberately: better-sqlite3 and @node-rs/argon2 publish glibc
-# prebuilds and no musl ones, so Alpine would fall back to compiling from source and put python3
-# and a C++ toolchain in this image permanently.
+# Debian slim rather than Alpine, deliberately: @node-rs/argon2 publishes glibc prebuilds and no
+# musl ones, so Alpine would fall back to compiling from source and put python3 and a C++ toolchain
+# in this image permanently. Note that better-sqlite3 is no longer a reason for this: since v13 it
+# ships musl prebuilds too. argon2 alone still decides it, so check that one before revisiting.
 FROM node:24-slim AS build
 WORKDIR /app
 RUN corepack enable

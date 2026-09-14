@@ -2,7 +2,15 @@ packages:
   - 'packages/*'
   - 'apps/*'
 allowBuilds:
-  better-sqlite3: true
+  # better-sqlite3 is deliberately false. v13 ships prebuilt binaries inside its own npm tarball
+  # (prebuilds/, eight platforms including musl), having moved to the N-API and dropped
+  # prebuild-install. It has no install script, but it does still ship a binding.gyp, and both npm
+  # and pnpm apply an implicit `node-gyp rebuild` to any package with a binding.gyp and no install
+  # script. Allowing that build compiles from source and uses the result instead of the shipped
+  # prebuild, which is how 13.0.3 first arrived: a source build that passed on Node 24 and 26 and
+  # produced a module that crashed the vitest workers on 22.13. Turning the build off is what makes
+  # the prebuild win, and it takes the install from minutes to seconds with no toolchain.
+  better-sqlite3: false
   esbuild: true
 overrides:
   # The deprecated @esbuild-kit chain, reached only through drizzle-kit, pins esbuild 0.18,
