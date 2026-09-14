@@ -10,7 +10,13 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.layout { display: flex; min-height: 100vh; }
+/* --chrome-above is whatever sits above the app in the document and takes flow height from it,
+   0px in a real instance because nothing does. The demo's banner does: it is prepended to
+   document.body, so the rail below it starts that much lower while still being exactly one
+   viewport tall, and its own overflow-y turned the menu into a scroller whose last items sat
+   under the fold. Set from apps/web/src/demo/DemoBanner.tsx, which measures the rendered banner
+   rather than hard-coding a height that its own text length would falsify. */
+.layout { display: flex; min-height: calc(100vh - var(--chrome-above, 0px)); }
 
 /* Sticky and viewport tall, because .rail-foot pins the account with margin-top: auto and a flex
    item stretches to its container. .layout is as tall as the page, so on a long Dashboard that
@@ -20,7 +26,9 @@ body {
 .rail {
   width: 186px; flex: none; display: flex; flex-direction: column;
   background: var(--surface-rail); padding: var(--space-4) var(--space-3);
-  position: sticky; top: 0; height: 100vh; height: 100dvh; overflow-y: auto;
+  position: sticky; top: 0;
+  height: calc(100vh - var(--chrome-above, 0px)); height: calc(100dvh - var(--chrome-above, 0px));
+  overflow-y: auto;
   transition: width .15s ease;
 }
 /* The icon strip a collapsed rail becomes. Every label underneath keeps its "sr-only" span

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { localMidnightMs as demoLocalMidnightMs, DEMO_INSTANT_MS, DEMO_CLOCK_MS } from '../src/demo/instant.js'
+import { localMidnightMs as demoLocalMidnightMs, DEMO_INSTANT_MS, DEMO_CLOCK_MS, DEMO_CLOCK_CEILING_MS } from '../src/demo/instant.js'
 // A deliberate cross-package deep import, not '@haelan/core': `localMidnightMs` is a testing-only
 // helper the package's public index does not re-export, and this test's whole point is to reach
 // past apps/web/src/demo/instant.ts's own reimplementation and check it against the real thing.
@@ -49,8 +49,20 @@ describe('the demo instant agrees with the seed it is copied from', () => {
  * quietly changed the offset (a whole day, an hour) would still "look pinned" without this.
  */
 describe('DEMO_CLOCK_MS', () => {
-  it('is exactly one millisecond before the archive\'s exclusive close', () => {
-    expect(DEMO_CLOCK_MS).toBe(DEMO_INSTANT_MS - 1)
+  it('starts at midday of the last day with data, leaving the clock room to run', () => {
+    // Twelve hours before the exclusive close, not one millisecond before it. The clock advances
+    // now (demoClock.ts says why: a constant stalls every chart animation, so bars stayed at
+    // height zero and lines stayed clipped to nothing), and an anchor a millisecond before
+    // midnight would tick straight into DEMO_END_DATE, a day the seed wrote nothing for, taking
+    // every url computed from today off the manifest with it.
+    expect(DEMO_CLOCK_MS).toBe(DEMO_INSTANT_MS - 12 * 60 * 60 * 1000)
+  })
+
+  it('may not run past the day it starts in', () => {
+    // The ceiling is the last millisecond of that same day, so a tab left open all afternoon
+    // cannot cross midnight into a date with no fixtures.
+    expect(DEMO_CLOCK_CEILING_MS).toBe(DEMO_INSTANT_MS - 1)
+    expect(DEMO_CLOCK_CEILING_MS).toBeGreaterThan(DEMO_CLOCK_MS)
   })
 
   it('formats to the day before DEMO_END_DATE in Amsterdam time, not the same day', () => {
