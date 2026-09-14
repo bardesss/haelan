@@ -6,7 +6,7 @@ import type { DayMarks } from './base.js'
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue, formatNumber } from '../format.js'
+import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 
 /**
  * A second copy of HeartRateRange's shape, not a rename of it. HeartRateRange names its own
@@ -153,9 +153,16 @@ export function Spo2Range({ days, annotations, excluded, label, onPointClick }: 
     if (date !== undefined) onPointClick?.(date)
   }, [days, marks, onPointClick])
 
-  const { host, style } = useChart(build, 170, onClick)
+  // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
+  // point a click would have opened.
+  const describe = useCallback((event: ECElementEvent) => {
+    const date = spo2RangePointDate(days, marks, event)
+    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [days, marks, i18n.language])
+
+  const { host, style, tap } = useChart(build, 170, { onClick, describe })
   return (
-    <ChartFigure label={label} host={host} style={style}
+    <ChartFigure label={label} host={host} style={style} tap={tap}
       table={{
         columns: [
           t('charts.columns.date'), t('charts.columns.minimum'), t('charts.columns.mean'),

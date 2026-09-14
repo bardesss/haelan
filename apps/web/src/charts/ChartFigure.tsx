@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import type { RefObject, CSSProperties } from 'react'
 import { useBasisId } from '../components/basis.js'
 import { useTranslation } from '../i18n/index.js'
+import type { ChartTap } from './useChart.js'
 
 export type ChartTable = {
   columns: string[]
@@ -9,11 +10,17 @@ export type ChartTable = {
 }
 
 // Accessible chart: a name, the card's basis line as description, and the same numbers as a table.
-export function ChartFigure({ label, table, host, style }: {
+export function ChartFigure({ label, table, host, style, tap }: {
   label: string
   table: ChartTable
   host: RefObject<HTMLDivElement | null>
   style: CSSProperties
+  /**
+   * useChart's own tap record, handed straight back. Present only below the breakpoint and only
+   * for a chart whose points can be annotated, which is what keeps this footer row byte-identical
+   * on a desktop: undefined here and the row renders exactly what it rendered before this existed.
+   */
+  tap?: ChartTap
 }) {
   const describedBy = useBasisId()
   const { t } = useTranslation()
@@ -34,7 +41,26 @@ export function ChartFigure({ label, table, host, style }: {
         the name of giving it to everyone else. This button changes pixels only, the same rule
         app.css states for the collapsed rail.
       */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {/*
+        Two shapes rather than one with a conditional gap: above the breakpoint `tap` is undefined
+        and this row is exactly the row it has always been, which is the promise this task makes
+        about the desktop. Below it the two controls sit at opposite ends and are allowed to wrap,
+        because "Annotate 12 September" beside "Show numbers" is most of a 375px card.
+      */}
+      <div style={tap
+        ? { display: 'flex', justifyContent: 'space-between', gap: 'var(--space-2)', flexWrap: 'wrap' }
+        : { display: 'flex', justifyContent: 'flex-end' }}>
+        {/*
+          Disabled until a tap has landed, and labelled with what that tap chose. The label is the
+          only confirmation of the selection that outlives the tooltip, so it names the point
+          rather than the chart: a reader who taps one bar, scrolls, and comes back can read which
+          point this is about to open.
+        */}
+        {tap && (
+          <button type="button" className="chart-annotate" disabled={tap.name === null} onClick={tap.annotate}>
+            {tap.name === null ? t('charts.annotate.idle') : t('charts.annotate.point', { point: tap.name })}
+          </button>
+        )}
         <button type="button" className="chart-table-toggle" aria-expanded={shown} aria-controls={tableId}
           aria-label={t(shown ? 'charts.tableToggle.hideFor' : 'charts.tableToggle.showFor', { label })}
           onClick={() => setShown((current) => !current)}>

@@ -5,7 +5,7 @@ import { chartBase, dayMarks, dayPointDate, dayTableRows, STROKE, OPACITY, SYMBO
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue } from '../format.js'
+import { formatLocalDate, formatMetricValue } from '../format.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
@@ -124,7 +124,7 @@ export function Sparkline({
   const format = (value: number | null, absent: string): string =>
     formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
 
-  // A ref, not `build` dependencies, and for the reason useChart's own onClickRef exists: the
+  // A ref, not `build` dependencies, and for the reason useChart's own pointRef exists: the
   // tooltip reads `formatValue`, `t` and the language, and `formatValue` is a fresh arrow on every
   // render at two call sites (Activity.tsx's distance card, Weight.tsx's weight card). In `build`'s
   // dependency array those would dispose and re-initialise the chart on every render, which is the
@@ -200,10 +200,18 @@ export function Sparkline({
     if (date !== undefined) onPointClick?.(date)
   }, [labels, marks, onPointClick])
 
-  const { host, style } = useChart(build, height, onClick)
+  // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
+  // point a click would have opened. This chart draws no axis labels at all, so the formatted date
+  // is the only place the tapped day is ever written down outside the tooltip.
+  const describe = useCallback((event: ECElementEvent) => {
+    const date = dayPointDate(labels, marks, event)
+    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [labels, marks, i18n.language])
+
+  const { host, style, tap } = useChart(build, height, { onClick, describe })
   return (
     <>
-      <ChartFigure label={label} host={host} style={style}
+      <ChartFigure label={label} host={host} style={style} tap={tap}
         table={{
           // The trend gets a column of its own whenever it is drawn, between the reading and the
           // note. Without one, the smooth line existed only on the canvas: a table-only reader was

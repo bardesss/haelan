@@ -7,7 +7,7 @@ import type { ChartTokens } from './tokens.js'
 import { hrTooltip } from './hrTooltip.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue } from '../format.js'
+import { formatLocalDate, formatMetricValue } from '../format.js'
 import type { DayRow } from '../fixtures/july.js'
 
 type Props = {
@@ -158,7 +158,15 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
     if (date !== undefined) onPointClick?.(date)
   }, [days, marks, onPointClick])
 
-  const { host, style } = useChart(build, 170, onClick)
+  // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
+  // point a click would have opened - including a tap on the band, which resolves to the same day
+  // as the mean line above it.
+  const describe = useCallback((event: ECElementEvent) => {
+    const date = heartRateRangePointDate(days, marks, event)
+    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [days, marks, i18n.language])
+
+  const { host, style, tap } = useChart(build, 170, { onClick, describe })
   return (
     <>
       {/* Section 11's own named example of a card level control. aria-pressed carries the state
@@ -170,7 +178,7 @@ export function HeartRateRange({ days, baseline, annotations, excluded, label, o
           {t(showBand ? 'charts.bandToggle.hide' : 'charts.bandToggle.show')}
         </button>
       </div>
-      <ChartFigure label={label} host={host} style={style}
+      <ChartFigure label={label} host={host} style={style} tap={tap}
         table={{
           // The minimum and maximum columns leave together with the band's series, from the same
           // showBand flag: a screen reader user toggling this gets the same change a sighted one

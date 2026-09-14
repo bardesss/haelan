@@ -5,7 +5,7 @@ import { chartBase, dayMarks, dayPointDate, dayTableRows, SYMBOL } from './base.
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue } from '../format.js'
+import { formatLocalDate, formatMetricValue } from '../format.js'
 import { barLabelInterval, barDateLabels } from './barAxis.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
@@ -70,7 +70,7 @@ export function DailyBars({
     formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
 
   // A ref, not `build` dependencies: see Sparkline's own tooltipRef comment and useChart's own
-  // onClickRef for why. `formatValue` is a fresh arrow on every render at both of this component's
+  // pointRef for why. `formatValue` is a fresh arrow on every render at both of this component's
   // call sites (Activity.tsx's distance and floors cards), and folding it into `build`'s dependency
   // array would dispose and re-initialise the chart on every render, the exact defect
   // chart-lifecycle.test.tsx guards.
@@ -155,9 +155,17 @@ export function DailyBars({
     if (date !== undefined) onPointClick?.(date)
   }, [labels, marks, onPointClick])
 
-  const { host, style } = useChart(build, height, onClick)
+  // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
+  // point a click would have opened. The full date rather than the axis label beside it: the axis
+  // thins its labels out (barLabelInterval), so a bar can be tapped that has no label at all.
+  const describe = useCallback((event: ECElementEvent) => {
+    const date = dayPointDate(labels, marks, event)
+    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [labels, marks, i18n.language])
+
+  const { host, style, tap } = useChart(build, height, { onClick, describe })
   return (
-    <ChartFigure label={label} host={host} style={style}
+    <ChartFigure label={label} host={host} style={style} tap={tap}
       table={{
         columns: [t('charts.columns.date'), unit, t('charts.columns.note')],
         // dayTableRows (base.ts): the row builder Sparkline's own accessible table uses, without

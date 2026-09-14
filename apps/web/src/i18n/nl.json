@@ -600,6 +600,10 @@
       "hide": "Dagbereik verbergen",
       "show": "Dagbereik tonen"
     },
+    "annotate": {
+      "idle": "Tik een punt aan om te annoteren",
+      "point": "{{point}} annoteren"
+    },
     "tableToggle": {
       "show": "Cijfers tonen",
       "hide": "Cijfers verbergen",

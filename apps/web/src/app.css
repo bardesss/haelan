@@ -434,6 +434,14 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .chart-table-toggle { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-faint); cursor: pointer; }
 .chart-table-toggle:hover { color: var(--text-secondary); }
 
+/* The table toggle's peer in the same footer row, and rendered only below the breakpoint, where a
+   tap reads the chart and something else has to open the annotate panel. Text rather than a
+   .button for the same reason its neighbour is: it sits under every chart on every page. Darker
+   than the toggle while it is live, because it acts on the reader's data rather than showing them
+   numbers they already have, and back to the toggle's weight once it has nothing to act on. */
+.chart-annotate { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-secondary); cursor: pointer; text-align: left; }
+.chart-annotate:disabled { color: var(--text-faint); cursor: default; }
+
 /* The same accessible table, shown. A scroll box rather than a plain block for the reason
    ChartFigure's own comment gives: a table's used width is floored at its min-content width, so it
    is allowed to be as wide as it needs and scrolls inside the card instead of widening the page.
@@ -806,12 +814,12 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
      DataTypePicker keeps its small, familiar size - inflating it to 44px square would look like a
      mistake - and gets its hit area from the label wrapping it instead, since the label is what a
      reader actually taps; layout-check measures the label for that control for the same reason. */
-  .button, .icon-button, .chart-table-toggle, .card-link,
+  .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
   .session-row-link, .night-row-link, .date-picker, .input {
     min-height: 44px;
   }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
-  .chart-table-toggle, .card-link, .session-row-link, .night-row-link { display: flex; align-items: center; }
+  .chart-table-toggle, .chart-annotate, .card-link, .session-row-link, .night-row-link { display: flex; align-items: center; }
   /* The source picker's real control: a bare <select> inside a label.button, so it inherits the
      label's box for everything except height, which the label never constrained in the first
      place (.button sizes to its content on every axis). */

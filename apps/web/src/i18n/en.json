@@ -600,6 +600,10 @@
       "hide": "Hide daily range",
       "show": "Show daily range"
     },
+    "annotate": {
+      "idle": "Tap a point to annotate",
+      "point": "Annotate {{point}}"
+    },
     "tableToggle": {
       "show": "Show numbers",
       "hide": "Hide numbers",
