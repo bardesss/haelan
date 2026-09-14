@@ -20,7 +20,7 @@
   --lede: clamp(1.05rem, 1.4vw, 1.2rem);
   --measure: 34rem;
   --page: 76rem;
-  --gutter: clamp(var(--space-4), 4vw, calc(var(--space-6) * 2));
+  --gutter: clamp(var(--space-4), 4vw, var(--space-8));
 }
 
 * { box-sizing: border-box; }
@@ -140,7 +140,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
    argument the project rests on is that a day is either kept or gone, and a wall of days makes
    it without a sentence. Everything else on the page stays quiet so this can be the thing you
    remember. */
-.days { padding: var(--space-6) 0 clamp(var(--space-6), 6vw, calc(var(--space-6) * 2)); }
+.days { padding: var(--space-6) 0 clamp(var(--space-6), 6vw, var(--space-8)); }
 .ribbon {
   display: flex;
   align-items: flex-end;
@@ -223,7 +223,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 .why-cost { margin-bottom: 0; color: var(--text-muted); }
 
 @media (min-width: 60rem) {
-  .why { grid-template-columns: auto minmax(0, 1fr); padding-block: clamp(var(--space-6), 5vw, calc(var(--space-6) * 2)); }
+  .why { grid-template-columns: auto minmax(0, 1fr); padding-block: clamp(var(--space-6), 5vw, var(--space-8)); }
 }
 
 /* ---- run it -------------------------------------------------------------- */
@@ -335,7 +335,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 footer {
   max-width: var(--page);
   margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) auto 0;
-  padding: var(--space-6) var(--gutter) calc(var(--space-6) * 2);
+  padding: var(--space-6) var(--gutter) var(--space-8);
   border-top: 1px solid var(--border-subtle);
 }
 .footer-cta { margin-bottom: var(--space-5); }

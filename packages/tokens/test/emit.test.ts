@@ -64,4 +64,12 @@ describe('css emitter', () => {
     // Zero rather than absent: a rule that reads var(--duration-fast) must still resolve.
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*--duration-fast: 0ms;/)
   })
+
+  // The landing page wrote page-level rhythm as calc(var(--space-6) * 2), and arithmetic on a
+  // token is the tell that the scale is short. These three are where that rhythm actually sits.
+  it('carries the spacing scale up to the page-level steps', () => {
+    expect(css).toContain('--space-7: 32px;')
+    expect(css).toContain('--space-8: 48px;')
+    expect(css).toContain('--space-9: 64px;')
+  })
 })
