@@ -38,6 +38,17 @@ echarts.use([
  * will open - and a control that cannot name its point is the "enabled but says nothing" case the
  * spec rules out. Taking them together makes a chart that can act but cannot name unrepresentable
  * rather than merely discouraged.
+ *
+ * What the pairing does NOT make unrepresentable is the opposite shape - a chart that offers a
+ * control it cannot act through - and that is the one that shipped. All six charts carrying an
+ * OPTIONAL `onPointClick` built this object unconditionally, so `onClick` was a closure over
+ * `onPointClick?.(...)` with nothing behind it whenever a page left the prop off. On
+ * `/activity/:sessionId` and `/sleep/night/:localDate`, neither of which passes one, the control
+ * rendered, armed itself on a tap, said "18:00 annoteren", and did nothing at all when pressed -
+ * exactly the "enabled control that does nothing" the spec rules out, arrived at from the other
+ * side. A type cannot see whether a caller's own prop is defined at runtime, so the rule lives at
+ * the call sites (`onPointClick ? { onClick, describe } : undefined`, on all six) and is pinned by
+ * chart-annotate-handlers.test.tsx, which renders each of the six both ways.
  */
 export type ChartPointHandlers = {
   /** Opens the annotate panel for this point. Above the breakpoint a click runs it directly. */

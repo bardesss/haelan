@@ -160,7 +160,11 @@ export function Spo2Range({ days, annotations, excluded, label, onPointClick }: 
     return date === undefined ? undefined : formatLocalDate(date, i18n.language)
   }, [days, marks, i18n.language])
 
-  const { host, style, tap } = useChart(build, 170, { onClick, describe })
+  // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
+  // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
+  // renders an annotate control that names a point and then does nothing when pressed. See
+  // useChart's ChartPointHandlers doc comment; chart-annotate-handlers.test.tsx pins it.
+  const { host, style, tap } = useChart(build, 170, onPointClick ? { onClick, describe } : undefined)
   return (
     <ChartFigure label={label} host={host} style={style} tap={tap}
       table={{
