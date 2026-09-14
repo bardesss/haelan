@@ -14,6 +14,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { galleryShots, SCREENSHOTS } from './screenshots.mjs'
 
 /**
  * Fills every {{slot}} in `template` from `values`.
@@ -77,6 +78,85 @@ export function ribbonHtml() {
   const peak = Math.max(...RIBBON_STEPS)
   return RIBBON_STEPS
     .map((steps) => `<i style="height:${((steps / peak) * 100).toFixed(1)}%"></i>`)
+    .join('')
+}
+
+/** The fragment a shot's full-size view lives at, derived from the file name so nothing names it twice. */
+export function shotId(shot) {
+  return `shot-${shot.file.replace(/\.png$/, '')}`
+}
+
+/**
+ * Where the close control on a shot's full-size view points.
+ *
+ * Not `#` alone for the gallery shots: clearing the fragment sends the reader back to the top of
+ * the page, so closing a screenshot two thirds of the way down would silently lose their place.
+ * Pointing at the section they opened it from puts them back where they were. The hero has no
+ * section above it to return to, and the top of the page is where it already is.
+ */
+function closeHref(shot) {
+  return shot.role === 'hero' ? '#' : '#gallery'
+}
+
+/** Escapes a string for use inside a double-quoted HTML attribute. */
+function attr(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+}
+
+/** Escapes a string for use as HTML text. */
+function text(value) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+}
+
+/**
+ * The gallery figures: every screenshot that is not the hero, in manifest order.
+ *
+ * Each image is wrapped in a link to its own full-size view rather than carrying one alongside,
+ * so the thing a reader instinctively clicks - the picture - is the thing that opens it.
+ */
+export function galleryHtml() {
+  return galleryShots()
+    .map((shot) => (
+      `<figure>`
+      + `<a class="shot-link" href="#${shotId(shot)}">`
+      + `<img src="screenshots/${shot.file}" alt="${attr(shot.alt)}" width="1440" height="900" loading="lazy" />`
+      + `</a>`
+      + `<figcaption>${text(shot.title)}</figcaption>`
+      + `</figure>`
+    ))
+    .join('')
+}
+
+/**
+ * One full-size view per screenshot, parked at the end of the document and revealed by `:target`.
+ *
+ * No JavaScript, which is what keeps this page a page: it loads nothing and runs nothing, and the
+ * no-telemetry line in the footer stays literally true rather than true-with-an-asterisk. The cost
+ * is two things a scripted lightbox would give and this one cannot - Escape does not close it, and
+ * the page behind it still scrolls - so the ways out are made obvious instead: the whole backdrop
+ * is a link, there is a labelled close control, and the browser's own Back button works because
+ * opening one is a navigation.
+ *
+ * `role="dialog"` is deliberately absent. Without script there is no focus trap and no way to
+ * return focus on close, and announcing a dialog that behaves like nothing of the sort is worse
+ * for a screen reader than the plain labelled region this actually is.
+ */
+export function lightboxHtml() {
+  return SCREENSHOTS
+    .map((shot) => {
+      const exit = closeHref(shot)
+      return `<div class="lightbox" id="${shotId(shot)}" aria-label="${attr(shot.title)}, full size">`
+        + `<a class="lightbox-backdrop" href="${exit}" aria-label="Close the full-size ${attr(shot.title)} screenshot"></a>`
+        + `<figure class="lightbox-figure">`
+        + `<img src="screenshots/${shot.file}" alt="${attr(shot.alt)}" width="1440" height="900" loading="lazy" />`
+        + `<figcaption>${text(shot.title)}<a class="lightbox-close" href="${exit}">Close</a></figcaption>`
+        + `</figure>`
+        + `</div>`
+    })
     .join('')
 }
 
@@ -169,7 +249,13 @@ export function buildSite(rootDir, outDir) {
 
   const template = readFileSync(join(rootDir, 'site/index.html'), 'utf8')
   mkdirSync(outDir, { recursive: true })
-  writeFileSync(join(outDir, 'index.html'), renderPage(template, { ...releaseStamp(rootDir), ribbon: ribbonHtml() }))
+  const values = {
+    ...releaseStamp(rootDir),
+    ribbon: ribbonHtml(),
+    gallery: galleryHtml(),
+    lightboxes: lightboxHtml(),
+  }
+  writeFileSync(join(outDir, 'index.html'), renderPage(template, values))
   written.push('index.html')
 
   // The site root's own 404, which Pages serves for every missing path anywhere under the site -

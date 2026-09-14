@@ -44,8 +44,15 @@
         </p>
       </div>
 
+      <!-- The one screenshot written out by hand rather than filled from a slot: it is the only
+           one that loads eagerly, being the thing a visitor sees first. Its src and alt are
+           therefore repeated from scripts/screenshots.mjs, and scripts/test/screenshots.test.ts
+           fails if they stop agreeing with it - so this is a second copy that cannot drift, not a
+           second source. -->
       <div class="hero-shot">
-        <img src="screenshots/dashboard.png" alt="The haelan dashboard: daily steps, resting heart rate, sleep and recovery, with charts for the month." loading="eager" />
+        <a class="shot-link" href="#shot-dashboard">
+          <img src="screenshots/dashboard.png" alt="The Hælan dashboard: daily steps, resting heart rate, sleep and recovery, with charts for the month." width="1440" height="900" loading="eager" />
+        </a>
       </div>
     </header>
     </div>
@@ -133,14 +140,14 @@ volumes:
   haelan-data:</code></pre>
     </section>
 
-    <section class="gallery">
+    <!-- id, because closing a full-size view links back here: without it the reader would be
+         returned to the top of the page and lose their place. -->
+    <section class="gallery" id="gallery">
       <p class="eyebrow">The rest of it</p>
-      <div class="gallery-grid">
-        <figure><img src="screenshots/activity.png" alt="" loading="lazy" /><figcaption>Activity</figcaption></figure>
-        <figure><img src="screenshots/sleep.png" alt="" loading="lazy" /><figcaption>Sleep</figcaption></figure>
-        <figure><img src="screenshots/recovery.png" alt="" loading="lazy" /><figcaption>Recovery</figcaption></figure>
-      </div>
-      <p class="gallery-note">All generated demo data, not anybody's real health history.</p>
+      <!-- Filled from scripts/screenshots.mjs, the same list the README's screenshot block is
+           written from. A shot added there appears here and in the README, or in neither. -->
+      <div class="gallery-grid">{{gallery}}</div>
+      <p class="gallery-note">Click any screenshot to see it full size. All generated demo data, not anybody's real health history.</p>
     </section>
 
     <footer>
@@ -156,5 +163,10 @@ volumes:
         and the app sends nothing anywhere except to the Google Health API you point it at.
       </p>
     </footer>
+
+    <!-- Last in the document on purpose. Each one is hidden until its own `:target` matches, so
+         placing them here keeps them out of the reading order of everything above, and a reader
+         who never opens one never meets them at all. -->
+    {{lightboxes}}
   </body>
 </html>
