@@ -76,6 +76,27 @@ body {
 .rail-resources { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-subtle); }
 .rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 0 var(--space-3); }
 .rail-foot .button { justify-content: center; }
+
+/* The drawer, below PHONE_MAX_WIDTH. The dialog is the container; the rail inside it keeps every
+   rule it already has except the ones that made it a column in a flex row. */
+.top-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-rail); border-bottom: 1px solid var(--border-subtle);
+  position: sticky; top: 0; z-index: 10;
+}
+.rail-dialog {
+  margin: 0; padding: 0; border: 0; max-width: none; max-height: none;
+  height: 100dvh; width: min(280px, 85vw);
+  background: var(--surface-rail);
+}
+.rail-dialog::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.rail-dialog .rail { width: 100%; height: 100%; position: static; }
+
+/* The rail is out of the flow below the breakpoint, so the flex row that held it and .main side
+   by side has one child left and would stretch the top bar next to the content. */
+.layout-phone { display: block; }
+.layout-phone .main { padding: var(--space-3); }
 .avatar {
   width: 19px; height: 19px; flex: none; border-radius: 50%;
   display: grid; place-items: center; text-transform: uppercase;

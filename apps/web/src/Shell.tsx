@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar } from './components/Sidebar.js'
+import { RailDrawer } from './components/RailDrawer.js'
+import { useIsPhone } from './ui/breakpoint.js'
 import { SetupApp } from './setup/SetupApp.js'
 import { SignIn } from './auth/SignIn.js'
 import { RedeemInvite } from './auth/RedeemInvite.js'
@@ -16,6 +18,10 @@ import { ErrorBoundary } from './components/ErrorBoundary.js'
 export function Shell() {
   const { t } = useTranslation()
   const route = useRoute()
+  const isPhone = useIsPhone()
+  // Both components take the same props, so this is a swap rather than a branch: the sign-out
+  // closure below and the rail's own error boundary are written once and serve either.
+  const Rail = isPhone ? RailDrawer : Sidebar
   const session = useSession()
   const queryClient = useQueryClient()
   const active = ROUTES.find((r) => matchRoute(r.path, route)) ?? ROUTES[0]!
@@ -112,12 +118,12 @@ export function Shell() {
   if (session.data === undefined) return null
 
   return (
-    <div className="layout">
+    <div className={isPhone ? 'layout layout-phone' : 'layout'}>
       {/* The rail's own boundary, kept apart from the page's below. A throw here costs the reader
           navigation and sign out, not the page they came for; the two boundaries are separate so
           neither failure takes both. */}
       <ErrorBoundary>
-        <Sidebar
+        <Rail
           active={active.rail ?? active.path}
           person={session.data.displayName}
           signOutError={signOutError}

@@ -51,6 +51,7 @@
   },
   "sidebar": {
     "sectionsLabel": "Secties",
+    "openMenu": "Menu openen",
     "collapse": "Navigatie inklappen",
     "expand": "Navigatie uitklappen",
     "groups": {

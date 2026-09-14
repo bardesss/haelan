@@ -51,6 +51,7 @@
   },
   "sidebar": {
     "sectionsLabel": "Sections",
+    "openMenu": "Open menu",
     "collapse": "Collapse navigation",
     "expand": "Expand navigation",
     "groups": {
