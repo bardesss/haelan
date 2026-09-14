@@ -209,27 +209,67 @@ try {
   // above it a mouse is precise, so shrinking desktop density to suit a phone would be solving a
   // problem no reader there has.
   const TOUCH_MIN = 44
+
+  // The zero-rect filter below is load bearing and stays: a control that is display:none, or that
+  // lives in a closed <dialog>, has no box to measure and reporting it as "0x0, below 44px" would
+  // be a lie about a control nobody can reach. What it also did, silently, was exclude the whole
+  // of the phone's navigation - the rail lives inside a closed `dialog.rail-dialog` on a phone, so
+  // all 12 `.rail-item` links and sign-out had a zero rect on every one of these routes and were
+  // dropped before measurement. Thirteen controls, none of them measured, while this check
+  // reported every route clean. The answer is not to drop the filter - it would then flag every
+  // genuinely hidden control in the app - but to run the sweep a second time with the drawer
+  // actually open, which is the only state in which those thirteen have a box at all.
+  //
+  // `root` scopes the second pass to the drawer: the page behind it is still laid out and still
+  // measurable, and re-reporting it would double every failure the first pass already names.
+  const smallTargets = (root) => page.evaluate(({ min, root }) => {
+    const scope = root === null ? document : document.querySelector(root)
+    if (scope === null) return [{ tag: 'missing', cls: root, w: 0, h: 0 }]
+    const interactive = 'a[href], button, input, select, textarea, [role="button"]'
+    return [...scope.querySelectorAll(interactive)]
+      .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
+      .map((el) => {
+        // A checkbox's own box stays small by design (DataTypePicker.tsx wraps each one in a
+        // <label> that also carries its name) - the label is what a reader actually taps, so
+        // that is what gets measured here instead of the input alone.
+        const target = el.matches('input[type="checkbox"]') ? (el.closest('label') ?? el) : el
+        const r = target.getBoundingClientRect()
+        return { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) }
+      })
+      .filter((t) => Math.min(t.w, t.h) < min)
+  }, { min: TOUCH_MIN, root: root ?? null })
+
+  const describeTargets = (targets) =>
+    targets.slice(0, 5).map((t) => `${t.tag}.${t.cls} ${t.w}x${t.h}`).join(', ')
+
+  // Opens the phone drawer on the route already loaded, and answers whether it opened. A fresh
+  // `open()` closes it again, so nothing needs to close it here.
+  async function openDrawer() {
+    const hamburger = page.locator('[data-testid="rail-open"]')
+    if (!(await hamburger.isVisible().catch(() => false))) return false
+    await hamburger.click()
+    return await page.locator('dialog.rail-dialog').isVisible().catch(() => false)
+  }
+
   await page.setViewportSize(PHONE)
   for (const route of ROUTES) {
     await open(route)
-    const smallTargets = await page.evaluate((min) => {
-      const interactive = 'a[href], button, input, select, textarea, [role="button"]'
-      return [...document.querySelectorAll(interactive)]
-        .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
-        .map((el) => {
-          // A checkbox's own box stays small by design (DataTypePicker.tsx wraps each one in a
-          // <label> that also carries its name) - the label is what a reader actually taps, so
-          // that is what gets measured here instead of the input alone.
-          const target = el.matches('input[type="checkbox"]') ? (el.closest('label') ?? el) : el
-          const r = target.getBoundingClientRect()
-          return { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) }
-        })
-        .filter((t) => Math.min(t.w, t.h) < min)
-    }, TOUCH_MIN)
+    const onPage = await smallTargets(null)
     check(
-      smallTargets.length === 0,
-      `${route}: ${smallTargets.length} control(s) below ${TOUCH_MIN}px: `
-        + smallTargets.slice(0, 5).map((t) => `${t.tag}.${t.cls} ${t.w}x${t.h}`).join(', '),
+      onPage.length === 0,
+      `${route}: ${onPage.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(onPage)}`,
+    )
+
+    // Every route rather than one: the drawer is the same component each time, but which item
+    // carries `aria-current` is not, and that is the one item with a different background, weight
+    // and colour from the other eleven.
+    const opened = await openDrawer()
+    check(opened, `${route}: the drawer did not open on a phone viewport`)
+    if (!opened) continue
+    const inDrawer = await smallTargets('dialog.rail-dialog')
+    check(
+      inDrawer.length === 0,
+      `${route}: ${inDrawer.length} drawer control(s) below ${TOUCH_MIN}px: ${describeTargets(inDrawer)}`,
     )
   }
 
@@ -343,6 +383,7 @@ if (failures.length > 0) {
 }
 console.log(
   `layout:check passed: ${ROUTES.length} routes at ${PHONE.width}px and ${BAND.width}px, `
+    + `hit areas on each of them with the drawer shut and again with it open, `
     + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
     + 'the drawer, and the rail foot.',
 )
