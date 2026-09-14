@@ -73,9 +73,10 @@ describe('css emitter', () => {
     expect(css).toContain('--space-9: 64px;')
   })
 
-  // font-weight: 650 and line-height: 1.25 sat as bare literals in two stylesheets that had no
-  // way to agree with each other, and did not: the app set 1.6 for body prose where the landing
-  // page set 1.7.
+  // Sixteen font-weight literals and twenty-four line-height literals, spread across two
+  // stylesheets with no shared vocabulary to name any of them by. The two never actually drifted -
+  // both set 1.6 for body prose - but nothing in either file said so, so nothing could tell a
+  // deliberate 1.6 from a coincidental one, and M7b's responsive type pass has to be able to.
   it('emits a weight and line-height vocabulary', () => {
     expect(css).toContain('--weight-medium: 600;')
     expect(css).toContain('--weight-semibold: 650;')

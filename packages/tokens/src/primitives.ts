@@ -54,9 +54,12 @@ export const primitives = {
   text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px' },
   // Three weights and three leadings, counted off both stylesheets rather than invented: app.css
   // used 600 thirteen times and 700 three times; site.css used 700, 600 and 650. The leadings were
-  // 1.5, 1.6 and 1.4 in the app, and the landing page's 1.7 for the same job as the app's 1.6 is
-  // the drift a token prevents. 650 has one consumer today, kept because a three-step scale with a
-  // hole in it is worse than a lightly used step.
+  // 1.5, 1.6 and 1.4 in the app. No drift between the two: site.css has always set 1.6 for body
+  // prose, the same as the app. What the count actually shows is an absence of vocabulary - the
+  // app carried sixteen weight literals and twenty-four line-height literals with nothing behind
+  // them, so nothing said which of them meant the same thing, and M7b has a responsive type pass
+  // to make that answerable before it can do anything else. 650 has one consumer today, kept
+  // because a three-step scale with a hole in it is worse than a lightly used step.
   weight: { medium: '600', semibold: '650', bold: '700' },
   leading: { tight: '1.4', normal: '1.5', relaxed: '1.6' },
   font: {

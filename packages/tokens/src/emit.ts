@@ -27,7 +27,9 @@ function scales(): string[] {
     ...Object.entries(primitives.weight).map(([k, v]) => `--weight-${k}: ${v};`),
     ...Object.entries(primitives.leading).map(([k, v]) => `--leading-${k}: ${v};`),
     // One definition for both themes: var(--accent) is resolved by the browser at the point of
-    // use, so this follows whichever theme is active. Two callers on the landing page today.
+    // use, so this follows whichever theme is active. One caller today, site/site.css's page
+    // wash; it lives here rather than there so the second caller reaches for it instead of
+    // re-deriving the mix.
     `--accent-wash: color-mix(in oklab, var(--accent) 22%, transparent);`,
     `--font-sans: ${primitives.font.sans};`,
     `--font-mono: ${primitives.font.mono};`,
