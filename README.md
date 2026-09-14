@@ -119,6 +119,25 @@ Then open `http://localhost:4235`. The database is empty, so the setup wizard ru
 four things in order: an admin account, the address this instance is reached at, a Google OAuth
 client, and consent. After that it asks which data types to fetch and how far back to backfill.
 
+### Proxmox LXC
+
+[`proxmox/`](proxmox) holds a [Community Scripts](https://community-scripts.org) installer. It
+builds an unprivileged Debian container from the latest release rather than running the image,
+because that catalogue takes bare-metal installs and not Docker. Run it on the Proxmox VE host:
+
+```
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/bardesss/haelan/master/proxmox/ct/haelan.sh)"
+```
+
+It creates the container, installs Node, builds the web app, writes a systemd unit and prints the
+address to open, which lands on the same setup wizard. Running the same command again updates an
+existing container to the latest release. The data directory is `/opt/haelan-data`, deliberately
+outside the tree an update replaces, so the database, the key and the backups survive it.
+
+The scripts are submitted upstream as
+[ProxmoxVED#2263](https://github.com/community-scripts/ProxmoxVED/issues/2263) and nobody has run
+them on a Proxmox host yet. Compose above is the path that is tested.
+
 ### The one manual step
 
 Somebody has to create a Google Cloud project and an OAuth client once, in the console. Google
