@@ -124,6 +124,35 @@ try {
     }
   }
 
+  // A finger needs about 44px in its smaller dimension - the figure both major mobile platforms
+  // publish, and close to the measured width of an adult fingertip. Below the breakpoint only:
+  // above it a mouse is precise, so shrinking desktop density to suit a phone would be solving a
+  // problem no reader there has.
+  const TOUCH_MIN = 44
+  await page.setViewportSize(PHONE)
+  for (const route of ROUTES) {
+    await open(route)
+    const smallTargets = await page.evaluate((min) => {
+      const interactive = 'a[href], button, input, select, textarea, [role="button"]'
+      return [...document.querySelectorAll(interactive)]
+        .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
+        .map((el) => {
+          // A checkbox's own box stays small by design (DataTypePicker.tsx wraps each one in a
+          // <label> that also carries its name) - the label is what a reader actually taps, so
+          // that is what gets measured here instead of the input alone.
+          const target = el.matches('input[type="checkbox"]') ? (el.closest('label') ?? el) : el
+          const r = target.getBoundingClientRect()
+          return { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) }
+        })
+        .filter((t) => Math.min(t.w, t.h) < min)
+    }, TOUCH_MIN)
+    check(
+      smallTargets.length === 0,
+      `${route}: ${smallTargets.length} control(s) below ${TOUCH_MIN}px: `
+        + smallTargets.slice(0, 5).map((t) => `${t.tag}.${t.cls} ${t.w}x${t.h}`).join(', '),
+    )
+  }
+
   // The rest of the band, swept on one route rather than nine: what overflowed there is the
   // control row, which is the same component on every page carrying one.
   for (const width of BAND_WIDTHS) {
