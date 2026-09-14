@@ -171,6 +171,20 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Before the fixture cache rather than after it, because the two checks below this line need
+      # nothing it produces. The wizard and the sign-in screen are measured against a server booted
+      # on a temporary directory, so an ordinary `pnpm build` is the whole of their input - seconds,
+      # and they fail the job here rather than after the minutes demo:capture can cost.
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm build
+
+      # The screens the demo cannot render. It is an already-signed-in instance against a recorded
+      # database, so the setup wizard (which needs an unfinished instance) and the sign-in screen
+      # (which needs a finished one with nobody signed in) are unreachable from layout:check by
+      # construction, and had never been measured at any viewport before this.
+      - run: pnpm layout:check:boot
+
       # Keyed on everything that decides what the fixtures contain: the recorder, the scripts that
       # build the throwaway instance, the routes whose shapes are recorded, core, which is what
       # derives the values in them, and apps/web/src - the recorder mounts real app code and
@@ -195,8 +209,6 @@ jobs:
 
       - run: pnpm demo:capture
         if: steps.fixtures.outputs.cache-hit != 'true'
-
-      - run: pnpm exec playwright install --with-deps chromium
 
       # layout:build does not exist - it was dropped in Task 4 because its DEMO_BASE=/ prefix is
       # not valid on Windows. demo:build already produces dist-demo under the /haelan/demo/ prefix

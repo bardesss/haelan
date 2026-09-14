@@ -14,7 +14,10 @@ import {
 import type { RedirectCandidate, SetupError, SyncStatus } from './api.js'
 import { ApiError } from '../api/client.js'
 
-const STEPS = [
+// Exported for apps/web/test/layout-routes.test.ts, which holds the boot layout harness's
+// declared screen list against this table: a step added here without a screen added there is a
+// wizard screen nothing measures at 375px, which is the exact gap that harness exists to close.
+export const STEPS = [
   { step: 'account', path: '/setup/account', titleKey: 'setup.app.steps.account' },
   { step: 'instance-url', path: '/setup/instance-url', titleKey: 'setup.app.steps.address' },
   { step: 'google-client', path: '/setup/google', titleKey: 'setup.app.steps.google' },

@@ -23,6 +23,7 @@
     "demo:capture": "node scripts/capture-demo.mjs",
     "demo:build": "pnpm --filter @haelan/tokens build:css && pnpm --filter @haelan/web exec vite build --config vite.demo.config.ts",
     "layout:check": "node scripts/layout-check.mjs",
+    "layout:check:boot": "node scripts/layout-check-boot.mjs",
     "demo:all": "pnpm demo:capture && pnpm demo:build && pnpm site:build"
   },
   "devDependencies": {
