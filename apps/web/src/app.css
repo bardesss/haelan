@@ -452,7 +452,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .chart-table th, .chart-table td { text-align: left; padding: 2px var(--space-1); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
 .chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
 
-@media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
+/* .grid > * reaches every ordinary grid item, but not a Card sitting one level under a
+   `display: contents` wrapper (.workout-tiles, .night-tiles, .night-trace above): display:
+   contents changes which boxes become grid items, but a CSS combinator still walks the real DOM,
+   where the Card is a child of the wrapper, not of .grid itself - so its own span (3, here) never
+   collapsed to 12 below this breakpoint. Latent on WorkoutTiles, whose labels all happened to fit
+   inside a quarter-width card and so never showed it; real on M7b's own night page, where the
+   Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
+   375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band). */
+@media (max-width: 900px) { .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; } }
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
    entire viewport before there is anything else to show. form-error is not redefined here,

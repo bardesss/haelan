@@ -19,8 +19,13 @@ import { extname, join, resolve } from 'node:path'
 import { chromium } from 'playwright'
 
 const DIST = resolve('apps/web/dist-demo')
-const ROUTES = JSON.parse(await readFile(resolve('scripts/layout-check-routes.json'), 'utf8'))
 const DEMO_PREFIX = '/haelan/demo'
+
+// Every route ROUTES.tsx declares, the two parameterised detail routes included, spelled the same
+// way ROUTES.tsx itself spells them (`:sessionId`, `:localDate`) - layout-routes.test.ts's own
+// coverage check compares this file against ROUTES exactly, with no exclusion for a `:` segment.
+// Resolved into real URLs below, once the built demo (and so its capture manifest) exists.
+const RAW_ROUTES = JSON.parse(await readFile(resolve('scripts/layout-check-routes.json'), 'utf8'))
 
 const PHONE = { width: 375, height: 812 }
 // One pixel above the breakpoint: the rail is back, so the content column is at its narrowest of
@@ -82,6 +87,81 @@ if (!existsSync(join(DIST, 'index.html'))) {
   console.error('No demo build found. Run: pnpm demo:build')
   process.exit(1)
 }
+
+// What these two routes' checks actually prove, and what they do not. The workout page
+// (`/activity/:sessionId`) shows exactly one intraday heart-rate point for every session this
+// seed can produce, not merely for whichever one this capture happened to pick: seedArchive
+// (packages/core/src/testing/seed.ts) writes a heart_rate sample once an hour, on the hour, for
+// the whole archive, and every workout it schedules lasts under an hour and starts on the hour -
+// so a workout's own window can never straddle two hourly grid points, only ever contain the one
+// at its start. Confirmed against this worktree's own capture: all three recorded workout windows
+// (26, 45 and 55 minutes) answer exactly 1 point, regardless of which session is chosen. Widening
+// that would mean teaching the shared seed generator to sample heart rate more densely during a
+// workout's own hour, which several tests outside this task pin exact counts against (
+// apps/server/test/upgrade-rehearsal.test.ts's `heart_rate: 4 * 24 * SEED_DAYS`, `samples: 2492`,
+// and friends, hand-verified by running the fixture and reading real row counts back) - a change
+// with a real, measured cost this task's own brief did not ask for, not merely a longer capture.
+// So: not widened. This route's checks below assert the honest, smaller claim - a page carrying
+// one data point does not overflow and its controls are still tappable - the same claim
+// `/nutrition`'s already-empty page settles for, and for the same reason.
+//
+// The night page (`/sleep/night/:localDate`) is not in the same spot: a night spans several hours,
+// so the same hourly grid gives it several points for free - this worktree's own capture answers
+// 7 to 9 points for every single-day night window recorded, a real (if coarse) trace rather than a
+// single dot. Its checks below are the fuller claim the workout page's cannot honestly make.
+//
+// The two parameterised routes' real ids, read out of the built demo's own capture manifest
+// (vite.demo.config.ts's demoFixtures plugin copies demo/capture/out/ to dist-demo/demo-api/)
+// rather than out of the capture directory directly - this is the exact file the demo itself
+// fetches from, so a route this check builds is guaranteed reachable by the same build it is
+// checking. Never hardcoded: a re-capture reassigns every id (writeCapture hashes each URL), and a
+// hardcoded id would rot into a 404 the SPA renders as an empty page - no over-wide element, no
+// missing hit target - that this check would happily wave through.
+const manifestPath = join(DIST, 'demo-api/manifest.json')
+if (!existsSync(manifestPath)) {
+  console.error(`No capture manifest found at ${manifestPath}. Run: pnpm demo:capture && pnpm demo:build`)
+  process.exit(1)
+}
+const manifestUrls = Object.keys(JSON.parse(await readFile(manifestPath, 'utf8')))
+
+// A real session id, read off a captured `/sessions/:id` detail read (sessionPath in
+// useWorkoutSession.ts) rather than off the `/sessions` list, which never appears in the manifest
+// under a URL carrying an id at all.
+const SESSION_ID = manifestUrls
+  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sessions\/([0-9a-f]+)$/))
+  .find((match) => match !== null)?.[1] ?? null
+
+// A real night's own local date, read off exactly the single-day `{from: localDate, to: localDate}`
+// read NightDetail.tsx's own useNights call makes (its own comment: a Night has no id, only a
+// (localDate, sourceId) pair) - not off a week/month list request, which answers with several
+// nights at once and names none of them in its own URL.
+const NIGHT_DATE = manifestUrls
+  .map((url) => url.match(/^\/api\/v1\/p\/[^/]+\/sleep\/nights\?from=([^&]+)&to=([^&]+)$/))
+  .find((match) => match !== null && match[1] === match[2])?.[1] ?? null
+
+if (SESSION_ID === null || NIGHT_DATE === null) {
+  console.error(
+    'layout:check could not find both a workout session and a night in the capture manifest '
+    + `(session: ${SESSION_ID}, night: ${NIGHT_DATE}) - the seed this capture ran against produced `
+    + 'no exercise session or no night in the window record.tsx sweeps.',
+  )
+  process.exit(1)
+}
+
+const ROUTE_PARAMS = { sessionId: SESSION_ID, localDate: NIGHT_DATE }
+
+function resolveRoute(route) {
+  return route.replace(/:(\w+)/g, (whole, name) => {
+    const value = ROUTE_PARAMS[name]
+    if (value === undefined) throw new Error(`layout-check-routes.json names an unresolvable parameter ${whole} in ${route}`)
+    return value
+  })
+}
+
+// Resolved, concrete URLs for every sweep below. RAW_ROUTES (the unresolved templates) is still
+// used on its own further down, where the check needs to tell a parameterised route apart from one
+// the rail can actually link to.
+const ROUTES = RAW_ROUTES.map(resolveRoute)
 
 const server = await startServer()
 const base = `http://127.0.0.1:${server.address().port}`
@@ -194,11 +274,13 @@ try {
 
     // Every destination by path, not a count of .rail-item. A count passes with three nav items
     // missing, because the three external resource links carry .rail-item too and make up the
-    // total.
+    // total. Unparameterised routes only: a workout or a night has no rail link of its own (routes.tsx's
+    // own `rail` field points a parameterised route back at '/activity' or '/sleep' instead), so
+    // the drawer was never going to carry a literal `/activity/:sessionId` href to find.
     const hrefs = await page.locator('dialog.rail-dialog a').evaluateAll(
       (nodes) => nodes.map((node) => node.getAttribute('href')),
     )
-    for (const route of ROUTES) {
+    for (const route of RAW_ROUTES.filter((r) => !r.includes(':'))) {
       check(hrefs.includes(`${DEMO_PREFIX}${route}`), `the drawer has no link to ${route}`)
     }
 
