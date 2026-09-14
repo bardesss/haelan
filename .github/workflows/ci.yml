@@ -147,3 +147,40 @@ jobs:
 
       - run: pnpm install --frozen-lockfile && pnpm demo:all
         if: steps.touched.outputs.run == 'true'
+
+  # The one check that can see a page wider than its screen. apps/web renders to static markup and
+  # happy-dom has no layout engine, so the 700px-against-375px overflow M7 fixes was invisible to
+  # every other job here.
+  layout:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Keyed on everything that decides what the fixtures contain: the recorder, the scripts that
+      # build the throwaway instance, the routes whose shapes are recorded, and core, which is what
+      # derives the values in them. A miss rebuilds them, which is the cost demo-rehearsal already
+      # pays; a hit is seconds.
+      - id: fixtures
+        uses: actions/cache@v4
+        with:
+          path: demo/capture/out
+          key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**') }}
+
+      - run: pnpm demo:capture
+        if: steps.fixtures.outputs.cache-hit != 'true'
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      # layout:build does not exist - it was dropped in Task 4 because its DEMO_BASE=/ prefix is
+      # not valid on Windows. demo:build already produces dist-demo under the /haelan/demo/ prefix
+      # layout:check expects, so that is what runs here instead.
+      - run: pnpm demo:build
+      - run: pnpm layout:check
