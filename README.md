@@ -134,9 +134,14 @@ address to open, which lands on the same setup wizard. Running the same command 
 existing container to the latest release. The data directory is `/opt/haelan_data`, deliberately
 outside the tree an update replaces, so the database, the key and the backups survive it.
 
-The scripts are submitted upstream as
-[ProxmoxVED#2263](https://github.com/community-scripts/ProxmoxVED/issues/2263) and nobody has run
-them on a Proxmox host yet. Compose above is the path that is tested.
+Nobody has run these on a Proxmox host yet, so compose above is still the path that is tested.
+[ProxmoxVED#2263](https://github.com/community-scripts/ProxmoxVED/issues/2263) is where to report
+it if you do.
+
+They are not in the Community Scripts catalogue and will not be for a while:
+[their bar for a new script](https://github.com/community-scripts/ProxmoxVED/pull/2264) is six
+months of age and 600 stars, and haelan has neither. That changes nothing about running them from
+here, which is what the command above does - the catalogue is a listing, not a dependency.
 
 ### The one manual step
 
