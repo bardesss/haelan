@@ -17,92 +17,102 @@
   </head>
   <body>
     <header class="hero">
-      <img class="mark" src="mark.svg" alt="" width="72" height="72" />
-      <h1>Hælan</h1>
-      <p class="lede">
-        <em>Hælan</em> is Old English for "to heal, to make whole", which is the root of both
-        <em>heal</em> and <em>health</em>. A self-hosted dashboard and local mirror for your own
-        health data, built on the Google Health API v4. One household, one instance, no telemetry,
-        no hosted offering.
-      </p>
-      <!-- Relative, not absolute: the demo is published beside this page by the same build, so it
-           follows wherever the site is served from - under /haelan/ today, under a domain later -
-           without this href having to know which. -->
-      <p class="actions">
-        <a class="button primary" href="demo/">See the demo</a>
-        <a class="button" href="https://github.com/bardesss/haelan">Source on GitHub</a>
-      </p>
-      <p class="demo-note">
-        Generated data, no account needed, nothing to install. To point it at your own history
-        instead, the README's
-        <a href="https://github.com/bardesss/haelan#try-it-without-a-google-account">try it without a Google account</a>
-        runs the same thing locally.
-      </p>
-      <p class="small-screen-note">
-        The dashboard is built for a desktop screen. A small-screen layout is on the roadmap and is
-        not here yet; the screenshots below are the honest preview from a phone.
-      </p>
+      <div class="hero-text">
+        <p class="eyebrow"><img class="mark" src="mark.svg" alt="" width="20" height="20" />Hælan</p>
+        <h1>Your health data, kept where you can reach it.</h1>
+        <p class="lede">
+          A self-hosted dashboard and a complete local mirror, built on the Google Health API v4.
+          Every day you have recorded, in one SQLite file, long after the API stops handing it
+          back.
+        </p>
+        <!-- Relative, not absolute: the demo is published beside this page by the same build, so
+             it follows wherever the site is served from, under /haelan/ today and under a domain
+             later, without this href having to know which. -->
+        <p class="actions">
+          <a class="button primary" href="demo/">Open the demo</a>
+          <a class="button" href="https://github.com/bardesss/haelan">Read the source</a>
+        </p>
+        <p class="actions-note">
+          Generated data, no account, nothing to install. The
+          <a href="https://github.com/bardesss/haelan#try-it-without-a-google-account">README</a>
+          runs the same thing against your own history.
+        </p>
+      </div>
+
+      <div class="hero-shot">
+        <img src="screenshots/dashboard.png" alt="The haelan dashboard: daily steps, resting heart rate, sleep and recovery, with charts for the month." loading="eager" />
+      </div>
     </header>
 
-    <section class="disclosure">
-      <h2>Written by an AI agent</h2>
-      <p>
-        Every line of haelan was written by a coding agent, with a human deciding what got built,
-        what got rejected, and what got merged. That is stated here rather than in a footnote
-        because you are considering pointing this at your own health record.
+    <!-- The one loud element on the page, and the argument the whole project rests on: a day is
+         either kept or it is gone. Ninety-one real days out of the demo's own seeded archive,
+         drawn from the same numbers the demo itself serves. -->
+    <section class="days">
+      <div class="ribbon" role="img" aria-label="Ninety-one consecutive days of step counts, from 4,183 to 15,623 a day.">{{ribbon}}</div>
+      <p class="ribbon-caption">
+        <span class="ribbon-title">91 days, every one of them still here</span>
+        <span class="ribbon-range">8 June to 6 September 2026 &middot; 4,183 to 15,623 steps &middot; generated data</span>
       </p>
-      <p>
-        Nothing merges without tests, and every pull request is reviewed by a second agent and by a
-        human. It is also true that no security professional has audited this, and that it has one
-        household's worth of production use.
-      </p>
-    </section>
-
-    <section class="shots">
-      <h2>What it looks like</h2>
-      <figure><img src="screenshots/dashboard.png" alt="" loading="lazy" /><figcaption>Dashboard</figcaption></figure>
-      <figure><img src="screenshots/activity.png" alt="" loading="lazy" /><figcaption>Activity</figcaption></figure>
-      <figure><img src="screenshots/sleep.png" alt="" loading="lazy" /><figcaption>Sleep</figcaption></figure>
-      <figure><img src="screenshots/recovery.png" alt="" loading="lazy" /><figcaption>Recovery</figcaption></figure>
-      <p class="caption">All four show the demo data the seed script generates, not anybody's real health history.</p>
     </section>
 
     <section class="what">
-      <h2>What it does</h2>
-      <h3>A complete local mirror</h3>
-      <p>
-        Your whole history in one SQLite file, kept past Google's retention windows and surviving
-        you losing access to the API. Intraday samples have a shelf life at the source, so a mirror
-        is the only place minute-level history stays available at that resolution.
-      </p>
-      <h3>Eight pages of it</h3>
-      <p>
-        Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with
-        stages, workouts with per-split heart rate, and the numbers annotated where a reading is
-        wrong.
-      </p>
-      <h3>Your data, answerable</h3>
-      <p>
-        An MCP server over the same mirror, so an agent you trust can answer questions about your
-        own history. The tool catalogue is generated from what ships, in
-        <a href="https://github.com/bardesss/haelan/blob/master/TOOLS.md">TOOLS.md</a>.
-      </p>
+      <div class="card">
+        <p class="eyebrow">The mirror</p>
+        <h2>Your whole history, on your disk</h2>
+        <p>
+          One SQLite file, kept past Google's retention windows and surviving you losing access to
+          the API. Intraday samples age out at the source, so a mirror is the only place
+          minute-level history stays at that resolution.
+        </p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">The dashboard</p>
+        <h2>Eight pages that answer something</h2>
+        <p>
+          Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with
+          stages, workouts with per-split heart rate, and any reading you know is wrong marked as
+          wrong.
+        </p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">The tools</p>
+        <h2>Answerable by an agent you trust</h2>
+        <p>
+          An MCP server over the same mirror, so a model you choose can ask questions of your own
+          history. The catalogue is generated from what ships, in
+          <a href="https://github.com/bardesss/haelan/blob/master/TOOLS.md">TOOLS.md</a>.
+        </p>
+      </div>
     </section>
 
     <section class="why">
-      <h2>Why it is self-hosted</h2>
-      <p>
-        The reason is structural rather than ideological. Google caps an unverified OAuth client at
-        100 users, and clearing verification for health scopes needs a paid third-party security
-        assessment. A hosted dashboard therefore stalls at a hundred signups no matter how good it
-        is. An instance whose only users are the people who own its OAuth client never meets that
-        cap. The cost is that every household brings its own Google Cloud project; the benefit is
-        that no ceiling exists.
-      </p>
+      <p class="cap-number" aria-hidden="true">100</p>
+      <div class="why-text">
+        <p class="eyebrow">Why it is self-hosted</p>
+        <p>
+          Google caps an unverified OAuth client at a hundred users, and clearing verification for
+          health scopes needs a paid third-party security assessment. A hosted dashboard therefore
+          stalls at a hundred signups no matter how good it is. An instance whose only users are
+          the people who own its OAuth client never meets that cap.
+        </p>
+        <p class="why-cost">
+          The cost is that every household brings its own Google Cloud project. The benefit is that
+          no ceiling exists.
+        </p>
+      </div>
     </section>
 
-    <section class="install">
-      <h2>Run it</h2>
+    <section class="run">
+      <div class="run-text">
+        <p class="eyebrow">Run it</p>
+        <h2>One compose file</h2>
+        <p>
+          Then open the instance and follow the setup wizard, which walks through the Google Cloud
+          project and the OAuth client it needs. The
+          <a href="https://github.com/bardesss/haelan#readme">README</a> is the full account,
+          including a configuration reference for people who disagree with the defaults.
+        </p>
+      </div>
       <pre><code>services:
   haelan:
     image: ghcr.io/bardesss/haelan:latest
@@ -111,22 +121,30 @@
     restart: unless-stopped
 volumes:
   haelan-data:</code></pre>
-      <p>
-        Then open the instance and follow the setup wizard, which walks through the Google Cloud
-        project and the OAuth client it needs. The
-        <a href="https://github.com/bardesss/haelan#readme">README</a> is the full account,
-        including a configuration reference for people who disagree with the defaults.
-      </p>
+    </section>
+
+    <section class="gallery">
+      <p class="eyebrow">The rest of it</p>
+      <div class="gallery-grid">
+        <figure><img src="screenshots/activity.png" alt="" loading="lazy" /><figcaption>Activity</figcaption></figure>
+        <figure><img src="screenshots/sleep.png" alt="" loading="lazy" /><figcaption>Sleep</figcaption></figure>
+        <figure><img src="screenshots/recovery.png" alt="" loading="lazy" /><figcaption>Recovery</figcaption></figure>
+      </div>
+      <p class="gallery-note">All generated demo data, not anybody's real health history.</p>
     </section>
 
     <footer>
-      <p>
+      <p class="footer-cta"><a class="button primary" href="demo/">Open the demo</a></p>
+      <p class="footer-meta">
         Version {{version}}, released {{releaseDate}}.
-        <a href="https://github.com/bardesss/haelan/releases">releases</a>,
+        <a href="https://github.com/bardesss/haelan/releases">Releases</a>,
         <a href="https://github.com/bardesss/haelan/blob/master/CHANGELOG.md">changelog</a>,
         <a href="https://github.com/bardesss/haelan/blob/master/ROADMAP.md">roadmap</a>.
       </p>
-      <p>AGPL-3.0-only. No telemetry: this page loads nothing from anyone but the host serving it, and the app sends nothing anywhere except to the Google Health API you point it at.</p>
+      <p class="footer-meta">
+        AGPL-3.0-only. No telemetry: this page loads nothing from anyone but the host serving it,
+        and the app sends nothing anywhere except to the Google Health API you point it at.
+      </p>
     </footer>
   </body>
 </html>

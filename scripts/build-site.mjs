@@ -43,6 +43,43 @@ export function renderPage(template, values) {
  * workflow produce the same bytes. A missing entry throws rather than falling back to today:
  * "today" would be the build date wearing a release date's clothes.
  */
+/**
+ * Ninety-one consecutive days of steps, ending on the demo's own last day (2026-09-06).
+ *
+ * Real values, read out of the demo capture's own `/series` fixture rather than invented here, so
+ * the ribbon on the landing page is the same data the demo itself serves one directory over. They
+ * are inlined rather than read at build time on purpose: `site:build` has to work with no capture
+ * on disk (that is what publishes the landing page on its own), and a marketing page quietly
+ * changing shape because someone reran a capture would be worse than a number that is pinned.
+ *
+ * Regenerate with, from a tree that has run `pnpm demo:capture`:
+ *   node -e "…read demo/capture/out/manifest.json, take the steps series, slice(-91)…"
+ */
+const RIBBON_STEPS = [
+  11548, 7047, 6898, 12068, 7067, 6927, 13460, 4224, 7160, 14340, 6891, 6775, 13987,
+  6953, 4310, 11965, 7366, 6892, 14624, 7141, 7126, 9042, 7095, 7019, 10547, 6839,
+  7017, 14319, 4442, 7136, 11534, 7084, 7058, 15195, 7257, 4236, 12566, 7225, 7161,
+  13138, 7214, 7138, 8529, 7077, 7414, 14264, 7267, 7176, 12126, 4358, 7158, 10489,
+  7099, 7110, 11569, 6966, 4233, 12974, 7223, 7122, 11791, 7242, 6833, 11172, 7236,
+  7240, 14289, 7228, 7115, 13170, 4212, 6919, 15623, 7095, 7123, 11499, 6893, 4183,
+  11796, 7280, 7063, 13895, 7074, 7209, 7432, 7199, 7218, 12989, 7378, 6999, 15031,
+]
+
+/**
+ * One `<i>` per day, height as a percentage of the busiest day.
+ *
+ * Built here rather than written into site/index.html because ninety-one hand-written elements
+ * would bury the rest of the page in markup, and because the only thing that varies is a number
+ * the array above already holds. Inline height and nothing else: every colour, radius and gap is
+ * a token in site.css, which is what keeps the no-raw-colour rule true of this page too.
+ */
+export function ribbonHtml() {
+  const peak = Math.max(...RIBBON_STEPS)
+  return RIBBON_STEPS
+    .map((steps) => `<i style="height:${((steps / peak) * 100).toFixed(1)}%"></i>`)
+    .join('')
+}
+
 export function releaseStamp(rootDir) {
   const { version } = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
   const changelog = readFileSync(join(rootDir, 'CHANGELOG.md'), 'utf8')
@@ -132,7 +169,7 @@ export function buildSite(rootDir, outDir) {
 
   const template = readFileSync(join(rootDir, 'site/index.html'), 'utf8')
   mkdirSync(outDir, { recursive: true })
-  writeFileSync(join(outDir, 'index.html'), renderPage(template, releaseStamp(rootDir)))
+  writeFileSync(join(outDir, 'index.html'), renderPage(template, { ...releaseStamp(rootDir), ribbon: ribbonHtml() }))
   written.push('index.html')
 
   // The site root's own 404, which Pages serves for every missing path anywhere under the site -
