@@ -117,10 +117,17 @@ try {
   const footVisible = await page.evaluate(() => {
     const rail = document.querySelector('.rail')
     const foot = document.querySelector('.rail-foot')
-    if (!rail || !foot) return false
-    return foot.getBoundingClientRect().bottom <= rail.getBoundingClientRect().bottom + 1
+    if (!rail || !foot) return null
+    const r = rail.getBoundingClientRect()
+    const f = foot.getBoundingClientRect()
+    return {
+      withinRail: f.bottom <= r.bottom + 1,
+      onScreen: f.bottom <= window.innerHeight + 1,
+    }
   })
-  check(footVisible, 'the rail foot sits below the fold of its own scroller at 900x380')
+  check(footVisible !== null, 'no rail or rail foot found at 900x380')
+  check(footVisible?.withinRail === true, 'the rail foot is not pinned to the bottom of its scroller at 900x380')
+  check(footVisible?.onScreen === true, 'the rail foot sits below the fold of the viewport at 900x380')
 } catch (err) {
   crashError = err
 } finally {
