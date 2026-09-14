@@ -9,7 +9,8 @@
     "dev": "vite",
     "prebuild": "pnpm --filter @haelan/tokens build:css",
     "build": "vite build",
-    "icons": "node scripts/render-icons.mjs"
+    "icons": "node scripts/render-icons.mjs",
+    "manifest": "vite-node scripts/write-manifest.ts"
   },
   "dependencies": {
     "@haelan/core": "workspace:*",

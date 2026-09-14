@@ -1,0 +1,30 @@
+{
+  "name": "Hælan",
+  "short_name": "Hælan",
+  "description": "A self-hosted dashboard and local mirror for your own health data, built on the Google Health API v4. One household, one instance, no telemetry.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "theme_color": "#0A0E17",
+  "background_color": "#0A0E17",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
