@@ -40,7 +40,7 @@ WorkingDirectory=/opt/haelan
 Environment=NODE_ENV=production
 # Outside /opt/haelan deliberately: an update is a clean re-deploy of that directory, so the
 # database, the encryption key and the backups have to live somewhere it cannot reach.
-Environment=HAELAN_DATA_DIR=/opt/haelan-data
+Environment=HAELAN_DATA_DIR=/opt/haelan_data
 ExecStart=/usr/bin/node /opt/haelan/apps/server/src/index.ts
 Restart=on-failure
 RestartSec=5

@@ -42,7 +42,7 @@ function update_script() {
     msg_ok "Stopped Service"
 
     # No create_backup: /opt/haelan holds nothing but code. The database, the encryption key and
-    # the backups are in /opt/haelan-data, which the clean re-deploy below does not touch, and
+    # the backups are in /opt/haelan_data, which the clean re-deploy below does not touch, and
     # copying a multi-gigabyte database on every update would be a real cost for no gain.
     CLEAN_INSTALL=1 fetch_and_deploy_gh_release "haelan" "bardesss/haelan" "tarball"
 
