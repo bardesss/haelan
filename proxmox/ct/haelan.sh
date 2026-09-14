@@ -19,7 +19,10 @@ var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
 #var_arm64="${var_arm64:-no}" # unset = ask the user; set yes/no only when verified
 var_unprivileged="${var_unprivileged:-1}"
-var_testurl="${var_testurl:-https://github.com/community-scripts/ProxmoxVED/issues/2263}"
+# Their own issue tracker is where this would point if the script were in their repository. It is
+# not, and will not be for months, so a container installed from here would be sending testers to
+# a repository that does not carry the script it is asking them about.
+var_testurl="${var_testurl:-https://github.com/bardesss/haelan/issues/232}"
 
 header_info "$APP"
 variables

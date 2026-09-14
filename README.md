@@ -135,8 +135,8 @@ existing container to the latest release. The data directory is `/opt/haelan_dat
 outside the tree an update replaces, so the database, the key and the backups survive it.
 
 Nobody has run these on a Proxmox host yet, so compose above is still the path that is tested.
-[ProxmoxVED#2263](https://github.com/community-scripts/ProxmoxVED/issues/2263) is where to report
-it if you do.
+[#232](https://github.com/bardesss/haelan/issues/232) is where to report it if you do, and every
+container the script builds points at that issue too.
 
 They are not in the Community Scripts catalogue and will not be for a while:
 [their bar for a new script](https://github.com/community-scripts/ProxmoxVED/pull/2264) is six
