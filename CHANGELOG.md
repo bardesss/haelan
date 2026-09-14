@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.22.3](https://github.com/bardesss/haelan/compare/v1.22.2...v1.22.3) (2026-09-14)
+
+
+### Bug Fixes
+
+* better-sqlite3 13, and the Node floor that actually made it fail ([#234](https://github.com/bardesss/haelan/issues/234)) ([5d39052](https://github.com/bardesss/haelan/commit/5d39052867a7435de7b9809b808161f3e984165c))
+
 ## [1.22.2](https://github.com/bardesss/haelan/compare/v1.22.1...v1.22.2) (2026-09-14)
 
 
