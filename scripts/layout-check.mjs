@@ -17,6 +17,10 @@ import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { extname, join, resolve } from 'node:path'
 import { chromium } from 'playwright'
+import {
+  BAND, BAND_WIDTHS, PHONE, ROTATE_FROM, ROTATE_TO, SETTLE_MS, SHORT, TOUCH_MIN,
+  describeTargets, smallTargets,
+} from './layout-shared.mjs'
 
 const DIST = resolve('apps/web/dist-demo')
 const DEMO_PREFIX = '/haelan/demo'
@@ -27,33 +31,10 @@ const DEMO_PREFIX = '/haelan/demo'
 // Resolved into real URLs below, once the built demo (and so its capture manifest) exists.
 const RAW_ROUTES = JSON.parse(await readFile(resolve('scripts/layout-check-routes.json'), 'utf8'))
 
-const PHONE = { width: 375, height: 812 }
-// One pixel above the breakpoint: the rail is back, so the content column is at its narrowest of
-// any width in the app, and this is where the band that scrolled sideways for the whole of M7a
-// begins. Every page measured 703px there - 186px of rail, 20px of .main padding, and a 497px
-// control row that would not wrap - against a 621px viewport.
-const BAND = { width: 621, height: 900 }
-// The rest of that band, on the one route whose control row is the widest thing on it. The upper
-// end is 702 and not 719: a page needs 703px, so 703 up was always clean and a check pinned at 719
-// would have passed against the broken stylesheet. Widths, not viewports - the height never
-// mattered to this.
-const BAND_WIDTHS = [660, 700, 702, 719]
+// The one route whose control row is the widest thing on it, which is where the rest of the
+// band below the breakpoint is swept. Demo-specific, so it stays here rather than in the shared
+// module: the boot harness has no rail and no control row to sweep.
 const BAND_ROUTE = '/activity'
-// A landscape phone, and the size at which the rail was measured holding 712px of content in a
-// 380px column with sign-out 437px below the fold.
-const SHORT = { width: 900, height: 380 }
-
-// A tablet rotating portrait to landscape: the one gesture that crosses the breakpoint upward
-// without a reload and without a second resize behind it.
-const ROTATE_FROM = { width: 600, height: 960 }
-const ROTATE_TO = { width: 960, height: 600 }
-
-// How long a page is given to settle after a viewport change before it is measured. This is not a
-// fix waiting out a race - that fix is in useChart, which observes its own container instead of
-// the window - it is a harness leaving room for a relayout the browser has already been asked for.
-// The overflow this guards was still there after two seconds, so a wait this side of that is
-// measuring a settled page rather than a lucky one.
-const SETTLE_MS = 500
 
 const TYPES = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
@@ -204,44 +185,6 @@ try {
     }
   }
 
-  // A finger needs about 44px in its smaller dimension - the figure both major mobile platforms
-  // publish, and close to the measured width of an adult fingertip. Below the breakpoint only:
-  // above it a mouse is precise, so shrinking desktop density to suit a phone would be solving a
-  // problem no reader there has.
-  const TOUCH_MIN = 44
-
-  // The zero-rect filter below is load bearing and stays: a control that is display:none, or that
-  // lives in a closed <dialog>, has no box to measure and reporting it as "0x0, below 44px" would
-  // be a lie about a control nobody can reach. What it also did, silently, was exclude the whole
-  // of the phone's navigation - the rail lives inside a closed `dialog.rail-dialog` on a phone, so
-  // all 12 `.rail-item` links and sign-out had a zero rect on every one of these routes and were
-  // dropped before measurement. Thirteen controls, none of them measured, while this check
-  // reported every route clean. The answer is not to drop the filter - it would then flag every
-  // genuinely hidden control in the app - but to run the sweep a second time with the drawer
-  // actually open, which is the only state in which those thirteen have a box at all.
-  //
-  // `root` scopes the second pass to the drawer: the page behind it is still laid out and still
-  // measurable, and re-reporting it would double every failure the first pass already names.
-  const smallTargets = (root) => page.evaluate(({ min, root }) => {
-    const scope = root === null ? document : document.querySelector(root)
-    if (scope === null) return [{ tag: 'missing', cls: root, w: 0, h: 0 }]
-    const interactive = 'a[href], button, input, select, textarea, [role="button"]'
-    return [...scope.querySelectorAll(interactive)]
-      .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
-      .map((el) => {
-        // A checkbox's own box stays small by design (DataTypePicker.tsx wraps each one in a
-        // <label> that also carries its name) - the label is what a reader actually taps, so
-        // that is what gets measured here instead of the input alone.
-        const target = el.matches('input[type="checkbox"]') ? (el.closest('label') ?? el) : el
-        const r = target.getBoundingClientRect()
-        return { tag: el.tagName.toLowerCase(), cls: String(el.className).slice(0, 30), w: Math.round(r.width), h: Math.round(r.height) }
-      })
-      .filter((t) => Math.min(t.w, t.h) < min)
-  }, { min: TOUCH_MIN, root: root ?? null })
-
-  const describeTargets = (targets) =>
-    targets.slice(0, 5).map((t) => `${t.tag}.${t.cls} ${t.w}x${t.h}`).join(', ')
-
   // Opens the phone drawer on the route already loaded, and answers whether it opened. A fresh
   // `open()` closes it again, so nothing needs to close it here.
   async function openDrawer() {
@@ -254,7 +197,7 @@ try {
   await page.setViewportSize(PHONE)
   for (const route of ROUTES) {
     await open(route)
-    const onPage = await smallTargets(null)
+    const onPage = await smallTargets(page, null)
     check(
       onPage.length === 0,
       `${route}: ${onPage.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(onPage)}`,
@@ -266,7 +209,7 @@ try {
     const opened = await openDrawer()
     check(opened, `${route}: the drawer did not open on a phone viewport`)
     if (!opened) continue
-    const inDrawer = await smallTargets('dialog.rail-dialog')
+    const inDrawer = await smallTargets(page, 'dialog.rail-dialog')
     check(
       inDrawer.length === 0,
       `${route}: ${inDrawer.length} drawer control(s) below ${TOUCH_MIN}px: ${describeTargets(inDrawer)}`,
