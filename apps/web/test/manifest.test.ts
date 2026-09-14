@@ -89,7 +89,7 @@ function decodePng(bytes: Buffer): { width: number, height: number, pixels: Buff
   const pixels = Buffer.alloc(width * height * 4)
   for (let y = 0; y < height; y++) {
     const filter = raw[y * (stride + 1)]
-    if (filter !== 0) throw new Error(`icon-512-maskable.png uses filter type ${filter}, which this decoder does not read`)
+    if (filter !== 0) throw new Error(`this PNG uses filter type ${filter} on row ${y}, which this decoder does not read`)
     raw.copy(pixels, y * stride, y * (stride + 1) + 1, (y + 1) * (stride + 1))
   }
   return { width, height, pixels }
@@ -109,25 +109,55 @@ function hexToRgb(hex: string): [number, number, number] {
 // 80% of the icon's diameter. This does not reimplement render-icons.mjs's own safe-zone maths to
 // check it - that would only prove the two copies of the same formula agree - it instead checks
 // the one thing the spec actually promises: no ink outside that circle, and the mark still drawn
-// inside it. Confirmed against icon-512.png by hand while writing this test: the same sweep over
-// that file's own bytes finds ink at 16 of the 72 sampled angles, so this is not a check every
-// render of this mark would pass for free.
+// inside it.
+//
+// "Everywhere outside" means every pixel. The first cut of this sampled one ring of 72 points at
+// r = 0.4 * width + 3, which is a circle rather than a region: ink at r = 300 - a whole corner of
+// the canvas - sat outside every sample and passed a test whose own name promised it had not.
+// The sweep below walks all 262,144 pixels and keeps the furthest one that is not background, so
+// what it reports is the actual reach of the ink rather than a verdict about 72 points.
+const SAFE_ZONE_FRACTION = 0.4
+// One pixel of feathering across the edge (render()'s own comment), plus room for it: the
+// boundary the renderer solves for is where the stroke's own outline lands, and the feather puts
+// a little colour just past it.
+const FEATHER_ALLOWANCE = 3
+
+/** The distance from the icon's centre to the furthest pixel that is not pure background. */
+function inkReach(image: { width: number, height: number, pixels: Buffer }, background: [number, number, number]) {
+  const center = image.width / 2
+  let radius = 0
+  let at = { x: 0, y: 0 }
+  for (let y = 0; y < image.height; y++) {
+    for (let x = 0; x < image.width; x++) {
+      const [r, g, b, a] = pixelAt(image, x, y)
+      if (r === background[0] && g === background[1] && b === background[2] && a === 255) continue
+      const distance = Math.hypot(x + 0.5 - center, y + 0.5 - center)
+      if (distance > radius) { radius = distance; at = { x, y } }
+    }
+  }
+  return { radius, at }
+}
+
 describe('the maskable icon keeps its mark inside the platform safe zone', () => {
   const image = decodePng(readFileSync(join(PUBLIC, 'icon-512-maskable.png')))
   const background = hexToRgb(resolveSemantic('dark')['surface-page'])
+  const boundary = SAFE_ZONE_FRACTION * image.width
 
   it('is pure background everywhere outside the 80%-diameter safe circle', () => {
-    const center = image.width / 2
-    // +3px clears the one pixel of feathering render() adds across every edge (its own comment:
-    // "One pixel of feathering across the edge").
-    const radius = 0.4 * image.width + 3
-    for (let angle = 0; angle < 360; angle += 5) {
-      const radians = (angle * Math.PI) / 180
-      const x = Math.round(center + radius * Math.cos(radians))
-      const y = Math.round(center + radius * Math.sin(radians))
-      const [r, g, b, a] = pixelAt(image, x, y)
-      expect([r, g, b, a], `angle ${angle}`).toEqual([...background, 255])
-    }
+    const { radius, at } = inkReach(image, background)
+    expect(radius, `furthest ink at (${at.x}, ${at.y}), r=${radius.toFixed(2)}`)
+      .toBeLessThanOrEqual(boundary + FEATHER_ALLOWANCE)
+  })
+
+  // The same sweep over the non-maskable 512, which is the mark drawn at full size rather than
+  // pulled into the safe zone. Its ink reaches well past the boundary, which is what makes the
+  // check above a real one rather than something every render of this mark passes for free. This
+  // was a sentence in a comment claiming it had been confirmed by hand; a claim in a comment is
+  // the shape of thing this whole file exists to stop trusting.
+  it('is a check icon-512.png would fail, which is what makes it worth running', () => {
+    const plain = decodePng(readFileSync(join(PUBLIC, 'icon-512.png')))
+    const { radius } = inkReach(plain, background)
+    expect(radius).toBeGreaterThan(boundary + FEATHER_ALLOWANCE)
   })
 
   it('still draws the mark near the centre - the sweep above is not just an empty canvas', () => {

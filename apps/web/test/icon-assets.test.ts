@@ -78,6 +78,20 @@ describe('index.html describes the icons it links', () => {
 
 interface ManifestIcon { src: string, sizes: string, type: string, purpose: string }
 
+/**
+ * A PNG's own IHDR, which is the first chunk of every PNG and always at the same offset: the
+ * 8-byte signature, then a 4-byte length and the 4-byte type `IHDR`, then width and height as
+ * big-endian 32-bit integers at byte 16 and byte 20.
+ *
+ * Here for the same reason `sniff` above is: `"sizes": "192x192"` is a claim the manifest's author
+ * makes, exactly like `type="image/png"` was, and an `icon-192.png` holding a 512px image would
+ * satisfy every other check in this file - the name matches, the signature matches, the byte
+ * budget matches. A browser picking an icon reads `sizes` and trusts it; this reads the image.
+ */
+function pngDimensions(bytes: Buffer): { width: number, height: number } {
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
 describe('manifest.webmanifest names icons that exist and are what it says they are', () => {
   const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as { icons: ManifestIcon[] }
 
@@ -91,6 +105,11 @@ describe('manifest.webmanifest names icons that exist and are what it says they 
     const actual = sniff(bytes)
     expect(actual).not.toBe('unknown')
     expect(type).toBe(actual)
+  })
+
+  it.each(manifest.icons)('$src really is $sizes pixels', ({ src, sizes }) => {
+    const { width, height } = pngDimensions(readFileSync(join(PUBLIC, src)))
+    expect(`${width}x${height}`).toBe(sizes)
   })
 
   // Same budget and the same reason as index.html's own icons above: 185KB of JPEG is what an
