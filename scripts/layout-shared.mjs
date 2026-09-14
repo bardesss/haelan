@@ -71,11 +71,33 @@ export const smallTargets = (page, root) => page.evaluate(({ min, root }) => {
   const interactive = 'a[href], button, input, select, textarea, [role="button"]'
   return [...scope.querySelectorAll(interactive)]
     .filter((el) => !el.closest('.sr-only') && el.getBoundingClientRect().width > 0)
+    // WCAG 2.5.8 Target Size (Minimum) carries an explicit exception for a target "in a sentence
+    // or whose size is otherwise constrained by the line-height of non-target text" - an inline
+    // link sitting inside a paragraph of running text (GoogleStep.tsx's console link, wrapped in a
+    // sentence: "...visit <a>console.cloud.google.com</a> and...") is exactly that case, and
+    // forcing it to a 44px box would change how the sentence sets rather than fix anything. Kept
+    // narrow on purpose, on both conditions the standard names: only an <a> whose own computed
+    // display is inline (not a block or flex link styled to look like a button), and only when the
+    // element enclosing it carries text of its own besides the link - a parent whose only content
+    // is the link is a card or button-like wrapper, not a sentence, and does not qualify.
+    .filter((el) => {
+      if (el.tagName.toLowerCase() !== 'a') return true
+      if (getComputedStyle(el).display !== 'inline') return true
+      const parent = el.parentElement
+      if (parent === null) return true
+      const siblingText = [...parent.childNodes]
+        .filter((node) => node !== el)
+        .map((node) => node.textContent ?? '')
+        .join('')
+        .trim()
+      return siblingText.length === 0
+    })
     .map((el) => {
-      // A checkbox's own box stays small by design (DataTypePicker.tsx wraps each one in a
-      // <label> that also carries its name) - the label is what a reader actually taps, so
-      // that is what gets measured here instead of the input alone.
-      const target = el.matches('input[type="checkbox"]') ? (el.closest('label') ?? el) : el
+      // A checkbox or radio's own box stays small by design (DataTypePicker.tsx and
+      // InstanceUrlStep.tsx each wrap one in a <label> that also carries its name) - the label is
+      // what a reader actually taps, so that is what gets measured here instead of the input
+      // alone.
+      const target = el.matches('input[type="checkbox"], input[type="radio"]') ? (el.closest('label') ?? el) : el
       const r = target.getBoundingClientRect()
       const owner = el.closest('[class]')
       return {

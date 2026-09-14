@@ -852,4 +852,9 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 
   .data-type-row, .data-type-row label { min-height: 44px; }
   .data-type-row input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
+
+  /* The backfill horizon buttons measured 62-68 x 32: wide enough already, short by 12px. No
+     display on the base rule, so it is set here too rather than assumed from the browser's own
+     button rendering. */
+  .setup-horizon li button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 }
