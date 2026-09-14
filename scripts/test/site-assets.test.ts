@@ -1,25 +1,14 @@
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { buildSite } from '../build-site.mjs'
-import { emitCss } from '../../packages/tokens/src/emit.js'
+import { ensurePalette } from './palette.js'
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 let out: string
 let written: string[]
-
-// dist/theme.css is a build artifact and the suite runs before anything builds it (ci.yml runs
-// pnpm test ahead of pnpm build). Writing it here from the same emitter its own build script
-// uses means this test exercises the real copy path rather than a stubbed one, on CI and on a
-// fresh clone alike.
-function ensurePalette(): void {
-  const css = new URL('../../packages/tokens/dist/theme.css', import.meta.url)
-  if (existsSync(css)) return
-  mkdirSync(new URL('../../packages/tokens/dist/', import.meta.url), { recursive: true })
-  writeFileSync(css, emitCss())
-}
 
 beforeAll(() => {
   ensurePalette()

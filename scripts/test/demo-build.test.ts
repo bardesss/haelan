@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import { buildSite, copyDemo } from '../build-site.mjs'
+import { ensurePalette } from './palette.js'
 
 function fakeDemoDist(): string {
   const dir = mkdtempSync(join(tmpdir(), 'haelan-demo-dist-'))
@@ -40,6 +41,11 @@ describe('copyDemo', () => {
     // buildSite rather than copyDemo: the root 404 belongs to the landing site and ships whether
     // or not a demo build exists, while the redirect inside it is what the demo's deep links need.
     // Pages ignores a 404.html in a subdirectory, which is what the first real deploy proved.
+    // buildSite copies packages/tokens/dist/theme.css, which is a build artifact that does not
+    // exist on CI (pnpm test runs ahead of pnpm build) or on a fresh clone. Without this the test
+    // passes on a machine that has built once and fails everywhere else - which is exactly how it
+    // first went red.
+    ensurePalette()
     const out = mkdtempSync(join(tmpdir(), 'haelan-site-root404-'))
     try {
       const written = buildSite(fileURLToPath(new URL('../../', import.meta.url)), out)
