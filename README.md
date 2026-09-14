@@ -131,7 +131,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/bardesss/haelan/master/p
 
 It creates the container, installs Node, builds the web app, writes a systemd unit and prints the
 address to open, which lands on the same setup wizard. Running the same command again updates an
-existing container to the latest release. The data directory is `/opt/haelan-data`, deliberately
+existing container to the latest release. The data directory is `/opt/haelan_data`, deliberately
 outside the tree an update replaces, so the database, the key and the backups survive it.
 
 The scripts are submitted upstream as

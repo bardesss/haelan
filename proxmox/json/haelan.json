@@ -45,7 +45,7 @@
       "type": "warning"
     },
     {
-      "text": "Storage grows by roughly 120 MB per person-year, and the default seven daily backups are seven more copies of the database on top of that. Data lives in /opt/haelan-data and survives updates.",
+      "text": "Storage grows by roughly 120 MB per person-year, and the default seven daily backups are seven more copies of the database on top of that. Data lives in /opt/haelan_data and survives updates.",
       "type": "info"
     }
   ]
