@@ -1,0 +1,64 @@
+<!doctype html>
+<!-- The site's own not-found page, and the reason the demo's deep links work at all.
+
+     GitHub Pages serves THIS file - the one at the site root - for every missing path, including
+     paths inside /demo/. It does not honour a 404.html sitting in a subdirectory: that was
+     assumed while the demo was built, and the first real deploy disproved it, with
+     /haelan/demo/sleep landing on GitHub's own "Page not found" rather than on the app.
+
+     So the redirect below is what a demo deep link relies on. It is the spa-github-pages trick:
+     rewrite /<base>/demo/sleep to /<base>/demo/?/sleep, which IS a real file, and let the demo's
+     own entry put the path back before React reads it (see index.demo.html). Anything outside
+     /demo/ is a genuine 404 on the landing site and gets the page below instead.
+
+     Do not replace this with a copy of the demo's index.html. That would boot the entire demo app
+     for every mistyped landing-page URL. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Not found — Hælan</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.ico" sizes="48x48 32x32 16x16" />
+    <meta name="theme-color" content="#0A0E17" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#F5F7FB" media="(prefers-color-scheme: light)" />
+    <link rel="stylesheet" href="theme.css" />
+    <link rel="stylesheet" href="site.css" />
+    <script>
+      // Runs before anything renders, so a redirected deep link never paints this page first.
+      (function () {
+        var path = window.location.pathname
+        var at = path.indexOf('/demo/')
+        // Only a path INSIDE the demo, and only one that is not already the demo's own entry:
+        // without that second check a redirect could bounce.
+        if (at !== -1 && path.length > at + '/demo/'.length) {
+          var base = path.slice(0, at + '/demo/'.length)
+          var rest = path.slice(at + '/demo/'.length)
+          window.location.replace(
+            base + '?/' + rest.replace(/&/g, '~and~') +
+            (window.location.search ? '&' + window.location.search.slice(1).replace(/&/g, '~and~') : '') +
+            window.location.hash,
+          )
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <header class="hero">
+      <img class="mark" src="mark.svg" alt="" width="72" height="72" />
+      <h1>Not found</h1>
+      <p class="lede">
+        There is nothing at this address. That is all this page knows — it says nothing about
+        whether the thing you were looking for exists somewhere else.
+      </p>
+      <!-- "./" rather than "/": a relative href on a 404 resolves against the address the reader
+           typed, not against where this file lives, so "/" would leave the site entirely when it
+           is served under a path. One level up is right for the mistyped-page case this page
+           actually meets; a deeper wrong address lands here again, which is honest. -->
+      <p class="actions">
+        <a class="button primary" href="./">The front page</a>
+        <a class="button" href="https://github.com/bardesss/haelan">Source on GitHub</a>
+      </p>
+    </header>
+  </body>
+</html>

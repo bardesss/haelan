@@ -15,6 +15,31 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0A0E17" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F5F7FB" media="(prefers-color-scheme: light)" />
+    <script>
+      // Puts a deep link back together before React reads the location.
+      //
+      // GitHub Pages serves the SITE ROOT's 404.html for a missing path and ignores one in a
+      // subdirectory - assumed otherwise while this was built, and disproved by the first real
+      // deploy, where /haelan/demo/sleep hit GitHub's own not-found page. site/404.html therefore
+      // rewrites such a path to /haelan/demo/?/sleep, which is a real file, and this undoes that
+      // rewrite so the router sees the address the visitor actually asked for.
+      //
+      // Before the module script on purpose: router.tsx reads window.location on its first render,
+      // so a restore that ran after hydration would route to the wrong page and then correct
+      // itself visibly.
+      (function () {
+        var search = window.location.search
+        if (search.charAt(1) !== '/') return
+        var restored = search.slice(1).split('&').map(function (part) {
+          return part.replace(/~and~/g, '&')
+        }).join('?')
+        window.history.replaceState(
+          null,
+          '',
+          window.location.pathname.slice(0, -1) + restored + window.location.hash,
+        )
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
