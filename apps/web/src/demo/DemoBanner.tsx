@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DEMO_CLOCK_MS } from './instant.js'
 import { detectDemoLang } from './lang.js'
@@ -45,7 +46,7 @@ const BANNER_TEXT: Record<DemoLang, (dateLabel: string) => string> = {
 // of that sentence isn't written in.
 const DATE_LOCALE: Record<DemoLang, string> = { en: 'en-US', nl: 'nl-NL' }
 
-export function DemoBanner() {
+export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   const lang = detectDemoLang()
   const dateLabel = new Date(DEMO_CLOCK_MS).toLocaleDateString(DATE_LOCALE[lang], {
     timeZone: 'Europe/Amsterdam',
@@ -53,6 +54,15 @@ export function DemoBanner() {
     month: 'long',
     day: 'numeric',
   })
+
+  // Measured here, inside the component's own commit, rather than by the caller right after
+  // `root.render(...)` returns - see publishBannerHeight's doc comment for why that call site was
+  // wrong. useLayoutEffect runs synchronously once this component's own output has actually been
+  // written into `host`, so the very first measurement already sees the real, rendered height.
+  useLayoutEffect(() => {
+    if (!host) return undefined
+    return publishBannerHeight(host)
+  }, [host])
 
   return (
     <div
@@ -94,8 +104,9 @@ export function mountDemoBanner(): void {
   // Prepended, not appended: the banner reads as a header above the app, not a footer a reader
   // has to scroll to find.
   document.body.prepend(host)
-  createRoot(host).render(<DemoBanner />)
-  publishBannerHeight(host)
+  // `host` also goes in as a prop, so DemoBanner's own useLayoutEffect - not this call site - does
+  // the first measurement. See publishBannerHeight's doc comment for why.
+  createRoot(host).render(<DemoBanner host={host} />)
 }
 
 /**
@@ -107,16 +118,25 @@ export function mountDemoBanner(): void {
  * own `overflow-y: auto` turns the menu into a scroller - which is what this banner did.
  *
  * Measured rather than declared: the banner is four sentences of prose in two languages and wraps
- * to a different height at every width, so any constant here would be wrong for some reader. A
- * ResizeObserver keeps it right through a window resize and through the reflow that follows the
- * fonts landing; app.css reads it as --chrome-above, defaulting to 0px, so a real instance - where
- * nothing sits above the app - is untouched.
+ * to a different height at every width, so any constant here would be wrong for some reader.
+ *
+ * Called from DemoBanner's own useLayoutEffect, not from mountDemoBanner right after
+ * `root.render(...)` returns: `createRoot(...).render(...)` does not paint or even commit
+ * synchronously, so a measurement taken immediately after that call reads `host` while it is still
+ * empty - 0px, every time, not a rare loss of a race. useLayoutEffect instead runs synchronously
+ * once this component's own commit has actually landed, so the first measurement is already
+ * correct. The ResizeObserver installed here is what keeps it correct after that, through a window
+ * resize and through the reflow that follows the fonts landing; app.css reads the result as
+ * --chrome-above, defaulting to 0px, so a real instance - where nothing sits above the app - is
+ * untouched. Returns a cleanup that disconnects the observer, for the effect it's called from.
  */
-function publishBannerHeight(host: HTMLElement): void {
+function publishBannerHeight(host: HTMLElement): () => void {
   const publish = (): void => {
     const height = Math.ceil(host.getBoundingClientRect().height)
     document.documentElement.style.setProperty('--chrome-above', `${height}px`)
   }
   publish()
-  new ResizeObserver(publish).observe(host)
+  const observer = new ResizeObserver(publish)
+  observer.observe(host)
+  return () => observer.disconnect()
 }

@@ -38,6 +38,36 @@ describe('the banner', () => {
     mountDemoBanner()
     expect(document.querySelectorAll('[data-demo-banner]')).toHaveLength(1)
   })
+
+  // happy-dom has no layout engine - every element's real getBoundingClientRect is the zero rect,
+  // and its ResizeObserver never delivers a notification for an actual size change (there is never
+  // one to detect) - so neither "the banner ends up some real number of pixels tall" nor "a resize
+  // is what corrects a wrong value" can be asserted honestly here. What the fix in this task
+  // actually changed is *when* the first measurement happens: DemoBanner.tsx used to measure `host`
+  // synchronously right after `createRoot(host).render(...)` returned, which reads `host` before
+  // its content has actually committed (createRoot's initial render is not synchronous - a real
+  // browser and this environment agree on that, see task-6b-report.md); now DemoBanner measures
+  // itself from its own useLayoutEffect, which by definition cannot run before that commit. This
+  // fakes just enough of getBoundingClientRect - zero for an empty host, a real number once content
+  // has actually landed in it - to make that ordering observable without needing real layout, and
+  // is what would have caught the regression this task fixed. scripts/layout-check.mjs's rail-foot
+  // check is what covers the genuine reflow-and-ResizeObserver path this can't.
+  it('measures the host only after the banner has actually committed into it, not before', () => {
+    const original = HTMLElement.prototype.getBoundingClientRect
+    HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+      if (this.hasAttribute('data-demo-banner') && this.childNodes.length > 0) {
+        return { height: 42 } as DOMRect
+      }
+      return original.call(this)
+    }
+    try {
+      act(() => { mountDemoBanner() })
+      expect(document.documentElement.style.getPropertyValue('--chrome-above')).toBe('42px')
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original
+      document.documentElement.style.removeProperty('--chrome-above')
+    }
+  })
 })
 
 describe('the banner in the visitor\'s own language', () => {
