@@ -7,15 +7,23 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import { RailDrawer } from '../src/components/RailDrawer.js'
+import { RAIL_PATHS } from '../src/components/Sidebar.js'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
+// Captured so afterEach can put them back. These are prototype methods on a global that every
+// other file in the suite shares: left patched, a stub written for this file's needs becomes the
+// dialog implementation any later file sees, and whichever one runs next in the same worker
+// inherits it without ever asking for it.
+const realShowModal = HTMLDialogElement.prototype.showModal
+const realClose = HTMLDialogElement.prototype.close
 
 beforeEach(() => {
   // happy-dom has no dialog implementation, so showModal and close are stubbed to move the open
   // attribute the way a browser would. What is being tested here is this component's own logic:
   // that it opens on click, closes on Escape and closes on navigation. The browser behaviour it
-  // leans on (focus containment, inertness) is checked in layout:check against real chromium.
+  // leans on (focus containment, inertness, and the scroll lock the page behind it needs) is
+  // checked in layout:check against real chromium.
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
   HTMLDialogElement.prototype.close = function () {
     this.removeAttribute('open')
@@ -31,6 +39,8 @@ afterEach(() => {
   container?.remove()
   container = null
   root = null
+  HTMLDialogElement.prototype.showModal = realShowModal
+  HTMLDialogElement.prototype.close = realClose
 })
 
 function render() {
@@ -78,14 +88,18 @@ describe('the rail drawer', () => {
     expect(document.activeElement).toBe(button)
   })
 
-  // The whole rail, not a reduced phone menu: the same nine destinations, the resources links, the
-  // person line and sign-out.
+  // The whole rail, not a reduced phone menu: every destination the rail links to, the resources
+  // links, the person line and sign-out.
+  //
+  // Every path from RAIL_PATHS rather than a sample of two, and by path rather than by counting
+  // .rail-item: the resources links carry .rail-item too, so a count passes with three
+  // destinations dropped, and two named hrefs pass with the other seven dropped.
   it('holds every rail destination', () => {
     render()
     act(() => { container!.querySelector<HTMLButtonElement>('[data-testid="rail-open"]')!.click() })
     const hrefs = [...container!.querySelectorAll('dialog a')].map((a) => a.getAttribute('href'))
-    expect(hrefs).toContain('/activity')
-    expect(hrefs).toContain('/settings')
+    expect(RAIL_PATHS.length, 'the rail should still link somewhere').toBeGreaterThan(0)
+    for (const path of RAIL_PATHS) expect(hrefs, `the drawer has no link to ${path}`).toContain(path)
     expect(container!.querySelector('dialog .rail-person')).not.toBeNull()
   })
 

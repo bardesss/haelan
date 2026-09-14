@@ -45,8 +45,9 @@ describe('the banner', () => {
   // is what corrects a wrong value" can be asserted honestly here. What the fix in this task
   // actually changed is *when* the first measurement happens: DemoBanner.tsx used to measure `host`
   // synchronously right after `createRoot(host).render(...)` returned, which reads `host` before
-  // its content has actually committed (createRoot's initial render is not synchronous - a real
-  // browser and this environment agree on that, see task-6b-report.md); now DemoBanner measures
+  // its content has actually committed: createRoot schedules the initial render rather than
+  // performing it, so the host is still empty when render() returns, and both a real browser and
+  // this environment measured it as zero. Now DemoBanner measures
   // itself from its own useLayoutEffect, which by definition cannot run before that commit. This
   // fakes just enough of getBoundingClientRect - zero for an empty host, a real number once content
   // has actually landed in it - to make that ordering observable without needing real layout, and
