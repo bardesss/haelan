@@ -151,8 +151,15 @@ jobs:
   # The one check that can see a page wider than its screen. apps/web renders to static markup and
   # happy-dom has no layout engine, so the 700px-against-375px overflow M7 fixes was invisible to
   # every other job here.
+  #
+  # Runs on push to master as well as on pull requests, and the push leg is what makes the cache
+  # below worth having. A cache entry is written in the scope of the ref that wrote it, and a
+  # pull_request run can restore only from its own branch scope or from the default branch's. With
+  # this job gated to pull requests alone, nothing ever wrote a default-branch entry, so every
+  # first run on every branch was a guaranteed miss and paid for demo:capture - the cost the
+  # rehearsal job above calls too much to pay on every push.
   layout:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -170,11 +177,21 @@ jobs:
       # records exactly what each mounted page fetches, so a page gaining or dropping a query
       # changes the manifest as surely as a route change does. A miss rebuilds them, which is the
       # cost demo-rehearsal already pays; a hit is seconds.
+      #
+      # restore-keys is deliberately not load-bearing. It lets a run restore the newest fixture
+      # directory when the exact key misses; what it must never do is let the run believe those
+      # fixtures are current, because a prefix match is by definition an entry keyed off different
+      # sources. cache-hit is 'true' on an exact match and nothing else, which is why the capture
+      # step below tests exactly that and not `cache-matched-key`, which a prefix match sets too.
+      # So a prefix hit re-runs demo:capture, and writeCapture clears the directory before it
+      # writes, leaving nothing restored to survive into the build. That is the stale-fixture bug
+      # review already closed once, left closed.
       - id: fixtures
         uses: actions/cache@v4
         with:
           path: demo/capture/out
           key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**', 'apps/web/src/**') }}
+          restore-keys: demo-fixtures-
 
       - run: pnpm demo:capture
         if: steps.fixtures.outputs.cache-hit != 'true'
