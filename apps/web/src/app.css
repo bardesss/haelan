@@ -459,7 +459,16 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    collapsed to 12 below this breakpoint. Latent on WorkoutTiles, whose labels all happened to fit
    inside a quarter-width card and so never showed it; real on M7b's own night page, where the
    Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
-   375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band). */
+   375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band).
+
+   Three wrappers listed, but only one of them ever had a card to collapse. .night-tiles is the
+   real one, the overflow above. .workout-tiles was latent: same shape, `span={3}` cards, and its
+   labels happened to fit. .night-trace is neither - NightTraces.tsx renders `<Card span={12}>`
+   inside it, already the full width this rule would set - so `.night-trace > *` is a no-op today
+   and is kept only so the list covers every `display: contents` wrapper in the file rather than
+   the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
+   the wrappers out of this stylesheet and fails if one of them is missing from the list below,
+   including the fourth nobody has written yet. */
 @media (max-width: 900px) { .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; } }
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
