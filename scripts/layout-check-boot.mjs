@@ -53,6 +53,13 @@ const SEED_SCRIPT = resolve('scripts/seed-demo.mjs')
 // on SetupApp's own local state rather than on the path, so they are two screens at one address.
 // The run fails if what it actually measured is not exactly this set - that is what keeps the file
 // load bearing instead of decorative.
+//
+// Both columns are load bearing, and the `url` one only became so in this fix: the run used to
+// match a measured screen against this file on its name alone, so the address beside the name was
+// a claim nothing held to anything. `visit()` below now navigates to the declared URL rather than
+// to one written a second time in the code, and then asserts the page settled on that same path -
+// SetupApp redirects when the server says a different step is due, so opening the wrong address
+// can still land on the right screen, and the marker alone would call that a pass.
 const SCREENS = JSON.parse(await readFile(resolve('scripts/layout-check-boot-screens.json'), 'utf8'))
 
 // The wizard needs a timezone the server will accept (isKnownTimezone in routes/setup.ts) and a
@@ -87,6 +94,18 @@ function check(condition, label) {
 const inventory = []
 const measured = new Set()
 
+// Every control `isExemptInlineLink` excused from the 44px rule across this run. The exemption
+// used to drop its candidates with a bare `.filter()`, which meant a second inline link - at any
+// size, on any wizard screen - would have left the sweep with nothing said about it. Printed
+// beside the inventory below and pinned to the count that exists today.
+const exempted = []
+// One: the Google step's link to the console, inside a sentence (WCAG 2.5.8's own allowance), at
+// 178x21. It is the only inline anchor in the app - every other `<a>` outside src/setup/ computes
+// to a block or flex display - so a second one turning up here is either a genuine new link in
+// running prose, in which case this number moves deliberately and with a note, or the exemption
+// widening past the one case it was written for.
+const EXPECTED_EXEMPTIONS = 1
+
 if (!existsSync(join(WEB_DIST, 'index.html'))) {
   console.error('No web build found. Run: pnpm build')
   process.exit(1)
@@ -109,17 +128,40 @@ function freePort() {
   })
 }
 
-function run(argv, env) {
+// The seeder's own ceiling. Everything else in this file that waits on a child process has one -
+// the server boot below is given 60s - and this was the gap: a seeder that wedged (a rebuild
+// worker that never reports, a SQLite write blocked on a handle Windows has not released yet) had
+// nothing to stop it, so the whole `layout` job would sit until the workflow's own default killed
+// it, which reads as an infrastructure timeout rather than as this step failing. 120s rather than
+// the boot's 60: this subprocess pays the same ~4s of WebAssembly type stripping before it starts
+// and then writes three days of archive and rebuilds it, and it measures 12-20s on this machine,
+// so the ceiling is generous against a slower runner while still being a ceiling.
+const SEED_TIMEOUT_MS = 120_000
+
+function run(argv, env, timeoutMs) {
   return new Promise((ok, fail) => {
     const child = spawn(process.execPath, argv, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
     let output = ''
+    let settled = false
+    const finish = (outcome) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      outcome()
+    }
+    // Killed rather than merely abandoned: an unreaped child here still holds the SQLite file in
+    // the temporary directory the finally below is about to try to remove.
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      finish(() => fail(new Error(`${argv.join(' ')} did not finish within ${timeoutMs}ms:\n${output}`)))
+    }, timeoutMs)
     child.stdout.on('data', (chunk) => { output += chunk })
     child.stderr.on('data', (chunk) => { output += chunk })
-    child.on('error', fail)
-    child.on('exit', (code) => {
+    child.on('error', (error) => finish(() => fail(error)))
+    child.on('exit', (code) => finish(() => {
       if (code === 0) ok(output)
       else fail(new Error(`${argv.join(' ')} exited ${code}:\n${output}`))
-    })
+    }))
   })
 }
 
@@ -142,7 +184,7 @@ async function boot({ seed = false } = {}) {
 
   // Before the server opens the directory, not after: seed-demo.mjs refuses to write over an
   // existing database, and the server creates one on boot.
-  if (seed) await run(['--experimental-strip-types', SEED_SCRIPT, dir, String(SEED_DAYS)], env)
+  if (seed) await run(['--experimental-strip-types', SEED_SCRIPT, dir, String(SEED_DAYS)], env, SEED_TIMEOUT_MS)
 
   const child = spawn(process.execPath, ['--experimental-strip-types', SERVER_ENTRY], {
     env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -221,34 +263,67 @@ try {
   }
 
   /**
-   * Opens a screen and waits for something only that screen renders. The marker is the guard
-   * against measuring the wrong thing: SetupApp asks the server which step is due and redirects
-   * when the answer disagrees with the path, so a request that silently failed to advance the
-   * wizard shows up here as a selector that never appears rather than as a second, cleaner
-   * measurement of the screen before it.
+   * Opens a declared screen at its declared URL, waits for every `marker` - one selector or a
+   * list of them - and measures it.
+   *
+   * The marker is the guard against measuring the wrong thing: SetupApp asks the server which
+   * step is due and redirects when the answer disagrees with the path, so a request that silently
+   * failed to advance the wizard shows up here as a selector that never appears rather than as a
+   * second, cleaner measurement of the screen before it.
+   *
+   * What a marker has to be, and what M7c shipped it as on one screen: it must be part of the
+   * content this sweep is here to measure, not a wrapper that renders on the way to it. The Google
+   * step waited for `.setup-instructions`, which GoogleStep.tsx renders immediately, while its four
+   * copy buttons and three redirect-URI blocks do not exist until `getRedirectUris` and `getScopes`
+   * resolve. Measured: with a 2s stall on those two requests the old marker swept 4 controls
+   * instead of 8, printed "0 control(s) below 44px" and passed - half the screen's controls
+   * unmeasured, on nothing but this machine being fast enough to hide it.
+   *
+   * The data-type step had the same shape and not the same defect, which is worth writing down
+   * because the thing that saved it is an accident: `.data-type-picker` is DataTypePicker's own
+   * outer div and does render with an empty `items`, but an empty one has no box, and
+   * `waitForSelector` defaults to `state: 'visible'` - so the wait skipped it and went on waiting
+   * anyway. Stalled by 8s it still measured all 41 rows. `.setup-instructions` is a populated
+   * `<ol>` of static text, which is exactly why that one had a box to satisfy the wait with. Both
+   * markers now name a control the fetch has to have answered for, rather than resting on whether
+   * a wrapper happens to be empty enough to be invisible.
+   *
+   * A list rather than one selector where a screen has more than one fetch behind it: waiting for
+   * whichever of two arrives first is the same bug one step smaller.
    *
    * `domcontentloaded` rather than `networkidle`: the backfill screen opens an EventSource for
-   * live progress and keeps it open, so the network never goes idle on it.
+   * live progress and keeps it open, so the network never goes idle on it. That is also why the
+   * markers here have to carry the weight `networkidle` carries for the other harness.
    */
-  async function open(instance, url, marker) {
-    await page.goto(`${instance.base}${url}`, { waitUntil: 'domcontentloaded' })
-    await page.waitForSelector(marker, { timeout: 20_000 })
-    await page.waitForTimeout(SETTLE_MS)
-  }
-
-  function record(screen) {
-    if (!SCREENS.some((entry) => entry.screen === screen)) {
+  async function visit(instance, screen, marker) {
+    const entry = SCREENS.find((row) => row.screen === screen)
+    if (entry === undefined) {
       throw new Error(`${screen} is measured here but not declared in layout-check-boot-screens.json`)
     }
     measured.add(screen)
+    await page.goto(`${instance.base}${entry.url}`, { waitUntil: 'domcontentloaded' })
+    for (const selector of Array.isArray(marker) ? marker : [marker]) {
+      await page.waitForSelector(selector, { timeout: 20_000 })
+    }
+    await page.waitForTimeout(SETTLE_MS)
+    // The declared URL is where this went, not merely where it was aimed. SetupApp navigates to
+    // the step the server says is due, so a wrong address in the declaration can still end up on
+    // the right screen and satisfy the marker; the path the page settled on is the only thing
+    // that holds that column to what actually happened.
+    const settled = new URL(page.url()).pathname
+    check(
+      settled === entry.url,
+      `${screen} is declared at ${entry.url} but the page settled on ${settled}`,
+    )
+    await measureScreen(screen)
   }
 
   async function measureScreen(screen) {
-    record(screen)
     const { scrollWidth, clientWidth } = await measure()
     check(scrollWidth <= clientWidth, `${screen} is ${scrollWidth}px wide in a ${clientWidth}px viewport`)
-    const small = await smallTargets(page, null)
-    inventory.push({ screen, scrollWidth, clientWidth, small })
+  const { small, exempt } = await smallTargets(page, null)
+    inventory.push({ screen, scrollWidth, clientWidth, small, exempt })
+    for (const target of exempt) exempted.push({ screen, target })
     check(
       small.length === 0,
       `${screen}: ${small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(small)}`,
@@ -259,19 +334,25 @@ try {
 
   const fresh = await boot()
 
-  await open(fresh, '/setup/account', 'input[autocomplete="new-password"]')
-  await measureScreen('the account step')
+  // AccountStep renders its whole form from constants, so the password field is there the moment
+  // React mounts and there is nothing later for it to hide.
+  await visit(fresh, 'the account step', 'input[autocomplete="new-password"]')
   await post('/api/setup/account', WIZARD_ACCOUNT)
 
-  await open(fresh, '/setup/instance-url', '.choice')
-  await measureScreen('the address step')
+  // Same: InstanceUrlStep's three `.choice` radios come from its own PATHS constant, not a fetch.
+  await visit(fresh, 'the address step', '.choice')
   // The instance's own origin, which is what InstanceUrlStep itself proposes (it defaults the
   // field to window.location.origin) and what candidateFor accepts: 127.0.0.1 is loopback, so it
   // is registrable without https.
   await post('/api/setup/instance-url', { baseUrl: fresh.base, consentPath: 'localhost' })
 
-  await open(fresh, '/setup/google', '.setup-instructions')
-  await measureScreen('the Google step')
+  // Three markers, not `.setup-instructions`: this screen has two independent fetches behind it
+  // and the instructions belong to neither. A `.setup-uris` block is what `getRedirectUris`
+  // renders, a `.setup-scopes` row is what `getScopes` renders (SCOPES in routes/setup.ts is a
+  // constant, so that list is never legitimately empty), and `.copy-field button` is the control
+  // the sweep is actually here for. All three, in order, because either fetch finishing alone
+  // satisfies a marker the other has not answered yet.
+  await visit(fresh, 'the Google step', ['.setup-uris > div', '.setup-scopes li', '.copy-field button'])
 
   // The wizard stops here. The step after this one is consent, which is a real redirect to Google
   // and cannot be walked by anything in this repository; the two screens past it are measured
@@ -284,8 +365,9 @@ try {
   // No session on this instance yet, so every path renders the sign-in screen. Measured at '/',
   // which is where somebody opening a finished instance actually lands - there is no /signin
   // route, because sign-in is the state the shell is in rather than a page it routes to.
-  await open(seeded, '/', 'main.signin form')
-  await measureScreen('sign in')
+  // SignIn renders its whole form from constants the moment the session query answers 401, so
+  // there is no later content for this marker to arrive ahead of.
+  await visit(seeded, 'sign in', 'main.signin form')
   await post('/api/auth/login', SEEDED_ACCOUNT)
 
   // SetupApp keeps "the data-type screen has been shown" in sessionStorage rather than on the
@@ -293,16 +375,29 @@ try {
   // the two screens at /setup/backfill is reached; it is the same key SetupApp itself writes.
   const DATA_TYPES_DONE_KEY = 'haelan.setup.dataTypesDone'
   await page.evaluate((key) => sessionStorage.removeItem(key), DATA_TYPES_DONE_KEY)
-  await open(seeded, '/setup/backfill', '.data-type-picker')
-  await measureScreen('the data type step')
+  // A row, not `.data-type-picker`: the picker's outer div renders with an empty `items` while
+  // useDataTypes is still in flight, and every checkbox and its label - the controls this sweep
+  // exists to measure, and the ones M7b's checkbox-to-label substitution applies to - arrive with
+  // the query. Not a bug that was firing (see visit()'s own note: an empty picker has no box, so
+  // the visibility wait skipped past it), but a marker that only worked because of that.
+  await visit(seeded, 'the data type step', '.data-type-row input')
 
   await page.evaluate((key) => sessionStorage.setItem(key, 'true'), DATA_TYPES_DONE_KEY)
-  await open(seeded, '/setup/backfill', '.setup-horizon')
-  await measureScreen('the backfill step')
+  // `.setup-horizon` is already a content marker rather than a wrapper: SetupApp renders
+  // BackfillStep only once `getSyncStatus` has answered, and shows a `.empty` placeholder until
+  // then, so nothing in this subtree exists before the fetch does.
+  await visit(seeded, 'the backfill step', '.setup-horizon')
 
   for (const entry of SCREENS) {
     check(measured.has(entry.screen), `${entry.screen} is declared in layout-check-boot-screens.json but was never measured`)
   }
+
+  check(
+    exempted.length === EXPECTED_EXEMPTIONS,
+    `${exempted.length} control(s) were excused from the ${TOUCH_MIN}px rule as inline links, `
+      + `not ${EXPECTED_EXEMPTIONS}: ${exempted.map((e) => `${e.screen} ${e.target.tag}.${e.target.cls} `
+      + `${e.target.w}x${e.target.h}`).join(', ')}`,
+  )
 } catch (error) {
   crashError = error
 } finally {
@@ -327,6 +422,15 @@ if (inventory.length > 0) {
         + `${target.w}x${target.h}`)
     }
   }
+}
+
+// Printed on every run, pass or fail, beside the inventory above: an exemption is a control the
+// sweep decided not to hold to the rule, and the only thing stopping that decision from widening
+// in silence is the number being on screen every time, next to the list of what it covers.
+console.log(`layout:check:boot excused ${exempted.length} control(s) from the ${TOUCH_MIN}px rule as inline links:`)
+for (const entry of exempted) {
+  console.log(`  - ${entry.screen}: ${entry.target.where === '' ? '' : `.${entry.target.where} `}`
+    + `${entry.target.tag}.${entry.target.cls} ${entry.target.w}x${entry.target.h}`)
 }
 
 if (crashError) {

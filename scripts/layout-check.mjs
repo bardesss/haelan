@@ -64,6 +64,18 @@ function check(condition, label) {
   if (!condition) failures.push(label)
 }
 
+// Every control `isExemptInlineLink` excused from the 44px rule across this whole run, with the
+// sweep that found it. An exemption that nothing counts is an exemption that can widen in
+// silence - the caveat in the pull request body promises this number stays visible, and a
+// printed line plus the pin below is what makes that true rather than aspirational.
+const exempted = []
+// Zero, and it has to stay zero here: every control the demo carries is a discrete target, and
+// the one inline link in the app lives on the wizard's Google step, which this harness cannot
+// reach at all (the boot harness pins that one at 1). A demo route that starts excusing a control
+// from the rule is either a genuine inline link in running prose - in which case say so here - or
+// the exemption widening past what it was written for.
+const EXPECTED_EXEMPTIONS = 0
+
 if (!existsSync(join(DIST, 'index.html'))) {
   console.error('No demo build found. Run: pnpm demo:build')
   process.exit(1)
@@ -199,9 +211,10 @@ try {
     await open(route)
     const onPage = await smallTargets(page, null)
     check(
-      onPage.length === 0,
-      `${route}: ${onPage.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(onPage)}`,
+      onPage.small.length === 0,
+      `${route}: ${onPage.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(onPage.small)}`,
     )
+    for (const target of onPage.exempt) exempted.push({ where: `${route}`, target })
 
     // Every route rather than one: the drawer is the same component each time, but which item
     // carries `aria-current` is not, and that is the one item with a different background, weight
@@ -211,9 +224,10 @@ try {
     if (!opened) continue
     const inDrawer = await smallTargets(page, 'dialog.rail-dialog')
     check(
-      inDrawer.length === 0,
-      `${route}: ${inDrawer.length} drawer control(s) below ${TOUCH_MIN}px: ${describeTargets(inDrawer)}`,
+      inDrawer.small.length === 0,
+      `${route}: ${inDrawer.small.length} drawer control(s) below ${TOUCH_MIN}px: ${describeTargets(inDrawer.small)}`,
     )
+    for (const target of inDrawer.exempt) exempted.push({ where: `${route} (drawer)`, target })
   }
 
   // The rest of the band, swept on one route rather than nine: what overflowed there is the
@@ -304,6 +318,13 @@ try {
   check(footVisible !== null, 'no rail or rail foot found at 900x380')
   check(footVisible?.withinRail === true, 'the rail foot is not pinned to the bottom of its scroller at 900x380')
   check(footVisible?.onScreen === true, 'the rail foot sits below the fold of the viewport at 900x380')
+
+  check(
+    exempted.length === EXPECTED_EXEMPTIONS,
+    `${exempted.length} control(s) were excused from the ${TOUCH_MIN}px rule as inline links, `
+      + `not ${EXPECTED_EXEMPTIONS}: ${exempted.map((e) => `${e.where} ${e.target.tag}.${e.target.cls} `
+      + `${e.target.w}x${e.target.h}`).join(', ')}`,
+  )
 } catch (err) {
   crashError = err
 } finally {
@@ -311,6 +332,14 @@ try {
   // vice versa - both are resources of this process and both must go regardless of the other.
   await browser.close().catch((err) => console.error('layout:check: browser.close() failed:', err))
   await new Promise((done) => server.close(done)).catch(() => {})
+}
+
+// Printed on every run, pass or fail, and printed even when it is zero: the number is only a
+// guard against silent widening if it is on screen when nothing has widened.
+console.log(`layout:check excused ${exempted.length} control(s) from the ${TOUCH_MIN}px rule as inline links:`)
+for (const entry of exempted) {
+  console.log(`  - ${entry.where}: ${entry.target.where === '' ? '' : `.${entry.target.where} `}`
+    + `${entry.target.tag}.${entry.target.cls} ${entry.target.w}x${entry.target.h}`)
 }
 
 if (crashError) {

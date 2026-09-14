@@ -75,7 +75,16 @@ export function isExemptInlineLink({ isAnchor, inlineDisplay, siblingText }) {
 
 /**
  * Every interactive control inside `root` (the whole document when it is null) whose smaller
- * dimension is under `TOUCH_MIN`, as `{ tag, cls, where, w, h }`.
+ * dimension is under `TOUCH_MIN`, split into the ones that fail the rule (`small`) and the ones
+ * `isExemptInlineLink` excuses from it (`exempt`), each as `{ tag, cls, where, w, h }`.
+ *
+ * Two lists rather than one, because an exemption nothing counts is an exemption that can widen
+ * in silence: the sweep used to drop an exempted candidate with a bare `.filter()`, so a second
+ * inline link - at any size, on any screen - would have left the run with nothing said about it.
+ * Only undersized candidates are reported as exempt: an inline link that already clears 44px was
+ * never going to fail, so excusing it changes nothing and counting it would make the number drift
+ * for reasons that have nothing to do with the rule being widened. Both callers print this list
+ * and pin its length.
  *
  * `where` is the nearest class-carrying ancestor, self included, and it is there because `cls`
  * alone is frequently empty: the controls this sweep catches tend to be bare elements styled
@@ -134,10 +143,12 @@ export const smallTargets = async (page, root) => {
       })
   }, { root: root ?? null })
 
-  return candidates
-    .filter((c) => !isExemptInlineLink(c))
-    .filter((c) => Math.min(c.w, c.h) < TOUCH_MIN)
-    .map(({ tag, cls, where, w, h }) => ({ tag, cls, where, w, h }))
+  const report = ({ tag, cls, where, w, h }) => ({ tag, cls, where, w, h })
+  const undersized = candidates.filter((c) => Math.min(c.w, c.h) < TOUCH_MIN)
+  return {
+    small: undersized.filter((c) => !isExemptInlineLink(c)).map(report),
+    exempt: undersized.filter((c) => isExemptInlineLink(c)).map(report),
+  }
 }
 
 export const describeTargets = (targets) =>
