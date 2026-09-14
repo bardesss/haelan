@@ -747,3 +747,30 @@ body {
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
+
+/* Below the breakpoint the control row becomes a stack of full-width rows. It is the widest thing
+   on every page: five range buttons in a nowrap flex row, a date stepper, and a group of actions
+   pushed away by margin-left: auto. Measured at 494px of min-content against a 375px viewport, so
+   it, not the rail, is what made these pages scroll sideways.
+
+   min-width: 0 on the grid and flex children is the part that actually does the work. A grid item
+   defaults to a min-width of auto, so one long label ("3 maanden") would push its column past its
+   share and take the row with it, whatever the column template says. */
+@media (max-width: 620px) {
+  .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
+
+  .segmented { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); }
+  .segment {
+    min-width: 0; padding: 5px 4px; text-align: center;
+    font-size: var(--font-size-micro);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .stepper { width: 100%; justify-content: space-between; }
+  .stepper-label { min-width: 0; flex: 1; }
+
+  /* margin-left: auto stops applying: nothing in a one-column stack should push anything anywhere. */
+  .controls-end { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .controls-end .button { min-width: 0; flex: 1 1 auto; justify-content: center; }
+  .synced { width: 100%; }
+}
