@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.22.0](https://github.com/bardesss/haelan/compare/v1.21.3...v1.22.0) (2026-09-14)
+
+
+### Features
+
+* haelan installs into a Proxmox LXC without Docker ([#229](https://github.com/bardesss/haelan/issues/229)) ([d957716](https://github.com/bardesss/haelan/commit/d957716893fc51e04aea734de354eb7566f02567))
+
 ## [1.21.3](https://github.com/bardesss/haelan/compare/v1.21.2...v1.21.3) (2026-09-14)
 
 
