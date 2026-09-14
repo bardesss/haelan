@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.21.3](https://github.com/bardesss/haelan/compare/v1.21.2...v1.21.3) (2026-09-14)
+
+
+### Bug Fixes
+
+* **site:** the hero wash and the cap band run edge to edge ([#226](https://github.com/bardesss/haelan/issues/226)) ([6aaafeb](https://github.com/bardesss/haelan/commit/6aaafeb6345bfd600856149e616808120b431ef9))
+
 ## [1.21.2](https://github.com/bardesss/haelan/compare/v1.21.1...v1.21.2) (2026-09-14)
 
 
