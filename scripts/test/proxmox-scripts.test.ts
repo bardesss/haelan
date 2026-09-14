@@ -19,6 +19,7 @@ const install = read('../../proxmox/install/haelan-install.sh')
 const json = JSON.parse(read('../../proxmox/json/haelan.json'))
 const pkg = JSON.parse(read('../../package.json'))
 const dockerfile = read('../../Dockerfile')
+const readme = read('../../README.md')
 
 // The same call the server makes at boot with an empty environment, so these are the defaults a
 // container actually gets rather than the defaults someone remembered.
@@ -104,6 +105,16 @@ describe('the Proxmox LXC installer', () => {
 
     expect(declared).toBe(false)
     expect(json.architectures).toBeUndefined()
+  })
+
+  it('sends testers to the same place the README does', () => {
+    // Every container the script builds repeats this URL - on each login, in its Proxmox
+    // description and on the last line of the install - so a stale one is repeated at the person
+    // best placed to report the thing it is asking about. Two copies, one issue.
+    const testurl = /^var_testurl="\$\{var_testurl:-(\S+)\}"/m.exec(ct)?.[1]
+
+    expect(testurl).toMatch(/^https:\/\//)
+    expect(readme).toContain(testurl)
   })
 
   it('promises an update path the container script implements', () => {
