@@ -7,3 +7,6 @@ export function releaseStamp(rootDir: string): { version: string, releaseDate: s
 export function copyDemo(fromDir: string, outDir: string): string[]
 export function buildSite(rootDir: string, outDir: string): string[]
 export function ribbonHtml(): string
+export function shotId(shot: { file: string }): string
+export function galleryHtml(): string
+export function lightboxHtml(): string

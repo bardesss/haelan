@@ -265,6 +265,71 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 }
 .gallery-note { margin: var(--space-4) 0 0; font-size: var(--font-size-xs); color: var(--text-faint); }
 
+/* ---- full-size screenshots ----------------------------------------------- */
+
+/* Every screenshot on the page links to a full-size copy of itself, revealed by `:target` and
+   hidden again when the fragment clears. No script: the page loads nothing and runs nothing, and
+   the footer's no-telemetry line stays literally true.
+
+   What that costs, said plainly because it cannot be fixed here: the Escape key does nothing, and
+   the page behind an open shot still scrolls. Both need a keydown listener and a scroll lock, and
+   neither is worth a script tag on a page that otherwise has none. The exits are made obvious
+   instead - the whole backdrop is a link, the close control is a button, and Back works. */
+
+.shot-link { display: block; border-radius: inherit; cursor: zoom-in; }
+.shot-link img { transition: border-color var(--duration-fast) var(--ease-standard); }
+.shot-link:hover img { border-color: var(--accent); }
+
+.lightbox { display: none; }
+.lightbox:target {
+  display: grid;
+  position: fixed; inset: 0; z-index: 10;
+  place-items: center;
+  padding: var(--gutter);
+  overscroll-behavior: contain;
+}
+/* Covers the viewport beneath the figure, so a click anywhere outside the image closes it - the
+   gesture most people try first, and the only one that needs no instruction. */
+.lightbox-backdrop {
+  position: absolute; inset: 0;
+  background: color-mix(in oklab, var(--surface-page) 96%, transparent);
+  cursor: zoom-out;
+}
+.lightbox-figure {
+  position: relative;
+  display: flex; flex-direction: column; gap: var(--space-3);
+  margin: 0;
+  max-width: min(100%, 82rem);
+}
+/* Bounded by the shorter of the two axes so a 1440x900 capture fits a phone in portrait and a
+   wide monitor without cropping either. The subtraction leaves room for the caption row under it;
+   dvh rather than vh because a mobile browser's toolbars make vh taller than what is visible. */
+.lightbox-figure img {
+  display: block;
+  width: auto; height: auto;
+  max-width: 100%;
+  max-height: calc(100dvh - var(--gutter) * 2 - 3.5rem);
+  object-fit: contain;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-inset);
+}
+.lightbox-figure figcaption {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  font-family: var(--font-mono); font-size: var(--font-size-micro);
+  letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint);
+}
+.lightbox-close {
+  flex: none;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.lightbox-close:hover { background: var(--surface-hover); }
+
 /* ---- footer -------------------------------------------------------------- */
 
 footer {
@@ -277,5 +342,5 @@ footer {
 .footer-meta { margin: 0 0 var(--space-2); font-size: var(--font-size-xs); color: var(--text-muted); }
 
 @media (prefers-reduced-motion: reduce) {
-  .button { transition: none; }
+  .button, .shot-link img { transition: none; }
 }

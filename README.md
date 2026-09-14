@@ -40,13 +40,18 @@ work in this repository - a green test that never failed for the right reason, a
 a substring instead of a value, a claim about a file nobody opened - because they recur, and
 catching them is a standing part of how the project is built rather than a past embarrassment.
 
-![The Dashboard](assets/screenshots/dashboard.png)
+<!-- Written by `pnpm readme:screenshots` from scripts/screenshots.mjs, the same list the landing
+     page is built from. Do not edit between the markers by hand: a test regenerates this and fails
+     when it disagrees. -->
+<!-- screenshots:start -->
+![The Hælan dashboard: daily steps, resting heart rate, sleep and recovery, with charts for the month.](assets/screenshots/dashboard.png)
 
-![Activity](assets/screenshots/activity.png)
+![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
 <sub>Dashboard and Activity above; [Sleep](assets/screenshots/sleep.png) and
 [Recovery](assets/screenshots/recovery.png) as well. All four are the demo data
 `scripts/seed-demo.mjs` generates, not anybody's real health history.</sub>
+<!-- screenshots:end -->
 
 ## What it does
 
@@ -94,7 +99,7 @@ A few people, one instance, each seeing only their own data. An admin invites a 
 chooses their own password, and each person connects their own Google account and picks which data
 types get fetched for them.
 
-### 🧰 Thirteen typed tools for an agent, read-only and person-bound
+### 🧰 Fourteen typed tools for an agent, read-only and person-bound
 
 They sit over the same person bound query layer the browser reads through, reachable over stdio
 from inside the container or over `POST /mcp` from anywhere else. An HTTP call needs a token
@@ -438,8 +443,8 @@ packages/core     the only package that issues SQL or talks to Google
 packages/tokens   design tokens, emitted to CSS custom properties
 apps/server       Fastify: routes, cookies, the scheduler, the setup wizard's API
 apps/web          React and Vite: the dashboard and the setup wizard
-scripts/          the demo seed, the enum drift check and the image boot check
-assets/           the screenshots above
+scripts/          the demo seed, the enum drift check, the image boot check and the site build
+assets/           the screenshots above, listed once in scripts/screenshots.mjs
 probe/            M0 throwaway scripts and the findings three plans still cite
 ```
 

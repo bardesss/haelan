@@ -18,6 +18,7 @@
     "start": "node --experimental-strip-types apps/server/src/index.ts",
     "check:enums": "node --experimental-strip-types scripts/check-enum-drift.mjs",
     "docs:tools": "node --experimental-strip-types scripts/generate-tools-doc.mjs",
+    "readme:screenshots": "node scripts/sync-readme-screenshots.mjs",
     "site:build": "pnpm --filter @haelan/tokens build:css && node scripts/build-site.mjs",
     "demo:capture": "node scripts/capture-demo.mjs",
     "demo:build": "pnpm --filter @haelan/tokens build:css && pnpm --filter @haelan/web exec vite build --config vite.demo.config.ts",
