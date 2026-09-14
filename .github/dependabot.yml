@@ -44,6 +44,11 @@ updates:
         dependency-type: development
         patterns: ['*']
         update-types: ['major']
+    # `build(deps)` rather than a bare `deps`, because the prefix Dependabot writes here becomes
+    # the pull request title, and the PR title workflow requires a conventional commit type. `deps`
+    # is not one, so every Dependabot pull request opened since that workflow landed has failed the
+    # check and had to be retitled by hand before it could be merged. `build` is a type the workflow
+    # accepts and one Release Please cuts nothing for, which is what a dependency bump should do.
     commit-message:
-      prefix: 'deps'
-      prefix-development: 'deps(dev)'
+      prefix: 'build(deps)'
+      prefix-development: 'build(deps-dev)'
