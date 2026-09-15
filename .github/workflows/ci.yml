@@ -161,10 +161,25 @@ jobs:
   layout:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-    # This job drives two real browsers and can wait on a network, an apt lock or a page that never
-    # settles. Without a ceiling it does not fail, it hangs to the six hour default, which is worse
-    # than a red check: nobody watches a job that is still running. Thirty minutes is roughly three
-    # times the slowest honest run, which is a cache miss paying for demo:capture.
+    # Microsoft's own image, pinned to the same version as the `playwright` dependency, because the
+    # browsers are already unpacked in it at /ms-playwright and this job therefore downloads and
+    # installs nothing.
+    #
+    # That is not a convenience. `playwright install chromium` hangs after the download completes,
+    # while it unpacks: measured here at 173.9 MiB fetched in about a second and then ten minutes of
+    # silence until the step's own timeout, and measured again on a Windows workstation during M7a,
+    # where it stalled three times in a row just after writing chrome.dll. Two operating systems,
+    # same stall, so the cause is the unpacking rather than either machine. An image that ships the
+    # browser already unpacked removes the step that fails instead of retrying it.
+    #
+    # The tag must move with the dependency. A container whose browsers are a different build from
+    # the `playwright` package driving them is the one way this arrangement breaks, and it breaks
+    # loudly at launch rather than quietly.
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.0-noble
+    # A ceiling regardless. This job drives two real browsers and can wait on a network or on a page
+    # that never settles, and without one it does not fail, it runs to the six hour default, which is
+    # worse than a red check because nobody watches a job that is still running.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -180,15 +195,6 @@ jobs:
       # nothing it produces. The wizard and the sign-in screen are measured against a server booted
       # on a temporary directory, so an ordinary `pnpm build` is the whole of their input - seconds,
       # and they fail the job here rather than after the minutes demo:capture can cost.
-      # No --with-deps. That flag shells out to apt for the shared libraries Chromium needs, and the
-      # ubuntu-latest image already ships them; what it adds instead is a wait on the runner's own
-      # apt lock, which is what left this job sitting on this line for thirty minutes on its first
-      # real run. If a library ever is missing, chromium fails to launch and the check says so in
-      # seconds, which is the failure we want. Its own ceiling as well, so a stalled download is a
-      # red check rather than a slow one.
-      - run: pnpm exec playwright install chromium
-        timeout-minutes: 10
-
       - run: pnpm build
 
       # The screens the demo cannot render. It is an already-signed-in instance against a recorded
