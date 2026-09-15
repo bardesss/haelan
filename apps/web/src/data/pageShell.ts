@@ -1,3 +1,4 @@
+import { cadenceOf } from '@haelan/core/source-cadence'
 import type { UseQueryResult } from '@tanstack/react-query'
 import type { MetricSeries } from './useSeries.js'
 import { sourceParam } from '../controls/source.js'
@@ -38,6 +39,50 @@ export function sourcesIn(raw: string | null): string[] {
 // mix), so the enumeration went empty, the selector fell back to the sentinel, and the label
 // silently relabelled itself "All sources" while the charts above it kept showing the device
 // filtered numbers.
+/**
+ * The sources that fed this range and then went quiet before the end of it.
+ *
+ * The answer to the question a thinning chart actually raises - "did I get lazier, or did the
+ * watch stop" - computed from the points the page has already loaded rather than from a request
+ * of its own. `sourceMix` is on every merged row (13,408 of 14,074 in the archive this was
+ * measured against), so no route, no read and nothing added to page load.
+ *
+ * Judged by `cadenceOf`, the same rule the settings card uses, with the end of the range standing
+ * in for today. That keeps one threshold in one file: a second copy here would drift from the one
+ * the server applies, and the two would disagree about the same source on the same day.
+ *
+ * Two things it cannot see, both stated rather than worked around. A source that stopped BEFORE
+ * this range never appears in it, so only the settings card knows about long-dead sources - but
+ * such a source is not what a thinning chart is about either. And `floors` and `total_calories`
+ * are written under the `provider` tier, which has no merged row and therefore no mix at all, so
+ * nothing here can speak for them.
+ *
+ * Takes the same all-sources-scoped queries `distinctSources` requires, for the same reason: a
+ * per source rollup carries no mix, so a device-filtered query answers nothing.
+ */
+export function sourcesStoppedInRange(
+  queries: readonly UseQueryResult<Record<string, MetricSeries>>[], rangeEnd: string,
+): string[] {
+  const datesBySource = new Map<string, string[]>()
+  for (const query of queries) {
+    for (const series of Object.values(query.data ?? {})) {
+      for (const point of series.points) {
+        for (const source of sourcesIn(point.sourceMix)) {
+          // Duplicates are expected and harmless: one point per metric per day means the same
+          // date arrives once per metric, and cadenceOf takes the distinct set.
+          const dates = datesBySource.get(source)
+          if (dates) dates.push(point.localDate)
+          else datesBySource.set(source, [point.localDate])
+        }
+      }
+    }
+  }
+  return [...datesBySource]
+    .filter(([, dates]) => cadenceOf(dates, rangeEnd).status === 'stale')
+    .map(([source]) => source)
+    .sort()
+}
+
 export function distinctSources(queries: readonly UseQueryResult<Record<string, MetricSeries>>[]): string[] {
   const found = new Set<string>()
   for (const query of queries) {

@@ -191,3 +191,37 @@ describe('ControlRow', () => {
   // could: a browser select silently defaults one to its first option no matter what this
   // component does.
 })
+
+const text = (selector: string): string => container!.querySelector(selector)?.textContent ?? ''
+
+describe('a source that stopped inside the range', () => {
+  it('names it, so a thinning chart is explained where the reader is looking', () => {
+    mount(withQuery(
+      <ControlRow controls={stubControls({ tab: 'month' })} sources={['watch']}
+        syncedMinutesAgo={4} stoppedSources={['watch']} />,
+    ))
+    expect(text('.control-row-stopped')).toBe('Stopped reporting during this range: watch.')
+  })
+
+  it('names all of them when more than one stopped', () => {
+    mount(withQuery(
+      <ControlRow controls={stubControls({ tab: 'month' })} sources={['watch', 'scale']}
+        syncedMinutesAgo={4} stoppedSources={['watch', 'scale']} />,
+    ))
+    // Intl.ListFormat, so the conjunction is the language's own rather than a hardcoded "and".
+    expect(text('.control-row-stopped')).toBe('Stopped reporting during this range: watch and scale.')
+  })
+
+  it('says nothing when none stopped', () => {
+    mount(withQuery(
+      <ControlRow controls={stubControls({})} sources={['watch']} syncedMinutesAgo={4}
+        stoppedSources={[]} />,
+    ))
+    expect(container!.querySelector('.control-row-stopped')).toBeNull()
+  })
+
+  it('says nothing at all when the page passes none, which is every page that has not adopted it', () => {
+    mount(withQuery(<ControlRow controls={stubControls({})} sources={['watch']} syncedMinutesAgo={4} />))
+    expect(container!.querySelector('.control-row-stopped')).toBeNull()
+  })
+})

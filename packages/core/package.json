@@ -16,7 +16,8 @@
     "./cardio-load": "./src/api/cardioLoad.ts",
     "./workout-comparison": "./src/api/workoutComparison.ts",
     "./split-heart-rate": "./src/api/splitHeartRate.ts",
-    "./training-load": "./src/api/trainingLoad.ts"
+    "./training-load": "./src/api/trainingLoad.ts",
+    "./source-cadence": "./src/api/sourceCadence.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate"

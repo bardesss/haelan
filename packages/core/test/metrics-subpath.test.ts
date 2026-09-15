@@ -40,7 +40,8 @@ describe('the @haelan/core/metrics subpath', () => {
     // without a wildcard is what stops a page reaching, say, ../src/store/accounts.ts and
     // dragging argon2 along behind it. ./cardio-load, ./coverage-signal, ./target-key,
     // ./baseline-window, ./metric-data-type, ./workout-summary, ./workout-comparison,
-    // ./split-heart-rate and ./training-load are the other nine browser-safe entry points; cardio-load.test.ts,
+    // ./split-heart-rate, ./training-load and ./source-cadence are the other ten browser-safe
+    // entry points; cardio-load.test.ts,
     // coverage-signal-subpath.test.ts, target-key-subpath.test.ts, baseline-window-subpath.test.ts,
     // metric-data-type-subpath.test.ts, workout-summary.test.ts, workout-comparison-subpath.test.ts
     // and split-heart-rate.test.ts carry their own guarantees, each a different shape: the middle
@@ -48,12 +49,14 @@ describe('the @haelan/core/metrics subpath', () => {
     // carries; workout-summary.test.ts and cardio-load.test.ts's own 'stays importable from a
     // browser bundle' block both allow-list an empty list, the same contract this file's own
     // module holds itself to; workout-comparison-subpath.test.ts allow-lists the one import
-    // workoutComparison.ts makes, into workout-summary.ts; and split-heart-rate.test.ts allow-lists
-    // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts.
+    // workoutComparison.ts makes, into workout-summary.ts; split-heart-rate.test.ts allow-lists
+    // the two imports splitHeartRate.ts makes, into workoutSummary.ts and cardioLoad.ts; and
+    // source-cadence-subpath.test.ts allow-lists an empty list, since that module is arithmetic
+    // over dates and imports nothing at all.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
-      './split-heart-rate', './target-key', './training-load', './workout-comparison',
-      './workout-summary',
+      './source-cadence', './split-heart-rate', './target-key', './training-load',
+      './workout-comparison', './workout-summary',
     ])
   })
 

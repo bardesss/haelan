@@ -44,7 +44,7 @@ import type { MetricGroup } from '../data/useMetricGroups.js'
 import { wornOn } from '../data/emptyState.js'
 import { useDataTypes } from '../data/useDataTypes.js'
 import { dataTypeForMetric } from '@haelan/core/metric-data-type'
-import { distinctSources, exportPathFor } from '../data/pageShell.js'
+import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/pageShell.js'
 import { formatClock, formatDuration, formatSignedDuration, formatWithUnit, deltaFor, formatMetricValue } from '../format.js'
 
 // /series takes a repeated metric parameter but exactly one `agg` for the whole call
@@ -228,6 +228,9 @@ export function Dashboard() {
   // every card underneath queried the foreign value.
   const sourceEnumeration = useSeries([...SUM_METRICS], { from: controls.from, to: controls.to, source: ALL_SOURCES }, 'sum')
   const sources = distinctSources([sourceEnumeration])
+  // Off the same all-sources enumeration the selector is built from, so this costs no
+  // request of its own: the mix is already on the points that query returned.
+  const stoppedSources = sourcesStoppedInRange([sourceEnumeration], controls.to)
   const source = resolveSource(controls.source, [ALL_SOURCES, ...sources])
   const range = { from: controls.from, to: controls.to, source }
   // One state object from here down, so the row, the card links and every request are talking
@@ -583,7 +586,8 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath} />
+      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+        stoppedSources={stoppedSources} />
       <div className="grid">
         {/* Renders nothing once connected (ConnectGoogle.tsx's own doc comment), so a household
             that finished setup sees no change here at all; this is only ever visible to a member

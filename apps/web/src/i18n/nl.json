@@ -40,6 +40,7 @@
     "nextPeriod": "Volgende periode",
     "pickDate": "Kies een datum",
     "sources": "Bronnen",
+    "sourceStopped": "Gestopt met rapporteren tijdens deze periode: {{sources}}.",
     "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
     "sync": "Synchroniseren",
