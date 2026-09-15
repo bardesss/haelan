@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { readSourceActivity } from './sourceActivity.ts'
-import type { SourceActivity } from './sourceActivity.ts'
+import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
 import { daily, people, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
@@ -517,7 +517,7 @@ export class PersonQuery {
    * `sources[].name` runs the same alias-then-display-name-then-id choice `nameFor` makes for
    * every other surface, rather than a second copy of it living here.
    */
-  describe(): DescribedPerson {
+  describe(input: { today?: string } = {}): DescribedPerson {
     const person = this.#db.select({
       id: people.id, displayName: people.displayName, timezone: people.timezone,
     }).from(people).where(eq(people.id, this.#personId)).get()
@@ -537,6 +537,13 @@ export class PersonQuery {
       .orderBy(asc(sources.createdAtMs), asc(sources.id))
       .all()
 
+    // Only when asked. The staleness read scans this person's daily rows, and describe() is the
+    // cheap "who am I bound to" call every agent session opens with.
+    const activity = input.today === undefined
+      ? new Map<string, SourceActivity>()
+      : new Map(readSourceActivity(this.#db, this.#personId, { today: input.today })
+        .map((a) => [a.sourceId, a]))
+
     return {
       id: person.id,
       displayName: person.displayName,
@@ -545,6 +552,10 @@ export class PersonQuery {
         id: row.id,
         name: nameFor({ id: row.id, displayName: row.displayName, alias: row.alias }),
         kind: row.kind,
+        // null for a source with no daily rows as well as for a call that asked for none: an
+        // agent is told "not known" rather than handed a guess either way.
+        lastReportedDate: activity.get(row.id)?.lastReportedDate ?? null,
+        status: activity.get(row.id)?.status ?? null,
       })),
     }
   }
@@ -568,7 +579,18 @@ export interface DescribedPerson {
   id: string
   displayName: string
   timezone: string
-  sources: { id: string, name: string, kind: 'device' | 'app' | 'manual' }[]
+  sources: {
+    id: string
+    name: string
+    kind: 'device' | 'app' | 'manual'
+    /**
+     * Both null unless `describe` was given a `today` to judge against. An agent reading a thin
+     * series has no other way to learn that the device behind it stopped reporting, but the
+     * staleness read costs a scan of this person's daily rows, so the caller asks for it.
+     */
+    lastReportedDate: string | null
+    status: SourceStatus | null
+  }[]
 }
 
 /**

@@ -36,10 +36,6 @@ const PERSON: Session = {
 
 const named = (id: string, displayName: string, alias: string | null): NamedSource => ({
   id, externalId: `x:${id}`, displayName, alias,
-  // Reporting normally: this file is about names, and a source grouped as dormant would change
-  // where the card renders it without changing anything this file asserts.
-  lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
-  status: 'reporting', reportingNow: true,
   name: alias ?? (displayName === '' ? id : displayName),
   kind: 'device', createdAtMs: 0,
 })

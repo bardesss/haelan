@@ -82,6 +82,21 @@ describe('describe_person', () => {
     expect(out.sources[0]!.id).toBe('watch')
   })
 
+  // An agent asked "why is my step data thin in August" could read every number and never learn
+  // that the watch stopped reporting. The staleness is in the database as of M6a; this is the
+  // only way an agent can reach it.
+  it('says whether each source is still reporting', () => {
+    for (let day = 1; day <= 20; day += 1) {
+      seedDaily({ localDate: `2026-01-${String(day).padStart(2, '0')}`, value: 1000, source: 'watch' })
+    }
+    const out = tool('describe_person').run(q(), { today: '2026-03-01' }) as {
+      sources: { id: string, lastReportedDate: string | null, status: string }[]
+    }
+    expect(out.sources[0]).toMatchObject({
+      id: 'watch', lastReportedDate: '2026-01-20', status: 'stale',
+    })
+  })
+
   it('puts a source name in the untrusted envelope, because a device chose it', () => {
     const out = tool('describe_person').run(q(), {}) as {
       sources: { name: { untrustedText: string | null } }[]

@@ -23,6 +23,11 @@ const auth = () => ({ authorization: `Bearer ${token}` })
 
 const list = () => h.app.inject({ method: 'GET', url: '/api/v1/p/p1/sources', headers: auth() })
 
+/** The same listing with the activity fields, which the settings card asks for and nothing else does. */
+const listWithActivity = () => h.app.inject({
+  method: 'GET', url: '/api/v1/p/p1/sources?activity=1', headers: auth(),
+})
+
 const rename = (sourceId: string, alias: string) => h.app.inject({
   method: 'PUT',
   url: `/api/v1/p/p1/sources/${sourceId}/alias`,
@@ -42,12 +47,25 @@ const seedDates = (sourceId: string, from: string, days: number) => {
   }
 }
 
+describe('GET /sources, the cost of the activity fields', () => {
+  // useSourceNames backs ControlRow and IntradayHeartRate as well as the settings card, so this
+  // route is hit by every page. Computing staleness measured 19-60ms against a real archive and
+  // grows with the daily row count, so it is opt in: only the one caller that shows it asks.
+  it('leaves the activity fields out unless they are asked for', async () => {
+    seedDates('watch', '2026-01-01', 14)
+    const [watch] = (await list()).json().items
+    expect(watch).not.toHaveProperty('status')
+    expect(watch).not.toHaveProperty('lastReportedDate')
+    expect(watch).toMatchObject({ id: 'watch', name: 'Pixel Watch 4' })
+  })
+})
+
 describe('GET /sources, the activity each one reports', () => {
   // The harness clock sits at 2026-02-02 and p1 is in Europe/Amsterdam, so "today" is that date
   // in that zone rather than whatever day the machine running this thinks it is.
   it('calls a source stale once it is silent past its own cadence', async () => {
     seedDates('watch', '2026-01-01', 14)
-    const [watch] = (await list()).json().items
+    const [watch] = (await listWithActivity()).json().items
     expect(watch).toMatchObject({
       id: 'watch', lastReportedDate: '2026-01-14', reportingDates: 14,
       medianGapDays: 1, status: 'stale', reportingNow: false,
@@ -56,13 +74,13 @@ describe('GET /sources, the activity each one reports', () => {
 
   it('leaves a source that is still reporting alone', async () => {
     seedDates('watch', '2026-01-20', 14)
-    const [watch] = (await list()).json().items
+    const [watch] = (await listWithActivity()).json().items
     expect(watch).toMatchObject({ id: 'watch', status: 'reporting', reportingNow: true })
   })
 
   it('answers for a source that has never reported rather than leaving it out', async () => {
     // 'app' is seeded in beforeEach and given no daily rows at all.
-    const items = (await list()).json().items
+    const items = (await listWithActivity()).json().items
     const app = items.find((i: { id: string }) => i.id === 'app')
     expect(app).toMatchObject({
       lastReportedDate: null, reportingDates: 0, medianGapDays: null,
@@ -75,16 +93,9 @@ describe('GET /sources', () => {
   it('lists the person\'s sources with the provider name until one is set', async () => {
     const response = await list()
     expect(response.statusCode).toBe(200)
-    // The activity fields are asserted in their own describe below. They are spelled out here
-    // too rather than loosened to toMatchObject, because this is the assertion that catches a
-    // field silently appearing or disappearing from the listing's shape.
-    const activityOfSourceWithNoRows = {
-      lastReportedDate: null, reportingDates: 0, medianGapDays: null,
-      status: 'unjudged', reportingNow: false,
-    }
     expect(response.json().items).toEqual([
-      { id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 10, ...activityOfSourceWithNoRows },
-      { id: 'app', externalId: 'HEALTH_CONNECT:com.lyfta', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app', createdAtMs: 20, ...activityOfSourceWithNoRows },
+      { id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: null, name: 'Pixel Watch 4', kind: 'device', createdAtMs: 10 },
+      { id: 'app', externalId: 'HEALTH_CONNECT:com.lyfta', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app', createdAtMs: 20 },
     ])
   })
 

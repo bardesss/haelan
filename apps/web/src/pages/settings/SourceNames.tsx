@@ -5,8 +5,8 @@ import { useTranslation } from '../../i18n/index.js'
 import { EmptyState } from '../../components/EmptyState.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
-import { sourceNamesKey, useClearSourceName, useRenameSource, useSourceNames } from '../../data/useSourceNames.js'
-import type { NamedSource } from '../../data/useSourceNames.js'
+import { sourceActivityKey, useClearSourceName, useRenameSource, useSourcesWithActivity } from '../../data/useSourceNames.js'
+import type { NamedSourceWithActivity } from '../../data/useSourceNames.js'
 
 /**
  * Mirrors MAX_ALIAS_LENGTH in packages/core/src/store/sourceAliases.ts. A local constant rather
@@ -29,7 +29,7 @@ export function SourceNames() {
   const { t } = useTranslation()
   const session = useSession()
   const queryClient = useQueryClient()
-  const { sources, isPending, isError, error } = useSourceNames()
+  const { sources, isPending, isError, error } = useSourcesWithActivity()
 
   if (isPending) return <Loading />
   if (isError) {
@@ -41,7 +41,7 @@ export function SourceNames() {
     return (
       <ErrorState onRetry={() => {
         const personId = session.data?.personId
-        if (personId !== undefined) void queryClient.refetchQueries({ queryKey: sourceNamesKey(personId), exact: true })
+        if (personId !== undefined) void queryClient.refetchQueries({ queryKey: sourceActivityKey(personId), exact: true })
       }} error={error} />
     )
   }
@@ -71,7 +71,7 @@ export function SourceNames() {
   )
 }
 
-function SourceNameRow({ source }: { source: NamedSource }) {
+function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
   const { t, i18n } = useTranslation()
   const rename = useRenameSource()
   const clear = useClearSourceName()

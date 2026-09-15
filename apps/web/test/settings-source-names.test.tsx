@@ -8,8 +8,8 @@ import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { SourceNames } from '../src/pages/settings/SourceNames.js'
-import { sourceNamesKey } from '../src/data/useSourceNames.js'
-import type { NamedSource } from '../src/data/useSourceNames.js'
+import { sourceActivityKey } from '../src/data/useSourceNames.js'
+import type { NamedSourceWithActivity } from '../src/data/useSourceNames.js'
 import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
@@ -35,15 +35,16 @@ const PERSON: Session = {
 /**
  * Same shape as source-names.test.tsx's own mount: a fresh QueryClient per test, the session
  * pre-seeded so useSession() never has to fetch, and the sources query pre-seeded under the same
- * key useSourceNames/useRenameSource/useClearSourceName all share (sourceNamesKey). An unseeded
+ * key the card reads (sourceActivityKey, a child of sourceNamesKey so the two mutations'
+ * prefix invalidation still reaches it). An unseeded
  * query would reach the real network in this environment rather than merely running slow (see
  * apps/web/test/control-row.test.tsx's own comment on withQuery), so every test here seeds it
  * even the one passing an empty list.
  */
-function mountSection(sources: NamedSource[]): void {
+function mountSection(sources: NamedSourceWithActivity[]): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(sourceNamesKey(PERSON.personId), { items: sources })
+  client.setQueryData(sourceActivityKey(PERSON.personId), { items: sources })
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
@@ -75,12 +76,12 @@ const fieldErrors = (): string[] =>
  * to flush() on (the mutation and the refetch it invalidates are both queryClient traffic, not DOM
  * traffic flush() could otherwise see) and mountSection's own callers never needed that.
  */
-function mountForWrites(sources: NamedSource[]): QueryClient {
+function mountForWrites(sources: NamedSourceWithActivity[]): QueryClient {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity }, mutations: { retry: false } },
   })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(sourceNamesKey(PERSON.personId), { items: sources })
+  client.setQueryData(sourceActivityKey(PERSON.personId), { items: sources })
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
@@ -94,13 +95,13 @@ function mountForWrites(sources: NamedSource[]): QueryClient {
 /**
  * Stands in for the real route (apps/server's PUT/DELETE .../sources/:id/alias): GET answers
  * whatever the last write left behind, so the refetch a successful mutation's onSuccess triggers
- * (sourceNamesKey invalidation in useSourceNames.ts) shows the new name rather than the seeded one.
+ * (the prefix invalidation in useSourceNames.ts) shows the new name rather than the seeded one.
  * PUT refuses a name already worn by a different source in this list, the one server rule these
  * tests care about (SourceAliasStore.put's own duplicate check, packages/core/src/store/sourceAliases.ts),
  * answered the same shape the real route does: a 400 with {error: {kind: 'config', message}}, which
  * is what SourceNames.tsx's inline error branch keys on.
  */
-function mockSourcesApi(initial: NamedSource[]): {
+function mockSourcesApi(initial: NamedSourceWithActivity[]): {
   restore: () => void
   requests: { method: string, url: string, body: Record<string, unknown> | null }[]
 } {
@@ -167,14 +168,14 @@ function pressEnter(input: HTMLInputElement): void {
  * name is, so every fixture here carries them; `namedSource` exists so a test that cares about
  * one of them says so and inherits the rest.
  */
-const SOURCE: NamedSource = {
+const SOURCE: NamedSourceWithActivity = {
   id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4',
   alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0,
   lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
   status: 'reporting', reportingNow: true,
 }
 
-const namedSource = (over: Partial<NamedSource> = {}): NamedSource => ({ ...SOURCE, ...over })
+const namedSource = (over: Partial<NamedSourceWithActivity> = {}): NamedSourceWithActivity => ({ ...SOURCE, ...over })
 
 describe('a source that has stopped reporting', () => {
   it('says when a stale source last reported', () => {
@@ -299,7 +300,7 @@ describe('committing a name from the field', () => {
   // apps/web/src/api/client.ts's KIND_BY_STATUS), the status SourceAliasStore.put's own duplicate
   // check answers with.
   it('shows the server\'s own message inline when the name is already taken', async () => {
-    const other: NamedSource = namedSource({
+    const other: NamedSourceWithActivity = namedSource({
       id: 'app', externalId: 'x', displayName: 'com.lyfta', alias: null, name: 'com.lyfta',
       kind: 'app', createdAtMs: 20,
     })
