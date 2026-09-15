@@ -49,15 +49,30 @@ export function SourceNames() {
     return <EmptyState title={t('settings.sourceNames.empty.title')} detail={t('settings.sourceNames.empty.detail')} />
   }
 
+  // Partitioned rather than filtered: a source that has stopped is still listed, because a
+  // household may want to rename or prioritise it. Only its position changes.
+  const live = sources.filter((source) => source.reportingNow)
+  const dormant = sources.filter((source) => !source.reportingNow)
+
   return (
-    <ul className="source-name-list">
-      {sources.map((source) => <SourceNameRow key={source.id} source={source} />)}
-    </ul>
+    <>
+      <ul className="source-name-list">
+        {live.map((source) => <SourceNameRow key={source.id} source={source} />)}
+      </ul>
+      {dormant.length > 0 && (
+        <>
+          <h3 className="source-names-dormant-heading">{t('settings.sourceNames.dormantHeading')}</h3>
+          <ul className="source-name-list source-names-dormant">
+            {dormant.map((source) => <SourceNameRow key={source.id} source={source} />)}
+          </ul>
+        </>
+      )}
+    </>
   )
 }
 
 function SourceNameRow({ source }: { source: NamedSource }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const rename = useRenameSource()
   const clear = useClearSourceName()
   // The field is uncontrolled between edits: `draft` starts from what the server says and is only
@@ -91,6 +106,20 @@ function SourceNameRow({ source }: { source: NamedSource }) {
       </label>
       <span className="source-name-detail">{`${fallbackLabel} - ${source.id}`}</span>
       <span className="source-name-kind">{t(`settings.sourceNames.kind.${source.kind}`)}</span>
+      {/* Only said about a source the card is making a claim about. A source reporting normally
+          needs no line: its last reading is yesterday and saying so is noise on every row. */}
+      {!source.reportingNow && (
+        <span className="source-name-stale">
+          {source.lastReportedDate === null
+            ? t('settings.sourceNames.neverReported')
+            : t('settings.sourceNames.lastReported', {
+              // Parsed as UTC, not as a local string: `new Date('2026-01-20')` is already UTC
+              // midnight, but the T00:00:00Z is explicit so a reader does not have to know that.
+              date: new Date(`${source.lastReportedDate}T00:00:00Z`)
+                .toLocaleString(i18n.language, { dateStyle: 'medium' }),
+            })}
+        </span>
+      )}
       {failed && (
         <span className="field-error">
           {/* clear is a DELETE: it only 404s or succeeds, never 400s, so a config error can only

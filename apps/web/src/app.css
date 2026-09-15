@@ -545,6 +545,18 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .source-name-kind {
   font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
 }
+/* Said only about a source the card is making a claim about - one still reporting carries no such
+   line - so this is a statement rather than a column, and it sits in the same muted register as
+   .source-name-detail beside it rather than shouting. A dead source is a fact to notice on the
+   settings page, not an alarm to raise over the whole app. */
+.source-name-stale { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* The group, not a hiding place: these rows are rendered in full, with their inputs, because a
+   household may still want to rename or prioritise a source that has stopped. */
+.source-names-dormant-heading {
+  margin: var(--space-5) 0 0; font-size: var(--font-size-xs); font-weight: var(--weight-medium);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
+}
+.source-names-dormant .source-name-row { opacity: .75; }
 
 /* Members.tsx: the same row shape .source-name-row uses (a fixed field, a muted detail, an action
    at the end), but the "field" here is a state label rather than an input, so the row never grows

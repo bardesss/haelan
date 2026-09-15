@@ -65,6 +65,8 @@ const placeholders = (): string[] =>
 const rowDetail = (index: number): string =>
   [...container!.querySelectorAll('.source-name-detail')][index]?.textContent ?? ''
 
+const text = (selector: string): string => container!.querySelector(selector)?.textContent ?? ''
+
 const fieldErrors = (): string[] =>
   [...container!.querySelectorAll('.field-error')].map((e) => e.textContent ?? '')
 
@@ -160,15 +162,62 @@ function pressEnter(input: HTMLInputElement): void {
   act(() => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
 }
 
+/**
+ * A source that is reporting normally. The activity fields are as required on the wire as the
+ * name is, so every fixture here carries them; `namedSource` exists so a test that cares about
+ * one of them says so and inherits the rest.
+ */
 const SOURCE: NamedSource = {
   id: 'watch', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4',
   alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0,
+  lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
+  status: 'reporting', reportingNow: true,
 }
+
+const namedSource = (over: Partial<NamedSource> = {}): NamedSource => ({ ...SOURCE, ...over })
+
+describe('a source that has stopped reporting', () => {
+  it('says when a stale source last reported', () => {
+    mountSection([namedSource({
+      id: 'watch', status: 'stale', reportingNow: false, lastReportedDate: '2026-01-20',
+    })])
+    // The exact string, not a substring: a substring check would survive the date formatting
+    // breaking, which is the thing most likely to break.
+    const expected = new Date('2026-01-20T00:00:00Z').toLocaleString('en', { dateStyle: 'medium' })
+    expect(text('.source-name-stale')).toBe(`Last reported ${expected}`)
+  })
+
+  it('says nothing about staleness for a source that is reporting', () => {
+    mountSection([namedSource({ status: 'reporting', reportingNow: true })])
+    expect(container!.querySelector('.source-name-stale')).toBeNull()
+  })
+
+  it('says so plainly when a source has never reported at all', () => {
+    mountSection([namedSource({ status: 'unjudged', reportingNow: false, lastReportedDate: null })])
+    expect(text('.source-name-stale')).toBe('Has never reported')
+  })
+
+  it('groups the ones no longer reporting under their own heading', () => {
+    mountSection([
+      namedSource({ id: 'live', name: 'My watch', reportingNow: true }),
+      namedSource({ id: 'gone', name: 'Old app', reportingNow: false, status: 'unjudged' }),
+    ])
+    expect(text('.source-names-dormant-heading')).toBe('No longer reporting')
+    expect(container!.querySelectorAll('.source-names-dormant .source-name-row')).toHaveLength(1)
+    // Still rendered, not hidden: a household may want to rename or prioritise one.
+    expect(container!.querySelectorAll('.source-name-row')).toHaveLength(2)
+  })
+
+  it('shows no heading at all when every source is reporting', () => {
+    mountSection([namedSource({ id: 'a', reportingNow: true }), namedSource({ id: 'b', reportingNow: true })])
+    expect(container!.querySelector('.source-names-dormant-heading')).toBeNull()
+  })
+})
 
 describe('the source names section', () => {
   it('shows the current name, the provider name and the id for each source', () => {
     mountSection([
-      { id: 'abc123', externalId: 'HEALTH_CONNECT:Pixel Watch 4', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 },
+      namedSource({ id: 'abc123' }),
     ])
     // The whole value, not a substring: toContain('My watch') would also pass on the id.
     expect(inputValues()).toEqual(['My watch'])
@@ -177,7 +226,7 @@ describe('the source names section', () => {
 
   it('offers an empty field for a source nobody named, with the provider name as the placeholder', () => {
     mountSection([
-      { id: 'abc123', externalId: 'x', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app', createdAtMs: 0 },
+      namedSource({ id: 'abc123', externalId: 'x', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app' }),
     ])
     expect(inputValues()).toEqual([''])
     expect(placeholders()).toEqual(['com.lyfta'])
@@ -250,9 +299,10 @@ describe('committing a name from the field', () => {
   // apps/web/src/api/client.ts's KIND_BY_STATUS), the status SourceAliasStore.put's own duplicate
   // check answers with.
   it('shows the server\'s own message inline when the name is already taken', async () => {
-    const other: NamedSource = {
-      id: 'app', externalId: 'x', displayName: 'com.lyfta', alias: null, name: 'com.lyfta', kind: 'app', createdAtMs: 20,
-    }
+    const other: NamedSource = namedSource({
+      id: 'app', externalId: 'x', displayName: 'com.lyfta', alias: null, name: 'com.lyfta',
+      kind: 'app', createdAtMs: 20,
+    })
     const api = mockSourcesApi([SOURCE, other])
     const client = mountForWrites([SOURCE, other])
 

@@ -1086,7 +1086,10 @@
         "app": "App",
         "manual": "Entered by hand"
       },
-      "saveFailed": "That did not save. Try again."
+      "saveFailed": "That did not save. Try again.",
+      "lastReported": "Last reported {{date}}",
+      "dormantHeading": "No longer reporting",
+      "neverReported": "Has never reported"
     },
     "dataTypes": {
       "title": "What to sync",

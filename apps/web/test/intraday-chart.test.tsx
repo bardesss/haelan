@@ -82,6 +82,15 @@ afterEach(() => {
  * spo2/hrv cards are the only reason this parameter exists at all (the "metric-specific
  * formatting" tests below).
  */
+/** One source, reporting normally. This file asserts series names and tooltips, not staleness, so
+ *  the activity fields are here only because the wire shape requires them. */
+const namedSource = (): NamedSource => ({
+  id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch',
+  name: 'My watch', kind: 'device', createdAtMs: 0,
+  lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
+  status: 'reporting', reportingNow: true,
+})
+
 function optionForPoints(
   points: IntradayPoint[],
   namedSources: NamedSource[],
@@ -236,7 +245,7 @@ describe('source names in the intraday heart rate chart', () => {
     // Two points from one source, rendered with an alias set for it.
     const option = optionForPoints(
       [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70, n: 1, excluded: false }],
-      [{ id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 }],
+      [namedSource()],
     )
     const series = option.series as { name: string, stack?: string }[]
     expect(series.map((s) => s.name)).toEqual(['My watch min', 'My watch range', 'My watch'])
@@ -258,7 +267,7 @@ describe('source names in the intraday heart rate chart', () => {
   it('still finds the hovered point after a rename', () => {
     const option = optionForPoints(
       [{ utcMs: 0, sourceId: 'src-hex-id', min: 50, mean: 60, max: 70, n: 1, excluded: false }],
-      [{ id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch', name: 'My watch', kind: 'device', createdAtMs: 0 }],
+      [namedSource()],
     )
     const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter
     // seriesIndex 2 is the mean line: three series per source, mean last.
