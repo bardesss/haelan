@@ -291,6 +291,69 @@ try {
     const scrolled = await page.evaluate(() => window.scrollY)
     check(scrolled === 0, `the page behind the open drawer scrolled to ${scrolled}`)
 
+    // The three ways out, each of them checked, because until this fix only one existed and it was
+    // the one a phone has no key for. Escape was asserted here from the start; a finger could not
+    // reach it, and nothing in this harness noticed.
+    //
+    // Tapping the rail item for the page already open is the case that made this a trap rather
+    // than an inconvenience: the drawer closes on a route change, and that is no route change, so
+    // a reader who opened the menu to look and decided to stay had nothing left. Asserted first,
+    // and asserted as still-open, because leaving it open is correct - what was missing is a way
+    // out that does not navigate.
+    const current = page.locator('dialog.rail-dialog a[aria-current="page"]')
+    check(await current.count() === 1, 'the drawer marks no current page, or more than one')
+    if (await current.count() === 1) {
+      await current.click()
+      await page.waitForTimeout(SETTLE_MS)
+      check(await dialog.isVisible(), 'the drawer closed on a tap that changed no route')
+    }
+
+    // The close control: it has to be there, it has to be big enough for the finger that is the
+    // whole reason it exists, and it has to actually close the drawer and hand focus back.
+    const close = page.locator('dialog.rail-dialog [data-testid="rail-close"]')
+    const closeVisible = await close.isVisible().catch(() => false)
+    check(closeVisible, 'the drawer has no close control')
+    if (closeVisible) {
+      const box = await close.boundingBox()
+      check(
+        box !== null && Math.min(box.width, box.height) >= TOUCH_MIN,
+        `the drawer's close control is ${box === null ? 'unmeasurable' : `${Math.round(box.width)}x${Math.round(box.height)}`}`
+          + `, below ${TOUCH_MIN}px`,
+      )
+      await close.click()
+      await page.waitForTimeout(SETTLE_MS)
+      check(!(await dialog.isVisible()), 'the close control did not close the drawer')
+      check(
+        await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'rail-open'),
+        'focus did not return to the hamburger after the close control',
+      )
+    }
+
+    // Between one dismissal and the next, and only when the one before it failed to dismiss. An
+    // open modal intercepts every pointer event on the page, so a way out that stops working takes
+    // the hamburger with it: the next click here retries for thirty seconds and then throws, and
+    // this run reports a Playwright timeout instead of the plain sentence above saying which way
+    // out broke. Watched: with the close control removed, the whole block ended in a click
+    // timeout on a .rail-item and printed none of its own failures.
+    async function forceShut() {
+      if (!(await dialog.isVisible())) return
+      await page.evaluate(() => document.querySelector('dialog.rail-dialog')?.close())
+      await page.waitForTimeout(SETTLE_MS)
+    }
+
+    // A backdrop tap, at a point outside the 280px drawer. Not a substitute for the control above -
+    // nothing on screen says the backdrop is tappable - but it is the gesture a reader who has met
+    // one modal already will try first, and it did nothing at all before this fix.
+    await forceShut()
+    await hamburger.click()
+    check(await dialog.isVisible(), 'the drawer did not reopen')
+    await page.mouse.click(PHONE.width - 20, 400)
+    await page.waitForTimeout(SETTLE_MS)
+    check(!(await dialog.isVisible()), 'a tap on the backdrop did not close the drawer')
+
+    await forceShut()
+    await hamburger.click()
+    check(await dialog.isVisible(), 'the drawer did not reopen for the Escape check')
     await page.keyboard.press('Escape')
     check(!(await dialog.isVisible()), 'Escape did not close the drawer')
     check(

@@ -88,6 +88,40 @@ describe('the rail drawer', () => {
     expect(document.activeElement).toBe(button)
   })
 
+  // The defect this component shipped with: Escape and a route change were the only two ways out,
+  // and a phone has neither a key for the first nor, for a reader who opened the menu and then
+  // decided to stay on the page they were already on, the second. The close control is what a
+  // finger can find; the backdrop handler below is the gesture it will try first.
+  it('closes on the close control, returning focus to the hamburger', () => {
+    render()
+    const button = container!.querySelector<HTMLButtonElement>('[data-testid="rail-open"]')!
+    act(() => { button.click() })
+    expect(container!.querySelector('dialog')?.hasAttribute('open')).toBe(true)
+
+    const close = container!.querySelector<HTMLButtonElement>('dialog [data-testid="rail-close"]')
+    expect(close, 'the drawer should carry a close control').not.toBeNull()
+    act(() => { close!.click() })
+    expect(container!.querySelector('dialog')?.hasAttribute('open')).toBe(false)
+    expect(document.activeElement).toBe(button)
+  })
+
+  // A click whose target is the dialog element itself landed on the backdrop: everything the
+  // drawer renders is a descendant, and .rail fills the dialog's box edge to edge. The two
+  // assertions are one rule read both ways, because a handler that closes on any click at all
+  // would pass the first on its own and make the menu unusable.
+  it('closes on a backdrop tap and not on a tap inside the drawer', () => {
+    render()
+    const open = () => act(() => { container!.querySelector<HTMLButtonElement>('[data-testid="rail-open"]')!.click() })
+    const dialog = () => container!.querySelector('dialog')!
+
+    open()
+    act(() => { dialog().querySelector('.rail')!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(dialog().hasAttribute('open'), 'a tap inside the drawer closed it').toBe(true)
+
+    act(() => { dialog().dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(dialog().hasAttribute('open'), 'a tap on the backdrop did not close the drawer').toBe(false)
+  })
+
   // The whole rail, not a reduced phone menu: every destination the rail links to, the resources
   // links, the person line and sign-out.
   //

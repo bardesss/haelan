@@ -52,6 +52,7 @@
   "sidebar": {
     "sectionsLabel": "Sections",
     "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "collapse": "Collapse navigation",
     "expand": "Expand navigation",
     "groups": {

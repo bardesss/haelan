@@ -12,6 +12,10 @@ import { useRoute } from '../router.js'
  * <dialog> rather than a hand-rolled panel because focus containment, Escape to close and making
  * the page behind inert are browser behaviour there, and thirty lines of our own everywhere else.
  * The parts of a drawer that are subtly wrong in one browser are exactly those three.
+ *
+ * What <dialog> does not give is a way out for a finger, and that is what the close button and the
+ * backdrop handler below are. Everything the element itself offers - Escape, and the close request
+ * a CloseWatcher raises from an Android back gesture - assumes hardware an iPhone does not have.
  */
 export function RailDrawer({ active, person, onSignOut, signOutError }: {
   active: string
@@ -79,7 +83,34 @@ export function RailDrawer({ active, person, onSignOut, signOutError }: {
         </button>
         <div className="brand"><BrandMark />Hælan</div>
       </div>
-      <dialog ref={dialog} className="rail-dialog" aria-label={t('sidebar.sectionsLabel')}>
+      {/*
+        The click handler is the backdrop tap. A click whose target is the dialog element itself
+        landed outside the dialog's own box - everything inside it is a descendant, and .rail fills
+        the box edge to edge - so this fires for the backdrop and for nothing else.
+
+        Not `closedby="any"`, which asks the browser for the same light dismiss: it is supported in
+        the Chromium this repository's own layout check drives (141; `'closedBy' in
+        HTMLDialogElement.prototype` answers true there) and in current Safari and Firefox, but it
+        arrived in all three during 2025, so an iPhone a year or two behind its last update has a
+        drawer with one fewer way out. The handler above costs one line and is the same behaviour
+        on every browser that has ever rendered this app, which is what a dismissal control has to
+        be. The attribute would add nothing this does not already do.
+      */}
+      <dialog ref={dialog} className="rail-dialog" aria-label={t('sidebar.sectionsLabel')}
+        onClick={(event) => { if (event.target === dialog.current) setOpen(false) }}>
+        {/*
+          The reason this exists at all: Escape and a route change were the only ways out, and a
+          phone has no Escape key. A reader who opened the menu to look and then decided to stay on
+          the page they were already on was stuck - tapping the rail item for the current page
+          changes no route, so the effect above never fires. A backdrop tap is a real dismissal but
+          not a discoverable one; this is the one a finger can find. Sized by the 44px rule through
+          .icon-button, which applies below the breakpoint, and this component only ever renders
+          there.
+        */}
+        <button type="button" className="icon-button rail-close" data-testid="rail-close"
+          aria-label={t('sidebar.closeMenu')} onClick={() => setOpen(false)}>
+          <Icon name="close" />
+        </button>
         <Sidebar active={active} person={person} onSignOut={onSignOut}
           signOutError={signOutError} collapsible={false} />
       </dialog>
