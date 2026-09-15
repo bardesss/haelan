@@ -776,6 +776,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
   font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0;
 }
 .maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); margin: 0 0 var(--space-2); }
+/* The backup download. The anchor carries .button already, so the only thing wanted here is a row
+   that does not stretch it to the card's full width the way a flex column otherwise would, and a
+   note under it in the same muted register as .maintenance-retention: all three lines are one
+   statement about one file rather than separate paragraphs. */
+.maintenance-download-row { margin: 0 0 var(--space-1); }
+.maintenance-download { display: inline-flex; align-items: center; gap: var(--space-2); }
+.maintenance-download-note {
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); margin: 0 0 var(--space-2);
+}
 /* The one fact worth a household's attention before they click reclaim: the same negative toned
    box .connect-warning uses above for a fact just as actionable (a redirect that cannot land, a
    reclaim that cannot run safely). */

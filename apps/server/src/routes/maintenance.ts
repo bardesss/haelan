@@ -1,9 +1,10 @@
+import { createReadStream } from 'node:fs'
 import type { FastifyInstance } from 'fastify'
 import {
   vacuumDecision, vacuumIfBloated, runBackup, listBackups, pruneBackups, backupDecision, databaseBloat,
 } from '@haelan/core'
 import type { BackupFile } from '@haelan/core'
-import { sendCoreError, errorBody } from '../api/envelope.ts'
+import { sendCoreError, errorBody, statusFor } from '../api/envelope.ts'
 
 /** What both POST routes answer when a second connection might still be open on the file - see
  * ServerDeps.rebuildInFlight for which one and why. Its own string rather than one of
@@ -92,6 +93,39 @@ export function registerMaintenance(app: FastifyInstance): void {
       // the store would give any other caller, rather than a second opinion written here.
       settings.putBackupPolicy({ keep, intervalHours }, app.haelan.now())
       return reply.send({ keep, intervalHours })
+    })
+
+    /**
+     * The newest backup, or any other one by name, as a file the browser saves.
+     *
+     * The name is resolved by LOOKUP against listBackups, never by joining the parameter onto
+     * dataDir. That is what makes traversal structurally impossible rather than filtered: the
+     * only paths this handler can ever open are ones listBackups itself produced, so no amount
+     * of `../` in the parameter reaches `instance.key` sitting beside the database - which is
+     * exactly the file a traversal would want, since it is what turns an unreadable archive into
+     * a restorable one. It also means a backup still being written cannot be served: listBackups
+     * only reports files that have been integrity checked and renamed.
+     *
+     * A stream rather than readFileSync. A household archive runs to hundreds of megabytes, and
+     * reading one into a Buffer would hold all of it in memory and block this process's only
+     * thread while it did.
+     *
+     * `path` is used here and nowhere else, and still never leaves the process: withoutPath
+     * keeps it out of every JSON body, and the Content-Disposition below carries the file's own
+     * name rather than its location.
+     */
+    scope.get<{ Params: { name: string } }>('/api/settings/maintenance/backups/:name/download', { preHandler: guard }, async (request, reply) => {
+      const file = listBackups(app.haelan.dataDir).find((f) => f.name === request.params.name)
+      if (!file) {
+        return reply.code(statusFor('not_found')).send(
+          errorBody('not_found', 'no_such_backup', 'no backup by that name'),
+        )
+      }
+      return reply
+        .type('application/octet-stream')
+        .header('content-disposition', `attachment; filename="${file.name}"`)
+        .header('content-length', file.bytes)
+        .send(createReadStream(file.path))
     })
 
     scope.post('/api/settings/maintenance/backup', { preHandler: guard }, async (_request, reply) => {

@@ -1146,6 +1146,8 @@
       "bloat": "{{mb}} MB of dead space in the database file.",
       "backups": {
         "none": "No backups yet.",
+        "download": "Download backup",
+        "downloadNote": "The file holds the database only. instance.key stays here, and is needed to read the stored Google credentials back.",
         "latest": "Last backup {{date}} ({{size}} MB).",
         "retention": "Keeps the last {{keep}}, taken every {{hours}} hours.",
         "off": "Backups are switched off for this instance."

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, it, expect, afterEach } from 'vitest'
 import { CredentialStore, listBackups, SCOPES } from '@haelan/core'
@@ -287,6 +287,79 @@ describe('POST /api/settings/maintenance/reclaim', () => {
 // The second half of this task: a person whose row instance.key cannot open. Simulated the way a
 // restored backup actually produces it - the same database, a refresh token sealed under a
 // different key than the one this process holds - rather than by corrupting bytes, which would
+describe('GET /api/settings/maintenance/backups/:name/download', () => {
+  it('answers forbidden for a non-admin session', async () => {
+    harness = await withServer()
+    await harness.addPerson({ id: 'p-outsider', displayName: 'Outsider', username: 'outsider' })
+    const token = await harness.signIn('outsider', 'a good long password')
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/maintenance/backups/haelan-anything.sqlite/download',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json().error.kind).toBe('forbidden')
+  })
+
+  it('sends the backup as an attachment named after the file, byte for byte', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const made = await harness.app.inject({
+      method: 'POST', url: '/api/settings/maintenance/backup',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const { name, bytes } = made.json()
+
+    const response = await harness.app.inject({
+      method: 'GET', url: `/api/settings/maintenance/backups/${name}/download`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.headers['content-disposition']).toBe(`attachment; filename="${name}"`)
+    expect(response.headers['content-type']).toBe('application/octet-stream')
+    expect(Number(response.headers['content-length'])).toBe(bytes)
+    // The bytes themselves, compared against the file listBackups reports rather than against
+    // the length header the same handler wrote: a route that streamed the wrong file would
+    // satisfy a length check whenever the two happened to match in size.
+    const onDisk = listBackups(harness.app.haelan.dataDir)
+    expect(onDisk).toHaveLength(1)
+    expect(response.rawPayload.equals(readFileSync(onDisk[0]!.path))).toBe(true)
+  })
+
+  it('answers not found for a name no backup has', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/maintenance/backups/haelan-2020-01-01T00-00-00-000Z.sqlite/download',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(404)
+    expect(response.json().error.kind).toBe('not_found')
+  })
+
+  // The reason this route resolves a name against listBackups instead of joining it onto the
+  // data directory. instance.key sits beside the database and is the one file that turns a
+  // backup from an unreadable archive into a restorable one, so it is what a traversal would go
+  // for first.
+  it('refuses a traversal name rather than reading a file beside the database', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    const keyPath = join(harness.app.haelan.dataDir, 'instance.key')
+    const key = readFileSync(keyPath)
+
+    for (const attempt of ['..%2Finstance.key', '..%2F..%2Finstance.key', 'instance.key']) {
+      const response = await harness.app.inject({
+        method: 'GET', url: `/api/settings/maintenance/backups/${attempt}/download`,
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.statusCode).toBe(404)
+      expect(response.rawPayload.includes(key)).toBe(false)
+    }
+  })
+})
+
 // prove something about malformed ciphertext instead of about the key that sealed it.
 describe('a stored refresh token instance.key cannot decrypt', () => {
   it('is reported as needing to re-consent, distinctly from one who was never connected', async () => {

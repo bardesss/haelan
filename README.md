@@ -273,7 +273,8 @@ An instance takes a compacted copy of its database once a day into `backups/` in
 directory, keeps the newest seven, and does it while the app is running. Settings, under Database
 maintenance, changes how many are kept and how many hours pass between them, and setting the count
 to `0` turns backups off for an operator who backs the volume up by other means. The same screen
-shows when the last one was taken and can take one now.
+shows when the last one was taken, can take one now, and can download the most recent one through
+the browser, for a household whose instance is not on the machine they are sitting at.
 
 A file appears in `backups/` only after it has been written, opened, integrity-checked and
 row-counted against the live database. A copy that fails any of those keeps a `.part` extension,
@@ -465,12 +466,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 841 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 843 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 841 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 843 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.
