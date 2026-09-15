@@ -50,7 +50,11 @@ tracked, so this file is the only place any of it exists.
 | **M5e-2** Seed and rehearsal | A deterministic demo data generator, the upgrade path rehearsed end to end from an old schema through rebuild, reclaim, backup and restore, and the script that seeds a directory for anyone to boot an instance against | Done, [#116](https://github.com/bardesss/haelan/pull/116) |
 | **M5e-3** Documentation and screenshots | Three screenshots off the seeded demo data, and the README a stranger meets first: the features that shipped and not the ones that did not, one deploy block, and a configuration reference written for people who disagree with the defaults | Done, [#117](https://github.com/bardesss/haelan/pull/117) |
 | **M5** Packaging | Cut into six units, a, b, c, d, e and f as listed here, with M5d itself cut into four strands - D cheaper tests, A narrow keys, then B reclaiming the space a rebuild frees but never returns and C backup and restore, which shipped together because a vacuum and a backup are one SQLite operation writing to two places - and M5e itself cut into three: M5e-1 the envelope, M5e-2 the seeded demo data and the automated upgrade rehearsal, M5e-3 the documentation and screenshots - and the catalogue work and the image both landing before the v1.0.0 tag | Done |
-| **M6** What only the archive can answer | Source staleness, so a source that quietly stopped reporting says so instead of thinning a chart; all-time records and a milestones timeline; and an Eddington style number, which needs every day on disk to compute at all | Not started |
+| **M6** What only the archive can answer | Source staleness, so a source that quietly stopped reporting says so instead of thinning a chart; all-time records and a milestones timeline; and an Eddington style number, which needs every day on disk to compute at all. Cut into four on 2026-09-15, in the order they are listed here: M6-0 the eligibility probe, M6a staleness, M6b the all-time page and its first consumer, M6c the rest of that page | Not started |
+| **M6-0** The eligibility probe | What an all-time number does with a day the reader excluded, and with a day whose coverage is thin, measured rather than decided. Answered, and it answered something else: **coverage never decides a record** - the record holder survives every threshold swept, because a big day is a worn day - and **no eligibility rule moves an Eddington number at all**, including one discarding a third of the days, since that statistic is decided at the top of the distribution and a coverage gate cuts the bottom. Excluding a corrected day stays in on principle rather than on evidence: this household has never excluded anything, so that half is unmeasured rather than measured as negative. **The rule the milestone actually needs is tier selection, not eligibility**: two of the five record-shaped metrics are written only under the `provider` source with no merged row and no coverage number at all, so a reader filtering to `merged`, as every page does, reports them as absent while the archive holds years of them. And **an all-time figure has to name the window it covers**, because the metric an Eddington number is defined on can begin long after the archive does. The write-up is not in git: it carries figures off a household archive and this repository is public | Done |
+| **M6a** Source staleness | A per source last reported read, a definition of stale that survives a scale stepped on monthly sitting beside a watch worn daily, and the Settings sources card M5a already gives every source a name in. Independent of the other three units and releasable on its own | Not started |
+| **M6b** The all-time page | A route outside the range bound group and whatever the control row becomes on a page where a range picker means nothing, the eligibility rule built once as a reader both consumers go through, and the Eddington number as its first consumer. M6-0 changes what that consumer has to prove: the eligibility rule turned out not to move it, so the spine's real work is the tier a metric is read from and the window an all-time figure actually covers, which it must name rather than imply | Not started |
+| **M6c** Records and milestones | All-time records and the milestones timeline, reading through the spine M6b built. The larger surface and the one with the most open questions - what counts as a record, what a streak survives, what happens to a tie - which is the other reason it is not the first consumer. M6-0 adds two: a top-ten list is affected by a coverage rule even though a single record is not, and a metric held only in the `provider` tier carries no coverage number for such a rule to read | Not started |
 | **M8a** Detail page spine | A session's `attrs` widened from seven keys to fourteen, and the archive re-mapped onto them by a mapping bump; one session by id; and intraday samples over a UTC window, which is the only shape a night crossing midnight has | Done, [#141](https://github.com/bardesss/haelan/pull/141) |
 | **M8b** The workout page | A stack of cards over what M8a's widened `attrs` already carried: the tiles, the heart rate zones a session records on its own four-zone vocabulary, the trace pinned to the device that recorded the workout and the fallback for the five sessions in 198 where that device logged nothing, `PAUSE` markers and an exact paused total rather than a fabricated band, the splits table whose absent state is the common case, running dynamics, a comparison stated as a count, and session-scope exclude - which the server has had since M3c and no browser could reach | Done, [#172](https://github.com/bardesss/haelan/pull/172) |
 | **M8c** The night page | The night list on Sleep, and a page per night keyed by its local date because a night has no id: the tier 1 tiles it never recomputes, the hypnogram, the naps its own grouping put outside the span, the overnight traces a date-keyed read cannot express, and one exclude control per session the night was assembled from | Done, [#174](https://github.com/bardesss/haelan/pull/174) |
@@ -104,8 +108,24 @@ mirror has, because it looks like a thin chart rather than an error, and nothing
 today. It is grouped with the other two because they read the same history, and it is separable
 from them if it ever needs to ship sooner.
 
+**What the three strands share is a rule, not a data layer**, which is what the cut above turns on.
+Measured 2026-09-15: `series()` caps no span, so an all-time read is already expressible, and
+`daily` is indexed by person, metric and date, so an all-time maximum or a whole step history is an
+index scan rather than a missing read path. There is no spine to build. What records and an
+Eddington number genuinely share is which days are eligible - whether a day the reader excluded,
+or a day whose coverage is thin, can hold a record - and that is one rule with two consumers, which
+is why M6-0 measures it before either is designed and M6b builds it once.
+
+**Nothing in M6 should need new stored rows, and a unit that thinks it does owes an argument.** A
+stored last reported column is derived state, so `DERIVATION_VERSION` moves, so every existing
+install rebuilds on upgrade - and the boot rebuild holds SQLite's write lock for its whole run. That
+is the 1.16.0 failure mode, where every authenticated request 500'd until the rebuild committed, and
+it is a steep price for a column a bounded `MAX` seek can answer live. If the live read measures too
+slow, the next move is an index, not a derived column.
+
 **M7 is separate from M6 rather than inside it**, and the cut is the same one this project makes
-everywhere else: M6's three strands share a thesis and a data layer, while M7 is a sweep across
+everywhere else: M6's three strands share a thesis and, as the paragraph above corrects, a rule
+rather than a data layer, while M7 is a sweep across
 eight pages, the rail, the charts and the wizard. One milestone whose review had to cover both a
 query and a stylesheet would be reviewing neither.
 
@@ -117,13 +137,13 @@ item on a short viewport; it scrolls. The real defect there was the account and 
 437px below the fold of a nested scroller with nothing on screen indicating there was more below -
 what M7a fixed.
 
-**M6 has no order against M4 yet.** Neither is started, and letter order has not decided sequence
-anywhere else in this table.
+**M6 is the last milestone left.** It had no order against M4 while neither was started; M4 shipped
+in full, so the question is closed and M6 is what remains.
 
 **M8 comes before M7.** M7 is a sweep across eight pages, the rail, the charts and the wizard.
 Landing two more pages after it would mean either sweeping twice or shipping two pages that do
-not work on a phone. M8 before M7 means M7 sweeps ten pages once. M8 has no order against M4 or
-M6; neither is started, and letter order has not decided sequence anywhere else in this table.
+not work on a phone. M8 before M7 means M7 sweeps ten pages once. M8 had no order against M4 or M6
+while none of them were started; both M8 and M4 have since shipped.
 
 **M8 is cut into a spine and two pages**, the same way M1, M2 and M3 were cut: M8a is the mapper
 widening, the version bump and the two new reads, and it ships with no page at all. Both pages read
