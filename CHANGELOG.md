@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.27.0](https://github.com/bardesss/haelan/compare/v1.26.1...v1.27.0) (2026-09-15)
+
+
+### Features
+
+* a source that stopped inside the range says so on the page ([#250](https://github.com/bardesss/haelan/issues/250)) ([52c754b](https://github.com/bardesss/haelan/commit/52c754b7676555b706f0f9f12834298c2564745b))
+
 ## [1.26.1](https://github.com/bardesss/haelan/compare/v1.26.0...v1.26.1) (2026-09-15)
 
 
