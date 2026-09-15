@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.24.0](https://github.com/bardesss/haelan/compare/v1.23.0...v1.24.0) (2026-09-15)
+
+
+### Features
+
+* **web:** M7, the small screen ([#241](https://github.com/bardesss/haelan/issues/241)) ([e411caa](https://github.com/bardesss/haelan/commit/e411caaa1d26055536182fa48dd660b0f57a179e))
+
 ## [1.23.0](https://github.com/bardesss/haelan/compare/v1.22.3...v1.23.0) (2026-09-14)
 
 
