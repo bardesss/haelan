@@ -161,6 +161,11 @@ jobs:
   layout:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    # This job drives two real browsers and can wait on a network, an apt lock or a page that never
+    # settles. Without a ceiling it does not fail, it hangs to the six hour default, which is worse
+    # than a red check: nobody watches a job that is still running. Thirty minutes is roughly three
+    # times the slowest honest run, which is a cache miss paying for demo:capture.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -175,7 +180,14 @@ jobs:
       # nothing it produces. The wizard and the sign-in screen are measured against a server booted
       # on a temporary directory, so an ordinary `pnpm build` is the whole of their input - seconds,
       # and they fail the job here rather than after the minutes demo:capture can cost.
-      - run: pnpm exec playwright install --with-deps chromium
+      # No --with-deps. That flag shells out to apt for the shared libraries Chromium needs, and the
+      # ubuntu-latest image already ships them; what it adds instead is a wait on the runner's own
+      # apt lock, which is what left this job sitting on this line for thirty minutes on its first
+      # real run. If a library ever is missing, chromium fails to launch and the check says so in
+      # seconds, which is the failure we want. Its own ceiling as well, so a stalled download is a
+      # red check rather than a slow one.
+      - run: pnpm exec playwright install chromium
+        timeout-minutes: 10
 
       - run: pnpm build
 
