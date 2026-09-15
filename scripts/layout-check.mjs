@@ -156,6 +156,14 @@ function resolveRoute(route) {
 // the rail can actually link to.
 const ROUTES = RAW_ROUTES.map(resolveRoute)
 
+// The two routes that open the annotate panel from a control the check can click by name, rather
+// than from a tap on a plotted point. Declared beside ROUTES because the run's closing line counts
+// them; the reasoning for the pair is with the sweep that uses them.
+const PANEL_OPENERS = [
+  { route: resolveRoute('/activity/:sessionId'), opener: '.workout-actions button.button' },
+  { route: resolveRoute('/sleep/night/:localDate'), opener: '.night-session button.button' },
+]
+
 const server = await startServer()
 const base = `http://127.0.0.1:${server.address().port}`
 const browser = await chromium.launch()
@@ -229,6 +237,72 @@ try {
     )
     for (const target of inDrawer.exempt) exempted.push({ where: `${route} (drawer)`, target })
   }
+
+  // The annotate panel, which none of the sweeps above can reach. It is a modal a reader opens
+  // from a control on the page, so while it is shut every control inside it has a zero rect and
+  // the zero-rect filter in smallTargets drops all of them - the same blindness that hid the
+  // drawer's twelve rail items through M7a and M7b, and the same answer: open it and sweep again.
+  //
+  // It was worth the fourth instance. With the panel open at 375px the action chooser laid its
+  // buttons out in the control row's five columns, 58.9px each, every label but the shortest
+  // clipped to an ellipsis inside it - and 59x44 passes the 44px rule, which takes the smaller
+  // dimension, so even a sweep that opened this panel would have certified it. Hence the second
+  // assertion below, which measures whether a label fits its box rather than whether the box fits
+  // a finger.
+  //
+  // Two openers, both plain buttons on a page: the workout page's own annotate control and the
+  // night page's per-session exclude. The panel's other entrance is a tap on a plotted point,
+  // which no check should depend on - it is a pixel hit against a canvas, and a miss would read as
+  // a pass. Both of these open the panel at `session` scope, so the chooser has two actions where a
+  // chart click can produce three or four; the defect shape is the same at any of those counts
+  // (n buttons in five fixed columns), and these two can be clicked by name.
+  let panelsOpened = 0
+  for (const { route, opener } of PANEL_OPENERS) {
+    await open(route)
+    const control = page.locator(opener).first()
+    const present = await control.isVisible().catch(() => false)
+    check(present, `${route}: no control to open the annotate panel (${opener})`)
+    if (!present) continue
+    await control.click()
+    const panel = page.locator('.annotate-panel')
+    const shown = await panel.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
+    check(shown, `${route}: the annotate panel did not open`)
+    if (!shown) continue
+    panelsOpened += 1
+
+    // Once per action, because the form below the chooser is a different set of fields for each
+    // one and only the selected action's fields have a box to measure.
+    const actions = await page.locator('.annotate-panel .segment').count()
+    check(actions > 0, `${route}: the annotate panel offers no actions`)
+    for (let index = 0; index < actions; index++) {
+      await page.locator('.annotate-panel .segment').nth(index).click()
+      await page.waitForTimeout(SETTLE_MS)
+      const label = `${route} (annotate panel, action ${index + 1} of ${actions})`
+
+      const inPanel = await smallTargets(page, '.annotate-panel')
+      check(
+        inPanel.small.length === 0,
+        `${label}: ${inPanel.small.length} control(s) below ${TOUCH_MIN}px: ${describeTargets(inPanel.small)}`,
+      )
+      for (const target of inPanel.exempt) exempted.push({ where: label, target })
+
+      // A control wide enough for a finger and too narrow for its own name is still unusable, and
+      // the 44px rule cannot see that: it reads the smaller dimension, and the smaller dimension
+      // here was the height. scrollWidth past clientWidth is the browser saying the text did not
+      // fit - which, under `white-space: nowrap` and `text-overflow: ellipsis`, is exactly the
+      // state in which a reader sees a truncated word instead of the action they are choosing.
+      const clipped = await page.locator('.annotate-panel .segment').evaluateAll((nodes) => nodes
+        .filter((node) => node.scrollWidth > node.clientWidth + 1)
+        .map((node) => `"${(node.textContent ?? '').trim()}" in ${Math.round(node.getBoundingClientRect().width)}px`))
+      check(clipped.length === 0, `${label}: ${clipped.length} action label(s) clipped: ${clipped.join(', ')}`)
+    }
+  }
+  // Pinned, so this whole block cannot quietly become a no-op: a renamed opener class or a panel
+  // that stops opening would otherwise skip every assertion above and say nothing.
+  check(
+    panelsOpened === PANEL_OPENERS.length,
+    `the annotate panel was opened on ${panelsOpened} of ${PANEL_OPENERS.length} routes that carry a control for it`,
+  )
 
   // The rest of the band, swept on one route rather than nine: what overflowed there is the
   // control row, which is the same component on every page carrying one.
@@ -419,6 +493,7 @@ if (failures.length > 0) {
 console.log(
   `layout:check passed: ${ROUTES.length} routes at ${PHONE.width}px and ${BAND.width}px, `
     + `hit areas on each of them with the drawer shut and again with it open, `
+    + `the annotate panel opened and swept on ${PANEL_OPENERS.length} routes, `
     + `${BAND_ROUTE} across the rest of the band, the same routes rotated across the breakpoint, `
-    + 'the drawer, and the rail foot.',
+    + 'the drawer and its three ways out, and the rail foot.',
 )

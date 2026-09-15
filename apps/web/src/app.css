@@ -816,7 +816,20 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 @media (max-width: 620px) {
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 
-  .segmented { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); }
+  /* `.controls .segmented`, not `.segmented`: the five columns are the five range buttons
+     ControlRow renders, and this rule was written against that row alone. AnnotatePanel reuses the
+     same two classes for a chooser of two to four actions, and M7b made that panel reachable on a
+     phone - so the rule reached it too, and laid two, three or four buttons out in five columns of
+     58.9px each. Measured on /sleep/night/... at 375px: two buttons at 59x44 with three empty
+     columns beside them, "Notitie toevoegen" clipped to an ellipsis inside its 59px.
+
+     Scoped rather than given the panel a class of its own, because the wrong half is this rule and
+     not the panel: five is a fact about the range buttons, and a second class would leave `repeat(5)`
+     sitting on a selector that still claims to describe every .segmented in the app. Outside the
+     control row the base .segmented (flex, wrap) is what a chooser of two to four wants anyway -
+     each button as wide as its label, wrapping when the row runs out. .segment below stays
+     unscoped: its 44px is the touch rule, which every segment on a phone needs. */
+  .controls .segmented { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); }
   .segment {
     min-width: 0; padding: 5px var(--space-1); text-align: center;
     font-size: var(--font-size-micro);
