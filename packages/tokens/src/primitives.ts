@@ -57,9 +57,15 @@ export const primitives = {
   // 1.5, 1.6 and 1.4 in the app. No drift between the two: site.css has always set 1.6 for body
   // prose, the same as the app. What the count actually shows is an absence of vocabulary - the
   // app carried sixteen weight literals and twenty-four line-height literals with nothing behind
-  // them, so nothing said which of them meant the same thing, and M7b has a responsive type pass
-  // to make that answerable before it can do anything else. 650 has one consumer today, kept
-  // because a three-step scale with a hole in it is worse than a lightly used step.
+  // them, so nothing said which of them meant the same thing, and M7b's sweep of every page at
+  // 375px needed that distinction before it could tell a deliberate value from a coincidental one.
+  // 650 has one consumer today, kept because a three-step scale with a hole in it is worse than a
+  // lightly used step.
+  //
+  // This comment used to promise "M7b has a responsive type pass". There was no type pass: M7b
+  // measured the type at 375px and it held unchanged, so the work went to touch targets instead
+  // (202 controls under 44px) and nothing here varies with viewport width. What these two scales
+  // bought is a vocabulary, not a response to width.
   weight: { medium: '600', semibold: '650', bold: '700' },
   leading: { tight: '1.4', normal: '1.5', relaxed: '1.6' },
   font: {

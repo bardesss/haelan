@@ -13,8 +13,20 @@ const screens = read('layout-check-boot-screens.json') as { screen: string, url:
 // pathForStep in SetupApp.tsx falls through to this for any step STEPS does not name, which in
 // practice is 'done' - the wizard's last two screens, both at this one address. Written out here
 // rather than imported because pathForStep returns it rather than exporting it; if it ever moves,
-// the harness stops finding `.data-type-picker` and `.setup-horizon` and says so loudly.
+// the harness stops finding `.data-type-row input` and `.setup-horizon` and says so loudly.
 const BACKFILL_PATH = '/setup/backfill'
+
+// The one step in STEPS that no harness in this repository measures, and it is a state rather
+// than an address: `consent` shares `/setup/google` with `google-client`, and reaching it means
+// completing a real OAuth redirect to Google, which nothing here can walk.
+//
+// Named, because the assertion below used to dissolve it. Deduplicating the wizard's paths through
+// a Set made consent "covered" by the console step next door - same address, different screen -
+// while scripts/layout-check-boot.mjs stops at the console step and says so in place. Two steps at
+// one URL is exactly the shape `/setup/backfill` already has, where the harness measures both
+// states and declares them as two screens; consent is the one that cannot be reached, and a test
+// that cannot say so is a test that reports full coverage of a wizard it has not fully seen.
+const UNREACHABLE_STEPS = ['consent']
 
 // Two harnesses, two lists, and neither list is the other's business.
 //
@@ -49,12 +61,24 @@ describe('the layout check route list', () => {
 
 describe('the boot layout check screen list', () => {
   // STEPS is the wizard's own table of which path each step lives at, and it is what SetupApp
-  // redirects to when the server says a different step is due. Deduplicated because two of its
-  // four entries share `/setup/google`: the console step and consent are one screen in two states.
-  it('covers every path the wizard can send a reader to', () => {
-    const wizard = [...new Set([...STEPS.map((step) => step.path), BACKFILL_PATH])]
+  // redirects to when the server says a different step is due. Every step but the one
+  // UNREACHABLE_STEPS names, plus the two screens at BACKFILL_PATH, which STEPS does not list
+  // because pathForStep falls through to it.
+  it('covers every wizard step except the one that needs a real Google redirect', () => {
+    const reachable = STEPS.filter((step) => !UNREACHABLE_STEPS.includes(step.step))
+    const wizard = [...new Set([...reachable.map((step) => step.path), BACKFILL_PATH])]
     const covered = new Set(screens.map((entry) => entry.url))
     expect(wizard.filter((path) => !covered.has(path))).toEqual([])
+  })
+
+  // The guard on the exclusion, which is the half that keeps it from growing quietly. A name in
+  // UNREACHABLE_STEPS that no longer matches a step excuses nothing and shrinks what the
+  // assertion above covers without anybody noticing; a second name appearing there is a second
+  // screen going unmeasured, and it has to be argued for in the comment beside it rather than
+  // typed into a list.
+  it('excuses exactly the steps it names, and those steps exist', () => {
+    expect(UNREACHABLE_STEPS.filter((name) => !STEPS.some((step) => step.step === name))).toEqual([])
+    expect(UNREACHABLE_STEPS).toEqual(['consent'])
   })
 
   // Not a path, which is the whole reason it needs saying. Sign-in is a state the shell is in -

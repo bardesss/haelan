@@ -49,10 +49,29 @@ const SEED_SCRIPT = resolve('scripts/seed-demo.mjs')
 
 // Every screen this harness measures, declared in a file rather than only in the code below, so
 // apps/web/test/layout-routes.test.ts can hold it against the wizard's own step table. Two entries
-// share a URL: /setup/backfill renders the data-type picker first and the progress screen after,
-// on SetupApp's own local state rather than on the path, so they are two screens at one address.
+// share a URL: /setup/backfill renders the data-type picker first and BackfillStep after, on
+// SetupApp's own local state rather than on the path, so they are two screens at one address.
 // The run fails if what it actually measured is not exactly this set - that is what keeps the file
 // load bearing instead of decorative.
+//
+// BackfillStep is one screen carrying two halves, the per-type progress list and the horizon
+// chooser, and it is declared here as "the backfill step". This comment used to call it "the
+// progress screen", which read as though the horizon buttons were somewhere else: they are not -
+// they are the controls this sweep is chiefly there for on that screen (three of them, 62-68x32
+// before M7c gave them a min-height), and `.setup-horizon` is the marker the run waits for.
+//
+// What is measured is that screen in one state, and it happens to be the widest one. A freshly
+// seeded instance renders 39 progress rows, every one of them "not started" ("nog niet gestart",
+// the longest of the three state strings in either catalogue) under the running note. A row that
+// has walked part of its horizon shows a percentage and a finished one shows "complete"; neither
+// has been measured at 375px, and neither is reachable here without letting a real backfill run
+// against Google. No control lives in those rows, so nothing in the 44px sweep turns on them -
+// but this file should not be read as a claim that the list has been seen in every state it takes.
+//
+// The wizard step that genuinely is not measured is consent, which shares /setup/google with the
+// console step: reaching it means completing a real OAuth redirect. The walk below stops at the
+// console step and says so in place, and layout-routes.test.ts names consent rather than letting
+// the shared URL dissolve it.
 //
 // Both columns are load bearing, and the `url` one only became so in this fix: the run used to
 // match a measured screen against this file on its name alone, so the address beside the name was
