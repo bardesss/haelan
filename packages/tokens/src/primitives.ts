@@ -47,11 +47,27 @@ export const primitives = {
     950: '#0C111C',
     975: '#0A0E17',
   },
-  space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px', 6: '24px' },
+  space: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px', 6: '24px', 7: '32px', 8: '48px', 9: '64px' },
   radius: { sm: '3px', md: '8px', lg: '11px', xl: '14px' },
   duration: { fast: '120ms', slow: '240ms' },
   ease: { standard: 'cubic-bezier(0.2, 0, 0, 1)' },
   text: { micro: '12px', xs: '13.5px', sm: '15.5px', md: '17px', lg: '24px', xl: '34px' },
+  // Three weights and three leadings, counted off both stylesheets rather than invented: app.css
+  // used 600 thirteen times and 700 three times; site.css used 700, 600 and 650. The leadings were
+  // 1.5, 1.6 and 1.4 in the app. No drift between the two: site.css has always set 1.6 for body
+  // prose, the same as the app. What the count actually shows is an absence of vocabulary - the
+  // app carried sixteen weight literals and twenty-four line-height literals with nothing behind
+  // them, so nothing said which of them meant the same thing, and M7b's sweep of every page at
+  // 375px needed that distinction before it could tell a deliberate value from a coincidental one.
+  // 650 has one consumer today, kept because a three-step scale with a hole in it is worse than a
+  // lightly used step.
+  //
+  // This comment used to promise "M7b has a responsive type pass". There was no type pass: M7b
+  // measured the type at 375px and it held unchanged, so the work went to touch targets instead
+  // (202 controls under 44px) and nothing here varies with viewport width. What these two scales
+  // bought is a vocabulary, not a response to width.
+  weight: { medium: '600', semibold: '650', bold: '700' },
+  leading: { tight: '1.4', normal: '1.5', relaxed: '1.6' },
   font: {
     sans: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     mono: 'ui-monospace, "Cascadia Mono", Consolas, monospace',

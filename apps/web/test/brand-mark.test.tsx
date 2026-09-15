@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
-import { execFileSync } from 'node:child_process'
-import { PATHS } from '../scripts/render-icons.mjs'
+import { PATHS, renderIcons } from '../scripts/render-icons.mjs'
 import { BrandMark } from '../src/components/BrandMark.js'
 import { Sidebar } from '../src/components/Sidebar.js'
 import { SignIn } from '../src/auth/SignIn.js'
@@ -108,14 +108,42 @@ describe('one geometry, written out in four places', () => {
 
   // The raster icons are generated, so the only thing that can rot is the checked-in output. A
   // rerun must produce the bytes that are committed.
-  it('the committed rasters are what the script renders', () => {
-    const before = ['public/favicon.ico', 'public/apple-touch-icon.png']
-      .map((path) => readFileSync(repo(path)))
-    execFileSync(process.execPath, [repo('scripts/render-icons.mjs')])
-    const after = ['public/favicon.ico', 'public/apple-touch-icon.png']
-      .map((path) => readFileSync(repo(path)))
-    expect(after[0]!.equals(before[0]!)).toBe(true)
-    expect(after[1]!.equals(before[1]!)).toBe(true)
+  //
+  // Two things were wrong with the first cut of this, and both were invisible while it passed.
+  // It compared two files, `favicon.ico` and `apple-touch-icon.png`, and M7c taught the script to
+  // write five. So a change to PWA_STROKE_WIDTH, PWA_ICON_SIZES, MARK_CENTER or scaleForSafeZone
+  // moved the three PWA icons and neither of the two it compared: the test passed, and a clean CI
+  // checkout - which never runs a renderer - would ship the stale committed bytes.
+  //
+  // It also ran the real script against the real `public/`, so the rerun it compared against was
+  // a rerun that had already overwritten the evidence. Rendering into a temporary directory keeps
+  // the working tree out of it entirely, and lets the file list itself be checked rather than
+  // hand-maintained: a sixth output added to renderIcons() fails the first expectation below
+  // instead of quietly going uncompared the way the three PWA icons did.
+  const RENDERED = [
+    'apple-touch-icon.png',
+    'favicon.ico',
+    'icon-192.png',
+    'icon-512-maskable.png',
+    'icon-512.png',
+  ]
+
+  it('the committed rasters are what the script renders, all of them', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-icons-'))
+    mkdirSync(join(dir, 'public'))
+    renderIcons(dir)
+
+    expect(readdirSync(join(dir, 'public')).sort()).toEqual(RENDERED)
+    for (const name of RENDERED) {
+      const fresh = readFileSync(join(dir, 'public', name))
+      const committed = readFileSync(repo(join('public', name)))
+      expect(fresh.equals(committed), `public/${name} is not what render-icons.mjs renders`).toBe(true)
+    }
+
+    // After the assertions, never in a finally: an rmSync that throws there replaces whichever
+    // expectation actually failed with its own error, and this directory is in the OS temp tree
+    // either way.
+    rmSync(dir, { recursive: true, force: true })
   })
 })
 

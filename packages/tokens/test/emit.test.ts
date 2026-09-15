@@ -64,4 +64,34 @@ describe('css emitter', () => {
     // Zero rather than absent: a rule that reads var(--duration-fast) must still resolve.
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*--duration-fast: 0ms;/)
   })
+
+  // The landing page wrote page-level rhythm as calc(var(--space-6) * 2), and arithmetic on a
+  // token is the tell that the scale is short. These three are where that rhythm actually sits.
+  it('carries the spacing scale up to the page-level steps', () => {
+    expect(css).toContain('--space-7: 32px;')
+    expect(css).toContain('--space-8: 48px;')
+    expect(css).toContain('--space-9: 64px;')
+  })
+
+  // Sixteen font-weight literals and twenty-four line-height literals, spread across two
+  // stylesheets with no shared vocabulary to name any of them by. The two never actually drifted -
+  // both set 1.6 for body prose - but nothing in either file said so, so nothing could tell a
+  // deliberate 1.6 from a coincidental one, and M7b's responsive type pass has to be able to.
+  it('emits a weight and line-height vocabulary', () => {
+    expect(css).toContain('--weight-medium: 600;')
+    expect(css).toContain('--weight-semibold: 650;')
+    expect(css).toContain('--weight-bold: 700;')
+    expect(css).toContain('--leading-tight: 1.4;')
+    expect(css).toContain('--leading-normal: 1.5;')
+    expect(css).toContain('--leading-relaxed: 1.6;')
+  })
+
+  // Emitted with the scales rather than the semantic layer because it is an expression over
+  // another custom property, not a palette reference: var(--accent) resolves at use, so one
+  // definition is correct in both themes.
+  it('emits the accent wash once, for both themes', () => {
+    expect(css).toContain('--accent-wash: color-mix(in oklab, var(--accent) 22%, transparent);')
+    const light = css.slice(css.indexOf("[data-theme='light']"))
+    expect(light, 'the wash must not be redefined per theme').not.toContain('--accent-wash:')
+  })
 })

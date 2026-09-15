@@ -13,6 +13,10 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- No service worker: this app cannot do anything without its server, so an offline promise
+         would be a lie. Installability alone still earns its place - it reclaims the browser
+         chrome a phone viewport otherwise loses to it. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0A0E17" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F5F7FB" media="(prefers-color-scheme: light)" />
   </head>

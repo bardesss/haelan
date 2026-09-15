@@ -1,0 +1,13 @@
+[
+  "/",
+  "/activity",
+  "/sleep",
+  "/recovery",
+  "/health",
+  "/weight",
+  "/nutrition",
+  "/notes",
+  "/settings",
+  "/activity/:sessionId",
+  "/sleep/night/:localDate"
+]

@@ -13,6 +13,11 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- manifest.webmanifest's start_url and scope are both "." - relative to this file's own
+         URL, which vite.demo.config.ts's DEMO_BASE prefixes the same way it prefixes every other
+         root-relative href on this page - so an installed demo opens back into the demo, not the
+         site root. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0A0E17" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#F5F7FB" media="(prefers-color-scheme: light)" />
     <script>
@@ -43,8 +48,8 @@
   </head>
   <body>
     <div id="root"></div>
-    <!-- The only difference from index.html: the demo entry installs the frozen clock before
-         main.tsx's first import runs. -->
+    <!-- The other difference from index.html, besides the manifest comment above: the demo entry
+         installs the frozen clock before main.tsx's first import runs. -->
     <script type="module" src="/src/demo/entry.tsx"></script>
   </body>
 </html>

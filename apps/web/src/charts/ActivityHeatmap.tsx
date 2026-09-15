@@ -6,7 +6,7 @@ import { scaleStops, type ChartTokens } from './tokens.js'
 import { calendarLayout, type CalendarCell } from './calendar.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue } from '../format.js'
+import { formatLocalDate, formatMetricValue } from '../format.js'
 import type { DayRow } from '../fixtures/july.js'
 
 // Order matches calendar.ts's weekdayIndex (Monday first); the catalogue keys underneath are
@@ -222,9 +222,21 @@ export function ActivityHeatmap({ days, max, label, annotations = EMPTY, exclude
     if (date !== undefined) onPointClick?.(date)
   }, [cells, markDates, onPointClick])
 
-  const { host, style } = useChart(build, 110, onClick)
+  // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
+  // point a click would have opened. A calendar cell is 10 pixels of colour carrying no text, so
+  // reading back which day was tapped matters more here than on any other chart.
+  const describe = useCallback((event: ECElementEvent) => {
+    const date = heatmapClickDate(cells, markDates, event)
+    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [cells, markDates, i18n.language])
+
+  // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
+  // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
+  // renders an annotate control that names a point and then does nothing when pressed. See
+  // useChart's ChartPointHandlers doc comment; chart-annotate-handlers.test.tsx pins it.
+  const { host, style, tap } = useChart(build, 110, onPointClick ? { onClick, describe } : undefined)
   return (
-    <ChartFigure label={label} host={host} style={style}
+    <ChartFigure label={label} host={host} style={style} tap={tap}
       table={{
         columns: [t('charts.columns.date'), t('charts.columns.weekday'), t('charts.columns.steps'), t('charts.columns.note')],
         // A day's own DayRow.steps is only ever null because no point exists for it (a real

@@ -5,7 +5,7 @@ import { chartBase, dayMarks, dayPointDate, dayTableRows, STROKE, OPACITY, SYMBO
 import type { ChartTokens } from './tokens.js'
 import { ChartFigure } from './ChartFigure.js'
 import { useTranslation } from '../i18n/index.js'
-import { formatMetricValue } from '../format.js'
+import { formatLocalDate, formatMetricValue } from '../format.js'
 import { dayTooltip } from './dayTooltip.js'
 import type { DayTooltipInput } from './dayTooltip.js'
 
@@ -124,7 +124,7 @@ export function Sparkline({
   const format = (value: number | null, absent: string): string =>
     formatValue ? formatValue(value, absent) : formatMetricValue(value, metric, i18n.language, absent)
 
-  // A ref, not `build` dependencies, and for the reason useChart's own onClickRef exists: the
+  // A ref, not `build` dependencies, and for the reason useChart's own pointRef exists: the
   // tooltip reads `formatValue`, `t` and the language, and `formatValue` is a fresh arrow on every
   // render at two call sites (Activity.tsx's distance card, Weight.tsx's weight card). In `build`'s
   // dependency array those would dispose and re-initialise the chart on every render, which is the
@@ -193,17 +193,38 @@ export function Sparkline({
           data: marks.atDate.map((mark) => ({ name: mark.text, xAxis: mark.index,
             ...(mark.excluded && { lineStyle: { color: tokens.excluded, type: 'solid' as const } }) })) } },
     ],
-  }), [values, baseline, marks, episodic, trend, hasTrend])
+    // `labels` is in this list even though nothing above reads it, and it is not dead weight.
+    // useChart keys its stale-tap reset on `build`'s identity, and the resolvers below (onClick,
+    // describe) index into `labels` - so a `labels` that can change without `build` changing is a
+    // stored tap replayed against data the chart no longer draws, the exact defect 75878d3 exists
+    // to prevent. That never happened only because denseSeries (data/useSeries.ts) returns
+    // `labels` and `values` from one call, so their identities move together, and because `marks`
+    // is memoised over `labels` as well; both are facts about today's call sites, not about this
+    // component. Memoise `labels` separately anywhere and the bug returns with every test green.
+    // Listing it makes the safety this chart's own, at no cost: `marks` already changes with it.
+  }), [values, labels, baseline, marks, episodic, trend, hasTrend])
 
   const onClick = useCallback((event: ECElementEvent) => {
     const date = dayPointDate(labels, marks, event)
     if (date !== undefined) onPointClick?.(date)
   }, [labels, marks, onPointClick])
 
-  const { host, style } = useChart(build, height, onClick)
+  // The same resolver as onClick, so the annotate control below the breakpoint names exactly the
+  // point a click would have opened. This chart draws no axis labels at all, so the formatted date
+  // is the only place the tapped day is ever written down outside the tooltip.
+  const describe = useCallback((event: ECElementEvent) => {
+    const date = dayPointDate(labels, marks, event)
+    return date === undefined ? undefined : formatLocalDate(date, i18n.language)
+  }, [labels, marks, i18n.language])
+
+  // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
+  // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
+  // renders an annotate control that names a point and then does nothing when pressed. See
+  // useChart's ChartPointHandlers doc comment; chart-annotate-handlers.test.tsx pins it.
+  const { host, style, tap } = useChart(build, height, onPointClick ? { onClick, describe } : undefined)
   return (
     <>
-      <ChartFigure label={label} host={host} style={style}
+      <ChartFigure label={label} host={host} style={style} tap={tap}
         table={{
           // The trend gets a column of its own whenever it is drawn, between the reading and the
           // note. Without one, the smooth line existed only on the canvas: a table-only reader was

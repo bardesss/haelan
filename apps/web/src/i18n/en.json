@@ -51,6 +51,8 @@
   },
   "sidebar": {
     "sectionsLabel": "Sections",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
     "collapse": "Collapse navigation",
     "expand": "Expand navigation",
     "groups": {
@@ -598,6 +600,10 @@
     "bandToggle": {
       "hide": "Hide daily range",
       "show": "Show daily range"
+    },
+    "annotate": {
+      "idle": "Tap a point to annotate",
+      "point": "Annotate {{point}}"
     },
     "tableToggle": {
       "show": "Show numbers",

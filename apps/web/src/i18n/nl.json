@@ -51,6 +51,8 @@
   },
   "sidebar": {
     "sectionsLabel": "Secties",
+    "openMenu": "Menu openen",
+    "closeMenu": "Menu sluiten",
     "collapse": "Navigatie inklappen",
     "expand": "Navigatie uitklappen",
     "groups": {
@@ -598,6 +600,10 @@
     "bandToggle": {
       "hide": "Dagbereik verbergen",
       "show": "Dagbereik tonen"
+    },
+    "annotate": {
+      "idle": "Tik een punt aan om te annoteren",
+      "point": "{{point}} annoteren"
     },
     "tableToggle": {
       "show": "Cijfers tonen",

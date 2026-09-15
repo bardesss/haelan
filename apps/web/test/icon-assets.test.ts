@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const PUBLIC = fileURLToPath(new URL('../public', import.meta.url))
 const INDEX_HTML = fileURLToPath(new URL('../index.html', import.meta.url))
 const BRAND = fileURLToPath(new URL('../../../assets/brand', import.meta.url))
+const MANIFEST = fileURLToPath(new URL('../public/manifest.webmanifest', import.meta.url))
 
 /**
  * What a file's first bytes say it is, rather than what its name says it is.
@@ -71,6 +72,51 @@ describe('index.html describes the icons it links', () => {
   // back to a raster export.
   it.each(links)('$href is small enough to be a mark rather than a photograph', ({ href }) => {
     const bytes = readFileSync(join(PUBLIC, href!.replace(/^\//, '')))
+    expect(bytes.length).toBeLessThan(16 * 1024)
+  })
+})
+
+interface ManifestIcon { src: string, sizes: string, type: string, purpose: string }
+
+/**
+ * A PNG's own IHDR, which is the first chunk of every PNG and always at the same offset: the
+ * 8-byte signature, then a 4-byte length and the 4-byte type `IHDR`, then width and height as
+ * big-endian 32-bit integers at byte 16 and byte 20.
+ *
+ * Here for the same reason `sniff` above is: `"sizes": "192x192"` is a claim the manifest's author
+ * makes, exactly like `type="image/png"` was, and an `icon-192.png` holding a 512px image would
+ * satisfy every other check in this file - the name matches, the signature matches, the byte
+ * budget matches. A browser picking an icon reads `sizes` and trusts it; this reads the image.
+ */
+function pngDimensions(bytes: Buffer): { width: number, height: number } {
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
+}
+
+describe('manifest.webmanifest names icons that exist and are what it says they are', () => {
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8')) as { icons: ManifestIcon[] }
+
+  it('names exactly the 192, 512 and maskable 512 sizes a manifest needs', () => {
+    expect(manifest.icons.map((icon) => icon.src).sort())
+      .toEqual(['icon-192.png', 'icon-512-maskable.png', 'icon-512.png'])
+  })
+
+  it.each(manifest.icons)('$src exists and is what the manifest says it is', ({ src, type }) => {
+    const bytes = readFileSync(join(PUBLIC, src))
+    const actual = sniff(bytes)
+    expect(actual).not.toBe('unknown')
+    expect(type).toBe(actual)
+  })
+
+  it.each(manifest.icons)('$src really is $sizes pixels', ({ src, sizes }) => {
+    const { width, height } = pngDimensions(readFileSync(join(PUBLIC, src)))
+    expect(`${width}x${height}`).toBe(sizes)
+  })
+
+  // Same budget and the same reason as index.html's own icons above: 185KB of JPEG is what an
+  // exported raster cost the first time, and there is no size the mark's own two paths should
+  // ever reach - a 512px canvas included.
+  it.each(manifest.icons)('$src is small enough to be a mark rather than a photograph', ({ src }) => {
+    const bytes = readFileSync(join(PUBLIC, src))
     expect(bytes.length).toBeLessThan(16 * 1024)
   })
 })

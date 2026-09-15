@@ -58,9 +58,9 @@ body {
 .rail-collapsed .rail-item svg { opacity: 1; }
 .rail-group { font-size: var(--font-size-micro); letter-spacing: .15em; text-transform: uppercase; color: var(--text-faint); padding: var(--space-3) var(--space-3) var(--space-1); }
 .rail-item { display: flex; align-items: center; gap: var(--space-2); padding: 8px var(--space-3); border-radius: 7px; font-size: var(--font-size-sm); color: var(--text-secondary); text-decoration: none; }
-.rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: 600; }
+.rail-item[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); font-weight: var(--weight-medium); }
 .brand-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 16px 12px; }
-.brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--font-size-sm); letter-spacing: .01em; }
+.brand { display: flex; align-items: center; gap: 7px; font-weight: var(--weight-bold); font-size: var(--font-size-sm); letter-spacing: .01em; }
 /* The one element that survives the rail collapsing, since `label()` sends the wordmark to
    sr-only and the row would otherwise be left holding nothing but the chevron. Sized here rather
    than on the svg so each surface below can ask for its own without touching the component. */
@@ -68,7 +68,17 @@ body {
 .rail-toggle { flex: none; }
 .rail-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
 .rail-item[aria-current='page'] svg { opacity: 1; color: var(--accent); }
-.rail-foot { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: var(--space-2); }
+/* Sticky to the bottom of the rail's own scroller. The rail is viewport tall with overflow-y:auto,
+   so on a short viewport (a landscape phone at 380px, where the rail holds 712px of content) the
+   account and sign-out sat 437px below the fold of a nested scroller with nothing saying so. They
+   are now always on screen and the nav scrolls behind them. The background is what stops the nav
+   showing through as it passes underneath. */
+.rail-foot {
+  margin-top: auto; padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: var(--space-2);
+  position: sticky; bottom: 0; background: var(--surface-rail);
+}
 /* Same border as rail-foot's own top edge, reused on purpose rather than a different weight: the
    resources links sit inside the foot (rail-foot's border already marks the foot off from the nav
    above), and this second one below them marks them off as their own group rather than blending
@@ -76,22 +86,65 @@ body {
 .rail-resources { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--space-2); border-bottom: 1px solid var(--border-subtle); }
 .rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 0 var(--space-3); }
 .rail-foot .button { justify-content: center; }
+
+/* The drawer, below PHONE_MAX_WIDTH. The dialog is the container; the rail inside it keeps every
+   rule it already has except the ones that made it a column in a flex row. */
+.top-bar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-rail); border-bottom: 1px solid var(--border-subtle);
+  position: sticky; top: 0; z-index: 10;
+}
+.rail-dialog {
+  margin: 0; padding: 0; border: 0; max-width: none; max-height: none;
+  height: 100dvh; width: min(280px, 85vw);
+  background: var(--surface-rail);
+}
+.rail-dialog::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.rail-dialog .rail { width: 100%; height: 100%; position: static; }
+/* The drawer's own dismissal control, in the corner the rail leaves empty: inside the drawer the
+   sidebar renders with collapsible={false}, so the slot .rail-toggle occupies in the rail proper
+   has nothing in it. Positioned rather than placed in the flow because .rail already fills the
+   dialog's whole box, and a sibling above it would take height the nav is using; that also keeps
+   the control still while the rail scrolls under it, which is what a control a reader reaches for
+   to get out has to do. */
+.rail-dialog { position: relative; }
+.rail-close { position: absolute; top: var(--space-2); right: var(--space-2); z-index: 1; }
+/* <dialog> makes the page behind inert for focus and for pointer targeting, and says nothing at
+   all about scrolling: a wheel or a drag over the backdrop still scrolls the document underneath.
+   The drawer is 280px of a 375px screen, so the strip beside it is a live scroll surface under an
+   open modal. Locked from the element's own open state rather than from a class React has to
+   remember to remove, so a dialog closed by Escape - which never tells React anything - unlocks
+   the page by the same declaration that locked it. */
+html:has(dialog.rail-dialog[open]) { overflow: hidden; }
+
+/* The rail is out of the flow below the breakpoint, so the flex row that held it and .main side
+   by side has one child left and would stretch the top bar next to the content. */
+.layout-phone { display: block; }
+.layout-phone .main { padding: var(--space-3); }
 .avatar {
   width: 19px; height: 19px; flex: none; border-radius: 50%;
   display: grid; place-items: center; text-transform: uppercase;
-  font-size: var(--font-size-micro); font-weight: 600;
+  font-size: var(--font-size-micro); font-weight: var(--weight-medium);
   /* A decorative tint, not an interaction state: nothing about this element hovers, selects or
      disables. Left as color-mix on purpose (M3a review finding 1). */
   background: color-mix(in srgb, var(--accent) 26%, transparent); color: var(--text-primary);
 }
 
+/* Every box in the control row wraps, at every width. .controls itself always did; its two flex
+   children did not, and a flex container that cannot wrap has a min-content width equal to the sum
+   of its children - 497px for the range buttons and the actions together. Above the breakpoint the
+   rail is back and .main's padding is 40px, so that row did not fit until 703px and the band from
+   621 to 702 scrolled sideways on every page. Wrapping drops each child's min-content to its
+   widest single item instead of the sum, which costs nothing where there is already room: the row
+   stays one line wherever one line fits, and the band fixes itself with no third breakpoint. */
 .controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
-.controls-end { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.controls-end { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-wrap: wrap; }
 
-.segmented { display: flex; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.segmented { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .segment { appearance: none; border: 0; background: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-muted); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
 .segment:hover { color: var(--text-primary); }
-.segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: 600; }
+.segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: var(--weight-medium); }
 
 .stepper { display: flex; align-items: center; padding: 2px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .stepper-label { font-size: var(--font-size-xs); color: var(--text-secondary); padding: 0 var(--space-2); min-width: 96px; text-align: center; }
@@ -199,7 +252,7 @@ body {
 /* WorkoutSplits.tsx's own two tables (autoSplits, laps), never more than one visible at once in
    the same card - each is its own Card, this only styles the table each one wraps. */
 .workout-splits { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; }
-.workout-splits th { text-align: left; color: var(--text-muted); font-weight: 600; padding: var(--space-1) 0; }
+.workout-splits th { text-align: left; color: var(--text-muted); font-weight: var(--weight-medium); padding: var(--space-1) 0; }
 .workout-splits td { padding: var(--space-1) 0; border-top: 1px solid var(--border-subtle); }
 /* The dagger footnote under a table where at least one row was filled from the trace - see
    WorkoutSplits.tsx's own comment on why it never appears under a table of provider values. */
@@ -212,33 +265,33 @@ body {
    since each row is a full sentence rather than a value under a column header. */
 .workout-comparison { margin: 0; padding-left: var(--space-4); }
 
-.label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
-.value { font-size: var(--font-size-xl); font-weight: 700; letter-spacing: -.02em; margin-top: var(--space-1); }
-.basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.label { font-size: var(--font-size-micro); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
+.value { font-size: var(--font-size-xl); font-weight: var(--weight-bold); letter-spacing: -.02em; margin-top: var(--space-1); }
+.basis { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 .delta { font-size: var(--font-size-xs); padding: 2px 7px; border-radius: 20px; background: var(--surface-inset); }
 .delta[data-tone='good'] { color: var(--positive); }
 .delta[data-tone='bad'] { color: var(--negative); }
 .delta[data-tone='neutral'] { color: var(--text-secondary); }
-.empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
+.empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 .empty small { color: var(--text-faint); }
 
 /* The training load card's own three. Its gate is NOT .empty: .empty means a metric card had no
    data to draw, while this says a DERIVED statistic has not enough worn days to be computed yet,
    which is a statement about the archive rather than about the card. activity.test.tsx asserts on
    .empty meaning only the first of those, and it is right to. */
-.training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: 1.5; padding: var(--space-4) 0 var(--space-1); }
+.training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 .training-load-ratio { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
 .training-load-target { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
 
 /* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
    muted caption like .basis rather than as the padded, body sized block .empty is. */
-.chart-note { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.chart-note { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 
 /* Hypnogram.tsx's own per-stage totals row (or its not-staged state), sitting directly beneath
    the chart it summarises. Same small, muted caption treatment as .chart-note, a distinct rule
    rather than a shared class because the two components have nothing else in common to couple. */
-.hypnogram-totals { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: 1.4; }
+.hypnogram-totals { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
 
 /* NightStages.tsx's own nap line, beneath the hypnogram and above NightExcludedSessions' own
    .chart-note - a step up from .hypnogram-totals' caption size, since this is body text stating a
@@ -267,7 +320,7 @@ body {
 /* The sentence an insight card exists to print, not a caption beside a value: unlike .basis
    (muted, font-size-xs) this is the whole content of the card, so it reads at body size in the
    primary text colour rather than as a subordinate line under something else. */
-.insight-summary { font-size: var(--font-size-sm); color: var(--text-primary); line-height: 1.5; margin: var(--space-1) 0 0; }
+.insight-summary { font-size: var(--font-size-sm); color: var(--text-primary); line-height: var(--leading-normal); margin: var(--space-1) 0 0; }
 
 /* A card's own entry point to its detail page, so the reader who wants more than the summary
    has somewhere to go without hunting the rail for it. */
@@ -286,7 +339,7 @@ body {
 }
 .input:hover { border-color: var(--text-faint); }
 .input::placeholder { color: var(--text-faint); }
-.field-hint { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; }
+.field-hint { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); }
 /* maintenance-backup-error and maintenance-reclaim-error carry the identical rule, added to the
    selector list rather than duplicated, the same reason annotate-note-withheld sits beside
    annotate-note below: Maintenance.tsx tracks its two mutations' failures separately, so each
@@ -294,7 +347,7 @@ body {
    render, while looking identical to every other inline field error in this app. */
 .field-error, .form-error, .maintenance-backup-error, .maintenance-reclaim-error,
 .maintenance-policy-error {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
 }
 .form-error {
   background: color-mix(in srgb, var(--negative) 10%, transparent);
@@ -311,29 +364,29 @@ body {
 .choice:has(input:checked) { border-color: var(--border-chosen); background: var(--surface-chosen); }
 .choice input { margin-top: 3px; flex: none; accent-color: var(--accent); }
 .choice-title { font-size: var(--font-size-sm); color: var(--text-primary); display: block; }
-.choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; display: block; margin-top: var(--space-1); }
+.choice-detail { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); display: block; margin-top: var(--space-1); }
 
 /* The wizard. No rail: there is no dashboard to navigate to until this finishes, so the whole
    viewport is the one thing being asked for. */
 .setup-shell { min-height: 100vh; display: flex; justify-content: center; padding: var(--space-6) var(--space-4); }
 .setup-column { width: 100%; max-width: 640px; }
-.setup-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
+.setup-brand { display: flex; align-items: center; gap: 7px; font-weight: var(--weight-bold); font-size: var(--font-size-sm); margin-bottom: var(--space-5); }
 
 /* The steps are a real sequence the server derives from what is in the database, so showing
    position states a fact rather than decorating one. */
 .setup-rail { display: flex; gap: var(--space-1); margin-bottom: var(--space-5); list-style: none; padding: 0; }
 .setup-rail li { flex: 1; font-size: var(--font-size-micro); color: var(--text-faint); padding-top: var(--space-2); border-top: 2px solid var(--border-subtle); }
-.setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: 600; }
+.setup-rail li[data-state='current'] { color: var(--accent-soft); border-top-color: var(--accent); font-weight: var(--weight-medium); }
 /* A progress marker, not an interaction state: it records a step already completed and nobody
    hovers, selects or disables it. Left as color-mix on purpose (M3a review finding 1). */
 .setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 .setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
-.setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-4); }
-.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; padding-left: var(--space-5); margin: 0 0 var(--space-4); }
+.setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-4); }
+.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
 .setup-instructions li { margin-bottom: var(--space-2); }
 .setup-instructions li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
+.setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-relaxed); background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
 .setup-uris { margin-bottom: var(--space-4); }
 .setup-scopes { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .setup-scopes .copy-value { display: block; }
@@ -344,7 +397,7 @@ body {
 .copy-field { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
 .copy-field .label { flex: none; width: 148px; }
 .copy-value { font-family: var(--font-mono); font-size: var(--font-size-xs); color: var(--text-primary); background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 6px var(--space-2); flex: 1; overflow-x: auto; white-space: nowrap; }
-.setup-rejected { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.6; border-left: 2px solid var(--negative); padding: var(--space-1) 0 var(--space-1) var(--space-3); margin: var(--space-2) 0; }
+.setup-rejected { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-relaxed); border-left: 2px solid var(--negative); padding: var(--space-1) 0 var(--space-1) var(--space-3); margin: var(--space-2) 0; }
 .setup-rejected code { font-family: var(--font-mono); color: var(--text-faint); text-decoration: line-through; }
 
 .setup-progress { list-style: none; padding: 0; margin: 0; }
@@ -389,6 +442,14 @@ body {
 .chart-table-toggle { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-faint); cursor: pointer; }
 .chart-table-toggle:hover { color: var(--text-secondary); }
 
+/* The table toggle's peer in the same footer row, and rendered only below the breakpoint, where a
+   tap reads the chart and something else has to open the annotate panel. Text rather than a
+   .button for the same reason its neighbour is: it sits under every chart on every page. Darker
+   than the toggle while it is live, because it acts on the reader's data rather than showing them
+   numbers they already have, and back to the toggle's weight once it has nothing to act on. */
+.chart-annotate { background: none; border: 0; padding: 2px 0; font-size: var(--font-size-micro); color: var(--text-secondary); cursor: pointer; text-align: left; }
+.chart-annotate:disabled { color: var(--text-faint); cursor: default; }
+
 /* The same accessible table, shown. A scroll box rather than a plain block for the reason
    ChartFigure's own comment gives: a table's used width is floored at its min-content width, so it
    is allowed to be as wide as it needs and scrolls inside the card instead of widening the page.
@@ -399,7 +460,24 @@ body {
 .chart-table th, .chart-table td { text-align: left; padding: 2px var(--space-1); border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary); }
 .chart-table thead th { position: sticky; top: 0; background: var(--surface-card); color: var(--text-faint); }
 
-@media (max-width: 900px) { .grid > * { grid-column: span 12 !important; } }
+/* .grid > * reaches every ordinary grid item, but not a Card sitting one level under a
+   `display: contents` wrapper (.workout-tiles, .night-tiles, .night-trace above): display:
+   contents changes which boxes become grid items, but a CSS combinator still walks the real DOM,
+   where the Card is a child of the wrapper, not of .grid itself - so its own span (3, here) never
+   collapsed to 12 below this breakpoint. Latent on WorkoutTiles, whose labels all happened to fit
+   inside a quarter-width card and so never showed it; real on M7b's own night page, where the
+   Efficiëntie tile's label alone escaped its ~79px card and pushed the whole page 49px past a
+   375px viewport (measured: 424px scrollWidth in a 375px viewport, and 651px in the 621px band).
+
+   Three wrappers listed, but only one of them ever had a card to collapse. .night-tiles is the
+   real one, the overflow above. .workout-tiles was latent: same shape, `span={3}` cards, and its
+   labels happened to fit. .night-trace is neither - NightTraces.tsx renders `<Card span={12}>`
+   inside it, already the full width this rule would set - so `.night-trace > *` is a no-op today
+   and is kept only so the list covers every `display: contents` wrapper in the file rather than
+   the subset that has bitten so far. grid-collapse.test.ts is what holds that promise: it reads
+   the wrappers out of this stylesheet and fails if one of them is missing from the list below,
+   including the fourth nobody has written yet. */
+@media (max-width: 900px) { .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; } }
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
    entire viewport before there is anything else to show. form-error is not redefined here,
@@ -429,7 +507,7 @@ body {
   padding: var(--space-4); width: min(420px, 100%); max-height: 90vh; overflow-y: auto;
 }
 .annotate-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
-.annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: 600; }
+.annotate-header h2 { font-size: var(--font-size-sm); margin: 0; font-weight: var(--weight-medium); }
 /* The applied:false report: the write is saved, only the re-derive has not caught up, which is
    not an error state and does not borrow form-error's negative tone. Reused as-is by
    OverrideList.tsx for the same report after a removal, not copied under a second name.
@@ -438,7 +516,7 @@ body {
    duplicated under it, so the two can never drift in appearance; it exists as its own class only
    so annotate-panel.test.tsx can find this one message without it colliding with notYetApplied's,
    which can render at the same time. */
-.annotate-note, .annotate-note-withheld { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
+.annotate-note, .annotate-note-withheld { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: var(--space-3) 0 0; }
 
 /* The overrides management list (OverrideList.tsx) and the notes and events list
    (pages/notes/NotesList.tsx): both a table with a row per record and a remove control, so both
@@ -446,7 +524,7 @@ body {
    borrowed from .setup-progress's own list rather than invented fresh. */
 .override-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
 .override-table th, .override-table td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
-.override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+.override-table thead th { font-size: var(--font-size-micro); letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); font-weight: var(--weight-medium); }
 .override-table tbody tr:last-child td { border-bottom: 0; }
 
 /* NotesList.tsx only: an override row carries no numeric value cell to share this with. */
@@ -477,7 +555,7 @@ body {
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
 }
 .member-row:last-child { border-bottom: 0; }
-.member-name { color: var(--text-primary); font-weight: 600; flex: 1; min-width: 120px; }
+.member-name { color: var(--text-primary); font-weight: var(--weight-medium); flex: 1; min-width: 120px; }
 .member-state { color: var(--text-secondary); font-size: var(--font-size-xs); }
 /* A disabled account is not a wrong value the way .delta's bad tone is, only an inactive one, so
    this reads as .source-name-kind's own faint, no-alarm treatment rather than borrowing --negative. */
@@ -525,7 +603,7 @@ body {
 /* The prominent half of the line now that the date is gone: font-weight 600 is the same weight
    .rail-item[aria-current='page'] and .segment[aria-pressed='true'] already use for "this one is
    the point", not a new value invented for this row. */
-.session-row-type { color: var(--text-primary); font-weight: 600; }
+.session-row-type { color: var(--text-primary); font-weight: var(--weight-medium); }
 /* The secondary half beside it: text-secondary and font-size-xs are the same pairing
    .stepper-label already uses for a label that supports the element next to it rather than
    standing on its own. */
@@ -564,7 +642,7 @@ body {
    one every .session-row already carries between rows within a day). */
 .session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 .session-date-group { min-width: 0; }
-.session-date-heading { font-size: var(--font-size-xs); font-weight: 600; color: var(--text-secondary); margin: 0 0 var(--space-1); }
+.session-date-heading { font-size: var(--font-size-xs); font-weight: var(--weight-medium); color: var(--text-secondary); margin: 0 0 var(--space-1); }
 
 /* NightList.tsx/NightRow.tsx: the night list Sleep gains in M8c, mirroring SessionList/SessionRow
    above one date at a time rather than one session at a time. .night-list and .night-groups carry
@@ -581,7 +659,7 @@ body {
 .night-row:last-child { border-bottom: 0; }
 .night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
-.night-row-duration { color: var(--text-primary); font-weight: 600; }
+.night-row-duration { color: var(--text-primary); font-weight: var(--weight-medium); }
 .night-row-source { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .night-row-excluded { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); }
@@ -599,10 +677,10 @@ body {
    that would undersell what is about to go wrong -- but under its own class rather than .form-error
    itself: this card holds no form, and a class named for one should not have to answer for a screen
    that never submits anything. */
-.connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0 0 var(--space-3); }
+.connect-detail { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-3); }
 .connect-action { margin-top: var(--space-2); }
 .connect-warning {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
@@ -627,18 +705,18 @@ body {
   border-top: 1px solid var(--border-subtle);
 }
 .profile-subhead {
-  font-size: var(--font-size-sm); font-weight: 600; color: var(--text-secondary);
+  font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary);
   margin: 0 0 var(--space-2);
 }
 .profile-warning {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
   margin: var(--space-3) 0 0;
 }
 .profile-result, .member-reset-result {
-  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
@@ -675,7 +753,7 @@ body {
    stretching this section past the card, the same reason .session-list carries it. */
 .instance-url { min-width: 0; }
 .instance-url-warning {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
@@ -685,7 +763,7 @@ body {
    a saved address is an uneventful report and the sentence that mattered was read before the
    click. */
 .instance-url-result {
-  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
 }
@@ -695,14 +773,14 @@ body {
    .source-name-row or .member-row do. */
 .maintenance { display: flex; flex-direction: column; gap: var(--space-1); }
 .maintenance-bloat, .maintenance-backups, .maintenance-credentials {
-  font-size: var(--font-size-sm); color: var(--text-secondary); line-height: 1.6; margin: 0;
+  font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0;
 }
-.maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5; margin: 0 0 var(--space-2); }
+.maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); margin: 0 0 var(--space-2); }
 /* The one fact worth a household's attention before they click reclaim: the same negative toned
    box .connect-warning uses above for a fact just as actionable (a redirect that cannot land, a
    reclaim that cannot run safely). */
 .maintenance-blocked {
-  font-size: var(--font-size-xs); color: var(--negative); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--negative) 30%, transparent);
   border-radius: var(--radius-md); padding: var(--space-2) var(--space-3);
@@ -722,7 +800,82 @@ body {
    failure (packages/core/src/db/vacuum.ts) -- the same muted inset box annotate-note uses for an
    equally uneventful report. */
 .maintenance-backup-result, .maintenance-reclaim-result, .maintenance-policy-result {
-  font-size: var(--font-size-xs); color: var(--text-muted); line-height: 1.5;
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
   background: var(--surface-inset); border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3); margin: var(--space-2) 0 0;
+}
+
+/* Below the breakpoint the control row becomes a stack of full-width rows. It is the widest thing
+   on every page: five range buttons in a nowrap flex row, a date stepper, and a group of actions
+   pushed away by margin-left: auto. Measured at 494px of min-content against a 375px viewport, so
+   it, not the rail, is what made these pages scroll sideways.
+
+   min-width: 0 on the grid and flex children is the part that actually does the work. A grid item
+   defaults to a min-width of auto, so one long label ("3 maanden") would push its column past its
+   share and take the row with it, whatever the column template says. */
+@media (max-width: 620px) {
+  .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
+
+  /* `.controls .segmented`, not `.segmented`: the five columns are the five range buttons
+     ControlRow renders, and this rule was written against that row alone. AnnotatePanel reuses the
+     same two classes for a chooser of two to four actions, and M7b made that panel reachable on a
+     phone - so the rule reached it too, and laid two, three or four buttons out in five columns of
+     58.9px each. Measured on /sleep/night/... at 375px: two buttons at 59x44 with three empty
+     columns beside them, "Notitie toevoegen" clipped to an ellipsis inside its 59px.
+
+     Scoped rather than given the panel a class of its own, because the wrong half is this rule and
+     not the panel: five is a fact about the range buttons, and a second class would leave `repeat(5)`
+     sitting on a selector that still claims to describe every .segmented in the app. Outside the
+     control row the base .segmented (flex, wrap) is what a chooser of two to four wants anyway -
+     each button as wide as its label, wrapping when the row runs out. .segment below stays
+     unscoped: its 44px is the touch rule, which every segment on a phone needs. */
+  .controls .segmented { width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); }
+  .segment {
+    min-width: 0; padding: 5px var(--space-1); text-align: center;
+    font-size: var(--font-size-micro);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    min-height: 44px; display: flex; align-items: center; justify-content: center;
+  }
+
+  .stepper { width: 100%; justify-content: space-between; }
+  .stepper-label { min-width: 0; flex: 1; }
+
+  /* margin-left: auto stops applying: nothing in a one-column stack should push anything anywhere. */
+  .controls-end { width: 100%; margin-left: 0; flex-wrap: wrap; }
+  .controls-end .button { min-width: 0; flex: 1 1 auto; justify-content: center; }
+  .synced { width: 100%; }
+
+  /* A finger needs about 44px in its smaller dimension and a mouse does not, so every rule below
+     applies only here. min-height rather than padding on .button and its siblings, because padding
+     would also widen a row of them that already fits; .icon-button is square, so it also needs a
+     min-width or the box would grow tall while staying just as narrow to tap. The checkbox in
+     DataTypePicker keeps its small, familiar size - inflating it to 44px square would look like a
+     mistake - and gets its hit area from the label wrapping it instead, since the label is what a
+     reader actually taps; layout-check measures the label for that control for the same reason.
+
+     .rail-item is in this list for the most-tapped control set on the phone, and it was the last
+     one added because it was also the hardest to see: on a phone the rail lives inside a closed
+     `dialog.rail-dialog`, so every one of these twelve links had a zero rect and layout-check's
+     own zero-rect filter dropped all twelve before measuring them, on all eleven routes. They
+     measured 256x37 with the drawer open - seven short, stacked edge to edge with no gap between
+     them, so a mis-tap did not miss, it navigated to the neighbour. The check now sweeps the
+     drawer open as well as closed, which is what turned this from an argument into a failure. */
+  .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
+  .session-row-link, .night-row-link, .date-picker, .input, .rail-item {
+    min-height: 44px;
+  }
+  .icon-button { min-width: 44px; justify-content: center; align-items: center; }
+  .chart-table-toggle, .chart-annotate, .card-link, .session-row-link, .night-row-link { display: flex; align-items: center; }
+  /* The source picker's real control: a bare <select> inside a label.button, so it inherits the
+     label's box for everything except height, which the label never constrained in the first
+     place (.button sizes to its content on every axis). */
+  .button select { min-height: 44px; }
+
+  .data-type-row, .data-type-row label { min-height: 44px; }
+  .data-type-row input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
+
+  /* The backfill horizon buttons measured 62-68 x 32: wide enough already, short by 12px. No
+     display on the base rule, so it is set here too rather than assumed from the browser's own
+     button rendering. */
+  .setup-horizon li button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 }

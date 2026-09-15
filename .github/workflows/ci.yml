@@ -147,3 +147,89 @@ jobs:
 
       - run: pnpm install --frozen-lockfile && pnpm demo:all
         if: steps.touched.outputs.run == 'true'
+
+  # The one check that can see a page wider than its screen. apps/web renders to static markup and
+  # happy-dom has no layout engine, so the 700px-against-375px overflow M7 fixes was invisible to
+  # every other job here.
+  #
+  # Runs on push to master as well as on pull requests, and the push leg is what makes the cache
+  # below worth having. A cache entry is written in the scope of the ref that wrote it, and a
+  # pull_request run can restore only from its own branch scope or from the default branch's. With
+  # this job gated to pull requests alone, nothing ever wrote a default-branch entry, so every
+  # first run on every branch was a guaranteed miss and paid for demo:capture - the cost the
+  # rehearsal job above calls too much to pay on every push.
+  layout:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    # Microsoft's own image, pinned to the same version as the `playwright` dependency, because the
+    # browsers are already unpacked in it at /ms-playwright and this job therefore downloads and
+    # installs nothing.
+    #
+    # That is not a convenience. `playwright install chromium` hangs after the download completes,
+    # while it unpacks: measured here at 173.9 MiB fetched in about a second and then ten minutes of
+    # silence until the step's own timeout, and measured again on a Windows workstation during M7a,
+    # where it stalled three times in a row just after writing chrome.dll. Two operating systems,
+    # same stall, so the cause is the unpacking rather than either machine. An image that ships the
+    # browser already unpacked removes the step that fails instead of retrying it.
+    #
+    # The tag must move with the dependency. A container whose browsers are a different build from
+    # the `playwright` package driving them is the one way this arrangement breaks, and it breaks
+    # loudly at launch rather than quietly.
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.0-noble
+    # A ceiling regardless. This job drives two real browsers and can wait on a network or on a page
+    # that never settles, and without one it does not fail, it runs to the six hour default, which is
+    # worse than a red check because nobody watches a job that is still running.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Before the fixture cache rather than after it, because the two checks below this line need
+      # nothing it produces. The wizard and the sign-in screen are measured against a server booted
+      # on a temporary directory, so an ordinary `pnpm build` is the whole of their input - seconds,
+      # and they fail the job here rather than after the minutes demo:capture can cost.
+      - run: pnpm build
+
+      # The screens the demo cannot render. It is an already-signed-in instance against a recorded
+      # database, so the setup wizard (which needs an unfinished instance) and the sign-in screen
+      # (which needs a finished one with nobody signed in) are unreachable from layout:check by
+      # construction, and had never been measured at any viewport before this.
+      - run: pnpm layout:check:boot
+
+      # Keyed on everything that decides what the fixtures contain: the recorder, the scripts that
+      # build the throwaway instance, the routes whose shapes are recorded, core, which is what
+      # derives the values in them, and apps/web/src - the recorder mounts real app code and
+      # records exactly what each mounted page fetches, so a page gaining or dropping a query
+      # changes the manifest as surely as a route change does. A miss rebuilds them, which is the
+      # cost demo-rehearsal already pays; a hit is seconds.
+      #
+      # restore-keys is deliberately not load-bearing. It lets a run restore the newest fixture
+      # directory when the exact key misses; what it must never do is let the run believe those
+      # fixtures are current, because a prefix match is by definition an entry keyed off different
+      # sources. cache-hit is 'true' on an exact match and nothing else, which is why the capture
+      # step below tests exactly that and not `cache-matched-key`, which a prefix match sets too.
+      # So a prefix hit re-runs demo:capture, and writeCapture clears the directory before it
+      # writes, leaving nothing restored to survive into the build. That is the stale-fixture bug
+      # review already closed once, left closed.
+      - id: fixtures
+        uses: actions/cache@v4
+        with:
+          path: demo/capture/out
+          key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**', 'apps/web/src/**') }}
+          restore-keys: demo-fixtures-
+
+      - run: pnpm demo:capture
+        if: steps.fixtures.outputs.cache-hit != 'true'
+
+      # layout:build does not exist - it was dropped in Task 4 because its DEMO_BASE=/ prefix is
+      # not valid on Windows. demo:build already produces dist-demo under the /haelan/demo/ prefix
+      # layout:check expects, so that is what runs here instead.
+      - run: pnpm demo:build
+      - run: pnpm layout:check

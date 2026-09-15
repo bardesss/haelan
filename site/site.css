@@ -20,7 +20,7 @@
   --lede: clamp(1.05rem, 1.4vw, 1.2rem);
   --measure: 34rem;
   --page: 76rem;
-  --gutter: clamp(var(--space-4), 4vw, calc(var(--space-6) * 2));
+  --gutter: clamp(var(--space-4), 4vw, var(--space-8));
 }
 
 * { box-sizing: border-box; }
@@ -31,7 +31,7 @@ body {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-md);
-  line-height: 1.6;
+  line-height: var(--leading-relaxed);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -56,7 +56,7 @@ h1 {
   font-size: var(--display-xl);
   line-height: 1.04;
   letter-spacing: -.03em;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   text-wrap: balance;
 }
 h2 {
@@ -64,7 +64,7 @@ h2 {
   font-size: var(--display-md);
   line-height: 1.25;
   letter-spacing: -.01em;
-  font-weight: 650;
+  font-weight: var(--weight-semibold);
 }
 p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 
@@ -76,7 +76,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
   background: var(--surface-card);
   color: var(--text-primary);
   font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-weight: var(--weight-medium);
   text-decoration: none;
   transition: background var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
@@ -101,7 +101,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(65rem 40rem at 72% 8%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(65rem 40rem at 72% 8%, var(--accent-wash), transparent 70%),
     radial-gradient(50rem 34rem at 12% 0%, color-mix(in oklab, var(--accent-soft) 10%, transparent), transparent 66%);
 }
 .hero {
@@ -140,7 +140,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
    argument the project rests on is that a day is either kept or gone, and a wall of days makes
    it without a sentence. Everything else on the page stays quiet so this can be the thing you
    remember. */
-.days { padding: var(--space-6) 0 clamp(var(--space-6), 6vw, calc(var(--space-6) * 2)); }
+.days { padding: var(--space-6) 0 clamp(var(--space-6), 6vw, var(--space-8)); }
 .ribbon {
   display: flex;
   align-items: flex-end;
@@ -169,7 +169,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
   display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); align-items: baseline;
   max-width: var(--page); margin: var(--space-4) auto 0; padding: 0 var(--gutter);
 }
-.ribbon-title { font-size: var(--font-size-md); color: var(--text-primary); font-weight: 600; }
+.ribbon-title { font-size: var(--font-size-md); color: var(--text-primary); font-weight: var(--weight-medium); }
 .ribbon-range {
   font-family: var(--font-mono);
   font-size: var(--font-size-micro);
@@ -215,7 +215,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
   font-size: clamp(3.5rem, 9vw, 6rem);
   line-height: .9;
   letter-spacing: -.04em;
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   color: var(--accent);
 }
 .why-text { max-width: var(--measure); }
@@ -223,7 +223,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 .why-cost { margin-bottom: 0; color: var(--text-muted); }
 
 @media (min-width: 60rem) {
-  .why { grid-template-columns: auto minmax(0, 1fr); padding-block: clamp(var(--space-6), 5vw, calc(var(--space-6) * 2)); }
+  .why { grid-template-columns: auto minmax(0, 1fr); padding-block: clamp(var(--space-6), 5vw, var(--space-8)); }
 }
 
 /* ---- run it -------------------------------------------------------------- */
@@ -241,7 +241,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
   border-radius: var(--radius-lg);
   overflow-x: auto;
 }
-.run code { font-family: var(--font-mono); font-size: var(--font-size-xs); line-height: 1.7; color: var(--text-secondary); }
+.run code { font-family: var(--font-mono); font-size: var(--font-size-xs); line-height: var(--leading-relaxed); color: var(--text-secondary); }
 
 @media (min-width: 60rem) {
   .run { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
@@ -335,7 +335,7 @@ p { margin: 0 0 var(--space-4); color: var(--text-secondary); }
 footer {
   max-width: var(--page);
   margin: clamp(var(--space-6), 7vw, calc(var(--space-6) * 2.5)) auto 0;
-  padding: var(--space-6) var(--gutter) calc(var(--space-6) * 2);
+  padding: var(--space-6) var(--gutter) var(--space-8);
   border-top: 1px solid var(--border-subtle);
 }
 .footer-cta { margin-bottom: var(--space-5); }

@@ -38,9 +38,9 @@ function distanceToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 }
 
-function distanceToMark(px, py) {
+function distanceToMark(px, py, geometry) {
   let best = Infinity
-  for (const line of GEOMETRY) {
+  for (const line of geometry) {
     for (let i = 0; i + 1 < line.length; i++) {
       best = Math.min(best, distanceToSegment(px, py, line[i][0], line[i][1], line[i + 1][0], line[i + 1][1]))
     }
@@ -48,14 +48,53 @@ function distanceToMark(px, py) {
   return best
 }
 
+const MARK_CENTER = [12, 12]
+
+// The four stem corners - (5,4), (19,4), (5,20) and (19,20) - are the farthest any point of the
+// mark's own polyline sits from its centre: sqrt(7^2 + 8^2) in this 24-unit space. Every other
+// vertex (the pulse's own endpoints included) is closer in.
+const FARTHEST_VERTEX_FROM_CENTER = Math.hypot(7, 8)
+
+/**
+ * How far in to pull the mark, about its own centre, so a maskable icon's ink stays inside the
+ * platform's safe zone.
+ *
+ * A maskable icon may be cropped by the platform to any shape it chooses - a circle, a squircle,
+ * a rounded square - and the one region every such shape leaves alone is a centred circle at 80%
+ * of the icon's diameter (the "safe zone" maskable.app and Android's adaptive-icon guidance both
+ * specify). render() draws GEOMETRY straight to the canvas for every other icon here, which is
+ * the right answer for an icon the platform does not crop - but it puts those four stem corners
+ * at radius 10.630, past this 9.6 boundary, so a maskable icon needs a genuinely different render
+ * rather than the same one with a different `purpose` label.
+ *
+ * The round cap on each stem end bleeds a further strokeWidth/2 outward past the vertex itself
+ * (in this same 24-unit space, since render() converts both the geometry and the stroke width by
+ * the one pixel scale below), so what has to clear the boundary is the vertex distance plus that
+ * half-width, not the bare vertex - hence solving for the scale that pins
+ * `FARTHEST_VERTEX_FROM_CENTER * scale + strokeWidth / 2` to the safe zone's radius exactly,
+ * rather than pinning the vertex alone and letting the cap bleed past it.
+ */
+function scaleForSafeZone(strokeWidth) {
+  const safeZoneRadius = 0.4 * 24 // 80% diameter, in the mark's own 24-unit coordinate space
+  return (safeZoneRadius - strokeWidth / 2) / FARTHEST_VERTEX_FROM_CENTER
+}
+
+/** GEOMETRY, scaled toward `center` - what a maskable render draws instead of the mark as-is. */
+function pulledToward(center, scale, geometry) {
+  return geometry.map((line) => line.map(([x, y]) => [
+    center[0] + (x - center[0]) * scale,
+    center[1] + (y - center[1]) * scale,
+  ]))
+}
+
 /** RGBA pixels. A null `background` leaves the ground transparent. */
-function render(size, strokeWidth, ink, background) {
+function render(size, strokeWidth, ink, background, geometry = GEOMETRY) {
   const scale = size / 24
   const half = (strokeWidth / 2) * scale
   const pixels = Buffer.alloc(size * size * 4)
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const distance = distanceToMark((x + 0.5) / scale, (y + 0.5) / scale) * scale
+      const distance = distanceToMark((x + 0.5) / scale, (y + 0.5) / scale, geometry) * scale
       // One pixel of feathering across the edge: the coverage a scanline rasteriser approximates
       // by supersampling, without the sampling noise.
       const coverage = Math.max(0, Math.min(1, half - distance + 0.5))
@@ -137,7 +176,15 @@ const PAGE_DARK = [0x0a, 0x0e, 0x17]     // --surface-page, dark theme
 // grey rather than reading as blue.
 const ICO_SIZES = [{ size: 16, strokeWidth: 3 }, { size: 32, strokeWidth: 2.6 }, { size: 48, strokeWidth: 2.4 }]
 
-/** Writes both raster icons into `webDir`/public. Returns what it wrote, for the CLI to report. */
+// The two sizes a web app manifest's `icons` list needs to be installable at all, painted the
+// same way as apple-touch-icon.png below and for the same reason: an "any" purpose icon can be
+// composited onto a background the platform chooses, and a transparent one would sit on whatever
+// that platform picked rather than this app's own page colour.
+const PWA_SIZE = 512
+const PWA_ICON_SIZES = [192, 512]
+const PWA_STROKE_WIDTH = 2.2
+
+/** Writes every raster icon into `webDir`/public. Returns what it wrote, for the CLI to report. */
 export function renderIcons(webDir) {
   const entries = ICO_SIZES.map(({ size, strokeWidth }) => ({
     size, bytes: png(size, render(size, strokeWidth, ACCENT_DARK, null)),
@@ -146,12 +193,30 @@ export function renderIcons(webDir) {
   // Apple masks and composites its icon, and a transparent one composites onto black, so this
   // gets the page colour painted in rather than an alpha channel.
   writeFileSync(`${webDir}/public/apple-touch-icon.png`, png(180, render(180, 2.2, ACCENT_DARK, PAGE_DARK)))
-  return ICO_SIZES.map((entry) => entry.size)
+
+  for (const size of PWA_ICON_SIZES) {
+    writeFileSync(
+      `${webDir}/public/icon-${size}.png`,
+      png(size, render(size, PWA_STROKE_WIDTH, ACCENT_DARK, PAGE_DARK)),
+    )
+  }
+  // Maskable: the mark pulled into the safe zone (see scaleForSafeZone's own comment), on the
+  // same full-bleed background as every other icon here - the background paints every pixel of
+  // the canvas regardless of how far in the mark itself sits, so cropping to any shape the
+  // platform chooses still lands on this app's own page colour at the edge, never on an
+  // unpainted ring nor on a fragment of the mark that should have been safely inside it.
+  const maskableGeometry = pulledToward(MARK_CENTER, scaleForSafeZone(PWA_STROKE_WIDTH), GEOMETRY)
+  writeFileSync(
+    `${webDir}/public/icon-${PWA_SIZE}-maskable.png`,
+    png(PWA_SIZE, render(PWA_SIZE, PWA_STROKE_WIDTH, ACCENT_DARK, PAGE_DARK, maskableGeometry)),
+  )
+
+  return { ico: ICO_SIZES.map((entry) => entry.size), pwa: [...PWA_ICON_SIZES, `${PWA_SIZE}-maskable`] }
 }
 
 // Nothing above this line touches the filesystem, so the drift test can import PATHS without the
 // import itself rewriting the files it is about to compare.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const sizes = renderIcons(fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, ''))
-  console.log(`favicon.ico ${sizes.join('/')} | apple-touch-icon.png 180`)
+  const written = renderIcons(fileURLToPath(new URL('..', import.meta.url)).replace(/[\\/]$/, ''))
+  console.log(`favicon.ico ${written.ico.join('/')} | apple-touch-icon.png 180 | icon-*.png ${written.pwa.join('/')}`)
 }

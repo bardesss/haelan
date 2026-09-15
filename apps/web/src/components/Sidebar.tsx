@@ -40,19 +40,24 @@ const RESOURCES = [
   { href: 'https://github.com/bardesss/haelan/issues', nameKey: 'sidebar.resources.issues', icon: 'issues' },
 ] as const
 
-export function Sidebar({ active, person, onSignOut, signOutError }: {
+export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true }: {
   active: string
   person: string
   onSignOut: () => void
   signOutError?: string | null
+  // False inside the drawer, where the rail is already as wide as the drawer and the icon strip
+  // has nothing to save. The stored preference is still read and still never written here, so a
+  // reader who crosses back above the breakpoint finds the rail as they left it.
+  collapsible?: boolean
 }) {
   const { t } = useTranslation()
   // Read once at mount rather than on every render: the value only ever changes through the
   // toggle below, which already knows the next value without asking storage for it back.
-  const [collapsed, setCollapsed] = useState(() => readCollapsed())
+  const [stored, setStored] = useState(() => readCollapsed())
+  const collapsed = collapsible && stored
 
   function toggle() {
-    setCollapsed((current) => {
+    setStored((current) => {
       const next = !current
       writeCollapsed(next)
       return next
@@ -80,10 +85,12 @@ export function Sidebar({ active, person, onSignOut, signOutError }: {
             spelling only — the package, the image, the command and every instruction in the
             catalogue stay "haelan", because those are the ones a reader has to type. */}
         <div className="brand"><BrandMark />{label('Hælan')}</div>
-        <button type="button" className="icon-button rail-toggle" onClick={toggle}
-          aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
-          <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} />
-        </button>
+        {collapsible && (
+          <button type="button" className="icon-button rail-toggle" onClick={toggle}
+            aria-label={collapsed ? t('sidebar.expand') : t('sidebar.collapse')}>
+            <Icon name={collapsed ? 'chevronRight' : 'chevronLeft'} />
+          </button>
+        )}
       </div>
       {GROUPS.map((g) => (
         <div key={g.labelKey}>

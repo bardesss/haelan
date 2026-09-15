@@ -282,18 +282,37 @@ export function IntradayHeartRate({
     }
   }, [series, pointsBySeriesIndex, timezone, t, i18n.language, nameOf, eventMarks, metric, unit])
 
-  const onClick = useCallback((event: ECElementEvent) => {
+  // Shared by onClick and describe below, so the annotate control acts on precisely the point a
+  // click would have opened rather than on a second reading of the same event.
+  const pointAt = useCallback((event: ECElementEvent) => {
     const seriesIndex = event.seriesIndex
-    if (seriesIndex === undefined) return
-    const point = event.componentType === 'markPoint'
+    if (seriesIndex === undefined) return undefined
+    return event.componentType === 'markPoint'
       ? excludedBySeriesIndex.get(seriesIndex)?.[event.dataIndex]
       : pointsBySeriesIndex.get(seriesIndex)?.[event.dataIndex]
-    if (point !== undefined) onPointClick?.({ sourceId: point.sourceId, utcMs: point.utcMs, n: point.n })
-  }, [pointsBySeriesIndex, excludedBySeriesIndex, onPointClick])
+  }, [pointsBySeriesIndex, excludedBySeriesIndex])
 
-  const { host, style } = useChart(build, 170, onClick)
+  const onClick = useCallback((event: ECElementEvent) => {
+    const point = pointAt(event)
+    if (point !== undefined) onPointClick?.({ sourceId: point.sourceId, utcMs: point.utcMs, n: point.n })
+  }, [pointAt, onPointClick])
+
+  // A time of day rather than a date: this chart draws one day, and the point a reader tapped is a
+  // minute inside it. The source is left out on purpose - two sources reporting the same minute
+  // are two points, but the panel this opens is about the reading, and the card already names
+  // which sources it drew.
+  const describe = useCallback((event: ECElementEvent) => {
+    const point = pointAt(event)
+    return point === undefined ? undefined : timeOfDay(point.utcMs, timezone, i18n.language)
+  }, [pointAt, timezone, i18n.language])
+
+  // Conditional on the caller having somewhere to send a click, not unconditional: `onClick`
+  // above bottoms out in `onPointClick?.(...)`, so handing useChart a pair it can never act on
+  // renders an annotate control that names a point and then does nothing when pressed. See
+  // useChart's ChartPointHandlers doc comment; chart-annotate-handlers.test.tsx pins it.
+  const { host, style, tap } = useChart(build, 170, onPointClick ? { onClick, describe } : undefined)
   return (
-    <ChartFigure label={label} host={host} style={style}
+    <ChartFigure label={label} host={host} style={style} tap={tap}
       table={{
         columns: [
           t('charts.columns.time'), t('charts.columns.source'),

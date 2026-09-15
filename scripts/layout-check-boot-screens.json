@@ -1,0 +1,8 @@
+[
+  { "screen": "the account step", "url": "/setup/account" },
+  { "screen": "the address step", "url": "/setup/instance-url" },
+  { "screen": "the Google step", "url": "/setup/google" },
+  { "screen": "the data type step", "url": "/setup/backfill" },
+  { "screen": "the backfill step", "url": "/setup/backfill" },
+  { "screen": "sign in", "url": "/" }
+]
