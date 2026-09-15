@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.26.1](https://github.com/bardesss/haelan/compare/v1.26.0...v1.26.1) (2026-09-15)
+
+
+### Bug Fixes
+
+* the staleness read leaves the hot path, and reaches an agent ([#248](https://github.com/bardesss/haelan/issues/248)) ([3431c3d](https://github.com/bardesss/haelan/commit/3431c3d455d3099418675bb11a4490f10d4e3f2e))
+
 ## [1.26.0](https://github.com/bardesss/haelan/compare/v1.25.0...v1.26.0) (2026-09-15)
 
 
