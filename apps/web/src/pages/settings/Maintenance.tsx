@@ -144,6 +144,23 @@ export function Maintenance() {
           })}
         </p>
       )}
+      {/* A plain link, not a fetch into a Blob: the session rides on a cookie (auth/cookie.ts),
+          so the browser authenticates this GET on its own, and the file streams to disk instead
+          of being held in memory - which for a household archive is hundreds of megabytes. The
+          same shape ControlRow uses for its CSV export. Rendered only when a backup exists,
+          since the route answers 404 for a name listBackups does not report. */}
+      {latest !== null && (
+        <p className="maintenance-download-row">
+          <a className="button maintenance-download"
+            href={`/api/settings/maintenance/backups/${encodeURIComponent(latest.name)}/download`}
+            download>
+            {t('settings.maintenance.backups.download')}
+          </a>
+        </p>
+      )}
+      {latest !== null && (
+        <p className="maintenance-download-note">{t('settings.maintenance.backups.downloadNote')}</p>
+      )}
       {/* keep === 0 is the form below set to zero, which is this instance's "turn backups off" --
           backupDecision declines every write this instance would otherwise make, so
           "Keeps the last 0, taken every N hours" described a schedule that does not exist and a

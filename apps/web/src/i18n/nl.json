@@ -1146,6 +1146,8 @@
       "bloat": "{{mb}} MB aan dode ruimte in het databasebestand.",
       "backups": {
         "none": "Nog geen back-ups.",
+        "download": "Back-up downloaden",
+        "downloadNote": "Het bestand bevat alleen de database. instance.key blijft hier, en is nodig om de opgeslagen Google-inloggegevens weer te kunnen lezen.",
         "latest": "Laatste back-up {{date}} ({{size}} MB).",
         "retention": "Bewaart de laatste {{keep}}, elke {{hours}} uur gemaakt.",
         "off": "Back-ups staan uit voor deze instantie."

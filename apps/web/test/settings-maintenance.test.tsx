@@ -179,6 +179,37 @@ describe('the maintenance section', () => {
     expect(text('.maintenance-backups')).toBe('No backups yet.')
   })
 
+  it('offers a download link pointing at the latest backup by name', () => {
+    mountSection(status({
+      backups: [{ name: 'haelan-2026-01-02T03-04-05-000Z.sqlite', takenAtMs: Date.UTC(2026, 0, 2), bytes: 10_500_000 }],
+    }))
+    const link = container!.querySelector<HTMLAnchorElement>('.maintenance-download')
+    // getAttribute, not .href: happy-dom resolves the property against the document's base URL,
+    // so a component that emitted an absolute URL to another origin would still pass a check on
+    // the property while failing the one thing this assertion is about.
+    expect(link?.getAttribute('href')).toBe(
+      '/api/settings/maintenance/backups/haelan-2026-01-02T03-04-05-000Z.sqlite/download',
+    )
+    expect(link?.textContent).toBe('Download backup')
+  })
+
+  // Not a warning, a restore fact: the README says a backup does not contain instance.key, and
+  // somebody downloading one has to know that the file alone will not bring the stored Google
+  // credentials back.
+  it('says the downloaded file does not carry instance.key', () => {
+    mountSection(status({
+      backups: [{ name: 'haelan-2026-01-02T03-04-05-000Z.sqlite', takenAtMs: Date.UTC(2026, 0, 2), bytes: 10_500_000 }],
+    }))
+    expect(text('.maintenance-download-note')).toBe(
+      'The file holds the database only. instance.key stays here, and is needed to read the stored Google credentials back.',
+    )
+  })
+
+  it('offers no download link when there are no backups yet', () => {
+    mountSection(status({ backups: [] }))
+    expect(container!.querySelector('.maintenance-download')).toBeNull()
+  })
+
   it('states the retention settings', () => {
     mountSection(status({ keep: 5, intervalHours: 12 }))
     expect(text('.maintenance-retention')).toBe('Keeps the last 5, taken every 12 hours.')
