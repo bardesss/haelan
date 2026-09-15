@@ -68,6 +68,22 @@ describe('PersonQuery isolation', () => {
     expect(carol.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-15', to: '2026-08-21' }).suppressed).toBe(true)
   })
 
+  it('reports source activity only for its own person', () => {
+    // The shared setup writes both people's rows against source 'merged', which this reader
+    // excludes, so give each person a source of their own to be isolated about.
+    for (const [personId, sourceId] of [['alice', 's-alice'], ['bart', 's-bart']] as const) {
+      for (let day = 1; day <= 20; day += 1) {
+        test.db.insert(daily).values({
+          personId, localDate: `2026-08-${String(day).padStart(2, '0')}`, metric: 'steps',
+          agg: 'sum', source: sourceId, value: 1000, coverage: 0.9, sourceMix: null,
+          derivationVersion: DERIVATION_VERSION,
+        }).run()
+      }
+    }
+    expect(alice.sourceActivity({ today: '2026-08-21' }).map((a) => a.sourceId)).toEqual(['s-alice'])
+    expect(bart.sourceActivity({ today: '2026-08-21' }).map((a) => a.sourceId)).toEqual(['s-bart'])
+  })
+
   it('smooths a trend only from its own person', () => {
     // Both people carry a flat, constant series with different values in the beforeEach above.
     // A leak would pull bart's 9000 into alice's line, or drag alice's centre toward 5000.

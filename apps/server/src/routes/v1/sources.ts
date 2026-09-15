@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { getSource } from '@haelan/core'
+import { getSource, readSourceActivity, localDateInZone } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { sendHashed } from './shared.ts'
 
@@ -18,7 +18,31 @@ export function registerSourceRoutes(app: FastifyInstance): void {
   const aliases = () => app.haelan.instance.sourceAliases
 
   app.get<{ Params: PersonParams }>('/p/:personId/sources', async (request, reply) => {
-    const items = aliases().listNamed(request.params.personId)
+    const { personId } = request.params
+    // Composed here rather than inside the store: a name is stored state and an activity is
+    // computed from `daily`, and NamedSource is shared with M4's tools, which want neither.
+    //
+    // Today is the person's own civil date, not the server's: a source is judged against the
+    // household's day, which is the same reason every derived row is keyed by a local date.
+    const person = app.haelan.stores.people.get(personId)
+    const today = localDateInZone(app.haelan.now(), person?.timezone ?? 'UTC')
+    const activity = new Map(
+      readSourceActivity(app.haelan.instance.db, personId, { today }).map((a) => [a.sourceId, a]),
+    )
+    const items = aliases().listNamed(personId).map((source) => {
+      // A source with no daily row at all is not left out and not crashed on: it is reported as
+      // having never reported, which is a real state - the archive measured had a source row
+      // with no rows behind it.
+      const seen = activity.get(source.id)
+      return {
+        ...source,
+        lastReportedDate: seen?.lastReportedDate ?? null,
+        reportingDates: seen?.reportingDates ?? 0,
+        medianGapDays: seen?.medianGapDays ?? null,
+        status: seen?.status ?? 'unjudged',
+        reportingNow: seen?.reportingNow ?? false,
+      }
+    })
     return sendHashed(reply, request, { items })
   })
 

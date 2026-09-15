@@ -1,5 +1,7 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
+import { readSourceActivity } from './sourceActivity.ts'
+import type { SourceActivity } from './sourceActivity.ts'
 import { daily, people, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
@@ -151,6 +153,18 @@ export class PersonQuery {
       y: (entry) => entry.point.value,
     })
     return { points: thinned.points.map((entry) => entry.point), reduction: thinned.reduction }
+  }
+
+  /**
+   * Whether each of this person's sources is still reporting, judged against its own cadence.
+   *
+   * Takes no range, unlike every other reader here: staleness is a question about the whole
+   * history, and a range would make "has this stopped" mean "did it report inside the window the
+   * reader happens to be looking at", which is a different and much less useful question.
+   */
+  sourceActivity(input: { today: string }): SourceActivity[] {
+    requireDate('today', input.today)
+    return readSourceActivity(this.#db, this.#personId, input)
   }
 
   /**

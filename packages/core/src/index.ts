@@ -110,6 +110,10 @@ export type {
 } from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
 export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
+// The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.
+// Aliased because the two cannot share a name and a caller holding a person's `timezone` string
+// needs this one: an offset is a fact about an instant, a zone is a fact about a person.
+export { localDateOf as localDateInZone } from './sync/localDate.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
@@ -176,6 +180,10 @@ export type { DailyPoint, SeriesResult } from './query/personQuery.ts'
 export { PROJECTION_TABLES } from './query/projection.ts'
 export { baselineOf, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
+export {
+  readSourceActivity, MIN_REPORTING_DATES, STALE_GAP_MULTIPLIER, STALE_FLOOR_DAYS, UNJUDGED_FLOOR_DAYS,
+} from './query/sourceActivity.ts'
+export type { SourceActivity, SourceStatus } from './query/sourceActivity.ts'
 export { comparePeriods, INSIGHT_MIN_DAY_FRACTION, INSIGHT_MIN_COVERAGE } from './query/insights.ts'
 export type { Insight, PeriodPoint, SuppressionReason, DateRange } from './query/insights.ts'
 export { coverageIsMeaningful } from './query/coverageSignal.ts'

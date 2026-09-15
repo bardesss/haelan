@@ -1086,7 +1086,10 @@
         "app": "App",
         "manual": "Handmatig ingevoerd"
       },
-      "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
+      "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw.",
+      "lastReported": "Laatst gerapporteerd op {{date}}",
+      "dormantHeading": "Rapporteert niet meer",
+      "neverReported": "Heeft nooit gerapporteerd"
     },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",

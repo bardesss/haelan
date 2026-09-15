@@ -19,6 +19,18 @@ export interface NamedSource {
   name: string
   kind: 'device' | 'app' | 'manual'
   createdAtMs: number
+  /** Local date, null when this source has never produced a row. */
+  lastReportedDate: string | null
+  reportingDates: number
+  medianGapDays: number | null
+  /** 'unjudged' means too little history to have a cadence, not that it is fine. */
+  status: 'reporting' | 'stale' | 'unjudged'
+  /**
+   * Whether the card lists it among the live sources. Computed by the server, not here: the
+   * thresholds behind it belong in one place, and a second copy in the browser is how a rule
+   * drifts. See packages/core/src/query/sourceActivity.ts.
+   */
+  reportingNow: boolean
 }
 
 interface SourcesResponse { items: NamedSource[] }
