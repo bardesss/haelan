@@ -17,8 +17,15 @@ interface AliasBody { alias?: unknown }
 export function registerSourceRoutes(app: FastifyInstance): void {
   const aliases = () => app.haelan.instance.sourceAliases
 
-  app.get<{ Params: PersonParams }>('/p/:personId/sources', async (request, reply) => {
+  app.get<{ Params: PersonParams, Querystring: { activity?: string } }>('/p/:personId/sources', async (request, reply) => {
     const { personId } = request.params
+    // Opt in, because this listing is not only the settings card's. useSourceNames backs
+    // ControlRow and IntradayHeartRate too, so every page in the app hits this route for the
+    // names alone - and computing staleness measured 19-60ms against a real archive, growing
+    // with the daily row count and the number of people. One caller shows it; one caller asks.
+    if (request.query.activity !== '1') {
+      return sendHashed(reply, request, { items: aliases().listNamed(personId) })
+    }
     // Composed here rather than inside the store: a name is stored state and an activity is
     // computed from `daily`, and NamedSource is shared with M4's tools, which want neither.
     //

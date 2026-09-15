@@ -242,10 +242,6 @@ describe('IntradayHeartRate tooltip', () => {
     const sources: NamedSource[] = [{
       id: 's1', externalId: 'x1', displayName: 'Watch', alias: sourceName, name: sourceName,
       kind: 'device', createdAtMs: 0,
-      // Reporting normally. This file is about escaping a hostile source NAME, and the activity
-      // fields are here only because the wire shape requires them.
-      lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
-      status: 'reporting', reportingNow: true,
     }]
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
     client.setQueryData(queryKeys.session(), session)

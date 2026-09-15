@@ -59,7 +59,7 @@ There is deliberately no tool that lists the household. A session is bound to on
 
 **Input**
 
-None.
+- **today** (string, optional) — Today's date as YYYY-MM-DD. Supply it to learn whether each source is still reporting: without it, lastReportedDate and status come back null. A source that quietly stopped is why a series can thin out without any single day being wrong.
 
 **Output**
 
@@ -74,6 +74,8 @@ None.
     - **untrustedText** (string, nullable)
     - **truncated** (boolean)
   - **kind** ('device' | 'app' | 'manual')
+  - **lastReportedDate** (string, nullable)
+  - **status** ('reporting' | 'stale' | 'unjudged', nullable)
 
 ### list_metrics
 

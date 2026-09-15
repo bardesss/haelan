@@ -82,13 +82,10 @@ afterEach(() => {
  * spo2/hrv cards are the only reason this parameter exists at all (the "metric-specific
  * formatting" tests below).
  */
-/** One source, reporting normally. This file asserts series names and tooltips, not staleness, so
- *  the activity fields are here only because the wire shape requires them. */
+/** One source. This file asserts series names and tooltips, nothing about activity. */
 const namedSource = (): NamedSource => ({
   id: 'src-hex-id', externalId: 'x', displayName: 'Pixel Watch 4', alias: 'My watch',
   name: 'My watch', kind: 'device', createdAtMs: 0,
-  lastReportedDate: '2026-02-01', reportingDates: 30, medianGapDays: 1,
-  status: 'reporting', reportingNow: true,
 })
 
 function optionForPoints(

@@ -14,7 +14,16 @@ export const describePerson: Tool = {
   notes:
     'There is deliberately no tool that lists the household. A session is bound to one person, and '
     + 'listing the others would name people whose data this session cannot read.',
-  inputSchema: {},
+  inputSchema: {
+    // Declared, not taken from a clock: the Tool contract deliberately gives `run` no second
+    // argument beyond its parsed input (see contract.ts), so there is nowhere for a server clock
+    // to enter. Without this the staleness fields below could never be reached at all.
+    today: z.string().optional().describe(
+      "Today's date as YYYY-MM-DD. Supply it to learn whether each source is still reporting: "
+      + 'without it, lastReportedDate and status come back null. A source that quietly stopped is '
+      + 'why a series can thin out without any single day being wrong.',
+    ),
+  },
   outputSchema: {
     personId: z.string(),
     displayName: UNTRUSTED,
@@ -25,15 +34,24 @@ export const describePerson: Tool = {
     // the answer can be rather than that it is text.
     sources: z.array(z.object({
       id: z.string(), name: UNTRUSTED, kind: z.enum(['device', 'app', 'manual']),
+      // Not untrusted: a date and an enum this instance computed, unlike the name a device chose
+      // for itself. An agent reading a thin series otherwise has no way to learn that the device
+      // behind it stopped reporting months ago.
+      lastReportedDate: z.string().nullable(),
+      status: z.enum(['reporting', 'stale', 'unjudged']).nullable(),
     })),
   },
-  run: (q) => {
-    const person = q.describe()
+  run: (q, args) => {
+    const today = typeof args['today'] === 'string' ? args['today'] : undefined
+    const person = q.describe({ today })
     return {
       personId: person.id,
       displayName: untrusted(person.displayName),
       timezone: person.timezone,
-      sources: person.sources.map((s) => ({ id: s.id, name: untrusted(s.name), kind: s.kind })),
+      sources: person.sources.map((s) => ({
+        id: s.id, name: untrusted(s.name), kind: s.kind,
+        lastReportedDate: s.lastReportedDate, status: s.status,
+      })),
     }
   },
 }

@@ -19,6 +19,17 @@ export interface NamedSource {
   name: string
   kind: 'device' | 'app' | 'manual'
   createdAtMs: number
+}
+
+/**
+ * What the listing adds when it is asked for `?activity=1`, which only the settings card does.
+ *
+ * A separate type rather than optional fields on NamedSource: every other caller of this route
+ * wants names and nothing else, and computing these measured 19-60ms against a real archive on a
+ * route ControlRow hits from every page. Optional fields would put that cost back on the hot path
+ * the moment somebody read them.
+ */
+export interface SourceActivityFields {
   /** Local date, null when this source has never produced a row. */
   lastReportedDate: string | null
   reportingDates: number
@@ -32,6 +43,8 @@ export interface NamedSource {
    */
   reportingNow: boolean
 }
+
+export type NamedSourceWithActivity = NamedSource & SourceActivityFields
 
 interface SourcesResponse { items: NamedSource[] }
 
@@ -55,6 +68,17 @@ export interface SourceNames {
   // Read only by ErrorState's own not_found branch (see its comment) - SourceNames.tsx has to
   // reach through this narrowed shape to hand ErrorState the underlying query's error.
   error: unknown
+}
+
+/**
+ * The same listing with each source's activity, for the one surface that shows it.
+ *
+ * Its own key, a child of the plain one, so both are cached separately and a rename still
+ * refreshes both: invalidateQueries matches by prefix unless told otherwise, and the two
+ * mutations below pass the parent key.
+ */
+export function sourceActivityKey(personId: string): readonly unknown[] {
+  return [...sourceNamesKey(personId), 'activity']
 }
 
 export function useSourceNames(): SourceNames {
@@ -86,6 +110,38 @@ export function useSourceNames(): SourceNames {
       error: query.error,
     }
   }, [items, query.isPending, query.isError, query.error])
+}
+
+/**
+ * The listing with each source's activity, for the settings card and nothing else.
+ *
+ * A second hook rather than a flag on useSourceNames, because the two answer different questions
+ * at different prices. useSourceNames backs ControlRow and IntradayHeartRate, so it runs on every
+ * page, and the activity fields measured 19-60ms against a real archive - growing with the daily
+ * row count. Keeping them behind their own hook and their own query key means no page pays for a
+ * number only one card shows.
+ */
+export function useSourcesWithActivity(): {
+  sources: NamedSourceWithActivity[]
+  isPending: boolean
+  isError: boolean
+  error: unknown
+} {
+  const session = useSession()
+  const personId = session.data?.personId
+  const query = useQuery({
+    queryKey: sourceActivityKey(personId ?? ''),
+    enabled: personId !== undefined,
+    queryFn: () => apiGet<{ items: NamedSourceWithActivity[] }>(
+      `/api/v1/p/${personId!}/sources?activity=1`,
+    ),
+  })
+  return {
+    sources: query.data?.items ?? [],
+    isPending: query.isPending,
+    isError: query.isError,
+    error: query.error,
+  }
 }
 
 export function useRenameSource(): UseMutationResult<{ name: string }, ApiError, { sourceId: string, alias: string }> {
