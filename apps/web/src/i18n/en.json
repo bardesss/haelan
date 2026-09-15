@@ -40,6 +40,7 @@
     "nextPeriod": "Next period",
     "pickDate": "Pick a date",
     "sources": "Sources",
+    "sourceStopped": "Stopped reporting during this range: {{sources}}.",
     "sourceAll": "All sources",
     "downloadTotals": "Download daily totals",
     "sync": "Sync",

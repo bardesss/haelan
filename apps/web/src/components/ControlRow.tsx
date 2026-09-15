@@ -10,9 +10,30 @@ import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES } from '../controls/source.js'
 import { periodLabel } from '../controls/periodLabel.js'
 
-export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, canSync = true }: {
+// A frozen module constant, not a fresh `[]` default: a new array identity on every render is
+// what chart-lifecycle.test.tsx exists to catch elsewhere in this app, and a default parameter
+// expression runs on every call.
+const EMPTY_SOURCES: string[] = Object.freeze([]) as never[]
+
+// Built per language and cached by Intl itself. "Watch and scale" in English, "Watch en scale" in
+// Dutch, and neither spelling hardcoded here.
+const listFormat = (language: string): Intl.ListFormat =>
+  new Intl.ListFormat(language, { style: 'long', type: 'conjunction' })
+
+export function ControlRow({
+  controls, sources, syncedMinutesAgo, exportPath, canSync = true, stoppedSources = EMPTY_SOURCES,
+}: {
   controls: PageControlsState
   sources: string[]
+  /**
+   * Sources that fed this range and then went quiet inside it, from
+   * `sourcesStoppedInRange` (data/pageShell.ts). Defaulted, so a page that has not adopted it
+   * renders exactly as it did before rather than being forced to pass an empty array.
+   *
+   * Passed in rather than computed here: this component has no series, and the question is about
+   * the points a page has already loaded.
+   */
+  stoppedSources?: string[]
   // null when no run has ever finished. It used to be a plain number, and nothing synced yet was
   // reported as 0, so a fresh instance and a page still loading both read "Synced 0 min ago",
   // which a reader takes to mean seconds ago. A missing copy string is not a reason to print a
@@ -129,6 +150,24 @@ export function ControlRow({ controls, sources, syncedMinutesAgo, exportPath, ca
         {canSync && <span className="synced">{syncedLabel}</span>}
         {canSync && runSync.isError && <span className="field-error">{syncErrorLabel}</span>}
       </div>
+      {/* The answer to what a thinning chart actually raises: did the person do less, or did the
+          device stop. Said once for the page rather than on each card, because every card on a
+          page reads the same range and would otherwise repeat one sentence up to twelve times.
+          Named, because "a source stopped" sends the reader to Settings to find out which.
+
+          The names never begin the sentence, which is why the copy reads "Stopped reporting
+          during this range: X" rather than "X stopped reporting". A source is called whatever
+          its device or its owner called it - "com.lyfta", "My watch" - so a sentence-initial
+          name either renders lowercase mid-sentence or gets capitalised into something nobody
+          typed. */}
+      {stoppedSources.length > 0 && (
+        <p className="control-row-stopped">
+          {t('controlRow.sourceStopped', {
+            sources: listFormat(i18n.language).format(stoppedSources.map(nameOf)),
+            count: stoppedSources.length,
+          })}
+        </p>
+      )}
     </div>
   )
 }

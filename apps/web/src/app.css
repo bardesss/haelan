@@ -550,6 +550,13 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    .source-name-detail beside it rather than shouting. A dead source is a fact to notice on the
    settings page, not an alarm to raise over the whole app. */
 .source-name-stale { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+/* ControlRow.tsx: said under the controls rather than over the charts, because it explains the
+   charts rather than replacing them. Muted for the same reason .source-name-stale is: a device
+   that stopped is a fact to notice, not an alarm. */
+.control-row-stopped {
+  margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
 /* The group, not a hiding place: these rows are rendered in full, with their inputs, because a
    household may still want to rename or prioritise a source that has stopped. */
 .source-names-dormant-heading {
