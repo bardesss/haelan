@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.25.0](https://github.com/bardesss/haelan/compare/v1.24.0...v1.25.0) (2026-09-15)
+
+
+### Features
+
+* the maintenance card can download the latest backup ([#243](https://github.com/bardesss/haelan/issues/243)) ([bc990ad](https://github.com/bardesss/haelan/commit/bc990adcb285ae28c75fc70a05ee4da673452454))
+
 ## [1.24.0](https://github.com/bardesss/haelan/compare/v1.23.0...v1.24.0) (2026-09-15)
 
 
