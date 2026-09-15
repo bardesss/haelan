@@ -110,6 +110,10 @@ export type {
 } from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
 export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
+// The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.
+// Aliased because the two cannot share a name and a caller holding a person's `timezone` string
+// needs this one: an offset is a fact about an instant, a zone is a fact about a person.
+export { localDateOf as localDateInZone } from './sync/localDate.ts'
 export { coverageOf } from './derive/coverage.ts'
 export { rollUpDay, PROVIDER_SOURCE } from './derive/rollup.ts'
 export type { DailyRow, SampleLike } from './derive/rollup.ts'
