@@ -553,6 +553,40 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 /* ControlRow.tsx: said under the controls rather than over the charts, because it explains the
    charts rather than replacing them. Muted for the same reason .source-name-stale is: a device
    that stopped is a fact to notice, not an alarm. */
+/* Records.tsx: the only page in the app with no control row, so the span line does the job the
+   control row does everywhere else - saying what the reader is looking at. Muted, because it is
+   a statement of scope rather than a heading. */
+.all-time-span {
+  margin: 0 0 var(--space-4); font-size: var(--font-size-sm); color: var(--text-muted);
+}
+.all-time-empty { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+.record-list, .milestone-list { list-style: none; margin: 0; padding: 0; }
+.record-row {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-sm);
+}
+.record-row:last-child { border-bottom: 0; }
+/* The number is the point of the row, so it carries the weight and the tabular figures that let
+   a column of them line up. */
+.record-metric { min-width: 9rem; }
+.record-value { font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.record-date, .record-window { color: var(--text-muted); }
+.record-window { font-size: var(--font-size-xs); }
+.eddington-value {
+  margin: 0; font-size: var(--font-size-xl); font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+.eddington-meaning { margin: var(--space-1) 0 0; font-size: var(--font-size-sm); }
+.eddington-window {
+  margin: var(--space-2) 0 0; font-size: var(--font-size-xs); color: var(--text-muted);
+}
+.milestone {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0; font-size: var(--font-size-sm);
+}
+.milestone-date { color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 7rem; }
+.milestone-label { color: var(--text-primary); }
 .control-row-stopped {
   margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-muted);
   line-height: var(--leading-normal);

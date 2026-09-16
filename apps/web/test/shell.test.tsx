@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { Sidebar, RAIL_PATHS } from '../src/components/Sidebar.js'
 import { ROUTES, NIGHT_ROUTE } from '../src/routes.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
+import { Records } from '../src/pages/Records.js'
 import { Activity } from '../src/pages/Activity.js'
 import { Sleep } from '../src/pages/Sleep.js'
 import { Recovery } from '../src/pages/Recovery.js'
@@ -51,8 +52,8 @@ describe('the route table', () => {
 
   it('has an entry for every page the design names', () => {
     expect(ROUTES.map((r) => r.path).sort()).toEqual(
-      ['/', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition', '/recovery',
-        '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
+      ['/', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition', '/records',
+        '/recovery', '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
     )
   })
 
@@ -79,6 +80,7 @@ describe('the route table', () => {
   it('resolves every path to the page component it names, not one that merely renders', () => {
     const byPath: Record<string, unknown> = {
       '/': Dashboard,
+      '/records': Records,
       '/activity': Activity,
       '/sleep': Sleep,
       '/recovery': Recovery,

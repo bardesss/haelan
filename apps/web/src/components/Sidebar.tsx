@@ -6,7 +6,13 @@ import { Link } from '../router.js'
 import { readCollapsed, writeCollapsed } from '../ui/railState.js'
 
 const GROUPS = [
-  { labelKey: 'sidebar.groups.overview', items: [{ path: '/', nameKey: 'sidebar.items.dashboard' }] },
+  {
+    labelKey: 'sidebar.groups.overview',
+    items: [
+      { path: '/', nameKey: 'sidebar.items.dashboard' },
+      { path: '/records', nameKey: 'sidebar.items.records' },
+    ],
+  },
   {
     labelKey: 'sidebar.groups.tracking',
     items: [

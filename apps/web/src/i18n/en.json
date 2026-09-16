@@ -70,7 +70,8 @@
       "weight": "Weight",
       "nutrition": "Nutrition",
       "notes": "Notes",
-      "settings": "Settings"
+      "settings": "Settings",
+      "records": "Records"
     },
     "resources": {
       "documentation": "Documentation",
@@ -1182,6 +1183,42 @@
         "backupsDisabled": "Backups are turned off for this instance.",
         "rebuildInProgress": "The database is still settling after a restart. Try again in a moment."
       }
+    }
+  },
+  "records": {
+    "title": "Records",
+    "empty": "Nothing on record yet. Sync some history and come back.",
+    "span": "All time: {{from}} to {{to}}, {{days}} days",
+    "metric": {
+      "steps": "Steps",
+      "distance": "Distance",
+      "floors": "Floors",
+      "active_energy": "Active energy",
+      "total_calories": "Total calories"
+    },
+    "bests": {
+      "label": "Best day on record",
+      "basis": "The highest single day for each metric, and the day it happened.",
+      "outOf": "of {{days}} days"
+    },
+    "eddington": {
+      "label": "Eddington number",
+      "meaning": "{{e}} days of at least {{e}},000 steps.",
+      "window": "Over {{days}} days with a step count, from {{from}}."
+    },
+    "milestones": {
+      "label": "Milestones",
+      "record": "Best {{metric}} set",
+      "first": {
+        "exercise": "First recorded workout",
+        "sleep": "First recorded night"
+      },
+      "count": {
+        "exercise": "{{count}}th workout",
+        "sleep": "{{count}}th night",
+        "steps": "{{count}} steps in total"
+      },
+      "run": "{{days}} days in a row with a reading"
     }
   }
 }

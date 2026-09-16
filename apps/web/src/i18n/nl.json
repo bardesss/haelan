@@ -70,7 +70,8 @@
       "weight": "Gewicht",
       "nutrition": "Voeding",
       "notes": "Notities",
-      "settings": "Instellingen"
+      "settings": "Instellingen",
+      "records": "Records"
     },
     "resources": {
       "documentation": "Documentatie",
@@ -1182,6 +1183,42 @@
         "backupsDisabled": "Back-ups staan uit voor deze instantie.",
         "rebuildInProgress": "De database is nog aan het bijkomen van een herstart. Probeer het zo weer."
       }
+    }
+  },
+  "records": {
+    "title": "Records",
+    "empty": "Nog niets vastgelegd. Synchroniseer wat geschiedenis en kom terug.",
+    "span": "Alles: {{from}} tot {{to}}, {{days}} dagen",
+    "metric": {
+      "steps": "Stappen",
+      "distance": "Afstand",
+      "floors": "Verdiepingen",
+      "active_energy": "Actieve energie",
+      "total_calories": "Totale calorieën"
+    },
+    "bests": {
+      "label": "Beste dag ooit",
+      "basis": "De hoogste losse dag per meting, en de dag waarop het gebeurde.",
+      "outOf": "van {{days}} dagen"
+    },
+    "eddington": {
+      "label": "Eddingtongetal",
+      "meaning": "{{e}} dagen met minstens {{e}}.000 stappen.",
+      "window": "Over {{days}} dagen met een stappenteller, vanaf {{from}}."
+    },
+    "milestones": {
+      "label": "Mijlpalen",
+      "record": "Beste {{metric}} neergezet",
+      "first": {
+        "exercise": "Eerste vastgelegde training",
+        "sleep": "Eerste vastgelegde nacht"
+      },
+      "count": {
+        "exercise": "{{count}}e training",
+        "sleep": "{{count}}e nacht",
+        "steps": "{{count}} stappen in totaal"
+      },
+      "run": "{{days}} dagen op rij met een meting"
     }
   }
 }

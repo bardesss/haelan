@@ -1,3 +1,4 @@
+import { Records } from './pages/Records.js'
 import type { ReactNode } from 'react'
 import { Dashboard } from './pages/Dashboard.js'
 import { Activity } from './pages/Activity.js'
@@ -31,6 +32,7 @@ export const NIGHT_ROUTE = '/sleep/night/:localDate'
 // since M8b: shell.test.tsx's own comment on that case says why a `:` segment is excluded.
 export const ROUTES: readonly Route[] = [
   { path: '/', element: <Dashboard /> },
+  { path: '/records', element: <Records /> },
   { path: '/activity', element: <Activity /> },
   { path: '/sleep', element: <Sleep /> },
   { path: '/recovery', element: <Recovery /> },

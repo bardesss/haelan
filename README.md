@@ -61,17 +61,22 @@ Your whole history in one SQLite file, kept past Google's retention windows and 
 losing access to the API. Intraday samples in particular have a shelf life at the source, so a
 mirror is the only place minute-level history stays available at that resolution.
 
-### 📊 Eight pages of it
+### 📊 Nine pages of it
 
-Dashboard, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with stages and
-nap detection, resting heart rate and HRV, SpO2 with its confidence interval, an activity heatmap
-and a workout list, and a page behind every workout in that list: splits, heart rate zones, running
+Dashboard, Records, Activity, Sleep, Recovery, Health, Weight, Nutrition and Notes: sleep with
+stages and nap detection, resting heart rate and HRV, SpO2 with its confidence interval, an
+activity heatmap and a workout list, and a page behind every workout in that list: splits, heart rate zones, running
 dynamics, the trace from the device that recorded it, and the exclude control that used to exist
 only on the server. Sleep carries the same kind of page behind every night: its stages, the naps
 outside that night's span, the overnight heart rate, SpO2 and HRV traces, and an exclude control
 for each session the night was assembled from. There is also an intraday chart, a weight trend, and
 period-over-period insight cards that withhold themselves, each with its own reason, when the data
 behind them is thin.
+
+Records is the one page that ignores the range entirely, because the questions on it cannot be
+asked of a window: the best day on record for each metric, an Eddington number, and a timeline of
+milestones. Each figure states the span it was computed over rather than claiming the whole
+archive, since a metric's history can begin long after the archive's does.
 English and Dutch throughout. Nutrition is the one page with nothing on it: this household has
 never logged food, and the API's Food type carries no timestamp to file a meal under, so the page
 says so rather than inventing a data model to have something to draw.
@@ -466,12 +471,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 847 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 870 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 847 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 870 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.
