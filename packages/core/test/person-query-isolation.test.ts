@@ -68,6 +68,14 @@ describe('PersonQuery isolation', () => {
     expect(carol.comparePeriods({ metric: 'steps', agg: 'sum', from: '2026-08-15', to: '2026-08-21' }).suppressed).toBe(true)
   })
 
+  it('answers all-time figures only for its own person', () => {
+    // The shared setup gives alice 1000 steps a day and bart 9000 for the same 28 days, so a
+    // reader that crossed between them would report bart's record on alice's page - visible
+    // rather than plausible, which is what that setup is for.
+    expect(alice.allTime().records.find((r) => r.metric === 'steps')?.value).toBe(1000)
+    expect(bart.allTime().records.find((r) => r.metric === 'steps')?.value).toBe(9000)
+  })
+
   it('reports source activity only for its own person', () => {
     // The shared setup writes both people's rows against source 'merged', which this reader
     // excludes, so give each person a source of their own to be isolated about.
