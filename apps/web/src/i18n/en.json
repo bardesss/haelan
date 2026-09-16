@@ -463,8 +463,8 @@
         "moving": "active duration, as the device recorded it",
         "provider": "as the provider recorded it",
         "pool": "as the provider recorded it, in a {{meters}} m pool",
-        "haelanEdwards": "Haelan's own figure, from this session's heart rate zones. Not the number Google Health shows.",
-        "haelanBanister": "Haelan's own figure, from this session's heart rate against a resting {{restingBpm}} and a maximum {{maxBpm}} bpm. Not the number Google Health shows."
+        "haelanEdwards": "Training impulse: minutes in each heart rate zone, weighted by zone. Haelan's own figure, and the one your weekly cardio load is built from. Not the number Google Health shows.",
+        "haelanBanister": "Training impulse by a second method, from this session's heart rate against a resting {{restingBpm}} and a maximum {{maxBpm}} bpm. Shown for this workout only; nothing else in Haelan reads it. Not the number Google Health shows."
       },
       "zones": {
         "label": "Time in heart rate zones",
@@ -513,6 +513,7 @@
         "pace": "Faster than {{better}} of your last {{of}} of this type",
         "heartRate": "Lower average heart rate than {{better}} of your last {{of}}",
         "distance": "Longer than {{better}} of your last {{of}}",
+        "cardioLoad": "Harder than {{better}} of your last {{of}}, by cardio load",
         "tooFew": "Not enough workouts of this type yet",
         "tooFewDetail_one": "{{count}} earlier workout of this type in the last 90 days; three are needed to compare.",
         "tooFewDetail_other": "{{count}} earlier workouts of this type in the last 90 days; three are needed to compare."

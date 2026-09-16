@@ -368,7 +368,9 @@ describe('the workout stat tiles', () => {
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
       expect(edwardsTile?.querySelector('.basis')?.textContent).toBe(
-        'Haelan\'s own figure, from this session\'s heart rate zones. Not the number Google Health shows.',
+        'Training impulse: minutes in each heart rate zone, weighted by zone. '
+        + 'Haelan\'s own figure, and the one your weekly cardio load is built from. '
+        + 'Not the number Google Health shows.',
       )
     } finally { restore() }
   })
@@ -382,7 +384,8 @@ describe('the workout stat tiles', () => {
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const banisterTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Banister)')
       expect(banisterTile?.querySelector('.basis')?.textContent).toBe(
-        'Haelan\'s own figure, from this session\'s heart rate against a resting 52 and a maximum 181 bpm. '
+        'Training impulse by a second method, from this session\'s heart rate against a resting 52 '
+        + 'and a maximum 181 bpm. Shown for this workout only; nothing else in Haelan reads it. '
         + 'Not the number Google Health shows.',
       )
     } finally { restore() }

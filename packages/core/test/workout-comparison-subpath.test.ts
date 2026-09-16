@@ -21,11 +21,29 @@ describe('the @haelan/core/workout-comparison subpath', () => {
     expect(pkg.exports[SUBPATH]).toBe(TARGET)
   })
 
-  it('imports nothing but workoutSummary, which is itself import-free', () => {
-    const importLines = [...read('../src/api/workoutComparison.ts').matchAll(IMPORT_LINE)].map((m) => m[0])
-    expect(importLines).toEqual(["import { workoutSummary } from './workoutSummary.ts'"])
-    const summaryImports = [...read('../src/api/workoutSummary.ts').matchAll(IMPORT_LINE)].map((m) => m[0])
-    expect(summaryImports).toEqual([])
+  /*
+   * The property, rather than a list of the imports that happened to exist when this was written.
+   *
+   * What keeps this subpath safe in a browser bundle is that everything it reaches is itself
+   * import-free, so the graph stops one level down and can never pull better-sqlite3 in behind it.
+   * Pinning the exact import line asserted that property by proxy and had to be edited every time
+   * a legitimate sibling was added - which is the edit most likely to be made by loosening it to
+   * `toContain`. This walks the imports instead and holds each one to the same standard, so adding
+   * a sibling that is NOT import-free still fails, and adding one that is does not.
+   */
+  it('reaches only modules that are themselves import-free', () => {
+    const source = read('../src/api/workoutComparison.ts')
+    const imports = [...source.matchAll(IMPORT_LINE)].map((m) => m[0])
+    expect(imports.length, 'the module should still import something').toBeGreaterThan(0)
+
+    for (const line of imports) {
+      const from = /['"](.+)['"]/.exec(line)?.[1]
+      expect(from, `could not read a path out of: ${line}`).toBeDefined()
+      expect(from, 'a relative sibling in api/, never a package or a deeper directory')
+        .toMatch(/^\.\/[A-Za-z]+\.ts$/)
+      const siblingImports = [...read(`../src/api/${from!.slice(2)}`).matchAll(IMPORT_LINE)]
+      expect(siblingImports.map((m) => m[0]), `${from} must import nothing`).toEqual([])
+    }
   })
 
   it('is a pure function of its arguments', () => {

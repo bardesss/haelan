@@ -463,8 +463,8 @@
         "moving": "actieve duur, zoals het apparaat die registreerde",
         "provider": "zoals de provider het registreerde",
         "pool": "zoals de provider het registreerde, in een baan van {{meters}} m",
-        "haelanEdwards": "Haelans eigen getal, uit de hartslagzones van deze sessie. Niet het getal dat Google Health laat zien.",
-        "haelanBanister": "Haelans eigen getal, uit de hartslag van deze sessie tegen een rust van {{restingBpm}} en een maximum van {{maxBpm}} bpm. Niet het getal dat Google Health laat zien."
+        "haelanEdwards": "Trainingsimpuls: minuten per hartslagzone, gewogen per zone. Haelans eigen getal, en het getal waarop je wekelijkse cardiobelasting is gebouwd. Niet het getal dat Google Health laat zien.",
+        "haelanBanister": "Trainingsimpuls volgens een tweede methode, uit de hartslag van deze sessie tegen een rust van {{restingBpm}} en een maximum van {{maxBpm}} bpm. Alleen voor deze training; niets anders in Haelan leest dit getal. Niet het getal dat Google Health laat zien."
       },
       "zones": {
         "label": "Tijd in hartslagzones",
@@ -513,6 +513,7 @@
         "pace": "Sneller dan {{better}} van je laatste {{of}} van dit type",
         "heartRate": "Lagere gemiddelde hartslag dan {{better}} van je laatste {{of}}",
         "distance": "Verder dan {{better}} van je laatste {{of}}",
+        "cardioLoad": "Zwaarder dan {{better}} van je laatste {{of}}, op cardiobelasting",
         "tooFew": "Nog niet genoeg trainingen van dit type",
         "tooFewDetail_one": "{{count}} eerdere training van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken.",
         "tooFewDetail_other": "{{count}} eerdere trainingen van dit type in de afgelopen 90 dagen; drie zijn nodig om te vergelijken."
