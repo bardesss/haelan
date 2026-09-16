@@ -2,7 +2,7 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
-import { formatNumber } from '../format.js'
+import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { useAllTime } from '../data/useAllTime.js'
 import type { AllTime, MetricRecord, Milestone } from '../data/useAllTime.js'
 
@@ -42,10 +42,25 @@ export function Records() {
 
 type Translate = ReturnType<typeof useTranslation>['t']
 
-const onDate = (localDate: string, language: string): string =>
-  // Parsed as UTC rather than left to the local parser: a bare 'YYYY-MM-DD' is already UTC
-  // midnight, and saying so keeps a reader from having to know that.
-  new Date(`${localDate}T00:00:00Z`).toLocaleString(language, { dateStyle: 'medium' })
+// formatLocalDate, not a local reimplementation of it. The shared helper pins `timeZone: 'UTC'`
+// and its own comment names the failure of leaving it out: a reader west of Greenwich is shown
+// the day before, because a bare 'YYYY-MM-DD' is UTC midnight and toLocaleString would read it
+// back in the browser's zone. This file had its own copy of that formatting, without the pin.
+const onDate = formatLocalDate
+
+/**
+ * A record's value as a person reads it, which is not always the number in the row.
+ *
+ * `distance` is stored in millimetres (METRICS.distance, precision 0), so the catalogue's own
+ * formatter would render a ten kilometre day as "10,000,000". Every other surface in this app
+ * converts at the point of display for exactly this metric; this is that conversion, in the one
+ * place this page needs it. Every other metric goes through formatMetricValue so its precision
+ * comes off the catalogue rather than off a literal here.
+ */
+function recordValue(metric: string, value: number, language: string): string {
+  if (metric === 'distance') return `${formatNumber(value / 1_000_000, 1, language, '')} km`
+  return formatMetricValue(value, metric, language, '')
+}
 
 function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, language: string }) {
   return (
@@ -113,12 +128,14 @@ function RecordRow({ record, t, language }: {
     // and every class in this app stays greppable as written.
     <li className="record-row" data-metric={record.metric}>
       <span className="record-metric">{t(`records.metric.${record.metric}`)}</span>
-      <span className="record-value">{formatNumber(record.value, 0, language, '')}</span>
+      <span className="record-value">{recordValue(record.metric, record.value, language)}</span>
       <span className="record-date">{onDate(record.localDate, language)}</span>
       {/* The metric's own history, which is not the page's: floors and total_calories reach
           back further than steps do on a real archive, and a record means less without knowing
           how many days it beat. */}
-      <span className="record-window">{t('records.bests.outOf', { days: record.days })}</span>
+      <span className="record-window">
+        {t('records.bests.outOf', { days: record.days, from: onDate(record.from, language) })}
+      </span>
     </li>
   )
 }
@@ -135,7 +152,12 @@ function MilestoneRow({ milestone, t, language }: {
       // about the person, and the copy has to be honest about which.
       ? t(`records.milestones.first.${milestone.metric}`)
       : milestone.kind === 'count'
-        ? t(`records.milestones.count.${milestone.metric}`, { count: milestone.count })
+        // Through formatNumber like every other figure on this page: the step crossings are
+        // millions, and i18next interpolates a raw 1000000 unless somebody formats it.
+        ? t(`records.milestones.count.${milestone.metric}`, {
+          count: milestone.count,
+          formatted: formatNumber(milestone.count ?? null, 0, language, ''),
+        })
         : t('records.milestones.run', { days: milestone.days })
 
   return (

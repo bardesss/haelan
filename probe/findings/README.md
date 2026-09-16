@@ -71,3 +71,14 @@ those endpoints exist; M2p measured what they take and return on 2026-08-22, in
 
 - **Billing.** Whether the console demands a billing account to enable the API, and whether any
   quota page shows a per request cost. Spec risk 6. Not yet observed.
+
+## M6-0, all-time eligibility, 2026-09-15
+
+`probe/scripts/all-time-eligibility.mjs`. Whether a day the reader excluded, or a day whose
+coverage is thin, can hold an all-time record or move an Eddington number.
+
+**The write-up is deliberately not in this directory.** It reports day counts and an Eddington
+integer off one household's archive, and this repository is public. What the units downstream
+needed from it is in `ROADMAP.md` instead, stated structurally: coverage never decides a record,
+no eligibility rule moves an Eddington number, the rule the milestone actually needed was tier
+selection rather than eligibility, and an all-time figure has to name the window it covers.

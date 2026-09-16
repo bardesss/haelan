@@ -111,6 +111,41 @@ describe('the all-time page', () => {
     expect(container!.querySelector('.eddington-value')).toBeNull()
   })
 
+  it('renders a distance record in kilometres, not in stored millimetres', () => {
+    // METRICS.distance stores millimetres at precision 0, which every other surface converts at
+    // the point of display. A raw formatNumber here prints a 10km day as "10,000,000".
+    mountPage({
+      ...EMPTY,
+      records: [{
+        metric: 'distance', tier: 'merged', localDate: '2026-03-14', value: 10_000_000,
+        from: '2026-01-21', days: 235,
+      }],
+    })
+    expect(text("[data-metric='distance'] .record-value")).toBe('10.0 km')
+  })
+
+  it('formats a million steps as a number a person reads, not as 1000000', () => {
+    mountPage({
+      ...EMPTY,
+      milestones: [{ kind: 'count', metric: 'steps', count: 1_000_000, localDate: '2026-05-05' }],
+    })
+    expect(text('.milestone-label')).toBe('1,000,000 steps in total')
+  })
+
+  it('says how far back a record’s own history goes, not just how many days', () => {
+    // Every figure on this page names the window it covers. The record row knew how many days
+    // it beat and never said when they started, which for floors is 2024 and for steps 2026.
+    mountPage({
+      ...EMPTY,
+      records: [{
+        metric: 'steps', tier: 'merged', localDate: '2026-03-14', value: 21000,
+        from: '2026-01-21', days: 235,
+      }],
+    })
+    const from = new Date('2026-01-21T00:00:00Z').toLocaleString('en', { dateStyle: 'medium' })
+    expect(text("[data-metric='steps'] .record-window")).toBe(`of 235 days since ${from}`)
+  })
+
   it('calls a first "first recorded", because it marks when syncing began', () => {
     mountPage({ ...EMPTY, milestones: [{ kind: 'first', metric: 'exercise', localDate: '2026-01-27' }] })
     expect(text("[data-kind='first']")).toContain('First recorded workout')

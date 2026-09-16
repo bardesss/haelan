@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
+import { parseSessionTarget } from '../derive/targetKey.ts'
 import type { DbOrTx } from '../db/open.ts'
 
 /**
@@ -16,13 +17,28 @@ import type { DbOrTx } from '../db/open.ts'
  * - **Session kinds:** both, and separately. Workout counts read `exercise` and night counts read
  *   `sleep`; neither is ever summed with the other, which is the confusion that produced 65.10
  *   TRIMP for a sleeping person in #191.
- * - **Override actions:** both, and neither re-applied. `applyToDay` (derive/overrides.ts) removes
- *   an excluded metric's rows at derivation and a correction's value is already in the row, so
- *   everything read here has both applied. Filtering again would apply a rule twice, and the
- *   filter would never fire.
+ * - **Override actions:** both, and the two tables this reads need opposite treatment - which is
+ *   the distinction an earlier version of this header got wrong by stating only the first half.
+ *
+ *   For `daily`, nothing is re-applied: `deriveDay` deletes an excluded metric's rows for the
+ *   day, across every source including `provider` (its second delete, the one the first spares),
+ *   and a correction's value is already in the row. Filtering again would apply a rule twice.
+ *
+ *   For `sessions`, this reader must filter, because `sessions` is the INGESTED table and
+ *   nothing deletes from it: `sleepNights` and `deriveDay` both drop excluded sessions at read
+ *   through `applyToSessions`, and `query/sessions.ts` marks rather than filters on purpose.
+ *   Counting raw rows credited somebody a 50th workout they had thrown out, and could name an
+ *   excluded session as their first ever.
  * - **Thinned:** no, and it must never be. Every figure here is computed from complete rows. A
  *   record read off a downsampled series would be the largest point the downsampler happened to
  *   keep, which is a fact about a point budget rather than about a person.
+ *
+ * **Measured, because this milestone's own rule is to measure rather than assume.** Against the
+ * real household archive - 29,676 daily rows, 440 sessions - one call costs 12-29ms: up to ten
+ * `daily` reads, two `sessions` reads and one `DISTINCT local_date` scan. That is the same order
+ * as M6a's 23ms and it is paid once per visit to one page, not on every page like the read M6a
+ * had to move off the hot path. Nothing is cached beyond the route's ETag. If this ever measures
+ * slow, the next move is an index rather than a stored column: nothing here writes.
  */
 
 /**
@@ -38,10 +54,13 @@ export const RECORD_METRICS = ['steps', 'distance', 'floors', 'active_energy', '
  *
  * Both, not merged alone, and this is the finding that decides whether the page works. Measured
  * against the household archive: `floors` and `total_calories` have **no merged row at all**,
- * 230 and 750 days of them living only under `provider`. Every other page in this app filters to
- * merged, so a records page that did the same would report two of its five metrics as absent
- * while looking perfectly healthy. Merged comes first because it is the reconciled figure;
- * provider is what one upstream said on its own.
+ * 230 and 750 days of them living only under `provider`. A reader that asked only for merged
+ * rows would report two of its five metrics as absent while looking perfectly healthy.
+ *
+ * `PersonQuery.series` already accepts either tier, so the fallback is not novel - an earlier
+ * version of this comment claimed every other page filters to merged, which is wrong and would
+ * have sent the next reader looking for a problem that is not there. What IS particular here is
+ * choosing per metric rather than per row: see the note on that below.
  */
 const TIERS = ['merged', 'provider'] as const
 type Tier = (typeof TIERS)[number]
@@ -52,7 +71,16 @@ const EDDINGTON_UNIT = 1000
 /** Cumulative step totals worth marking. */
 const STEP_MILLIONS = 1_000_000
 
-/** How often a session count is worth marking, per kind. */
+/**
+ * How often a session count is worth marking, per kind.
+ *
+ * Different numbers because the two accumulate at different rates: a household records a night
+ * most nights and a workout some days, so one threshold would either bury the timeline in nights
+ * or never reach a workout. Measured against the real archive to pick them - 201 workouts and 239
+ * nights over the same span - which yields four workout marks and two night marks rather than
+ * fifteen of one and one of the other. Proposals, not derived truths, and named here so the next
+ * person argues with a number.
+ */
 const COUNT_EVERY = { exercise: 50, sleep: 100 } as const
 
 export interface AllTimeSpan { from: string, to: string, days: number }
@@ -86,6 +114,11 @@ export interface AllTime {
    * from 2024-08-25 and the first step row from 2026-01-21, so E rests on 235 days of 750.
    * Presenting that as an all-time figure without saying which days it covers is the failure
    * mode the M6-0 probe warned about, and this is the first feature to meet it.
+   *
+   * That horizon is a fact about the data rather than a gap in derivation, checked rather than
+   * assumed: the archive holds 457 step payloads reaching back to 2025-08-25, and the 149 dated
+   * before 2026-01-21 are empty - median body three bytes, every one HTTP 200. Google was asked
+   * and had nothing. So the window is the honest answer here, not a label over a bug.
    */
   eddington: { e: number, from: string, days: number } | null
   milestones: Milestone[]
@@ -106,6 +139,16 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
   for (const metric of RECORD_METRICS) {
     // Whichever tier actually has rows, asked rather than assumed, so a household whose device
     // reports floors per source gets the merged answer without a code change here.
+    //
+    // **Chosen once for the metric's whole history, which is deliberately not what
+    // `preferMerged` (personQuery.ts) does per row.** That function's own comment warns that "a
+    // metric can gain a merged row partway through its history", and mixing the two tiers row by
+    // row is right for a series: each day shows the best answer available for that day. A record
+    // is one day compared against every other, so mixing would compare a reconciled figure
+    // against an unreconciled one and call the larger a personal best. The cost is the case that
+    // comment names: one stray merged row makes this read the merged tier alone and ignore a
+    // longer provider history. Accepted, because a wrong record is worse than a short one, and
+    // the record's own `from`/`days` say which history it was drawn from.
     let tier: Tier | undefined
     let rows: DayRow[] = []
     for (const candidate of TIERS) {
@@ -158,12 +201,24 @@ function milestonesOf(
     milestones.push({ kind: 'record', metric: record.metric, localDate: record.localDate })
   }
 
+  // The session-scope exclusions, read once for both kinds. Hand-entered and few, the same
+  // reasoning sleepNights.ts gives for reading them itself rather than taking them as an
+  // argument: a caller that forgot to pass them would silently count sessions the person had
+  // already corrected away.
+  const excludedSessions = new Set(
+    db.all<{ targetKey: string }>(sql`
+      SELECT target_key AS targetKey FROM overrides
+       WHERE person_id = ${personId} AND scope = 'session' AND action = 'exclude'`)
+      .map((row) => parseSessionTarget(row.targetKey)),
+  )
+
   // 2. Round numbers reached, per session kind and never across them.
   for (const [kind, every] of Object.entries(COUNT_EVERY)) {
-    const dates = db.all<{ localDate: string }>(sql`
-      SELECT local_date AS localDate FROM sessions
+    const dates = db.all<{ id: string, localDate: string }>(sql`
+      SELECT id, local_date AS localDate FROM sessions
        WHERE person_id = ${personId} AND kind = ${kind}
        ORDER BY start_ms`)
+      .filter((row) => !excludedSessions.has(row.id))
     for (let at = every; at <= dates.length; at += every) {
       milestones.push({ kind: 'count', metric: kind, count: at, localDate: dates[at - 1]!.localDate })
     }
@@ -190,11 +245,18 @@ function milestonesOf(
     }
   }
 
-  // 4. The longest unbroken run of days carrying any reading, dated to the day it ended.
-  const dates = db.all<{ localDate: string }>(sql`
-    SELECT DISTINCT local_date AS localDate FROM daily
-     WHERE person_id = ${personId} AND value IS NOT NULL`).map((row) => row.localDate)
-  const run = longestRun(dates, MIN_RUN_DAYS)
+  // 4. The longest unbroken run of WORN days, dated to the day it ended.
+  //
+  // Over the step history, not over every row this person has, and the difference is the whole
+  // milestone. Measured against the real archive: a run over any row at all answers 751 days and
+  // a run over merged rows answers 732, because the provider tier files a total_calories row on
+  // every single day of the span whether anybody moved or not. Both numbers are the length of
+  // the archive wearing a habit's clothes. The step history answers 159, because steps exist
+  // when somebody carried the device, which is the question this milestone is asking: is the
+  // mirror complete, not did a server reply.
+  //
+  // The same rows the Eddington number reads, so the two agree about which days count.
+  const run = longestRun(stepDays.map((day) => day.localDate), MIN_RUN_DAYS)
   if (run !== null) milestones.push({ kind: 'run', localDate: run.to, days: run.days })
 
   return milestones.sort((a, b) => a.localDate.localeCompare(b.localDate))

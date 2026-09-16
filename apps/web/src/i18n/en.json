@@ -1089,9 +1089,10 @@
         "manual": "Entered by hand"
       },
       "saveFailed": "That did not save. Try again.",
-      "lastReported": "Last reported {{date}}",
       "dormantHeading": "No longer reporting",
-      "neverReported": "Has never reported"
+      "neverReported": "Has never reported",
+      "stopped": "Stopped reporting — last was {{date}}",
+      "unjudged": "Too little history to judge — last was {{date}}"
     },
     "dataTypes": {
       "title": "What to sync",
@@ -1199,7 +1200,7 @@
     "bests": {
       "label": "Best day on record",
       "basis": "The highest single day for each metric, and the day it happened.",
-      "outOf": "of {{days}} days"
+      "outOf": "of {{days}} days since {{from}}"
     },
     "eddington": {
       "label": "Eddington number",
@@ -1216,9 +1217,9 @@
       "count": {
         "exercise": "{{count}}th workout",
         "sleep": "{{count}}th night",
-        "steps": "{{count}} steps in total"
+        "steps": "{{formatted}} steps in total"
       },
-      "run": "{{days}} days in a row with a reading"
+      "run": "{{days}} days in a row with a step count"
     }
   }
 }

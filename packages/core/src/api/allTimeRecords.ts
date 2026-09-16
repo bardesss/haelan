@@ -15,6 +15,11 @@ export interface DailyRecord { localDate: string, value: number }
  * threshold swept, because a big day is a worn day. Nobody sets a step record wearing the watch
  * for four hours.
  *
+ * **That result is about a single record and does not transfer to a leaderboard.** The same
+ * measurement found three of steps' top TEN days sitting below 0.75 coverage. Anything here that
+ * grows from "the best day" into "the best ten days" has to decide about coverage again, and the
+ * evidence says it will get a different answer than this function did.
+ *
  * Pure, in `api/` beside `trainingLoad.ts`.
  */
 export function recordOf(days: readonly DatedValue[]): DailyRecord | null {

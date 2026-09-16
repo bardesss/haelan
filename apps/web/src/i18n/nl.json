@@ -1089,9 +1089,10 @@
         "manual": "Handmatig ingevoerd"
       },
       "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw.",
-      "lastReported": "Laatst gerapporteerd op {{date}}",
       "dormantHeading": "Rapporteert niet meer",
-      "neverReported": "Heeft nooit gerapporteerd"
+      "neverReported": "Heeft nooit gerapporteerd",
+      "stopped": "Rapporteert niet meer — laatst op {{date}}",
+      "unjudged": "Te weinig historie om te beoordelen — laatst op {{date}}"
     },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",
@@ -1199,7 +1200,7 @@
     "bests": {
       "label": "Beste dag ooit",
       "basis": "De hoogste losse dag per meting, en de dag waarop het gebeurde.",
-      "outOf": "van {{days}} dagen"
+      "outOf": "van {{days}} dagen sinds {{from}}"
     },
     "eddington": {
       "label": "Eddingtongetal",
@@ -1216,9 +1217,9 @@
       "count": {
         "exercise": "{{count}}e training",
         "sleep": "{{count}}e nacht",
-        "steps": "{{count}} stappen in totaal"
+        "steps": "{{formatted}} stappen in totaal"
       },
-      "run": "{{days}} dagen op rij met een meting"
+      "run": "{{days}} dagen op rij met een stappenteller"
     }
   }
 }

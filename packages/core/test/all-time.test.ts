@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sessions, sources } from '../src/db/schema/index.ts'
+import { seedOverride } from '../src/testing/fixtures.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { MIN_RUN_DAYS } from '../src/api/runs.ts'
 import { readAllTime } from '../src/query/allTime.ts'
@@ -117,6 +118,35 @@ describe('readAllTime', () => {
     expect(counts).toEqual([{ kind: 'count', metric: 'exercise', count: 50, localDate: '2026-01-01' }])
   })
 
+  it('does not count a session the person excluded', () => {
+    // `sessions` is the ingested table, not a derived one: nothing deletes an excluded row, and
+    // every other reader drops it at read through applyToSessions (sleepNights.ts:104,
+    // deriveDay.ts:105). Counting raw rows here would credit somebody a 50th workout they had
+    // already thrown out, and could name an excluded session as their first ever.
+    for (let i = 0; i < 50; i += 1) {
+      insertSession({ kind: 'exercise', id: `e${i}`, localDate: '2026-01-01' })
+    }
+    seedOverride(test.db, {
+      personId: 'p1', scope: 'session', action: 'exclude',
+      targetKey: JSON.stringify({ session: 'e49' }), reason: 'test',
+    })
+
+    const counts = readAllTime(test.db, 'p1').milestones.filter((m) => m.kind === 'count')
+    expect(counts).toEqual([])
+  })
+
+  it('does not name an excluded session as the first recorded one', () => {
+    insertSession({ kind: 'exercise', id: 'e-first', localDate: '2026-01-05' })
+    insertSession({ kind: 'exercise', id: 'e-second', localDate: '2026-01-09' })
+    seedOverride(test.db, {
+      personId: 'p1', scope: 'session', action: 'exclude',
+      targetKey: JSON.stringify({ session: 'e-first' }), reason: 'test',
+    })
+
+    const first = readAllTime(test.db, 'p1').milestones.find((m) => m.kind === 'first')
+    expect(first).toMatchObject({ metric: 'exercise', localDate: '2026-01-09' })
+  })
+
   it('marks the first recorded session of each kind', () => {
     insertSession({ kind: 'exercise', id: 'e1', localDate: '2026-01-27' })
     insertSession({ kind: 'sleep', id: 's1', localDate: '2026-01-24' })
@@ -128,10 +158,37 @@ describe('readAllTime', () => {
     ])
   })
 
+  it('marks each millionth cumulative step on the day it was crossed', () => {
+    // Implemented since the first version of this reader and never tested at any layer, which
+    // is how its label reached the page interpolating a raw 1000000.
+    insertDaily({ metric: 'steps', localDate: '2026-01-01', value: 600_000 })
+    insertDaily({ metric: 'steps', localDate: '2026-01-02', value: 600_000 })
+    insertDaily({ metric: 'steps', localDate: '2026-01-03', value: 100 })
+
+    const crossings = readAllTime(test.db, 'p1').milestones
+      .filter((m) => m.kind === 'count' && m.metric === 'steps')
+    expect(crossings).toEqual([
+      { kind: 'count', metric: 'steps', count: 1_000_000, localDate: '2026-01-02' },
+    ])
+  })
+
   it('reports the longest run of days carrying a reading', () => {
     insertRun('2026-01-01', MIN_RUN_DAYS + 3)
     const run = readAllTime(test.db, 'p1').milestones.find((m) => m.kind === 'run')
     expect(run).toMatchObject({ days: MIN_RUN_DAYS + 3, localDate: '2026-01-10' })
+  })
+
+  it('counts the run over worn days, not over days some provider filed a row for', () => {
+    // Measured against the real archive, and the reason this milestone exists at all: the
+    // provider tier carries a total_calories row on EVERY day of the span, worn or not, so a run
+    // over any row at all answers 751 days - the length of the archive, dressed up as a habit.
+    // Over merged rows it answers 732, which is the same thing. Only the step history, which
+    // exists when somebody carried the device, answers the question the page is asking.
+    insertRun('2026-01-01', 40, { metric: 'total_calories', source: 'provider' })
+    insertRun('2026-01-01', MIN_RUN_DAYS + 1, { metric: 'steps' })
+
+    const run = readAllTime(test.db, 'p1').milestones.find((m) => m.kind === 'run')
+    expect(run).toMatchObject({ days: MIN_RUN_DAYS + 1 })
   })
 
   it('withholds the run below the floor rather than naming a short one', () => {
