@@ -37,14 +37,6 @@ const GROUPS = [
 // path, so this derivation stays untouched by that feature.
 export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
 
-// Three external links, not app routes: a self hosted tool has no in app feedback channel of its
-// own, so these point straight at the project's home on GitHub rather than at a page this app
-// serves.
-const RESOURCES = [
-  { href: 'https://github.com/bardesss/haelan#readme', nameKey: 'sidebar.resources.documentation', icon: 'docs' },
-  { href: 'https://github.com/bardesss/haelan/releases', nameKey: 'sidebar.resources.changelog', icon: 'changelog' },
-  { href: 'https://github.com/bardesss/haelan/issues', nameKey: 'sidebar.resources.issues', icon: 'issues' },
-] as const
 
 export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true }: {
   active: string
@@ -111,14 +103,6 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
         </div>
       ))}
       <div className="rail-foot">
-        <div className="rail-resources">
-          {RESOURCES.map((resource) => (
-            <a key={resource.href} href={resource.href} className="rail-item" target="_blank"
-               rel="noreferrer" title={hoverName(t(resource.nameKey))}>
-              <Icon name={resource.icon} />{label(t(resource.nameKey))}
-            </a>
-          ))}
-        </div>
         {/* Not a Link: the account page it would point to has no home yet. M3e closes with this
             milestone without one, and the README's own M5 row puts the person switcher and
             member management there instead. A dead link here would be a tenth way to reach a

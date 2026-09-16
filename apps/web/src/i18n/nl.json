@@ -72,11 +72,6 @@
       "notes": "Notities",
       "settings": "Instellingen",
       "records": "Records"
-    },
-    "resources": {
-      "documentation": "Documentatie",
-      "changelog": "Wijzigingslogboek",
-      "issues": "Problemen"
     }
   },
   "common": {
@@ -1071,6 +1066,12 @@
       "removeAriaUnreadable": "Verwijder {{target}}, {{date}} ({{id}})",
       "removeFailed": "Dat is niet verwijderd. Probeer het opnieuw.",
       "removedNotYetApplied": "Verwijderd. De cijfers erachter zijn nog niet bijgewerkt."
+    },
+    "about": {
+      "title": "Over deze instance",
+      "documentation": "Documentatie",
+      "changelog": "Wijzigingslogboek",
+      "issues": "Problemen"
     },
     "sourceNames": {
       "title": "Bronnamen",

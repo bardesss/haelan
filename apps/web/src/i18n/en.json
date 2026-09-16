@@ -72,11 +72,6 @@
       "notes": "Notes",
       "settings": "Settings",
       "records": "Records"
-    },
-    "resources": {
-      "documentation": "Documentation",
-      "changelog": "Changelog",
-      "issues": "Issues"
     }
   },
   "common": {
@@ -1071,6 +1066,12 @@
       "removeAriaUnreadable": "Remove {{target}}, {{date}} ({{id}})",
       "removeFailed": "That did not remove. Try again.",
       "removedNotYetApplied": "Removed. The numbers behind it have not caught up yet."
+    },
+    "about": {
+      "title": "About this instance",
+      "documentation": "Documentation",
+      "changelog": "Changelog",
+      "issues": "Issues"
     },
     "sourceNames": {
       "title": "Source names",

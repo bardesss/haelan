@@ -10,6 +10,7 @@ import { DataTypes } from './settings/DataTypes.js'
 import { Members } from './settings/Members.js'
 import { InstanceUrl } from './settings/InstanceUrl.js'
 import { Maintenance } from './settings/Maintenance.js'
+import { About } from './settings/About.js'
 
 // The settings page: no sections existed before this one, so pages/settings/ holds each section's
 // own component (OverrideList.tsx is the first) and this file is the shell that gives them a
@@ -86,6 +87,16 @@ export function Settings() {
             <Maintenance />
           </Card>
         )}
+
+        {/* Last, and not gated on isAdmin: these are the project's own links, not anything about
+            this instance that an admin arbitrates. They used to be three permanent rows in the
+            rail foot - and three unlabelled glyphs in the collapsed rail - for destinations that
+            all leave the app. The reason for having them is unchanged and was always Sidebar's:
+            a self hosted tool has no in app feedback channel of its own. That argued for keeping
+            them findable, never for spending rail rows on them. */}
+        <Card span={12} measured label={t('settings.about.title')}>
+          <About />
+        </Card>
       </div>
     </>
   )
