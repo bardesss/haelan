@@ -901,15 +901,29 @@ describe('the flagged days card', () => {
 })
 
 describe('the anomalies card', () => {
-  // No anomaly detection algorithm exists anywhere in this codebase (grepped for "anomal" across
-  // the repo), so this card stays a static empty state; only its false clause was in scope here.
-  it('states the missing feature honestly, without the false connectivity claim', async () => {
+  /*
+   * It is gone, and this test is what keeps it gone.
+   *
+   * The card arrived with the first web commit (#64) and spent the whole life of the app as a
+   * full-width empty state announcing that a feature nobody had scheduled did not exist. #250
+   * corrected its copy - the old wording implied a feed that reported anomalies, which was false -
+   * and kept the card, drawing the line at "building actual anomaly detection is new scope". That
+   * was the right call about the feature and the wrong one about the card: correcting a sentence
+   * that should not have been on screen left the widest slot on the most-visited page saying
+   * nothing.
+   *
+   * Anomaly detection may still get built - there is a real case for it, and `baseline.ts` already
+   * computes the per-person centre and spread it would need, with `zScoreOf` exported and
+   * unused. If it is, it arrives with a card that has something to say. A placeholder does not
+   * reserve the space in any sense the layout cares about.
+   */
+  it('is not on the page at all, rather than present and empty', async () => {
     const restore = stubFetch({ baseline: null })
     const { client, tree } = withQuery(<Dashboard />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
-    expect(container!.textContent).toContain('Automatic anomaly detection has not been built yet.')
-    expect(container!.textContent).not.toContain('nothing connected reports')
+    expect(container!.textContent).not.toContain('anomaly')
+    expect(container!.textContent).not.toContain('Sleep anomalies')
     restore()
   })
 })

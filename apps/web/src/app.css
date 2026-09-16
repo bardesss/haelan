@@ -780,7 +780,7 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .night-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .night-row:last-child { border-bottom: 0; }
 .night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); min-width: 0; flex-wrap: wrap; }
 .night-row-duration { color: var(--text-primary); font-weight: var(--weight-medium); }
 .night-row-source { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -966,6 +966,13 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
      reads as three separate figures. */
   .record-date { white-space: nowrap; }
   .record-window { flex-basis: 100%; }
+
+  /* The date takes 11rem on a wide screen so the duration beside it lines up down the list. At
+     375px that width, plus the duration, the source and the clock, came to 406px in a 375px
+     viewport - which layout:check caught and nothing local could, since Playwright will not
+     install on this machine. The alignment it buys is worth nothing on a phone, so the date gives
+     the width back and takes a line of its own. */
+  .night-row-date { min-width: 0; flex-basis: 100%; }
 
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 

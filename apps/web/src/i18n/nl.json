@@ -200,11 +200,6 @@
       "basis": "gemiddelde, {{reported}} van {{total}} dagen",
       "chartLabel": "Dagelijkse hartslagvariabiliteit in {{period}}",
       "viewAll": "Bekijk herstel"
-    },
-    "anomalies": {
-      "label": "Slaapafwijkingen",
-      "emptyTitle": "Nog geen afwijkingsdetectie.",
-      "emptyDetail": "Automatische afwijkingsdetectie is nog niet gebouwd."
     }
   },
   "recovery": {

@@ -200,11 +200,6 @@
       "basis": "mean, {{reported}} of {{total}} days",
       "chartLabel": "Daily heart rate variability through {{period}}",
       "viewAll": "View recovery"
-    },
-    "anomalies": {
-      "label": "Sleep anomalies",
-      "emptyTitle": "No anomaly detection yet.",
-      "emptyDetail": "Automatic anomaly detection has not been built yet."
     }
   },
   "recovery": {
