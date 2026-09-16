@@ -206,6 +206,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .main { flex: 1; padding: var(--space-5); min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
 .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+/* A card that holds reading matter rather than a chart stops at a measure.
+   A list of rows has a natural width the way a paragraph does, and a `span={12}` card is about
+   1400px of frame on a wide monitor around content that wants half of it - which is what put a
+   session's name and its heart rate at opposite ends of the screen with nothing between them.
+   An absolute value rather than a smaller span, because a span is a fraction: `span={8}` is 930px
+   here and 1700px on a 2560px monitor, which scales the problem instead of removing it. The span
+   stays 12 so the 900px collapse rule and every phone width below it are untouched. Charts are
+   deliberately excluded - they earn their width. */
+.card-measured { max-width: 46rem; }
 
 /* WorkoutDetail.tsx's own heading, above its `.grid` rather than one of the cards inside it - the
    same "heading, then grid" shape every sibling page's own `<h1>` sits in front of, just with more
@@ -566,16 +575,42 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 }
 .all-time-empty { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 .record-list, .milestone-list { list-style: none; margin: 0; padding: 0; }
+/* Columns, not a row of flex children. Four tracks shared by both lists on this page - the metric
+   records add a fifth cell, their window, which spans all four beneath the rest. `display: contents`
+   on the row is what lets a cell in one row line up with the cell above it: the spans become items
+   of the list's own grid rather than of a grid per row, which is the only arrangement in which a
+   column exists at all.
+   Under 620px it reverts to the wrapping flex row below, where columns have no room to mean
+   anything. */
+.record-list { display: grid; grid-template-columns: minmax(7rem, 1fr) auto auto auto; }
+/* Subgrid, not `display: contents`. Both would align a cell with the cell above it, and contents
+   costs two things this row needs: a box to hang its own border on - which forced the separator
+   onto the cells, split by which list the row was in - and its standing with
+   grid-collapse.test.ts, which requires every `display: contents` wrapper to appear in the 900px
+   collapse rule. That requirement is right for the wrappers it was written for, which sit inside
+   `.grid` and hand their Card straight to it. This row is two levels below `.grid`, inside a grid
+   of its own, so `grid-column: span 12 !important` on its cells would stack the columns between
+   620px and 900px - the guard would have been satisfied and the layout wrong. */
 .record-row {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4);
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline;
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-size-sm);
 }
 .record-row:last-child { border-bottom: 0; }
-/* The number is the point of the row, so it carries the weight and the tabular figures that let
-   a column of them line up. */
-.record-metric { min-width: 9rem; }
-.record-value { font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.record-metric { min-width: 0; }
+.record-value, .record-date, .record-source { padding-left: var(--space-4); }
+/* The window is the row's second line: it cannot be folded into one footnote per card, because
+   these spans genuinely differ per metric - a metric's history can begin long after the archive's,
+   and M6c states each one for that reason. */
+.record-window { grid-column: 1 / -1; padding-top: var(--space-1); }
+/* The number is the point of the row, so it carries the weight and the tabular figures. Right
+   aligned so a column of them shares an edge: tabular figures equalise digit widths within a
+   string and can do nothing across strings of different lengths, which is exactly what this row
+   needed and never had. */
+.record-value {
+  text-align: right; font-weight: var(--weight-medium); font-variant-numeric: tabular-nums;
+}
+.record-source { text-align: right; min-width: 7rem; }
 .record-date, .record-window { color: var(--text-muted); }
 /* The device that set a record, and on a session row the activity it was. Both are quiet: the
    number is the row's subject and these say where it came from. */
@@ -884,6 +919,28 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    defaults to a min-width of auto, so one long label ("3 maanden") would push its column past its
    share and take the row with it, whatever the column template says. */
 @media (max-width: 620px) {
+  /* Columns need width to mean anything, and at 375px there is none to give: four tracks would
+     each be a few characters wide and the alignment they exist for would cost more than it buys.
+     So the record rows go back to the wrapping flex row they were before, which is what a phone
+     wants anyway. The border returns to the row, which has a box of its own again here.
+
+     This block rather than the earlier 620px block above: `.record-list { display: grid }` sits
+     between the two, and at equal specificity the later rule wins. Put in the earlier block these
+     overrides lost to it, the grid stayed on at 375px with half its rules overridden, and the
+     value and the date drew on top of each other. */
+  .record-list { display: block; }
+  .record-row { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+  .record-row > *, .record-window { padding: 0; }
+  .record-value, .record-source { text-align: left; min-width: 0; }
+  /* The metric keeps the width it had before the columns existed. Without it the name shrinks to
+     its longest word and the cells after it are squeezed until "13 jun 2026" breaks across three
+     lines - which is exactly what handing this rule over to the grid's own track did here. */
+  .record-metric { min-width: 9rem; }
+  /* A date is one thing and reads as one. Broken, it stacks a month and a year under a day and
+     reads as three separate figures. */
+  .record-date { white-space: nowrap; }
+  .record-window { flex-basis: 100%; }
+
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 
   /* `.controls .segmented`, not `.segmented`: the five columns are the five range buttons

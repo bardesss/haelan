@@ -184,7 +184,41 @@ describe('the all-time page', () => {
       ],
     })
     expect(text("[data-metric='steps'] .record-source")).toBe('Pixel Watch 4')
-    expect(container!.querySelector("[data-metric='floors'] .record-source")).toBeNull()
+    expect(text("[data-metric='floors'] .record-source")).toBe('')
+  })
+
+  // The cell used to be omitted outright, which is what made the rows look misaligned: in a row of
+  // columns an absent cell reserves nothing, so the window text on the two metrics that have no
+  // single device slid left past every other row's. It is rendered empty instead - still saying
+  // nothing, which is the rule a merged day needs (it belongs to no one device, and "unknown"
+  // would read as a fault), while holding the column its neighbours are aligned against.
+  it('holds the device column even for a metric no single device can be credited with', () => {
+    mountPage({
+      ...EMPTY,
+      records: [
+        { metric: 'steps', tier: 'merged', localDate: '2026-03-14', value: 21000, from: '2026-01-21', days: 235, sourceName: 'Pixel Watch 4' },
+        { metric: 'floors', tier: 'provider', localDate: '2026-02-02', value: 42, from: '2024-08-25', days: 230, sourceName: null },
+      ],
+    })
+    for (const row of Array.from(container!.querySelectorAll('.record-row'))) {
+      expect(row.children.length, row.getAttribute('data-metric') ?? '').toBe(5)
+    }
+  })
+
+  // The session rows share .record-row's columns deliberately, so they need the same rule: the
+  // activity is absent on a session whose device recorded no type, and an omitted cell there
+  // would misalign that row against the two beside it.
+  it('holds the activity column on a session record whose device recorded no type', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'RUNNING', value: 60 * 60_000 },
+        { kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: null, value: 12_850_000 },
+      ],
+    })
+    for (const row of Array.from(container!.querySelectorAll('[data-record]'))) {
+      expect(row.children.length, row.getAttribute('data-record') ?? '').toBe(4)
+    }
   })
 
   it('calls a first "first recorded", because it marks when syncing began', () => {
