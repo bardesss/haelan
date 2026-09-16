@@ -1092,7 +1092,9 @@
       "dormantHeading": "Rapporteert niet meer",
       "neverReported": "Heeft nooit gerapporteerd",
       "stopped": "Rapporteert niet meer — laatst op {{date}}",
-      "unjudged": "Te weinig historie om te beoordelen — laatst op {{date}}"
+      "unjudged": "Te weinig historie om te beoordelen — laatst op {{date}}",
+      "volume_one": "{{count}} dag gerapporteerd",
+      "volume_other": "{{count}} dagen gerapporteerd"
     },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",

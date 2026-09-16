@@ -332,3 +332,45 @@ describe('committing a name from the field', () => {
     expect(fieldErrors()).toEqual(["'My watch' is already the name of another source"])
   })
 })
+
+/**
+ * What tells two rows apart when their names cannot.
+ *
+ * The card's existing rule is that a source reporting normally needs no line, because its last
+ * reading is yesterday and saying so is noise. That holds while the name distinguishes the row,
+ * and it stops holding on a real household: six of this archive's seventeen sources are
+ * `com.android.healthconnect.phone.<32 hex>`, identical but for the hash, all of kind `app`, all
+ * reporting. Nothing on those rows says which is the phone that has been recording for a year and
+ * which is a reinstall that logged three days - so the card asks the reader to name sources it
+ * gives them no way to tell apart.
+ *
+ * The discriminator is the volume, not the recency: recency is "yesterday" for all six. It is
+ * already on the wire for every source, live and dormant alike, and was rendered for neither.
+ */
+describe('what a live source says about itself', () => {
+  it('states how many dates it has reported on', () => {
+    mountSection([namedSource({ reportingDates: 236, reportingNow: true })])
+    expect(text('.source-name-volume')).toBe('236 days reported')
+  })
+
+  it('says one day rather than 1 days', () => {
+    mountSection([namedSource({ reportingDates: 1, reportingNow: true })])
+    expect(text('.source-name-volume')).toBe('1 day reported')
+  })
+
+  it('separates a busy source from a near-empty one carrying the same name', () => {
+    mountSection([
+      namedSource({ id: 'a', name: 'com.android.healthconnect.phone', reportingDates: 236 }),
+      namedSource({ id: 'b', name: 'com.android.healthconnect.phone', reportingDates: 3 }),
+    ])
+    const volumes = Array.from(container!.querySelectorAll('.source-name-volume')).map((e) => e.textContent)
+    expect(volumes).toEqual(['236 days reported', '3 days reported'])
+  })
+
+  // A source that has produced nothing has no volume worth printing, and "0 days reported" beside
+  // the "Has never reported" line below it would say the same thing twice.
+  it('prints no volume for a source that has never reported', () => {
+    mountSection([namedSource({ reportingDates: 0, lastReportedDate: null, reportingNow: false })])
+    expect(container!.querySelector('.source-name-volume')).toBeNull()
+  })
+})

@@ -107,6 +107,20 @@ function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
       </label>
       <span className="source-name-detail">{`${fallbackLabel} - ${source.id}`}</span>
       <span className="source-name-kind">{t(`settings.sourceNames.kind.${source.kind}`)}</span>
+      {/* How much this source has actually produced, on every row rather than only the stale ones.
+          The card's rule for the stale line - a source reporting normally needs no line, since its
+          last reading is yesterday and saying so is noise - holds only while the NAME distinguishes
+          the row. On a real household it does not: six of seventeen sources here are
+          `com.android.healthconnect.phone.<hash>`, identical but for the hash, all of kind app, all
+          reporting. Recency cannot separate them, because it is yesterday for all six. The volume
+          can: one is the phone that has recorded for a year and the others logged a handful of days.
+          Zero prints nothing - the stale line below already says it has never reported, and a
+          "0 days" beside it would state the same fact twice. */}
+      {source.reportingDates > 0 && (
+        <span className="source-name-volume">
+          {t('settings.sourceNames.volume', { count: source.reportingDates })}
+        </span>
+      )}
       {/* Only said about a source the card is making a claim about. A source reporting normally
           needs no line: its last reading is yesterday and saying so is noise on every row. */}
       {!source.reportingNow && (

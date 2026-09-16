@@ -1092,7 +1092,9 @@
       "dormantHeading": "No longer reporting",
       "neverReported": "Has never reported",
       "stopped": "Stopped reporting — last was {{date}}",
-      "unjudged": "Too little history to judge — last was {{date}}"
+      "unjudged": "Too little history to judge — last was {{date}}",
+      "volume_one": "{{count}} day reported",
+      "volume_other": "{{count}} days reported"
     },
     "dataTypes": {
       "title": "What to sync",

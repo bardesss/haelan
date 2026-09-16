@@ -559,6 +559,10 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .source-name-kind {
   font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
 }
+/* Tabular figures because this is the column a reader compares down: telling six identically named
+   sources apart means reading 236 against 3, and equal-width digits are what make that scannable
+   rather than a line-by-line parse. */
+.source-name-volume { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Said only about a source the card is making a claim about - one still reporting carries no such
    line - so this is a statement rather than a column, and it sits in the same muted register as
    .source-name-detail beside it rather than shouting. A dead source is a fact to notice on the
