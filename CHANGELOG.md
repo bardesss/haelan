@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.30.0](https://github.com/bardesss/haelan/compare/v1.29.0...v1.30.0) (2026-09-16)
+
+
+### Features
+
+* **web:** tiles that are tiles, lists that stop at a measure, and figures that say what they are ([#258](https://github.com/bardesss/haelan/issues/258)) ([00a8855](https://github.com/bardesss/haelan/commit/00a88553749dbe84c0ef141a599e92ba14eabdda))
+
 ## [1.29.0](https://github.com/bardesss/haelan/compare/v1.28.0...v1.29.0) (2026-09-16)
 
 
