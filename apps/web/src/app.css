@@ -557,7 +557,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 /* Grows into whatever the row has spare instead of a fixed 220px. The placeholder is the
    provider's own name, which for a Health Connect row is a package plus a hash, and at 220px it
    was clipped mid-word - so the field a reader is meant to type into read as broken text. */
-.source-name-row .input { flex: 1 1 16rem; min-width: 0; max-width: 26rem; }
+/* No width fits this placeholder. It is the provider's own name, which for a Health Connect row is
+   a package and a hash - 66 characters - so the field grows into whatever the row has spare and
+   then truncates rather than pretending a wider field would solve it. `text-overflow: ellipsis`
+   applies to placeholder text too, and the difference matters: cut at the glyph the field reads as
+   broken, cut at an ellipsis it reads as "there is more of this", which is true, and the whole
+   string is on the identifier line below. */
+.source-name-row .input {
+  flex: 1 1 16rem; min-width: 0; max-width: 26rem; text-overflow: ellipsis;
+}
 /* Its own full-width line, below the name, kind and volume rather than between them. Micro and
    faint because it is reference material: a reader scanning for which source to rename wants the
    first line, and only somebody chasing a deep link wants this one. break-all because a 32
