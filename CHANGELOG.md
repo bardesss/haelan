@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.29.0](https://github.com/bardesss/haelan/compare/v1.28.0...v1.29.0) (2026-09-16)
+
+
+### Features
+
+* the records a session holds, and the device that set a record ([#256](https://github.com/bardesss/haelan/issues/256)) ([a4d6515](https://github.com/bardesss/haelan/commit/a4d6515b0f725d29b6172df7ba9baf7e027cb11d))
+
 ## [1.28.0](https://github.com/bardesss/haelan/compare/v1.27.0...v1.28.0) (2026-09-16)
 
 
