@@ -373,4 +373,25 @@ describe('what a live source says about itself', () => {
     mountSection([namedSource({ reportingDates: 0, lastReportedDate: null, reportingNow: false })])
     expect(container!.querySelector('.source-name-volume')).toBeNull()
   })
+
+  /*
+   * What a row leads with.
+   *
+   * The raw id is kept - SourceNames.tsx's own reason is that deep links carry it, so somebody
+   * debugging one has to be able to read it off this screen, and that requirement is real. It was
+   * weighted wrongly though: the provider's name and a 32 character hash were set at body size
+   * between the field and everything else, so seventeen rows led with the one thing a reader
+   * cannot act on and the facts they can act on came last.
+   *
+   * So the identifiers move behind the name, the kind and the volume rather than in front of them.
+   * Still printed in full and still selectable - a title tooltip would satisfy "readable" and not
+   * "copyable", and copying it is the whole reason a debugger is on this screen.
+   */
+  it('leads with what a reader can act on and puts the provider identifiers last', () => {
+    mountSection([namedSource()])
+    const classes = Array.from(container!.querySelector('.source-name-row')!.children)
+      .map((child) => child.className)
+      .filter((name) => name.startsWith('source-name-'))
+    expect(classes).toEqual(['source-name-kind', 'source-name-volume', 'source-name-detail'])
+  })
 })

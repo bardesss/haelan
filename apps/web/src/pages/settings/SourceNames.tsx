@@ -105,7 +105,6 @@ function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
         />
       </label>
-      <span className="source-name-detail">{`${fallbackLabel} - ${source.id}`}</span>
       <span className="source-name-kind">{t(`settings.sourceNames.kind.${source.kind}`)}</span>
       {/* How much this source has actually produced, on every row rather than only the stale ones.
           The card's rule for the stale line - a source reporting normally needs no line, since its
@@ -121,6 +120,11 @@ function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
           {t('settings.sourceNames.volume', { count: source.reportingDates })}
         </span>
       )}
+      {/* The provider's own name and the id, behind the facts a reader can act on rather than in
+          front of them. Kept in full and kept selectable: deep links carry the id, so somebody
+          debugging one has to read it off this screen, and a tooltip would make it readable
+          without making it copyable - which is the whole reason they are here. */}
+      <span className="source-name-detail">{`${fallbackLabel} - ${source.id}`}</span>
       {/* Only said about a source the card is making a claim about. A source reporting normally
           needs no line: its last reading is yesterday and saying so is noise on every row. */}
       {!source.reportingNow && (
