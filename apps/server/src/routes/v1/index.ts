@@ -7,6 +7,7 @@ import { registerChangesRoutes } from './changes.ts'
 import { registerExportRoutes } from './export.ts'
 import { registerAnnotationRoutes } from './annotations.ts'
 import { registerSourceRoutes } from './sources.ts'
+import { registerAllTimeRoutes } from './allTime.ts'
 import { registerDataTypeRoutes } from './dataTypes.ts'
 
 /**
@@ -46,6 +47,7 @@ export function registerV1(app: FastifyInstance, testOnlyExtra?: (app: FastifyIn
   registerExportRoutes(app)
   registerAnnotationRoutes(app)
   registerSourceRoutes(app)
+  registerAllTimeRoutes(app)
   registerDataTypeRoutes(app)
 
   testOnlyExtra?.(app)

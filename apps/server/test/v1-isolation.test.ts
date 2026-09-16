@@ -301,6 +301,18 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-reason-999999',
   },
   {
+    name: 'all-time',
+    template: '/api/v1/p/:personId/all-time',
+    // No range here either, and unlike every other entry that is the route's defining property
+    // rather than an incidental one: an all-time figure has no window to scope. The marker rides
+    // on a value nobody else could produce, since this route answers numbers rather than text.
+    path: (p) => `/api/v1/p/${p}/all-time`,
+    seedOwn: (h) => seedDaily(h, { personId: 'p1', localDate: dateOf(2), value: 1111 }),
+    seedOther: (h, personId) => seedDaily(h, { personId, localDate: dateOf(2), value: 999999 }),
+    ownNeedle: '1111',
+    otherNeedle: '999999',
+  },
+  {
     name: 'sources',
     template: '/api/v1/p/:personId/sources',
     // No date range on this route either: it lists every source a person has, so the marker rides
