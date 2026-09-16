@@ -181,6 +181,13 @@ export { PROJECTION_TABLES } from './query/projection.ts'
 export { baselineOf, baselineWindow, zScoreOf, BASELINE_WINDOW_DAYS, BASELINE_MIN_DAYS } from './query/baseline.ts'
 export type { Baseline } from './query/baseline.ts'
 export { readSourceActivity } from './query/sourceActivity.ts'
+export { readAllTime, RECORD_METRICS } from './query/allTime.ts'
+export type { AllTime, AllTimeSpan, MetricRecord, Milestone } from './query/allTime.ts'
+export { eddingtonOf } from './api/eddington.ts'
+export { recordOf } from './api/allTimeRecords.ts'
+export type { DailyRecord, DatedValue } from './api/allTimeRecords.ts'
+export { longestRun, MIN_RUN_DAYS } from './api/runs.ts'
+export type { Run } from './api/runs.ts'
 export type { SourceActivity } from './query/sourceActivity.ts'
 export {
   cadenceOf, MIN_REPORTING_DATES, STALE_GAP_MULTIPLIER, STALE_FLOOR_DAYS, UNJUDGED_FLOOR_DAYS,

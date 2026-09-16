@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSession } from '../../auth/session.js'
 import { useTranslation } from '../../i18n/index.js'
+import { formatLocalDate } from '../../format.js'
 import { EmptyState } from '../../components/EmptyState.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
@@ -110,13 +111,20 @@ function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
           needs no line: its last reading is yesterday and saying so is noise on every row. */}
       {!source.reportingNow && (
         <span className="source-name-stale">
+          {/* `stale` is a verdict and `unjudged` is the absence of one, and the difference is the
+              whole reason the rule has a history gate: a source with too little history to have
+              a cadence must not be called stale, because nothing supports the claim. Grouping
+              them together under one line read the same for a dead watch and a two-day app. */}
           {source.lastReportedDate === null
             ? t('settings.sourceNames.neverReported')
-            : t('settings.sourceNames.lastReported', {
+            : t(source.status === 'stale'
+              ? 'settings.sourceNames.stopped'
+              : 'settings.sourceNames.unjudged', {
               // Parsed as UTC, not as a local string: `new Date('2026-01-20')` is already UTC
               // midnight, but the T00:00:00Z is explicit so a reader does not have to know that.
-              date: new Date(`${source.lastReportedDate}T00:00:00Z`)
-                .toLocaleString(i18n.language, { dateStyle: 'medium' }),
+              // The shared helper, which pins timeZone: 'UTC'. Without it a reader west of
+              // Greenwich is told a source last reported the day before it did.
+              date: formatLocalDate(source.lastReportedDate, i18n.language),
             })}
         </span>
       )}

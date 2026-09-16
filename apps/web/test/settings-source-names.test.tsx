@@ -185,7 +185,7 @@ describe('a source that has stopped reporting', () => {
     // The exact string, not a substring: a substring check would survive the date formatting
     // breaking, which is the thing most likely to break.
     const expected = new Date('2026-01-20T00:00:00Z').toLocaleString('en', { dateStyle: 'medium' })
-    expect(text('.source-name-stale')).toBe(`Last reported ${expected}`)
+    expect(text('.source-name-stale')).toBe(`Stopped reporting — last was ${expected}`)
   })
 
   it('says nothing about staleness for a source that is reporting', () => {
@@ -196,6 +196,22 @@ describe('a source that has stopped reporting', () => {
   it('says so plainly when a source has never reported at all', () => {
     mountSection([namedSource({ status: 'unjudged', reportingNow: false, lastReportedDate: null })])
     expect(text('.source-name-stale')).toBe('Has never reported')
+  })
+
+  it('tells a source judged stale apart from one it has no verdict about', () => {
+    // The whole reason `unjudged` exists: a source with too little history to have a cadence
+    // must not be called stale, because nothing supports the claim. The card grouped on
+    // reportingNow alone, so a dead watch and a two-day app read identically.
+    mountSection([
+      namedSource({ id: 'watch', status: 'stale', reportingNow: false, lastReportedDate: '2026-01-20' }),
+      namedSource({ id: 'app', status: 'unjudged', reportingNow: false, lastReportedDate: '2026-01-02' }),
+    ])
+    const rows = [...container!.querySelectorAll('.source-names-dormant .source-name-row')]
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.querySelector('.source-name-stale')?.textContent)
+      .toContain('Stopped reporting')
+    expect(rows[1]!.querySelector('.source-name-stale')?.textContent)
+      .toContain('Too little history to judge')
   })
 
   it('groups the ones no longer reporting under their own heading', () => {

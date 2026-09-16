@@ -60,15 +60,39 @@ describe('readSourceActivity', () => {
     expect(activity).toMatchObject({ status: 'unjudged', reportingNow: true })
   })
 
-  it('counts an excluded day as a day the source reported', () => {
+  // What this replaced, and why it is worth a comment rather than a silent edit. The original
+  // asserted that an excluded day still counts as a day the source reported, matching a claim in
+  // the reader's own header. It passed by seeding a `daily` row AND an override directly, which
+  // is a state production never reaches: `applyToDay` removes an excluded metric's rows before
+  // they are written, so the row the test relied on would never exist. The test asserted
+  // behaviour that cannot occur and the header documented a decision the data layer had already
+  // made the other way.
+  //
+  // What is actually true is asserted here instead: this reader sees whatever survived
+  // derivation, and nothing about an override reaches it.
+  it('judges a source on the rows derivation left behind, overrides included', () => {
     seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 20 })
     seedOverride(test.db, {
       personId: 'p1', scope: 'day_metric', action: 'exclude',
       targetKey: JSON.stringify({ localDate: '2026-01-20', metric: 'steps' }), reason: 'test',
     })
+
+    // The override changes nothing here, because this reader never consults the overrides table:
+    // in production the excluded row would simply be absent from `daily`, and the cadence would
+    // be computed over the days that remain.
     const [activity] = readSourceActivity(test.db, 'p1', { today: '2026-01-21' })
-    expect(activity!.lastReportedDate).toBe('2026-01-20')
+    expect(activity!.reportingDates).toBe(20)
     expect(activity!.status).toBe('reporting')
+  })
+
+  it('shortens a history when derivation left the excluded day out, which is what really happens', () => {
+    // The production shape, written the way production writes it: the excluded day's row is
+    // simply not there. 13 dates is below MIN_REPORTING_DATES, so the source stops being judged
+    // at all rather than being called stale - the honest consequence of the rule above.
+    seedDates({ sourceId: 's-watch', from: '2026-01-01', days: 13 })
+    const [activity] = readSourceActivity(test.db, 'p1', { today: '2026-01-14' })
+    expect(activity!.reportingDates).toBe(13)
+    expect(activity!.status).toBe('unjudged')
   })
 
   it('never reports the sources of another person', () => {

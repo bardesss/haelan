@@ -23,10 +23,19 @@ import type { DbOrTx } from '../db/open.ts'
  * Per CONTRIBUTING.md's rule for a reader whose output is printed:
  *
  * - **Session kinds:** none. This reads `daily` rows, not sessions.
- * - **Override actions:** NEITHER, deliberately, and this is the one place in this codebase where
- *   ignoring an exclusion is the correct answer. A day the reader excluded is still a day the
- *   source reported on: staleness is a question about the device, not about the data's quality,
- *   and a household that excluded a bad week must not thereby be told its watch has died.
+ * - **Override actions:** both, applied upstream, and this reader re-applies neither.
+ *   `applyToDay` (derive/overrides.ts) filters an excluded metric's rows out before they are
+ *   written, so an excluded day has no `daily` row for this to see, and a correction's value is
+ *   already in the row.
+ *
+ *   **This header used to claim the opposite** - that a day the reader excluded is still a day
+ *   the source reported on, and that this was the one place in the codebase where ignoring an
+ *   exclusion was correct. The intent was sound: a household that excluded a bad week should not
+ *   be told its watch has died. The claim was not, because this reader cannot see those rows.
+ *   Honouring the intent would mean reading `samples`, which survive an exclusion, and that was
+ *   measured at 3,380ms against 23ms - the entire reason this reads `daily`. So an excluded day
+ *   does shorten a source's apparent history here. The effect on a cadence judged over at least
+ *   14 reporting dates is marginal, and no household in this project has excluded anything.
  * - **Thinned:** no. It reads dates, never a point budget.
  */
 

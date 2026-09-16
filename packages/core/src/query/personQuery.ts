@@ -1,6 +1,8 @@
 import { and, asc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { readSourceActivity } from './sourceActivity.ts'
+import { readAllTime } from './allTime.ts'
+import type { AllTime } from './allTime.ts'
 import type { SourceActivity, SourceStatus } from './sourceActivity.ts'
 import { daily, people, SESSION_KINDS, sourceAliases, sources } from '../db/schema/index.ts'
 import { EXERCISE_TYPES } from '../api/enums.ts'
@@ -162,6 +164,17 @@ export class PersonQuery {
    * history, and a range would make "has this stopped" mean "did it report inside the window the
    * reader happens to be looking at", which is a different and much less useful question.
    */
+  /**
+   * Every figure the all-time page shows, in one call.
+   *
+   * No range, and no arguments at all: these are the questions the range on screen cannot answer,
+   * which is the whole reason M6 exists. One call rather than four because they are one page, and
+   * four round trips for one screen is four chances to render it half built.
+   */
+  allTime(): AllTime {
+    return readAllTime(this.#db, this.#personId)
+  }
+
   sourceActivity(input: { today: string }): SourceActivity[] {
     requireDate('today', input.today)
     return readSourceActivity(this.#db, this.#personId, input)

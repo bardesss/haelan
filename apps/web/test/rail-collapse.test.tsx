@@ -66,6 +66,7 @@ afterEach(() => {
 // reader) gets, not the raw catalogue key renderToStaticMarkup falls back to without a provider.
 const EXPECTED_NAMES: Record<string, string> = {
   '/': 'Dashboard',
+  '/records': 'Records',
   '/activity': 'Activity',
   '/sleep': 'Sleep',
   '/recovery': 'Recovery',

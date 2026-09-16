@@ -76,7 +76,11 @@ const SOURCE_ROUTES = new Set(['/', '/activity', '/sleep', '/recovery', '/health
  *  routes in ROUTES that do not (mount()'s own guard comment on Settings, and Nutrition.tsx's own
  *  comment on why it has no data hook to read a range for in the first place). */
 function usesPageControls(path: string): boolean {
-  return path !== '/settings' && path !== '/nutrition'
+  // /records (M6c) is the third, and the only one rangeless by design rather than by subject:
+  // every figure on it is an all-time figure, so it has no ControlRow at all and its query key
+  // carries no range. Five range mounts therefore ask for one already-cached resource, and only
+  // the first is owed a landing.
+  return path !== '/settings' && path !== '/nutrition' && path !== '/records'
 }
 
 let server: CaptureServer
@@ -192,11 +196,17 @@ describe('the capture sweep', () => {
           // Year view, say) would otherwise go unnoticed. Settings is the one exception that still
           // needs one: unlike every other route here, it never calls usePageControls, so its five
           // range mounts genuinely ask for the same, already-fresh resources every time once the
-          // first has run - only that first mount is owed new activity. Nutrition never lands
+          // first has run - only that first mount is owed new activity. /records (M6c) is in
+          // the same position for a reason of its own: it is the one page with no control row
+          // at all, because every figure on it is an all-time figure and a range picker there
+          // would be a control that either lies or does nothing. Five range mounts therefore
+          // ask for one already-cached resource, and only the first is owed a landing.
+          // Nutrition never lands
           // anything, on any visit, by design: it renders one static sentence and calls no data
           // hook at all (Nutrition.tsx's own comment - the household never logged food, so there
           // is nothing here to ask a server for).
-          expectGrowth: route.path !== '/nutrition' && (route.path !== '/settings' || index === 0),
+          expectGrowth: route.path !== '/nutrition'
+            && (usesPageControls(route.path) || index === 0),
         })
       }
     }

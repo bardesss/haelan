@@ -39,7 +39,7 @@ export interface SourceActivityFields {
   /**
    * Whether the card lists it among the live sources. Computed by the server, not here: the
    * thresholds behind it belong in one place, and a second copy in the browser is how a rule
-   * drifts. See packages/core/src/query/sourceActivity.ts.
+   * drifts. See packages/core/src/api/sourceCadence.ts, which both sides share.
    */
   reportingNow: boolean
 }
