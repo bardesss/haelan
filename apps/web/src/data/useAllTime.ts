@@ -18,6 +18,17 @@ export interface MetricRecord {
   /** This metric's own first day, which is not the page's. */
   from: string
   days: number
+  /** The device behind the record day, or null when no single one can be named. */
+  sourceName: string | null
+}
+
+export interface SessionRecord {
+  kind: 'longest' | 'furthest' | 'fastest-km'
+  sessionId: string
+  localDate: string
+  exerciseType: string | null
+  /** Milliseconds, millimetres or seconds, depending on `kind`. */
+  value: number
 }
 
 export interface Milestone {
@@ -31,6 +42,8 @@ export interface Milestone {
 export interface AllTime {
   span: AllTimeSpan
   records: MetricRecord[]
+  /** Only the session records the sessions actually support; may be empty. */
+  sessionRecords: SessionRecord[]
   /** `from` and `days` are the step history's own window, not the span's. Null without steps. */
   eddington: { e: number, from: string, days: number } | null
   milestones: Milestone[]

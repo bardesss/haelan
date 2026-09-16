@@ -2,6 +2,9 @@ import { sql } from 'drizzle-orm'
 import { eddingtonOf } from '../api/eddington.ts'
 import { recordOf } from '../api/allTimeRecords.ts'
 import { longestRun, MIN_RUN_DAYS } from '../api/runs.ts'
+import { sessionRecordsOf } from '../api/sessionRecords.ts'
+import type { SessionForRecords, SessionRecord } from '../api/sessionRecords.ts'
+import { nameFor } from '../store/sourceAliases.ts'
 import { parseSessionTarget } from '../derive/targetKey.ts'
 import type { DbOrTx } from '../db/open.ts'
 
@@ -90,6 +93,14 @@ export interface MetricRecord {
   tier: Tier
   localDate: string
   value: number
+  /**
+   * What the person calls the source that recorded the record day, or null.
+   *
+   * Null is common and honest rather than a failure: a `provider` row carries no `sourceMix` at
+   * all (rollup.ts writes it null), so the two provider-tier metrics can never be attributed,
+   * and a merged day assembled from several devices is not one device's record.
+   */
+  sourceName: string | null
   /** This metric's own first day, which is not the page's - see `eddington` for why that matters. */
   from: string
   days: number
@@ -107,6 +118,14 @@ export interface Milestone {
 export interface AllTime {
   span: AllTimeSpan
   records: MetricRecord[]
+  /**
+   * The records a SESSION holds rather than a day: longest, furthest, fastest kilometre.
+   *
+   * A separate list because they are a different kind of claim - one read off `sessions` and its
+   * payload attributes, one off `daily` - and because a household may support some and not
+   * others. Only the records the sessions actually support appear.
+   */
+  sessionRecords: SessionRecord[]
   /**
    * `from` and `days` are the STEP history's own window, not the span's.
    *
@@ -164,6 +183,7 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
       records.push({
         metric, tier, localDate: best.localDate, value: best.value,
         from: rows[0]!.localDate, days: rows.length,
+        sourceName: soleSourceOn(db, personId, metric, best.localDate),
       })
     }
   }
@@ -180,16 +200,129 @@ export function readAllTime(db: DbOrTx, personId: string): AllTime {
     days: stepDays.length,
   }
 
+  const excludedSessions = excludedSessionIds(db, personId)
+
   return {
     span: { from: span.from ?? '', to: span.to ?? '', days: span.days ?? 0 },
     records,
+    sessionRecords: sessionRecordsOf(sessionsForRecords(db, personId, excludedSessions)),
     eddington,
-    milestones: milestonesOf(db, personId, records, stepDays),
+    milestones: milestonesOf(db, personId, records, stepDays, excludedSessions),
   }
+}
+
+/**
+ * The name of the one source behind a record day, or null when that question has no answer.
+ *
+ * Null rather than a guess in three real cases: a provider row carries no mix at all, a merged
+ * day assembled from two devices belongs to neither, and a source may have no row in `sources`.
+ * The alias chain is `nameFor`, the same one every other surface resolves a source name through,
+ * so a household that renamed its watch sees that name here too.
+ */
+function soleSourceOn(
+  db: DbOrTx, personId: string, metric: string, localDate: string,
+): string | null {
+  const row = db.all<{ sourceMix: string | null }>(sql`
+    SELECT source_mix AS sourceMix FROM daily
+     WHERE person_id = ${personId} AND metric = ${metric} AND local_date = ${localDate}
+       AND source = 'merged' AND agg = 'sum'`)[0]
+  if (!row?.sourceMix) return null
+
+  let mix: unknown
+  try { mix = JSON.parse(row.sourceMix) } catch { return null }
+  if (!Array.isArray(mix) || mix.length !== 1) return null
+
+  const sourceId = (mix[0] as { source?: unknown }).source
+  if (typeof sourceId !== 'string') return null
+
+  const source = db.all<{ displayName: string, alias: string | null }>(sql`
+    SELECT s.display_name AS displayName, a.alias AS alias FROM sources s
+      LEFT JOIN source_aliases a ON a.person_id = s.person_id AND a.source_id = s.id
+     WHERE s.person_id = ${personId} AND s.id = ${sourceId}`)[0]
+  if (!source) return null
+
+  return nameFor({ id: sourceId, displayName: source.displayName, alias: source.alias })
+}
+
+/**
+ * Records per SOURCE were specified, measured and rejected on 2026-09-16; this note is here
+ * because it is where the next person will come looking to add them.
+ *
+ * For steps the archive has four sources: 48,030 over 207 days, then 14,661, 13,963 and 8,424
+ * over 29, 94 and 9 days. The top row is the record already on the page and the rest are
+ * short-lived devices that never stood a chance, so the table is one real row and three that
+ * read as failures. Worse, `floors` and `total_calories` have no per-source rows at all - they
+ * are provider-only - so two of the five metrics would render empty.
+ *
+ * What the data does support is attribution, which is what `soleSourceOn` above does: naming the
+ * one device behind a record day. If a household ever genuinely wants to compare two watches,
+ * that is the request to design against, and it is not this.
+ */
+
+/** Session-scope exclusions, read once and shared by the milestones and the session records. */
+function excludedSessionIds(db: DbOrTx, personId: string): Set<string> {
+  return new Set(
+    db.all<{ targetKey: string }>(sql`
+      SELECT target_key AS targetKey FROM overrides
+       WHERE person_id = ${personId} AND scope = 'session' AND action = 'exclude'`)
+      .map((row) => parseSessionTarget(row.targetKey)),
+  )
+}
+
+/**
+ * Exercise sessions in the shape `sessionRecordsOf` needs, with the payload parsing kept here.
+ *
+ * `attrs` is JSON this process wrote but a mapper's shape rather than a schema, so every read
+ * below is defensive: a session with no metricsSummary, no splits, or a split that is not a
+ * kilometre is ordinary rather than broken.
+ */
+function sessionsForRecords(
+  db: DbOrTx, personId: string, excluded: ReadonlySet<string>,
+): SessionForRecords[] {
+  const rows = db.all<{ id: string, localDate: string, startMs: number, endMs: number, attrs: string }>(sql`
+    SELECT id, local_date AS localDate, start_ms AS startMs, end_ms AS endMs, attrs
+      FROM sessions
+     WHERE person_id = ${personId} AND kind = 'exercise'
+     ORDER BY start_ms`)
+
+  const out: SessionForRecords[] = []
+  for (const row of rows) {
+    if (excluded.has(row.id)) continue
+
+    let attrs: Record<string, unknown> = {}
+    try { attrs = JSON.parse(row.attrs) as Record<string, unknown> } catch { attrs = {} }
+
+    const summary = attrs['metricsSummary'] as { distanceMillimeters?: unknown } | undefined
+    const distance = typeof summary?.distanceMillimeters === 'number' && summary.distanceMillimeters > 0
+      ? summary.distanceMillimeters
+      : null
+
+    // Exactly one kilometre, so every candidate is the same distance: a 400m lap would win a
+    // "fastest split" every time by being shorter rather than quicker.
+    const kilometreSeconds: number[] = []
+    for (const split of (attrs['splits'] as unknown[] | undefined) ?? []) {
+      const s = split as { splitType?: unknown, activeDuration?: unknown, metricsSummary?: { distanceMillimeters?: unknown } }
+      if (s.splitType !== 'DISTANCE') continue
+      if (s.metricsSummary?.distanceMillimeters !== 1_000_000) continue
+      const seconds = Number.parseFloat(String(s.activeDuration ?? '').replace(/s$/, ''))
+      if (Number.isFinite(seconds) && seconds > 0) kilometreSeconds.push(seconds)
+    }
+
+    out.push({
+      sessionId: row.id,
+      localDate: row.localDate,
+      exerciseType: typeof attrs['exerciseType'] === 'string' ? attrs['exerciseType'] : null,
+      durationMs: row.endMs - row.startMs,
+      distanceMm: distance,
+      kilometreSeconds,
+    })
+  }
+  return out
 }
 
 function milestonesOf(
   db: DbOrTx, personId: string, records: readonly MetricRecord[], stepDays: readonly DayRow[],
+  excludedSessions: ReadonlySet<string>,
 ): Milestone[] {
   const milestones: Milestone[] = []
 
@@ -200,17 +333,6 @@ function milestonesOf(
   for (const record of records) {
     milestones.push({ kind: 'record', metric: record.metric, localDate: record.localDate })
   }
-
-  // The session-scope exclusions, read once for both kinds. Hand-entered and few, the same
-  // reasoning sleepNights.ts gives for reading them itself rather than taking them as an
-  // argument: a caller that forgot to pass them would silently count sessions the person had
-  // already corrected away.
-  const excludedSessions = new Set(
-    db.all<{ targetKey: string }>(sql`
-      SELECT target_key AS targetKey FROM overrides
-       WHERE person_id = ${personId} AND scope = 'session' AND action = 'exclude'`)
-      .map((row) => parseSessionTarget(row.targetKey)),
-  )
 
   // 2. Round numbers reached, per session kind and never across them.
   for (const [kind, every] of Object.entries(COUNT_EVERY)) {
