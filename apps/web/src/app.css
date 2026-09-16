@@ -748,9 +748,12 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .night-list { min-width: 0; }
 .night-list-header { display: flex; align-items: baseline; justify-content: space-between; }
 .night-list-count { color: var(--text-secondary); font-size: var(--font-size-sm); }
-.night-groups { display: flex; flex-direction: column; gap: var(--space-4); }
-.night-date-group { min-width: 0; }
-.night-date-heading { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-3) 0 var(--space-1); }
+/* No gap between rows any more: the group gap existed to separate one date's group from the next,
+   and with the date inside the row there are no groups - the rows' own bottom borders separate
+   them, the same way .record-row's do. */
+.night-groups { display: flex; flex-direction: column; }
+/* The date, now the row's own first column rather than a heading above a group of one. */
+.night-row-date { color: var(--text-secondary); font-weight: var(--weight-medium); min-width: 11rem; }
 .night-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .night-row:last-child { border-bottom: 0; }
 .night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }

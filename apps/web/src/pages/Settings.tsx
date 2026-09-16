@@ -61,7 +61,7 @@ export function Settings() {
             already answer 'forbidden' to anyone else, but mounting the section at all for a
             member who cannot use a single control on it would be pure noise on their own screen. */}
         {session.data?.isAdmin === true && (
-          <Card span={12} label={t('settings.members.title')}>
+          <Card span={12} measured label={t('settings.members.title')}>
             <Members />
           </Card>
         )}
