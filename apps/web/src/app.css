@@ -260,6 +260,11 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 /* WorkoutDynamics.tsx's own tile row - up to five StatTiles, fewer when a session recorded fewer
    of the five fields, wrapping onto a second row on a narrow viewport rather than compressing. */
 .workout-dynamics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
+/* One box per tile. Without it the grid's children are StatTile's own three elements rather than
+   its tiles, and auto-fit flows label, value and basis into separate columns. min-width: 0 for the
+   same reason .session-list carries it: a grid child defaults to min-content and a long label would
+   push the track wider than its share. */
+.workout-dynamic-tile { min-width: 0; }
 
 /* WorkoutComparison.tsx's own sentence list, one per compared facet - a plain list, not a table,
    since each row is a full sentence rather than a value under a column header. */
