@@ -129,8 +129,15 @@ jobs:
       # with && rather than split over a `run: |` block on purpose: release-workflow-order.test.ts
       # reads each step by the line that opens it, and `pnpm test` moving onto a line below the
       # step's name is invisible to it - which reads there as the workflow having stopped running
-      # the suite at all.
-      - run: ulimit -c unlimited && pnpm test
+      # the suite at all. That is also why the retry below wraps the command as arguments rather
+      # than hiding it inside a named step.
+      #
+      # The wrapper retries once and only when a worker CRASHED - a signal, with every test
+      # passed - never when the suite failed on its own terms. This step exists to stop a release
+      # going out on a commit whose tests do not pass, and a blanket retry would quietly undo
+      # that. The crash it is for has happened twice: v1.14.1's publish job and master on
+      # 2026-09-15, both V8 WebAssembly rather than anything in this codebase.
+      - run: ulimit -c unlimited && bash scripts/retry-if-worker-crashed.sh pnpm test
 
       - name: Backtrace whatever crashed
         if: failure()
@@ -294,7 +301,13 @@ jobs:
             echo "find its own previous release without it, and a missing tag is how the version"
             echo "numbers became fiction in #127. Leave the tag alone."
             echo
-            echo "To recover: fix the cause and re-run this job. Its last step publishes the draft."
+            echo "To recover: fix the cause and use **Re-run failed jobs**. The last step of this"
+            echo "job publishes the draft."
+            echo
+            echo "Do **not** use *Re-run all jobs*. Release Please refuses to cut a release that"
+            echo "already exists, so \`release-please\` reports nothing released, and this job is"
+            echo "skipped on its \`if:\` -- the run goes green having published nothing."
+            echo
             echo "Do **not** publish the draft by hand from the Releases page -- that is precisely the"
             echo "release-pointing-at-a-missing-image this ordering exists to prevent."
           } >> "$GITHUB_STEP_SUMMARY"

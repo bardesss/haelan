@@ -152,6 +152,24 @@ describe('the release workflow', () => {
     expect(test).toBeLessThan(push)
   })
 
+  // The suite step may retry, and the line between "may" and "always" is the whole guarantee of
+  // this job: it exists to stop a release going out on a commit whose tests do not pass. A
+  // blanket retry would undo that silently, and the shape that does it - `|| pnpm test` - looks
+  // almost identical to the shape that does not.
+  it('retries the suite only through the crash-only wrapper', () => {
+    const suite = publishSteps[indexOf('pnpm test')]
+    expect(suite, 'the publish job no longer runs the suite').toBeDefined()
+    expect(suite!.label).toContain('retry-if-worker-crashed.sh')
+
+    const wrapper = readFileSync('scripts/retry-if-worker-crashed.sh', 'utf8')
+    // It decides on the output, not on the exit code: an assertion failure and a crashed worker
+    // both exit non-zero, and only one of them may be retried.
+    expect(wrapper).toMatch(/Worker exited unexpectedly/)
+    expect(wrapper).toMatch(/not retrying/)
+    // One retry, not a loop: a reproducible crash is not the flake this is for.
+    expect(wrapper.match(/"\$@"/g) ?? []).toHaveLength(2)
+  })
+
   it('only publishes when Release Please cut a release', () => {
     // Without the guard every push to master would build and push an image over `latest`, since
     // the workflow's trigger is a branch now rather than a tag.
