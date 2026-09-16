@@ -4,7 +4,7 @@ import { ErrorState } from '../components/ErrorState.js'
 import { Loading } from '../components/Loading.js'
 import { formatLocalDate, formatMetricValue, formatNumber } from '../format.js'
 import { useAllTime } from '../data/useAllTime.js'
-import type { AllTime, MetricRecord, Milestone } from '../data/useAllTime.js'
+import type { AllTime, MetricRecord, Milestone, SessionRecord } from '../data/useAllTime.js'
 
 /**
  * What only the whole archive can answer.
@@ -84,6 +84,16 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
           </Card>
         )}
 
+        {all.sessionRecords.length > 0 && (
+          <Card span={12} label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
+            <ul className="record-list">
+              {all.sessionRecords.map((record) => (
+                <SessionRecordRow key={record.kind} record={record} t={t} language={language} />
+              ))}
+            </ul>
+          </Card>
+        )}
+
         {all.eddington !== null && (
           <Card span={6} label={t('records.eddington.label')}>
             <p className="eddington-value">{all.eddington.e}</p>
@@ -130,12 +140,58 @@ function RecordRow({ record, t, language }: {
       <span className="record-metric">{t(`records.metric.${record.metric}`)}</span>
       <span className="record-value">{recordValue(record.metric, record.value, language)}</span>
       <span className="record-date">{onDate(record.localDate, language)}</span>
+      {/* Only when one device can be named. A merged day assembled from two watches belongs to
+          neither, and a provider row carries no mix at all, so most of the time this is absent
+          rather than "unknown" - a row that says "unknown" reads as a fault. */}
+      {record.sourceName !== null && (
+        <span className="record-source">{record.sourceName}</span>
+      )}
       {/* The metric's own history, which is not the page's: floors and total_calories reach
           back further than steps do on a real archive, and a record means less without knowing
           how many days it beat. */}
       <span className="record-window">
         {t('records.bests.outOf', { days: record.days, from: onDate(record.from, language) })}
       </span>
+    </li>
+  )
+}
+
+/**
+ * A session record's value, in the unit that record is measured in.
+ *
+ * Three units for three records, which is why this is a switch rather than one formatter: a
+ * duration reads as hours and minutes, a distance as kilometres, and a pace as minutes and
+ * seconds per kilometre. Rendering any of them as a bare number would be technically true and
+ * useless.
+ */
+function sessionValue(record: SessionRecord, language: string): string {
+  if (record.kind === 'longest') {
+    const minutes = Math.round(record.value / 60_000)
+    return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+  }
+  if (record.kind === 'furthest') {
+    return `${formatNumber(record.value / 1_000_000, 1, language, '')} km`
+  }
+  const seconds = Math.round(record.value)
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} / km`
+}
+
+function SessionRecordRow({ record, t, language }: {
+  record: SessionRecord, t: Translate, language: string
+}) {
+  return (
+    // No class of its own: it shares .record-row's layout deliberately, because the two
+    // lists answer the same question at different grains and should not look like two
+    // features. `data-record` is the seam a test needs, and it carries the kind anyway.
+    <li className="record-row" data-record={record.kind}>
+      <span className="record-metric">{t(`records.sessions.${record.kind}`)}</span>
+      <span className="record-value">{sessionValue(record, language)}</span>
+      <span className="record-date">{onDate(record.localDate, language)}</span>
+      {/* The activity as the device recorded it. Not translated: it is the provider's own enum,
+          and inventing Dutch for CARDIO_WORKOUT would be inventing a fact about the payload. */}
+      {record.exerciseType !== null && (
+        <span className="record-source">{record.exerciseType.toLowerCase().replace(/_/g, ' ')}</span>
+      )}
     </li>
   )
 }

@@ -1220,6 +1220,13 @@
         "steps": "{{formatted}} stappen in totaal"
       },
       "run": "{{days}} dagen op rij met een stappenteller"
+    },
+    "sessions": {
+      "label": "Beste losse sessie",
+      "basis": "Gelezen uit de trainingen zelf, niet uit een dag vol trainingen.",
+      "longest": "Langste sessie",
+      "furthest": "Verste sessie",
+      "fastest-km": "Snelste kilometer"
     }
   }
 }

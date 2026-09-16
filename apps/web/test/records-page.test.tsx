@@ -35,7 +35,7 @@ const PERSON: Session = {
 
 const EMPTY: AllTime = {
   span: { from: '2026-01-01', to: '2026-01-31', days: 31 },
-  records: [], eddington: null, milestones: [],
+  records: [], sessionRecords: [], eddington: null, milestones: [],
 }
 
 /** The page's own query key pre-seeded: an unseeded query reaches the real network here. */
@@ -72,7 +72,7 @@ describe('the all-time page', () => {
       ...EMPTY,
       records: [{
         metric: 'steps', tier: 'merged', localDate: '2026-03-14', value: 21000,
-        from: '2026-01-21', days: 235,
+        from: '2026-01-21', days: 235, sourceName: null,
       }],
     })
     expect(text("[data-metric='steps'] .record-value")).toBe('21,000')
@@ -87,7 +87,7 @@ describe('the all-time page', () => {
       ...EMPTY,
       records: [{
         metric: 'floors', tier: 'provider', localDate: '2026-02-02', value: 42,
-        from: '2024-08-25', days: 230,
+        from: '2024-08-25', days: 230, sourceName: null,
       }],
     })
     expect(text("[data-metric='floors'] .record-value")).toBe('42')
@@ -98,7 +98,7 @@ describe('the all-time page', () => {
     // and must not present as covering the lot.
     mountPage({
       span: { from: '2024-08-25', to: '2026-09-14', days: 750 },
-      records: [], milestones: [],
+      records: [], sessionRecords: [], milestones: [],
       eddington: { e: 13, from: '2026-01-21', days: 235 },
     })
     expect(text('.eddington-value')).toBe('13')
@@ -118,7 +118,7 @@ describe('the all-time page', () => {
       ...EMPTY,
       records: [{
         metric: 'distance', tier: 'merged', localDate: '2026-03-14', value: 10_000_000,
-        from: '2026-01-21', days: 235,
+        from: '2026-01-21', days: 235, sourceName: null,
       }],
     })
     expect(text("[data-metric='distance'] .record-value")).toBe('10.0 km')
@@ -139,11 +139,52 @@ describe('the all-time page', () => {
       ...EMPTY,
       records: [{
         metric: 'steps', tier: 'merged', localDate: '2026-03-14', value: 21000,
-        from: '2026-01-21', days: 235,
+        from: '2026-01-21', days: 235, sourceName: null,
       }],
     })
     const from = new Date('2026-01-21T00:00:00Z').toLocaleString('en', { dateStyle: 'medium' })
     expect(text("[data-metric='steps'] .record-window")).toBe(`of 235 days since ${from}`)
+  })
+
+  it('shows the three session records in the units each one is measured in', () => {
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000 },
+        { kind: 'furthest', sessionId: 'b', localDate: '2026-09-12', exerciseType: 'RUNNING', value: 12_850_000 },
+        { kind: 'fastest-km', sessionId: 'c', localDate: '2026-06-16', exerciseType: 'RUNNING', value: 308.5 },
+      ],
+    })
+    expect(text("[data-record='longest'] .record-value")).toBe('4h 24m')
+    expect(text("[data-record='furthest'] .record-value")).toBe('12.9 km')
+    // 308.5s rounds to 5:09, not down to 5:08. A record must never render faster than it was
+    // run, so the half-second goes against the runner rather than for them.
+    expect(text("[data-record='fastest-km'] .record-value")).toBe('5:09 / km')
+  })
+
+  it('shows only the session records the sessions support', () => {
+    // A household that only lifts has a longest session and no distance at all. A card reading
+    // "furthest: none" would be worse than no card.
+    mountPage({
+      ...EMPTY,
+      sessionRecords: [
+        { kind: 'longest', sessionId: 'a', localDate: '2026-06-19', exerciseType: 'WORKOUT', value: 60 * 60_000 },
+      ],
+    })
+    expect(container!.querySelectorAll('[data-record]')).toHaveLength(1)
+    expect(container!.querySelector("[data-record='furthest']")).toBeNull()
+  })
+
+  it('names the device that set a record, and says nothing when it cannot', () => {
+    mountPage({
+      ...EMPTY,
+      records: [
+        { metric: 'steps', tier: 'merged', localDate: '2026-03-14', value: 21000, from: '2026-01-21', days: 235, sourceName: 'Pixel Watch 4' },
+        { metric: 'floors', tier: 'provider', localDate: '2026-02-02', value: 42, from: '2024-08-25', days: 230, sourceName: null },
+      ],
+    })
+    expect(text("[data-metric='steps'] .record-source")).toBe('Pixel Watch 4')
+    expect(container!.querySelector("[data-metric='floors'] .record-source")).toBeNull()
   })
 
   it('calls a first "first recorded", because it marks when syncing began', () => {
@@ -160,7 +201,7 @@ describe('the all-time page', () => {
   })
 
   it('says the archive is empty rather than rendering blank sections', () => {
-    mountPage({ span: { from: '', to: '', days: 0 }, records: [], eddington: null, milestones: [] })
+    mountPage({ span: { from: '', to: '', days: 0 }, records: [], sessionRecords: [], eddington: null, milestones: [] })
     expect(text('.all-time-empty')).toBe('Nothing on record yet. Sync some history and come back.')
   })
 })

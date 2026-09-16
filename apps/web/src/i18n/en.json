@@ -1220,6 +1220,13 @@
         "steps": "{{formatted}} steps in total"
       },
       "run": "{{days}} days in a row with a step count"
+    },
+    "sessions": {
+      "label": "Best single session",
+      "basis": "Read from the workouts themselves, not from a day of them.",
+      "longest": "Longest session",
+      "furthest": "Furthest session",
+      "fastest-km": "Fastest kilometre"
     }
   }
 }

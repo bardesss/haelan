@@ -39,12 +39,16 @@ const insertRun = (from: string, days: number, o: { metric?: string, source?: st
   }
 }
 
-const insertSession = (o: { kind: 'exercise' | 'sleep', localDate: string, id: string }) => {
+const insertSession = (o: {
+  kind: 'exercise' | 'sleep', localDate: string, id: string,
+  minutes?: number, attrs?: Record<string, unknown>,
+}) => {
   const startMs = Date.parse(`${o.localDate}T08:00:00Z`)
   test.db.insert(sessions).values({
     id: o.id, personId: 'p1', sourceId: 'watch', kind: o.kind, externalId: o.id,
-    startMs, startOffsetMinutes: 0, endMs: startMs + 3_600_000, endOffsetMinutes: 0,
-    localDate: o.localDate, attrs: '{}', rawPayloadId: null,
+    startMs, startOffsetMinutes: 0, endMs: startMs + (o.minutes ?? 60) * 60_000,
+    endOffsetMinutes: 0, localDate: o.localDate,
+    attrs: JSON.stringify(o.attrs ?? {}), rawPayloadId: null,
   }).run()
 }
 
@@ -156,6 +160,69 @@ describe('readAllTime', () => {
       { kind: 'first', metric: 'sleep', localDate: '2026-01-24' },
       { kind: 'first', metric: 'exercise', localDate: '2026-01-27' },
     ])
+  })
+
+  it('reads the three session records out of what the payloads recorded', () => {
+    insertSession({
+      kind: 'exercise', id: 'long', localDate: '2026-06-19', minutes: 264,
+      attrs: { exerciseType: 'CARDIO_WORKOUT' },
+    })
+    insertSession({
+      kind: 'exercise', id: 'far', localDate: '2026-09-12', minutes: 70,
+      attrs: {
+        exerciseType: 'RUNNING',
+        metricsSummary: { distanceMillimeters: 12_850_000 },
+        splits: [
+          { splitType: 'DISTANCE', activeDuration: '308.5s', metricsSummary: { distanceMillimeters: 1_000_000 } },
+          // Not a kilometre, so it must not win the pace record by being short.
+          { splitType: 'DISTANCE', activeDuration: '120s', metricsSummary: { distanceMillimeters: 400_000 } },
+        ],
+      },
+    })
+
+    const { sessionRecords } = readAllTime(test.db, 'p1')
+    expect(sessionRecords.find((r) => r.kind === 'longest')).toMatchObject({
+      sessionId: 'long', exerciseType: 'CARDIO_WORKOUT', value: 264 * 60_000,
+    })
+    expect(sessionRecords.find((r) => r.kind === 'furthest')).toMatchObject({
+      sessionId: 'far', value: 12_850_000,
+    })
+    expect(sessionRecords.find((r) => r.kind === 'fastest-km')).toMatchObject({
+      sessionId: 'far', value: 308.5,
+    })
+  })
+
+  it('does not let an excluded session hold a session record', () => {
+    insertSession({ kind: 'exercise', id: 'excluded', localDate: '2026-01-01', minutes: 300 })
+    insertSession({ kind: 'exercise', id: 'kept', localDate: '2026-01-02', minutes: 60 })
+    seedOverride(test.db, {
+      personId: 'p1', scope: 'session', action: 'exclude',
+      targetKey: JSON.stringify({ session: 'excluded' }), reason: 'test',
+    })
+
+    expect(readAllTime(test.db, 'p1').sessionRecords.find((r) => r.kind === 'longest'))
+      .toMatchObject({ sessionId: 'kept' })
+  })
+
+  it('names the source that set a daily record', () => {
+    // The merged row carries the mix that produced it, so a record can say which device was on
+    // the wrist that day rather than leaving an unattributed number.
+    test.db.insert(daily).values({
+      personId: 'p1', localDate: '2026-03-14', metric: 'steps', agg: 'sum', source: 'merged',
+      value: 21_000, coverage: 0.9,
+      sourceMix: JSON.stringify([{ source: 'watch', hours: 20 }]),
+      derivationVersion: DERIVATION_VERSION, updatedAtMs: null,
+    }).run()
+
+    expect(readAllTime(test.db, 'p1').records.find((r) => r.metric === 'steps'))
+      .toMatchObject({ sourceName: 'Watch' })
+  })
+
+  it('leaves a record unattributed rather than guessing when the row carries no mix', () => {
+    // Provider rows never carry one - rollup.ts writes it null - and floors is provider only.
+    insertDaily({ metric: 'floors', source: 'provider', localDate: '2026-01-01', value: 12 })
+    expect(readAllTime(test.db, 'p1').records.find((r) => r.metric === 'floors'))
+      .toMatchObject({ sourceName: null })
   })
 
   it('marks each millionth cumulative step on the day it was crossed', () => {
