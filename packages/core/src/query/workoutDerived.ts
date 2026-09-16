@@ -3,14 +3,13 @@ import type { DbOrTx } from '../db/open.ts'
 import { daily, people } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { workoutDetail } from '../api/workoutSummary.ts'
-import { edwardsLoad, banisterLoad, coefficientFor, ageAt } from '../api/cardioLoad.ts'
+import { edwardsLoadFromSeconds, banisterLoad, coefficientFor, ageAt } from '../api/cardioLoad.ts'
 import type { CardioLoad } from '../api/cardioLoad.ts'
 import { fillSplitHeartRate } from '../api/splitHeartRate.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
 import { readSessionHeartRateMinutes } from './sessionHeartRate.ts'
 import type { WorkoutSession } from './sessions.ts'
 
-const SECONDS_PER_MINUTE = 60
 
 /**
  * One workout's cardio load, both models.
@@ -34,14 +33,10 @@ export function readWorkoutCardioLoad(db: DbOrTx, input: {
   if (input.session.kind !== 'exercise') return null
 
   const detail = workoutDetail(input.session.attrs)
-  const zones = detail.zones
-  const toMinutes = (seconds: number | null) => (seconds === null ? null : seconds / SECONDS_PER_MINUTE)
-  const edwards = zones === null ? null : edwardsLoad({
-    lightMinutes: toMinutes(zones.lightSeconds),
-    moderateMinutes: toMinutes(zones.moderateSeconds),
-    vigorousMinutes: toMinutes(zones.vigorousSeconds),
-    peakMinutes: toMinutes(zones.peakSeconds),
-  })
+  // Through the shared helper, not a second inline conversion. workoutComparison.ts scores this
+  // same figure against recent workouts, and two copies of `/ 60` are how the number on the tile
+  // and the number it is compared against come to round differently.
+  const edwards = edwardsLoadFromSeconds(detail.zones)
 
   const banister = readBanister(db, input)
 

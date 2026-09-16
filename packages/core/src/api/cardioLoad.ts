@@ -53,6 +53,41 @@ export function edwardsLoad(zones: ZoneMinutes): number | null {
   return load
 }
 
+const SECONDS_PER_MINUTE = 60
+
+/**
+ * Edwards TRIMP from a session's own zone durations, which are stored in seconds.
+ *
+ * The conversion lives here rather than at each call site because there are two of them - the
+ * derive that writes the daily row, and the comparison that scores one workout against recent ones
+ * - and a second inline `/ 60` is how the number on a tile and the number it is compared against
+ * come to disagree about rounding.
+ *
+ * The parameter is spelled structurally instead of importing HeartRateZoneDurations from
+ * api/workoutSummary.ts. This file is the `./cardio-load` subpath and cardio-load.test.ts asserts
+ * it imports nothing at all, which is what keeps it safe to pull into a browser bundle; a type-only
+ * import would be erased by the compiler and still fail that assertion, which reads the source.
+ *
+ * Null for a session with no zone breakdown, which is not the same as a load of zero: the first is
+ * a workout whose device recorded no zones, the second is one that recorded four zeroes.
+ */
+export function edwardsLoadFromSeconds(zones: {
+  lightSeconds: number | null
+  moderateSeconds: number | null
+  vigorousSeconds: number | null
+  peakSeconds: number | null
+} | null): number | null {
+  if (zones === null) return null
+  const toMinutes = (seconds: number | null) =>
+    (seconds === null ? null : seconds / SECONDS_PER_MINUTE)
+  return edwardsLoad({
+    lightMinutes: toMinutes(zones.lightSeconds),
+    moderateMinutes: toMinutes(zones.moderateSeconds),
+    vigorousMinutes: toMinutes(zones.vigorousSeconds),
+    peakMinutes: toMinutes(zones.peakSeconds),
+  })
+}
+
 const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /**

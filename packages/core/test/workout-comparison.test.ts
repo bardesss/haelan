@@ -95,7 +95,62 @@ describe('comparing a workout against recent ones of the same type', () => {
   it('answers no facets at all when nothing was compared', () => {
     const result = compareWorkout(subject, [])
     expect(result).toEqual({
-      exerciseType: 'RUNNING', of: 0, reason: 'too-few', pace: null, heartRate: null, distance: null,
+      exerciseType: 'RUNNING', of: 0, reason: 'too-few',
+      pace: null, heartRate: null, distance: null, cardioLoad: null,
     })
+  })
+})
+
+/**
+ * Cardio load, compared the way the other three measures are.
+ *
+ * The workout page prints a load of 86 TRIMP and nothing anywhere says whether that is a lot. It
+ * cannot be answered in the abstract - a training impulse has no good or bad value, only a value
+ * relative to what this person usually does - and this card already exists to answer exactly that
+ * shape of question, as a count rather than a rank.
+ *
+ * Deliberately NOT a band or a verdict. TrainingLoadCard refuses to read this family of figure as
+ * injury risk, and says why: a personal archive is not licensed to say that. A colour here would
+ * cross the same line more quietly.
+ *
+ * Higher is "more", not "better", and the facet comparator is fine with that: it counts how many
+ * were lower, and the copy above it says harder rather than better.
+ */
+describe('comparing a workout on cardio load', () => {
+  const zones = (light: number, moderate: number, vigorous: number, peak: number) => ({
+    heartRateZoneDurations: {
+      lightTime: `${light}s`, moderateTime: `${moderate}s`,
+      vigorousTime: `${vigorous}s`, peakTime: `${peak}s`,
+    },
+  })
+
+  // 600s in each zone is 10 minutes each: 10*1 + 10*2 + 10*3 + 10*4 = 100.
+  const loaded = (id: string, daysAgo: number, seconds: number) =>
+    run(id, daysAgo, zones(seconds, seconds, seconds, seconds))
+
+  it('counts how many recent workouts carried less load than this one', () => {
+    const heavy = run('subject', 0, zones(1200, 1200, 1200, 1200))
+    const result = compareWorkout(heavy, [loaded('a', 1, 600), loaded('b', 2, 600), loaded('c', 3, 600)])
+    expect(result.cardioLoad).toEqual({ better: 3, of: 3 })
+  })
+
+  it('counts none when this workout was the lightest of them', () => {
+    const light = run('subject', 0, zones(60, 60, 60, 60))
+    const result = compareWorkout(light, [loaded('a', 1, 600), loaded('b', 2, 600), loaded('c', 3, 600)])
+    expect(result.cardioLoad).toEqual({ better: 0, of: 3 })
+  })
+
+  // The ordinary case on a real archive rather than a guard against a rarity: a device that
+  // recorded no zone breakdown has no load, and a session compared against three of those has
+  // nothing to say.
+  it('drops the facet when the subject recorded no zones', () => {
+    const result = compareWorkout(subject, [loaded('a', 1, 600), loaded('b', 2, 600), loaded('c', 3, 600)])
+    expect(result.cardioLoad).toBeNull()
+  })
+
+  it('drops the facet when too few of the compared workouts recorded zones', () => {
+    const heavy = run('subject', 0, zones(1200, 1200, 1200, 1200))
+    const result = compareWorkout(heavy, [loaded('a', 1, 600), run('b', 2), run('c', 3)])
+    expect(result.cardioLoad).toBeNull()
   })
 })

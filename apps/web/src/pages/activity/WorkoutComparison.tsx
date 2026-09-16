@@ -41,6 +41,13 @@ export function WorkoutComparisonCard({ comparison, isPending, isError }: {
       : t('activity.workout.comparison.heartRate', { better: comparison.heartRate.better, of: comparison.heartRate.of }),
     comparison.distance === null ? null
       : t('activity.workout.comparison.distance', { better: comparison.distance.better, of: comparison.distance.of }),
+    // Last, because it is the only one of the four a reader cannot judge without it. A pace is
+    // fast or slow on its own terms; a cardio load of 86 is a number with no scale attached until
+    // this sentence gives it one. "Harder than", never a band or a colour - TrainingLoadCard
+    // refuses to read this family of figure as risk and says why, and a verdict here would cross
+    // the same line more quietly.
+    comparison.cardioLoad === null ? null
+      : t('activity.workout.comparison.cardioLoad', { better: comparison.cardioLoad.better, of: comparison.cardioLoad.of }),
   ].filter((sentence): sentence is string => sentence !== null)
 
   if (sentences.length === 0) return null

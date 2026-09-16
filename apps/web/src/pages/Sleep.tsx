@@ -498,7 +498,7 @@ export function Sleep() {
             `Activity.tsx` mounts its own SessionList with `resolved` for that identical reason. A
             night list built from the unresolved value would query a source the control row above
             it is not showing, so the two would read as two different periods for the one page. */}
-        <Card span={12} label={t('sleep.nights.label')}>
+        <Card span={12} measured label={t('sleep.nights.label')}>
           <NightList controls={resolved} />
         </Card>
       </div>

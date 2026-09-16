@@ -21,7 +21,7 @@ describe('the comparison card', () => {
   it('states a count, not a rank', () => {
     const html = renderToStaticMarkup(<WorkoutComparisonCard comparison={{
       exerciseType: 'RUNNING', of: 12, reason: null,
-      pace: { better: 8, of: 12 }, heartRate: null, distance: { better: 4, of: 12 },
+      pace: { better: 8, of: 12 }, heartRate: null, distance: { better: 4, of: 12 }, cardioLoad: null,
     }} isPending={false} isError={false} />)
     expect(html).toContain('activity.workout.comparison.pace')
     expect(html).not.toContain('activity.workout.comparison.rank')
@@ -29,15 +29,43 @@ describe('the comparison card', () => {
 
   it('withholds itself with its own reason when there are too few prior workouts', () => {
     const html = renderToStaticMarkup(<WorkoutComparisonCard comparison={{
-      exerciseType: 'RUNNING', of: 2, reason: 'too-few', pace: null, heartRate: null, distance: null,
+      exerciseType: 'RUNNING', of: 2, reason: 'too-few',
+      pace: null, heartRate: null, distance: null, cardioLoad: null,
     }} isPending={false} isError={false} />)
     expect(html).toContain('activity.workout.comparison.tooFew')
   })
 
   it('renders no card at all when the workout has no type to compare within', () => {
     expect(renderToStaticMarkup(<WorkoutComparisonCard comparison={{
-      exerciseType: null, of: 0, reason: 'no-type', pace: null, heartRate: null, distance: null,
+      exerciseType: null, of: 0, reason: 'no-type',
+      pace: null, heartRate: null, distance: null, cardioLoad: null,
     }} isPending={false} isError={false} />)).toBe('')
+  })
+})
+
+/**
+ * Cardio load as a fourth sentence on this card.
+ *
+ * The workout page prints "86 TRIMP" and nothing tells a reader whether that is a lot. It has no
+ * answer in the abstract - a training impulse is a measure of what a session cost, and 86 means
+ * something only against what this person's sessions usually cost - so the answer belongs on the
+ * card that already compares this workout to recent ones, in the same count-not-rank form.
+ */
+describe('the comparison card on cardio load', () => {
+  const withLoad = (cardioLoad: { better: number, of: number } | null) => renderToStaticMarkup(
+    <WorkoutComparisonCard comparison={{
+      exerciseType: 'RUNNING', of: 20, reason: null,
+      pace: null, heartRate: null, distance: null, cardioLoad,
+    }} isPending={false} isError={false} />,
+  )
+
+  it('says how many recent workouts this one was harder than', () => {
+    expect(withLoad({ better: 14, of: 20 })).toContain('activity.workout.comparison.cardioLoad')
+  })
+
+  it('renders no card when cardio load is the only facet and it is absent', () => {
+    // The existing rule for every other facet: a card with no sentence on it is not a card.
+    expect(withLoad(null)).toBe('')
   })
 })
 

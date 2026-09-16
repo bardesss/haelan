@@ -1,7 +1,45 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { edwardsLoad, ageAt, banisterLoad, coefficientFor } from '../src/api/cardioLoad.ts'
+import {
+  edwardsLoad, edwardsLoadFromSeconds, ageAt, banisterLoad, coefficientFor,
+} from '../src/api/cardioLoad.ts'
+
+/**
+ * The seconds-to-minutes step, in one place.
+ *
+ * A session's zone durations are stored in seconds (workoutSummary's HeartRateZoneDurations) and
+ * Edwards is defined on minutes, so every caller of edwardsLoad has to divide first. There were
+ * two callers coming - the derive that writes the daily row, and the comparison that scores a
+ * workout against recent ones - and a second inline `/ 60` is how a rounding rule drifts between
+ * the number on a tile and the number it is compared against.
+ *
+ * It takes the shape structurally rather than importing HeartRateZoneDurations, because this file
+ * is the ./cardio-load subpath and its own test below asserts it imports nothing at all.
+ */
+describe('Edwards TRIMP from zone seconds', () => {
+  it('converts seconds to the minutes Edwards is defined on', () => {
+    expect(edwardsLoadFromSeconds({
+      lightSeconds: 600, moderateSeconds: 600, vigorousSeconds: 600, peakSeconds: 600,
+    })).toBe(100)
+  })
+
+  it('answers null for a session with no zone breakdown at all', () => {
+    expect(edwardsLoadFromSeconds(null)).toBeNull()
+  })
+
+  it('treats an absent zone among present ones as no time there, not as a missing load', () => {
+    expect(edwardsLoadFromSeconds({
+      lightSeconds: 1800, moderateSeconds: null, vigorousSeconds: null, peakSeconds: null,
+    })).toBe(30)
+  })
+
+  it('keeps a recorded zero as a zero', () => {
+    expect(edwardsLoadFromSeconds({
+      lightSeconds: 0, moderateSeconds: 0, vigorousSeconds: 0, peakSeconds: 0,
+    })).toBe(0)
+  })
+})
 
 describe('Edwards TRIMP', () => {
   it('weights each zone by its rank', () => {

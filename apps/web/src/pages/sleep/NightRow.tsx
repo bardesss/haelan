@@ -36,10 +36,11 @@ export function NightRow({ night }: { night: Night }) {
       <div className="night-row">
         <div className="night-row-main">
           <span className="night-row-primary">
-            {/* Trailing space for the same reason SessionRow's own sr-only date carries one: a
-                screen reader arriving at a row by arrow key has no guarantee it heard the date
-                heading above it, and without the space the two text nodes concatenate. */}
-            <span className="sr-only">{`${formatSessionDateHeading(night.localDate, language)} `}</span>
+            {/* Visible, and the row's first column. It used to be an sr-only span, because the
+                date lived in a heading above the row and a screen reader arriving here by arrow
+                key had no guarantee it had heard that heading. The date is in the row now, so the
+                guarantee is structural and a second copy would read it out twice. */}
+            <span className="night-row-date">{formatSessionDateHeading(night.localDate, language)}</span>
             <span className="night-row-duration">{formatDuration(minutes)}</span>
             <span className="night-row-source">{nameOf(night.sourceId)}</span>
           </span>

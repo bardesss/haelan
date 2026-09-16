@@ -136,3 +136,32 @@ describe('the night list', () => {
     expect(container?.querySelector('.night-row-excluded')).toBeNull()
   })
 })
+
+describe('where a night states its date', () => {
+  // This list used to mirror SessionList's shape: a date heading, then the rows under it. That
+  // shape earns its keep on Activity, where one day really can hold three sessions. Here it cannot:
+  // NightList's own rule is one row per date, so every "group" held exactly one row and each night
+  // cost a heading, a group gap and a row - three vertical elements to say one thing, which is why
+  // sixteen nights filled a screen and a half. The date belongs in the row, as its first column.
+  it('puts the date in the row rather than in a heading of its own above it', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8), night('2026-08-04', 'watch', 7)]),
+      <NightList controls={CONTROLS} />)
+    expect(container?.querySelectorAll('.night-date-heading')).toHaveLength(0)
+    expect(container?.querySelectorAll('.night-row-date')).toHaveLength(2)
+  })
+
+  it('states each row\'s own date, not the same one twice', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8), night('2026-08-04', 'watch', 7)]),
+      <NightList controls={CONTROLS} />)
+    const dates = Array.from(container!.querySelectorAll('.night-row-date')).map((e) => e.textContent)
+    expect(new Set(dates).size).toBe(2)
+  })
+
+  // The sr-only date existed because a screen reader arriving at a row by arrow key had no
+  // guarantee it heard the heading above it. With the date inside the row that guarantee is
+  // structural, and keeping both would read the date out twice per row.
+  it('does not also announce the date a second time', () => {
+    mount(clientWith([night('2026-08-03', 'watch', 8)]), <NightList controls={CONTROLS} />)
+    expect(container?.querySelectorAll('.night-row .sr-only')).toHaveLength(0)
+  })
+})

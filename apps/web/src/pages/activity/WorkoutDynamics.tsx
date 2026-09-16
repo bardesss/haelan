@@ -33,11 +33,23 @@ export function WorkoutDynamics({ detail }: { detail: WorkoutDetail }) {
   ].filter((tile): tile is Tile => tile !== null)
 
   return (
-    <Card span={12} label={t('activity.workout.dynamics.label')}>
+    // The basis sits on the Card, not on each tile. Every one of these five is read straight off
+    // the payload, so a basis per tile printed one identical sentence five times; said once above
+    // them it is the same claim, made once.
+    <Card span={12} label={t('activity.workout.dynamics.label')}
+      basis={t('activity.workout.basis.provider')}>
       <div className="workout-dynamics">
+        {/* The wrapper is load bearing. StatTile is a fragment - a header, a value and a basis as
+            three siblings, with the box left to its caller - and every other call site gives it a
+            Card. Dropped bare into this grid, each tile contributed three grid items instead of
+            one, so five tiles became fifteen and the browser laid label, value and basis out in a
+            single run across the row. A Card each would fix it and cost the group label above
+            them, which is the one thing saying these five are a set. */}
         {tiles.map((tile) => (
-          <StatTile key={tile.key} label={t(`activity.workout.dynamics.${tile.key}`)}
-            value={tile.value} unit={tile.unit} basis={t('activity.workout.basis.provider')} />
+          <div key={tile.key} className="workout-dynamic-tile">
+            <StatTile label={t(`activity.workout.dynamics.${tile.key}`)}
+              value={tile.value} unit={tile.unit} />
+          </div>
         ))}
       </div>
     </Card>

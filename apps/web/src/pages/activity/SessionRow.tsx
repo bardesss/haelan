@@ -28,6 +28,19 @@ import { formatPace } from './pace.js'
  * would undo that distinction right before it reaches a reader, which is the one thing this
  * component exists to not do.
  */
+/**
+ * What sits between two figures on a row.
+ *
+ * A middot rather than a hyphen, and it is not decoration: "445 kcal - 151 bpm" puts a minus sign
+ * between two numbers, so the eye reads an arithmetic relation that does not exist before it reads
+ * a list. Both lines of this row are lists of unrelated measurements, which is exactly the case a
+ * hyphen is wrong for.
+ *
+ * Not translated. It is punctuation rather than copy, and no locale this app ships spells a list
+ * separator differently.
+ */
+const SEPARATOR = ' · '
+
 export function SessionRow({ session }: { session: WorkoutSession }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -86,11 +99,11 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
             <span className="session-row-type">{typeText}</span>
             <span className="session-row-duration">{durationText}</span>
           </span>
-          {stats.length > 0 && <span className="session-row-stats">{stats.join(' - ')}</span>}
+          {stats.length > 0 && <span className="session-row-stats">{stats.join(SEPARATOR)}</span>}
         </div>
         {/* Omitted outright, not rendered empty: the fourth test pins a session with none of these
             fields to one line, and an empty div here would still be a second line, just a blank one. */}
-        {detail.length > 0 && <div className="session-row-detail">{detail.join(' - ')}</div>}
+        {detail.length > 0 && <div className="session-row-detail">{detail.join(SEPARATOR)}</div>}
         {/* excludeReason can be null even when excluded is true (a person can exclude without
             typing a reason), so this falls back to a bare "Excluded" rather than printing "Excluded:
             " with nothing after the colon. */}

@@ -6,7 +6,6 @@ import { NightRow } from './NightRow.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { EmptyState } from '../../components/EmptyState.js'
-import { formatSessionDateHeading } from '../../format.js'
 import type { PageControlsState } from '../../controls/usePageControls.js'
 
 /**
@@ -42,13 +41,13 @@ export function NightList({ controls }: { controls: PageControlsState }) {
         <span className="night-list-count">{t('sleep.nights.count', { count: nights.length })}</span>
       </div>
       <p className="basis">{t('sleep.nights.basis')}</p>
+      {/* A flat list, not dates grouping rows. SessionList's shape - a heading, then the rows
+          under it - earns its keep on Activity, where one day really can hold three sessions.
+          Here it cannot: this component's own rule, stated above, is one row per date, so every
+          group held exactly one row and each night cost a heading, a group gap and a row to say
+          one thing. The date is a column of the row instead. */}
       <div className="night-groups">
-        {nights.map((night) => (
-          <div key={night.localDate} className="night-date-group">
-            <h3 className="night-date-heading">{formatSessionDateHeading(night.localDate, i18n.language)}</h3>
-            <NightRow night={night} />
-          </div>
-        ))}
+        {nights.map((night) => <NightRow key={night.localDate} night={night} />)}
       </div>
     </div>
   )

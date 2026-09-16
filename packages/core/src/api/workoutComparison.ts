@@ -1,4 +1,5 @@
-import { workoutSummary } from './workoutSummary.ts'
+import { workoutSummary, workoutDetail } from './workoutSummary.ts'
+import { edwardsLoadFromSeconds } from './cardioLoad.ts'
 
 /**
  * One workout against recent ones of the same type, as a count rather than a rank.
@@ -42,9 +43,21 @@ export interface WorkoutComparison {
   pace: ComparisonFacet | null
   heartRate: ComparisonFacet | null
   distance: ComparisonFacet | null
+  /**
+   * Edwards TRIMP, and the only one of these four whose figure a reader cannot interpret alone.
+   * A pace is fast or slow on its own terms and a distance is long or short; a training impulse of
+   * 86 means nothing without knowing what this person's workouts usually come to. Higher counts as
+   * "more" rather than "better" here - the copy above it says harder - and the tie rule is the
+   * same as the other three's.
+   *
+   * Edwards rather than Banister, because Edwards needs only the session's own zone durations.
+   * Banister needs a resting and a maximum heart rate off the person's profile, which this module
+   * has no access to and must not gain: it is a browser-reachable subpath.
+   */
+  cardioLoad: ComparisonFacet | null
 }
 
-const WITHHELD = { pace: null, heartRate: null, distance: null } as const
+const WITHHELD = { pace: null, heartRate: null, distance: null, cardioLoad: null } as const
 
 /**
  * A facet is dropped rather than reported thin: fewer than COMPARISON_MIN prior workouts recorded
@@ -84,7 +97,13 @@ export function compareWorkout(
     .filter((candidate) => candidate.startMs < subject.startMs && candidate.startMs >= windowStart)
     // A person who excluded a session has already said it should not count.
     .filter((candidate) => !candidate.excluded)
-    .map((candidate) => ({ candidate, summary: workoutSummary(candidate.attrs) }))
+    .map((candidate) => ({
+      candidate,
+      summary: workoutSummary(candidate.attrs),
+      // The zone durations live on the detail rather than the summary, so this is a second pass
+      // over the same attrs. Bounded by COMPARISON_LIMIT, which is twenty.
+      load: edwardsLoadFromSeconds(workoutDetail(candidate.attrs).zones),
+    }))
     .filter((entry) => entry.summary.exerciseType === exerciseType)
     .sort((a, b) => b.candidate.startMs - a.candidate.startMs)
     .slice(0, COMPARISON_LIMIT)
@@ -100,5 +119,13 @@ export function compareWorkout(
     pace: facet(subjectSummary.paceSecondsPerKm, compared.map((e) => e.summary.paceSecondsPerKm), true),
     heartRate: facet(subjectSummary.averageHeartRateBpm, compared.map((e) => e.summary.averageHeartRateBpm), true),
     distance: facet(subjectSummary.distanceMeters, compared.map((e) => e.summary.distanceMeters), false),
+    // false: a bigger load counts, the same direction as distance. "Better" is the comparator's
+    // word for it; the sentence a reader sees says harder, because a training impulse is a measure
+    // of what a session cost rather than of how well it went.
+    cardioLoad: facet(
+      edwardsLoadFromSeconds(workoutDetail(subject.attrs).zones),
+      compared.map((e) => e.load),
+      false,
+    ),
   }
 }

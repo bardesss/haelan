@@ -287,11 +287,13 @@ describe('the Dashboard round trip', () => {
     // 5 stat tiles (steps, resting heart rate, sleep, mean heart rate, and recovery since the M3
     // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus the five
     // remaining non-tile cards task 10 restored (heart rate range, flagged days, sleep stages,
-    // sleep schedule, anomalies), plus the three insight cards this task added (steps,
-    // resting_heart_rate, sleep_asleep_minutes), 13 not 4 or 10: this test predates all of their
-    // returns and only ever meant "every card on the page", not "exactly the tiles". Daily steps
-    // (the heatmap) is not among them any more: M3d2 moved it to Activity.tsx.
-    expect(container!.querySelectorAll('.card')).toHaveLength(13)
+    // sleep schedule), plus the three insight cards this task added (steps, resting_heart_rate,
+    // sleep_asleep_minutes), 12 not 4 or 10: this test predates all of their returns and only ever
+    // meant "every card on the page", not "exactly the tiles". Daily steps (the heatmap) is not
+    // among them any more: M3d2 moved it to Activity.tsx. Twelve rather than thirteen since the
+    // anomalies placeholder was removed - it was a card whose entire content said that a feature
+    // nobody had scheduled did not exist.
+    expect(container!.querySelectorAll('.card')).toHaveLength(12)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

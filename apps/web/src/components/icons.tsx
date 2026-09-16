@@ -8,6 +8,17 @@ const PATHS: Record<string, React.ReactNode> = {
       <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
     </>
   ),
+  // A trophy, for the page of all-time bests. Placed in rail order rather than alphabetically,
+  // like every entry here: between dashboard and activity, because that is where Sidebar's own
+  // GROUPS puts /records.
+  records: (
+    <>
+      <path d="M8 4h8v5.5a4 4 0 0 1-8 0V4Z" />
+      <path d="M8 5.5H5.6a2.4 2.4 0 0 0 0 4.8H8" />
+      <path d="M16 5.5h2.4a2.4 2.4 0 0 1 0 4.8H16" />
+      <path d="M12 13.5V17M9 20h6" />
+    </>
+  ),
   activity: <path d="M4 19v-6M9.3 19V6M14.7 19v-9M20 19v-4" />,
   sleep: <path d="M20.5 14.8A8.5 8.5 0 0 1 9.2 3.5a8.5 8.5 0 1 0 11.3 11.3Z" />,
   recovery: <path d="M13 3 5.5 13.6h5.6L10 21l7.5-10.6h-5.6L13 3Z" />,

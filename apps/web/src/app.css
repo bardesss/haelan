@@ -206,6 +206,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .main { flex: 1; padding: var(--space-5); min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
 .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+/* A card that holds reading matter rather than a chart stops at a measure.
+   A list of rows has a natural width the way a paragraph does, and a `span={12}` card is about
+   1400px of frame on a wide monitor around content that wants half of it - which is what put a
+   session's name and its heart rate at opposite ends of the screen with nothing between them.
+   An absolute value rather than a smaller span, because a span is a fraction: `span={8}` is 930px
+   here and 1700px on a 2560px monitor, which scales the problem instead of removing it. The span
+   stays 12 so the 900px collapse rule and every phone width below it are untouched. Charts are
+   deliberately excluded - they earn their width. */
+.card-measured { max-width: 46rem; }
 
 /* WorkoutDetail.tsx's own heading, above its `.grid` rather than one of the cards inside it - the
    same "heading, then grid" shape every sibling page's own `<h1>` sits in front of, just with more
@@ -260,6 +269,11 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 /* WorkoutDynamics.tsx's own tile row - up to five StatTiles, fewer when a session recorded fewer
    of the five fields, wrapping onto a second row on a narrow viewport rather than compressing. */
 .workout-dynamics { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
+/* One box per tile. Without it the grid's children are StatTile's own three elements rather than
+   its tiles, and auto-fit flows label, value and basis into separate columns. min-width: 0 for the
+   same reason .session-list carries it: a grid child defaults to min-content and a long label would
+   push the track wider than its share. */
+.workout-dynamic-tile { min-width: 0; }
 
 /* WorkoutComparison.tsx's own sentence list, one per compared facet - a plain list, not a table,
    since each row is a full sentence rather than a value under a column header. */
@@ -540,11 +554,34 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
 }
 .source-name-row:last-child { border-bottom: 0; }
-.source-name-row .input { width: 220px; }
-.source-name-detail { color: var(--text-muted); }
+/* Grows into whatever the row has spare instead of a fixed 220px. The placeholder is the
+   provider's own name, which for a Health Connect row is a package plus a hash, and at 220px it
+   was clipped mid-word - so the field a reader is meant to type into read as broken text. */
+/* No width fits this placeholder. It is the provider's own name, which for a Health Connect row is
+   a package and a hash - 66 characters - so the field grows into whatever the row has spare and
+   then truncates rather than pretending a wider field would solve it. `text-overflow: ellipsis`
+   applies to placeholder text too, and the difference matters: cut at the glyph the field reads as
+   broken, cut at an ellipsis it reads as "there is more of this", which is true, and the whole
+   string is on the identifier line below. */
+.source-name-row .input {
+  flex: 1 1 16rem; min-width: 0; max-width: 26rem; text-overflow: ellipsis;
+}
+/* Its own full-width line, below the name, kind and volume rather than between them. Micro and
+   faint because it is reference material: a reader scanning for which source to rename wants the
+   first line, and only somebody chasing a deep link wants this one. break-all because a 32
+   character hash has no break opportunity in it and would otherwise push the row wider than the
+   card. */
+.source-name-detail {
+  flex-basis: 100%; min-width: 0; word-break: break-all;
+  font-size: var(--font-size-micro); color: var(--text-faint);
+}
 .source-name-kind {
   font-size: var(--font-size-micro); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
 }
+/* Tabular figures because this is the column a reader compares down: telling six identically named
+   sources apart means reading 236 against 3, and equal-width digits are what make that scannable
+   rather than a line-by-line parse. */
+.source-name-volume { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Said only about a source the card is making a claim about - one still reporting carries no such
    line - so this is a statement rather than a column, and it sits in the same muted register as
    .source-name-detail beside it rather than shouting. A dead source is a fact to notice on the
@@ -561,16 +598,42 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 }
 .all-time-empty { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 .record-list, .milestone-list { list-style: none; margin: 0; padding: 0; }
+/* Columns, not a row of flex children. Four tracks shared by both lists on this page - the metric
+   records add a fifth cell, their window, which spans all four beneath the rest. `display: contents`
+   on the row is what lets a cell in one row line up with the cell above it: the spans become items
+   of the list's own grid rather than of a grid per row, which is the only arrangement in which a
+   column exists at all.
+   Under 620px it reverts to the wrapping flex row below, where columns have no room to mean
+   anything. */
+.record-list { display: grid; grid-template-columns: minmax(7rem, 1fr) auto auto auto; }
+/* Subgrid, not `display: contents`. Both would align a cell with the cell above it, and contents
+   costs two things this row needs: a box to hang its own border on - which forced the separator
+   onto the cells, split by which list the row was in - and its standing with
+   grid-collapse.test.ts, which requires every `display: contents` wrapper to appear in the 900px
+   collapse rule. That requirement is right for the wrappers it was written for, which sit inside
+   `.grid` and hand their Card straight to it. This row is two levels below `.grid`, inside a grid
+   of its own, so `grid-column: span 12 !important` on its cells would stack the columns between
+   620px and 900px - the guard would have been satisfied and the layout wrong. */
 .record-row {
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4);
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline;
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle);
   font-size: var(--font-size-sm);
 }
 .record-row:last-child { border-bottom: 0; }
-/* The number is the point of the row, so it carries the weight and the tabular figures that let
-   a column of them line up. */
-.record-metric { min-width: 9rem; }
-.record-value { font-weight: var(--weight-medium); font-variant-numeric: tabular-nums; }
+.record-metric { min-width: 0; }
+.record-value, .record-date, .record-source { padding-left: var(--space-4); }
+/* The window is the row's second line: it cannot be folded into one footnote per card, because
+   these spans genuinely differ per metric - a metric's history can begin long after the archive's,
+   and M6c states each one for that reason. */
+.record-window { grid-column: 1 / -1; padding-top: var(--space-1); }
+/* The number is the point of the row, so it carries the weight and the tabular figures. Right
+   aligned so a column of them shares an edge: tabular figures equalise digit widths within a
+   string and can do nothing across strings of different lengths, which is exactly what this row
+   needed and never had. */
+.record-value {
+  text-align: right; font-weight: var(--weight-medium); font-variant-numeric: tabular-nums;
+}
+.record-source { text-align: right; min-width: 7rem; }
 .record-date, .record-window { color: var(--text-muted); }
 /* The device that set a record, and on a session row the activity it was. Both are quiet: the
    number is the row's subject and these say where it came from. */
@@ -708,13 +771,16 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .night-list { min-width: 0; }
 .night-list-header { display: flex; align-items: baseline; justify-content: space-between; }
 .night-list-count { color: var(--text-secondary); font-size: var(--font-size-sm); }
-.night-groups { display: flex; flex-direction: column; gap: var(--space-4); }
-.night-date-group { min-width: 0; }
-.night-date-heading { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-3) 0 var(--space-1); }
+/* No gap between rows any more: the group gap existed to separate one date's group from the next,
+   and with the date inside the row there are no groups - the rows' own bottom borders separate
+   them, the same way .record-row's do. */
+.night-groups { display: flex; flex-direction: column; }
+/* The date, now the row's own first column rather than a heading above a group of one. */
+.night-row-date { color: var(--text-secondary); font-weight: var(--weight-medium); min-width: 11rem; }
 .night-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .night-row:last-child { border-bottom: 0; }
 .night-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.night-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); min-width: 0; flex-wrap: wrap; }
 .night-row-duration { color: var(--text-primary); font-weight: var(--weight-medium); }
 .night-row-source { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .night-row-clock { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -879,6 +945,35 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    defaults to a min-width of auto, so one long label ("3 maanden") would push its column past its
    share and take the row with it, whatever the column template says. */
 @media (max-width: 620px) {
+  /* Columns need width to mean anything, and at 375px there is none to give: four tracks would
+     each be a few characters wide and the alignment they exist for would cost more than it buys.
+     So the record rows go back to the wrapping flex row they were before, which is what a phone
+     wants anyway. The border returns to the row, which has a box of its own again here.
+
+     This block rather than the earlier 620px block above: `.record-list { display: grid }` sits
+     between the two, and at equal specificity the later rule wins. Put in the earlier block these
+     overrides lost to it, the grid stayed on at 375px with half its rules overridden, and the
+     value and the date drew on top of each other. */
+  .record-list { display: block; }
+  .record-row { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+  .record-row > *, .record-window { padding: 0; }
+  .record-value, .record-source { text-align: left; min-width: 0; }
+  /* The metric keeps the width it had before the columns existed. Without it the name shrinks to
+     its longest word and the cells after it are squeezed until "13 jun 2026" breaks across three
+     lines - which is exactly what handing this rule over to the grid's own track did here. */
+  .record-metric { min-width: 9rem; }
+  /* A date is one thing and reads as one. Broken, it stacks a month and a year under a day and
+     reads as three separate figures. */
+  .record-date { white-space: nowrap; }
+  .record-window { flex-basis: 100%; }
+
+  /* The date takes 11rem on a wide screen so the duration beside it lines up down the list. At
+     375px that width, plus the duration, the source and the clock, came to 406px in a 375px
+     viewport - which layout:check caught and nothing local could, since Playwright will not
+     install on this machine. The alignment it buys is worth nothing on a phone, so the date gives
+     the width back and takes a line of its own. */
+  .night-row-date { min-width: 0; flex-basis: 100%; }
+
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 
   /* `.controls .segmented`, not `.segmented`: the five columns are the five range buttons

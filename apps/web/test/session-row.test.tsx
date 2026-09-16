@@ -103,3 +103,30 @@ describe('SessionRow', () => {
     expect(html).toContain('170')
   })
 })
+
+describe('how a row separates its figures', () => {
+  // A hyphen between two numbers reads as a minus sign: "445 kcal - 151 bpm" invites the eye to
+  // subtract before it parses. A middot carries no arithmetic meaning.
+  //
+  // Asserted on the whole cell rather than with toContain, because a substring check passes on
+  // every half-applied version of this - including one where the first line was converted and the
+  // second was not, which is the mistake this pair of tests exists to catch.
+  // The whole element, not a substring of the page: this file renders to a string and has no DOM
+  // to query, and the exact markup is what pins the separator between BOTH figures rather than
+  // just the presence of one middot somewhere.
+  it('separates the figures on the first line with a middot', () => {
+    const html = render(run({
+      exerciseType: 'RUNNING',
+      metricsSummary: { caloriesKcal: 445, averageHeartRateBeatsPerMinute: '151' },
+    }))
+    expect(html).toContain('<span class="session-row-stats">445 kcal · 151 bpm</span>')
+  })
+
+  it('separates the figures on the second line with a middot', () => {
+    const html = render(run({
+      exerciseType: 'RUNNING',
+      metricsSummary: { distanceMillimeters: 4_000_000, elevationGainMillimeters: 30_000 },
+    }))
+    expect(html).toContain('<div class="session-row-detail">4,0 km · 30 m omhoog</div>')
+  })
+})

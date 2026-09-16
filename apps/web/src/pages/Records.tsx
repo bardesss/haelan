@@ -75,7 +75,7 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
 
       <div className="grid">
         {all.records.length > 0 && (
-          <Card span={12} label={t('records.bests.label')} basis={t('records.bests.basis')}>
+          <Card span={12} measured label={t('records.bests.label')} basis={t('records.bests.basis')}>
             <ul className="record-list">
               {all.records.map((record) => (
                 <RecordRow key={record.metric} record={record} t={t} language={language} />
@@ -85,7 +85,7 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
         )}
 
         {all.sessionRecords.length > 0 && (
-          <Card span={12} label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
+          <Card span={12} measured label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
             <ul className="record-list">
               {all.sessionRecords.map((record) => (
                 <SessionRecordRow key={record.kind} record={record} t={t} language={language} />
@@ -140,12 +140,14 @@ function RecordRow({ record, t, language }: {
       <span className="record-metric">{t(`records.metric.${record.metric}`)}</span>
       <span className="record-value">{recordValue(record.metric, record.value, language)}</span>
       <span className="record-date">{onDate(record.localDate, language)}</span>
-      {/* Only when one device can be named. A merged day assembled from two watches belongs to
-          neither, and a provider row carries no mix at all, so most of the time this is absent
-          rather than "unknown" - a row that says "unknown" reads as a fault. */}
-      {record.sourceName !== null && (
-        <span className="record-source">{record.sourceName}</span>
-      )}
+      {/* Named only when one device can be. A merged day assembled from two watches belongs to
+          neither, and a provider row carries no mix at all, so most of the time this says nothing
+          rather than "unknown" - a row that says "unknown" reads as a fault.
+          Rendered empty rather than omitted, though: these rows are columns now, and an omitted
+          cell reserves no width, so the window line on the two metrics with no single device used
+          to slide left past every other row's. Saying nothing and occupying nothing are different
+          things, and only the first one was ever intended. */}
+      <span className="record-source">{record.sourceName ?? ''}</span>
       {/* The metric's own history, which is not the page's: floors and total_calories reach
           back further than steps do on a real archive, and a record means less without knowing
           how many days it beat. */}
@@ -188,10 +190,12 @@ function SessionRecordRow({ record, t, language }: {
       <span className="record-value">{sessionValue(record, language)}</span>
       <span className="record-date">{onDate(record.localDate, language)}</span>
       {/* The activity as the device recorded it. Not translated: it is the provider's own enum,
-          and inventing Dutch for CARDIO_WORKOUT would be inventing a fact about the payload. */}
-      {record.exerciseType !== null && (
-        <span className="record-source">{record.exerciseType.toLowerCase().replace(/_/g, ' ')}</span>
-      )}
+          and inventing Dutch for CARDIO_WORKOUT would be inventing a fact about the payload.
+          Empty rather than omitted when the device recorded no type, for the same reason
+          RecordRow's device cell is: these rows are columns, and an omitted cell holds no width. */}
+      <span className="record-source">
+        {record.exerciseType === null ? '' : record.exerciseType.toLowerCase().replace(/_/g, ' ')}
+      </span>
     </li>
   )
 }

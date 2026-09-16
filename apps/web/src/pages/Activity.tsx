@@ -439,7 +439,7 @@ export function Activity() {
             export does not: exportPathFor builds a daily rollup download over SUM_METRICS and
             knows nothing about sessions, so the link beside these controls will not carry the
             rows below them. */}
-        <Card span={12} label={t('activity.sessions.label')}>
+        <Card span={12} measured label={t('activity.sessions.label')}>
           <SessionList controls={resolved} />
         </Card>
       </div>

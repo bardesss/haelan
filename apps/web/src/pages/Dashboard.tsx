@@ -786,15 +786,6 @@ export function Dashboard() {
             {t('dashboard.recovery.viewAll')}
           </Link>, t('dashboard.units.ms'))}
 
-        {/* Unlike the two cards above, there is no anomaly detection anywhere in this codebase to
-            wire up: no algorithm reads a baseline and a day's rows and calls one of them
-            anomalous. The false part of the old copy was "which nothing connected reports yet",
-            since events are connected now (M3c); the missing feature itself is real, so the empty
-            state still states that, honestly, without the false connectivity claim. Building
-            actual anomaly detection is new scope past what this fix covers. */}
-        <Card span={12} label={t('dashboard.anomalies.label')}>
-          <EmptyState title={t('dashboard.anomalies.emptyTitle')} detail={t('dashboard.anomalies.emptyDetail')} />
-        </Card>
       </div>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
