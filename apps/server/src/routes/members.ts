@@ -21,6 +21,14 @@ interface MemberRow {
   isAdmin: boolean
   state: MemberState
   inviteId: string | null
+  /** Null until the account signs in once, and on every row that has no account yet. */
+  lastLoginAtMs: number | null
+  /**
+   * How fresh this person's data is, as the floor rather than the ceiling, and how much of it is
+   * failing. Null for a row with no account: an invited person syncs nothing, so "never synced"
+   * would read as a problem rather than as the absence of one.
+   */
+  sync: { oldestSuccessAtMs: number | null, neverSucceeded: number, failing: number, due: number } | null
 }
 
 // This family answered { error: { kind, code, message } } from the day it was written, while
@@ -39,7 +47,11 @@ export function registerMemberRoutes(app: FastifyInstance): void {
     const pendingByPerson = new Map<string, PendingInvite>()
     for (const invite of app.haelan.instance.invites.listPending(now)) pendingByPerson.set(invite.personId, invite)
 
-    const items: MemberRow[] = stores().people.list().map((person): MemberRow => {
+    const people = stores().people.list()
+    // One query for the household rather than one per member, the way the invite lookup above is.
+    const freshness = stores().syncState.freshnessFor(people.map((person) => person.id))
+
+    const items: MemberRow[] = people.map((person): MemberRow => {
       const account = stores().accounts.getByPersonId(person.id)
       if (account) {
         return {
@@ -51,6 +63,8 @@ export function registerMemberRoutes(app: FastifyInstance): void {
           isAdmin: account.isAdmin,
           state: account.disabledAtMs === null ? 'active' : 'disabled',
           inviteId: null,
+          lastLoginAtMs: account.lastLoginAtMs,
+          sync: freshness.get(person.id) ?? null,
         }
       }
       const invite = pendingByPerson.get(person.id) ?? null
@@ -68,6 +82,8 @@ export function registerMemberRoutes(app: FastifyInstance): void {
         // scope here; this state exists to name what the row is, not to offer a way out of it.
         state: invite ? 'invited' : 'expired',
         inviteId: invite?.id ?? null,
+        lastLoginAtMs: null,
+        sync: null,
       }
     })
     return reply.send({ items })

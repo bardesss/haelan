@@ -76,7 +76,9 @@ describe('admin passwd', () => {
     const withNew = await accounts.login({ username: 'robin', password: NEW_PASSWORD, nowMs: NOW_MS })
     expect(withNew).toEqual({
       ok: true,
-      account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null },
+      // lastLoginAtMs is this sign-in's own clock: the reset did not touch it, and signing in is
+      // what stamps it.
+      account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null, lastLoginAtMs: NOW_MS },
     })
     const withOld = await accounts.login({ username: 'robin', password: OLD_PASSWORD, nowMs: NOW_MS })
     expect(withOld).toEqual({ ok: false, reason: 'bad_password' })

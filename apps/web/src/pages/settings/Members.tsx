@@ -13,6 +13,7 @@ import {
 } from '../../data/useMembers.js'
 import type { InviteResult, MemberRow, MemberState } from '../../data/useMembers.js'
 import { useResetMemberPassword } from '../../data/useProfile.js'
+import { formatSince } from '../../format.js'
 
 // The one formula for turning a bare token into the link a new member actually gets handed. A
 // function rather than a component, because both the visible <code> text and the clipboard write
@@ -214,6 +215,45 @@ export function Members() {
   )
 }
 
+/**
+ * The two figures a household admin asked for, as one line: when this person last signed in and
+ * how fresh their data is.
+ *
+ * Both are omitted rather than filled in when there is nothing to say. An invited row has no
+ * account and syncs nothing, so it gets neither, and a row that has both says both - which is why
+ * this is a joined list rather than two fixed slots, the same grammar SessionRow's detail line
+ * uses for the fields a session happens to carry.
+ *
+ * Sync is the floor across the types this person still syncs, never the newest of them: see
+ * SyncFreshness in packages/core. The failure count rides beside it because the timestamp alone
+ * cannot tell an instance that is quietly fine from one where three types have been stuck for a
+ * week - and a floor that is six days old with nothing failing is a different story from a floor
+ * six days old with four types failing, even though the timestamp reads the same.
+ */
+function activityText(
+  member: MemberRow,
+  t: (key: string, options?: Record<string, unknown>) => string,
+  language: string,
+  nowMs: number,
+): string {
+  const parts: string[] = []
+  if (member.accountId !== null) {
+    parts.push(member.lastLoginAtMs === null
+      ? t('settings.members.lastLoginNever')
+      : t('settings.members.lastLogin', { when: formatSince(member.lastLoginAtMs, nowMs, language) }))
+  }
+  const sync = member.sync
+  if (sync !== null && sync.due > 0) {
+    parts.push(sync.oldestSuccessAtMs === null
+      ? t('settings.members.syncedNever')
+      : t('settings.members.synced', { when: formatSince(sync.oldestSuccessAtMs, nowMs, language) }))
+    if (sync.failing > 0) {
+      parts.push(t('settings.members.syncFailing', { count: sync.failing, total: sync.due }))
+    }
+  }
+  return parts.join(' · ')
+}
+
 function MemberRowView({
   member, isSelf, disable, enable, revoke, reset,
   isResetting, onResetOpen, onResetCancel, password, onPasswordChange, onSubmitReset,
@@ -231,10 +271,20 @@ function MemberRowView({
   onPasswordChange: (value: string) => void
   onSubmitReset: (event: FormEvent<HTMLFormElement>) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   return (
     <li className="member-row">
-      <span className="member-name">{member.displayName}</span>
+      <span className="member-identity">
+        <span className="member-name">{member.displayName}</span>
+        {/* Nothing on this card said who the admin was. In a one-person household that is invisible;
+            in any other it is the first thing somebody wants to know, and the route has been
+            sending the field the whole time. */}
+        {member.isAdmin && <span className="member-admin">{t('settings.members.admin')}</span>}
+        {member.username !== null && <span className="member-username">{member.username}</span>}
+      </span>
+      {/* Read at render rather than from a stored clock: these are "how long ago" figures on a card
+          a reader leaves open, and a timestamp captured on mount would quietly age. */}
+      <span className="member-activity">{activityText(member, t, i18n.language, Date.now())}</span>
       <span className="member-state" data-state={member.state}>
         {t(`settings.members.state.${member.state}`)}
       </span>
