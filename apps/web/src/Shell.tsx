@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar } from './components/Sidebar.js'
 import { RailDrawer } from './components/RailDrawer.js'
@@ -10,6 +10,7 @@ import { useSession } from './auth/session.js'
 import { useRoute, matchRoute, routeParams, navigate } from './router.js'
 import { useTranslation } from './i18n/index.js'
 import { ApiError } from './api/client.js'
+import { useDataTypes } from './data/useDataTypes.js'
 import { signOutAndResetSession } from './auth/signOutRequest.js'
 import { queryKeys } from './api/queryKeys.js'
 import { ROUTES } from './routes.js'
@@ -25,6 +26,19 @@ export function Shell() {
   const session = useSession()
   const queryClient = useQueryClient()
   const active = ROUTES.find((r) => matchRoute(r.path, route)) ?? ROUTES[0]!
+
+  // What this person turned off, so the rail can leave out a page they have nothing left to draw
+  // on. Read here rather than inside Sidebar because the rail is rendered by two components and by
+  // several tests, and a hook in there would put a request behind every one of them. An unresolved
+  // or failed query yields an empty set, which shows every page: a rail that hid items while the
+  // answer was still in flight would flicker, and one that hid them because a request failed would
+  // take pages away over a network blip.
+  const dataTypes = useDataTypes()
+  const excludedDataTypes = useMemo(
+    () => new Set(dataTypes.items.filter((item) => item.excluded).map((item) => item.id)),
+    [dataTypes.items],
+  )
+
 
   // query-core keeps state.data across a failed refetch, so session.data stays defined forever
   // after one successful load: it is never reliable evidence of being signed in. The error is,
@@ -126,6 +140,7 @@ export function Shell() {
         <Rail
           active={active.rail ?? active.path}
           person={session.data.displayName}
+          excludedDataTypes={excludedDataTypes}
           signOutError={signOutError}
           onSignOut={() => {
             setSignOutError(null)
