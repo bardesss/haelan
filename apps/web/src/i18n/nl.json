@@ -108,6 +108,10 @@
       "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen."
     }
   },
+  "againstUsual": {
+    "below": "{{amount}} onder je gemiddelde over {{days}} dagen",
+    "above": "{{amount}} boven je gemiddelde over {{days}} dagen"
+  },
   "insightCard": {
     "summary": "{{current}} gemiddeld ({{currentFrom}} tot en met {{currentTo}}) tegenover {{previous}} gemiddeld in de vorige periode ({{previousFrom}} tot en met {{previousTo}}), een verandering van {{delta}}.",
     "thinCoverage": {

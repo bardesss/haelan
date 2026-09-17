@@ -9,6 +9,7 @@ import { MetricCard } from '../components/MetricCard.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { ChartNote } from '../components/ChartNote.js'
+import { AgainstUsual } from '../components/AgainstUsual.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -414,7 +415,19 @@ export function Dashboard() {
           <StatTile label={t(labelKey)} value={format(points)} unit={unit}
             basis={basis}
             delta={deltaFor(t, metric, values(points), direction)}>
-            {oneDayRange ? <ChartNote /> : (
+            {/* On a single day the sparkline is replaced by a note saying why there is no chart,
+                and that is the one range where "how did this day compare to my usual" is a
+                question the reader has already asked by choosing the day. The line says nothing
+                for an ordinary day, which is most of them, and nothing when the baseline is too
+                thin to stand on, which the probe measured at about one day in five. */}
+            {oneDayRange ? (
+              <>
+                <ChartNote />
+                <AgainstUsual metric={metric} agg={metricGroups.aggOf(metric)}
+                  on={controls.historicalTo} source={source}
+                  value={points[0]?.value ?? null} unit={unit} />
+              </>
+            ) : (
               <Sparkline values={sparklines.get(metric)!.values} labels={sparklines.get(metric)!.labels} metric={metric}
                 label={t(chartLabelKey, { period })} unit={t(unitKey)}
                 annotations={annotations} excluded={excluded}

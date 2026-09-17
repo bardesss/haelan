@@ -314,6 +314,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
    muted caption like .basis rather than as the padded, body sized block .empty is. */
 .chart-note { font-size: var(--font-size-xs); color: var(--text-muted); margin-top: var(--space-1); line-height: var(--leading-tight); }
+/* How the day on screen sat against the person's own recent history, shown only when it sat far
+   enough out to be worth a sentence. The same quiet register as .chart-note beside it, and
+   deliberately no colour: the z-score decided whether to speak, and a personal archive is not
+   licensed to say that a low number is a bad one. Marking "below" red would say exactly that. */
+.against-usual {
+  font-size: var(--font-size-xs); color: var(--text-secondary);
+  margin: var(--space-1) 0 0; line-height: var(--leading-tight);
+  font-variant-numeric: tabular-nums;
+}
 
 /* Hypnogram.tsx's own per-stage totals row (or its not-staged state), sitting directly beneath
    the chart it summarises. Same small, muted caption treatment as .chart-note, a distinct rule
