@@ -17,14 +17,17 @@ const lines = yaml.split(/\r?\n/)
 // Steps are collected as blocks rather than as bare label lines, because one assertion below
 // needs to know which steps only run on failure, and that lives on an `if:` line inside the
 // block rather than on the line that names it.
-const publishSteps = (() => {
-  const start = lines.findIndex(line => /^ {2}publish:/.test(line))
+const jobBody = (name: string): string[] => {
+  const start = lines.findIndex(line => new RegExp(`^ {2}${name}:`).test(line))
+  if (start === -1) return []
   const rest = lines.slice(start + 1)
   const end = rest.findIndex(line => /^ {2}\S/.test(line))
-  const body = end === -1 ? rest : rest.slice(0, end)
+  return end === -1 ? rest : rest.slice(0, end)
+}
 
+const stepsOf = (name: string): { label: string; onlyOnFailure: boolean }[] => {
   const steps: { label: string; onlyOnFailure: boolean }[] = []
-  for (const line of body) {
+  for (const line of jobBody(name)) {
     const opener = /^ {6}- (?:name|uses|run|id):\s*(.*)$/.exec(line)
     if (opener) {
       steps.push({ label: opener[1], onlyOnFailure: false })
@@ -33,9 +36,15 @@ const publishSteps = (() => {
     }
   }
   return steps
-})()
+}
 
-const indexOf = (needle: string) => publishSteps.findIndex(step => step.label.includes(needle))
+const publishSteps = stepsOf('publish')
+const verifySteps = stepsOf('verify')
+const imageSteps = stepsOf('image')
+
+const indexIn = (steps: { label: string }[], needle: string) =>
+  steps.findIndex(step => step.label.includes(needle))
+const indexOf = (needle: string) => indexIn(publishSteps, needle)
 
 // The release-please job, as raw text. Scoped for the same reason the publish job is: the two
 // release-please invocations below differ only in two lines each, and a file-wide search would
@@ -56,6 +65,8 @@ describe('the release workflow', () => {
     // Without this every assertion below passes vacuously on -1 === -1 if the file's shape moves
     // and the parse quietly returns nothing.
     expect(publishSteps.length).toBeGreaterThan(5)
+    expect(verifySteps.length, 'the verify job parsed to nothing').toBeGreaterThan(5)
+    expect(imageSteps.length, 'the image job parsed to nothing').toBeGreaterThan(5)
   })
 
   it('asks release-please to draft the release, and to create the tag anyway', () => {
@@ -94,12 +105,14 @@ describe('the release workflow', () => {
     const publishDraft = indexOf('The release stops being a draft')
     expect(publishDraft).toBeGreaterThanOrEqual(0)
 
-    for (const earlier of [
-      'pnpm test',
-      'check-image-boots.sh haelan:release-amd64',
-      'check-image-boots.sh haelan:release-arm64',
-      'Push both architectures',
-    ]) {
+    // The suite and the per-architecture builds moved into jobs of their own when arm64 stopped
+    // being emulated, so their ordering is now carried by `needs:` rather than by position in one
+    // step list. Both halves are asserted: the graph puts them before this job, and the steps
+    // inside this job that could still fail come before the publish.
+    expect(jobBody('publish').join('\n')).toMatch(/needs: \[release-please, image\]/)
+    expect(jobBody('image').join('\n')).toMatch(/needs: \[release-please, verify\]/)
+
+    for (const earlier of ['Tag both architectures as one image', 'The version tags exist']) {
       const step = indexOf(earlier)
       expect(step, `${earlier} is missing from the publish job`).toBeGreaterThanOrEqual(0)
       expect(step, `${earlier} runs after the release is published`).toBeLessThan(publishDraft)
@@ -132,24 +145,59 @@ describe('the release workflow', () => {
     expect(yaml).toContain('GITHUB_STEP_SUMMARY')
   })
 
-  it('boots both architectures before pushing either', () => {
-    const push = indexOf('Push both architectures')
-    for (const arch of ['haelan:release-amd64', 'haelan:release-arm64']) {
-      const boot = publishSteps.findIndex(
-        s => s.label.includes('check-image-boots.sh') && s.label.includes(arch),
-      )
-      expect(boot).toBeGreaterThanOrEqual(0)
-      expect(boot).toBeLessThan(push)
+  it('boots each architecture before pushing it, and tags neither until both are built', () => {
+    // The old shape built and booted both in one job and pushed them together, so "both boot
+    // before either is pushed" could be read off one step list. Per-architecture jobs cannot
+    // promise that: each pushes as soon as it is done, without waiting for the other.
+    //
+    // What is promised instead is the thing a person pulling actually depends on. Each job pushes
+    // BY DIGEST, which puts layers in the registry under no tag at all, and the tags are created
+    // in a single later step that needs both jobs. So no tag resolves until both architectures
+    // built and booted - and if arm64 dies the way it did in 1.32.0, what is left behind is
+    // untagged blobs rather than a half-released version.
+    const boot = indexIn(imageSteps, 'check-image-boots.sh')
+    const push = indexIn(imageSteps, 'Push ')
+    expect(boot, 'the image job no longer boots what it built').toBeGreaterThanOrEqual(0)
+    expect(push, 'the image job no longer pushes').toBeGreaterThanOrEqual(0)
+    expect(boot, 'the image is pushed before it is booted').toBeLessThan(push)
+
+    const imageYaml = jobBody('image').join('\n')
+    expect(imageYaml, 'the push must carry no tag').toContain('push-by-digest=true')
+    expect(imageYaml, 'a tagged push here would publish one architecture on its own')
+      .not.toMatch(/^\s+tags:.*ghcr\.io/m)
+
+    // Both architectures, on machines of their own architecture.
+    expect(imageYaml).toMatch(/arch: amd64/)
+    expect(imageYaml).toMatch(/arch: arm64/)
+    expect(imageYaml, 'arm64 must build on an arm64 runner').toMatch(/runner: ubuntu-[\d.]+-arm/)
+  })
+
+  // The reason this whole shape exists. Emulating V8 under qemu is a known way to meet an
+  // instruction it cannot execute, and when it happens buildx hangs on a dead process rather than
+  // failing: 1.32.0 spent 78 minutes that way against a 7 minute pipeline and had to be cancelled
+  // by hand, leaving a draft nothing could publish. Comments may discuss it; no step may use it.
+  it('emulates nothing', () => {
+    const uses = lines.filter(line => /^\s+- uses:/.test(line))
+    expect(uses.filter(line => line.includes('setup-qemu'))).toEqual([])
+  })
+
+  // A hang is a failure that never arrives, and the default is six hours of a runner sitting on
+  // one. Every job that can hang says when to give up.
+  it('gives every job a deadline', () => {
+    for (const job of ['verify', 'image', 'publish']) {
+      expect(jobBody(job).join('\n'), `${job} has no timeout`).toMatch(/timeout-minutes: \d+/)
     }
   })
 
   it('runs the test suite before anything is pushed', () => {
-    // Both indices asserted present before they are compared, for the reason given above.
-    const test = indexOf('pnpm test')
-    const push = indexOf('Push both architectures')
-    expect(test).toBeGreaterThanOrEqual(0)
-    expect(push).toBeGreaterThanOrEqual(0)
-    expect(test).toBeLessThan(push)
+    // Carried by the graph now: the suite is the verify job, and the image jobs need it. A push
+    // cannot start until it has passed, which is the same guarantee the step ordering used to
+    // give inside one job.
+    const test = indexIn(verifySteps, 'pnpm test')
+    expect(test, 'the verify job no longer runs the suite').toBeGreaterThanOrEqual(0)
+    expect(jobBody('image').join('\n')).toMatch(/needs: \[release-please, verify\]/)
+    expect(indexIn(imageSteps, 'pnpm test'), 'the suite must not be re-run per architecture')
+      .toBe(-1)
   })
 
   // The suite step may retry, and the line between "may" and "always" is the whole guarantee of
@@ -157,8 +205,8 @@ describe('the release workflow', () => {
   // blanket retry would undo that silently, and the shape that does it - `|| pnpm test` - looks
   // almost identical to the shape that does not.
   it('retries the suite only through the crash-only wrapper', () => {
-    const suite = publishSteps[indexOf('pnpm test')]
-    expect(suite, 'the publish job no longer runs the suite').toBeDefined()
+    const suite = verifySteps[indexIn(verifySteps, 'pnpm test')]
+    expect(suite, 'the verify job no longer runs the suite').toBeDefined()
     expect(suite!.label).toContain('retry-if-worker-crashed.sh')
 
     const wrapper = readFileSync('scripts/retry-if-worker-crashed.sh', 'utf8')
