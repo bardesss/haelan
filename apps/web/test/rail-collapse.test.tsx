@@ -136,10 +136,13 @@ describe('the rail collapses to an icon strip', () => {
     }
   })
 
-  it('names the sign out button, the account and the resources links too, which lose their labels with the rest', () => {
+  // The project links used to be named here too. They have moved to Settings' About card, which is
+  // why this list is two names rather than five: they were three rows of the rail foot that all
+  // left the app, and collapsed they were three unlabelled glyphs pointing at github.com.
+  it('names the sign out button and the account, which lose their labels with the rest', () => {
     const expanded = renderRailNamed()
     const collapsed = renderCollapsedNamed()
-    for (const name of ['Sign out', 'Documentation', 'Changelog', 'Issues', 'Robin']) {
+    for (const name of ['Sign out', 'Robin']) {
       expect(collapsed, name).toContain(`title="${name}"`)
     }
     expect(expanded).not.toContain('title=')
@@ -162,11 +165,14 @@ describe('the rail collapses to an icon strip', () => {
     expect(readCollapsed()).toBe(false)
   })
 
-  it('keeps the resources links reachable when collapsed too', () => {
-    const html = renderCollapsed()
-    expect(html).toContain('href="https://github.com/bardesss/haelan#readme"')
-    expect(html).toContain('href="https://github.com/bardesss/haelan/releases"')
-    expect(html).toContain('href="https://github.com/bardesss/haelan/issues"')
+  // The inverse of what used to be here. This test asserted the three project links stayed
+  // reachable in the collapsed rail; they are not in the rail at all now, in either state, and
+  // settings-about.test.tsx asserts where they went. Kept rather than deleted because "the rail
+  // links only inside this app" is the property that replaced the old one, and a collapsed rail is
+  // exactly where an external link would be hardest to notice.
+  it('links nowhere outside this app, collapsed or not', () => {
+    expect(renderCollapsed()).not.toContain('github.com')
+    expect(renderRail()).not.toContain('github.com')
   })
 })
 

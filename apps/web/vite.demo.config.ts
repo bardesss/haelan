@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
+import { appVersion } from '../../scripts/app-version.ts'
 import { fileURLToPath } from 'node:url'
 import { cpSync, existsSync, renameSync } from 'node:fs'
 import { join, normalize, resolve } from 'node:path'
@@ -110,6 +111,12 @@ function demoEntryFilename(): Plugin {
 
 export default defineConfig({
   plugins: [react(), demoTransport(), demoEntryFilename(), demoFixtures()],
+  // The demo bundle needs it for the same reason the app bundle does: this config does not extend
+  // vite.config.ts, it replaces it, so nothing here inherits that file's `define`. Without it the
+  // demo build ships a bare `__APP_VERSION__`, the app throws on its first render, and
+  // layout:check times out waiting for <main> rather than reporting anything useful.
+  // app-version-define.test.ts holds all four configs to this.
+  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   // The prefix the demo is served under. One variable, so a custom domain later is a one-line
   // change: the site publishes the demo at <base>/demo/.
   base: process.env.DEMO_BASE ?? '/haelan/demo/',

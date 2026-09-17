@@ -1,5 +1,6 @@
 import { cpus } from 'node:os'
 import { defineConfig } from 'vitest/config'
+import { appVersion } from './scripts/app-version.ts'
 
 /**
  * Six was measured on a 22-core development machine, where it is both faster and more reliable
@@ -14,6 +15,10 @@ import { defineConfig } from 'vitest/config'
 const WORKERS = Math.max(1, Math.min(6, cpus().length - 1))
 
 export default defineConfig({
+  // The same constant apps/web/vite.config.ts bakes into the bundle, from the same helper. The
+  // suite does not load that config, so without this the About card renders "undefined" in every
+  // test while being correct in the app - the direction of drift that stays hidden longest.
+  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   test: {
     include: ['packages/**/test/**/*.test.ts?(x)', 'apps/**/test/**/*.test.ts?(x)', 'scripts/test/**/*.test.ts'],
     // Well above vitest's 5s default, because a lot of this suite is not unit work: a sync run
