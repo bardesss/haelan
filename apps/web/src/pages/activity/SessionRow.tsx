@@ -3,6 +3,9 @@ import { formatNumber, formatSessionDateHeading } from '../../format.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
+import { exerciseCategory } from '../../data/exerciseCategory.js'
+import type { ExerciseCategory } from '../../data/exerciseCategory.js'
+import { Icon } from '../../components/icons.js'
 import { Link } from '../../router.js'
 import { formatPace } from './pace.js'
 
@@ -41,6 +44,17 @@ import { formatPace } from './pace.js'
  */
 const SEPARATOR = ' · '
 
+/** The glyph each category draws. Named here so icons.tsx stays a set of drawings. */
+const CATEGORY_ICONS: Record<ExerciseCategory, string> = {
+  run: 'sessionRun',
+  walk: 'sessionWalk',
+  ride: 'sessionRide',
+  swim: 'sessionSwim',
+  strength: 'sessionStrength',
+  cardio: 'sessionCardio',
+  other: 'sessionOther',
+}
+
 export function SessionRow({ session }: { session: WorkoutSession }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -51,6 +65,7 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
   // a sighted reader sees above it.
   const dateHeading = formatSessionDateHeading(session.localDate, language)
   const typeText = exerciseTypeLabel(t, summary.exerciseType)
+  const category = exerciseCategory(summary.exerciseType)
   // Not read off metricsSummary: every session has a start and an end, so a duration derived from
   // them is never one of the fields this row has to omit.
   const durationMinutes = Math.round((session.endMs - session.startMs) / 60_000)
@@ -91,6 +106,13 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
     <Link to={`/activity/${encodeURIComponent(session.id)}`} className="session-row-link">
       <div className={rowClassName}>
         <div className="session-row-main">
+          {/* A glyph per category, never per type: the catalogue declares 182 exercise types and a
+              real archive holds about a dozen, so an icon each would be drawings nobody sees. The
+              fallback is a real mark rather than nothing, so no row is the one that looks
+              unfinished - which is what an omitted cell did to the Records device column. */}
+          <span className="session-row-icon" data-category={category}>
+            <Icon name={CATEGORY_ICONS[category]} />
+          </span>
           <span className="session-row-primary">
             {/* Trailing space: this text node sits directly against session-row-type's own text
                 node with nothing between them in the accessibility tree, and without it a screen
@@ -100,6 +122,11 @@ export function SessionRow({ session }: { session: WorkoutSession }) {
             <span className="session-row-duration">{durationText}</span>
           </span>
           {stats.length > 0 && <span className="session-row-stats">{stats.join(SEPARATOR)}</span>}
+          {/* The row has linked to the workout page since M8b with nothing at rest to say so - a
+              hover background was the only hint, which a finger never sees. Decoration rather than
+              content: it repeats what the link already means, so it is hidden from a screen reader
+              instead of being read out as a separate thing. */}
+          <span className="session-row-go" aria-hidden="true"><Icon name="chevronRight" /></span>
         </div>
         {/* Omitted outright, not rendered empty: the fourth test pins a session with none of these
             fields to one line, and an empty div here would still be a second line, just a blank one. */}

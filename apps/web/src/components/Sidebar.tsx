@@ -37,8 +37,60 @@ const GROUPS = [
 // path, so this derivation stays untouched by that feature.
 export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((item) => item.path))
 
+/**
+ * Which catalogue data types a page has nothing to draw without.
+ *
+ * Declared here rather than derived from the pages, because a page's metrics are not reachable from
+ * the rail and would not answer the question anyway: what matters is which types a person could
+ * turn off such that the page has nothing left, and that is an editorial judgement about the page
+ * rather than a fact about its imports.
+ *
+ * Only pages whose whole subject is one category appear. A page absent from this map never hides,
+ * which is the right default: Settings in particular must always be reachable, since it is where an
+ * exclusion is turned back off and a rail that could hide it would be a one-way door.
+ *
+ * rail-hidden-pages.test.ts holds every id here to the catalogue's own. A typo fails in the worst
+ * possible way - an id nothing matches can never be excluded, so the page would simply never hide
+ * and nobody would find out why.
+ */
+export const PAGE_DATA_TYPES: Record<string, readonly string[]> = {
+  '/nutrition': ['nutrition-log', 'hydration-log', 'food'],
+}
 
-export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true }: {
+/**
+ * The rail's items, with pages the person has switched off left out.
+ *
+ * Every type a page names has to be excluded before it goes. Turning off one of several leaves the
+ * page something to draw, and hiding it then would take away a page that still works.
+ *
+ * Hidden from the rail, never removed from the router: a bookmark, a deep link and a history entry
+ * all keep working, and RAIL_PATHS above stays the complete static list, so the shell test's
+ * assertion that the rail and the router name exactly the same paths keeps proving what it was
+ * written to prove.
+ */
+export interface RailItem { path: string, nameKey: string }
+
+// Widened deliberately. GROUPS is `as const` so every path is its own literal type, which is what
+// keeps RAIL_PATHS honest - and it makes a flatMap across groups a union of literal shapes that
+// nothing downstream can filter without complaint. The names are still checked against GROUPS by
+// construction; only the type is loosened here.
+const ALL_ITEMS: readonly RailItem[] = GROUPS.flatMap((group) => group.items as readonly RailItem[])
+
+export function railItemsFor(excludedDataTypes: ReadonlySet<string>): readonly RailItem[] {
+  return ALL_ITEMS.filter((item) => isVisible(item.path, excludedDataTypes))
+}
+
+/** Module level, so a Sidebar rendered without the prop does not build a new Set every render. */
+const EMPTY_EXCLUSIONS: ReadonlySet<string> = new Set()
+
+function isVisible(path: string, excluded: ReadonlySet<string>): boolean {
+  const required = PAGE_DATA_TYPES[path]
+  if (required === undefined || required.length === 0) return true
+  return !required.every((id) => excluded.has(id))
+}
+
+
+export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true, excludedDataTypes }: {
   active: string
   person: string
   onSignOut: () => void
@@ -47,8 +99,15 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
   // has nothing to save. The stored preference is still read and still never written here, so a
   // reader who crosses back above the breakpoint finds the rail as they left it.
   collapsible?: boolean
+  // The types this person turned off, so a page they have nothing left to draw on leaves the rail.
+  // A prop rather than a query of its own: this component is rendered by the shell, inside the
+  // drawer and by several tests, and a hook here would put a request behind every one of them.
+  // Undefined means "nothing excluded", which is what a caller that has not resolved the set yet
+  // should show - a rail that hid pages while the answer was still loading would flicker.
+  excludedDataTypes?: ReadonlySet<string>
 }) {
   const { t } = useTranslation()
+  const excluded = excludedDataTypes ?? EMPTY_EXCLUSIONS
   // Read once at mount rather than on every render: the value only ever changes through the
   // toggle below, which already knows the next value without asking storage for it back.
   const [stored, setStored] = useState(() => readCollapsed())
@@ -90,7 +149,14 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
           </button>
         )}
       </div>
-      {GROUPS.map((g) => (
+      {GROUPS.map((g) => ({
+        labelKey: g.labelKey,
+        items: (g.items as readonly RailItem[]).filter((item) => isVisible(item.path, excluded)),
+      }))
+        // A group whose every page is hidden takes its heading with it, rather than leaving a
+        // label over nothing.
+        .filter((g) => g.items.length > 0)
+        .map((g) => (
         <div key={g.labelKey}>
           <div className="rail-group">{label(t(g.labelKey))}</div>
           {g.items.map((item) => (

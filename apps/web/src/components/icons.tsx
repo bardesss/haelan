@@ -93,6 +93,45 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M12 16.3h.01" strokeWidth="2.6" />
     </>
   ),
+  // One per exercise category (data/exerciseCategory.ts), drawn at the same 1.7 stroke and 24x24
+  // box as everything above so a session row reads as part of this app rather than as clip art.
+  // `sessionOther` is the fallback and is deliberately a real mark: every row carries a glyph, so
+  // none of them is the row that looks unfinished.
+  sessionRun: (
+    <>
+      <circle cx="13.6" cy="4.3" r="1.7" />
+      <path d="M6.6 12.2 9.4 8.4l3.4-1.2 2.8 2.7 3 .9" />
+      <path d="M9.2 21.4l2.5-5.2 2.9 2.2.9 3.1" />
+      <path d="M11.7 16.2 9.9 12.6" />
+    </>
+  ),
+  sessionWalk: (
+    <>
+      <circle cx="13.2" cy="4.1" r="1.7" />
+      <path d="M10.6 21.6l1.7-5.8-2.1-2.2 1.1-5.3 3.5 2.1 2.1 2.7" />
+      <path d="m12.3 15.8-3 2.4" />
+    </>
+  ),
+  sessionRide: (
+    <>
+      <circle cx="5.6" cy="17.3" r="3.4" />
+      <circle cx="18.4" cy="17.3" r="3.4" />
+      <path d="M8.7 17.3h3.5l3.2-6.6h-4" />
+      <path d="M14.4 4.6h2.5l1.5 12.7" />
+    </>
+  ),
+  sessionSwim: (
+    <>
+      <path d="M3 17.7c1.8 0 1.8 1.4 3.5 1.4s1.8-1.4 3.5-1.4 1.8 1.4 3.5 1.4 1.8-1.4 3.5-1.4 1.8 1.4 3.5 1.4" />
+      <path d="M6.6 14.1 12 11l4.4 2.6" />
+      <circle cx="17.1" cy="7.4" r="1.7" />
+    </>
+  ),
+  sessionStrength: <path d="M3.5 9.5v5M6.8 7.5v9M17.2 7.5v9M20.5 9.5v5M6.8 12h10.4" />,
+  sessionCardio: (
+    <path d="M12 20.3S4.8 15.6 4.8 10.8A3.9 3.9 0 0 1 12 8.6a3.9 3.9 0 0 1 7.2 2.2c0 4.8-7.2 9.5-7.2 9.5Z" />
+  ),
+  sessionOther: <path d="M4 19v-6M9.3 19V6M14.7 19v-9M20 19v-4" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="M6 6l12 12M18 6 6 18" />,
 }

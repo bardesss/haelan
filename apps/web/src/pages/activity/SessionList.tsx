@@ -4,7 +4,7 @@ import { useSessions } from '../../data/useSessions.js'
 import type { WorkoutSession } from '../../data/useSessions.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
-import { formatSessionDateHeading } from '../../format.js'
+import { formatDuration, formatSessionDateHeading } from '../../format.js'
 import { SessionRow } from './SessionRow.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
@@ -20,6 +20,17 @@ const ALL_TYPES = '__all__'
 // ("Unknown"/"Onbekend") and a session with no type is still a session a reader should be able to
 // see or filter out.
 const UNKNOWN_TYPE = '__unknown__'
+
+/**
+ * A day's total time, from the same start and end each row's own duration comes from.
+ *
+ * Elapsed rather than moving time: only some sessions record a moving duration, so summing that
+ * would give a day total measuring something different from the rows beneath it, and lower than
+ * their visible sum for a reason a reader cannot see.
+ */
+function totalMinutes(sessions: readonly WorkoutSession[]): number {
+  return sessions.reduce((total, s) => total + Math.round((s.endMs - s.startMs) / 60_000), 0)
+}
 
 /**
  * The section 192 real exercise sessions had no surface for: a list below Activity's tiles and
@@ -176,7 +187,19 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
             // sharing one date, so group.date is usually unique across groups but not by
             // construction. index always is.
             <div key={`${group.date}-${index}`} className="session-date-group">
-              <h3 className="session-date-heading">{formatSessionDateHeading(group.date, i18n.language)}</h3>
+              {/* The count and the total were there to be added up by hand, which is what a reader
+                  scanning a week was doing. Elapsed time, the same figure each row already shows,
+                  summed - not moving time, which only some sessions record and which would make
+                  the day total mean something different from the rows beneath it. */}
+              <h3 className="session-date-heading">
+                <span className="session-date-label">{formatSessionDateHeading(group.date, i18n.language)}</span>
+                <span className="session-day-summary">
+                  {t('activity.sessions.daySummary', {
+                    count: group.sessions.length,
+                    duration: formatDuration(totalMinutes(group.sessions)),
+                  })}
+                </span>
+              </h3>
               {group.sessions.map((session) => <SessionRow key={session.id} session={session} />)}
             </div>
           ))}

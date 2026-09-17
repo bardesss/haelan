@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 import {
   withinSchedule, localMinutesOf, inWindow, napInWindow, noDataYFor, axisTickInterval,
+  fitWindow, MIN_FITTED_SPAN,
   AXIS_MIN, AXIS_MAX, DEFAULT_WINDOW, WIDE_WINDOW,
 } from '../src/charts/schedule.js'
 
@@ -295,5 +296,75 @@ describe('every SleepSchedule caller goes through this module', () => {
       // several of these files, and a comment naming withinSchedule proves nothing either way.
       expect(source, page).not.toMatch(/(?:function|const)\s+(?:localMinutesOf|inWindow|withinSchedule)\b/)
     }
+  })
+})
+
+/**
+ * An axis fitted to the nights it has to draw, rather than a constant.
+ *
+ * DEFAULT_WINDOW reserves noon to noon so that a nap at 13:00 fits without compressing the sleep
+ * band - which is right for the caller that draws naps and pure cost for the one that does not.
+ * Measured against a real archive, a third of that axis sat permanently empty below the earliest
+ * bedtime, which is why the bars read as thin floating ticks: ten hours of data stretched over
+ * twenty-four.
+ *
+ * Fitted rather than narrowed to a better constant, and that is the load-bearing choice. Every
+ * candidate constant placed every night in the archive it was measured against, so a constant
+ * would have looked perfect - and it would have been tuned to one household's hours. A shift
+ * worker sleeping at 09:00 falls outside it, and withinSchedule does not complain when a night
+ * falls outside a window: it nulls the night out, and SleepSchedule draws an absence dot. The
+ * failure would look like missing data rather than a bad axis.
+ */
+describe('fitWindow', () => {
+  // 23:30 to 07:00, in the minutes-from-local-midnight convention where a bedtime before midnight
+  // is negative.
+  const night = (bed: number, wake: number) => ({ bed, wake })
+
+  it('brackets the nights it is given', () => {
+    const fitted = fitWindow([night(-30, 420)])
+    // The bed is drawn at 1410 (23:30 the evening before) and the wake at 1860 (07:00).
+    expect(fitted.min).toBeLessThanOrEqual(1410)
+    expect(fitted.max).toBeGreaterThanOrEqual(1860)
+  })
+
+  it('lands on whole hours, so the tick labels stay whole hours', () => {
+    const fitted = fitWindow([night(-37, 433)])
+    expect(fitted.min % 60).toBe(0)
+    expect(fitted.max % 60).toBe(0)
+  })
+
+  it('places every night it fitted itself to', () => {
+    // The property that matters, and the one a constant cannot promise: a window derived from
+    // these nights must never be a window that then refuses one of them.
+    const nights = [night(-236, 266), night(-30, 420), night(276, 652)]
+    const fitted = fitWindow(nights)
+    for (const n of nights) {
+      expect(withinSchedule(n.bed, n.wake, fitted).bed, `${n.bed}/${n.wake}`).not.toBeNull()
+    }
+  })
+
+  it('is at least a readable span when one short night is all there is', () => {
+    const fitted = fitWindow([night(-30, 60)])
+    expect(fitted.max - fitted.min).toBeGreaterThanOrEqual(MIN_FITTED_SPAN)
+  })
+
+  it('falls back to the default window when there is nothing to fit to', () => {
+    expect(fitWindow([])).toEqual(DEFAULT_WINDOW)
+  })
+
+  // A night withinSchedule refuses outright - wake at or before bed, which is how a session longer
+  // than the frame arrives - must not drag the axis with it. It is drawn as an absence dot and the
+  // window has nothing to learn from it.
+  it('ignores a night that cannot be placed at all', () => {
+    const fitted = fitWindow([night(-30, 420), night(500, 100)])
+    expect(fitted).toEqual(fitWindow([night(-30, 420)]))
+  })
+
+  it('keeps a late sleeper inside the axis rather than dropping them off it', () => {
+    // 09:00 to 17:00, which DEFAULT_WINDOW cannot place: the whole reason this is fitted.
+    const shiftWorker = night(540, 1020)
+    expect(withinSchedule(shiftWorker.bed, shiftWorker.wake, DEFAULT_WINDOW).bed).toBeNull()
+    const fitted = fitWindow([shiftWorker])
+    expect(withinSchedule(shiftWorker.bed, shiftWorker.wake, fitted).bed).not.toBeNull()
   })
 })
