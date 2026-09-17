@@ -43,8 +43,26 @@ describe('AccountStore', () => {
     const result = await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 2000 })
     expect(result).toEqual({
       ok: true,
-      account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null },
+      // Stamped with this sign-in's own clock rather than the previous one: the caller that just
+      // signed somebody in should not be holding a value one sign-in out of date.
+      account: { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null, lastLoginAtMs: 2000 },
     })
+  })
+
+  // The stamp itself, held separately from the shape above: a sign-in is the only thing that writes
+  // it, and a failed one must not - an account somebody is guessing at is not an account in use.
+  it('stamps the sign-in, and only a successful one', async () => {
+    await create()
+    expect(store.list()[0]!.lastLoginAtMs).toBeNull()
+
+    await store.login({ username: 'robin', password: 'wrong', nowMs: 2000 })
+    expect(store.list()[0]!.lastLoginAtMs).toBeNull()
+
+    await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 3000 })
+    expect(store.list()[0]!.lastLoginAtMs).toBe(3000)
+
+    await store.login({ username: 'robin', password: 'correct horse battery staple', nowMs: 9000 })
+    expect(store.list()[0]!.lastLoginAtMs).toBe(9000)
   })
 
   it('rejects the wrong password without saying whether the account exists', async () => {
@@ -82,8 +100,8 @@ describe('AccountStore', () => {
     })
     const listed = store.list()
     expect(listed).toEqual([
-      { id: 'a2', personId: 'p2', username: 'alice', isAdmin: false, disabledAtMs: null, lockedUntilMs: null },
-      { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null, lockedUntilMs: null },
+      { id: 'a2', personId: 'p2', username: 'alice', isAdmin: false, disabledAtMs: null, lockedUntilMs: null, lastLoginAtMs: null },
+      { id: 'a1', personId: 'p1', username: 'robin', isAdmin: true, disabledAtMs: null, lockedUntilMs: null, lastLoginAtMs: null },
     ])
   })
 

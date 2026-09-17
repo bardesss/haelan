@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "c39579ac-6c33-4692-a3f2-af525a7721c1",
-  "prevId": "9c1e9d6f-0310-4c47-a2b2-9a9b3e8663d2",
+  "id": "98f4295c-692b-4a22-9cf5-f953822e8fe2",
+  "prevId": "c39579ac-6c33-4692-a3f2-af525a7721c1",
   "tables": {
     "accounts": {
       "name": "accounts",
@@ -642,6 +642,14 @@
         },
         "update_check_enabled": {
           "name": "update_check_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "companion_mode": {
+          "name": "companion_mode",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1346,6 +1354,13 @@
         "sex": {
           "name": "sex",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "companion_path": {
+          "name": "companion_path",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

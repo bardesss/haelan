@@ -19,6 +19,21 @@ export interface MemberRow {
   isAdmin: boolean
   state: MemberState
   inviteId: string | null
+  /** Null until this account signs in once, and on every row that has no account yet. */
+  lastLoginAtMs: number | null
+  /** Null for a row with no account: an invited person syncs nothing, and "never synced" would
+   *  read as a fault rather than as the absence of one. */
+  sync: SyncFreshness | null
+}
+
+/** Mirrors SyncFreshness in packages/core/src/store/syncState.ts, by value like MemberRow above.
+ *  The floor rather than the ceiling: see that store's own comment for why a maximum would read
+ *  "synced two minutes ago" while half the person's data had been failing for a week. */
+export interface SyncFreshness {
+  oldestSuccessAtMs: number | null
+  neverSucceeded: number
+  failing: number
+  due: number
 }
 
 interface MembersResponse { items: MemberRow[] }

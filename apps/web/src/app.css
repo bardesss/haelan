@@ -713,18 +713,47 @@ a.segment { text-decoration: none; display: inline-block; }
 /* Members.tsx: the same row shape .source-name-row uses (a fixed field, a muted detail, an action
    at the end), but the "field" here is a state label rather than an input, so the row never grows
    an .input the way that list's does. */
-.member-list { list-style: none; margin: 0; padding: 0; }
+/* Columns shared by every row, not four tracks per row. A grid on the row alone aligns nothing:
+   each row becomes its own grid, so a row with two buttons puts its state label in a different
+   place from the row above it with one - which is what a cell lining up with the cell above it
+   actually requires. The list owns the tracks and each row is a subgrid of them, exactly as
+   .record-list and .record-row do one card up, including why subgrid rather than
+   `display: contents` (the row needs a box to hang its own separator on). */
+.member-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto auto; }
+/* Tracks, not a flex line with the name on one edge and the state on the other. At card width
+   that shape put two words about a thousand pixels apart with nothing between them, which is the
+   same complaint the sessions list drew and the same fix: who they are, what they have been doing,
+   where they stand, what you can do about it - four columns, one edge each, down the list. */
 .member-row {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4);
+  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
+  align-items: center; column-gap: var(--space-4); row-gap: var(--space-2);
   padding: var(--space-3) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
 }
 .member-row:last-child { border-bottom: 0; }
-.member-name { color: var(--text-primary); font-weight: var(--weight-medium); flex: 1; min-width: 120px; }
+.member-identity { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; flex-wrap: wrap; }
+.member-name { color: var(--text-primary); font-weight: var(--weight-medium); }
+/* The one thing this card never said. A quiet mark rather than a badge with a colour of its own:
+   it names a capability, not a state, and the state column beside it is where the alarming words
+   are allowed to live. */
+.member-admin {
+  font-size: var(--font-size-micro); color: var(--accent-soft);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1px 6px;
+}
+.member-username { color: var(--text-faint); font-size: var(--font-size-xs); }
+/* When they last signed in and how fresh their data is. Muted and tabular: these are figures to
+   scan down the column rather than to read, and the eye doing that wants the digits to line up. */
+.member-activity {
+  color: var(--text-muted); font-size: var(--font-size-xs); min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
 .member-state { color: var(--text-secondary); font-size: var(--font-size-xs); }
 /* A disabled account is not a wrong value the way .delta's bad tone is, only an inactive one, so
    this reads as .source-name-kind's own faint, no-alarm treatment rather than borrowing --negative. */
 .member-state[data-state='disabled'] { color: var(--text-faint); }
-.member-actions { display: flex; gap: var(--space-2); margin-left: auto; }
+/* Hugging the right edge of the column rather than its left: rows carry one, two or three buttons,
+   and left-aligned they ended wherever the row's own buttons ran out - five different edges down
+   a list five rows long, which is the ragged shape the columns above exist to stop. */
+.member-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
 
 /* DataTypePicker.tsx: the same row shape .member-row uses, but the field itself is the row's own
    checkbox and label rather than a name column beside a separate action, since checking a box
@@ -1050,6 +1079,15 @@ a.segment { text-decoration: none; display: inline-block; }
      reads as three separate figures. */
   .record-date { white-space: nowrap; }
   .record-window { flex-basis: 100%; }
+
+  /* Four columns need width to mean anything, and at 375px there is none to give - the same
+     ruling the record rows take one block up. Back to the wrapping flex line this row was before
+     the columns existed, which is what a phone wants anyway: each part as wide as its content,
+     wrapping when the row runs out. */
+  .member-list { display: block; }
+  .member-row { display: flex; flex-wrap: wrap; }
+  .member-identity { flex: 1; min-width: 120px; }
+  .member-activity { flex-basis: 100%; }
 
   /* The date takes 11rem on a wide screen so the duration beside it lines up down the list. At
      375px that width, plus the duration, the source and the clock, came to 406px in a 375px

@@ -152,8 +152,15 @@
     {
       "idx": 21,
       "version": "6",
-      "when": 1789656978201,
-      "tag": "0021_bouncy_baron_strucker",
+      "when": 1789655514710,
+      "tag": "0021_stale_spitfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1789674114326,
+      "tag": "0022_clumsy_talisman",
       "breakpoints": true
     }
   ]

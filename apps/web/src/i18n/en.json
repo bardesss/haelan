@@ -1171,7 +1171,14 @@
         "title": "No other members",
         "detail": "Invite someone to give them their own account and their own data."
       },
-      "failed": "That did not work. Try again."
+      "failed": "That did not work. Try again.",
+      "admin": "Admin",
+      "lastLogin": "Signed in {{when}}",
+      "lastLoginNever": "Never signed in",
+      "synced": "Synced {{when}}",
+      "syncedNever": "Never synced",
+      "syncFailing_one": "{{count}} of {{total}} data types failing",
+      "syncFailing_other": "{{count}} of {{total}} data types failing"
     },
     "instanceUrl": {
       "title": "Instance address",

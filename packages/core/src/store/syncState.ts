@@ -16,6 +16,19 @@ export interface SyncStateRow {
   consecutiveFailures: number
 }
 
+/** What the members list says about one person's sync, and the only aggregate over sync_state
+ *  anything outside this store asks for. */
+export interface SyncFreshness {
+  /** The oldest last-success across the types this person syncs; null when one has never run. */
+  oldestSuccessAtMs: number | null
+  /** How many of those types have never succeeded. */
+  neverSucceeded: number
+  /** How many are failing right now, by their own consecutive-failure count. */
+  failing: number
+  /** How many types this person syncs at all - the denominator for both counts above. */
+  due: number
+}
+
 export class SyncStateStore {
   readonly #db: DbOrTx
 
@@ -135,6 +148,64 @@ export class SyncStateStore {
       return DATA_TYPES.filter((t) => t.actions.length > 0 && !excluded.has(t.id))
         .map((t) => ({ personId, dataType: t.id }))
     })
+  }
+
+  /**
+   * How fresh a person's data actually is, for the members list.
+   *
+   * The floor, not the ceiling. A maximum over a person's types reads "synced two minutes ago"
+   * while sleep has been failing since Tuesday, because steps synced two minutes ago - flattering,
+   * and wrong in the one direction that matters. `oldestSuccessAtMs` is the oldest last-success
+   * across the types this person still syncs, so it cannot be newer than the least fresh thing on
+   * their pages, and it is null when any of those types has never succeeded at all: the floor
+   * under "never" is never.
+   *
+   * Over the same set dueJobs walks - a type with no actions is not fetched, and a type the person
+   * turned off is not theirs to be behind on - read here the same way and for the same reason, so
+   * one person's exclusions can never colour another's figure.
+   *
+   * The two counts beside it are what the timestamp cannot say: a single figure cannot distinguish
+   * an instance that is quietly fine from one where three types have been failing for a week, and
+   * "failing" is the story an admin looking at this list is actually after.
+   */
+  freshnessFor(personIds: string[]): Map<string, SyncFreshness> {
+    const result = new Map<string, SyncFreshness>()
+    if (personIds.length === 0) return result
+    const stateRows = this.#db.select().from(syncState)
+      .where(inArray(syncState.personId, personIds)).all()
+    const byPerson = new Map<string, Map<string, typeof stateRows[number]>>()
+    for (const row of stateRows) {
+      const forPerson = byPerson.get(row.personId) ?? new Map()
+      forPerson.set(row.dataType, row)
+      byPerson.set(row.personId, forPerson)
+    }
+    // dueJobs already answers "which types is this person syncing", exclusions and all, and asking
+    // it is what keeps that rule in one place rather than in two that can drift.
+    const dueByPerson = new Map<string, string[]>()
+    for (const job of this.dueJobs(personIds, 0)) {
+      dueByPerson.set(job.personId, [...(dueByPerson.get(job.personId) ?? []), job.dataType])
+    }
+    for (const personId of personIds) {
+      const due = dueByPerson.get(personId) ?? []
+      const rows = byPerson.get(personId) ?? new Map()
+      let oldest: number | null = null
+      let neverSucceeded = 0
+      let failing = 0
+      for (const dataType of due) {
+        const row = rows.get(dataType)
+        const success = row?.lastSuccessAtMs ?? null
+        if (success === null) neverSucceeded += 1
+        else if (oldest === null || success < oldest) oldest = success
+        if ((row?.consecutiveFailures ?? 0) > 0) failing += 1
+      }
+      result.set(personId, {
+        oldestSuccessAtMs: neverSucceeded > 0 ? null : oldest,
+        neverSucceeded,
+        failing,
+        due: due.length,
+      })
+    }
+    return result
   }
 
   private upsert(personId: string, dataType: string, set: Partial<typeof syncState.$inferInsert>): void {

@@ -24,6 +24,16 @@ export const accounts = sqliteTable('accounts', {
   // A timestamp rather than a boolean: "when was this account suspended" is the question an admin
   // asks afterwards, and a boolean throws the answer away. Null means active.
   disabledAtMs: integer('disabled_at_ms'),
+  // When this account last signed in, for the members list. Null until it signs in once, which is
+  // every account that existed before this column did.
+  //
+  // Here rather than derived from auth_sessions.lastSeenAtMs, which looks like the same answer and
+  // is not: sessions expire and are swept, so that value goes blank exactly for the dormant member
+  // it would be consulted about. A deliberate decision rather than a side effect of a screen - it
+  // is the first thing this app records about when a person uses it, and it is visible to the
+  // household's admin. Nothing else reads it, no behaviour turns on it, and it is one timestamp
+  // rather than a history: "when did they last sign in", not "when have they ever signed in".
+  lastLoginAtMs: integer('last_login_at_ms'),
 })
 
 // Not called sessions: that name belongs to sleep and exercise in tier 2.
