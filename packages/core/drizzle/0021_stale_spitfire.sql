@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `last_login_at_ms` integer;

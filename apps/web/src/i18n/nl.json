@@ -1154,7 +1154,14 @@
         "title": "Geen andere leden",
         "detail": "Nodig iemand uit om diegene een eigen account en eigen gegevens te geven."
       },
-      "failed": "Dat is niet gelukt. Probeer het opnieuw."
+      "failed": "Dat is niet gelukt. Probeer het opnieuw.",
+      "admin": "Beheerder",
+      "lastLogin": "Aangemeld {{when}}",
+      "lastLoginNever": "Nooit aangemeld",
+      "synced": "Gesynchroniseerd {{when}}",
+      "syncedNever": "Nooit gesynchroniseerd",
+      "syncFailing_one": "{{count}} van {{total}} gegevenstypen mislukt",
+      "syncFailing_other": "{{count}} van {{total}} gegevenstypen mislukken"
     },
     "instanceUrl": {
       "title": "Adres van deze instantie",

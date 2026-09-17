@@ -51,6 +51,11 @@ function member(overrides: Partial<MemberRow> & { displayName: string }): Member
     isAdmin: false,
     state,
     inviteId: state === 'invited' ? `invite-${memberCounter}` : null,
+    // The two figures the row shows beside the name, defaulted to "nothing to say" so a case that
+    // is not about activity renders the same row it always did: never signed in, and - for a row
+    // with an account - a sync with nothing due, which prints no sync half at all.
+    lastLoginAtMs: null,
+    sync: state === 'invited' ? null : { oldestSuccessAtMs: null, neverSucceeded: 0, failing: 0, due: 0 },
     ...overrides,
   }
 }
@@ -106,6 +111,9 @@ const rowNames = (): string[] =>
 
 const rowStates = (): string[] =>
   [...container!.querySelectorAll('.member-state')].map((n) => n.textContent ?? '')
+
+const rowActivity = (): string[] =>
+  [...container!.querySelectorAll('.member-activity')].map((n) => n.textContent ?? '')
 
 // Every control the list draws, in order, by its label. A count alone said "three buttons" and
 // would have gone on saying it if the wrong three had been drawn.
@@ -272,5 +280,65 @@ describe('the members section', () => {
   it('is rendered for an admin', () => {
     mountSettingsAs({ isAdmin: true })
     expect(container!.textContent).toContain('Members')
+  })
+})
+
+/**
+ * What the row says about a person beyond their name.
+ *
+ * The card showed three of the eight fields the route already sent, so nothing on it said who the
+ * admin was - invisible in a one-person household, and the first thing anybody wants to know in
+ * any other. These hold the three additions: the admin mark, the sign-in figure, and the sync
+ * floor with its failure count.
+ *
+ * The relative wording ("2 days ago") comes from Intl and is not asserted verbatim: what matters
+ * is which figure is named and that an absent one is left out rather than filled in.
+ */
+describe('what a member row says', () => {
+  const HOUR = 3_600_000
+  const now = Date.now()
+
+  it('marks the admin, which nothing on this card used to say', () => {
+    mountSection([member({ displayName: 'Ann', isAdmin: true }), member({ displayName: 'Bob' })])
+    const marks = [...container!.querySelectorAll('.member-admin')].map((n) => n.textContent)
+    expect(marks).toEqual(['Admin'])
+    // On Ann's row, not merely somewhere on the card.
+    expect(container!.querySelectorAll('.member-row')[0]!.querySelector('.member-admin')).not.toBeNull()
+  })
+
+  it('shows the username the route has been sending all along', () => {
+    mountSection([member({ displayName: 'Ann', username: 'ann' })])
+    expect(container!.querySelector('.member-username')!.textContent).toBe('ann')
+  })
+
+  it('names when they signed in, and says so plainly when they never have', () => {
+    mountSection([
+      member({ displayName: 'Ann', lastLoginAtMs: now - 2 * HOUR }),
+      member({ displayName: 'Bob' }),
+    ])
+    expect(rowActivity()[0]).toContain('Signed in')
+    expect(rowActivity()[1]).toContain('Never signed in')
+  })
+
+  // The floor is what this figure is for: a person whose steps synced a minute ago and whose sleep
+  // has never run is not "synced a minute ago", and the row must not say so.
+  it('reports the sync floor, and the failure count the floor cannot carry', () => {
+    mountSection([
+      member({ displayName: 'Ann', lastLoginAtMs: now, sync: { oldestSuccessAtMs: now - 3 * HOUR, neverSucceeded: 0, failing: 0, due: 14 } }),
+      member({ displayName: 'Bob', lastLoginAtMs: now, sync: { oldestSuccessAtMs: null, neverSucceeded: 14, failing: 0, due: 14 } }),
+      member({ displayName: 'Cat', lastLoginAtMs: now, sync: { oldestSuccessAtMs: now - HOUR, neverSucceeded: 0, failing: 3, due: 14 } }),
+    ])
+    expect(rowActivity()[0]).toContain('Synced')
+    expect(rowActivity()[1]).toContain('Never synced')
+    expect(rowActivity()[2]).toContain('3 of 14 data types failing')
+    // Nothing failing says nothing about failures, rather than "0 of 14".
+    expect(rowActivity()[0]).not.toContain('failing')
+  })
+
+  // An invited person has no account to have signed in and nothing of their own to sync, so the
+  // row says neither instead of reporting two absences as if they were findings.
+  it('leaves the line empty for a row with no account behind it', () => {
+    mountSection([member({ displayName: 'Bob', state: 'invited' })])
+    expect(rowActivity()).toEqual([''])
   })
 })

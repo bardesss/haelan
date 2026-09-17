@@ -101,6 +101,28 @@ export function formatSessionDateHeading(date: string, language: string): string
   })
 }
 
+/**
+ * How long ago something happened, in the reader's own language: "3 minutes ago", "2 uur geleden".
+ *
+ * Intl.RelativeTimeFormat rather than a hand-built string, because "ago" is grammar and every
+ * language has its own. The unit is chosen by magnitude - minutes under an hour, hours under a
+ * day, days after that - because a members list showing "43,200 minutes ago" for a member who has
+ * not signed in for a month is arithmetic rather than an answer. Days is the coarsest: a household
+ * that has not synced in three months wants to see the number of days, not "3 months ago" rounded
+ * off the edge of the problem.
+ *
+ * Future timestamps round to "0 minutes ago" rather than reading "in 5 minutes": a clock skew
+ * between a server stamping and a browser reading is not something to narrate.
+ */
+export function formatSince(atMs: number, nowMs: number, language: string): string {
+  const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
+  const minutes = Math.max(0, Math.round((nowMs - atMs) / 60_000))
+  if (minutes < 60) return relative.format(-minutes, 'minute')
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return relative.format(-hours, 'hour')
+  return relative.format(-Math.round(hours / 24), 'day')
+}
+
 // Round to whole minutes before splitting, not after: splitting first turns 419.6 into 6h and round(59.6)m ("6h 60m").
 export function formatDuration(minutes: number): string {
   const total = Math.round(minutes)
