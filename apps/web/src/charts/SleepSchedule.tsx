@@ -3,7 +3,7 @@ import type { EChartsOption, CustomSeriesRenderItemAPI, CustomSeriesRenderItemPa
 import { useChart } from './useChart.js'
 import { chartBase, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
-import { nightMark, noDataYFor, axisTickInterval, DEFAULT_WINDOW, type Night } from './schedule.js'
+import { nightMark, noDataYFor, axisTickInterval, fitWindow, DEFAULT_WINDOW, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
@@ -14,20 +14,27 @@ import { scheduleTooltip } from './scheduleTooltip.js'
 // schedule-marks.test.ts) that import them from this module.
 export { AXIS_MIN, AXIS_MAX, NO_DATA_Y } from './schedule.js'
 
-export function SleepSchedule({ nights, label, showNaps = true, axisWindow = DEFAULT_WINDOW }: {
+export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
   nights: Night[]
   label: string
   showNaps?: boolean
   // Named axisWindow, not window: a plain `window` parameter shadows the DOM global, which this
   // file does not use today but a future edit here easily might reach for without noticing the
   // shadow.
+  //
+  // Optional, and what happens when it is left out depends on whether naps are drawn. A caller
+  // drawing naps gets DEFAULT_WINDOW, because fitWindow fits to the nights and knows nothing about
+  // where an afternoon nap lands - fitting to the nights alone would put a nap outside the axis
+  // that was built to contain it. A caller not drawing naps gets an axis fitted to its own nights,
+  // which is most of the height DEFAULT_WINDOW was spending on the naps it is not drawing.
   axisWindow?: { min: number, max: number }
 }) {
   const { t } = useTranslation()
+  const resolvedWindow = axisWindow ?? (showNaps ? DEFAULT_WINDOW : fitWindow(nights))
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
-    const noDataY = noDataYFor(axisWindow)
+    const noDataY = noDataYFor(resolvedWindow)
     return {
       grid: base.grid({ left: 40 }),
       tooltip: {
@@ -40,12 +47,12 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow = DEF
       },
       xAxis: { type: 'category' as const, data: nights.map((n) => n.date.slice(8)),
         ...base.labelledAxis, axisLabel: { ...base.axisLabel, interval: 4 } },
-      yAxis: { type: 'value' as const, min: axisWindow.min, max: axisWindow.max, inverse: false,
+      yAxis: { type: 'value' as const, min: resolvedWindow.min, max: resolvedWindow.max, inverse: false,
         // Explicit, not ECharts's own automatic "nice number" search: axisTickInterval's own
         // comment has the reproduction and the reasoning, but in short, the default search does
         // not know this axis wraps every 1440 minutes and picked an interval that left one tick,
         // and its label, off the evenly spaced grid the rest of the axis draws.
-        interval: axisTickInterval(axisWindow),
+        interval: axisTickInterval(resolvedWindow),
         axisLabel: { ...base.axisLabel, formatter: (v: number) => formatClock(v).slice(0, 2) + ':00' },
         splitLine: base.splitLine },
       series: [
@@ -87,7 +94,7 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow = DEF
     // module level constant of its own, for the same reason) should not have to guarantee object
     // identity across renders just to avoid disposing and rebuilding this chart every commit, the
     // defect useChart.ts's own doc comment already names for a freshly constructed array.
-  }, [nights, showNaps, axisWindow.min, axisWindow.max, t])
+  }, [nights, showNaps, resolvedWindow.min, resolvedWindow.max, t])
 
   const { host, style } = useChart(build, 150)
   const baseColumns = [t('charts.columns.night'), t('charts.columns.toBed'), t('charts.columns.woke')]

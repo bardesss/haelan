@@ -18,6 +18,66 @@ export const AXIS_MIN = 12 * 60
 export const AXIS_MAX = 36 * 60
 export const DEFAULT_WINDOW = { min: AXIS_MIN, max: AXIS_MAX }
 
+/**
+ * The narrowest axis worth drawing, in minutes.
+ *
+ * Twelve hours. A single short night would otherwise fit itself an axis two hours tall, where the
+ * bar fills the plot and the gridlines sit minutes apart - technically the tightest fit and
+ * useless to read. This is the floor below which a fitted window stops tightening, not a target.
+ */
+export const MIN_FITTED_SPAN = 12 * 60
+
+/**
+ * An axis fitted to the nights it has to draw.
+ *
+ * DEFAULT_WINDOW reserves noon to noon so a nap at 13:00 fits without compressing the sleep band,
+ * which is right for the caller that draws naps and pure cost for the one that does not. Measured
+ * against a real archive, a third of that axis sat permanently empty below the earliest bedtime -
+ * which is why the bars read as thin floating ticks rather than as spans.
+ *
+ * Fitted rather than narrowed to a better constant, and that is the load-bearing choice. Every
+ * candidate constant placed every night of the archive it was measured against, so a constant
+ * would have looked perfect and would have been tuned to one household's hours. Somebody who
+ * sleeps days falls outside it, and `withinSchedule` does not complain when a night falls outside
+ * its window: it nulls the night out and the chart draws an absence dot. The failure would read as
+ * missing data rather than as a wrong axis, which is the worst way for it to fail.
+ *
+ * Whole hours out, because `axisTickInterval` divides the span into six and a window ending at
+ * 23:47 gives six ticks nobody can read.
+ */
+export function fitWindow(
+  nights: readonly { bed: number | null, wake: number | null }[],
+): { min: number, max: number } {
+  let low = Infinity
+  let high = -Infinity
+
+  for (const night of nights) {
+    if (night.bed === null || night.wake === null || night.wake <= night.bed) continue
+    // The same frame shift withinSchedule applies, so the bounds are in the coordinates the spans
+    // will actually be drawn in. A window derived from anything else would be a window that then
+    // refuses the nights it came from.
+    const bed = inWindow(night.bed, DEFAULT_WINDOW)
+    const wake = bed + (night.wake - night.bed)
+    if (bed < low) low = bed
+    if (wake > high) high = wake
+  }
+
+  // Nothing placeable to learn from: a range with no nights, or only nights withinSchedule refuses
+  // outright. The default window is as good an empty axis as any, and it keeps the tick labels a
+  // reader may already recognise.
+  if (low === Infinity) return DEFAULT_WINDOW
+
+  let min = Math.floor(low / 60) * 60
+  let max = Math.ceil(high / 60) * 60
+  // Grown from the middle so a short range stays centred rather than hanging off one edge.
+  const short = MIN_FITTED_SPAN - (max - min)
+  if (short > 0) {
+    min -= Math.floor(short / 2 / 60) * 60
+    max += Math.ceil(short / 2 / 60) * 60
+  }
+  return { min, max }
+}
+
 // A further noon two days on rather than one: wide enough that a night running past the default
 // window's own noon sits inside it instead of on its edge or past it. Sleep.tsx's own schedule
 // card passes this; Dashboard's stays on DEFAULT_WINDOW. Exported here rather than declared on the
