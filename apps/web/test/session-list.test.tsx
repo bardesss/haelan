@@ -305,7 +305,9 @@ describe('SessionList', () => {
       session('c', 'WALKING', { localDate: '2026-08-24', startMs: Date.UTC(2026, 7, 24, 8, 0), endMs: Date.UTC(2026, 7, 24, 8, 43) }),
     ], 'nl')
 
-    const headings = [...container!.querySelectorAll('.session-date-heading')].map((h) => h.textContent)
+    // The label, not the whole heading: the heading also carries the day's own count and total,
+    // and reading both together would let a broken date pass on the totals' text alone.
+    const headings = [...container!.querySelectorAll('.session-date-label')].map((h) => h.textContent)
     // Two headings for three rows: the two 27th sessions share one heading rather than each
     // printing their own, which is the defect this change exists to fix.
     expect(headings).toEqual(['donderdag 27 augustus', 'maandag 24 augustus'])
@@ -318,6 +320,21 @@ describe('SessionList', () => {
   // ("do 27 aug" is not "donderdag 27 augustus").
   it('spells the heading as the full weekday and date, not an abbreviation', () => {
     mountWith([session('a', 'RUNNING', { localDate: '2026-08-27' })], 'nl')
-    expect(container!.querySelector('.session-date-heading')!.textContent).toBe('donderdag 27 augustus')
+    expect(container!.querySelector('.session-date-label')!.textContent).toBe('donderdag 27 augustus')
+  })
+
+  // What a reader scanning a week was doing by hand: adding up the rows under one date. Elapsed
+  // time, the same figure each row shows, summed across the day - not moving time, which only some
+  // sessions record and which would make the day total mean something different from its rows.
+  it('sums the day into its heading, over the rows that day holds', () => {
+    mountWith([
+      session('a', 'RUNNING', { localDate: '2026-08-27', startMs: Date.UTC(2026, 7, 27, 8, 0), endMs: Date.UTC(2026, 7, 27, 8, 28) }),
+      session('b', 'RUNNING', { localDate: '2026-08-27', startMs: Date.UTC(2026, 7, 27, 7, 0), endMs: Date.UTC(2026, 7, 27, 7, 24) }),
+      session('c', 'WALKING', { localDate: '2026-08-24', startMs: Date.UTC(2026, 7, 24, 8, 0), endMs: Date.UTC(2026, 7, 24, 8, 43) }),
+    ], 'nl')
+
+    const summaries = [...container!.querySelectorAll('.session-day-summary')].map((s) => s.textContent)
+    // 28 + 24 on the 27th, and a singular for the one session on the 24th.
+    expect(summaries).toEqual(['2 sessies · 0h 52m', '1 sessie · 0h 43m'])
   })
 })

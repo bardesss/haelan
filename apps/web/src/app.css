@@ -736,11 +736,35 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    actually recorded. */
 .session-row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm); }
 .session-row:last-child { border-bottom: 0; }
-.session-row-main { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+/* Tracks, not space-between. The figures were the third item of a flex row whose first item is a
+   name of any length, so they landed wherever that name happened to end and no two rows agreed.
+   Four columns - glyph, name, figures, the mark that the row opens - give every row the same edges.
+   Measured at 1000px: every row's stats end on one pixel and every chevron on another, where before
+   there were five different edges. */
+.session-row-main {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto;
+  column-gap: var(--space-3); align-items: baseline;
+}
 /* Wraps session-row-type and session-row-duration (plus an sr-only date, invisible either way) so
    the gap between them comes from layout rather than a literal space character joining two spans
    with nothing else to tell them apart. */
-.session-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); }
+.session-row-primary { display: inline-flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+/* The category mark. Centred against the line rather than sitting on its baseline, which a glyph
+   has no business doing, and muted: it is there to be scanned past, not read. */
+.session-row-icon { display: inline-flex; align-self: center; color: var(--text-muted); flex: none; }
+.session-row-icon svg { width: 18px; height: 18px; }
+/* Says the row opens something. It has linked to the workout page since M8b with only a hover
+   background to suggest it, which a finger never sees. Quiet until the row is hovered or focused. */
+.session-row-go { display: inline-flex; align-self: center; color: var(--text-faint); flex: none; }
+.session-row-go svg { width: 16px; height: 16px; }
+.session-row-link:hover .session-row-go,
+.session-row-link:focus-visible .session-row-go { color: var(--accent-soft); }
+/* What a reader was adding up by hand. Quiet, and on the opposite edge from the date so the two
+   read as one line rather than as a heading with a tail. */
+.session-day-summary {
+  font-size: var(--font-size-xs); color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
 /* The prominent half of the line now that the date is gone: font-weight 600 is the same weight
    .rail-item[aria-current='page'] and .segment[aria-pressed='true'] already use for "this one is
    the point", not a new value invented for this row. */
@@ -750,7 +774,12 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    standing on its own. */
 .session-row-duration { color: var(--text-secondary); font-size: var(--font-size-xs); }
 .session-row-stats { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.session-row-detail { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: var(--space-1); }
+/* Indented to the name's own column by hand, because it sits outside the row's grid: the glyph's
+   width plus the grid's gap, which is what puts it under the type rather than under the mark. */
+.session-row-detail {
+  font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums;
+  margin-top: var(--space-1); padding-left: calc(18px + var(--space-3));
+}
 /* An excluded session stays in the list, muted and struck through rather than removed: the same
    "still visible, no longer counted" pairing .setup-rejected code already uses (text-faint plus
    line-through) for a rejected event kept on screen. The decoration sits on the row itself so it
@@ -783,7 +812,17 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    one every .session-row already carries between rows within a day). */
 .session-groups { display: flex; flex-direction: column; gap: var(--space-4); }
 .session-date-group { min-width: 0; }
-.session-date-heading { font-size: var(--font-size-xs); font-weight: var(--weight-medium); color: var(--text-secondary); margin: 0 0 var(--space-1); }
+/* The date and its totals on one line, with a rule under them, so a day reads as a group rather
+   than as a loose run of rows following a quiet label. */
+.session-date-heading {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
+  font-weight: var(--weight-medium); color: var(--text-primary);
+  margin: 0 0 var(--space-1); padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border-subtle);
+}
+/* The two halves carry their own size rather than inheriting one and overriding it, since the
+   heading is a flex container: its own font-size sets nothing here beyond what these two say. */
+.session-date-label { font-size: var(--font-size-sm); }
 
 /* NightList.tsx/NightRow.tsx: the night list Sleep gains in M8c, mirroring SessionList/SessionRow
    above one date at a time rather than one session at a time. .night-list and .night-groups carry

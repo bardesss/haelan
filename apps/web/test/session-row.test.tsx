@@ -130,3 +130,46 @@ describe('how a row separates its figures', () => {
     expect(html).toContain('<div class="session-row-detail">4,0 km · 30 m omhoog</div>')
   })
 })
+
+/**
+ * What a row shows besides its figures.
+ *
+ * The list was readable and completely flat: a run, a walk and an hour of housework were the same
+ * shape in the same weight, so finding the runs in a month meant reading every line. A glyph per
+ * category is what makes it scannable, and a mark at the end is what says the row opens something
+ * - it has linked to the workout page since M8b with nothing at rest to suggest it.
+ */
+describe('what a row carries besides its numbers', () => {
+  it('marks a row with its category, not its exact type', () => {
+    // Two different types, one category: a reader scanning for runs does not care which.
+    const running = render(run({ exerciseType: 'RUNNING', metricsSummary: {} }))
+    const treadmill = render(run({ exerciseType: 'TREADMILL', metricsSummary: {} }))
+    expect(running).toContain('data-category="run"')
+    expect(treadmill).toContain('data-category="run"')
+  })
+
+  // The failure this avoids is the one the Records device column had: an absent cell left some
+  // rows with art and some without, and the list read as broken rather than as varied.
+  it('marks a row whose type nobody mapped, rather than leaving it bare', () => {
+    const html = render(run({ exerciseType: 'CROSS_COUNTRY_SKI', metricsSummary: {} }))
+    expect(html).toContain('data-category="other"')
+    expect(html).toContain('<svg')
+  })
+
+  it('marks a row whose device recorded no type at all', () => {
+    const html = render(run({ metricsSummary: {} }))
+    expect(html).toContain('data-category="other"')
+  })
+
+  it('says the row opens something', () => {
+    const html = render(run({ exerciseType: 'RUNNING', metricsSummary: {} }))
+    expect(html).toContain('session-row-go')
+  })
+
+  // Decoration, not content: it repeats what the link already means, so it must not reach a
+  // screen reader as a separate thing to hear.
+  it('hides that mark from assistive technology', () => {
+    const html = render(run({ exerciseType: 'RUNNING', metricsSummary: {} }))
+    expect(html).toMatch(/class="session-row-go" aria-hidden="true"|aria-hidden="true" class="session-row-go"/)
+  })
+})
