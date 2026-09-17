@@ -21,6 +21,9 @@ export interface AccountRow {
   username: string
   isAdmin: boolean
   disabledAtMs: number | null
+  /** Null until this account has signed in once. See the column's own comment for why it is not
+   *  read off auth_sessions. */
+  lastLoginAtMs: number | null
 }
 
 /**
@@ -95,7 +98,7 @@ export class AccountStore {
       isAdmin: input.isAdmin,
       createdAtMs: input.nowMs,
     }).run()
-    return { id: input.id, personId: input.personId, username, isAdmin: input.isAdmin, disabledAtMs: null }
+    return { id: input.id, personId: input.personId, username, isAdmin: input.isAdmin, disabledAtMs: null, lastLoginAtMs: null }
   }
 
   async login(input: LoginInput): Promise<LoginResult> {
@@ -125,8 +128,13 @@ export class AccountStore {
     // disabled it is the one who tells the member - the app has no way to reach them.
     if (row.disabledAtMs !== null) return { ok: false, reason: 'bad_password' }
 
-    this.#db.update(accounts).set(LOCKOUT_CLEARED).where(eq(accounts.id, row.id)).run()
-    return { ok: true, account: toRow(row) }
+    // The one write that stamps a sign-in, in the same update that clears the lockout: this is the
+    // only path that ends in a session, so a stamp anywhere else would either miss a way in or
+    // count something that is not one.
+    this.#db.update(accounts).set({ ...LOCKOUT_CLEARED, lastLoginAtMs: input.nowMs }).where(eq(accounts.id, row.id)).run()
+    // The row as it now is, not as it was read: returning the previous stamp would have the caller
+    // that just signed somebody in holding a value one sign-in out of date.
+    return { ok: true, account: toRow({ ...row, lastLoginAtMs: input.nowMs }) }
   }
 
   getById(id: string): AccountRow | null {
@@ -161,6 +169,7 @@ export class AccountStore {
       isAdmin: accounts.isAdmin,
       disabledAtMs: accounts.disabledAtMs,
       lockedUntilMs: accounts.lockedUntilMs,
+      lastLoginAtMs: accounts.lastLoginAtMs,
     }).from(accounts).orderBy(asc(accounts.username)).all()
   }
 
@@ -275,5 +284,6 @@ function toRow(row: typeof accounts.$inferSelect): AccountRow {
     username: row.username,
     isAdmin: row.isAdmin,
     disabledAtMs: row.disabledAtMs,
+    lastLoginAtMs: row.lastLoginAtMs ?? null,
   }
 }

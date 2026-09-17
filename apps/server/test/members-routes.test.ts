@@ -57,8 +57,47 @@ describe('GET /api/members', () => {
         personId: 'p1', displayName: 'Robin', timezone: 'Europe/Amsterdam',
         accountId: expect.any(String), username: 'robin', isAdmin: true,
         state: 'active', inviteId: null,
+        // Signed in, because the token this suite holds came from a real login; nothing synced
+        // yet, so the floor across everything this person syncs is "never".
+        lastLoginAtMs: expect.any(Number),
+        sync: { oldestSuccessAtMs: null, neverSucceeded: expect.any(Number), failing: 0, due: expect.any(Number) },
       },
     ])
+  })
+
+  // An invited row has no account to have signed in, and nothing of its own to sync: both figures
+  // are absent rather than filled in with a zero or a "never" that would read as a fault.
+  it('leaves both figures off a row that has no account yet', async () => {
+    await invite(adminToken, 'Bob')
+    const bob = (await list(adminToken)).json().items
+      .find((m: { displayName: string }) => m.displayName === 'Bob')
+    expect(bob).toMatchObject({ state: 'invited', lastLoginAtMs: null, sync: null })
+  })
+
+  // The stamp only a real sign-in writes. An account created through the store has never signed
+  // in, and says so, until it does.
+  it('reports when an account last signed in, and null until it has', async () => {
+    await h.addPerson({ id: 'p-bob', displayName: 'Bob', username: 'bob' })
+    const findBob = async () => (await list(adminToken)).json().items
+      .find((m: { displayName: string }) => m.displayName === 'Bob')
+    expect(await findBob()).toMatchObject({ lastLoginAtMs: null })
+
+    await login('bob', PASSWORD)
+
+    expect(await findBob()).toMatchObject({ lastLoginAtMs: expect.any(Number) })
+  })
+
+  // The floor, which is the whole point of the aggregate: one type synced now cannot make a
+  // household look fresh while the rest of it has never run.
+  it('reports the oldest success across the types a person syncs, not the newest', async () => {
+    const stores = h.app.haelan.stores
+    for (const type of ['steps', 'weight']) {
+      stores.syncState.recordSuccess({ personId: 'p1', dataType: type, highWaterMs: 1, nowMs: 500 })
+    }
+    const item = (await list(adminToken)).json().items[0]
+    // Every other type has still never run, so the floor is null however fresh these two are.
+    expect(item.sync.oldestSuccessAtMs).toBeNull()
+    expect(item.sync.neverSucceeded).toBeGreaterThan(0)
   })
 })
 
@@ -180,6 +219,8 @@ describe('DELETE /api/members/invites/:id', () => {
     expect(carol).toEqual({
       personId: created.personId, displayName: 'Carol', timezone: 'Europe/Amsterdam',
       accountId: null, username: null, isAdmin: false, state: 'expired', inviteId: null,
+      // Both activity figures absent, like every row with no account behind it.
+      lastLoginAtMs: null, sync: null,
     })
 
     // A second revoke of the same id finds nothing pending to revoke.

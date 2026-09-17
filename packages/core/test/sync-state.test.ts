@@ -101,6 +101,70 @@ describe('SyncStateStore', () => {
     expect(store.get('p2', 'steps')).toBeNull()
   })
 
+  /**
+   * The aggregate the members card reads, and the whole reason it is an aggregate rather than a
+   * maximum: a household admin looking at that card is asking how far behind somebody is, and the
+   * newest of a person's types cannot answer that question.
+   */
+  describe('freshnessFor', () => {
+    const DUE = DATA_TYPES.filter((t) => t.actions.length > 0).length
+
+    it('reports the oldest success, not the newest, so one fresh type cannot hide a stale one', () => {
+      // Every type but one succeeded a minute ago; 'weight' succeeded a week before that. The
+      // flattering answer is 60_000; the true one is the week-old floor.
+      for (const type of DATA_TYPES.filter((t) => t.actions.length > 0)) {
+        store.recordSuccess({ personId: 'p1', dataType: type.id, highWaterMs: 1, nowMs: 1_000_000 })
+      }
+      store.recordSuccess({ personId: 'p1', dataType: 'weight', highWaterMs: 1, nowMs: 400_000 })
+
+      expect(store.freshnessFor(['p1']).get('p1')).toEqual({
+        oldestSuccessAtMs: 400_000, neverSucceeded: 0, failing: 0, due: DUE,
+      })
+    })
+
+    // The floor under "never" is never. A person whose steps synced a minute ago and whose sleep
+    // has never run at all is not "synced a minute ago" by any reading a reader would accept.
+    it('answers null while any type it syncs has never succeeded', () => {
+      store.recordSuccess({ personId: 'p1', dataType: 'steps', highWaterMs: 1, nowMs: 1_000_000 })
+      const answer = store.freshnessFor(['p1']).get('p1')!
+      expect(answer.oldestSuccessAtMs).toBeNull()
+      expect(answer.neverSucceeded).toBe(DUE - 1)
+    })
+
+    it('counts what is failing right now, which the timestamp cannot say', () => {
+      store.recordFailure({ personId: 'p1', dataType: 'steps', error: new TransientError('nope'), nowMs: 2000 })
+      store.recordFailure({ personId: 'p1', dataType: 'weight', error: new TransientError('nope'), nowMs: 2000 })
+      expect(store.freshnessFor(['p1']).get('p1')).toMatchObject({ failing: 2, due: DUE })
+    })
+
+    it('does not hold a person to a type they turned off', () => {
+      const excluded = new ExcludedDataTypeStore(ctx.db)
+      for (const type of DATA_TYPES.filter((t) => t.actions.length > 0)) {
+        store.recordSuccess({ personId: 'p1', dataType: type.id, highWaterMs: 1, nowMs: 1_000_000 })
+      }
+      // A type that is both excluded and long stale: it must not drag the floor down, because it
+      // is not something this person is behind on - it is something they said they did not want.
+      store.recordSuccess({ personId: 'p1', dataType: 'weight', highWaterMs: 1, nowMs: 1 })
+      excluded.setFor({ personId: 'p1', dataTypeIds: ['weight'], nowMs: 1000 })
+
+      expect(store.freshnessFor(['p1']).get('p1')).toEqual({
+        oldestSuccessAtMs: 1_000_000, neverSucceeded: 0, failing: 0, due: DUE - 1,
+      })
+    })
+
+    it("answers per person in one call, without leaking one person's state into another", () => {
+      seedPerson(ctx.db, 'p3')
+      store.recordSuccess({ personId: 'p1', dataType: 'steps', highWaterMs: 1, nowMs: 5000 })
+      const answers = store.freshnessFor(['p1', 'p3'])
+      expect(answers.get('p1')).toMatchObject({ neverSucceeded: DUE - 1 })
+      expect(answers.get('p3')).toMatchObject({ neverSucceeded: DUE, oldestSuccessAtMs: null })
+    })
+
+    it('answers nothing for nobody, rather than querying for an empty list', () => {
+      expect(store.freshnessFor([]).size).toBe(0)
+    })
+  })
+
   describe('dueJobs and exclusions', () => {
     let excluded: ExcludedDataTypeStore
 
