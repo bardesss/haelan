@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.36.0](https://github.com/bardesss/haelan/compare/v1.35.0...v1.36.0) (2026-09-17)
+
+
+### Features
+
+* the members card says who the admin is, and how each member is doing ([#271](https://github.com/bardesss/haelan/issues/271)) ([f59d2fa](https://github.com/bardesss/haelan/commit/f59d2fa4ca1b237c2ebb5df59b05dfb631a9ca2e))
+
 ## [1.35.0](https://github.com/bardesss/haelan/compare/v1.34.0...v1.35.0) (2026-09-17)
 
 
