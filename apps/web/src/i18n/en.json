@@ -108,6 +108,10 @@
       "detail": "There are too few days here to say anything useful yet."
     }
   },
+  "againstUsual": {
+    "below": "{{amount}} below your {{days}}-day average",
+    "above": "{{amount}} above your {{days}}-day average"
+  },
   "insightCard": {
     "summary": "{{current}} on average ({{currentFrom}} to {{currentTo}}) against {{previous}} on average in the previous period ({{previousFrom}} to {{previousTo}}), a change of {{delta}}.",
     "thinCoverage": {

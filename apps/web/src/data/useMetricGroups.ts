@@ -50,6 +50,8 @@ export interface MetricGroups {
   queryForAgg: (agg: string) => UseQueryResult<Record<string, MetricSeries>>
   /** `metric`'s points, or the one shared EMPTY array below when its query has none. */
   pointsOf: (metric: string) => SeriesPoint[]
+  /** The agg the card for this metric is reading, resolved through the same group lookup. */
+  aggOf: (metric: string) => string
   /** Every group's query, in the same order as `groups`, for a caller that needs to await or
    *  retry all of them together rather than one metric at a time. */
   queries: readonly UseQueryResult<Record<string, MetricSeries>>[]
@@ -157,5 +159,16 @@ export function useMetricGroups(groups: readonly MetricGroup[], range: SeriesRan
 
   const pointsOf = (metric: string): SeriesPoint[] => queryFor(metric).data?.[metric]?.points ?? EMPTY
 
-  return { queryFor, queryForAgg, pointsOf, queries }
+  /**
+   * Which aggregate this metric's card is actually reading.
+   *
+   * Resolved through the same group lookup queryFor uses, so it can never disagree with the series
+   * the card is drawing - and it cannot be answered from the catalogue instead, because the
+   * catalogue says which aggs a metric HAS rows under and never which one a given card asked to
+   * see. A baseline fetched under a different agg than the series it is compared against would be
+   * two different numbers held up beside each other, which is the mistake this exists to prevent.
+   */
+  const aggOf = (metric: string): string => groups[indexOfGroup(groups, metric)]!.agg
+
+  return { queryFor, queryForAgg, pointsOf, aggOf, queries }
 }
