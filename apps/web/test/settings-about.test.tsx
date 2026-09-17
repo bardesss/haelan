@@ -2,9 +2,14 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { About, PROJECT_LINKS, APP_VERSION } from '../src/pages/settings/About.js'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { About, PROJECT_LINKS, APP_VERSION, updateState } from '../src/pages/settings/About.js'
 import { Sidebar } from '../src/components/Sidebar.js'
 import { I18nProvider } from '../src/i18n/index.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import type { Session } from '../src/auth/session.js'
+import { updateStatusKey, isNewer } from '../src/data/useUpdateCheck.js'
+import type { UpdateStatus } from '../src/data/useUpdateCheck.js'
 
 /**
  * Where the project's own links live.
@@ -19,8 +24,31 @@ import { I18nProvider } from '../src/i18n/index.js'
  * in-app feedback channel of its own, so these point straight at the project's home. That argues
  * for keeping them somewhere findable, which Settings is. It never argued for the rail.
  */
-const render = (node: React.ReactNode, lng = 'en') =>
-  renderToStaticMarkup(<I18nProvider lng={lng}>{node}</I18nProvider>)
+const MEMBER: Session = {
+  personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+}
+
+/** The instance that has never been allowed to ask, which is every instance until an admin says
+ *  otherwise and so is the right default for a case that is not about the check. */
+const OFF: UpdateStatus = { enabled: false, latest: null, checkedAtMs: null, reachable: true }
+
+/**
+ * Renders with both answers this card reads already in the cache.
+ *
+ * Seeded rather than fetched: react-query hands back cached data on the first render, so a static
+ * render sees the state a case is about instead of the loading state every case would otherwise
+ * share. An unseeded query would also reach the real network here.
+ */
+function render(node: React.ReactNode, options: { lng?: string, status?: UpdateStatus, session?: Partial<Session> } = {}): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), { ...MEMBER, ...options.session })
+  client.setQueryData(updateStatusKey(), options.status ?? OFF)
+  return renderToStaticMarkup(
+    <QueryClientProvider client={client}>
+      <I18nProvider lng={options.lng ?? 'en'}>{node}</I18nProvider>
+    </QueryClientProvider>,
+  )
+}
 
 describe('the project links', () => {
   it('names the three the project actually has', () => {
@@ -91,5 +119,84 @@ describe('the rail, once the project links have left it', () => {
       </I18nProvider>,
     )
     expect(html).not.toContain('github.com')
+  })
+})
+
+/**
+ * The update check: five states, one sentence each.
+ *
+ * The states are asserted through `updateState` rather than by matching the rendered copy, which
+ * would be asserting the catalogue against itself. What the render is held to is the one thing the
+ * copy cannot say for itself: that the version named in "x is out" is the one the server reported,
+ * and that the switch is an admin's.
+ */
+describe('what the card says about releases', () => {
+  const status = (over: Partial<UpdateStatus>): UpdateStatus => ({ ...OFF, ...over })
+
+  it('is off until an admin turns it on, whatever else is true', () => {
+    expect(updateState(status({ latest: '99.0.0' }), '1.0.0')).toBe('off')
+  })
+
+  it('separates could not ask from nothing to report', () => {
+    expect(updateState(status({ enabled: true, reachable: false }), '1.0.0')).toBe('unreachable')
+    expect(updateState(status({ enabled: true, latest: null }), '1.0.0')).toBe('unknown')
+  })
+
+  it('calls a newer release out and leaves an equal one alone', () => {
+    expect(updateState(status({ enabled: true, latest: '1.34.0' }), '1.33.0')).toBe('available')
+    expect(updateState(status({ enabled: true, latest: '1.33.0' }), '1.33.0')).toBe('current')
+  })
+
+  // A release behind the running one is not a reason to say anything: a household on a build from
+  // master is ahead of the latest tag, and telling them to upgrade to the version they passed
+  // would be worse than silence.
+  it('says nothing when the newest release is older than what is running', () => {
+    expect(updateState(status({ enabled: true, latest: '1.32.0' }), '1.33.0')).toBe('current')
+  })
+
+  it('names the version the server reported, in the sentence a reader sees', () => {
+    const html = render(<About />, { status: status({ enabled: true, latest: '9.9.9' }) })
+    expect(html).toContain('9.9.9')
+    expect(html).toContain('data-state="available"')
+  })
+
+  it('offers the switch to an admin and not to a member', () => {
+    expect(render(<About />, { session: { isAdmin: true } })).toContain('type="checkbox"')
+    expect(render(<About />)).not.toContain('type="checkbox"')
+  })
+
+  // The sentence naming what leaves this instance is shown to whoever can act on it, and it is
+  // shown whether the check is on or off: nobody can decide against a sentence they would only
+  // see after saying yes.
+  it('tells an admin what the check sends before they can switch it on', () => {
+    const html = render(<About />, { session: { isAdmin: true } })
+    expect(html).toContain('GitHub sees a request from this instance')
+  })
+})
+
+/**
+ * Version comparison, which is the one piece of this the browser owns: the server reports a tag
+ * and this decides whether it means anything.
+ */
+describe('comparing two versions', () => {
+  it('reads the numbers rather than the text, so 1.9.0 is behind 1.10.0', () => {
+    expect(isNewer('1.10.0', '1.9.0')).toBe(true)
+    expect(isNewer('1.9.0', '1.10.0')).toBe(false)
+  })
+
+  it('compares each part in turn', () => {
+    expect(isNewer('2.0.0', '1.99.99')).toBe(true)
+    expect(isNewer('1.33.1', '1.33.0')).toBe(true)
+    expect(isNewer('1.33.0', '1.33.0')).toBe(false)
+  })
+
+  // "I cannot tell" and "you are behind" are different claims, and only one of them belongs on a
+  // card. A tag with a suffix, an empty answer, or a build constant that never got replaced all
+  // answer the first.
+  it('answers no to anything it cannot read as three numbers', () => {
+    expect(isNewer('1.34.0-rc.1', '1.33.0')).toBe(false)
+    expect(isNewer('nightly', '1.33.0')).toBe(false)
+    expect(isNewer(null, '1.33.0')).toBe(false)
+    expect(isNewer('1.34.0', '__APP_VERSION__')).toBe(false)
   })
 })

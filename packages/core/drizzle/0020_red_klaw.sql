@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `update_check_enabled` integer DEFAULT false NOT NULL;

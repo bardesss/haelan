@@ -2,9 +2,11 @@ import type { FastifyInstance } from 'fastify'
 import { USER_HORIZON_CHOICES, DEFAULT_USER_HORIZON_DAYS, DATA_TYPES, supports } from '@haelan/core'
 import { errorBody } from '../api/envelope.ts'
 import { candidateFor, redirectUriFor } from '../oauth/redirectUri.ts'
+import { checkForUpdate } from '../updates.ts'
 
 interface HorizonBody { days?: unknown }
 interface InstanceUrlBody { baseUrl?: unknown }
+interface UpdateCheckBody { enabled?: unknown }
 
 // Post-setup routes: reachable once the wizard finishes and answered with setup_incomplete
 // before that, unlike /api/setup/*, which the gate closes the moment setup is done. The
@@ -93,5 +95,43 @@ export function registerSettings(app: FastifyInstance): void {
     // The stored value put through redirectUriFor, which is the same call every consent makes, so
     // what the panel tells somebody to register is the string Google will actually be sent.
     return reply.send({ baseUrl: normalized, redirectUri: redirectUriFor(normalized) })
+  })
+
+  /**
+   * Whether a newer release exists, and whether this instance is allowed to ask.
+   *
+   * requireSession rather than requireAdmin: knowing the version behind the one you are running is
+   * not an instance secret, and the reader who most needs to know is whoever notices something is
+   * broken. Only turning the check on is an admin's to do, which is the PUT below.
+   *
+   * Switched off, this answers immediately with nothing known and never touches the network -
+   * which is also what makes the disabled state honest rather than merely hidden: there is no
+   * cached answer sitting behind the flag from before it was turned off.
+   */
+  app.get('/api/settings/update', { preHandler: [app.requireSession] }, async (_request, reply) => {
+    if (!stores().settings.updateCheckEnabled()) {
+      return reply.send({ enabled: false, latest: null, checkedAtMs: null, reachable: true })
+    }
+    // Never throws: updates.ts turns every failure into `reachable: false`, so an instance with no
+    // outbound network answers this route as fast as one that is up to date.
+    const result = await checkForUpdate(app.haelan.now())
+    return reply.send({ enabled: true, ...result })
+  })
+
+  // requireAdmin for the reason the two settings above give, with one of its own: this is the
+  // switch that decides whether this instance talks to a third party at all, which is a household
+  // decision rather than a reader's preference.
+  app.put<{ Body: UpdateCheckBody }>('/api/settings/update', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
+    const { enabled } = request.body ?? {}
+    if (typeof enabled !== 'boolean') {
+      return reply.code(400).send(errorBody('config', 'config', 'enabled must be true or false'))
+    }
+    stores().settings.putUpdateCheckEnabled(enabled, app.haelan.now())
+    // The new state read back through the same shape the GET answers with, so the page that just
+    // switched this on can show the answer without a second request. Turning it on asks GitHub
+    // straight away, which is what a reader who just pressed the switch is waiting to see.
+    if (!enabled) return reply.send({ enabled: false, latest: null, checkedAtMs: null, reachable: true })
+    const result = await checkForUpdate(app.haelan.now())
+    return reply.send({ enabled: true, ...result })
   })
 }

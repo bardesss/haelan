@@ -89,6 +89,13 @@ export const instanceSettings = sqliteTable('instance_settings', {
   backupKeep: integer('backup_keep'),
   backupIntervalHours: integer('backup_interval_hours'),
   setupCompletedAtMs: integer('setup_completed_at_ms'),
+  // Whether this instance may ask GitHub whether a newer release exists. Off by default, and the
+  // default is the point: everything else this program does stays inside the household, and a
+  // check that contacted a third party without being asked would quietly end that property for
+  // every instance that upgraded into it. An admin turns it on knowing what it sends, which is a
+  // request for one public release tag and nothing about this instance beyond the fact that it
+  // asked. See apps/server/src/updates.ts for what goes over the wire.
+  updateCheckEnabled: integer('update_check_enabled', { mode: 'boolean' }).notNull().default(false),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })
 

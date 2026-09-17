@@ -152,6 +152,13 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   { route: 'GET /api/settings/maintenance/backups/:name/download', auth: 'admin' },
   { route: 'POST /api/settings/maintenance/reclaim', auth: 'admin' },
 
+  {
+    route: 'GET /api/settings/update',
+    auth: 'session',
+    why: 'which release is out is not an instance secret, and the member who notices something is broken is who needs it',
+  },
+  { route: 'PUT /api/settings/update', auth: 'admin' },
+
   { route: 'GET /api/members', auth: 'admin' },
   { route: 'POST /api/members', auth: 'admin' },
   { route: 'POST /api/members/:accountId/disable', auth: 'admin' },

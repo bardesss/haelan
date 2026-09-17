@@ -410,6 +410,24 @@ dashboard stays reachable with its intraday charts empty, which is not distingui
 with no data. Both come back on their own when it finishes. It happens once: the next boot finds
 the person stamped at the current version and starts normally.
 
+### Knowing there is one
+
+Nothing tells you. That is deliberate: this program contacts Google on your behalf and nobody else,
+and a version check that phoned a third party without being asked would quietly end that property
+for every instance that upgraded into it.
+
+If you want it, **Settings -> Info -> "Check GitHub for new releases"** turns it on, and only an
+admin can. Switched on, the server asks `api.github.com` for this repository's newest release tag
+once every six hours and the page compares it with the version you are running. The request carries
+no credential, no identifier, no version and nothing about your household; GitHub learns that
+somebody at your address asked for a public tag. Your browser never talks to GitHub - your instance
+does, once for everybody on it. An instance with no way out says it could not check rather than
+showing an error for ever, and tries again a quarter of an hour later rather than on every page
+view.
+
+Switched off - which is how every instance starts - the page keeps no cached answer from before,
+and the server makes no request at all.
+
 ## Roadmap
 
 Five milestones are done and the sixth is finishing: the store and sync engine, the derivation
@@ -471,12 +489,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 888 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 895 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 888 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 895 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

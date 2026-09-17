@@ -49,6 +49,8 @@ export interface InstanceSettingsRow {
   /** Null until somebody chooses. See the column's own comment for why that state exists. */
   backupKeep: number | null
   backupIntervalHours: number | null
+  /** Whether this instance may ask GitHub about newer releases. False until an admin says so. */
+  updateCheckEnabled: boolean
 }
 
 export interface PutSettingsInput {
@@ -77,6 +79,7 @@ export class SettingsStore {
       nightGapMinutes: row.nightGapMinutes,
       backupKeep: row.backupKeep ?? null,
       backupIntervalHours: row.backupIntervalHours ?? null,
+      updateCheckEnabled: row.updateCheckEnabled,
     }
   }
 
@@ -176,6 +179,22 @@ export class SettingsStore {
       updatedAtMs: nowMs,
     }).where(eq(instanceSettings.id, ROW_ID)).run()
     return written
+  }
+
+  /**
+   * Whether this instance may ask GitHub about newer releases.
+   *
+   * Total, like backupPolicy above and for the same reason: there is no settings row until the
+   * wizard writes one, and "no row" has to mean the default rather than a crash. The default is
+   * the safe direction - an instance that has not been asked does not phone anybody.
+   */
+  updateCheckEnabled(): boolean {
+    return this.get()?.updateCheckEnabled ?? false
+  }
+
+  putUpdateCheckEnabled(enabled: boolean, nowMs: number): void {
+    this.#db.update(instanceSettings).set({ updateCheckEnabled: enabled, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 
   putSessionOverlapRatio(ratio: number, nowMs: number): void {
