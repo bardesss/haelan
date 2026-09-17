@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.33.0](https://github.com/bardesss/haelan/compare/v1.32.0...v1.33.0) (2026-09-17)
+
+
+### Features
+
+* **web:** a readable sessions list, a fitted sleep axis, and a rail that follows the pages you keep ([#265](https://github.com/bardesss/haelan/issues/265)) ([97b4d53](https://github.com/bardesss/haelan/commit/97b4d53132e3f8305448df474f3d2f0b54262ef5))
+
 ## [1.32.0](https://github.com/bardesss/haelan/compare/v1.31.0...v1.32.0) (2026-09-17)
 
 
