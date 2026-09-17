@@ -1086,6 +1086,15 @@
     "about": {
       "title": "Over deze instance",
       "version": "Versie {{version}}",
+      "update": {
+        "off": "De updatecontrole staat uit, dus deze instantie vraagt niemand naar nieuwe releases.",
+        "unknown": "Nog geen antwoord over nieuwere releases.",
+        "unreachable": "GitHub was niet bereikbaar, dus dit kan de nieuwste release zijn of niet.",
+        "current": "Dit is de nieuwste release.",
+        "available": "Versie {{version}} is uit. Het wijzigingslogboek hieronder vertelt wat er veranderd is.",
+        "toggle": "Controleer GitHub op nieuwe releases",
+        "sends": "Als dit aanstaat, vraagt deze instantie elke zes uur bij GitHub naar de nieuwste release. GitHub ziet een verzoek vanaf het adres van deze instantie; er wordt niets over het huishouden, de gegevens of de versie meegestuurd."
+      },
       "documentation": "Documentatie",
       "changelog": "Wijzigingslogboek",
       "issues": "Problemen"

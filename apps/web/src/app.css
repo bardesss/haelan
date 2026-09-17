@@ -90,6 +90,13 @@ body {
   margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+/* The release sentence, directly under the version it is about and weighted like it: the pair
+   reads as one line about what this instance is running, not as a notice. Only the "a newer one
+   exists" case is coloured, because it is the only one of the five that asks anything of the
+   reader. */
+.about-update { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-muted); }
+.about-update[data-state='available'] { color: var(--accent-soft); font-weight: var(--weight-medium); }
+.about-update-toggle { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); }
 .about-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .about-link {
   display: flex; align-items: center; gap: var(--space-2); min-height: 44px;
@@ -1110,8 +1117,14 @@ a.segment { text-decoration: none; display: inline-block; }
      place (.button sizes to its content on every axis). */
   .button select { min-height: 44px; }
 
-  .data-type-row, .data-type-row label { min-height: 44px; }
-  .data-type-row input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
+  /* The update switch on the Info tab joins the data type rows here rather than getting a rule of
+     its own: it is the same control - a small checkbox whose hit area is the label wrapping it -
+     and layout:check measures the label for exactly that reason. It cannot measure this one,
+     though, which is why the shared rule matters more than usual: the demo the check drives opens
+     /settings on its first tab and never captures the route this card reads, so the card renders
+     nothing there to measure. */
+  .data-type-row, .data-type-row label, .about-update-toggle { min-height: 44px; }
+  .data-type-row input[type='checkbox'], .about-update-toggle input[type='checkbox'] { width: 20px; height: 20px; flex: none; }
 
   /* The backfill horizon buttons measured 62-68 x 32: wide enough already, short by 12px. No
      display on the base rule, so it is set here too rather than assumed from the browser's own

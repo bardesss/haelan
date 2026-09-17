@@ -1086,6 +1086,15 @@
     "about": {
       "title": "About this instance",
       "version": "Version {{version}}",
+      "update": {
+        "off": "Update check is off, so this instance asks nobody about new releases.",
+        "unknown": "No answer yet about newer releases.",
+        "unreachable": "Could not reach GitHub, so this could be the latest release or it could not.",
+        "current": "This is the latest release.",
+        "available": "Version {{version}} is out. The changelog below says what changed.",
+        "toggle": "Check GitHub for new releases",
+        "sends": "Switched on, this instance asks GitHub for the newest release tag every six hours. GitHub sees a request from this instance's address; nothing about the household, its data or its version is sent."
+      },
       "documentation": "Documentation",
       "changelog": "Changelog",
       "issues": "Issues"

@@ -141,6 +141,13 @@
       "when": 1789301057603,
       "tag": "0019_conscious_jubilee",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1789651353649,
+      "tag": "0020_red_klaw",
+      "breakpoints": true
     }
   ]
 }
