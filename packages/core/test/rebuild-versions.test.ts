@@ -11,6 +11,7 @@ const person = (over: Partial<PersonRow> = {}): PersonRow => ({
   timezone: 'Europe/Amsterdam',
   birthDate: null,
   sex: null,
+  companionPath: false,
   builtMappingVersion: MAPPING_VERSION,
   builtDerivationVersion: DERIVATION_VERSION,
   ...over,

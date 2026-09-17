@@ -27,7 +27,7 @@ export interface SyncStatus {
   backfill: BackfillSummary[]
 }
 
-export const getSetupState = () => apiGet<{ step: string }>('/api/setup/state')
+export const getSetupState = () => apiGet<{ step: string, companionMode: boolean }>('/api/setup/state')
 export const getLastError = () => apiGet<SetupError>('/api/setup/last-error')
 export const getSyncStatus = () => apiGet<SyncStatus>('/api/sync/status')
 export const getRedirectUris = (host: string) =>
@@ -46,6 +46,11 @@ export const putInstanceUrl = (body: { baseUrl: string, consentPath: string }) =
 
 export const putGoogleClient = (body: { clientId: string, clientSecret: string }) =>
   apiSend<{ step: string }>('POST', '/api/setup/google-client', body)
+
+// No body: finishing without Google is a choice rather than a value, and the server reads
+// the step it is on rather than anything the browser claims.
+export const postCompanionSetup = () =>
+  apiSend<{ step: string }>('POST', '/api/setup/companion', {})
 
 // Under /api/settings/, not /api/setup/: the backfill screen is the step after setup is
 // 'done', and the setup gate answers every /api/setup/* path with 409 once it is.

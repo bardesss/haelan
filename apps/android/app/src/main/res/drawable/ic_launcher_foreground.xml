@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher foreground: the same two strokes as assets/brand/mark.svg and drawable/ic_brand_mark,
+     centered in the 108dp adaptive box. The group scales the 24 box by 2.5 and offsets by 24, so the
+     mark spans about 36 to 72dp across and 34 to 74dp down: inside the 72dp safe circle with room to
+     breathe on all sides. A vector scales to every density, which is the complete scaling: no mipmap
+     buckets. Colour is not written here: @color/accent is the token, so light and dark builds tint
+     from the same definition the login card reads. Single colour only, which keeps the monochrome
+     themed icon a recolor rather than a second drawing. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="2.5"
+        android:scaleY="2.5"
+        android:translateX="24"
+        android:translateY="24">
+        <path
+            android:pathData="M5,4L5,20M19,4L19,20"
+            android:strokeColor="@color/accent"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M5,12H8.9L9.8,13.5L11.2,7.3L13,15.9L14,12H19"
+            android:strokeColor="@color/accent"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

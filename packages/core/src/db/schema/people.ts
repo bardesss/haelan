@@ -38,6 +38,14 @@ export const people = sqliteTable('people', {
   // the same moment.
   birthDate: text('birth_date'),
   sex: text('sex', { enum: ['male', 'female'] }),
+  // How this person connects. True when they chose the phone path. Null on
+  // rows predating the column, which reads as false: no choice was ever recorded
+  // for them. The Google path needs no column: a credentials row for this person
+  // is already that choice written down. The instance flag says only that the
+  // wizard once closed without a client, never which member walks which path, so
+  // two members of one instance can walk different ones and setup is done when at
+  // least one of them walks any.
+  companionPath: integer('companion_path', { mode: 'boolean' }),
   // What this person's tiers 2 and 3 were built with. Per person rather than instance wide,
   // because that is what makes an interrupted rebuild resumable: a person carrying the current
   // numbers is already done. Null on a database whose data predates M2e, which is the case the

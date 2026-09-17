@@ -142,6 +142,7 @@ describe('setup routes', () => {
       { method: 'GET' as const, url: '/api/setup/redirect-uris?host=box.tail1234.ts.net' },
       { method: 'GET' as const, url: '/api/setup/scopes' },
       { method: 'GET' as const, url: '/api/setup/last-error' },
+      { method: 'POST' as const, url: '/api/setup/companion', payload: {} },
     ]
     for (const request of unauthenticated) {
       const response = await harness.app.inject({ ...request, headers })
@@ -153,11 +154,74 @@ describe('setup routes', () => {
 
   it('refuses the setup routes once setup is finished', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const response = await createAccount(harness)
     expect(response.statusCode).toBe(409)
     expect(response.json()).toEqual({
       error: { kind: 'setup_incomplete', code: 'setup_complete', message: expect.any(String) },
     })
+  })
+
+  it('finishes the wizard without a Google client through the companion route', async () => {
+    harness = await withServer()
+    const created = await createAccount(harness)
+    const cookie = created.cookies.find((c) => c.name === 'haelan_session')!.value
+    const personId = (created.json() as { personId: string }).personId
+    const cookies = { haelan_session: cookie }
+
+    const addressed = await harness.app.inject({
+      method: 'POST', url: '/api/setup/instance-url', headers, cookies,
+      payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
+    })
+    expect(addressed.statusCode).toBe(200)
+
+    const finished = await harness.app.inject({
+      method: 'POST', url: '/api/setup/companion', headers, cookies, payload: {},
+    })
+    expect(finished.statusCode).toBe(200)
+    expect(finished.json()).toEqual({ step: 'done' })
+    expect(harness.app.haelan.stores.settings.get()?.companionMode).toBe(true)
+    // T6.0: closing without Google is this person's phone choice, recorded next to the flag.
+    expect(harness.app.haelan.stores.people.get(personId)?.companionPath).toBe(true)
+
+    const state = await harness.app.inject({ method: 'GET', url: '/api/setup/state' })
+    expect(state.json()).toEqual({ step: 'done', companionMode: true })
+
+    // The gate is open now: the versioned surface answers instead of 409 setup_incomplete,
+    // with no Google client and no consent anywhere behind it.
+    const sources = await harness.app.inject({
+      method: 'GET', url: `/api/v1/p/${personId}/sources`, headers, cookies,
+    })
+    expect(sources.statusCode).toBe(200)
+  })
+
+  it('refuses the companion route before the address step and after setup is done', async () => {
+    harness = await withServer()
+    const cookie = await accountCookie(harness)
+    const cookies = { haelan_session: cookie }
+
+    // At the instance-url step: there is no settings row yet to complete.
+    const early = await harness.app.inject({
+      method: 'POST', url: '/api/setup/companion', headers, cookies, payload: {},
+    })
+    expect(early.statusCode).toBe(409)
+    expect(early.json()).toMatchObject({ error: { kind: 'setup_incomplete', code: 'wrong_step' } })
+    expect(harness.app.haelan.stores.settings.get()).toBeNull()
+
+    await harness.app.inject({
+      method: 'POST', url: '/api/setup/instance-url', headers, cookies,
+      payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
+    })
+    const finished = await harness.app.inject({
+      method: 'POST', url: '/api/setup/companion', headers, cookies, payload: {},
+    })
+    expect(finished.statusCode).toBe(200)
+
+    // Finished means finished: the gate shuts the setup routes, this one included.
+    const again = await harness.app.inject({
+      method: 'POST', url: '/api/setup/companion', headers, cookies, payload: {},
+    })
+    expect(again.statusCode).toBe(409)
+    expect(again.json()).toMatchObject({ error: { kind: 'setup_incomplete', code: 'setup_complete' } })
   })
 })

@@ -15,7 +15,10 @@
     "password": "Password",
     "submit": "Create my account",
     "invalid": "This invite is no longer valid",
-    "failed": "That did not work. Try again."
+    "failed": "That did not work. Try again.",
+    "pathTitle": "How will you connect?",
+    "pathGoogle": "With Google",
+    "pathCompanion": "With the Android app"
   },
   "shell": {
     "signOut": "Sign out",
@@ -238,6 +241,10 @@
       "label": "Respiratory rate",
       "basis": "mean, {{reported}} of {{total}} days; {{note}}",
       "chartLabel": "Daily respiratory rate through {{period}}"
+    },
+    "respiratoryRateSleep": {
+      "label": "Respiratory rate, during sleep",
+      "chartLabel": "Respiratory rate through {{period}}, measured during sleep"
     }
   },
   "health": {
@@ -820,7 +827,11 @@
       "clientIdLabel": "Client ID",
       "clientSecretLabel": "Client secret",
       "saving": "Saving",
-      "submit": "Save and grant consent"
+      "submit": "Save and grant consent",
+      "withoutGoogle": "Continue without Google",
+      "withoutGoogleNote": "No Google Cloud project needed. Use the Android companion app with Health Connect instead, and press its Sync button to send readings here.",
+      "choiceTitle": "How will you connect?",
+      "companionTitle": "With the Android app"
     },
     "backfill": {
       "title": "Filling in your history",
@@ -837,6 +848,12 @@
         "twoYears": "2 years",
         "fiveYears": "5 years"
       }
+    },
+    "companionHistory": {
+      "title": "Your history starts here",
+      "intro": "There is nothing to fill in: on this path haelan reads nothing back. Your history starts with the first readings the phone sends. Open the companion app and press Sync.",
+      "startedOn": "Phone history since {{date}}.",
+      "toDashboard": "Go to the dashboard"
     },
     "dataTypes": {
       "title": "What to sync",

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher icon: background is the page token, foreground is the brand mark. The v26 folder
+     stays although minSdk is 26: an adaptive icon outside a v26 folder is not read, so merging
+     it down would remove the icon instead of silencing the lint. One vector covers every density,
+     so no PNG buckets are needed. The monochrome entry reuses the same foreground so the themed
+     icon on Android 13 and later is the mark recolored by the system, not a second drawing. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/surface_page" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

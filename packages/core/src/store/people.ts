@@ -11,6 +11,7 @@ export interface PersonRow {
   timezone: string
   birthDate: string | null
   sex: 'male' | 'female' | null
+  companionPath: boolean
   builtMappingVersion: number | null
   builtDerivationVersion: number | null
 }
@@ -37,13 +38,14 @@ export class PeopleStore {
    * rows built by something older" rather than "has rows, or does not, we cannot tell".
    */
   create(
-    input: Omit<PersonRow, 'birthDate' | 'sex' | 'builtMappingVersion' | 'builtDerivationVersion'>
-      & { nowMs: number },
+    input: Omit<PersonRow, 'birthDate' | 'sex' | 'builtMappingVersion' | 'builtDerivationVersion' | 'companionPath'>
+      & { nowMs: number, companionPath?: boolean },
   ): PersonRow {
     this.#db.insert(people).values({
       id: input.id,
       displayName: input.displayName,
       timezone: input.timezone,
+      companionPath: input.companionPath ?? false,
       createdAtMs: input.nowMs,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
@@ -54,6 +56,7 @@ export class PeopleStore {
       timezone: input.timezone,
       birthDate: null,
       sex: null,
+      companionPath: input.companionPath ?? false,
       builtMappingVersion: MAPPING_VERSION,
       builtDerivationVersion: DERIVATION_VERSION,
     }
@@ -68,6 +71,7 @@ export class PeopleStore {
         timezone: row.timezone,
         birthDate: row.birthDate ?? null,
         sex: row.sex ?? null,
+        companionPath: row.companionPath ?? false,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }
@@ -82,6 +86,7 @@ export class PeopleStore {
         timezone: row.timezone,
         birthDate: row.birthDate ?? null,
         sex: row.sex ?? null,
+        companionPath: row.companionPath ?? false,
         builtMappingVersion: row.builtMappingVersion ?? null,
         builtDerivationVersion: row.builtDerivationVersion ?? null,
       }))
@@ -173,6 +178,16 @@ export class PeopleStore {
       .set({ builtMappingVersion: input.mappingVersion, builtDerivationVersion: input.derivationVersion })
       .where(eq(people.id, input.id))
       .run()
+  }
+
+  /**
+   * Records this person's connection path choice. True means the phone
+   * path, false means not. The Google path is recorded by the credentials row
+   * instead, so this column never has to say both at once and never deduces a
+   * choice from the absence of the other.
+   */
+  setCompanionPath(id: string, usesCompanion: boolean): void {
+    this.#db.update(people).set({ companionPath: usesCompanion }).where(eq(people.id, id)).run()
   }
 
   // The wizard creates the person row before the account's foreign key can point at it, and

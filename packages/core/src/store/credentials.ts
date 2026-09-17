@@ -153,6 +153,16 @@ export class CredentialStore {
       .where(isNull(credentials.revokedAtMs)).all().map((r) => r.personId)
   }
 
+  // Every person holding a refresh token row, revoked or not (T6.0). setupStep asks
+  // "has anyone ever chosen the Google path", not "is any grant currently working":
+  // a revoked grant stays a chosen path whose way back is reconsent (the banner),
+  // not a wizard that reopens and blocks the dashboard. Decrypt-free like
+  // listConnectedPeople, which is what a per-request gate wants.
+  listTokenPeople(): string[] {
+    return this.#db.select({ personId: credentials.personId }).from(credentials)
+      .all().map((r) => r.personId)
+  }
+
   // Deliberately not listConnectedPeople's predicate (row exists, never revoked) plus a decrypt
   // attempt bolted on: this is the one place that decides what "connected" means for a single
   // person, and #readable below is the single place that decides whether the key can still open

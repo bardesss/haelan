@@ -359,6 +359,7 @@ describe('package barrel', () => {
         accounts: new core.AccountStore(fixture.db),
         settings: new core.SettingsStore(fixture.db),
         credentials: new core.CredentialStore(fixture.db, core.loadOrCreateKey(fixture.dir, {})),
+        people: new core.PeopleStore(fixture.db),
       })
       expect(step).toBe('account')
     } finally { fixture.cleanup() }

@@ -4,7 +4,7 @@ import { errorBody, sendCoreError, statusFor } from '../api/envelope.ts'
 import { setSessionCookie } from '../auth/cookie.ts'
 
 interface InviteParams { token: string }
-interface RedeemBody { username?: unknown, password?: unknown }
+interface RedeemBody { username?: unknown, password?: unknown, path?: unknown }
 
 // Unauthenticated on purpose, and the only pair in the app besides /api/auth/login that is: the
 // member holding this link has no account yet, so there is no session to require. Every other
@@ -37,9 +37,16 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       const invite = app.haelan.instance.invites.findByToken(request.params.token, app.haelan.now())
       if (!invite) return reply.code(statusFor('not_found')).send(notFound())
 
-      const { username, password } = request.body ?? {}
+      const { username, password, path } = request.body ?? {}
       if (typeof username !== 'string' || typeof password !== 'string') {
         return reply.code(statusFor('config')).send(errorBody('config', 'config', 'username and password are required'))
+      }
+      // T6.1: whoever is invited names their own path while redeeming instead of inheriting
+      // the admin's. Only 'companion' writes anything, onto their own person row; 'google'
+      // and an absent choice both leave the flag for a later consent or pairing. Validated
+      // before the claim below so a bad value cannot burn a one-time link.
+      if (path !== undefined && path !== 'google' && path !== 'companion') {
+        return reply.code(statusFor('config')).send(errorBody('config', 'config', "path must be 'google' or 'companion' when given"))
       }
 
       const now = app.haelan.now()
@@ -73,6 +80,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
         throw error
       }
       setSessionCookie(request, reply, app.haelan.stores.sessions.create(account.id, now))
+      if (path === 'companion') app.haelan.stores.people.setCompanionPath(invite.personId, true)
       return reply.code(201).send({ personId: account.personId, username: account.username })
     })
   })
