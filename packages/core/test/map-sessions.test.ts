@@ -52,6 +52,28 @@ const anExercise = {
 }
 
 describe('mapSessions', () => {
+  /**
+   * The same fallback the samples mapper needs, for the same reason: the companion route archives
+   * the request's identity beside the points, and a session replayed from the archive alone would
+   * otherwise land under `unknown`.
+   */
+  it('reads the source a page names for all of its sessions', () => {
+    const seen: unknown[] = []
+    const rows = mapSessions({
+      dataType: sleep, personId: 'p1', rawPayloadId: 'r1',
+      resolveSource: (dataSource) => { seen.push(dataSource); return 's1' },
+      body: JSON.stringify({
+        dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+        // The name and the per-point source are both dropped on purpose: this is the shape the
+        // companion app sends, where a point carries nothing but its reading.
+        dataPoints: [{ sleep: aNight.sleep }],
+      }),
+    })
+
+    expect(rows.sessions).toHaveLength(1)
+    expect(seen).toEqual([{ platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } }])
+  })
+
   it('maps one night to one session', () => {
     const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([aNight]) })
     expect(sessions).toHaveLength(1)

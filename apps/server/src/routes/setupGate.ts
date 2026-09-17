@@ -8,7 +8,13 @@ import { errorBody } from '../api/envelope.ts'
 const ALWAYS_OPEN = new Set(['/api/health', '/api/setup/state'])
 
 export function registerSetupGate(app: FastifyInstance): void {
-  app.get('/api/setup/state', async () => ({ step: currentStep(app) }))
+  // The wizard's backfill step does not apply to a phone path (T5.4), so the state names
+  // the mode next to the step: one fetch tells SetupApp whether to offer a horizon to
+  // walk or a history start that is a fact rather than a choice.
+  app.get('/api/setup/state', async () => ({
+    step: currentStep(app),
+    companionMode: app.haelan.stores.settings.get()?.companionMode ?? false,
+  }))
 
   app.addHook('preHandler', async (request, reply) => {
     const path = request.url.split('?')[0] ?? ''
@@ -59,6 +65,6 @@ export function registerSetupGate(app: FastifyInstance): void {
 }
 
 function currentStep(app: FastifyInstance): SetupStep {
-  const { accounts, settings, credentials } = app.haelan.stores
-  return setupStep({ accounts, settings, credentials })
+  const { accounts, settings, credentials, people } = app.haelan.stores
+  return setupStep({ accounts, settings, credentials, people })
 }

@@ -368,14 +368,16 @@ describe('a stored refresh token instance.key cannot decrypt', () => {
 
     const { db } = harness.app.haelan.instance
     const wrongKeyCredentials = new CredentialStore(db, randomBytes(32))
-    wrongKeyCredentials.putRefreshToken({
-      personId: 'p1', refreshToken: 'sealed-under-a-key-this-process-does-not-have',
-      scopes: [...SCOPES], nowMs: harness.clock.nowMs,
-    })
 
     await harness.addPerson({ id: 'p-never', displayName: 'Never Connected', username: 'never' })
 
     const unreadableToken = await harness.signIn()
+    // Sealed after the sign-in that connected them: signIn leaves a readable token,
+    // so sealing first would prove nothing about the unreadable one.
+    wrongKeyCredentials.putRefreshToken({
+      personId: 'p1', refreshToken: 'sealed-under-a-key-this-process-does-not-have',
+      scopes: [...SCOPES], nowMs: harness.clock.nowMs,
+    })
     const unreadableMe = await harness.app.inject({
       method: 'GET', url: '/api/auth/me',
       headers: { authorization: `Bearer ${unreadableToken}` },

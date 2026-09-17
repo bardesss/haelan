@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { CopyField } from './CopyField.js'
-import { putGoogleClient } from './api.js'
+import { putGoogleClient, postCompanionSetup } from './api.js'
 import type { RedirectCandidate, SetupError } from './api.js'
 
 // The console's own address. Not translated: it is the same URL in every locale, and a link whose
@@ -12,21 +12,51 @@ import type { RedirectCandidate, SetupError } from './api.js'
 const CONSOLE_URL = 'https://console.cloud.google.com'
 const CONSOLE_HOST = new URL(CONSOLE_URL).host
 
-export function GoogleStep({ candidates, scopes = [], error, onDone }: {
+export function GoogleStep({ candidates, scopes = [], error, onDone, onCompanion }: {
   candidates: RedirectCandidate[]
   scopes?: string[]
   error: SetupError | null
   onDone: () => void
+  onCompanion: () => void
 }) {
   const { t } = useTranslation()
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [companionBusy, setCompanionBusy] = useState(false)
 
   return (
     <section className="setup-step">
-      <h1>{t('setup.google.title')}</h1>
+      <h1>{t('setup.google.choiceTitle')}</h1>
+
+      {/* The phone path is a section of its own above the Google one, not an escape
+          hatch under it: whoever syncs from a phone picks it here instead of scrolling
+          past six console steps. A second submit would nest a form, so its button sits
+          beside the client form below rather than inside it. */}
+      <h2>{t('setup.google.companionTitle')}</h2>
+      <p>{t('setup.google.withoutGoogleNote')}</p>
+      <div className="form-actions">
+        <button
+          type="button"
+          className="button"
+          disabled={busy || companionBusy}
+          onClick={() => {
+            setCompanionBusy(true)
+            setFailure(null)
+            postCompanionSetup()
+              .then(onCompanion)
+              .catch((cause: unknown) => {
+                setFailure(cause instanceof Error ? cause.message : t('setup.genericError'))
+                setCompanionBusy(false)
+              })
+          }}
+        >
+          {companionBusy ? t('setup.google.saving') : t('setup.google.withoutGoogle')}
+        </button>
+      </div>
+
+      <h2>{t('setup.google.title')}</h2>
       <p>{t('setup.google.intro')}</p>
 
       <ol className="setup-instructions">

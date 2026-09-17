@@ -10,7 +10,7 @@ describe('the setup gate', () => {
     harness = await withServer()
     const response = await harness.app.inject({ method: 'GET', url: '/api/setup/state' })
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toEqual({ step: 'account' })
+    expect(response.json()).toEqual({ step: 'account', companionMode: false })
   })
 
   it('refuses every non setup route while setup is unfinished, and names the step that is due', async () => {
@@ -98,7 +98,7 @@ describe('the setup gate', () => {
   // SQLite, and it is the same path a second household member's first consent will take (M5).
   it('keeps consent reachable after setup, because a revoked grant has no other way back', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     // 401 rather than 302: the gate is open, and the route's own session check is what answers.
     // A 409 here would mean the gate never let it through at all.
     expect((await harness.app.inject({ method: 'GET', url: '/oauth/start' })).statusCode).toBe(401)
@@ -106,7 +106,7 @@ describe('the setup gate', () => {
 
   it('still refuses the wizard API after setup, because those routes build an instance that exists', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const response = await harness.app.inject({
       method: 'POST', url: '/api/setup/instance-url',
       payload: { baseUrl: 'http://elsewhere.invalid', consentPath: 'elsewhere.invalid' },
@@ -119,7 +119,7 @@ describe('the setup gate', () => {
 
   it('still reports the step after setup is finished, because the SPA asks on every load', async () => {
     harness = await withServer()
-    await harness.completeSetup()
-    expect((await harness.app.inject({ method: 'GET', url: '/api/setup/state' })).json()).toEqual({ step: 'done' })
+    await harness.connectPerson()
+    expect((await harness.app.inject({ method: 'GET', url: '/api/setup/state' })).json()).toEqual({ step: 'done', companionMode: false })
   })
 })

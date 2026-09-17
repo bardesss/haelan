@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The instance is whatever address the person typed, and on a home network that is http, so
+  cleartext stays permitted. It is said here, in the one file that governs it, rather than in a
+  manifest flag that would also cover hosts this app is never pointed at: a person who wants TLS
+  puts a reverse proxy in front of the instance and types an https address, and nothing in the
+  app has to change for that (T3.5).
+
+  What this does not do is hide the session cookie: over http it travels in cleartext on the
+  local network, which the package README says out loud.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <!-- System anchors only, which is also the default from API 24: a certificate
+                 somebody installed by hand does not become trusted by this file. -->
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

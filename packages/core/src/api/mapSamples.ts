@@ -52,6 +52,12 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
   // an array. Iterating that throws "not iterable"; treating it as no data does not.
   const points = Array.isArray(dataPoints) ? dataPoints : []
 
+  // The source a page names for all of its points. The companion route archives the one identity
+  // a request carries here rather than inside every point (ingest.ts), and a rebuild has nothing
+  // but the archive to read: without this fallback every row of such a page replays under
+  // `unknown`, an identity no describe() would ever have produced for it.
+  const pageSource = (parsed as { dataSource?: unknown }).dataSource
+
   const rows: SampleRow[] = []
   for (const point of points) {
     const payload = valueAt(point, t.payloadKey)
@@ -97,8 +103,9 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
       // single easiest way to turn a gap into a fabricated measurement. Spec invariant 2.
       if (value !== null) {
         // Per point, not once per call: a single payload carries more than one platform, and
-        // spec invariant 4 requires every row to keep its own source.
-        const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+        // spec invariant 4 requires every row to keep its own source. A point that names none
+        // belongs to the page's name, which is the only source such a body carries.
+        const sourceId = input.resolveSource(valueAt(point, 'dataSource') ?? pageSource)
         rows.push({
           personId: input.personId,
           sourceId,
@@ -118,7 +125,7 @@ export function mapSamples(input: MapSamplesInput): SampleRow[] {
       const elements = sub.arrayPath ? (Array.isArray(arrayValue) ? arrayValue : []) : [payload]
       // One source per point, not per element: every element in this loop comes from the same
       // point, so resolving it once outside the loop is both correct and cheaper.
-      const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+      const sourceId = input.resolveSource(valueAt(point, 'dataSource') ?? pageSource)
       for (const element of elements) {
         const key = valueAt(element, sub.keyPath)
         const metric = typeof key === 'string' ? sub.metricByKey[key] : undefined

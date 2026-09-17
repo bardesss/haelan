@@ -6,3 +6,7 @@ end_of_line = lf
 indent_style = space
 indent_size = 2
 insert_final_newline = true
+
+# Kotlin follows the official style, which uses four spaces.
+[*.{kt,kts}]
+indent_size = 4

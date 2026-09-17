@@ -101,6 +101,11 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
     auth: 'session',
     why: 'the same wizard window; it reports the last consent failure to whoever is walking the wizard',
   },
+  {
+    route: 'POST /api/setup/companion',
+    auth: 'session',
+    why: 'the same wizard window; it finishes setup without a Google client, and the gate shuts it once setup is done',
+  },
 
   {
     route: 'GET /oauth/start',

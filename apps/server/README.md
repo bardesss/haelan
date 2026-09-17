@@ -38,6 +38,7 @@ above do.
 | `GET /api/setup/redirect-uris` | session | Concrete, complete candidates. Never a placeholder. |
 | `GET /api/setup/scopes` | session | The six scopes the consent screen declares, for the wizard to list. |
 | `POST /api/setup/google-client` | session | Stores the pasted OAuth client, encrypted. |
+| `POST /api/setup/companion` | session | Finishes setup without a Google client, for the companion app. |
 | `GET /api/setup/last-error` | session | The message from the last failed callback, for the wizard to show. |
 | `GET /oauth/start` | session | Redirects to Google with a signed state. |
 | `GET /oauth/callback` | none | Exchanges the code, probes access, stores the token, marks setup complete. |

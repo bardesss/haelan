@@ -175,6 +175,58 @@ describe('PersonQuery.series', () => {
   })
 })
 
+describe('PersonQuery.series, the metric a phone rolls up instead of a daily type', () => {
+  it('answers daily_hrv from the rolled up hrv when nothing wrote the daily name', () => {
+    // The measured shape of a companion instance: `hrv` has rows, `daily_hrv` has none, because
+    // Health Connect computes no daily HRV summary and the phone has no Google daily type to
+    // send. The card asks for the daily name and used to get an empty series while the number
+    // sat one name away, already derived.
+    insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
+
+    const { points } = query.series({ metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([42])
+  })
+
+  it('reads the merged hrv rather than one device, the same choice every series makes', () => {
+    insertSource('phone')
+    insertDaily({ localDate: '2026-08-01', value: 30, metric: 'hrv', agg: 'mean', source: 'phone' })
+    insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
+
+    const { points } = query.series({ metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([42])
+    expect(points.map((p) => p.source)).toEqual(['merged'])
+  })
+
+  it('does not take the fallback when the daily row exists, so a Google instance is unchanged', () => {
+    // The one that must not move. daily_hrv is the device's own summary, and a fallback that
+    // outranked it would answer a question about the watch with a number about the phone.
+    insertDaily({ localDate: '2026-08-01', value: 55, metric: 'daily_hrv', agg: 'last', source: 'provider' })
+    insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
+
+    const { points } = query.series({ metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([55])
+    expect(points.map((p) => p.source)).toEqual(['provider'])
+  })
+
+  it('keeps a day with a daily row and fills the day without one, in the same series', () => {
+    insertDaily({ localDate: '2026-08-01', value: 55, metric: 'daily_spo2', agg: 'last', source: 'provider' })
+    insertDaily({ localDate: '2026-08-02', value: 97, metric: 'spo2', agg: 'mean', source: 'merged' })
+
+    const { points } = query.series({ metric: 'daily_spo2', agg: 'last', from: '2026-08-01', to: '2026-08-02' })
+    expect(points.map((p) => p.value)).toEqual([55, 97])
+  })
+
+  it('answers nothing for respiratory_rate, because the phone only has the night', () => {
+    // The asymmetry, held on purpose. Google summarises a whole day of breathing; the phone
+    // summarises the night, under `sleep_respiratory_rate`. Mapping the day's card onto the
+    // night's number would answer the question it asked with a different one.
+    insertDaily({ localDate: '2026-08-01', value: 14, metric: 'sleep_respiratory_rate', agg: 'last', source: 'merged' })
+
+    const { points } = query.series({ metric: 'respiratory_rate', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
+    expect(points).toEqual([])
+  })
+})
+
 describe('PersonQuery.series with a point budget', () => {
   it('thins on the index, keeping the first and last local date', () => {
     for (let day = 1; day <= 20; day += 1) {

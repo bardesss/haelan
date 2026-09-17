@@ -138,7 +138,7 @@ describe('the entry point boots', () => {
       if (outcome.ok) {
         expect(outcome.health).toEqual({ ok: true })
         // A fresh volume boots straight into the wizard, which is the state a first run is in.
-        expect(outcome.setupState).toEqual({ step: 'account' })
+        expect(outcome.setupState).toEqual({ step: 'account', companionMode: false })
         return
       }
       lastFailure = outcome.output

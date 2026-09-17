@@ -231,6 +231,9 @@ describe('the two credential kinds are not interchangeable', () => {
   })
 
   it('refuses an MCP token at /api/v1 and at the flat surface', async () => {
+    // These two families sit behind the setup gate, unlike /mcp above: without a finished
+    // instance the gate answers 409 before the credential guard ever sees the token.
+    await h.connectPerson()
     const { secret } = h.mintMcpToken()
     const personId = ADMIN_PERSON
     const header = { authorization: `Bearer ${secret}` }

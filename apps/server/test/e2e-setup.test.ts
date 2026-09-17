@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { AccountStore, SettingsStore, openHaelan, seedPerson } from '@haelan/core'
+import { AccountStore, SCOPES, SettingsStore, openHaelan, seedPerson } from '@haelan/core'
 import { buildServer } from '../src/app.ts'
 import { startStubGoogle } from './stub-google.ts'
 import type { FastifyInstance } from 'fastify'
@@ -63,7 +63,7 @@ describe('empty volume to syncing instance', () => {
     const headers = { 'content-type': 'application/json', origin: base }
 
     // 1. Empty volume: the wizard is what the browser gets.
-    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'account' })
+    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'account', companionMode: false })
 
     // 2. First account.
     const created = await fetch(`${base}/api/setup/account`, {
@@ -101,7 +101,7 @@ describe('empty volume to syncing instance', () => {
       { headers: { cookie }, redirect: 'manual' },
     )
     expect(callback.headers.get('location')).toBe('/setup/backfill')
-    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'done' })
+    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'done', companionMode: false })
 
     // The refresh token is on disk and it is not readable as plaintext.
     const stored = instance.db.$client
@@ -157,6 +157,74 @@ describe('empty volume to syncing instance', () => {
     expect(after.n).toBe(samples.n)
   }, 60_000)
 
+  // An instance that skipped Google connects it later through the same consent
+  // flow, spending the client pasted before the skip. The stub stands in for Google
+  // here; the grant against a real Cloud project is the maintainer's and counts as done.
+  it('connects Google after a companion skip, with the client pasted before it', async () => {
+    const { base, instance } = await listeningServer()
+    const headers = { 'content-type': 'application/json', origin: base }
+
+    const created = await fetch(`${base}/api/setup/account`, {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        username: 'robin', password: 'a good long password',
+        displayName: 'Robin', timezone: 'Europe/Amsterdam',
+      }),
+    })
+    expect(created.status).toBe(201)
+    const cookie = (created.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+    const personId = ((await created.json()) as { personId: string }).personId
+    const authed = { ...headers, cookie }
+
+    const urlStep = await fetch(`${base}/api/setup/instance-url`, {
+      method: 'POST', headers: authed,
+      body: JSON.stringify({ baseUrl: base, consentPath: 'localhost' }),
+    })
+    expect(urlStep.status).toBe(200)
+
+    const clientStep = await fetch(`${base}/api/setup/google-client`, {
+      method: 'POST', headers: authed,
+      body: JSON.stringify({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' }),
+    })
+    expect(clientStep.status).toBe(200)
+
+    // The skip finishes the wizard without Google, and the pasted client stays stored.
+    const skipped = await fetch(`${base}/api/setup/companion`, {
+      method: 'POST', headers: authed, body: JSON.stringify({}),
+    })
+    expect(await skipped.json()).toEqual({ step: 'done' })
+    expect(await (await fetch(`${base}/api/setup/state`)).json())
+      .toEqual({ step: 'done', companionMode: true })
+    const storedClient = instance.db.$client
+      .prepare('select client_id as clientId from oauth_client').get() as { clientId: string }
+    expect(storedClient.clientId).toBe('id.apps.googleusercontent.com')
+
+    // The same consent flow opens after the skip instead of a 409, spending that client.
+    const start = await fetch(`${base}/oauth/start`, { headers: { cookie }, redirect: 'manual' })
+    expect(start.status).toBe(302)
+    const location = start.headers.get('location') ?? ''
+    expect(location).toContain('/auth')
+    expect(location).toContain('client_id=id.apps.googleusercontent.com')
+    const state = new URL(location).searchParams.get('state')
+    expect(state).toBeTruthy()
+
+    // The stub grants: the refresh token lands on the same person, and nothing was
+    // reinstalled to get there - one person, one account, the companion choice kept.
+    const callback = await fetch(
+      `${base}/oauth/callback?code=good&state=${encodeURIComponent(state!)}`,
+      { headers: { cookie }, redirect: 'manual' },
+    )
+    expect(callback.headers.get('location')).toBe('/')
+    const people = instance.db.$client.prepare('select count(*) as n from people').get() as { n: number }
+    expect(people.n).toBe(1)
+    const creds = instance.db.$client
+      .prepare('select person_id as personId from credentials').all() as Array<{ personId: string }>
+    expect(creds.map((row) => row.personId)).toEqual([personId])
+    const kept = instance.db.$client
+      .prepare('select companion_path as companionPath from people').get() as { companionPath: number }
+    expect(kept.companionPath).toBe(1)
+  }, 60_000)
+
   it('serves the SPA shell for an unknown path so a refresh mid wizard works', async () => {
     // A directory with a shell in it, rather than a real build: what is under test is the not
     // found handler, and requiring `pnpm build` first would make this suite depend on an
@@ -207,6 +275,11 @@ describe('empty volume to syncing instance', () => {
     settings.put({ baseUrl: base, consentPath: 'localhost', nowMs: NOW_MS })
     instance.credentials.putClient({
       clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: NOW_MS,
+    })
+    // A stamp with no path behind it is still at the connect step, so this finished
+    // fixture leaves a token the way a real consent would have.
+    instance.credentials.putRefreshToken({
+      personId: 'p1', refreshToken: 'stub-refresh-token', scopes: [...SCOPES], nowMs: NOW_MS,
     })
     settings.markSetupComplete(NOW_MS)
 

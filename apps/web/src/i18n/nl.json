@@ -15,7 +15,10 @@
     "password": "Wachtwoord",
     "submit": "Mijn account aanmaken",
     "invalid": "Deze uitnodiging is niet meer geldig",
-    "failed": "Dat is niet gelukt. Probeer het opnieuw."
+    "failed": "Dat is niet gelukt. Probeer het opnieuw.",
+    "pathTitle": "Hoe verbind je?",
+    "pathGoogle": "Met Google",
+    "pathCompanion": "Met de Android-app"
   },
   "shell": {
     "signOut": "Uitloggen",
@@ -238,6 +241,10 @@
       "label": "Ademhalingsfrequentie",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
       "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
+    },
+    "respiratoryRateSleep": {
+      "label": "Ademhalingsfrequentie, tijdens slaap",
+      "chartLabel": "Ademhalingsfrequentie in {{period}}, gemeten tijdens slaap"
     }
   },
   "health": {
@@ -820,7 +827,11 @@
       "clientIdLabel": "Client-ID",
       "clientSecretLabel": "Clientgeheim",
       "saving": "Bezig met opslaan",
-      "submit": "Opslaan en toestemming geven"
+      "submit": "Opslaan en toestemming geven",
+      "withoutGoogle": "Doorgaan zonder Google",
+      "withoutGoogleNote": "Geen Google Cloud-project nodig. Gebruik in plaats daarvan de Android-companion-app met Health Connect en druk daar op Synchroniseren om metingen hierheen te sturen.",
+      "choiceTitle": "Hoe verbind je?",
+      "companionTitle": "Met de Android-app"
     },
     "backfill": {
       "title": "De geschiedenis wordt aangevuld",
@@ -837,6 +848,12 @@
         "twoYears": "2 jaar",
         "fiveYears": "5 jaar"
       }
+    },
+    "companionHistory": {
+      "title": "Je geschiedenis begint hier",
+      "intro": "Er valt niets in te vullen: op dit pad leest haelan niets terug. Je geschiedenis begint bij de eerste metingen die de telefoon verstuurt. Open de companion-app en druk op Sync.",
+      "startedOn": "Telefoongeschiedenis sinds {{date}}.",
+      "toDashboard": "Ga naar het dashboard"
     },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",

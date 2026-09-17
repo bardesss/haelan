@@ -12,7 +12,10 @@ interface InstanceUrlBody { baseUrl?: unknown, consentPath?: unknown }
 export function registerSetup(app: FastifyInstance): void {
   const stores = () => app.haelan.stores
   const step = () => setupStep({
-    accounts: stores().accounts, settings: stores().settings, credentials: stores().credentials,
+    accounts: stores().accounts,
+    settings: stores().settings,
+    credentials: stores().credentials,
+    people: stores().people,
   })
 
   // The account step is the only open one, because it mints the session every step after it
@@ -79,6 +82,27 @@ export function registerSetup(app: FastifyInstance): void {
   // list buildConsentUrl requests are the same array. A wizard that told somebody to declare
   // five scopes and then asked for six would fail at consent, having been the reason.
   app.get('/api/setup/scopes', { preHandler: [app.requireSession] }, async (_request, reply) => reply.send({ scopes: [...SCOPES] }))
+
+  // The companion app's way past the wizard: no Google Cloud project, no OAuth client, no
+  // consent. Only past the address step, which is what makes google-client and consent the
+  // two states this accepts: before it there is no settings row to complete, and once setup
+  // is done the gate shuts every setup route before this handler runs. A client pasted
+  // earlier stays stored and unused, which also keeps the door open to connecting Google
+  // later through /oauth/start without anything stored contradicting the mode.
+  // T6.0: closing without Google is also this person's choice of the phone path, so it is
+  // recorded on their person row next to the instance flag. The flag alone could never say
+  // which member walks which path on a mixed instance; the consent exit needs no twin write
+  // because putRefreshToken already records that person's Google choice the same way.
+  app.post('/api/setup/companion', { preHandler: [app.requireSession] }, async (request, reply) => {
+    const current = step()
+    if (current !== 'google-client' && current !== 'consent') {
+      return reply.code(409).send(errorBody('setup_incomplete', 'wrong_step', `setup is at the ${current} step`))
+    }
+    const account = request.accountId ? stores().accounts.getById(request.accountId) : null
+    if (account) stores().people.setCompanionPath(account.personId, true)
+    stores().settings.completeCompanionSetup(app.haelan.now())
+    return reply.send({ step: step() })
+  })
 }
 
 function portOf(hostHeader: string | undefined): number {

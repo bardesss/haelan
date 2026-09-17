@@ -79,6 +79,44 @@ export function datesFor(tab: RangeKey, anchor: string): { from: string, to: str
   }
 }
 
+export interface HistoryBounds {
+  historyStartMs: number | null
+  googleConnected: boolean
+}
+
+/**
+ * The person's history start as a local date, in their own zone. en-CA formats as
+ * YYYY-MM-DD, the one shape every local date in this system already has, the same
+ * way usePageControls computes today.
+ */
+export function historyStartLocalDate(historyStartMs: number, timezone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(historyStartMs))
+}
+
+/**
+ * Where a card range honestly starts for a phone-only history (T5.3 passo 3).
+ *
+ * A phone-only person has no rows before their first sync, so a tab opening earlier
+ * asks for a window that can only come back empty: the card then reads "1 of 30 days"
+ * and the one reporting day looks like 29 days of inactivity. Starting the range on
+ * the history start makes the denominator what it is and the chart what it shows.
+ * A person who also walks the Google path keeps the deep archive untouched, and a
+ * range ending before the history starts is left alone so from never passes to.
+ */
+export function clampFromToHistory(
+  from: string, to: string, history: HistoryBounds | undefined, timezone: string,
+): string {
+  // A history the hook has not resolved yet, or a wire answer with no number in it,
+  // leaves the range alone: the clamp only ever narrows on a measured start.
+  if (history === undefined || typeof history.historyStartMs !== 'number' || history.googleConnected) return from
+  if (timezone === '') return from
+  const start = historyStartLocalDate(history.historyStartMs, timezone)
+  if (start <= from || start > to) return from
+  return start
+}
+
 export function stepAnchor(tab: RangeKey, anchor: string, direction: -1 | 1): string {
   switch (tab) {
     case 'day': return addDays(anchor, direction)

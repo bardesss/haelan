@@ -44,12 +44,15 @@ export function createTestDatabase(): TestDatabase {
 export interface SeedPersonOverrides { timezone?: string, displayName?: string, createdAtMs?: number }
 
 export function seedPerson(db: Database, id: string, overrides: SeedPersonOverrides = {}): string {
-  db.insert(people).values({
-    id,
-    displayName: overrides.displayName ?? id,
-    timezone: overrides.timezone ?? 'Europe/Amsterdam',
-    createdAtMs: overrides.createdAtMs ?? 0,
-  }).run()
+  // Raw SQL with explicit columns, not a drizzle insert: upgrade-rehearsal builds an
+  // old database (migrations through 0015) and seeds it with this function before
+  // migrating to head, so a drizzle insert would name every column the current schema
+  // knows, including ones the old database does not have yet (T6.0 companion_path).
+  // Explicit columns keep the seed readable by both schemas; post-migration rows get
+  // their defaults (and PeopleStore.create stamps new rows explicitly from then on).
+  db.$client.prepare(
+    'insert into people (id, display_name, timezone, created_at_ms) values (?, ?, ?, ?)',
+  ).run(id, overrides.displayName ?? id, overrides.timezone ?? 'Europe/Amsterdam', overrides.createdAtMs ?? 0)
   return id
 }
 

@@ -34,6 +34,52 @@ describe('mapSamples', () => {
     expect(rows[0]).toMatchObject({ metric: 'steps', agg: 'raw', value: 128, utcMs: Date.UTC(2026, 7, 18, 10, 0) })
   })
 
+  /**
+   * The companion route archives the one identity a request carries beside its points, because
+   * that is the identity the live write used. A rebuild replays from the archive alone, so a
+   * mapper that only ever looked inside a point would file every one of those rows under
+   * `unknown` the first time somebody bumped the mapping version.
+   */
+  it('reads the source a page names for all of its points', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const seen: unknown[] = []
+    const rows = mapSamples({
+      dataType: spo2, personId: 'p1', rawPayloadId: 'r1',
+      resolveSource: (dataSource) => { seen.push(dataSource); return 's1' },
+      body: JSON.stringify({
+        dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+        dataPoints: [{
+          oxygenSaturation: {
+            sampleTime: { physicalTime: '2026-08-18T22:30:00Z', utcOffset: '7200s' },
+            percentage: 97,
+          },
+        }],
+      }),
+    })
+
+    expect(rows).toHaveLength(1)
+    expect(seen).toEqual([{ platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } }])
+  })
+
+  it('still prefers the source a point names for itself', () => {
+    const spo2 = dataTypeById('oxygen-saturation')!
+    const seen: unknown[] = []
+    const own = { platform: 'FITBIT', recordingMethod: 'DERIVED' }
+    mapSamples({
+      dataType: spo2, personId: 'p1', rawPayloadId: 'r1',
+      resolveSource: (dataSource) => { seen.push(dataSource); return 's1' },
+      body: JSON.stringify({
+        dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+        dataPoints: [samplePoint({
+          payloadKey: 'oxygenSaturation', valuePath: 'percentage', value: 97,
+          physicalTime: '2026-08-18T22:30:00Z', dataSource: own,
+        })],
+      }),
+    })
+
+    expect(seen).toEqual([own])
+  })
+
   it('maps a daily type onto the start of its civil date', () => {
     const rhr = dataTypeById('daily-resting-heart-rate')!
     const rows = mapSamples({

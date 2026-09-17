@@ -62,6 +62,37 @@ export interface SeriesResult {
 }
 
 /**
+ * The metrics an instance writes only when Google is connected, and the metric a phone's own
+ * samples roll up into instead.
+ *
+ * The catalogue owns metric names, and it owns two families for the same reading, because Google
+ * publishes a daily summary as its own data type: `daily-heart-rate-variability` lands on
+ * `daily_hrv` and `daily-oxygen-saturation` on `daily_spo2`. A phone has no daily record for
+ * either - Health Connect's HRV and SpO2 records are readings with a time, and the device computes
+ * no summary - so its samples are filed under the intraday type and rolled up to `hrv` and `spo2`
+ * by `deriveDay`. Two names, one reading, and which of them exists is a fact about how the
+ * instance is connected rather than about the person.
+ *
+ * So a read of the daily name falls back to the device-rolled one when the daily name has no rows.
+ * This is the rule the merge already applies to numbers: `mergeDay` fills an hour from a source
+ * that has it, and a name nothing wrote is the same gap one level up. It is deliberately not a
+ * second derivation and not a bumped version: the mean it reads was already computed, and reading
+ * it changes no row.
+ *
+ * `respiratory_rate` is not here, and that is the asymmetry worth knowing. Google summarises a
+ * whole day of breathing; a phone can only summarise the night, which is what
+ * `sleep-respiratory-rate-sleep-summary` rolls up to under its own name, `sleep_respiratory_rate`.
+ * Mapping `respiratory_rate` onto it would answer a question about the day with a number about the
+ * night, so the day's card stays empty rather than lying in the right shape. Measured on this
+ * household's two instances on 2026-09-14, that card is empty on both, because the daily type has
+ * never been synced on either; the companion path is not the reason.
+ */
+const DEVICE_ROLLED_EQUIVALENT: Readonly<Record<string, { metric: string, agg: string }>> = {
+  daily_hrv: { metric: 'hrv', agg: 'mean' },
+  daily_spo2: { metric: 'spo2', agg: 'mean' },
+}
+
+/**
  * The widest span `intradayWindow` will read.
  *
  * 48 rather than 24 because the two questions the window exists for both cross a midnight: a night
@@ -121,28 +152,20 @@ export class PersonQuery {
     requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const source = input.source
-    const rows = this.#db.select({
-      localDate: daily.localDate,
-      value: daily.value,
-      coverage: daily.coverage,
-      source: daily.source,
-      sourceMix: daily.sourceMix,
-      updatedAtMs: daily.updatedAtMs,
-    }).from(daily).where(and(
-      eq(daily.personId, this.#personId),
-      eq(daily.metric, input.metric),
-      eq(daily.agg, input.agg),
-      source === undefined
-        ? inArray(daily.source, [MERGED_SOURCE, PROVIDER_SOURCE])
-        : eq(daily.source, source),
-      gte(daily.localDate, input.from),
-      lte(daily.localDate, input.to),
-      // A row with no value is not a measurement, and letting one through would put a hole in
-      // every mean computed downstream. Nothing writes one today; this is the guard for later.
-      isNotNull(daily.value),
-    )).orderBy(asc(daily.localDate)).all() as DailyPoint[]
+    const rows = this.#rowsOf(input.metric, input.agg, input.from, input.to, source)
+    const ofName = source === undefined ? preferMerged(rows) : rows
 
-    const result = source === undefined ? preferMerged(rows) : rows
+    // Per day, not per series: a person can have the daily name for the days Google was connected
+    // and the rolled up name for the days the phone covered, and a rule that fired only on an
+    // entirely empty series would answer a range like that with the Google half alone. See
+    // DEVICE_ROLLED_EQUIVALENT above for why the two names exist and why this is not a derivation.
+    const rolled = DEVICE_ROLLED_EQUIVALENT[input.metric]
+    const rolledByDate = rolled === undefined
+      ? new Map<string, DailyPoint>()
+      : new Map(this.#rowsOf(rolled.metric, rolled.agg, input.from, input.to, source)
+        .map((point) => [point.localDate, point]))
+    const result = withFilledDays(ofName, rolledByDate)
+
     if (input.points === undefined) return { points: result, reduction: null }
 
     // Daily rows are evenly spaced by construction, one per local date, so the index is the
@@ -586,6 +609,61 @@ export class PersonQuery {
   writeProjection(destPath: string): void {
     writeProjection(this.#db, this.#personId, destPath)
   }
+
+  /**
+   * The `daily` rows behind one metric and aggregate, in date order, for this person.
+   *
+   * A method rather than a statement inside `series`, because the fallback there has to ask the
+   * same question twice with two different names, and two copies of a WHERE clause is how the
+   * second one comes to disagree with the first about a source or a null value.
+   *
+   * A row with no value is not a measurement, and letting one through would put a hole in every
+   * mean computed downstream. Nothing writes one today; this is the guard for later.
+   */
+  #rowsOf(metric: string, agg: string, from: string, to: string, source: string | undefined): DailyPoint[] {
+    return this.#db.select({
+      localDate: daily.localDate,
+      value: daily.value,
+      coverage: daily.coverage,
+      source: daily.source,
+      sourceMix: daily.sourceMix,
+      updatedAtMs: daily.updatedAtMs,
+    }).from(daily).where(and(
+      eq(daily.personId, this.#personId),
+      eq(daily.metric, metric),
+      eq(daily.agg, agg),
+      source === undefined
+        ? inArray(daily.source, [MERGED_SOURCE, PROVIDER_SOURCE])
+        : eq(daily.source, source),
+      gte(daily.localDate, from),
+      lte(daily.localDate, to),
+      isNotNull(daily.value),
+    )).orderBy(asc(daily.localDate)).all() as DailyPoint[]
+  }
+}
+
+/**
+ * A series with the days only another name has, filled in from it and sorted back into order.
+ *
+ * A date the requested name already answers is never replaced: that name is the more specific
+ * statement about the day, and a fallback that overwrote it would answer a question about what a
+ * device computed with a number we computed ourselves. `rolledByDate` is read for the dates the
+ * requested name is silent about and for nothing else, and every row keeps its own `source`, so
+ * which name a day came from stays visible in the answer rather than being flattened by the fill.
+ */
+function withFilledDays(
+  points: readonly DailyPoint[],
+  rolledByDate: ReadonlyMap<string, DailyPoint>,
+): DailyPoint[] {
+  if (rolledByDate.size === 0) return [...points]
+  const answered = new Set(points.map((point) => point.localDate))
+  const filled = [...points]
+  for (const [localDate, point] of rolledByDate) {
+    // `points` is already in range and ordered; `rolledByDate` was read over the same range, so
+    // this adds no date the caller did not ask for.
+    if (!answered.has(localDate)) filled.push(point)
+  }
+  return filled.sort((a, b) => (a.localDate < b.localDate ? -1 : a.localDate > b.localDate ? 1 : 0))
 }
 
 export interface DescribedPerson {
