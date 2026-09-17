@@ -1,103 +1,106 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { useSession } from '../auth/session.js'
 import { Card } from '../components/Card.js'
-import { ConnectGoogle } from '../auth/ConnectGoogle.js'
-import { Profile } from './settings/Profile.js'
-import { McpTokens } from './settings/McpTokens.js'
-import { OverrideList } from './settings/OverrideList.js'
-import { SourceNames } from './settings/SourceNames.js'
-import { DataTypes } from './settings/DataTypes.js'
+import { Link, useRoute, readQuery, withQuery } from '../router.js'
 import { Members } from './settings/Members.js'
 import { InstanceUrl } from './settings/InstanceUrl.js'
 import { Maintenance } from './settings/Maintenance.js'
 import { About } from './settings/About.js'
 
-// The settings page: no sections existed before this one, so pages/settings/ holds each section's
-// own component (OverrideList.tsx is the first) and this file is the shell that gives them a
-// title, a route and a place in the rail, the same shape every other top level page already uses.
+/**
+ * What this page is left holding once the account sections move to Account.tsx: the instance
+ * everybody on it shares, and the project it runs.
+ *
+ * Three tabs rather than a column of cards. The sections were never one subject - who may sign in,
+ * where the instance answers and what it keeps on disk, and the project's own links - and scrolling
+ * past two of them to reach the third was the complaint.
+ *
+ * Tabs in the query string, not in the path. `?tab=` is the shape this app already uses for a
+ * dimension of a page the URL should carry (ControlRow's range, source and anchor all live there),
+ * and it costs no new route: a bookmark, the back button and a reload all work, while the route
+ * table, the rail, and every guard that compares the two stay exactly as they are.
+ *
+ * Links rather than a tablist. These change the URL, which makes them navigation, and a nav of
+ * links needs no roving tabindex, no arrow-key handler and no `aria-selected` of its own - the
+ * `aria-current="page"` the rail already uses says which one you are on.
+ */
+interface Tab { id: string, element: ReactNode }
+
 export function Settings() {
   const { t } = useTranslation()
   const session = useSession()
-  return (
-    <>
-      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('settings.title')}</h1>
-      <div className="grid">
-        {/* A person whose token was revoked lands on this page with somewhere to reconnect from
-            that is not the Dashboard's front page forever: ConnectGoogle renders nothing once
-            connected (its own doc comment), so this is silent for the common case. */}
-        <ConnectGoogle />
-        {/* First, and not gated on isAdmin: this is the reader's own account rather than anything
-            about the instance, and the two routes behind it act on whoever the session resolves to.
-            Every section below it changes something shared; this one is the only one that does not,
-            which is also why it is the one a member arriving here at all can use. */}
-        {/* Half width and side by side, and the only pairing on this page that is guaranteed to
-            hold: these two are the sections nobody is gated out of, so admin and member see the
-            same row rather than one of them seeing a card stranded beside a gap. Both are narrow
-            enough to earn it - a form of three fields and a list of checkboxes - where the three
-            sections below are a table and two rows of name-plus-controls that only lose columns
-            at half width. DataTypes is lifted above Overrides to make the pair; it reads better
-            here anyway, with the two sections about the reader's own account at the top and
-            everything instance wide beneath them. */}
-        <Card span={6} label={t('settings.profile.title')}>
-          <Profile />
-        </Card>
-        {/* Not gated on isAdmin: DataTypes.tsx's own comment on why this is per person rather
-            than household wide. */}
-        <Card span={6} label={t('settings.dataTypes.title')}>
-          <DataTypes />
-        </Card>
-        {/* Under the Profile/DataTypes row and not gated on isAdmin, for the same reason Profile
-            is not: this is the reader's own credential, and there is deliberately no path by
-            which an admin could mint one for somebody else. */}
-        <Card span={12} label={t('settings.mcp.title')}>
-          <McpTokens />
-        </Card>
-        <Card span={12} label={t('settings.overrides.title')}>
-          <OverrideList />
-        </Card>
-        <Card span={12} label={t('settings.sourceNames.title')}>
-          <SourceNames />
-        </Card>
-        {/* Admin only, and gated here rather than inside Members itself: the five routes it calls
-            already answer 'forbidden' to anyone else, but mounting the section at all for a
-            member who cannot use a single control on it would be pure noise on their own screen. */}
-        {session.data?.isAdmin === true && (
+  const route = useRoute()
+  const isAdmin = session.data?.isAdmin === true
+
+  // Not gated: these are the project's own links and the version this instance runs, not anything
+  // about the instance an admin arbitrates. They used to be three permanent rows in the rail foot
+  // - and three unlabelled glyphs in the collapsed rail - for destinations that all leave the app.
+  const info: Tab = {
+    id: 'info',
+    element: (
+      <Card span={12} measured label={t('settings.about.title')}>
+        <About />
+      </Card>
+    ),
+  }
+
+  // Admin only, and gated by this list rather than inside each section: every route they call
+  // already answers 'forbidden' to anyone else, but mounting a section a member cannot use a
+  // single control on would be pure noise on their own screen.
+  const tabs: readonly Tab[] = isAdmin
+    ? [
+      {
+        id: 'members',
+        element: (
           <Card span={12} measured label={t('settings.members.title')}>
             <Members />
           </Card>
-        )}
-        {/* Admin only, and gated here for the same reason Members is: the PUT it calls already
-            answers 'forbidden' to anyone else, and the address on show is one nobody but an admin
-            can act on. Placed above Maintenance because moving an instance is a thing a household
-            does once and needs to find, not a figure they watch.
+        ),
+      },
+      {
+        // The two sections about this instance as a running thing, together: where it answers,
+        // and what it keeps. They were a half width pair on the old page for the same reason they
+        // share a tab here - neither is a subject on its own.
+        id: 'instance',
+        element: (
+          <>
+            <Card span={6} label={t('settings.instanceUrl.title')}>
+              <InstanceUrl />
+            </Card>
+            <Card span={6} label={t('settings.maintenance.title')}>
+              <Maintenance />
+            </Card>
+          </>
+        ),
+      },
+      info,
+    ]
+    : [info]
 
-            The second half width pair, and stable for the mirror image of the reason the first
-            one is: both of these are admin gated, so they are present together or absent
-            together and neither is ever left beside a gap. */}
-        {session.data?.isAdmin === true && (
-          <Card span={6} label={t('settings.instanceUrl.title')}>
-            <InstanceUrl />
-          </Card>
-        )}
-        {/* Admin only, and gated here for the same reason Members is: the three routes it calls
-            already answer 'forbidden' to anyone else, but mounting a card whose only content is
-            two buttons a member could never press would be pure noise on their own screen. */}
-        {session.data?.isAdmin === true && (
-          <Card span={6} label={t('settings.maintenance.title')}>
-            <Maintenance />
-          </Card>
-        )}
+  // An unknown tab, and a member who typed one they cannot see, both land on the first tab they
+  // can have: resolving against the visible list rather than against every id there is means the
+  // query string can never mount a section its reader is gated out of.
+  const wanted = readQuery(route.split('?')[1] ?? '').get('tab')
+  const active = tabs.find((tab) => tab.id === wanted) ?? tabs[0]!
 
-        {/* Last, and not gated on isAdmin: these are the project's own links, not anything about
-            this instance that an admin arbitrates. They used to be three permanent rows in the
-            rail foot - and three unlabelled glyphs in the collapsed rail - for destinations that
-            all leave the app. The reason for having them is unchanged and was always Sidebar's:
-            a self hosted tool has no in app feedback channel of its own. That argued for keeping
-            them findable, never for spending rail rows on them. */}
-        <Card span={12} measured label={t('settings.about.title')}>
-          <About />
-        </Card>
-      </div>
+  return (
+    <>
+      <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('settings.title')}</h1>
+      {/* A strip of one is not a strip: a member has a single tab, and a chooser over it would be
+          a control with nothing to choose. The same ruling the source picker and the session type
+          filter already make. */}
+      {tabs.length > 1 && (
+        <nav className="segmented settings-tabs" aria-label={t('settings.tabs.label')}>
+          {tabs.map((tab) => (
+            <Link key={tab.id} to={withQuery('/settings', { tab: tab.id })} className="segment"
+                  aria-current={tab.id === active.id ? 'page' : undefined}>
+              {t(`settings.tabs.${tab.id}`)}
+            </Link>
+          ))}
+        </nav>
+      )}
+      <div className="grid">{active.element}</div>
     </>
   )
 }

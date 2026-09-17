@@ -70,6 +70,7 @@
       "weight": "Gewicht",
       "nutrition": "Voeding",
       "notes": "Notities",
+      "account": "Account",
       "settings": "Instellingen",
       "records": "Records"
     }
@@ -967,8 +968,17 @@
     "irregular-rhythm-notification": "Melding onregelmatig ritme",
     "electrocardiogram": "ECG"
   },
+  "account": {
+    "title": "Account"
+  },
   "settings": {
     "title": "Instellingen",
+    "tabs": {
+      "label": "Onderdelen van instellingen",
+      "members": "Leden",
+      "instance": "Instantie",
+      "info": "Info"
+    },
     "profile": {
       "title": "Je account",
       "displayName": "Naam",

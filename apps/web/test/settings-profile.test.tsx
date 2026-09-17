@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { Settings } from '../src/pages/Settings.js'
+import { Account } from '../src/pages/Account.js'
 import { Profile } from '../src/pages/settings/Profile.js'
 import { instanceUrlKey } from '../src/data/useInstanceUrl.js'
 import { membersKey } from '../src/data/useMembers.js'
@@ -57,7 +57,7 @@ function mountSection(overrides: Partial<Session> = {}): QueryClient {
  * query is seeded for settings-members.test.tsx's reason: an unseeded query reaches the real
  * network in this environment.
  */
-function mountSettingsAs(overrides: Partial<Session>): void {
+function mountAccountAs(overrides: Partial<Session>): void {
   const session: Session = { ...SESSION, ...overrides }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), session)
@@ -68,7 +68,7 @@ function mountSettingsAs(overrides: Partial<Session>): void {
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
-        <I18nProvider lng="en"><Settings /></I18nProvider>
+        <I18nProvider lng="en"><Account /></I18nProvider>
       </QueryClientProvider>,
     )
   })
@@ -334,18 +334,24 @@ describe('changing your own password', () => {
   })
 })
 
+// This card used to sit on the Settings page under an admin gate it was deliberately outside of,
+// and the two cases below were how that was held. The gate is now the page itself: the account
+// page carries only what acts on the reader's own account, so an admin and a member see the same
+// six sections and neither sees an instance-wide one. Both cases are kept, asserting the new
+// arrangement rather than being deleted with the gate they were written for.
 describe('where the card is mounted', () => {
-  it('renders for a member who is not an admin, unlike every section below it', () => {
-    mountSettingsAs({ isAdmin: false })
+  it('renders for a member who is not an admin', () => {
+    mountAccountAs({ isAdmin: false })
     expect(container!.textContent).toContain('Your account')
-    // The gated sections stay gated; this card is the only one a member can use.
+    // Not on this page at all now, for either of them - not merely gated out of a member's copy.
     expect(container!.textContent).not.toContain('Members')
     expect(container!.textContent).not.toContain('Instance address')
   })
 
-  it('renders for an admin too', () => {
-    mountSettingsAs({ isAdmin: true })
+  it('renders for an admin too, alongside exactly the same sections', () => {
+    mountAccountAs({ isAdmin: true })
     expect(container!.textContent).toContain('Your account')
-    expect(container!.textContent).toContain('Members')
+    expect(container!.textContent).not.toContain('Members')
+    expect(container!.textContent).not.toContain('Instance address')
   })
 })

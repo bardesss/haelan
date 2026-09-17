@@ -75,10 +75,15 @@ function mountSection(data: MaintenanceStatus): QueryClient {
 /**
  * Mounts the whole Settings page as a given session, the way a real admin or a real non-admin
  * member would see it -- settings-members.test.tsx's own mountSettingsAs, extended with the keys
- * Maintenance.tsx and InstanceUrl.tsx also read. OverrideList, SourceNames, Members and
- * InstanceUrl mount alongside it here regardless of which section this test cares about, so every
- * one of their queries needs seeding too or they reach the real network the same way an unseeded
- * maintenance query would.
+ * Maintenance.tsx and InstanceUrl.tsx also read. InstanceUrl mounts alongside it here regardless
+ * of which section this test cares about, so its query needs seeding too or it reaches the real
+ * network the same way an unseeded maintenance query would.
+ *
+ * On the instance tab, which is where this section lives now that the page has tabs. Through the
+ * real url rather than a prop, because that is how the page itself decides: a reader who lands on
+ * /settings with no tab gets the first one they are allowed, and pinning the tab here is the same
+ * act as clicking it. A non-admin sees no tab of this name at all, which is exactly what the
+ * "not rendered for a non-admin" case below is asking about.
  */
 function mountSettingsAs(overrides: Partial<Session>): void {
   const session: Session = { ...ADMIN, ...overrides }
@@ -89,6 +94,7 @@ function mountSettingsAs(overrides: Partial<Session>): void {
   client.setQueryData(membersKey(), { items: [] })
   client.setQueryData(maintenanceKey(), status({}))
   client.setQueryData(instanceUrlKey(), { baseUrl: 'http://localhost:4235', redirectUri: 'http://localhost:4235/oauth/callback' })
+  window.history.replaceState(null, '', '/settings?tab=instance')
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
@@ -231,6 +237,8 @@ describe('the maintenance section', () => {
     expect(buttonLabels()).toEqual(['Reclaim space'])
   })
 
+  // Nothing to gate inside the section any more: a member has no instance tab to open, so the
+  // tab list is what keeps this off their screen, and this is the case that proves it.
   it('is not rendered at all, buttons included, for a non-admin', () => {
     mountSettingsAs({ isAdmin: false })
     expect(container!.querySelector('.maintenance')).toBeNull()

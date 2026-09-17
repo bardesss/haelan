@@ -9,6 +9,7 @@ import { Weight } from './pages/Weight.js'
 import { Nutrition } from './pages/Nutrition.js'
 import { Notes } from './pages/Notes.js'
 import { Settings } from './pages/Settings.js'
+import { Account } from './pages/Account.js'
 import { WorkoutDetail } from './pages/WorkoutDetail.js'
 import { NightDetail } from './pages/NightDetail.js'
 
@@ -40,6 +41,7 @@ export const ROUTES: readonly Route[] = [
   { path: '/weight', element: <Weight /> },
   { path: '/nutrition', element: <Nutrition /> },
   { path: '/notes', element: <Notes /> },
+  { path: '/account', element: <Account /> },
   { path: '/settings', element: <Settings /> },
   { path: WORKOUT_ROUTE, element: <WorkoutDetail />, rail: '/activity' },
   { path: NIGHT_ROUTE, element: <NightDetail />, rail: '/sleep' },
