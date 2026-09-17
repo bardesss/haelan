@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.34.0](https://github.com/bardesss/haelan/compare/v1.33.0...v1.34.0) (2026-09-17)
+
+
+### Features
+
+* **web:** settings split into your account and this instance ([#267](https://github.com/bardesss/haelan/issues/267)) ([e9efd2c](https://github.com/bardesss/haelan/commit/e9efd2ca1251c368b031d3e40d59a9682ad5a8a0))
+
 ## [1.33.0](https://github.com/bardesss/haelan/compare/v1.32.0...v1.33.0) (2026-09-17)
 
 
