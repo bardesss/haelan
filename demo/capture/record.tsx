@@ -67,20 +67,21 @@ const DEMO_DATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam
 
 // The routes whose ControlRow offers a real source picker (Dashboard.tsx through Weight.tsx all
 // build `sources` from distinctSources and pass it down). Notes has a ControlRow but no sources
-// (its own comment: a note is not read off a device); Settings and Nutrition have no ControlRow at
-// all - routes.tsx's own table names every unparameterised path, and this is that table minus
-// those three.
+// (its own comment: a note is not read off a device); Settings, Account and Nutrition have no
+// ControlRow at all - routes.tsx's own table names every unparameterised path, and this is that
+// table minus those four.
 const SOURCE_ROUTES = new Set(['/', '/activity', '/sleep', '/recovery', '/health', '/weight'])
 
-/** Whether `path` reads range/anchor from the url at all. Settings and Nutrition are the two
- *  routes in ROUTES that do not (mount()'s own guard comment on Settings, and Nutrition.tsx's own
- *  comment on why it has no data hook to read a range for in the first place). */
+/** Whether `path` reads range/anchor from the url at all. Settings, Account and Nutrition are
+ *  the routes in ROUTES that do not (mount()'s own guard comment on Settings, which Account was
+ *  split out of and inherits, and Nutrition.tsx's own comment on why it has no data hook to read
+ *  a range for in the first place). */
 function usesPageControls(path: string): boolean {
   // /records (M6c) is the third, and the only one rangeless by design rather than by subject:
   // every figure on it is an all-time figure, so it has no ControlRow at all and its query key
   // carries no range. Five range mounts therefore ask for one already-cached resource, and only
   // the first is owed a landing.
-  return path !== '/settings' && path !== '/nutrition' && path !== '/records'
+  return path !== '/settings' && path !== '/account' && path !== '/nutrition' && path !== '/records'
 }
 
 let server: CaptureServer

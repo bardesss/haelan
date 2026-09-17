@@ -16,6 +16,7 @@ import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
 import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
+import { Account } from '../src/pages/Account.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -238,9 +239,14 @@ const SLEEP_ROUTE = '/sleep?range=week&on=2026-08-12'
 const HEALTH_ROUTE = '/health?range=week&on=2026-08-12'
 const WEIGHT_ROUTE = '/weight?range=week&on=2026-08-12'
 const NOTES_ROUTE = '/notes?range=week&on=2026-08-12'
-// No range or anchor query params: Settings never calls usePageControls, so this is just a real
-// path for window.history.replaceState to carry; nothing in the page reads it back.
-const SETTINGS_ROUTE = '/settings'
+// No range or anchor query params: neither page calls usePageControls, so these are real paths
+// for window.history.replaceState to carry and nothing in either reads a range back. Settings does
+// read one thing off its own path - which tab is open - and it is pinned to the instance tab here
+// on purpose: it is the tab whose two cards are ordinary cards, so the assertions below about card
+// markup have something to look at. The members tab's one card is `measured`, which the card regex
+// in this file deliberately does not match.
+const SETTINGS_ROUTE = '/settings?tab=instance'
+const ACCOUNT_ROUTE = '/account'
 
 /**
  * Mounts one page for real, waits for every query to settle, and returns the settled markup.
@@ -276,6 +282,7 @@ const settledHealth = (lng: string) => settledPage(Health, HEALTH_ROUTE, lng)
 const settledWeight = (lng: string) => settledPage(Weight, WEIGHT_ROUTE, lng)
 const settledNotes = (lng: string) => settledPage(Notes, NOTES_ROUTE, lng)
 const settledSettings = (lng: string) => settledPage(Settings, SETTINGS_ROUTE, lng)
+const settledAccount = (lng: string) => settledPage(Account, ACCOUNT_ROUTE, lng)
 
 const restore = stubFetch()
 // Sleep used to leave this harness once it went off fixtures (M3d2): a review round afterwards
@@ -305,6 +312,11 @@ const pages = {
   Nutrition: renderToStaticMarkup(<I18nProvider lng="en"><Nutrition /></I18nProvider>),
   Notes: await settledNotes('en'),
   Settings: await settledSettings('en'),
+  // The sections that used to make up most of Settings, on the page they moved to. Listed here
+  // for the same reason Settings is: this battery is where a page's own markup is held to the
+  // app's rules, and a split that left the account sections out of it would quietly drop five
+  // cards' worth of coverage.
+  Account: await settledAccount('en'),
 }
 const dashboardNl = await settledDashboard('nl')
 // Settled inside the same stub window as `pages`/`dashboardNl` above, rather than inside an `it`
@@ -359,7 +371,7 @@ restore()
 // paragraph, no table of any kind.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: false, Sleep: false, Health: true, Weight: false,
-  Nutrition: false, Notes: false, Settings: false,
+  Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
 // Whether a page carries any chart (and, riding on the same StatTile/MetricCard machinery, any
@@ -375,7 +387,7 @@ const HAS_ABSENCE_CHART: Record<string, boolean> = {
 // unlisted page must run the assertion, not skip it by omission.
 const IS_CHART_PAGE: Record<string, boolean> = {
   Dashboard: true, Activity: true, Recovery: true, Sleep: true, Health: true, Weight: true,
-  Nutrition: false, Notes: false, Settings: false,
+  Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
 // Everything inside the accessible tables, which is where a chart's own numbers and absence words

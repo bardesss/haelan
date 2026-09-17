@@ -70,6 +70,7 @@
       "weight": "Weight",
       "nutrition": "Nutrition",
       "notes": "Notes",
+      "account": "Account",
       "settings": "Settings",
       "records": "Records"
     }
@@ -967,8 +968,17 @@
     "irregular-rhythm-notification": "Irregular rhythm notification",
     "electrocardiogram": "ECG"
   },
+  "account": {
+    "title": "Account"
+  },
   "settings": {
     "title": "Settings",
+    "tabs": {
+      "label": "Settings sections",
+      "members": "Members",
+      "instance": "Instance",
+      "info": "Info"
+    },
     "profile": {
       "title": "Your account",
       "displayName": "Name",

@@ -27,7 +27,10 @@ const GROUPS = [
   },
   {
     labelKey: 'sidebar.groups.settings',
-    items: [{ path: '/settings', nameKey: 'sidebar.items.settings' }],
+    items: [
+      { path: '/account', nameKey: 'sidebar.items.account' },
+      { path: '/settings', nameKey: 'sidebar.items.settings' },
+    ],
   },
 ] as const
 
@@ -46,7 +49,7 @@ export const RAIL_PATHS: readonly string[] = GROUPS.flatMap((g) => g.items.map((
  * rather than a fact about its imports.
  *
  * Only pages whose whole subject is one category appear. A page absent from this map never hides,
- * which is the right default: Settings in particular must always be reachable, since it is where an
+ * which is the right default: Account in particular must always be reachable, since it is where an
  * exclusion is turned back off and a rail that could hide it would be a one-way door.
  *
  * rail-hidden-pages.test.ts holds every id here to the catalogue's own. A typo fails in the worst
@@ -169,13 +172,18 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
         </div>
       ))}
       <div className="rail-foot">
-        {/* Not a Link: the account page it would point to has no home yet. M3e closes with this
-            milestone without one, and the README's own M5 row puts the person switcher and
-            member management there instead. A dead link here would be a tenth way to reach a
-            blank screen, now that the rail carries nine (M3c-12 added the ninth, Settings). */}
-        <div className="rail-person" title={hoverName(person)}>
+        {/* A Link at last: this was a plain div for as long as the account page it wanted to
+            point at did not exist, and the comment here said so since M3e. It leads where a
+            reader expects their own name to lead - their profile, their data types, their tokens
+            - and the rail item above says the same thing in words for anyone who would not think
+            to click a name.
+
+            No aria-current of its own. The rail item is what marks /account as the page you are
+            on, and a second mark for the same destination would leave the rail claiming two
+            current pages. */}
+        <Link to="/account" className="rail-person" title={hoverName(person)}>
           <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
-        </div>
+        </Link>
         {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
         <button type="button" className="button" onClick={onSignOut} title={hoverName(t('shell.signOut'))}>
           <Icon name="signOut" />{label(t('shell.signOut'))}

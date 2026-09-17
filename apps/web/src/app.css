@@ -97,7 +97,10 @@ body {
 }
 .about-link:hover { color: var(--text-primary); text-decoration: underline; }
 .about-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
-.rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 0 var(--space-3); }
+/* A link since the account page exists, so it takes the same text-decoration reset .rail-item
+   does. No hover or current state, also like .rail-item: the rail has never drawn either, and the
+   item for /account directly above this one is what says you are there. */
+.rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 4px var(--space-3); text-decoration: none; }
 .rail-foot .button { justify-content: center; }
 
 /* The drawer, below PHONE_MAX_WIDTH. The dialog is the container; the rail inside it keeps every
@@ -158,6 +161,15 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
 .segment { appearance: none; border: 0; background: none; font: inherit; font-size: var(--font-size-xs); color: var(--text-muted); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
 .segment:hover { color: var(--text-primary); }
 .segment[aria-pressed='true'] { background: var(--surface-card); color: var(--text-primary); font-weight: var(--weight-medium); }
+/* A segment that is a link rather than a button. Settings' tabs change the URL, so they are
+   navigation and say so with aria-current, where the range buttons act on the page in place and
+   say so with aria-pressed. Same control, same look, two honest states - which is why this is one
+   more selector on the existing vocabulary rather than a tab strip of its own. */
+a.segment { text-decoration: none; display: inline-block; }
+.segment[aria-current='page'] { background: var(--surface-card); color: var(--text-primary); font-weight: var(--weight-medium); }
+/* Its own line above the cards, and only as wide as the tabs it holds: .segmented is a flex row,
+   which would otherwise stretch the strip across the whole page. */
+.settings-tabs { width: fit-content; margin-bottom: var(--space-4); }
 
 .stepper { display: flex; align-items: center; padding: 2px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .stepper-label { font-size: var(--font-size-xs); color: var(--text-secondary); padding: 0 var(--space-2); min-width: 96px; text-align: center; }
@@ -1082,7 +1094,7 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
      them, so a mis-tap did not miss, it navigated to the neighbour. The check now sweeps the
      drawer open as well as closed, which is what turned this from an argument into a failure. */
   .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
-  .session-row-link, .night-row-link, .date-picker, .input, .rail-item {
+  .session-row-link, .night-row-link, .date-picker, .input, .rail-item, .rail-person {
     min-height: 44px;
   }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }

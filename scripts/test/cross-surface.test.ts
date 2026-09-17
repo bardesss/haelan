@@ -31,10 +31,11 @@ function pageNames() {
 
   return [...table![1].matchAll(/\{\s*path:\s*(?:'([^']*)'|(\w+)),\s*element:\s*<(\w+)/g)]
     // A parameterised path is a detail page reached from a list, not a page in the rail, and
-    // Settings is not one of the eight either document counts.
+    // neither Settings nor Account - the two halves of what used to be one settings page - is one
+    // of the eight either document counts.
     .filter(([, literal, constant]) => constant === undefined && !literal!.includes(':'))
     .map(([, , , component]) => component!)
-    .filter((component) => component !== 'Settings')
+    .filter((component) => component !== 'Settings' && component !== 'Account')
 }
 
 /**

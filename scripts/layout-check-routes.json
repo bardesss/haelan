@@ -8,6 +8,7 @@
   "/weight",
   "/nutrition",
   "/notes",
+  "/account",
   "/settings",
   "/activity/:sessionId",
   "/sleep/night/:localDate"

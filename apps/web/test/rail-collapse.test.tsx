@@ -74,6 +74,7 @@ const EXPECTED_NAMES: Record<string, string> = {
   '/weight': 'Weight',
   '/nutrition': 'Nutrition',
   '/notes': 'Notes',
+  '/account': 'Account',
   '/settings': 'Settings',
 }
 

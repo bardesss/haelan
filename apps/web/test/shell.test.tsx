@@ -12,6 +12,7 @@ import { Weight } from '../src/pages/Weight.js'
 import { Nutrition } from '../src/pages/Nutrition.js'
 import { Notes } from '../src/pages/Notes.js'
 import { Settings } from '../src/pages/Settings.js'
+import { Account } from '../src/pages/Account.js'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
 import { NightDetail } from '../src/pages/NightDetail.js'
 
@@ -24,6 +25,20 @@ describe('the navigation rail', () => {
 
   it('marks the current page and only the current page', () => {
     const html = renderToStaticMarkup(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+  })
+
+  // The name in the rail foot was a plain div for as long as there was no account page to send it
+  // to, with a comment saying exactly that. Both halves are asserted: that it leads somewhere, and
+  // that it does not also claim to be the current page - the rail item for /account already does
+  // that, and two marks would be two current pages.
+  it('leads from the signed-in person to their own account page', () => {
+    const html = renderToStaticMarkup(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
+    expect(html).toMatch(/<a [^>]*href="\/account"[^>]*class="rail-person"/)
+  })
+
+  it('marks the account page once when that is where you are, not twice', () => {
+    const html = renderToStaticMarkup(<Sidebar person="Robin" active="/account" onSignOut={() => {}} />)
     expect(html.match(/aria-current="page"/g)).toHaveLength(1)
   })
 
@@ -52,8 +67,8 @@ describe('the route table', () => {
 
   it('has an entry for every page the design names', () => {
     expect(ROUTES.map((r) => r.path).sort()).toEqual(
-      ['/', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition', '/records',
-        '/recovery', '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
+      ['/', '/account', '/activity', '/activity/:sessionId', '/health', '/notes', '/nutrition',
+        '/records', '/recovery', '/settings', '/sleep', NIGHT_ROUTE, '/weight'].sort(),
     )
   })
 
@@ -88,6 +103,7 @@ describe('the route table', () => {
       '/weight': Weight,
       '/nutrition': Nutrition,
       '/notes': Notes,
+      '/account': Account,
       '/settings': Settings,
       '/activity/:sessionId': WorkoutDetail,
       [NIGHT_ROUTE]: NightDetail,
