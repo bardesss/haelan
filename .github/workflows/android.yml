@@ -54,6 +54,13 @@ jobs:
         with:
           cache-provider: basic
 
+      # The wrapper loses its executable bit when committed from Windows (git then
+      # stores 100644 instead of 100755), and the checkout on Linux keeps it that
+      # way, failing with "./gradlew: Permission denied". Belt and suspenders:
+      # the bit is set in the index, this step keeps CI green if it is ever lost.
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --console=plain
 
