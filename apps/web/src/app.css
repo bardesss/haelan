@@ -1069,6 +1069,12 @@ a.segment { text-decoration: none; display: inline-block; }
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     min-height: 44px; display: flex; align-items: center; justify-content: center;
   }
+  /* The five range buttons above get their width from the grid that lays them out, so `min-width:
+     0` is right for them: each is a fifth of the row, well past 44px. Settings' tabs are a flex
+     row of three, so a short label is as wide as the word - "Info" measured 28x44, which is a
+     44px-tall target 28px wide and exactly what the touch rule is about. layout:check caught it;
+     nothing local could, since Playwright will not install on this machine. */
+  .settings-tabs .segment { min-width: 44px; }
 
   .stepper { width: 100%; justify-content: space-between; }
   .stepper-label { min-width: 0; flex: 1; }
