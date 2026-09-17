@@ -1069,6 +1069,7 @@
     },
     "about": {
       "title": "About this instance",
+      "version": "Version {{version}}",
       "documentation": "Documentation",
       "changelog": "Changelog",
       "issues": "Issues"

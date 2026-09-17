@@ -86,6 +86,10 @@ body {
 /* Settings' About card. The same row shape the rail gave these links, minus the rail: an icon and
    a label per line, and the touch height every other control on this page already has, since
    Settings is a page a person reaches on a phone as readily as on a desktop. */
+.about-version {
+  margin: 0 0 var(--space-2); font-size: var(--font-size-sm); color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
 .about-links { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .about-link {
   display: flex; align-items: center; gap: var(--space-2); min-height: 44px;

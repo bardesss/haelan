@@ -1069,6 +1069,7 @@
     },
     "about": {
       "title": "Over deze instance",
+      "version": "Versie {{version}}",
       "documentation": "Documentatie",
       "changelog": "Wijzigingslogboek",
       "issues": "Problemen"

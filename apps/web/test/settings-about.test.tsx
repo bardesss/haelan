@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { About, PROJECT_LINKS } from '../src/pages/settings/About.js'
+import { About, PROJECT_LINKS, APP_VERSION } from '../src/pages/settings/About.js'
 import { Sidebar } from '../src/components/Sidebar.js'
 import { I18nProvider } from '../src/i18n/index.js'
 
@@ -47,6 +49,37 @@ describe('the project links', () => {
     const html = render(<About />)
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1])
     expect(hrefs).toEqual(PROJECT_LINKS.map((link) => link.href))
+  })
+})
+
+/**
+ * The version the running bundle was built from.
+ *
+ * Nothing in this app said which version it was, anywhere. The root package.json carries it
+ * (release-please bumps it on every release), apps/server/package.json is still 0.1.0 and is not
+ * the release version, and the landing page gets its number from the release pipeline rather than
+ * from a running instance - so a person looking at their own instance had no way to tell what they
+ * were running short of reading the container tag.
+ *
+ * It is injected at build time from that one package.json, through a helper both vite configs
+ * read. Two configs because the app and the tests do not share one: apps/web/vite.config.ts serves
+ * the app and the root vitest.config.ts runs the suite, and a literal written into each is exactly
+ * the drift this repo keeps guards against elsewhere.
+ */
+describe('the version', () => {
+  it('is the one in the root package.json, not a hardcoded string', () => {
+    const root = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8'),
+    ) as { version: string }
+    expect(APP_VERSION).toBe(root.version)
+  })
+
+  it('reads as a version rather than as undefined, which is what a missing define looks like', () => {
+    expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+/)
+  })
+
+  it('is on the card', () => {
+    expect(render(<About />)).toContain(APP_VERSION)
   })
 })
 
