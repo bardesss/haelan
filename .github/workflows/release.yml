@@ -83,14 +83,26 @@ jobs:
           skip-github-release: true
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  # Only on a release. Everything here has to pass before the release stops being a draft, which
-  # is the last step in the job, so a failure anywhere leaves a draft nobody browsing can see
-  # rather than a finished-looking release page pointing at an image that was never pushed.
-  publish:
+  # Everything that can fail runs before the release stops being a draft. That ordering used to be
+  # a step list inside one job; it is a job graph now, because arm64 has to be built on an arm64
+  # machine. The guarantee is unchanged and is asserted in
+  # scripts/test/release-workflow-order.test.ts: nothing is pullable by tag until both
+  # architectures have been built AND booted, and the draft is published only after that.
+  #
+  # QEMU is gone, and that is the point of this shape. arm64 used to be emulated on an amd64
+  # runner, and emulating V8 is a known way to meet an instruction qemu cannot execute: the 1.32.0
+  # publish died on `qemu: uncaught target signal 4 (Illegal instruction) - core dumped` inside
+  # `pnpm install`, in two separate build stages, and then hung rather than failing - buildx sat
+  # waiting on a process that was already dead, for 78 minutes against a 7 minute pipeline, until
+  # it was cancelled by hand. Native runners remove the emulator rather than betting on a version
+  # of it.
+  verify:
     needs: release-please
     if: needs.release-please.outputs.released == 'true'
     runs-on: ubuntu-latest
+    # A hang is a failure that never arrives. Without this the default is six hours of a runner
+    # sitting on a dead process, which is exactly how 1.32.0 spent its morning.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -105,6 +117,7 @@ jobs:
       # CI never ran, which costs one wrong image on a registry other people pull from.
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+
       # A vitest worker that dies on a signal reports the signal and nothing else: no stack, no
       # faulting frame, nothing saying which of the three hundred files mattered or what it was
       # doing. v1.14.1's publish job died exactly that way - one SIGSEGV, 302 files green, no
@@ -114,29 +127,17 @@ jobs:
       # trigger is gone now the rebuild runs in a forked process.
       #
       # This stays anyway, because what cost the time was not that crash in particular. It was
-      # that a crash here says nothing at all, and the next one will be something else. Cores are
-      # off by default on the runners, so it would be just as silent. It costs nothing on a green
-      # run: setting core_pattern is one write, the ulimit is free, and gdb is installed only
-      # after a failure. /mnt is the runner's large temp disk - a Node core is several gigabytes,
-      # and / does not have room for one.
+      # that a crash here says nothing at all, and the next one will be something else.
       - name: Let a crash leave a core behind
         run: |
           sudo mkdir -p /mnt/cores
           sudo chmod 1777 /mnt/cores
           echo '/mnt/cores/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
 
-      # ulimit is per shell, so it has to be raised in the same step that runs the suite. Joined
-      # with && rather than split over a `run: |` block on purpose: release-workflow-order.test.ts
-      # reads each step by the line that opens it, and `pnpm test` moving onto a line below the
-      # step's name is invisible to it - which reads there as the workflow having stopped running
-      # the suite at all. That is also why the retry below wraps the command as arguments rather
-      # than hiding it inside a named step.
-      #
-      # The wrapper retries once and only when a worker CRASHED - a signal, with every test
-      # passed - never when the suite failed on its own terms. This step exists to stop a release
-      # going out on a commit whose tests do not pass, and a blanket retry would quietly undo
-      # that. The crash it is for has happened twice: v1.14.1's publish job and master on
-      # 2026-09-15, both V8 WebAssembly rather than anything in this codebase.
+      # ulimit is per shell, so it has to be raised in the same step that runs the suite. The
+      # wrapper retries once and only when a worker CRASHED - a signal, with every test passed -
+      # never when the suite failed on its own terms. This job exists to stop a release going out
+      # on a commit whose tests do not pass, and a blanket retry would quietly undo that.
       - run: ulimit -c unlimited && bash scripts/retry-if-worker-crashed.sh pnpm test
 
       - name: Backtrace whatever crashed
@@ -155,10 +156,88 @@ jobs:
             echo "::endgroup::"
           done
 
-      # arm64 runs under emulation, which is what lets the boot check below start it. The native
-      # prebuilds differ per architecture, so the one that is not booted is the one most likely
-      # to be broken.
-      - uses: docker/setup-qemu-action@v4
+  # One job per architecture, each on a machine of that architecture. Each builds its own image,
+  # boots it, and only then pushes it BY DIGEST - which puts the layers in the registry without
+  # attaching any tag to them. Nothing is pullable by tag until the publish job below runs, so
+  # "both architectures boot before either is reachable" survives the split into jobs.
+  image:
+    needs: [release-please, verify]
+    timeout-minutes: 45
+    strategy:
+      # Both results are wanted even when one fails: knowing that arm64 broke and amd64 did not is
+      # most of the diagnosis, and fail-fast would cancel the healthy one before it said so.
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            # GitHub's native arm64 runner, free for public repositories. The whole reason this
+            # matrix exists.
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # No docker/setup-qemu-action. Deliberately: see the comment on `verify` above.
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Built and loaded first, so it is booted before anything reaches the registry.
+      - name: Build ${{ matrix.arch }}
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: haelan:release-${{ matrix.arch }}
+      - run: bash scripts/check-image-boots.sh haelan:release-${{ matrix.arch }} linux/${{ matrix.arch }}
+
+      # Pushed by digest: layers and a manifest, no tag. The cache populated by the build above is
+      # what makes this second invocation cheap, and push-by-digest is what keeps the registry free
+      # of a half-released tag if the other architecture fails after this one succeeded.
+      - name: Push ${{ matrix.arch }} by digest
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Hand the digest to the publish job
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.push.outputs.digest }}"
+          if [ -z "$digest" ]; then
+            echo "::error::the ${{ matrix.arch }} push reported no digest"
+            exit 1
+          fi
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # The tags appear here and nowhere else, out of digests that have each already booted.
+  publish:
+    needs: [release-please, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
       - uses: docker/setup-buildx-action@v4
 
       - uses: docker/login-action@v4
@@ -177,8 +256,8 @@ jobs:
           #
           # latest is written here explicitly rather than left to the `latest=auto` flavour,
           # because that flavour reads the git ref, and on this workflow the ref is a branch. The
-          # job only reaches this step when release-please cut a release, and release-please's
-          # own config sets prerelease false, so a value arriving here is a full release.
+          # job only reaches this step when release-please cut a release, and release-please's own
+          # config sets prerelease false, so a value arriving here is a full release.
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release-please.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.version }}
@@ -198,66 +277,36 @@ jobs:
             exit 1
           fi
 
-      # Built and loaded per architecture first, so each one is booted before anything is pushed.
-      - name: Build and boot amd64
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          tags: haelan:release-amd64
-      - run: bash scripts/check-image-boots.sh haelan:release-amd64 linux/amd64
-
-      - name: Build and boot arm64
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          load: true
-          tags: haelan:release-arm64
-      - run: bash scripts/check-image-boots.sh haelan:release-arm64 linux/arm64
-
-      # This is a third, separate invocation, not a re-push of the two images just booted above --
-      # build-push-action has no "push what you already built" mode. It relies on the per-platform
-      # buildx cache populated by those two builds to hit, so what reaches the registry is
-      # *probably* the exact bits that were booted, not provably so. That gap is accepted, not
-      # fixed, here.
-      - name: Push both architectures
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      # The multi-architecture tag, assembled from the exact digests that were booted. The old
+      # single-job shape rebuilt everything a third time in order to push, and its own comment
+      # admitted the gap that left: what reached the registry was only *probably* the bits that
+      # had been booted. Naming digests closes it - these are those images, not a rebuild of the
+      # same source.
+      - name: Tag both architectures as one image
+        working-directory: /tmp/digests
+        run: |
+          digests=(*)
+          if [ ${#digests[@]} -ne 2 ]; then
+            echo "::error::expected one digest per architecture, found ${#digests[@]}"
+            exit 1
+          fi
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf 'ghcr.io/${{ github.repository }}@sha256:%s ' *)
+          docker buildx imagetools inspect \
+            "ghcr.io/${{ github.repository }}:${{ needs.release-please.outputs.version }}"
 
       # This is what makes the release exist for anyone who is not a maintainer, and it is
-      # deliberately the last thing the job does. Until it runs the release is a draft: invisible
+      # deliberately the last thing that happens. Until it runs the release is a draft: invisible
       # on the Releases page, not returned as `latest`, not in the Atom feed.
       #
       # Drafting was tried once before, in #127, and reverted in #135 because it made the version
-      # number fiction. The cause was precise and is worth writing down rather than leaving to be
-      # rediscovered a third time. GitHub does not create a draft's git tag until the draft is
-      # published, and release-please drops every release whose tag does not resolve -- its
-      # release search is literally `releases.filter(release => !!release.tagCommit)`, and the
-      # fallback that recovers a release the search missed looks it up by tag as well. So with a
-      # lazily-tagged draft release-please found no previous release at all: it backfilled one
-      # from the manifest with `sha: ''`, never matched that sha while walking history, and
-      # recomputed the version from all 217 commits in the repository. That history always holds
-      # a `feat:`, so every run proposed a minor bump and merging a release opened another
-      # release containing only its own release commit. 1.2.0, 1.3.0 and a proposed 1.4.0 came
-      # out that way.
-      #
-      # What is different now is `force-tag-creation: true` in release-please-config.json.
-      # release-please creates the git tag itself, with an explicit createRef, before it creates
-      # the release -- so the tag exists from the moment the draft does, both of its lookups
-      # resolve, and the ordering guarantee costs nothing. The option exists upstream for exactly
-      # this: "particularly useful when `draft` is enabled, because GitHub does not create a Git
-      # tag for draft releases until they are published."
-      #
-      # The two settings are one mechanism and neither works alone. `draft` without
-      # `force-tag-creation` is #127 again; `force-tag-creation` without `draft` is a tag
-      # release-please would have created anyway. Both are pinned together in
+      # number fiction. GitHub does not create a draft's git tag until the draft is published, and
+      # release-please drops every release whose tag does not resolve -- its release search is
+      # literally `releases.filter(release => !!release.tagCommit)`. `force-tag-creation: true` in
+      # release-please-config.json is what fixes that: release-please creates the tag itself,
+      # before the release, so both of its lookups resolve and the ordering costs nothing. The two
+      # settings are one mechanism and neither works alone; both are pinned in
       # scripts/test/release-workflow-order.test.ts.
       - name: The release stops being a draft
         env:
@@ -272,19 +321,17 @@ jobs:
             echo "::error::release-please reported no release id for ${TAG}"
             exit 1
           fi
-          # make_latest explicitly: it is applied when a release is published, and this release
-          # was created as a draft, so leaving it to the default risks publishing a release the
+          # make_latest explicitly: it is applied when a release is published, and this release was
+          # created as a draft, so leaving it to the default risks publishing a release the
           # Releases page still does not call the latest one.
           gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
             -F draft=false -f make_latest=true \
             --jq '"published \(.tag_name) (draft=\(.draft)): \(.html_url)"'
 
-      # A failure above is correct behaviour -- the draft stays a draft -- but it is quiet. The
-      # release page looks like nothing happened because to everyone except a maintainer nothing
-      # did, and the red run is one line in a list of runs. Say plainly what state the repository
-      # is in, because the wrong recovery is available and tempting: publishing the draft by hand
-      # from the Releases UI produces exactly the release-pointing-at-no-image that this ordering
-      # exists to prevent.
+      # A failure above is correct behaviour -- the draft stays a draft -- but it is quiet. Say
+      # plainly what state the repository is in, because the wrong recovery is available and
+      # tempting: publishing the draft by hand from the Releases UI produces exactly the
+      # release-pointing-at-no-image that this ordering exists to prevent.
       - name: Say what a failure left behind
         if: failure()
         env:
@@ -293,21 +340,21 @@ jobs:
           {
             echo "## ${TAG} is tagged, but not released"
             echo
-            echo "This job did not finish, so the image for \`${TAG}\` may not be on"
-            echo "\`ghcr.io/${GITHUB_REPOSITORY}\`. The release is still a draft: nobody browsing"
-            echo "the Releases page can see it, and \`latest\` still points at the previous version."
+            echo "This run did not finish, so no tag on \`ghcr.io/${GITHUB_REPOSITORY}\` points at"
+            echo "\`${TAG}\` yet. The release is still a draft: nobody browsing the Releases page"
+            echo "can see it, and \`latest\` still points at the previous version."
             echo
             echo "The git tag \`${TAG}\` **does** exist. That is deliberate -- release-please cannot"
             echo "find its own previous release without it, and a missing tag is how the version"
             echo "numbers became fiction in #127. Leave the tag alone."
             echo
-            echo "To recover: fix the cause and use **Re-run failed jobs**. The last step of this"
-            echo "job publishes the draft."
+            echo "To recover: fix the cause and use **Re-run failed jobs**, which keeps the"
+            echo "release-please outputs every job here is gated on."
             echo
             echo "Do **not** use *Re-run all jobs*. Release Please refuses to cut a release that"
-            echo "already exists, so \`release-please\` reports nothing released, and this job is"
-            echo "skipped on its \`if:\` -- the run goes green having published nothing."
+            echo "already exists, so \`release-please\` reports nothing released, every job below it"
+            echo "is skipped on its \`if:\` -- and the run goes green having published nothing."
             echo
-            echo "Do **not** publish the draft by hand from the Releases page -- that is precisely the"
-            echo "release-pointing-at-a-missing-image this ordering exists to prevent."
+            echo "Do **not** publish the draft by hand from the Releases page -- that is precisely"
+            echo "the release-pointing-at-a-missing-image this ordering exists to prevent."
           } >> "$GITHUB_STEP_SUMMARY"
