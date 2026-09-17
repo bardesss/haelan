@@ -81,6 +81,11 @@ console.log(`people: ${people.length}`)
 for (const person of people) {
   console.log(`\n${'='.repeat(70)}\n## person ${person.id.slice(0, 4)}…\n`)
 
+  // Kept for the co-occurrence section below, which is the question that decides whether a feed is
+  // worth having at all: one metric being odd on a day is mostly something the person already
+  // lived through, and several at once is a different claim.
+  const scoredByMetric = new Map()
+
   for (const metric of METRICS) {
     // Whichever tier actually holds this metric, preferring merged. Printed, because "which tier
     // holds this" is a question the feature has to answer before it can read anything.
@@ -142,6 +147,8 @@ for (const person of people) {
       if (z === null) { zeroSpread += 1; continue }
       scored.push({ day, z, coverage: byDay.get(day).coverage })
     }
+
+    scoredByMetric.set(metric, new Map(scored.map((s) => [s.day, s.z])))
 
     const judged = scored.length
     console.log(`  judgeable: ${judged} (${pct(judged, days.length)})`)
@@ -212,6 +219,68 @@ for (const person of people) {
     console.log(`    longest run: ${lengths.length === 0 ? 0 : Math.max(...lengths)} days`)
     console.log('')
   }
+
+  // ------------------------------------------------------------------ do several metrics agree
+  //
+  // The question that decides whether a feed is worth building. One metric flagging is mostly a
+  // day the person already lived through - they were awake for the bad night, they were there for
+  // the long walk - so a card announcing it is a notification with statistics attached. Several
+  // metrics flagging the same day is a different claim, and it is what being ill looks like in
+  // data.
+  //
+  // Observed against expected-under-independence, because the observed count alone means nothing:
+  // six metrics each flagging a few percent of days will land on the same day sometimes by pure
+  // chance, and the feature only exists if they do it MORE than chance. Expected is the exact
+  // Poisson-binomial over the per metric rates rather than a simulation, which for six metrics is
+  // a six step convolution and needs no sampling error.
+  //
+  // Restricted to the days every metric could be judged on, so "two of six" means two of six that
+  // were actually asked, never two of however many happened to have a baseline that day.
+  const metricsHere = [...scoredByMetric.keys()].filter((m) => scoredByMetric.get(m).size > 0)
+  const everyDay = metricsHere.length === 0
+    ? []
+    : [...scoredByMetric.get(metricsHere[0]).keys()]
+      .filter((day) => metricsHere.every((m) => scoredByMetric.get(m).has(day)))
+      .sort((a, b) => a - b)
+
+  console.log(`\n${'-'.repeat(70)}\n### Do several metrics flag the same day?\n`)
+  console.log(`  ${metricsHere.length} metrics judgeable together on ${everyDay.length} days`)
+
+  for (const z of [1.5, 2, 2.5]) {
+    const flaggedOn = (day) => metricsHere.filter((m) => Math.abs(scoredByMetric.get(m).get(day)) >= z).length
+
+    const observed = new Array(metricsHere.length + 1).fill(0)
+    for (const day of everyDay) observed[flaggedOn(day)] += 1
+
+    // Each metric's own rate over these days, which is what independence would predict from.
+    const rates = metricsHere.map((m) =>
+      everyDay.filter((day) => Math.abs(scoredByMetric.get(m).get(day)) >= z).length / (everyDay.length || 1))
+
+    // Convolution: start certain of zero flags, fold in one metric at a time.
+    let dist = [1]
+    for (const p of rates) {
+      const next = new Array(dist.length + 1).fill(0)
+      for (let k = 0; k < dist.length; k += 1) {
+        next[k] += dist[k] * (1 - p)
+        next[k + 1] += dist[k] * p
+      }
+      dist = next
+    }
+
+    console.log(`\n  at z>=${z.toFixed(1)}:`)
+    console.log(`    metrics   observed days   expected if independent`)
+    for (let k = 0; k < observed.length; k += 1) {
+      const expected = (dist[k] ?? 0) * everyDay.length
+      if (observed[k] === 0 && expected < 0.05) continue
+      console.log(`    ${String(k).padStart(4)}   ${String(observed[k]).padStart(11)}   ${expected.toFixed(1).padStart(11)}`)
+    }
+    const obsTwoPlus = observed.slice(2).reduce((a, b) => a + b, 0)
+    const expTwoPlus = dist.slice(2).reduce((a, b) => a + b, 0) * everyDay.length
+    console.log(`    2 or more: observed ${obsTwoPlus}, expected ${expTwoPlus.toFixed(1)}`
+      + `${expTwoPlus > 0 ? `  (${(obsTwoPlus / expTwoPlus).toFixed(1)}x)` : ''}`)
+    console.log(`    a feed of 2-or-more days would carry ~${((obsTwoPlus / (everyDay.length || 1)) * 365).toFixed(0)} entries a year`)
+  }
+  console.log('')
 }
 
 console.log(`\n${'='.repeat(70)}`)
