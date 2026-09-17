@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.35.0](https://github.com/bardesss/haelan/compare/v1.34.0...v1.35.0) (2026-09-17)
+
+
+### Features
+
+* tell an admin when a newer release is out, if they ask for it ([#269](https://github.com/bardesss/haelan/issues/269)) ([d30ddff](https://github.com/bardesss/haelan/commit/d30ddff0398bbfb87174a2b9ed1d95e2b33d13ef))
+
 ## [1.34.0](https://github.com/bardesss/haelan/compare/v1.33.0...v1.34.0) (2026-09-17)
 
 
