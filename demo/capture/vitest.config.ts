@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { defineConfig } from 'vitest/config'
+import { appVersion } from '../../scripts/app-version.ts'
 
 // demo/capture/ has no package.json of its own (server.ts's own comment already explains why: a
 // deep relative import is the only thing a bare specifier could resolve against here), so a bare
@@ -18,6 +19,12 @@ const WEB_NODE_MODULES = fileURLToPath(new URL('../../apps/web/node_modules', im
 // root config's globs (packages|apps|scripts)/**/test/**, or `pnpm test` would run a real Fastify
 // instance against a freshly seeded, rebuilt directory as part of the ordinary suite.
 export default defineConfig({
+  // The third config that has to define this, and the one that is easy to forget: the recorder
+  // mounts real apps/web pages, so it reaches Settings' About card and the constant baked into the
+  // bundle by apps/web/vite.config.ts. Without it the recorder throws "__APP_VERSION__ is not
+  // defined" and takes the whole layout job down with it - which is how it was found, since
+  // neither the suite nor a production build exercises this path.
+  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   resolve: {
     alias: [
       // jsx-dev-runtime is not something record.tsx names itself - it is what esbuild's JSX
