@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.32.0](https://github.com/bardesss/haelan/compare/v1.31.0...v1.32.0) (2026-09-17)
+
+
+### Features
+
+* **web:** a day tile says how that day sat against your own usual ([#262](https://github.com/bardesss/haelan/issues/262)) ([3072a58](https://github.com/bardesss/haelan/commit/3072a586d950f8c748478b10011bf31e79a6e22a))
+
 ## [1.31.0](https://github.com/bardesss/haelan/compare/v1.30.0...v1.31.0) (2026-09-17)
 
 
