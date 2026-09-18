@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.37.2](https://github.com/bardesss/haelan/compare/v1.37.1...v1.37.2) (2026-09-18)
+
+
+### Bug Fixes
+
+* **core:** insert a day's derived rows in chunks, not one statement each ([#283](https://github.com/bardesss/haelan/issues/283)) ([37fb04e](https://github.com/bardesss/haelan/commit/37fb04e9cefba3392fc139b4b2308def9b2c05fc)), closes [#275](https://github.com/bardesss/haelan/issues/275)
+
 ## [1.37.1](https://github.com/bardesss/haelan/compare/v1.37.0...v1.37.1) (2026-09-18)
 
 
