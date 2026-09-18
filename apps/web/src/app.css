@@ -1158,10 +1158,18 @@ a.segment { text-decoration: none; display: inline-block; }
      them, so a mis-tap did not miss, it navigated to the neighbour. The check now sweeps the
      drawer open as well as closed, which is what turned this from an argument into a failure. */
   .button, .icon-button, .chart-table-toggle, .chart-annotate, .card-link,
-  .session-row-link, .night-row-link, .date-picker, .input, .rail-item, .rail-person {
+  .session-row-link, .night-row-link, .date-picker, .input, .rail-item, .rail-person,
+  .source-order-list button {
     min-height: 44px;
   }
   .icon-button { min-width: 44px; justify-content: center; align-items: center; }
+  /* The ranking list's two movers are bare buttons carrying a word rather than .button or
+     .icon-button, so they inherited none of this and measured 33x21 and 50x21. Both dimensions are
+     under the rule, not just the height, which is why they need the min-width .icon-button gets as
+     well: a 50x44 target still fails on its smaller side. Worth stating plainly, because these are
+     the controls chosen over drag specifically so a screen reader and a finger could both drive
+     them, and at 21px tall a finger could not. layout:check caught it. */
+  .source-order-list button { min-width: 44px; justify-content: center; align-items: center; }
   .chart-table-toggle, .chart-annotate, .card-link, .session-row-link, .night-row-link { display: flex; align-items: center; }
   /* The source picker's real control: a bare <select> inside a label.button, so it inherits the
      label's box for everything except height, which the label never constrained in the first
