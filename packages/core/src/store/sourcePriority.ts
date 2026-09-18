@@ -1,12 +1,12 @@
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { samples, sourcePriority, sources } from '../db/schema/index.ts'
+import { samples, sessions, sourcePriority, sources } from '../db/schema/index.ts'
 import { SampleKeys } from '../db/keys.ts'
 import type { DeriveQueue } from './deriveQueue.ts'
 import { ConfigError } from '../errors.ts'
 import { priorityFrom } from '../derive/priority.ts'
 import type { Priority, SourceFacts } from '../derive/priority.ts'
-import { localDateOf, shiftLocalDate } from '../derive/localDay.ts'
+import { shiftLocalDate } from '../derive/localDay.ts'
 
 export interface StoredList {
   metric: string
@@ -61,14 +61,14 @@ export class SourcePriorityStore {
           .values({ personId: input.personId, metric: input.metric, sourceId, rank })
           .run()
       })
-      this.#markEveryDay(input.personId, input.nowMs, tx)
+      this.#markContestedDays(input.personId, input.nowMs, tx)
     })
   }
 
   clear(input: { personId: string, metric: string, nowMs: number }): void {
     this.#db.transaction((tx) => {
       this.#replace(tx, input.personId, input.metric)
-      this.#markEveryDay(input.personId, input.nowMs, tx)
+      this.#markContestedDays(input.personId, input.nowMs, tx)
     })
   }
 
@@ -103,42 +103,60 @@ export class SourcePriorityStore {
   }
 
   /**
-   * Every day between the person's first and last sample, widened by a day at each end. Two
-   * indexed reads rather than a distinct scan over millions of rows, and each end's offset is
-   * read off the boundary row itself. The earliest UTC row is not the earliest local row once
-   * offsets differ, so the two converted dates are ordered here rather than assumed in order:
-   * inverted ends make datesBetween empty and mark nothing at all. The widening covers the same
-   * skew at the outside, where a person's first or last local day can sit outside the raw
-   * min-to-max window. A spare day costs one empty derive; a missed day keeps a merge computed
-   * under the priority list this write just replaced.
+   * The days a ranking change could actually change, which is the days two or more sources
+   * contributed rows to. `rank()` has three consumers (merge.ts, activityBands.ts,
+   * sessionOverlap.ts) and all three use it only to choose between candidates competing for one
+   * slot, so a day with a single source produces the same rows under any ranking. This replaced a
+   * marker that marked every day between the person's first and last sample: correct, and on a
+   * multi-year archive it queued more days than any drain converges through, so the change looked
+   * like it did nothing for days.
+   *
+   * Not read off `daily.sourceMix`, which would be cheaper and wrong: mergeDay builds that from
+   * hoursWon, so a source that had rows and won no hour does not appear in it, and those are
+   * exactly the days a ranking change is most likely to flip.
+   *
+   * Each contested day takes its neighbours with it. A night belongs to the morning it ended in
+   * and sessionOverlap reads across midnight, so a contested day can move the day either side of
+   * it. A spare day costs one empty derive; a missed day keeps a merge computed under the list
+   * this write just replaced.
    */
-  #markEveryDay(personId: string, nowMs: number, tx: DbOrTx): void {
-    const columns = { utcMs: samples.utcMs, tzOffsetMinutes: samples.tzOffsetMinutes }
-    // Bound to the write's transaction. Only the person is translated: this reads the two boundary
-    // instants and nothing about which metric or source they belong to. IfKnown, because a person
-    // with no row has no samples either, which is the same nothing-to-mark the empty query below
-    // already answers with.
+  #markContestedDays(personId: string, nowMs: number, tx: DbOrTx): void {
     const personRef = new SampleKeys(tx).personRefIfKnown(personId)
-    if (personRef === undefined) return
-    const first = tx.select(columns).from(samples).where(eq(samples.personRef, personRef))
-      .orderBy(asc(samples.utcMs)).limit(1).get()
-    const last = tx.select(columns).from(samples).where(eq(samples.personRef, personRef))
-      .orderBy(desc(samples.utcMs)).limit(1).get()
-    if (!first || !last) return
+    const contested = new Set<string>()
 
-    // Sorted, because the earliest UTC row is not the earliest LOCAL row once offsets differ:
-    // an eastward flight can give the later instant the earlier calendar date, and an inverted
-    // range marks nothing at all.
-    const [earlier, later] = [
-      localDateOf(first.utcMs, first.tzOffsetMinutes),
-      localDateOf(last.utcMs, last.tzOffsetMinutes),
-    ].sort()
+    if (personRef !== undefined) {
+      // The local date is computed rather than stored, so it is computed here the same way
+      // localDateOf does: shift the instant by its own offset, then take the calendar date.
+      const rows = tx.all<{ localDate: string }>(sql`
+        SELECT local_date AS localDate FROM (
+          SELECT date((utc_ms + tz_offset_minutes * 60000) / 1000, 'unixepoch') AS local_date,
+                 source_ref
+          FROM samples
+          WHERE person_ref = ${personRef}
+          GROUP BY local_date, source_ref
+        )
+        GROUP BY local_date
+        HAVING COUNT(*) > 1
+      `)
+      for (const row of rows) contested.add(row.localDate)
+    }
 
-    this.#queue.markRange({
-      personId,
-      fromLocalDate: shiftLocalDate(earlier!, -1),
-      toLocalDate: shiftLocalDate(later!, 1),
-      nowMs,
-    })
+    // Sessions carry their local date already, so this one needs no conversion.
+    const sessionRows = tx.all<{ localDate: string }>(sql`
+      SELECT local_date AS localDate FROM ${sessions}
+      WHERE person_id = ${personId}
+      GROUP BY local_date
+      HAVING COUNT(DISTINCT source_id) > 1
+    `)
+    for (const row of sessionRows) contested.add(row.localDate)
+
+    for (const localDate of contested) {
+      for (const offset of [-1, 0, 1]) {
+        this.#queue.markDirty(
+          { personId, localDate: shiftLocalDate(localDate, offset), nowMs },
+          tx,
+        )
+      }
+    }
   }
 }
