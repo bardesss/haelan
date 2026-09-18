@@ -16,6 +16,7 @@ import type { PeopleStore } from '../store/people.ts'
 import type { OverrideStore } from '../store/overrides.ts'
 import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import type { SettingsStore } from '../store/settings.ts'
+import type { RebuildStateStore } from '../store/rebuildState.ts'
 import { ObservationStore } from '../store/observations.ts'
 import { peopleNeedingRebuild } from './versions.ts'
 import { replayPerson } from './replay.ts'
@@ -93,6 +94,15 @@ export interface RebuildInput {
   force?: boolean
   /** Called after each person's transaction commits, so what it reports is durable. */
   onPersonDone?: (report: RebuildPersonReport) => void
+  /**
+   * Where each person's outcome is recorded. Optional so existing callers and tests compile
+   * unchanged; an instance always passes it.
+   *
+   * Called from the catch below and from after the commit, never from inside the transaction
+   * callback - see the class comment on RebuildStateStore for why that distinction is the whole
+   * point of this field.
+   */
+  rebuildState?: RebuildStateStore
 }
 
 /**
@@ -246,6 +256,14 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         reasons,
         error: error instanceof Error ? error : new Error(String(error)),
       })
+      // After the push and outside the transaction, which has already rolled back by the time
+      // this runs. That is what makes the write durable: enlisted in the rebuild's own
+      // transaction it would roll back with the failure it exists to record.
+      input.rebuildState?.recordFailure({
+        personId,
+        nowMs: input.nowMs,
+        error: error instanceof Error ? error.message : String(error),
+      })
       continue
     }
 
@@ -257,6 +275,14 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     // the space will be reclaimed by the next one; this person's rows are committed either way,
     // and failing their rebuild over a disk tidy-up would be a far worse outcome than a large file.
     checkpointTruncate(input.db)
+
+    // After the commit, for the same reason the failure is recorded after the rollback: this is
+    // a durable record of a durable outcome. droppedPages is zero and drops empty until #276b
+    // gives replayPerson per-page isolation; the columns exist now so the surfaces that render
+    // them do not have to change again when it lands.
+    input.rebuildState?.recordSuccess({
+      personId, nowMs: input.nowMs, droppedPages: 0, drops: [],
+    })
 
     report.people.push(personReport)
     input.onPersonDone?.(personReport)
