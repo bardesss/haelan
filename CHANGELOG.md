@@ -9,6 +9,20 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.36.1](https://github.com/bardesss/haelan/compare/v1.36.0...v1.36.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **core:** a body that repeats a session no longer costs a person their rebuild ([#277](https://github.com/bardesss/haelan/issues/277)) ([cacc225](https://github.com/bardesss/haelan/commit/cacc22525405aa70c19e56a0240b465915e8c976))
+
+## [1.36.0](https://github.com/bardesss/haelan/compare/v1.35.0...v1.36.0) (2026-09-17)
+
+
+### Features
+
+* the members card says who the admin is, and how each member is doing ([#271](https://github.com/bardesss/haelan/issues/271)) ([f59d2fa](https://github.com/bardesss/haelan/commit/f59d2fa4ca1b237c2ebb5df59b05dfb631a9ca2e))
+
 ## [1.35.0](https://github.com/bardesss/haelan/compare/v1.34.0...v1.35.0) (2026-09-17)
 
 

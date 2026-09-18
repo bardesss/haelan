@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
-import { DERIVATION_VERSION, RawArchive, dayMetricTarget, insertSample, schema } from '@haelan/core'
+import { DEFAULT_LIST, DERIVATION_VERSION, RawArchive, dayMetricTarget, insertSample, schema } from '@haelan/core'
 import { registeredRoutes, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -324,6 +324,18 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-source-999999',
   },
   {
+    name: 'source-priority',
+    template: '/api/v1/p/:personId/source-priority',
+    // No date range and nothing stored either: with no ranking configured, the answer is the
+    // fallback order, so the marker is a seeded source's own id showing up in that order, the
+    // same as the sources entry above.
+    path: (p) => `/api/v1/p/${p}/source-priority`,
+    seedOwn: (h) => seedSource(h, 'p1', 'own-source-ok'),
+    seedOther: (h, personId) => seedSource(h, personId, 'leaked-source-999999'),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
     name: 'data-types',
     template: '/api/v1/p/:personId/data-types',
     // This route's items are the catalogue itself, the same list for every person; the only thing
@@ -494,6 +506,7 @@ describe('the versioned surface, beyond the per-route table', () => {
     'PUT /api/v1/p/:personId/sources/:sourceId/alias',
     'DELETE /api/v1/p/:personId/sources/:sourceId/alias',
     'PUT /api/v1/p/:personId/data-types',
+    'PUT /api/v1/p/:personId/source-priority',
     'POST /api/v1/p/:personId/ingest/:dataTypeId',
   ]
 
@@ -1048,6 +1061,71 @@ describe('the versioned surface, beyond the per-route table', () => {
       expect(written.statusCode).toBe(200)
       expect(written.json()).toEqual({ excluded: ['steps', 'weight'] })
       expect(excludedDataTypes.listFor('p1')).toEqual(['steps', 'weight'])
+    })
+  })
+
+  // Another route with no id in its path, the same shape as data-types writes above: it replaces
+  // a person's whole ranking in one call, so what could leak is again not an extra row but this
+  // person's own list silently reflecting a source id only the other person's request named.
+  describe('source-priority writes', () => {
+    it('answers 401 with no session at all, before touching anything', async () => {
+      harness = await withServer()
+      await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p2', 'theirs')
+      const sourcePriority = harness.app.haelan.instance.sourcePriority
+      sourcePriority.put({ personId: 'p2', metric: DEFAULT_LIST, sourceIds: ['theirs'], nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/source-priority',
+        payload: { sourceIds: [] },
+      })
+      expect(written.statusCode).toBe(401)
+      expect(written.json()).toMatchObject({ error: { kind: 'unauthorized', code: 'no_session' } })
+
+      // p1, not p2: the request above names p1 in the path, so a guard that failed open would
+      // touch p1's own ranking, never p2's. p2's is read too, for the symmetry, but it was never
+      // the one a broken guard here would touch.
+      expect(sourcePriority.lists('p1')).toEqual([])
+      expect(sourcePriority.lists('p2')).toEqual([{ metric: DEFAULT_LIST, sourceIds: ['theirs'] }])
+    })
+
+    // The one direction this write has, unlike the create-and-delete pairs above: a PUT always
+    // replaces the whole list for the metric, so there is nothing separate to call "removing" it.
+    it('refuses the write against another person, and leaves their ranking unchanged', async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      await harness.addPerson({ id: 'p2', displayName: 'Someone else', username: 'other' })
+      seedSource(harness, 'p2', 'theirs')
+      const sourcePriority = harness.app.haelan.instance.sourcePriority
+      sourcePriority.put({ personId: 'p2', metric: DEFAULT_LIST, sourceIds: ['theirs'], nowMs: harness.clock.nowMs })
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p2/source-priority',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { sourceIds: [] },
+      })
+      expect(written.statusCode).toBe(403)
+      // The envelope, not only the status: see the comment on the override 403 case above for why
+      // a status-only assertion here can pass for the wrong reason.
+      expect(written.json()).toMatchObject({ error: { kind: 'forbidden', code: 'not_your_person' } })
+      expect(sourcePriority.lists('p2')).toEqual([{ metric: DEFAULT_LIST, sourceIds: ['theirs'] }])
+    })
+
+    it("stores the ranking for the session's own person", async () => {
+      harness = await withServer()
+      const token = await harness.signIn()
+      seedSource(harness, 'p1', 'mine')
+      const sourcePriority = harness.app.haelan.instance.sourcePriority
+
+      const written = await harness.app.inject({
+        method: 'PUT', url: '/api/v1/p/p1/source-priority',
+        headers: { authorization: `Bearer ${token}`, ...ORIGIN },
+        payload: { sourceIds: ['mine'] },
+      })
+      expect(written.statusCode).toBe(200)
+      expect((written.json() as { order: { sourceId: string }[] }).order.map((e) => e.sourceId)).toEqual(['mine'])
+      expect(sourcePriority.lists('p1')).toEqual([{ metric: DEFAULT_LIST, sourceIds: ['mine'] }])
     })
   })
 

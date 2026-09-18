@@ -1136,6 +1136,18 @@
       "volume_one": "{{count}} day reported",
       "volume_other": "{{count}} days reported"
     },
+    "sourceOrder": {
+      "title": "Which source wins",
+      "intro": "When two of your sources report the same thing on the same day, the one nearest the top is the one haelan believes. Changing this recomputes the days where your sources disagreed, which happens in the background.",
+      "moveUp": "Move {{name}} up",
+      "moveDown": "Move {{name}} down",
+      "up": "Up",
+      "down": "Down",
+      "reset": "Use the default order",
+      "moved": "{{name}} moved to position {{position}} of {{total}}",
+      "resetAnnounced": "Order reset to the default",
+      "saveFailed": "That did not save. Try again."
+    },
     "dataTypes": {
       "title": "What to sync",
       "detail": "Turning one off stops fetching it. Nothing already fetched is deleted.",
