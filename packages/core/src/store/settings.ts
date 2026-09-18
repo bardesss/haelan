@@ -1,4 +1,4 @@
-﻿import { eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { instanceSettings } from '../db/schema/index.ts'
 import type { ConsentPath } from '../db/schema/accounts.ts'
@@ -253,6 +253,13 @@ export function setupStep(deps: SetupDeps): SetupStep {
   // finish. Per-person phone choices live on people.companionPath; legacy companion rows predate
   // the column and read as false, which is exactly why the instance flag stays sufficient rather
   // than demanding a flag no legacy row could carry.
+  //
+  // No client is required for that 'done', and none may be: letting a phone-only instance fall
+  // through to the check below would answer 'google-client' instead, which shuts every route
+  // outside the wizard (setupGate.ts) and stops the phone syncing with no way back to done. This
+  // short-circuit closes no door of its own - the gate keeps /api/setup/google-client open on a
+  // completed companion instance while nobody has connected Google yet, so a client can still be
+  // pasted afterwards.
   if (settings.companionMode && settings.setupCompletedAtMs !== null) return 'done'
   // Unreadable counts as not configured, and is asked first so this function stays total -
   // getClient throws on a secret this key cannot open, and setupStep runs in a preHandler on

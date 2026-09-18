@@ -86,9 +86,10 @@ export function registerSetup(app: FastifyInstance): void {
   // The companion app's way past the wizard: no Google Cloud project, no OAuth client, no
   // consent. Only past the address step, which is what makes google-client and consent the
   // two states this accepts: before it there is no settings row to complete, and once setup
-  // is done the gate shuts every setup route before this handler runs. A client pasted
-  // earlier stays stored and unused, which also keeps the door open to connecting Google
-  // later through /oauth/start without anything stored contradicting the mode.
+  // is done the gate shuts every setup route before this handler runs, this one included. A
+  // client pasted earlier stays stored and unused, and one pasted afterwards is accepted too:
+  // setupGate.ts keeps that route open on a completed companion instance, so that this choice
+  // always has a way back to Google. Either way nothing stored here contradicts the mode.
   // Closing without Google is also this person's choice of the phone path, so it is
   // recorded on their person row next to the instance flag. The flag alone could never say
   // which member walks which path on a mixed instance; the consent exit needs no twin write

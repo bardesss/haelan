@@ -225,6 +225,75 @@ describe('empty volume to syncing instance', () => {
     expect(kept.companionPath).toBe(1)
   }, 60_000)
 
+  // The mirror image of the case above, and the one the gate used to refuse: the skip comes first
+  // with no client anywhere on the instance, and the client is pasted afterwards. That paste was a
+  // 409 setup_complete - POST /api/setup/google-client is the only writer of a client, and at
+  // 'done' the gate shut it - so choosing the phone closed the Google door for good. The rest of
+  // the flow is the one above, unchanged: consent, callback, one person, the phone choice kept.
+  it('connects Google after a companion skip that never saw a client', async () => {
+    const { base, instance } = await listeningServer()
+    const headers = { 'content-type': 'application/json', origin: base }
+
+    const created = await fetch(`${base}/api/setup/account`, {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        username: 'robin', password: 'a good long password',
+        displayName: 'Robin', timezone: 'Europe/Amsterdam',
+      }),
+    })
+    expect(created.status).toBe(201)
+    const cookie = (created.headers.get('set-cookie') ?? '').split(';')[0] ?? ''
+    const personId = ((await created.json()) as { personId: string }).personId
+    const authed = { ...headers, cookie }
+
+    const urlStep = await fetch(`${base}/api/setup/instance-url`, {
+      method: 'POST', headers: authed,
+      body: JSON.stringify({ baseUrl: base, consentPath: 'localhost' }),
+    })
+    expect(urlStep.status).toBe(200)
+
+    // The phone path, with nothing pasted before it: no client row anywhere on this instance.
+    const skipped = await fetch(`${base}/api/setup/companion`, {
+      method: 'POST', headers: authed, body: JSON.stringify({}),
+    })
+    expect(await skipped.json()).toEqual({ step: 'done' })
+    expect(await (await fetch(`${base}/api/setup/state`)).json())
+      .toEqual({ step: 'done', companionMode: true })
+    expect(instance.credentials.getClient()).toBeNull()
+
+    // The door: the wizard route that writes the client answers instead of 409ing, and the step
+    // it reports stays 'done' - pasting a client is not walking the wizard again.
+    const pasted = await fetch(`${base}/api/setup/google-client`, {
+      method: 'POST', headers: authed,
+      body: JSON.stringify({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' }),
+    })
+    expect(pasted.status).toBe(200)
+    expect(await pasted.json()).toEqual({ step: 'done' })
+
+    // The same consent flow opens after it, spending the client that arrived late.
+    const start = await fetch(`${base}/oauth/start`, { headers: { cookie }, redirect: 'manual' })
+    expect(start.status).toBe(302)
+    const location = start.headers.get('location') ?? ''
+    expect(location).toContain('/auth')
+    expect(location).toContain('client_id=id.apps.googleusercontent.com')
+    const state = new URL(location).searchParams.get('state')
+    expect(state).toBeTruthy()
+
+    const callback = await fetch(
+      `${base}/oauth/callback?code=good&state=${encodeURIComponent(state!)}`,
+      { headers: { cookie }, redirect: 'manual' },
+    )
+    expect(callback.headers.get('location')).toBe('/')
+    const people = instance.db.$client.prepare('select count(*) as n from people').get() as { n: number }
+    expect(people.n).toBe(1)
+    const creds = instance.db.$client
+      .prepare('select person_id as personId from credentials').all() as Array<{ personId: string }>
+    expect(creds.map((row) => row.personId)).toEqual([personId])
+    const kept = instance.db.$client
+      .prepare('select companion_path as companionPath from people').get() as { companionPath: number }
+    expect(kept.companionPath).toBe(1)
+  }, 60_000)
+
   it('serves the SPA shell for an unknown path so a refresh mid wizard works', async () => {
     // A directory with a shell in it, rather than a real build: what is under test is the not
     // found handler, and requiring `pnpm build` first would make this suite depend on an
