@@ -5,7 +5,10 @@ import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { UNRANKED_BASE, DEFAULT_LIST } from '../src/derive/priority.ts'
 import { ConfigError } from '../src/errors.ts'
-import { sources, sessions, deriveQueue as deriveQueueTable } from '../src/db/schema/index.ts'
+import { sources, sessions, deriveQueue as deriveQueueTable, daily } from '../src/db/schema/index.ts'
+import { runDerive } from '../src/derive/runDerive.ts'
+import { OverrideStore } from '../src/store/overrides.ts'
+import { SettingsStore } from '../src/store/settings.ts'
 
 const OFFSET = 120
 const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
@@ -13,6 +16,8 @@ const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
 let test: TestDatabase
 let store: SourcePriorityStore
 let queue: DeriveQueue
+let overrides: OverrideStore
+let settings: SettingsStore
 
 beforeEach(() => {
   test = createTestDatabase()
@@ -25,6 +30,8 @@ beforeEach(() => {
   ]).run()
   queue = new DeriveQueue(test.db)
   store = new SourcePriorityStore(test.db, queue)
+  overrides = new OverrideStore(test.db, queue)
+  settings = new SettingsStore(test.db)
 })
 afterEach(() => test.cleanup())
 
@@ -152,6 +159,27 @@ describe('marks only contested days', () => {
     })
     store.put({ personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['phone', 'watch'], nowMs: 1 })
     expect(queuedDates()).toEqual([])
+  })
+
+  it('derives identical rows for a single source day whatever the ranking', () => {
+    // Confirms the narrowing does not just leave the day unmarked but that a marked derive
+    // of the same day would have produced the same rows anyway: rank() only breaks ties
+    // between two or more sources, so a lone source's output cannot depend on it.
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET, value: 500 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    const derive = () => runDerive({
+      db: test.db, queue, priority: store, overrides, settings, nowMs: 2,
+    })
+    derive()
+    const before = test.db.select().from(daily).all()
+
+    store.put({ personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['phone', 'watch'], nowMs: 3 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 3 })
+    derive()
+    const after = test.db.select().from(daily).all()
+
+    expect(after).toEqual(before)
   })
 
   it('marks a day two sources both reported on, and its neighbours', () => {
