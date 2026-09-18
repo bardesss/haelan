@@ -12,7 +12,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 /**
- * The two things `T4.5` asks to be proven rather than declared: what a night that crosses a change
+ * The two things proven rather than declared here: what a night that crosses a change
  * of hour is written as, and what becomes of a stage v4 has no name for.
  *
  * The night below is synthetic and says so. Europe/Rome falls back on 2026-10-25 at 01:00Z, when

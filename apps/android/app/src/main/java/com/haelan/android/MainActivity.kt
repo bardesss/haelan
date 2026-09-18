@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
     /** The state box each row carries, by the same key its toggle uses. */
     private val rowStates = mutableMapOf<String, RowState>()
 
-    /** The sentence under each toggle that names its last finished run (T5.2). */
+    /** The sentence under each toggle that names its last finished run. */
     private val rowStatus = mutableMapOf<String, TextView>()
 
     /**
@@ -213,7 +213,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * The system list where Hælan can be set to unrestricted. No permission needed to open
-     * it: the choice stays with the person, and this screen only names it (T5.2).
+     * it: the choice stays with the person, and this screen only names it.
      */
     private fun openBatterySettings() {
         try {
@@ -429,7 +429,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * A body the instance refused, as an outcome rather than a throw. The status decides what the
-     * screen does with it (T3.5), and 401 is the one that concerns every type rather than this one.
+     * screen does with it, and 401 is the one that concerns every type rather than this one.
      */
     private class Refused(val status: Int, val answer: String) : Exception("$status: $answer")
 
@@ -494,7 +494,7 @@ class MainActivity : ComponentActivity() {
                 override fun typeEmpty(key: String) {
                     // A finished read with nothing behind it: no tick, because nothing was
                     // sent, and its own sentence, because never ran and nothing there are
-                    // the two answers T5.2 keeps apart.
+                    // the two answers kept apart.
                     rowStates[key]?.hide()
                     recordEmpty(key, runEndMs)
                     advance(key)

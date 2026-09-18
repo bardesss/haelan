@@ -7,7 +7,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The rule `T7.1` exists to keep: the palette has one definition, in `packages/tokens`, and no
+ * The palette has one definition, in `packages/tokens`, and no
  * resource in this app states a colour of its own. The counterpart of the web's
  * `apps/web/test/no-raw-color.test.ts`, including the part that makes the guard honest: a check
  * that only knows about one spelling of a colour advertises more than it does.

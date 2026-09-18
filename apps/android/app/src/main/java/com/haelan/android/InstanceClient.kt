@@ -11,7 +11,7 @@ import java.net.URL
  * with the status. The exchange is also where the answer is read, and reading it twice is the
  * defect this file exists to stop: `responseCode` asks the connection for its status, and asking it
  * again after the body has been taken can throw on a connection that has nothing left to say. One
- * read, and the status, the body and the cookies all come out of it together (T3.5).
+ * read, and the status, the body and the cookies all come out of it together.
  *
  * There is no Apache HttpClient here and no OkHttp: this is a POST to one address the person typed,
  * optionally with a session cookie, and a client library would be a dependency to keep patched for
@@ -21,7 +21,7 @@ object InstanceClient {
 
     // A home instance is a container on the same network, so this is generous rather than tight;
     // the point of both numbers is that neither is infinite. A request that hangs forever is the
-    // failure nobody can describe, because the screen simply never changes (T3.5).
+    // failure nobody can describe, because the screen simply never changes.
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 30_000
 

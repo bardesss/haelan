@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * What T3.1 asks to be proven rather than asserted: the recording method crosses into the
+ * What is proven rather than asserted here: the recording method crosses into the
  * vocabulary the instance actually reads, and a device gets the name v4 wants out of the two
  * fields Health Connect has instead of one it never had.
  */

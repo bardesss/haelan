@@ -7,7 +7,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 /**
- * What T2.2 step 3 asks to be proven rather than asserted: the figure crosses in the unit the
+ * What is proven rather than asserted here: the figure crosses in the unit the
  * catalogue declares. Health Connect's Power carries the same rate twice, so a mapping that read
  * the wrong getter would still compile and still look like a number.
  */

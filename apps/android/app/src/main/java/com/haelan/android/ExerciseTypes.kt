@@ -9,7 +9,7 @@ import androidx.health.connect.client.records.ExerciseSessionRecord
  * 61 constants in connect-client 1.1.0, v4 defines 181 values, and only 49 of the 61 share a
  * spelling. The other 12 are decisions, taken one row at a time against the v4 list in
  * `app/src/test/resources/v4-exercise-types.txt`, and each carries the reason it went where it did
- * (T0.5 measured the set on this household's phone, T4.1 built the table).
+ * (An earlier measurement covered the set on this household's phone, and this table was built from it).
  *
  * The rule this file exists to keep: **the app never invents a value v4 does not define.** A
  * constant v4 has no word for is filed under the nearest word v4 does have, never under a name
@@ -88,7 +88,7 @@ object ExerciseTypes {
         // v4 calls it MEDITATE, and that is what the record is: a guided breathing session.
         ExerciseSessionRecord.EXERCISE_TYPE_GUIDED_BREATHING -> "MEDITATE"
 
-        // The one name pair T0.5 measured as differing, against both obvious spellings.
+        // The one name pair measured as differing, against both obvious spellings.
         ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "HIIT"
 
         // v4 has no ice hockey. HOCKEY is its general word, FIELD_HOCKEY its other, so the

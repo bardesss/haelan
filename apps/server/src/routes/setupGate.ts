@@ -8,7 +8,7 @@ import { errorBody } from '../api/envelope.ts'
 const ALWAYS_OPEN = new Set(['/api/health', '/api/setup/state'])
 
 export function registerSetupGate(app: FastifyInstance): void {
-  // The wizard's backfill step does not apply to a phone path (T5.4), so the state names
+  // The wizard's backfill step does not apply to a phone path, so the state names
   // the mode next to the step: one fetch tells SetupApp whether to offer a horizon to
   // walk or a history start that is a fact rather than a choice.
   app.get('/api/setup/state', async () => ({

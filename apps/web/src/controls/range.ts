@@ -96,7 +96,7 @@ export function historyStartLocalDate(historyStartMs: number, timezone: string):
 }
 
 /**
- * Where a card range honestly starts for a phone-only history (T5.3 passo 3).
+ * Where a card range honestly starts for a phone-only history.
  *
  * A phone-only person has no rows before their first sync, so a tab opening earlier
  * asks for a window that can only come back empty: the card then reads "1 of 30 days"

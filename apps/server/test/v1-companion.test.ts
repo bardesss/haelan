@@ -106,7 +106,7 @@ describe('GET /companion/cursors', () => {
 
   it('names whether the person also has a Google path, so cards know when to clamp', async () => {
     harness = await withServer()
-    // T6.0: the harness finishes the wizard with a Google path for p1, so the unconnected
+    // The harness finishes the wizard with a Google path for p1, so the unconnected
     // case needs a member of its own: addPerson creates one with no token behind it.
     const added = await harness.addPerson({ id: 'p2', displayName: 'Other', username: 'other' })
     const token = await harness.signIn('other', 'a good long password')

@@ -21,7 +21,7 @@ jobs:
 
       # The palette this module compiles is generated from @haelan/tokens, so this job needs the
       # Node side of the repository as well. The Gradle build does not run the generator: it fails
-      # with the command to run, because assembling an app should not need a Node toolchain (T7.1).
+      # with the command to run, because assembling an app should not need a Node toolchain.
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
@@ -76,7 +76,7 @@ jobs:
       # No secret is read anywhere in this workflow, and that is the point: GitHub does not pass
       # secrets to pull requests from forks, so a workflow that wanted the release key would hand
       # the project's signing identity to whoever opens one. A review build is debug and installs
-      # beside the real app (T8.2), which is what a reviewer needs and all this job may produce.
+      # beside the real app, which is what a reviewer needs and all this job may produce.
       - name: Upload the review APK
         uses: actions/upload-artifact@v5
         with:

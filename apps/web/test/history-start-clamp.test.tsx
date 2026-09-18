@@ -82,7 +82,7 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
 }
 
 describe('a phone-only history start', () => {
-  // T5.3 acceptance: an all time card on a phone-only instance must not show a 30 day
+  // An all time card on a phone-only instance must not show a 30 day
   // window. The month tab opens 2026-09-01, the phone measures since 2026-09-13, so
   // every series request the cards send has to carry from=2026-09-13 once the start
   // has loaded, and the "1 of 30 days" denominator goes away with it.
@@ -104,7 +104,7 @@ describe('a phone-only history start', () => {
     restore()
   })
 
-  // T5.3 passo 4: a person who also walks the Google path keeps the deep archive,
+  // A person who also walks the Google path keeps the deep archive,
   // so the same month tab keeps asking from the tab start.
   it('leaves the tab window alone when Google is also connected', async () => {
     const seen: string[] = []

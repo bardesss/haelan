@@ -6,7 +6,7 @@ import { useSession } from '../auth/session.js'
 import type { HistoryBounds } from '../controls/range.js'
 
 // Mirrors GET /api/v1/p/:personId/companion/cursors
-// (apps/server/src/routes/v1/companion.ts): the history start T5.3 names and whether
+// (apps/server/src/routes/v1/companion.ts): the history start and whether
 // this person also walks the Google path, which is what decides if a card range may
 // be clamped to it. Items travel on the same response for the phone's own delta sync;
 // cards read only these two fields.

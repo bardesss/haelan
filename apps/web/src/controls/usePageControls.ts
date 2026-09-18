@@ -56,7 +56,7 @@ export function usePageControls(): PageControlsState {
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
   const controls = parseControls(search, today)
   const { from: tabFrom, to } = datesFor(controls.tab, controls.anchor)
-  // A phone-only history starts at the first sync, not at the tab start (T5.3 passo 3):
+  // A phone-only history starts at the first sync, not at the tab start:
   // every card on these pages reads from here, so one clamp honors the start in each
   // query and each "reported of total" denominator at once. Pending or Google-backed
   // histories leave the range alone, and the anchor, stepper and `to` never move.

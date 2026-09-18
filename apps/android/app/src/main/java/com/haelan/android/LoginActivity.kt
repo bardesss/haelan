@@ -46,7 +46,7 @@ class LoginActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val stored = SessionStore.prefs(this)
-        // L'app sta sul telefono: se c'e una sessione salvata, entra da sola.
+        // The app lives on the phone: if a saved session exists, it signs in on its own.
         SessionStore.loadSession(stored)?.let {
             startMain(it)
             return
@@ -71,7 +71,7 @@ class LoginActivity : ComponentActivity() {
 
         button.setOnClickListener {
             // The address is repaired here and only here, before it is saved: every request the
-            // app makes afterwards is built from the stored form (T3.5).
+            // app makes afterwards is built from the stored form.
             val server = InstanceAddress.normalize(serverField.text.toString())
             val username = usernameField.text.toString().trim()
             val password = passwordField.text.toString()

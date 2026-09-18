@@ -7,7 +7,7 @@ plugins {
 
 // The palette is a target of @haelan/tokens and reaches this module as generated resources: no
 // colour in res/ is written by hand, and the two files are an output like any other, which is why
-// they belong under build/ rather than in the source tree (T7.1).
+// they belong under build/ rather than in the source tree.
 val tokensRes = layout.buildDirectory.dir("haelan-tokens/res")
 val tokensColorFiles = listOf("values/colors.xml", "values-night/colors.xml")
 
@@ -33,8 +33,8 @@ base {
     archivesName.set("haelan-android")
 }
 
-// Release signing (T8.1): the key never enters the repository. The owner mints it once and
-// hands it to CI through four variables (the runbook lives in TASKS.md T8.1); a release build
+// Release signing: the key never enters the repository. The owner mints it once and
+// hands it to CI through four variables; a release build
 // without them fails below with the fix, instead of shipping an unsigned APK that looks fine.
 // A local .env file fills the same four values on the owner's machine; real environment
 // variables always win, so CI needs no file. The file is git-ignored and must stay that way:
@@ -65,7 +65,7 @@ val releaseKeystoreBase64 = releaseSigningVars[0].second
 fun releaseSigningError(): Nothing = throw GradleException(
     "release signing is not configured: set HAELAN_KEYSTORE_BASE64, HAELAN_KEYSTORE_PASSWORD, " +
         "HAELAN_KEY_ALIAS and HAELAN_KEY_PASSWORD as environment variables, or list them in " +
-        "apps/android/.env (see .env.example). TASKS.md T8.1 tells the owner how to mint them. " +
+        "apps/android/.env (see .env.example). The owner mints them once and hands them to CI through four variables. " +
         "Debug builds need none of this.",
 )
 
@@ -103,7 +103,7 @@ android {
         debug {
             // A review build lives beside the real app instead of on top of it: its own Health
             // Connect permission set, and since the upload names the running package, a
-            // reviewer's push cannot land in the source a paired installation writes to (T8.2).
+            // reviewer's push cannot land in the source a paired installation writes to.
             applicationIdSuffix = ".debug"
         }
     }
@@ -127,7 +127,7 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    // Periodic background sync (T5.1): the only scheduler in this app. Version lives here,
+    // Periodic background sync: the only scheduler in this app. Version lives here,
     // next to the other five, so there is no catalog to drift (root build file, line 1).
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 

@@ -5,7 +5,7 @@ import { useDataTypes, useSetDataTypes } from '../data/useDataTypes.js'
 
 /**
  * Shown once, between consent and backfill, on SetupApp's own local state, and never
- * on a companion path: SetupApp skips it there rather than filtering its list (T6.4). setupStep in
+ * on a companion path: SetupApp skips it there rather than filtering its list. setupStep in
  * packages/core is computed from accounts, settings and credentials, the same three inputs it has
  * always had; this screen adds no fourth value to it; SetupApp decides to show it the same way it
  * already decides to show BackfillStep, which is also not one of setupStep's values.

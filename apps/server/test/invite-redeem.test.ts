@@ -124,7 +124,7 @@ describe('POST /api/invite/:token', () => {
     expect((await peek(token)).statusCode).toBe(200)
   })
 
-  // T6.1: whoever is invited chooses their own path when redeeming instead of inheriting
+  // Whoever is invited chooses their own path when redeeming instead of inheriting
   // the admin's. A phone choice is recorded on their person row; anything else leaves it
   // alone for a later consent or a later pairing, and no choice here ever touches the
   // instance flag, which still says only how the wizard once closed.

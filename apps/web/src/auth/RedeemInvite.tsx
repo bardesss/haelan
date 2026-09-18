@@ -26,7 +26,7 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  // T6.1: whoever is invited names their own path while redeeming instead of inheriting
+  // Whoever is invited names their own path while redeeming instead of inheriting
   // the admin's. Google is the default because it writes nothing, exactly what redeeming
   // without this screen always did; picking the phone sends path companion, which is what
   // records people.companion_path on their own row and nothing else.

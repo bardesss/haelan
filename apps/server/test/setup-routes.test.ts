@@ -181,7 +181,7 @@ describe('setup routes', () => {
     expect(finished.statusCode).toBe(200)
     expect(finished.json()).toEqual({ step: 'done' })
     expect(harness.app.haelan.stores.settings.get()?.companionMode).toBe(true)
-    // T6.0: closing without Google is this person's phone choice, recorded next to the flag.
+    // Closing without Google is this person's phone choice, recorded next to the flag.
     expect(harness.app.haelan.stores.people.get(personId)?.companionPath).toBe(true)
 
     const state = await harness.app.inject({ method: 'GET', url: '/api/setup/state' })

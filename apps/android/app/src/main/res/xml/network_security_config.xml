@@ -4,7 +4,7 @@
   cleartext stays permitted. It is said here, in the one file that governs it, rather than in a
   manifest flag that would also cover hosts this app is never pointed at: a person who wants TLS
   puts a reverse proxy in front of the instance and types an https address, and nothing in the
-  app has to change for that (T3.5).
+  app has to change for that.
 
   What this does not do is hide the session cookie: over http it travels in cleartext on the
   local network, which the package README says out loud.

@@ -47,7 +47,7 @@ export function seedPerson(db: Database, id: string, overrides: SeedPersonOverri
   // Raw SQL with explicit columns, not a drizzle insert: upgrade-rehearsal builds an
   // old database (migrations through 0015) and seeds it with this function before
   // migrating to head, so a drizzle insert would name every column the current schema
-  // knows, including ones the old database does not have yet (T6.0 companion_path).
+  // knows, including ones the old database does not have yet (companion_path).
   // Explicit columns keep the seed readable by both schemas; post-migration rows get
   // their defaults (and PeopleStore.create stamps new rows explicitly from then on).
   db.$client.prepare(

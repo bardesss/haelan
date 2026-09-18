@@ -5,8 +5,8 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 /**
- * One Health Connect sleep session as a v4 payload describes it, with the two things `T4.5` asks
- * to be proven rather than declared held where a JVM test can reach them.
+ * One Health Connect sleep session as a v4 payload describes it, with the details
+ * proven rather than declared and held where a JVM test can reach them.
  *
  * A stage carries no offset of its own: `SleepSessionRecord.Stage` is a start, an end and a type,
  * read out of connect-client 1.1.0's source rather than remembered. So each end of a stage borrows

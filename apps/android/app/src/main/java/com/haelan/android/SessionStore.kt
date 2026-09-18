@@ -6,15 +6,15 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 
 /**
- * Tutto cio che l'app ricorda - indirizzo, username, sessione e toggle - vive
- * qui, cifrato con una chiave nel Keystore (AES256-SIV per i nomi, AES256-GCM
- * per i valori). La password non viene mai scritta: resta solo nel campo di
- * testo e nella POST di login.
+ * Everything the app remembers - server address, username, session and toggles - lives
+ * here, encrypted with a Keystore key (AES256-SIV for names, AES256-GCM
+ * for values). The password is never persisted: it stays only in the text
+ * field and in the login POST.
  *
- * La prima apertura dopo l'aggiornamento migra una volta i valori dal vecchio
- * file in chiaro e poi lo svuota. Se il Keystore non fosse disponibile, usa il
- * file in chiaro e lo segnala (insecureFallback): meglio un avviso che un'app
- * che non parte.
+ * The first launch after the upgrade migrates the values once from the legacy
+ * plaintext file and then clears it. If the Keystore is unavailable, it falls
+ * back to the plaintext file and reports it (insecureFallback): a warning is
+ * better than an app that does not start.
  */
 object SessionStore {
 
@@ -103,7 +103,7 @@ object SessionStore {
     fun serverAndUsername(prefs: SharedPreferences): Pair<String, String> =
         (prefs.getString(KEY_SERVER, "") ?: "") to (prefs.getString(KEY_USERNAME, "") ?: "")
 
-    /** Dimentica la sessione, tiene indirizzo e username per precompilare il login. */
+    /** Forgets the session, keeps server address and username to prefill login. */
     fun clearSession(prefs: SharedPreferences) {
         prefs.edit().remove(KEY_PERSON_ID).remove(KEY_COOKIE).apply()
     }

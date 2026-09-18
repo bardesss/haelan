@@ -57,7 +57,7 @@ class InstanceErrorTest {
 
     /**
      * A status the app cannot use arrives as a failure from the client rather than as a throw
-     * from the platform, so it has to reach the same sentence the status already had (T3.5).
+     * from the platform, so it has to reach the same sentence the status already had.
      * Without this the 403 and the 413 would fall through to the generic "the instance answered"
      * and the two cases somebody can act on would be indistinguishable.
      */

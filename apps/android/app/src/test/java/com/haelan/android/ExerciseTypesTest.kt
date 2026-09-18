@@ -8,7 +8,7 @@ import org.junit.Test
 import java.lang.reflect.Modifier
 
 /**
- * The rule T4.1 exists to keep: the app never invents a value v4 does not define, and it never
+ * The app never invents a value v4 does not define, and it never
  * loses an activity it could have named.
  *
  * Every constant is walked out of the library rather than listed here, so a connect-client upgrade
@@ -33,7 +33,7 @@ class ExerciseTypesTest {
         .filter { Modifier.isStatic(it.modifiers) && it.type == Int::class.javaPrimitiveType }
         .associate { it.name to it.getInt(null) }
 
-    /** The 181 values v4 defines, from the file T0.5 step 3 wrote out of the reference. */
+    /** The 181 values v4 defines, from the file written out of the reference. */
     private val v4Values: Set<String> =
         checkNotNull(javaClass.getResourceAsStream("/v4-exercise-types.txt")) {
             "v4-exercise-types.txt is not on the test classpath"

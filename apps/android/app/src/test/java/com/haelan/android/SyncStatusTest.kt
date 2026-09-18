@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The timestamps T5.2 shows per row, pinned where a JVM test can reach them: the keys the
+ * The timestamps shown per row, pinned where a JVM test can reach them: the keys the
  * screen and the worker share, and the day count that says a gap is a gap.
  */
 class SyncStatusTest {

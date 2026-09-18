@@ -7,7 +7,7 @@ import type { ColorPath } from './primitives.js'
  *
  * A surface written in another language gets its own emitted target from this package rather than
  * a copied palette, and the companion app is the second surface. The app's layouts name a
- * resource, each resource is a token, and no colour in `res/` is written by hand (T7.1).
+  * resource, each resource is a token, and no colour in `res/` is written by hand.
  *
  * The resource names are the token's own, with the dash spelled as an underscore. That is the
  * whole mapping a reader has to hold: `@color/text_secondary` is `text-secondary` in
@@ -38,7 +38,7 @@ const FROM_SEMANTIC = {
  * The web paints the third, the sync's amber bar, with the negative tone instead, so there is no
  * shared token to read. `amber` is where both themes' own answer already lives, and the chart's
  * own `stage-awake` reads exactly these two steps, so this reuses them rather than minting a
- * token the dashboard would not use (T5.5).
+  * token the dashboard would not use.
  */
 const FROM_PRIMITIVE = {
   warning: { dark: 'amber.500', light: 'amber.700' },

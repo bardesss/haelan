@@ -127,7 +127,7 @@ describe('the invite screen', () => {
     expect(container!.textContent).toContain('This invite is no longer valid')
   })
 
-  // T6.1 on the web half: whoever is invited names their own path while redeeming
+  // On the web half, whoever is invited names their own path while redeeming
   // instead of inheriting the admin's. Picking the phone sends path companion, which is
   // what records people.companion_path on their own row (apps/server/src/routes/invite.ts).
   it('sends the phone path when the member picks it', async () => {

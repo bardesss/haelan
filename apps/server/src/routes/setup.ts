@@ -89,7 +89,7 @@ export function registerSetup(app: FastifyInstance): void {
   // is done the gate shuts every setup route before this handler runs. A client pasted
   // earlier stays stored and unused, which also keeps the door open to connecting Google
   // later through /oauth/start without anything stored contradicting the mode.
-  // T6.0: closing without Google is also this person's choice of the phone path, so it is
+  // Closing without Google is also this person's choice of the phone path, so it is
   // recorded on their person row next to the instance flag. The flag alone could never say
   // which member walks which path on a mixed instance; the consent exit needs no twin write
   // because putRefreshToken already records that person's Google choice the same way.

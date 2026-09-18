@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- La grafia visibile e Hælan in ogni lingua. Tutto cio' che si digita,
-         package compreso, resta haelan. L'app parla inglese e olandese (values-nl):
-         ogni stringa traducibile sta in entrambi, e MissingTranslation lo impone. -->
+    <!-- The visible spelling is Hælan in every language. Everything that is typed,
+         package included, stays haelan. The app speaks English and Dutch (values-nl):
+         every translatable string lives in both, and MissingTranslation enforces it. -->
     <string name="app_name" translatable="false">Hælan</string>
 
-    <!-- Login: stessa copia della web (signIn.* + shell.sessionExpired). Il marchio non e' una
-         stringa: e' il vector drawable, come sulla card di accesso del web (T7.1). -->
+    <!-- Login: same copy as the web (signIn.* + shell.sessionExpired). The brand mark is not a
+         string: it is the vector drawable, as on the web sign-in card. -->
     <string name="login_title">Sign in</string>
     <string name="login_server">Instance address</string>
     <string name="login_server_hint">http://192.168.x.x:4235</string>
@@ -49,15 +49,15 @@
     <string name="sync_body">Sends what is new since the last sync, or the last 30 days the first time.</string>
     <string name="sync_action">Sync now</string>
     <string name="sync_working">Syncing…</string>
-    <!-- Il sync non scrive piu un log: le tre barre dicono a che punto e, e le due frasi che
-         restano sono quelle che devono arrivare a chi preme il bottone (niente da mandare, e il
-         sync che si ferma). Il resto dei motivi va in logcat. -->
+    <!-- The sync no longer writes a log: the three bars say how far along it is, and the two sentences that
+         remain are the ones that must reach whoever presses the button (nothing to send, and the
+         sync stopping). Every other reason goes to logcat. -->
     <string name="sync_none">Switch on at least one data type.</string>
     <string name="sync_failed">Sync stopped: %1$s</string>
     <string name="type_failed">This type was not sent.</string>
     <string name="type_sent">This type has been sent.</string>
 
-    <!-- T5.2: a gap reads as a timestamp that stopped moving, not as a missing failure. Each
+    <!-- A gap reads as a timestamp that stopped moving, not as a missing failure. Each
          row names its last finished run, so a day without any run is visible there. -->
     <string name="status_never">Never synced</string>
     <!-- The absolute time beside the relative sentence, so today still says when. -->
@@ -73,7 +73,7 @@
         <item quantity="other">No data, last checked %d days ago</item>
     </plurals>
 
-    <!-- T5.2: Doze and the vendor battery savers stop the background run without a failure,
+    <!-- Doze and the vendor battery savers stop the background run without a failure,
          which is worse than an error because nothing looks wrong. The card says so and names
          the one setting that keeps the twice daily run on schedule. -->
     <string name="battery_title">Background sync</string>

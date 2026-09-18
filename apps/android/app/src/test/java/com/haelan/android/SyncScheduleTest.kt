@@ -5,7 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The background cadence T5.1 promises, pinned where a JVM test can reach it: [SyncSchedule]
+ * The background cadence, pinned where a JVM test can reach it: [SyncSchedule]
  * is the only place the interval, the network requirement and the backoff are decided, so a
  * change to any of the three fails here instead of silently moving the sync.
  */
