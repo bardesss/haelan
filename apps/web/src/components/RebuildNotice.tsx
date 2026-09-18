@@ -2,6 +2,13 @@ import { useTranslation } from '../i18n/index.js'
 
 export interface RebuildNoticeProps {
   quarantined: boolean
+  /**
+   * This person's derived rows are stamped at a version this build does not derive at, so sync
+   * and the derive drainer both skip them until a boot rebuilds them. Distinct from a
+   * quarantine, which is also true of a quarantined person: nothing here has failed, and a
+   * restart is the whole of the remedy.
+   */
+  awaitingRebuild: boolean
   droppedPages: number
   drops: { dataType: string, reason: string, pages: number }[]
   lastError: string | null
@@ -15,8 +22,9 @@ export interface RebuildNoticeProps {
  * the admin's household list. Shared rather than written twice, because a member told one thing
  * on their dashboard and an operator told another in settings is worse than either message alone.
  *
- * The two states are worded differently on purpose. A quarantine means "your data has stopped and
- * somebody must act". Dropped pages mean "some history is missing and will return on its own".
+ * The three states are worded differently on purpose. A quarantine means "your data has stopped
+ * and somebody must act". Awaiting a rebuild means "your data has stopped and the next restart
+ * starts it again". Dropped pages mean "some history is missing and will return on its own".
  * Collapsing them into one severity would either alarm people about a gap that heals itself or
  * bury an outage inside a footnote.
  *
@@ -24,11 +32,11 @@ export interface RebuildNoticeProps {
  * than each repeating the same guard.
  */
 export function RebuildNotice({
-  quarantined, droppedPages, drops, lastError, voice, personName,
+  quarantined, awaitingRebuild, droppedPages, drops, lastError, voice, personName,
 }: RebuildNoticeProps) {
   const { t } = useTranslation()
 
-  if (!quarantined && droppedPages === 0) return null
+  if (!quarantined && !awaitingRebuild && droppedPages === 0) return null
 
   return (
     <div className="maintenance">
@@ -40,6 +48,24 @@ export function RebuildNotice({
           {voice === 'self'
             ? t('settings.rebuild.quarantinedSelf')
             : t('settings.rebuild.quarantinedOther', { name: personName })}
+        </p>
+      )}
+      {/* Suppressed while quarantined, although both flags are true of a quarantined person:
+          their stamp rolled back with their transaction, so peopleNeedingRebuild returns them
+          too, and both routes report the raw fact rather than choosing between them. The choice
+          belongs here because only here does saying both do harm. "A restart runs it" is the
+          one promise that is certainly false for a quarantine - the failure is deterministic, so
+          the next boot fails in exactly the same place - and printing it under a line that has
+          just asked for an administrator would send the reader to reboot instead.
+
+          .maintenance-waiting: the plain secondary register Maintenance.tsx's own statements
+          carry, not the negative box above. Their data has genuinely stopped, which is why it is
+          not the muted note either, but nothing is broken and nobody has to diagnose anything. */}
+      {awaitingRebuild && !quarantined && (
+        <p className="maintenance-waiting">
+          {voice === 'self'
+            ? t('settings.rebuild.awaitingSelf')
+            : t('settings.rebuild.awaitingOther', { name: personName })}
         </p>
       )}
       {/* .maintenance-download-note: the same muted register Maintenance.tsx uses for a fact that

@@ -34,7 +34,9 @@ function Probe() {
   return <span>{status.data?.running === true ? 'running' : 'idle'}</span>
 }
 
-const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+const NO_REBUILD_NEWS = {
+  quarantined: false, awaitingRebuild: false, droppedPages: 0, lastError: null, drops: [],
+}
 
 describe('syncPollInterval', () => {
   it('polls only while a run is going', () => {

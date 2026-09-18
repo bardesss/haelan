@@ -89,9 +89,25 @@ export interface BackfillSummary {
  * the only surface that needs to ask it; a person warned about here and reported clean somewhere
  * else would be worse than either answer standing alone, so the two share one function rather
  * than one comment describing two.
+ *
+ * `awaitingRebuild` is the other way a person's data stops, and the one no rebuild attempt
+ * precedes. It comes off `peopleNeedingRebuild`, the same predicate #eligible below already
+ * skips people by, so this field cannot disagree with the decision it is reporting. Its cause
+ * is usually nothing going wrong at all: PeopleStore.setTimezone nulls builtDerivationVersion
+ * in the same statement as the zone, which the Profile form reaches, and from the next tick the
+ * runner and the derive drainer both skip that person until a boot rebuilds them. rebuild_state
+ * still holds their last actual outcome - a clean success, or no row - so `quarantined` alone
+ * reported them as fine while they had in fact stopped, for as long as nobody restarted the
+ * container.
+ *
+ * The two are not exclusive and this deliberately does not choose between them. A quarantined
+ * person is behind on their stamp as well, because the rollback took it with them, so both read
+ * true of them. Which sentence a reader is shown is a question about wording, and it is settled
+ * once in RebuildNotice rather than differently by each surface that asks.
  */
 export interface RebuildStatus {
   quarantined: boolean
+  awaitingRebuild: boolean
   droppedPages: number
   lastErrorAtMs: number | null
   /** What can and cannot end up in this string is answered once, at the catch in runRebuild.ts
@@ -237,6 +253,12 @@ export class SyncRunner {
     // stale copy here would leave a person's dashboard reporting yesterday's quarantine after a
     // later boot already cleared it.
     const rebuild = this.#context.stores.rebuildState.get(personId)
+    // Read from the people row rather than from rebuild_state, because that is where this state
+    // lives: a stale stamp is the absence of a rebuild, so no row records it. An unknown person
+    // is behind on nothing - peopleNeedingRebuild over an empty list is an empty list - which is
+    // the same answer #eligible gives them, and #backfillPass is where a connected person with
+    // no row is actually handled.
+    const person = this.#context.stores.people.get(personId)
     return {
       ...this.runState(),
       personId,
@@ -244,6 +266,7 @@ export class SyncRunner {
       backfill,
       rebuild: {
         quarantined: isQuarantined(rebuild),
+        awaitingRebuild: peopleNeedingRebuild(person === null ? [] : [person]).length > 0,
         droppedPages: rebuild?.droppedPages ?? 0,
         lastErrorAtMs: rebuild?.lastErrorAtMs ?? null,
         lastError: rebuild?.lastError ?? null,

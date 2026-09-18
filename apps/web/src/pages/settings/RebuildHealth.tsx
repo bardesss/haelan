@@ -18,6 +18,7 @@ export interface RebuildPersonState {
   personId: string
   displayName: string
   quarantined: boolean
+  awaitingRebuild: boolean
   droppedPages: number
   lastErrorAtMs: number | null
   lastError: string | null
@@ -81,7 +82,14 @@ export function RebuildHealth() {
   }
 
   const { people } = status.data
-  const affected = people.filter((person) => person.quarantined || person.droppedPages > 0)
+  // awaitingRebuild counts as affected, and it is the reason this filter had to change. A person
+  // whose version stamp went stale with no attempt behind it - which changing a timezone in
+  // Profile does - carries a clean success row, so on the two flags this used to read they were
+  // indistinguishable from somebody fine, and the card printed "every person's history rebuilt
+  // cleanly" about a member sync had already stopped. allWell has to mean what it says.
+  const affected = people.filter(
+    (person) => person.quarantined || person.awaitingRebuild || person.droppedPages > 0,
+  )
 
   if (affected.length === 0) {
     return (
@@ -99,6 +107,7 @@ export function RebuildHealth() {
           voice="admin"
           personName={person.displayName}
           quarantined={person.quarantined}
+          awaitingRebuild={person.awaitingRebuild}
           droppedPages={person.droppedPages}
           lastError={person.lastError}
           drops={person.drops}

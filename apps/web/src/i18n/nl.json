@@ -1233,6 +1233,8 @@
       "title": "Status van de herbouw",
       "quarantinedSelf": "Je gegevens worden niet meer bijgewerkt. Een herbouw van je geschiedenis is niet voltooid, dus er worden geen nieuwe metingen verzameld. Een beheerder moet hiernaar kijken.",
       "quarantinedOther": "{{name}} ontvangt geen gegevens meer. Een herbouw van hun geschiedenis is niet voltooid.",
+      "awaitingSelf": "Je gegevens wachten op een herbouw van je geschiedenis; die draait bij de volgende herstart van de server. Er is niets misgegaan, maar tot die tijd worden er geen nieuwe metingen verzameld.",
+      "awaitingOther": "{{name}} wacht op een herbouw van hun geschiedenis; die draait bij de volgende herstart van de server. Tot die tijd komen er geen nieuwe gegevens binnen.",
       "droppedSelf": "Een deel van je geschiedenis kon niet worden herbouwd en ontbreekt op deze pagina's. Er is niets verwijderd, en het komt terug zodra de oorzaak is verholpen.",
       "droppedOther": "{{count}} pagina's van de geschiedenis van {{name}} konden niet worden herbouwd.",
       "dropsHeading": "Wat niet kon worden herbouwd",

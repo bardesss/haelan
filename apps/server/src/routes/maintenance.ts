@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import type { FastifyInstance } from 'fastify'
 import {
   vacuumDecision, vacuumIfBloated, runBackup, listBackups, pruneBackups, backupDecision, databaseBloat,
-  isQuarantined,
+  isQuarantined, peopleNeedingRebuild,
 } from '@haelan/core'
 import type { BackupFile } from '@haelan/core'
 import { sendCoreError, errorBody, statusFor } from '../api/envelope.ts'
@@ -188,6 +188,15 @@ export function registerMaintenance(app: FastifyInstance): void {
      * not an absence to hide. isQuarantined(undefined) reads that missing row as not quarantined,
      * which is what it means: a state map keyed by personId, not a second lookup per person.
      *
+     * `awaitingRebuild` comes off the people rows instead, because a stale version stamp is the
+     * absence of a rebuild and nothing in rebuild_state records it. That is the case this card
+     * was blind to and actively wrong about: a member who changes their timezone in Profile has
+     * builtDerivationVersion nulled in the same statement as the zone, is skipped by sync and by
+     * the derive drainer from the next tick, and carries a clean success row the whole time - so
+     * the card printed "every person's history rebuilt cleanly" about somebody whose data had
+     * stopped. Nothing here is wrong with their archive and a restart fixes it, which is why it
+     * is a third state rather than a quarantine.
+     *
      * `lastError` is sent verbatim, unlike the backup file's `path` two routes above - not
      * because this route withholds less, but because there is nothing here to withhold. What
      * that string can and cannot contain is answered once, where it is captured, in runRebuild.ts;
@@ -197,12 +206,18 @@ export function registerMaintenance(app: FastifyInstance): void {
       const states = new Map(
         app.haelan.stores.rebuildState.all().map((row) => [row.personId, row]),
       )
-      const people = app.haelan.stores.people.list().map((person) => {
+      const rows = app.haelan.stores.people.list()
+      // One pass over every row rather than peopleNeedingRebuild([person]) inside the map: it is
+      // the same call the sync runner makes to decide who it skips, and giving it the whole list
+      // at once is how it is meant to be asked.
+      const behind = new Set(peopleNeedingRebuild(rows).map((need) => need.personId))
+      const people = rows.map((person) => {
         const state = states.get(person.id)
         return {
           personId: person.id,
           displayName: person.displayName,
           quarantined: isQuarantined(state),
+          awaitingRebuild: behind.has(person.id),
           droppedPages: state?.droppedPages ?? 0,
           lastErrorAtMs: state?.lastErrorAtMs ?? null,
           lastError: state?.lastError ?? null,

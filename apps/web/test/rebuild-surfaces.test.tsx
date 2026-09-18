@@ -44,12 +44,15 @@ const PERSON: Session = {
 
 interface RebuildNews {
   quarantined: boolean
+  awaitingRebuild: boolean
   droppedPages: number
   lastError: string | null
   drops: { dataType: string, reason: string, pages: number }[]
 }
 
-const NO_REBUILD_NEWS: RebuildNews = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+const NO_REBUILD_NEWS: RebuildNews = {
+  quarantined: false, awaitingRebuild: false, droppedPages: 0, lastError: null, drops: [],
+}
 
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
   return {
@@ -86,10 +89,24 @@ describe('the control row surfaces a rebuild problem', () => {
   it('renders the notice when the status carries a quarantine', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />,
-      { quarantined: true, droppedPages: 0, lastError: 'UNIQUE constraint failed: samples.id', drops: [] },
+      {
+        quarantined: true, awaitingRebuild: true, droppedPages: 0, drops: [],
+        lastError: 'UNIQUE constraint failed: samples.id',
+      },
     ))
     expect(text('.maintenance-blocked')).toBe('Your data has stopped updating. A rebuild of your history did not finish, so new readings are not being collected. An administrator needs to look at this.')
     expect(text('.maintenance-download-note')).toBe('UNIQUE constraint failed: samples.id')
+  })
+
+  // The state nothing on this row could say before: their stamp is stale, sync has been skipping
+  // them since the tick after they changed their timezone, and no rebuild has failed.
+  it('renders the notice when the status says a rebuild is merely awaited', () => {
+    mount(withQuery(
+      <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />,
+      { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
+    ))
+    expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.')
+    expect(container!.querySelector('.maintenance-blocked')).toBeNull()
   })
 })
 
@@ -103,6 +120,7 @@ function person(overrides: Partial<RebuildPersonState>): RebuildPersonState {
     personId: 'p1',
     displayName: 'Robin',
     quarantined: false,
+    awaitingRebuild: false,
     droppedPages: 0,
     lastErrorAtMs: null,
     lastError: null,
@@ -157,5 +175,22 @@ describe('the admin rebuild health card', () => {
       person({ personId: 'p2', displayName: 'Wilma', lastSuccessAtMs: null, lastErrorAtMs: null }),
     ])
     expect(text('.maintenance-backups')).toBe('No rebuild has run on this instance yet.')
+  })
+
+  /**
+   * The claim this card used to make about somebody whose data had stopped. A member who changes
+   * their timezone carries a clean success row and a stale stamp, so quarantined and droppedPages
+   * both read zero while sync skips them from the next tick - and the card, reading only those
+   * two, printed "every person's history rebuilt cleanly". An operator with no reason to doubt it
+   * is exactly who this branch exists to stop producing.
+   */
+  it('names a person awaiting a rebuild rather than calling the household clean', () => {
+    mountRebuildHealth([
+      person({ personId: 'p1', displayName: 'Robin', awaitingRebuild: true }),
+      person({ personId: 'p2', displayName: 'Wilma' }),
+    ])
+    expect(text('.maintenance-waiting')).toBe('Robin is waiting for a rebuild of their history, which runs at the next restart of the server. They receive no new data until it has.')
+    expect(container!.textContent).not.toContain('rebuilt cleanly')
+    expect(container!.textContent).not.toContain('Wilma')
   })
 })

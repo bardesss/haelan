@@ -12,14 +12,19 @@ const render = (node: React.ReactNode): string =>
 describe('RebuildNotice', () => {
   it('renders nothing when there is nothing wrong', () => {
     const html = render(
-      <RebuildNotice quarantined={false} droppedPages={0} drops={[]} lastError={null} voice="self" />,
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} droppedPages={0} drops={[]}
+        lastError={null} voice="self"
+      />,
     )
     expect(html).toBe('')
   })
 
   it('tells the person their data has stopped, not that pages were dropped', () => {
     const html = render(
-      <RebuildNotice quarantined droppedPages={0} drops={[]} lastError="boom" voice="self" />,
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError="boom" voice="self"
+      />,
     )
     expect(html).toContain('Your data has stopped updating')
     expect(html).not.toContain('could not be rebuilt and is missing')
@@ -28,7 +33,7 @@ describe('RebuildNotice', () => {
   it('names every dropped data type with its count', () => {
     const html = render(
       <RebuildNotice
-        quarantined={false} droppedPages={7} lastError={null} voice="self"
+        awaitingRebuild={false} quarantined={false} droppedPages={7} lastError={null} voice="self"
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 7 }]}
       />,
     )
@@ -43,7 +48,8 @@ describe('RebuildNotice', () => {
   it('names the affected person in the admin voice', () => {
     const html = render(
       <RebuildNotice
-        quarantined droppedPages={0} drops={[]} lastError={null} voice="admin" personName="Robin"
+        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError={null}
+        voice="admin" personName="Robin"
       />,
     )
     expect(html).toContain('Robin has stopped receiving data')
@@ -55,7 +61,8 @@ describe('RebuildNotice', () => {
   it('shows the reported error when there is one', () => {
     const html = render(
       <RebuildNotice
-        quarantined droppedPages={0} drops={[]} lastError="UNIQUE constraint failed: samples.id" voice="self"
+        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} voice="self"
+        lastError="UNIQUE constraint failed: samples.id"
       />,
     )
     expect(html).toContain('UNIQUE constraint failed: samples.id')
@@ -63,8 +70,55 @@ describe('RebuildNotice', () => {
 
   it('says nothing about an error when the store never recorded one', () => {
     const html = render(
-      <RebuildNotice quarantined droppedPages={0} drops={[]} lastError={null} voice="self" />,
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+      />,
     )
     expect(html).not.toContain('The error the rebuild reported')
+  })
+
+  /**
+   * The third state, and the one this component was blind to. A person whose version stamp went
+   * stale with no rebuild attempt behind it - which changing a timezone in Profile does - is
+   * skipped by sync from the next tick while rebuild_state holds a clean success. Without this
+   * the component returned null and their dashboard said nothing at all.
+   */
+  it('tells a person waiting for a rebuild that a restart is what runs it', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null} voice="self"
+      />,
+    )
+    expect(html).toContain('waiting for a rebuild of your history')
+    expect(html).toContain('at the next restart of the server')
+    // Nothing failed, so nothing on screen may say an administrator has to go and look.
+    expect(html).not.toContain('An administrator needs to look at this')
+  })
+
+  it('names the person waiting for a rebuild in the admin voice', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null}
+        voice="admin" personName="Robin"
+      />,
+    )
+    expect(html).toContain('Robin is waiting for a rebuild of their history')
+  })
+
+  /**
+   * A quarantined person is behind on their stamp as well - the rollback took it with them - so
+   * both flags arrive true and both routes report them that way. Saying both here would promise
+   * a restart fixes it, which for a quarantine is the one thing that is certainly false: the
+   * failure is deterministic, so the next boot fails in exactly the same place. The quarantine
+   * is the sentence that survives.
+   */
+  it('says only the quarantine when a quarantined person is also behind on their stamp', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+      />,
+    )
+    expect(html).toContain('Your data has stopped updating')
+    expect(html).not.toContain('at the next restart of the server')
   })
 })

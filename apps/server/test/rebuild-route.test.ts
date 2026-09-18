@@ -42,6 +42,7 @@ describe('GET /api/settings/rebuild', () => {
         personId: string
         displayName: string
         quarantined: boolean
+        awaitingRebuild: boolean
         droppedPages: number
         lastErrorAtMs: number | null
         lastError: string | null
@@ -56,6 +57,10 @@ describe('GET /api/settings/rebuild', () => {
       personId: 'p1',
       displayName: 'Robin',
       quarantined: true,
+      // completeSetup stamps the current versions, and recordFailure alone does not move them,
+      // so this person is behind on nothing. A real quarantine rolls the stamp back too and
+      // reads true here as well; sync-status-rebuild.test.ts pins that pairing.
+      awaitingRebuild: false,
       droppedPages: 0,
       lastErrorAtMs: 100,
       lastError: 'boom',
@@ -71,6 +76,7 @@ describe('GET /api/settings/rebuild', () => {
       personId: 'p2',
       displayName: 'Never Rebuilt',
       quarantined: false,
+      awaitingRebuild: false,
       droppedPages: 0,
       lastErrorAtMs: null,
       lastError: null,
@@ -96,5 +102,33 @@ describe('GET /api/settings/rebuild', () => {
     expect(person?.quarantined).toBe(false)
     expect(person?.droppedPages).toBe(3)
     expect(person?.lastSuccessAtMs).toBe(200)
+  })
+
+  /**
+   * The admin's half of the silent stop. Before this the card read a clean success row off a
+   * person the sync runner had already stopped syncing and printed "every person's history
+   * rebuilt cleanly" - the surfacing unit asserting, in so many words, the opposite of what was
+   * true. setTimezone is the reachable trigger: the Profile form nulls builtDerivationVersion in
+   * the same statement as the zone.
+   */
+  it('reports a person whose stamp went stale with no attempt as awaiting a rebuild', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+    harness.app.haelan.stores.rebuildState.recordSuccess({
+      personId: 'p1', nowMs: 200, droppedPages: 0, drops: [],
+    })
+    harness.app.haelan.stores.people.setTimezone('p1', 'Pacific/Auckland')
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/rebuild',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const body = response.json() as {
+      people: { personId: string, quarantined: boolean, awaitingRebuild: boolean, lastError: string | null }[]
+    }
+    const person = body.people.find((p) => p.personId === 'p1')
+    expect(person?.awaitingRebuild).toBe(true)
+    expect(person?.quarantined).toBe(false)
+    expect(person?.lastError).toBeNull()
   })
 })

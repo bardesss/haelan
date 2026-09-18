@@ -16,6 +16,7 @@ export interface SyncStatus {
   lastFinishedAtMs: number | null
   rebuild: {
     quarantined: boolean
+    awaitingRebuild: boolean
     droppedPages: number
     lastError: string | null
     drops: { dataType: string, reason: string, pages: number }[]
