@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { ConfigError, DATA_TYPES, RawArchive, supports } from '@haelan/core'
+import { COMPANION_SOURCE, ConfigError, DATA_TYPES, RawArchive, supports } from '@haelan/core'
 import { sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
@@ -12,10 +12,10 @@ interface CursorsQuery {
  * Where the phone asks what it already sent, so it sends only what is new.
  *
  * The archive is the source of truth: every companion upload lands in raw_payloads
- * with requestParams { source: 'companion' }, while Google fetches carry a filter.
+ * with requestParams { source: COMPANION_SOURCE }, while Google fetches carry a filter.
  * This route groups those rows by data type and answers the newest window end and
-  * the newest fetch time per type, plus the oldest window start as the history start
-  * the phone-history clamp names. A type with no row answers null, which is how the app tells a first
+ *  the newest fetch time per type, plus the oldest window start as the history start
+ * the phone-history clamp names. A type with no row answers null, which is how the app tells a first
  * sync (send the full window) from a later one (send the delta with an overlap).
  *
  * The list is the ingest contract, not the catalogue: the same predicate ingest.ts
@@ -43,21 +43,15 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
   app.get<{ Params: PersonParams, Querystring: CursorsQuery }>('/p/:personId/companion/cursors', async (request, reply) => {
     normalizePlatform(request.query.platform)
     const personId = request.params.personId
-    // Through RawArchive.listFor rather than SQL of our own: the archive owns the
-    // shape of requestParams, and listFor already returns only the 200 rows a replay
-    // would map, oldest fetch first. Filtering to companion uploads is a JSON parse
-    // here, not a second reader of that shape in SQL.
+    // Through RawArchive rather than SQL of our own: the archive owns the shape of
+    // requestParams, and listForSource applies the `source: COMPANION_SOURCE` predicate in
+    // SQL, so this walks only the phone's own rows. Narrowing here instead meant
+    // JSON.parsing every row the person had ever archived, once an hour per open
+    // dashboard, to answer null on an instance that has never seen the app.
     const archive = new RawArchive(app.haelan.instance.db)
     const byType = new Map<string, { lastWindowEndMs: number, lastIngestAtMs: number }>()
     let historyStartMs: number | null = null
-    for (const row of archive.listFor(personId)) {
-      let source: unknown
-      try {
-        source = (JSON.parse(row.requestParams) as { source?: unknown }).source
-      } catch {
-        continue
-      }
-      if (source !== 'companion') continue
+    for (const row of archive.listForSource(personId, COMPANION_SOURCE)) {
       const seen = byType.get(row.dataType)
       if (!seen || row.windowEndMs > seen.lastWindowEndMs) {
         byType.set(row.dataType, {

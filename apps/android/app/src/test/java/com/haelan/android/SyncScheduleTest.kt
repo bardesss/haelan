@@ -1,5 +1,6 @@
 package com.haelan.android
 
+import androidx.work.ExistingPeriodicWorkPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,5 +30,22 @@ class SyncScheduleTest {
     @Test
     fun `the work has one name, so every start keeps the same schedule`() {
         assertEquals("haelan-background-sync", SyncSchedule.UNIQUE_NAME)
+    }
+
+    /**
+     * KEEP was right within one version and wrong across two: it keeps whatever the first install
+     * enqueued, so a release that changes the interval or the backoff reaches nobody who already
+     * has the app. With Obtainium updating over the top rather than reinstalling, that install
+     * would keep the old schedule for the life of the phone.
+     */
+    @Test
+    fun `an update replaces the schedule the previous version asked for`() {
+        assertEquals(ExistingPeriodicWorkPolicy.UPDATE, SyncSchedule.ENQUEUE_POLICY)
+    }
+
+    /** The one name is spelled by the worker, so a rename cannot leave two schedules behind. */
+    @Test
+    fun `the name and the tag the worker carries are the same string`() {
+        assertEquals(SyncWorker.PERIODIC_WORK_NAME, SyncSchedule.UNIQUE_NAME)
     }
 }

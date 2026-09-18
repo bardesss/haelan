@@ -22,6 +22,15 @@ import java.time.Instant
  */
 class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
 
+    companion object {
+        /**
+         * The name this worker's periodic work is enqueued under, read by [SyncSchedule] rather
+         * than typed out beside it. A rename that missed one of the two would leave the old
+         * schedule running and add a second one, and nothing would fail loudly.
+         */
+        const val PERIODIC_WORK_NAME = "haelan-background-sync"
+    }
+
     override suspend fun doWork(): Result {
         val context = applicationContext
         // Signed out is not a failure and has nothing to retry: the next sign-in enqueues again.

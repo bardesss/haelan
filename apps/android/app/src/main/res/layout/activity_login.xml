@@ -26,8 +26,8 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <!-- Il marchio invece del nome scritto, come la card di accesso del web
-                     (auth/SignIn.tsx): 30dp, la stessa misura di .signin .brand-mark. -->
+                <!-- The mark instead of the wordmark, as on the web sign-in card
+                     (auth/SignIn.tsx): 30dp, the same size as .signin .brand-mark. -->
                 <ImageView
                     android:layout_width="30dp"
                     android:layout_height="30dp"

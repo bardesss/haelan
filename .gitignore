@@ -68,6 +68,6 @@ apps/android/PLAN.md
 apps/android/MEASUREMENTS.md
 # The app's palette, emitted by `pnpm --filter @haelan/tokens build:android` into the module's
 # build/ directory. Named here as well as covered by the rule above, because the one file it
-# replaces (res/values/colors.xml) was tracked for months and putting it back is the mistake this
-# is meant to make visible (T7.1).
+# replaces (res/values/colors.xml) was tracked for months, and putting it back is the mistake
+# this rule exists to make visible.
 apps/android/app/build/haelan-tokens/
