@@ -706,6 +706,19 @@ a.segment { text-decoration: none; display: inline-block; }
 }
 .source-names-dormant .source-name-row { opacity: .75; }
 
+/* SourceNames.tsx's own ranking section, below the name rows rather than beside them: a household
+   renames a source and reorders it as two separate questions, and stacking keeps the card
+   answering one at a time. Buttons rather than drag, per the plan's own constraint - the list is
+   long, and this project's only layout coverage is a browser harness blind to drag. */
+.source-order { margin-top: var(--space-5); }
+.source-order-list { list-style: none; margin: 0; padding: 0; }
+.source-order-list li {
+  display: flex; align-items: baseline; gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); font-size: var(--font-size-sm);
+}
+.source-order-list li:last-child { border-bottom: 0; }
+.source-order-list h4 { flex: 1 1 auto; min-width: 0; margin: 0; font-weight: var(--weight-medium); }
+
 /* Members.tsx: the same row shape .source-name-row uses (a fixed field, a muted detail, an action
    at the end), but the "field" here is a state label rather than an input, so the row never grows
    an .input the way that list's does. */

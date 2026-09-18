@@ -116,6 +116,12 @@ function mockSourcesApi(initial: NamedSourceWithActivity[]): {
     const json = (status: number, payload: unknown) =>
       new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
 
+    // SourceNames now also mounts useSourcePriority, so a GET here has to answer two different
+    // shapes: the ranking section reads {configured, order}, and answering it with {items} the
+    // way the rename list wants left `order` undefined and crashed the row it built.
+    if (method === 'GET' && url.includes('/source-priority')) {
+      return json(200, { configured: false, order: items.map((s) => ({ sourceId: s.id, configured: false })) })
+    }
     if (method === 'GET') return json(200, { items })
 
     const match = /\/sources\/([^/]+)\/alias/.exec(url)

@@ -8,6 +8,7 @@ import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { sourceActivityKey, useClearSourceName, useRenameSource, useSourcesWithActivity } from '../../data/useSourceNames.js'
 import type { NamedSourceWithActivity } from '../../data/useSourceNames.js'
+import { useSetSourcePriority, useSourcePriority } from '../../data/useSourcePriority.js'
 
 /**
  * Mirrors MAX_ALIAS_LENGTH in packages/core/src/store/sourceAliases.ts. A local constant rather
@@ -31,6 +32,8 @@ export function SourceNames() {
   const session = useSession()
   const queryClient = useQueryClient()
   const { sources, isPending, isError, error } = useSourcesWithActivity()
+  const priority = useSourcePriority()
+  const setPriority = useSetSourcePriority()
 
   if (isPending) return <Loading />
   if (isError) {
@@ -55,6 +58,13 @@ export function SourceNames() {
   const live = sources.filter((source) => source.reportingNow)
   const dormant = sources.filter((source) => !source.reportingNow)
 
+  // Sourced from `sources`, not `live`: the ranking list below must include a dormant source too,
+  // since priorityFrom treats an omitted source as UNRANKED_BASE and the route would refuse a
+  // write that left one out. Falling back to the id keeps a name lookup that races the sources
+  // query from crashing the row rather than rendering it blank.
+  const nameFor = (sourceId: string): string => sources.find((s) => s.id === sourceId)?.name ?? sourceId
+  const order = (priority.data?.order ?? []).map((entry) => entry.sourceId)
+
   return (
     <>
       <ul className="source-name-list">
@@ -68,8 +78,65 @@ export function SourceNames() {
           </ul>
         </>
       )}
+      {/* Waits on its own query rather than sharing sources' isPending guard above: the two
+          routes answer at different times, and gating the whole card on the slower of the two
+          would leave the names blank while priority is still in flight for no reason. */}
+      {priority.data && (
+        <section className="source-order">
+          <h3>{t('settings.sourceOrder.title')}</h3>
+          <p>{t('settings.sourceOrder.intro')}</p>
+          <ol className="source-order-list">
+            {priority.data.order.map((entry, at) => {
+              const name = nameFor(entry.sourceId)
+              return (
+                <li key={entry.sourceId} aria-label={t('settings.sourceOrder.itemLabel', { name })}>
+                  <h4>{name}</h4>
+                  <button
+                    type="button"
+                    disabled={at === 0 || setPriority.isPending}
+                    aria-label={t('settings.sourceOrder.moveUp', { name })}
+                    onClick={() => setPriority.mutate(moved(order, at, -1))}
+                  >{t('settings.sourceOrder.up')}</button>
+                  <button
+                    type="button"
+                    disabled={at === order.length - 1 || setPriority.isPending}
+                    aria-label={t('settings.sourceOrder.moveDown', { name })}
+                    onClick={() => setPriority.mutate(moved(order, at, 1))}
+                  >{t('settings.sourceOrder.down')}</button>
+                </li>
+              )
+            })}
+          </ol>
+          {priority.data.configured && (
+            <button
+              type="button"
+              disabled={setPriority.isPending}
+              onClick={() => setPriority.mutate([])}
+            >{t('settings.sourceOrder.reset')}</button>
+          )}
+          {/* 'settings.sourceOrder.recomputing' has no reader yet: nothing exposes a person's derive
+              queue depth over HTTP, so the days-remaining line it belongs to is a follow up rather
+              than something this card can show today. Reserved here rather than left out, so the
+              key exists in both catalogues before the line that reads it does. */}
+        </section>
+      )}
     </>
   )
+}
+
+/**
+ * The list with one entry moved by one place, returned whole rather than as a patch. The route
+ * takes the complete list because priorityFrom treats it as a complete statement: a source it
+ * omits falls to UNRANKED_BASE and loses to every ranked source on every day they share, so a
+ * partial send from here would silently demote everything this helper left out.
+ */
+function moved(order: readonly string[], at: number, by: -1 | 1): string[] {
+  const next = [...order]
+  const target = at + by
+  if (target < 0 || target >= next.length) return next
+  const [item] = next.splice(at, 1)
+  next.splice(target, 0, item!)
+  return next
 }
 
 function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
