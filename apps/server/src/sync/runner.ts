@@ -94,6 +94,8 @@ export interface RebuildStatus {
   quarantined: boolean
   droppedPages: number
   lastErrorAtMs: number | null
+  /** What can and cannot end up in this string is answered once, at the catch in runRebuild.ts
+   * that captures it - not here and not on the admin route that reads the same column. */
   lastError: string | null
   drops: { dataType: string, reason: string, pages: number }[]
 }

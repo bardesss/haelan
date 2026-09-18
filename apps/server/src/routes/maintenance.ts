@@ -187,6 +187,11 @@ export function registerMaintenance(app: FastifyInstance): void {
      * all, because "this person has never been rebuilt" is a real answer an operator can act on,
      * not an absence to hide. isQuarantined(undefined) reads that missing row as not quarantined,
      * which is what it means: a state map keyed by personId, not a second lookup per person.
+     *
+     * `lastError` is sent verbatim, unlike the backup file's `path` two routes above - not
+     * because this route withholds less, but because there is nothing here to withhold. What
+     * that string can and cannot contain is answered once, where it is captured, in runRebuild.ts;
+     * this route and the per-person one both just forward the same column.
      */
     scope.get('/api/settings/rebuild', { preHandler: guard }, async (_request, reply) => {
       const states = new Map(

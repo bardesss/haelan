@@ -259,6 +259,24 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       // After the push and outside the transaction, which has already rolled back by the time
       // this runs. That is what makes the write durable: enlisted in the rebuild's own
       // transaction it would roll back with the failure it exists to record.
+      //
+      // `error.message` is stored and later shown whole - to the affected person on their own
+      // sync status, and to any admin on the household-wide route - so this is the one place to
+      // ask what can actually reach it, once, rather than trusting each reader to have checked.
+      // Nothing inside this try touches the filesystem: every store call here runs against the
+      // db handle this function was already given, and reading it does not open anything of its
+      // own the way `db/open.ts` does at boot, so there is no path for a Node ENOENT/EACCES
+      // message - the kind that embeds a filesystem path - to originate here. A body that fails
+      // to parse cannot surface either: mapSamples, mapSessions and mapObservations each wrap
+      // their own `JSON.parse(body)` and return no rows rather than throw, and replay.ts's two
+      // `JSON.parse(requestParams)` calls do the same, so a corrupted or drifted payload is
+      // reported as unmapped, never as this string. A corrupted `bodyGzip` blob still throws
+      // out of `RawArchive.getBody`, but as one of zlib's fixed messages ("incorrect header
+      // check", "unexpected end of file") - a description of the compression stream, not the
+      // household's data inside it. What is left is SQLite's own constraint and corruption
+      // messages, which name a table and column, and this file's own ConfigErrors, which name a
+      // metric or data type id from the shared catalogue - never a bound value, another
+      // person's reading, or a location on disk.
       input.rebuildState?.recordFailure({
         personId,
         nowMs: input.nowMs,
