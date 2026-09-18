@@ -1,14 +1,15 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   AccountStore, McpCallLog, McpTokenStore, PeopleStore, SessionStore, SettingsStore,
   SourceRegistry, SyncStateStore, openHaelan,
 } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import type { Stores } from '../src/app.ts'
-import { drainOnce, shouldDrain } from '../src/derive/drainer.ts'
+import { DRAIN_TICK_MS, drainOnce, shouldDrain } from '../src/derive/drainer.ts'
+import { DrainLoop } from '../src/derive/drainLoop.ts'
 
 describe('shouldDrain', () => {
   it('stands down while a rebuild holds the write lock', () => {
@@ -113,5 +114,58 @@ describe('drainOnce', () => {
 
       expect(daysDerived).toBe(0)
     })
+  })
+})
+
+describe('DrainLoop', () => {
+  // Fake timers rather than a real one, the same reason maintenance/tick.test.ts uses them: a
+  // real setInterval costs 10 to 14ms a call on this machine, and DRAIN_TICK_MS is 30 seconds, so
+  // a test that actually waited on it would be both slow and flaky. Driving the fake clock proves
+  // the schedule and the stop, without either.
+  it('ticks on the schedule and goes quiet once stopped', () => {
+    let ticks = 0
+    const loop = new DrainLoop({
+      instance: { deriveQueue: { size: () => { ticks++; return 0 } } } as never,
+      stores: { people: { list: () => [] } } as never,
+      nowMs: () => 0,
+      rebuildRunning: () => false,
+    })
+    vi.useFakeTimers()
+    try {
+      loop.start()
+      expect(ticks).toBe(0)
+      vi.advanceTimersByTime(DRAIN_TICK_MS)
+      expect(ticks).toBe(1)
+      vi.advanceTimersByTime(DRAIN_TICK_MS)
+      expect(ticks).toBe(2)
+
+      loop.stop()
+      vi.advanceTimersByTime(DRAIN_TICK_MS * 3)
+      expect(ticks).toBe(2)
+    } finally {
+      loop.stop()
+      vi.useRealTimers()
+    }
+  })
+
+  // start() is called once from index.ts today, but the guard is what keeps a future second call
+  // (a restart of a component that already holds a loop, say) from leaking a timer stop() can no
+  // longer reach - the same guard MaintenanceTick.start() carries for the same reason.
+  it('does not arm a second timer if started twice', () => {
+    const loop = new DrainLoop({
+      instance: { deriveQueue: { size: () => 0 } } as never,
+      stores: { people: { list: () => [] } } as never,
+      nowMs: () => 0,
+      rebuildRunning: () => false,
+    })
+    vi.useFakeTimers()
+    try {
+      loop.start()
+      loop.start()
+      expect(vi.getTimerCount()).toBe(1)
+    } finally {
+      loop.stop()
+      vi.useRealTimers()
+    }
   })
 })

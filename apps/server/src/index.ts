@@ -7,6 +7,7 @@ import { buildServer } from './app.ts'
 import { runBootSequence } from './rebuild.ts'
 import { rebuildInWorkerIfNeeded } from './rebuildInWorker.ts'
 import { MaintenanceTick } from './maintenance/tick.ts'
+import { DrainLoop } from './derive/drainLoop.ts'
 import { seedBackupPolicyFromEnv } from './maintenance/backupPolicySeed.ts'
 import { sweepStaleProjections } from './mcp/sweepProjections.ts'
 
@@ -60,6 +61,16 @@ const maintenance = new MaintenanceTick({
   instance, dir: dataDir, policy: () => instance.settings.backupPolicy(), now: Date.now,
 })
 
+// Constructed here for the same reason: instance, stores and rebuildInFlight are all already in
+// scope, and the class only arms its timer once start() is called below. Only two things drained
+// the derive queue before this, the sync runner (Google-connected people only) and a per-request
+// helper bounded to one second - an instance whose people push from a phone had no reliable drain
+// at all, so a queued day could sit for days. rebuildRunning reads the same rebuildInFlight flag
+// the reclaim and backup routes already gate on, not a second copy of it.
+const drainLoop = new DrainLoop({
+  instance, stores: app.haelan.stores, nowMs: Date.now, rebuildRunning: () => rebuildInFlight,
+})
+
 // Assigned after listen. Declared here so shutdown can wait on it: a rebuild holds a write
 // transaction, and closing SQLite underneath one is how a shutdown turns into a stack trace.
 let rebuilding: Promise<unknown> = Promise.resolve()
@@ -68,11 +79,13 @@ const shutdown = async () => {
   // Stop scheduling first so nothing new begins, then wait for whatever is already running.
   // Closing SQLite under a backfill mid-window is how a shutdown turns into a stack trace.
   //
-  // Both schedulers, not just the sync one. The maintenance timer is hourly and unref'd, so the
-  // window is narrow and the consequence would be a backup starting against a database this
-  // function is about to close - the same stack trace, from the other timer.
+  // All three schedulers, not just the sync one. The maintenance timer and the drain loop are
+  // both unref'd, so the window is narrow, but the consequence would be a backup or a derive
+  // starting against a database this function is about to close - the same stack trace, from
+  // either of the other two timers.
   app.haelan.runner.stop()
   maintenance.stop()
+  drainLoop.stop()
   await app.haelan.runner.settle()
   await rebuilding.catch(() => {})
   await app.close()
@@ -112,10 +125,14 @@ rebuilding = runBootSequence({
 // while the rebuild worker still holds its own connection to the file. That means it runs while
 // the server is already serving - accepted, because better-sqlite3 is synchronous and this
 // process holds one connection, so it is a stall (measured at 21s reclaiming 645 MB) rather than a
-// lock conflict. The maintenance tick starts here too, once, for the same reason: it must not
-// take its first tick until the file it is about to back up is settled.
+// lock conflict. The maintenance tick and the drain loop both start here too, once, for the same
+// reason: neither should take its first tick until the file is settled and the rebuild worker's
+// own connection to it is gone. drainOnce would decline anyway while rebuildRunning() answers
+// true, but starting the timer only once that window has closed means the derive queue is not
+// polled for no reason during it, and reads the same rebuildInFlight settlement the vacuum below
+// already depends on rather than inventing a second wait for the same fact.
 //
-// The vacuum and the tick start do not share a fate, on purpose - a `.then` with no `.catch`
+// The vacuum and the tick starts do not share a fate, on purpose - a `.then` with no `.catch`
 // producing a *new* promise was exactly the bug here before: `rebuilding` is what `shutdown`
 // awaits with its own `.catch(() => {})`, but that guard does not run until SIGTERM, so a throw
 // from `VACUUM` (SQLITE_FULL, or SQLITE_BUSY against a slow-booting rebuild worker) was an
@@ -147,4 +164,5 @@ rebuilding = rebuilding.then(() => {
     console.error('boot vacuum failed', error)
   }
   maintenance.start()
+  drainLoop.start()
 })
