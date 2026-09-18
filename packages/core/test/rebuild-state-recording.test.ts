@@ -48,3 +48,69 @@ describe('runRebuild, recording each person\'s outcome', () => {
     expect(row?.lastSuccessAtMs).toBeNull()
   })
 })
+
+/**
+ * A store whose writes fail the way a real one can: SQLITE_BUSY past the busy timeout.
+ *
+ * Not hypothetical. The boot rebuild runs while the HTTP server is already answering, and
+ * recordSuccess opens a write transaction of its own - by design, so it cannot be rolled back
+ * with the rebuild it describes. A write transaction is exactly what another writer can lock it
+ * out of, and better-sqlite3 throws rather than queueing once the busy timeout is spent.
+ */
+class FailingRecorder extends RebuildStateStore {
+  readonly #failing: 'success' | 'failure'
+
+  constructor(db: Rebuildable['db'], failing: 'success' | 'failure') {
+    super(db)
+    this.#failing = failing
+  }
+
+  override recordSuccess(input: Parameters<RebuildStateStore['recordSuccess']>[0]): void {
+    if (this.#failing === 'success') throw new Error('SQLITE_BUSY: database is locked')
+    super.recordSuccess(input)
+  }
+
+  override recordFailure(input: Parameters<RebuildStateStore['recordFailure']>[0]): void {
+    if (this.#failing === 'failure') throw new Error('SQLITE_BUSY: database is locked')
+    super.recordFailure(input)
+  }
+}
+
+/**
+ * Recording observes the rebuild; it never takes part in it. Before these two, a throw out of
+ * either recorder escaped the per-person loop and rejected the whole call, after that person's
+ * own transaction had already committed - so contention this unit did not create would leave the
+ * boot sequence never starting sync for ANYBODY. Contention there was caught per person before
+ * this branch, which makes that a change to rebuild behaviour, the one thing #276a promised not
+ * to make.
+ */
+describe('runRebuild, when recording the outcome is what fails', () => {
+  test('still reports the person it rebuilt when recording the success throws', () => {
+    h = seedRebuildable()
+    h.seedSecondPerson()
+
+    const report = runRebuild({
+      ...h.deps, nowMs: 5_000, rebuildState: new FailingRecorder(h.db, 'success'),
+    })
+
+    // Both people, not only the first: the throw used to abandon the loop, so whoever came after
+    // the person whose recording failed was never rebuilt at all.
+    expect(report.people.map((person) => person.personId).sort()).toEqual(['p1', 'p2'])
+    expect(report.failures).toEqual([])
+  })
+
+  test('still reports the person it could not rebuild when recording the failure throws', () => {
+    h = seedRebuildable()
+    h.corruptOneArchivedBody()
+
+    const report = runRebuild({
+      ...h.deps, nowMs: 7_000, rebuildState: new FailingRecorder(h.db, 'failure'),
+    })
+
+    // The failure the rebuild actually had, not the recorder's. Losing the durable record is a
+    // degradation; losing the report is how the boot sequence stops telling anybody anything.
+    expect(report.failures).toHaveLength(1)
+    expect(report.failures[0]?.personId).toBe(h.personId)
+    expect(report.failures[0]?.error.message).not.toContain('SQLITE_BUSY')
+  })
+})

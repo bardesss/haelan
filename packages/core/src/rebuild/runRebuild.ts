@@ -106,6 +106,34 @@ export interface RebuildInput {
 }
 
 /**
+ * Runs one RebuildStateStore write and lets nothing it throws escape.
+ *
+ * Both recording calls sit outside the person's transaction, which is the whole point of them -
+ * a write enlisted in a rebuild that rolled back would roll back with it. The cost of that
+ * placement is that they are separate statements against a live database, and recordSuccess
+ * opens a write transaction of its own. So they can fail for reasons that have nothing to do
+ * with the rebuild they describe: SQLITE_BUSY past the busy timeout is the realistic one, since
+ * the boot rebuild runs while the HTTP server is already answering requests, and better-sqlite3
+ * throws rather than queueing once that timeout is spent.
+ *
+ * Unguarded, such a throw escaped the per-person catch below - it is raised from outside the try
+ * - abandoned the loop, and rejected runRebuild. `runBootSequence` reads a rejection as
+ * structural and deliberately does not start sync, so a lock held for a second longer than the
+ * timeout would stop ingestion for every household member, after the person it happened to had
+ * already committed. Contention there was caught per person before this branch existed; letting
+ * it out again would be a change to rebuild behaviour, which #276a exists precisely not to make.
+ *
+ * Swallowed rather than reported, the same way runJob guards `onProgress`. What is lost is the
+ * durable record of one attempt, and the caller still receives that attempt in the report it
+ * returns, which is what `rebuildIfNeeded` logs line by line. The surfaces reading rebuild_state
+ * then show the previous attempt until the next rebuild of that person writes over it - stale,
+ * and a great deal better than a household that silently stopped syncing.
+ */
+function recordQuietly(write: () => void): void {
+  try { write() } catch { /* the record, not the rebuild */ }
+}
+
+/**
  * Regenerates tiers 2 and 3 from tier 1, one person at a time, each inside a single transaction.
  *
  * Per person rather than instance wide for two reasons. A household member reading their own
@@ -277,11 +305,11 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       // messages, which name a table and column, and this file's own ConfigErrors, which name a
       // metric or data type id from the shared catalogue - never a bound value, another
       // person's reading, or a location on disk.
-      input.rebuildState?.recordFailure({
+      recordQuietly(() => input.rebuildState?.recordFailure({
         personId,
         nowMs: input.nowMs,
         error: error instanceof Error ? error.message : String(error),
-      })
+      }))
       continue
     }
 
@@ -298,9 +326,9 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     // a durable record of a durable outcome. droppedPages is zero and drops empty until #276b
     // gives replayPerson per-page isolation; the columns exist now so the surfaces that render
     // them do not have to change again when it lands.
-    input.rebuildState?.recordSuccess({
+    recordQuietly(() => input.rebuildState?.recordSuccess({
       personId, nowMs: input.nowMs, droppedPages: 0, drops: [],
-    })
+    }))
 
     report.people.push(personReport)
     input.onPersonDone?.(personReport)
