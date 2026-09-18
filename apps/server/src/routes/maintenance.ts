@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs'
 import type { FastifyInstance } from 'fastify'
 import {
   vacuumDecision, vacuumIfBloated, runBackup, listBackups, pruneBackups, backupDecision, databaseBloat,
+  isQuarantined,
 } from '@haelan/core'
 import type { BackupFile } from '@haelan/core'
 import { sendCoreError, errorBody, statusFor } from '../api/envelope.ts'
@@ -170,6 +171,42 @@ export function registerMaintenance(app: FastifyInstance): void {
       // own return type already says so. See its own comment for why refusing is not an exception.
       const outcome = vacuumIfBloated(instance.db, dataDir)
       return reply.send(outcome)
+    })
+
+    /**
+     * The household-wide view of the same state /api/sync/status carries one person at a time.
+     *
+     * Admin only, like every other route on this scope. It names other household members, which
+     * the per-person route deliberately never does, but display names are already admin-visible
+     * through members.ts - so this adds a view onto state that already exists, not a new
+     * disclosure. It exists at all because a quarantined member who is not themselves an admin
+     * has no route of their own that tells anyone with the power to fix it; without this, the
+     * operator only learns their dashboard went quiet from the member themselves.
+     *
+     * Every person in stores.people appears here, including one rebuildState has no row for at
+     * all, because "this person has never been rebuilt" is a real answer an operator can act on,
+     * not an absence to hide. isQuarantined(undefined) reads that missing row as not quarantined,
+     * which is what it means: a state map keyed by personId, not a second lookup per person.
+     */
+    scope.get('/api/settings/rebuild', { preHandler: guard }, async (_request, reply) => {
+      const states = new Map(
+        app.haelan.stores.rebuildState.all().map((row) => [row.personId, row]),
+      )
+      const people = app.haelan.stores.people.list().map((person) => {
+        const state = states.get(person.id)
+        return {
+          personId: person.id,
+          displayName: person.displayName,
+          quarantined: isQuarantined(state),
+          droppedPages: state?.droppedPages ?? 0,
+          lastErrorAtMs: state?.lastErrorAtMs ?? null,
+          lastError: state?.lastError ?? null,
+          lastSuccessAtMs: state?.lastSuccessAtMs ?? null,
+          consecutiveFailures: state?.consecutiveFailures ?? 0,
+          drops: state?.drops ?? [],
+        }
+      })
+      return reply.send({ people })
     })
   })
 }
