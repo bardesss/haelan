@@ -54,6 +54,38 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // archive replays through it, so a metric name costs one query rather than one per row.
   const keys = new SampleKeys(tx)
 
+  // Prepared once for the whole replay rather than rebuilt per row, and this is a memory fix
+  // rather than a speed one. Drizzle compiles and prepares a fresh better-sqlite3 statement on
+  // every `insert().values().run()`, and better-sqlite3 holds on to every statement a connection
+  // prepares so it can finalise them when the connection closes. Inside one long transaction
+  // nothing releases them, so the old loop leaked a statement per row written: measured at about
+  // 2.8 KB a row, which is what took a rebuild of a real archive past 5 GB and had the worker
+  // OOM-killed on a memory capped host (#275). The same 400,000 rows through the statement below
+  // hold flat. Samples get this treatment first because they are the overwhelming majority of the
+  // rows a replay writes; the other four loops in this function have the same shape and, on a
+  // household archive, a tiny fraction of the volume.
+  const insertSample = tx.insert(samples).values({
+    personRef: sql.placeholder('personRef'),
+    sourceRef: sql.placeholder('sourceRef'),
+    metricRef: sql.placeholder('metricRef'),
+    utcMs: sql.placeholder('utcMs'),
+    tzOffsetMinutes: sql.placeholder('tzOffsetMinutes'),
+    aggRef: sql.placeholder('aggRef'),
+    value: sql.placeholder('value'),
+    n: sql.placeholder('n'),
+    rawPayloadRef: sql.placeholder('rawPayloadRef'),
+  } as unknown as typeof samples.$inferInsert).onConflictDoUpdate({
+    // The same five columns, in the same order, as the loop this replaced and as runJob's
+    // writeSamples. The comment on `samples_natural` says why the three have to move together.
+    target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
+    set: {
+      value: sql.placeholder('value'),
+      n: sql.placeholder('n'),
+      tzOffsetMinutes: sql.placeholder('tzOffsetMinutes'),
+      rawPayloadRef: sql.placeholder('rawPayloadRef'),
+    } as unknown as Partial<typeof samples.$inferInsert>,
+  }).prepare()
+
   for (const group of groupIntoWindows(input.payloads)) {
     const t = dataTypeById(group.dataType)
     // A data type the catalogue no longer describes leaves payloads nobody can map. Counted and
@@ -191,15 +223,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
           // have to stay the same: a replay that keyed a row differently from the sync would
           // upsert onto a key the sync never wrote and double the table on the first rebuild.
           const stored = keys.sampleRefs(row)
-          tx.insert(samples).values(stored).onConflictDoUpdate({
-            target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
-            set: {
-              value: stored.value,
-              n: stored.n,
-              tzOffsetMinutes: stored.tzOffsetMinutes,
-              rawPayloadRef: stored.rawPayloadRef,
-            },
-          }).run()
+          insertSample.run(stored)
           localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
         }
       }
