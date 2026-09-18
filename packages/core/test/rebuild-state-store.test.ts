@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { rebuildDrops, rebuildState } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { RebuildStateStore } from '../src/store/rebuildState.ts'
+import { RebuildStateStore, isQuarantined } from '../src/store/rebuildState.ts'
 
 let fixture: TestDatabase
 
@@ -76,6 +76,34 @@ describe('RebuildStateStore', () => {
     store.recordSuccess({ personId: 'p1', nowMs: 400, droppedPages: 0, drops: [] })
     expect(store.get('p1')?.drops).toEqual([])
     expect(store.get('p1')?.droppedPages).toBe(0)
+  })
+
+  // A stale error beside a fresh success is the loudest thing on the surfaces that read this
+  // row: RebuildNotice renders lastError verbatim under its own heading whenever the column is
+  // non-null, independent of whether anything is currently wrong. Leaving it standing showed a
+  // degraded-but-healthy person the error text of an attempt a later rebuild had already
+  // superseded, with nothing on screen saying it was historical. The same argument the
+  // consecutive_failures reset is already made on applies here and applies harder.
+  it('clears the recorded error when a later rebuild commits', () => {
+    const store = new RebuildStateStore(fixture.db)
+    store.recordFailure({ personId: 'p1', nowMs: 100, error: 'UNIQUE constraint failed: samples.id' })
+    store.recordSuccess({ personId: 'p1', nowMs: 300, droppedPages: 0, drops: [] })
+    const row = store.get('p1')
+    expect(row?.lastError).toBeNull()
+    expect(row?.lastErrorAtMs).toBeNull()
+    expect(row?.lastSuccessAtMs).toBe(300)
+  })
+
+  // The tie the old timestamp comparison got wrong. A success and a later failure inside the
+  // same millisecond - which a rebuild of a person with little data and a mocked clock produces
+  // readily - left lastSuccessAtMs === lastErrorAtMs, and `lastSuccessAtMs < lastErrorAtMs` read
+  // that as not quarantined, hiding a real one. recordSuccess clearing the error columns is what
+  // makes the two timestamps unable to coexist at all, so the question no longer arises.
+  it('reads a failure recorded in the same millisecond as an earlier success as quarantined', () => {
+    const store = new RebuildStateStore(fixture.db)
+    store.recordSuccess({ personId: 'p1', nowMs: 100, droppedPages: 0, drops: [] })
+    store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
+    expect(isQuarantined(store.get('p1'))).toBe(true)
   })
 
   it('survives the rollback of an unrelated transaction, which is the whole point', () => {

@@ -73,6 +73,19 @@ export class RebuildStateStore {
           // even when it dropped pages, and a stale count beside a fresh success would read as
           // "still broken" to whoever is deciding whether their upgrade worked.
           consecutiveFailures: 0,
+          // Cleared for the same reason, and for a sharper one. The count is a number somebody
+          // has to interpret; the error text is a sentence, rendered verbatim under its own
+          // heading on both surfaces whenever this column is non-null, and nothing on either
+          // screen says when it was captured. Left standing beside a fresh success it told a
+          // person whose rebuild had just committed that their history had failed with a message
+          // describing an attempt this one superseded. An error that is no longer the last thing
+          // that happened is not an error anybody can act on, and tier 1 still holds whatever it
+          // described, so there is nothing lost by forgetting it.
+          //
+          // This is also what makes the two timestamps mutually exclusive, which isQuarantined
+          // below relies on.
+          lastErrorAtMs: null,
+          lastError: null,
           droppedPages: input.droppedPages,
         },
       }).run()
@@ -118,8 +131,15 @@ export class RebuildStateStore {
  * The last attempt errored and nothing has committed since. Exported and shared by the two
  * surfaces that ask, because a person warned about on one screen and clean on the other is
  * worse than either answer on its own.
+ *
+ * A non-null error timestamp is the whole test. This used to compare it against
+ * lastSuccessAtMs, which was needed while recordSuccess left the error columns standing: the
+ * two could then both be set and only their order said which came last. recordSuccess now
+ * clears them, so an error timestamp survives only until the next attempt commits and its mere
+ * presence already means "the last thing that happened was a failure". Dropping the comparison
+ * also drops the tie it got wrong - a success and a failure landing in the same millisecond
+ * left `lastSuccessAtMs < lastErrorAtMs` false and reported a real quarantine as clean.
  */
 export function isQuarantined(row: RebuildStateRow | null | undefined): boolean {
-  if (row == null || row.lastErrorAtMs === null) return false
-  return row.lastSuccessAtMs === null || row.lastSuccessAtMs < row.lastErrorAtMs
+  return row != null && row.lastErrorAtMs !== null
 }
