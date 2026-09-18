@@ -53,6 +53,7 @@ export class SourcePriorityStore {
   }
 
   put(input: { personId: string, metric: string, sourceIds: readonly string[], nowMs: number }): void {
+    const contestedDates = this.#contestedDates(input.personId)
     this.#db.transaction((tx) => {
       this.#assertOwned(tx, input.personId, input.sourceIds)
       this.#replace(tx, input.personId, input.metric)
@@ -61,14 +62,15 @@ export class SourcePriorityStore {
           .values({ personId: input.personId, metric: input.metric, sourceId, rank })
           .run()
       })
-      this.#markContestedDays(input.personId, input.nowMs, tx)
+      this.#markDates(contestedDates, input.personId, input.nowMs, tx)
     })
   }
 
   clear(input: { personId: string, metric: string, nowMs: number }): void {
+    const contestedDates = this.#contestedDates(input.personId)
     this.#db.transaction((tx) => {
       this.#replace(tx, input.personId, input.metric)
-      this.#markContestedDays(input.personId, input.nowMs, tx)
+      this.#markDates(contestedDates, input.personId, input.nowMs, tx)
     })
   }
 
@@ -115,19 +117,29 @@ export class SourcePriorityStore {
    * hoursWon, so a source that had rows and won no hour does not appear in it, and those are
    * exactly the days a ranking change is most likely to flip.
    *
+   * Run against `#db` rather than a transaction, and run before `put`/`clear` open theirs. The two
+   * GROUP BYs each build a temp B-tree over the person's whole sample history, which on a real
+   * archive is seconds, not the couple of indexed point reads the old marker cost. This project has
+   * already shipped an outage from holding the write lock across a long operation on a request
+   * path (1.16.0's boot rebuild), and a later task puts this call behind an HTTP PUT, so the scan
+   * must finish before there is a lock to hold. The gap this opens is a sample landing between this
+   * read and the write below leaving its own day unmarked; that is acceptable because both paths
+   * that write samples, the sync runner's runJob and the companion ingest route, mark the day dirty
+   * themselves and do not depend on this scan to catch it.
+   *
    * Each contested day takes its neighbours with it. A night belongs to the morning it ended in
    * and sessionOverlap reads across midnight, so a contested day can move the day either side of
    * it. A spare day costs one empty derive; a missed day keeps a merge computed under the list
    * this write just replaced.
    */
-  #markContestedDays(personId: string, nowMs: number, tx: DbOrTx): void {
-    const personRef = new SampleKeys(tx).personRefIfKnown(personId)
+  #contestedDates(personId: string): string[] {
+    const personRef = new SampleKeys(this.#db).personRefIfKnown(personId)
     const contested = new Set<string>()
 
     if (personRef !== undefined) {
       // The local date is computed rather than stored, so it is computed here the same way
       // localDateOf does: shift the instant by its own offset, then take the calendar date.
-      const rows = tx.all<{ localDate: string }>(sql`
+      const rows = this.#db.all<{ localDate: string }>(sql`
         SELECT local_date AS localDate FROM (
           SELECT date((utc_ms + tz_offset_minutes * 60000) / 1000, 'unixepoch') AS local_date,
                  source_ref
@@ -142,7 +154,7 @@ export class SourcePriorityStore {
     }
 
     // Sessions carry their local date already, so this one needs no conversion.
-    const sessionRows = tx.all<{ localDate: string }>(sql`
+    const sessionRows = this.#db.all<{ localDate: string }>(sql`
       SELECT local_date AS localDate FROM ${sessions}
       WHERE person_id = ${personId}
       GROUP BY local_date
@@ -150,13 +162,18 @@ export class SourcePriorityStore {
     `)
     for (const row of sessionRows) contested.add(row.localDate)
 
+    const widened = new Set<string>()
     for (const localDate of contested) {
-      for (const offset of [-1, 0, 1]) {
-        this.#queue.markDirty(
-          { personId, localDate: shiftLocalDate(localDate, offset), nowMs },
-          tx,
-        )
-      }
+      for (const offset of [-1, 0, 1]) widened.add(shiftLocalDate(localDate, offset))
+    }
+    return [...widened]
+  }
+
+  // Split from #contestedDates so the scan above can run outside the write transaction while the
+  // marking itself, which is cheap, still runs inside it alongside the rows it is a consequence of.
+  #markDates(localDates: readonly string[], personId: string, nowMs: number, tx: DbOrTx): void {
+    for (const localDate of localDates) {
+      this.#queue.markDirty({ personId, localDate, nowMs }, tx)
     }
   }
 }
