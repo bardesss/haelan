@@ -186,4 +186,16 @@ describe('marks only contested days', () => {
     store.clear({ personId: 'p1', metric: DEFAULT_LIST, nowMs: 1 })
     expect(queuedDates()).toEqual([])
   })
+
+  it('rejects an unowned source before scanning for contested days, not after', () => {
+    // Two sources on the same day would be contested if the scan ran at all, so a nonempty
+    // queue here would mean ownership was checked too late, after the scan already ran.
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    expect(() => store.put({
+      personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['watch', 'their-watch'], nowMs: 1,
+    })).toThrow(ConfigError)
+    expect(queuedDates()).toEqual([])
+  })
 })

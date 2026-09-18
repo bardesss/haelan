@@ -53,9 +53,9 @@ export class SourcePriorityStore {
   }
 
   put(input: { personId: string, metric: string, sourceIds: readonly string[], nowMs: number }): void {
+    this.#assertOwned(input.personId, input.sourceIds)
     const contestedDates = this.#contestedDates(input.personId)
     this.#db.transaction((tx) => {
-      this.#assertOwned(tx, input.personId, input.sourceIds)
       this.#replace(tx, input.personId, input.metric)
       input.sourceIds.forEach((sourceId, rank) => {
         tx.insert(sourcePriority)
@@ -79,10 +79,19 @@ export class SourcePriorityStore {
    * member's source id under this person, where `lists` would read it straight back. Master
    * design section 15: an account sees only its own data, and a route can authorise the person
    * without knowing anything about the source ids in the body.
+   *
+   * Run against `#db` before `put` opens its transaction, and not repeated inside it. A source id
+   * names the person it belongs to for as long as the row exists, so this is exactly as true
+   * outside the transaction as inside one; asking twice would be duplication, not extra safety.
+   * What this gives up is the one case where a named source row disappears between this check and
+   * the insert below, and `source_priority.source_id`'s own foreign key is the backstop for that,
+   * same as it always was. Checking first also means a request naming a source that is not this
+   * person's fails on this cheap point read and never reaches `#contestedDates`, which is the
+   * multi-second scan a malformed request must not get to pay for.
    */
-  #assertOwned(tx: DbOrTx, personId: string, sourceIds: readonly string[]): void {
+  #assertOwned(personId: string, sourceIds: readonly string[]): void {
     for (const sourceId of sourceIds) {
-      const owned = tx.select({ id: sources.id }).from(sources)
+      const owned = this.#db.select({ id: sources.id }).from(sources)
         .where(and(eq(sources.id, sourceId), eq(sources.personId, personId))).get()
       if (!owned) throw new ConfigError(`source ${sourceId} does not belong to this person`)
     }
