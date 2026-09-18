@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { schema, DERIVATION_VERSION } from '@haelan/core'
+import { schema, DERIVATION_VERSION, DEFAULT_LIST } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -157,6 +157,106 @@ describe('PUT /sources/:sourceId/alias', () => {
     const response = await rename('theirs', 'Mine now')
     expect(response.statusCode).toBe(404)
     expect((await list()).json().items.map((s: { id: string }) => s.id)).toEqual(['watch', 'app'])
+  })
+})
+
+describe('GET /source-priority', () => {
+  const priority = () => h.app.inject({ method: 'GET', url: '/api/v1/p/p1/source-priority', headers: auth() })
+
+  it('answers the fallback order when nothing is configured', async () => {
+    const response = await priority()
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.configured).toBe(false)
+    // 'watch' is a device and 'app' is an app, which is fallbackOrder's own kind ordering; the
+    // two are what beforeEach seeds, and neither has a stored ranking yet.
+    expect(body.order.map((e: { sourceId: string }) => e.sourceId)).toEqual(['watch', 'app'])
+    expect(body.order.every((e: { configured: boolean }) => e.configured === false)).toBe(true)
+  })
+
+  it('answers the stored order once configured', async () => {
+    h.app.haelan.instance.sourcePriority.put({
+      personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['app', 'watch'], nowMs: 1,
+    })
+    const response = await priority()
+    const body = response.json()
+    expect(body.configured).toBe(true)
+    expect(body.order.map((e: { sourceId: string }) => e.sourceId)).toEqual(['app', 'watch'])
+    expect(body.order.every((e: { configured: boolean }) => e.configured === true)).toBe(true)
+  })
+
+  it('needs a session', async () => {
+    const response = await h.app.inject({ method: 'GET', url: '/api/v1/p/p1/source-priority' })
+    expect(response.statusCode).toBe(401)
+  })
+})
+
+describe('PUT /source-priority', () => {
+  const put = (sourceIds: string[]) => h.app.inject({
+    method: 'PUT',
+    url: '/api/v1/p/p1/source-priority',
+    headers: { ...auth(), 'content-type': 'application/json' },
+    payload: { sourceIds },
+  })
+
+  it('refuses a list that omits one of the person\'s sources', async () => {
+    // priorityFrom treats a list as a complete statement, so an omitted source falls to
+    // UNRANKED_BASE and loses to every ranked one on historical days. Refusing is what keeps a
+    // screen from silently demoting a retired watch.
+    const response = await put(['watch'])
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('stores a complete list and answers the new order', async () => {
+    const response = await put(['app', 'watch'])
+    expect(response.statusCode).toBe(200)
+    expect(response.json().order.map((e: { sourceId: string }) => e.sourceId)).toEqual(['app', 'watch'])
+    expect(response.json().order.every((e: { configured: boolean }) => e.configured === true)).toBe(true)
+    expect(response.json().configured).toBe(true)
+  })
+
+  it('clears the list when given an empty array', async () => {
+    h.app.haelan.instance.sourcePriority.put({
+      personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['app', 'watch'], nowMs: 1,
+    })
+    const response = await put([])
+    expect(response.statusCode).toBe(200)
+    expect(response.json().configured).toBe(false)
+    // Cleared, not emptied: the fallback order still answers both of this person's sources.
+    expect(response.json().order.map((e: { sourceId: string }) => e.sourceId)).toEqual(['watch', 'app'])
+  })
+
+  it('refuses another person\'s source', async () => {
+    const other = await h.addPerson({ id: 'p2', displayName: 'Other', username: 'other' })
+    h.app.haelan.instance.db.insert(schema.sources).values({
+      id: 'their-watch', personId: other.personId, externalId: 'x', displayName: 'Theirs', kind: 'device', createdAtMs: 0,
+    }).run()
+    const response = await put(['watch', 'app', 'their-watch'])
+    expect(response.statusCode).toBe(400)
+  })
+
+  it('refuses a body whose sourceIds is not an array', async () => {
+    const response = await h.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/source-priority',
+      headers: { ...auth(), 'content-type': 'application/json' },
+      payload: { sourceIds: 'watch' },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('refuses a list naming the same source twice', async () => {
+    const response = await put(['watch', 'app', 'watch'])
+    expect(response.statusCode).toBe(400)
+    expect(response.json().error.kind).toBe('config')
+  })
+
+  it('needs a session', async () => {
+    const response = await h.app.inject({
+      method: 'PUT', url: '/api/v1/p/p1/source-priority', payload: { sourceIds: [] },
+    })
+    expect(response.statusCode).toBe(401)
   })
 })
 

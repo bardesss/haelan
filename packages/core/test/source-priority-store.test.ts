@@ -5,7 +5,10 @@ import { SourcePriorityStore } from '../src/store/sourcePriority.ts'
 import { DeriveQueue } from '../src/store/deriveQueue.ts'
 import { UNRANKED_BASE, DEFAULT_LIST } from '../src/derive/priority.ts'
 import { ConfigError } from '../src/errors.ts'
-import { sources } from '../src/db/schema/index.ts'
+import { sources, sessions, deriveQueue as deriveQueueTable, daily } from '../src/db/schema/index.ts'
+import { runDerive } from '../src/derive/runDerive.ts'
+import { OverrideStore } from '../src/store/overrides.ts'
+import { SettingsStore } from '../src/store/settings.ts'
 
 const OFFSET = 120
 const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
@@ -13,6 +16,8 @@ const MIDNIGHT_UTC = Date.UTC(2026, 7, 21, 22, 0)
 let test: TestDatabase
 let store: SourcePriorityStore
 let queue: DeriveQueue
+let overrides: OverrideStore
+let settings: SettingsStore
 
 beforeEach(() => {
   test = createTestDatabase()
@@ -25,6 +30,8 @@ beforeEach(() => {
   ]).run()
   queue = new DeriveQueue(test.db)
   store = new SourcePriorityStore(test.db, queue)
+  overrides = new OverrideStore(test.db, queue)
+  settings = new SettingsStore(test.db)
 })
 afterEach(() => test.cleanup())
 
@@ -69,34 +76,40 @@ describe('SourcePriorityStore', () => {
     expect(priority.rank('weight', 'watch')).toBe(0)
   })
 
-  it('marks every day the person has samples for, because changing priority is a rebuild', () => {
+  it('marks the neighbourhood of each contested day, not the whole span between them', () => {
+    // Both sources on both days, so both are contested. The days are adjacent, so their two
+    // separate +/-1 neighbourhoods union into one unbroken run, the same run the old
+    // mark-everything-between-first-and-last logic produced for this data by coincidence.
     insertAtHour(9)
     insertAtHour(24 + 9)
-    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone'], nowMs: 1 })
-    // The two sample days plus the spare day at each end. An extra empty derive is the price of
-    // never leaving a boundary day on the old merge.
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: MIDNIGHT_UTC + 9 * 3_600_000, tzOffsetMinutes: OFFSET })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: MIDNIGHT_UTC + (24 + 9) * 3_600_000, tzOffsetMinutes: OFFSET })
+    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
     expect(markedDates()).toEqual(['2026-08-21', '2026-08-22', '2026-08-23', '2026-08-24'])
   })
 
-  it('marks both ends when the earliest UTC row is not the earliest local row', () => {
-    // Somebody who flew west: the later instant belongs to the earlier local day. Taking the
-    // min and max utcMs as the range ends inverts them, and an inverted range marks nothing.
+  it('computes the contested local date correctly when the earliest UTC row is not the earliest local row', () => {
+    // Somebody who flew west: the later instant belongs to the earlier local day. Each source
+    // reports at both instants, so both local days are contested regardless of which one the
+    // earlier UTC row lands on.
     insertAt(Date.UTC(2026, 7, 22, 0, 0), 120)
     insertAt(Date.UTC(2026, 7, 22, 5, 0), -600)
-    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone'], nowMs: 1 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: Date.UTC(2026, 7, 22, 0, 0), tzOffsetMinutes: 120 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: Date.UTC(2026, 7, 22, 5, 0), tzOffsetMinutes: -600 })
+    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
 
-    const dates = markedDates()
-    expect(dates).not.toEqual([])
-    expect(dates).toContain('2026-08-21')
-    expect(dates).toContain('2026-08-22')
+    expect(markedDates()).toEqual(['2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23'])
   })
 
-  it('reads each boundary offset off its own row rather than sharing one', () => {
-    // +2 puts the first row on 08-21 and -10 puts the last on 08-22. Reading the first row's
-    // offset for both ends would push the far end to 08-23 and widen the range by a day.
+  it('reads each row\'s own offset rather than sharing one across a day', () => {
+    // +2 puts one row on 08-21 and -10 puts the other on 08-22. The SQL computes each row's
+    // local date from that row's own offset, so nothing here can borrow one row's offset for
+    // another the way a shared boundary read once could.
     insertAt(Date.UTC(2026, 7, 20, 23, 0), 120)
     insertAt(Date.UTC(2026, 7, 23, 1, 0), -600)
-    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone'], nowMs: 1 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: Date.UTC(2026, 7, 20, 23, 0), tzOffsetMinutes: 120 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: Date.UTC(2026, 7, 23, 1, 0), tzOffsetMinutes: -600 })
+    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
 
     expect(markedDates()).toEqual(['2026-08-20', '2026-08-21', '2026-08-22', '2026-08-23'])
   })
@@ -108,7 +121,8 @@ describe('SourcePriorityStore', () => {
 
   it('marks the same days when a list is cleared', () => {
     insertAtHour(9)
-    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone'], nowMs: 1 })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs: MIDNIGHT_UTC + 9 * 3_600_000, tzOffsetMinutes: OFFSET })
+    store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
     queue.clear(queue.claim(100))
     store.clear({ personId: 'p1', metric: 'steps', nowMs: 2 })
     expect(store.lists('p1')).toEqual([])
@@ -127,5 +141,102 @@ describe('SourcePriorityStore', () => {
     store.put({ personId: 'p1', metric: 'steps', sourceIds: ['phone', 'watch'], nowMs: 1 })
     expect(store.lists('p2')).toEqual([])
     expect(store.load('p2').rank('steps', 'phone')).toBeGreaterThanOrEqual(UNRANKED_BASE)
+  })
+})
+
+const queuedDates = (personId = 'p1'): string[] =>
+  test.db.select().from(deriveQueueTable).all()
+    .filter((r) => r.personId === personId)
+    .map((r) => r.localDate)
+    .sort()
+
+describe('marks only contested days', () => {
+  it('leaves a single source day alone', () => {
+    // One source, one day. No ranking can change what a lone source reported.
+    insertSample(test.db, {
+      personId: 'p1', sourceId: 'watch', metric: 'steps',
+      utcMs: MIDNIGHT_UTC + 3_600_000, tzOffsetMinutes: OFFSET,
+    })
+    store.put({ personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['phone', 'watch'], nowMs: 1 })
+    expect(queuedDates()).toEqual([])
+  })
+
+  it('derives identical rows for a single source day whatever the ranking', () => {
+    // Confirms the narrowing does not just leave the day unmarked but that a marked derive
+    // of the same day would have produced the same rows anyway: rank() only breaks ties
+    // between two or more sources, so a lone source's output cannot depend on it.
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET, value: 500 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 1 })
+    const derive = () => runDerive({
+      db: test.db, queue, priority: store, overrides, settings, nowMs: 2,
+    })
+    derive()
+    const before = test.db.select().from(daily).all()
+
+    store.put({ personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['phone', 'watch'], nowMs: 3 })
+    queue.markDirty({ personId: 'p1', localDate: '2026-08-22', nowMs: 3 })
+    derive()
+    const after = test.db.select().from(daily).all()
+
+    expect(after).toEqual(before)
+  })
+
+  it('marks a day two sources both reported on, and its neighbours', () => {
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    store.put({ personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['phone', 'watch'], nowMs: 1 })
+    // A night spans midnight, so sessionOverlap reads across the boundary and the neighbours go too.
+    expect(queuedDates()).toEqual(['2026-08-21', '2026-08-22', '2026-08-23'])
+  })
+
+  it('marks a day two sources wrote sessions on', () => {
+    test.db.insert(sessions).values([
+      {
+        id: 's1', personId: 'p1', sourceId: 'watch', kind: 'sleep', externalId: 'a',
+        startMs: 0, startOffsetMinutes: 0, endMs: 0, endOffsetMinutes: 0,
+        localDate: '2026-08-22', attrs: '{}', rawPayloadId: null,
+      },
+      {
+        id: 's2', personId: 'p1', sourceId: 'phone', kind: 'sleep', externalId: 'b',
+        startMs: 0, startOffsetMinutes: 0, endMs: 0, endOffsetMinutes: 0,
+        localDate: '2026-08-22', attrs: '{}', rawPayloadId: null,
+      },
+    ]).run()
+    store.put({ personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['phone', 'watch'], nowMs: 1 })
+    expect(queuedDates()).toEqual(['2026-08-21', '2026-08-22', '2026-08-23'])
+  })
+
+  it('narrows clear the same way it narrows put', () => {
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    store.clear({ personId: 'p1', metric: DEFAULT_LIST, nowMs: 1 })
+    expect(queuedDates()).toEqual([])
+  })
+
+  it('marks nothing when clearing a list that was never configured, even on a day that would otherwise be contested', () => {
+    // Two sources on the same day, which put() would mark. Nothing was ever put for this metric,
+    // so the delete clear() runs first removes zero rows and the scan that would find this day
+    // never runs. Before this was fixed, clear() paid for the scan regardless and marked the day
+    // dirty despite changing nothing.
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    store.clear({ personId: 'p1', metric: DEFAULT_LIST, nowMs: 1 })
+    expect(queuedDates()).toEqual([])
+  })
+
+  it('rejects an unowned source even when a contested day is in play', () => {
+    // A rejected put writes nothing, so nothing should be queued either, on a day that would
+    // otherwise have been marked. This does not observe when the ownership check runs relative
+    // to the contested-day scan, only that a rejection leaves derive_queue untouched.
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    expect(() => store.put({
+      personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['watch', 'their-watch'], nowMs: 1,
+    })).toThrow(ConfigError)
+    expect(queuedDates()).toEqual([])
   })
 })
