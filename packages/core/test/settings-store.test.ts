@@ -59,6 +59,43 @@ describe('setupStep', () => {
     expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
   })
 
+  // The phone path, at the level of the store rather than the gate. Closing the wizard without
+  // Google stamps both columns, and the step has to be 'done' from that alone: falling through to
+  // the client check below would answer 'google-client', which shuts every route outside the
+  // wizard (setupGate.ts) and stops the phone syncing, with no way back to done.
+  it('treats a companion instance as done with no client at all', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('google-client')
+
+    settings.completeCompanionSetup(2)
+    expect(credentials.getClient()).toBeNull()
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
+  })
+
+  it('stays done when a companion instance gains a Google token later', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.completeCompanionSetup(2)
+    credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 3 })
+    credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 3 })
+
+    // A member consenting later is what a mixed instance looks like, and it reopens nothing: the
+    // phone choice on people.companionPath survives beside the Google row.
+    people.setCompanionPath('p1', true)
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
+  })
+
+  it('does not read the companion flag without its completion stamp as done', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    // Written directly because completeCompanionSetup writes both columns: a row carries the flag
+    // alone only through an interrupted write or a restored backup, and the short-circuit must not
+    // fire on it - the step has to land somewhere the wizard can still finish from.
+    fixture.db.$client.prepare('update instance_settings set companion_mode = 1').run()
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('google-client')
+  })
+
   // A backup restored without instance.key, at the point it is decided. The client secret is
   // sealed with the same key the refresh tokens are, so the household client goes unreadable
   // too - and this function runs in a preHandler on every request, so a throw here used to take

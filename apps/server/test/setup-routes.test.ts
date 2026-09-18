@@ -224,4 +224,95 @@ describe('setup routes', () => {
     expect(again.statusCode).toBe(409)
     expect(again.json()).toMatchObject({ error: { kind: 'setup_incomplete', code: 'setup_complete' } })
   })
+
+  // The phone path was a one-way door: POST /api/setup/companion finishes the wizard with no
+  // client, and at 'done' the gate shut POST /api/setup/google-client - the only writer of one
+  // (oauth.ts) - while /oauth/start needs a readable client. So whoever chose the phone could
+  // never add Google afterwards. The three cases below are the door, the refusal that has to
+  // survive beside it, and the read the failed-consent screen depends on.
+  async function companionInstance(h: Harness): Promise<{ cookies: { haelan_session: string }, personId: string }> {
+    const created = await createAccount(h)
+    const cookie = created.cookies.find((c) => c.name === 'haelan_session')!.value
+    const personId = (created.json() as { personId: string }).personId
+    const cookies = { haelan_session: cookie }
+    await h.app.inject({
+      method: 'POST', url: '/api/setup/instance-url', headers, cookies,
+      payload: { baseUrl: 'http://localhost:4235', consentPath: 'localhost' },
+    })
+    const skipped = await h.app.inject({
+      method: 'POST', url: '/api/setup/companion', headers, cookies, payload: {},
+    })
+    expect(skipped.json()).toEqual({ step: 'done' })
+    return { cookies, personId }
+  }
+
+  it('lets a phone-only instance paste a client later, and keeps every other wizard route shut', async () => {
+    harness = await withServer()
+    const { cookies } = await companionInstance(harness)
+    expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+
+    const pasted = await harness.app.inject({
+      method: 'POST', url: '/api/setup/google-client', headers, cookies,
+      payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' },
+    })
+    expect(pasted.statusCode).toBe(200)
+    // Pasting a client is not walking the wizard again: the step it reports is still 'done'.
+    expect(pasted.json()).toEqual({ step: 'done' })
+    expect(harness.app.haelan.stores.credentials.getClient()?.clientId)
+      .toBe('id.apps.googleusercontent.com')
+
+    // With a client stored, consent is the open door it has always been past 'done'.
+    const start = await harness.app.inject({ method: 'GET', url: '/oauth/start', headers, cookies })
+    expect(start.statusCode).toBe(302)
+    expect(start.headers.location).toContain('client_id=id.apps.googleusercontent.com')
+
+    // The exemption is those two paths, not the wizard reopening: the route that closed this
+    // instance is still shut, which is what stops one being re-run from the phone alone.
+    const again = await harness.app.inject({
+      method: 'POST', url: '/api/setup/companion', headers, cookies, payload: {},
+    })
+    expect(again.statusCode).toBe(409)
+    expect(again.json()).toMatchObject({ error: { kind: 'setup_incomplete', code: 'setup_complete' } })
+  })
+
+  it('keeps the client route shut on a companion instance that has since connected Google', async () => {
+    harness = await withServer()
+    const { cookies, personId } = await companionInstance(harness)
+    // The member's own consent is how a companion instance ends up mixed. Written straight to the
+    // store: this case is about the gate, not about the consent flow e2e-setup.test.ts walks.
+    harness.app.haelan.instance.credentials.putRefreshToken({
+      personId, refreshToken: 'stub-refresh-token', scopes: [...SCOPES], nowMs: harness.clock.nowMs,
+    })
+
+    const pasted = await harness.app.inject({
+      method: 'POST', url: '/api/setup/google-client', headers, cookies,
+      payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' },
+    })
+    expect(pasted.statusCode).toBe(409)
+    expect(pasted.json()).toMatchObject({ error: { kind: 'setup_incomplete', code: 'setup_complete' } })
+    // Nothing was written: the refusal is the point, not a redirect to a form.
+    expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+  })
+
+  it('answers the failed-consent screen on a completed companion instance', async () => {
+    harness = await withServer()
+    const { cookies } = await companionInstance(harness)
+
+    const before = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies })
+    expect(before.statusCode).toBe(200)
+    expect(before.json()).toEqual({ code: 'none', message: '' })
+
+    // The callback is open past 'done' - consent outlives setup - and a failure redirects to the
+    // screen that fetches the reason from the route above. No client is needed for the failure
+    // branch: the error query is read before the client is.
+    const failed = await harness.app.inject({
+      method: 'GET', url: '/oauth/callback?error=access_denied', headers,
+    })
+    expect(failed.statusCode).toBe(302)
+    expect(failed.headers.location).toBe('/setup/google?error=access_denied')
+
+    const after = await harness.app.inject({ method: 'GET', url: '/api/setup/last-error', headers, cookies })
+    expect(after.statusCode).toBe(200)
+    expect(after.json()).toMatchObject({ code: 'access_denied' })
+  })
 })
