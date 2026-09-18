@@ -77,6 +77,23 @@ object SyncEngine {
     internal const val MAX_CHUNK_SPAN_MS = 12L * 60L * 60L * 1000L
 
     /**
+     * How many points one request may carry, which neither ceiling above can express.
+     *
+     * The route refuses a request carrying more than 10000 points (ingest.ts, MAX_POINTS),
+     * counted as points rather than weighed: a heart rate sample is some twenty bytes of JSON,
+     * so a dense hour fits 24000 of them inside the 512 KiB budget above and inside the twelve
+     * hour span beside it, and travels as one request the instance answers with a 400. Seen on
+     * a real phone, 2026-09-18: 24045 heart rate points in one chunk, whole type unposted.
+     *
+     * Spelled here rather than read from the server because the app has no Node toolchain at
+     * build time; kept ten below the route's own so the two can drift by a rounding without a
+     * 400. A chunk cut here is still one chunk of the same hour, posted by the same loop in
+     * the same order - the split changes how many requests an hour travels in, never which
+     * readings travel.
+     */
+    internal const val MAX_CHUNK_POINTS = 9_990
+
+    /**
      * How many times one request is attempted before the type is told the chunk did not go.
      *
      * The retry is what stops a refusal from abandoning the rest of the type: the loop returns on
@@ -294,6 +311,11 @@ object SyncEngine {
      * not from a page or a day: this decides what travels together and nothing about what a
      * reading means, since the instance files every row by its own instant and offset.
      *
+     * [maxPoints] bounds the count, because the instance refuses a request over its own point
+     * ceiling and neither of the other two counts: dense small points fit tens of thousands
+     * inside both. Counted as points held, not bytes used, so a cut lands between two readings
+     * of the same hour and the pieces travel as consecutive requests, in order, none skipped.
+     *
      * A single point over either ceiling still travels, alone: a record the provider answered with
      * cannot be split, and dropping it here would lose a reading the instance never got to refuse.
      */
@@ -302,6 +324,7 @@ object SyncEngine {
         maxBytes: Int,
         timesMs: List<Long?> = emptyList(),
         maxSpanMs: Long = Long.MAX_VALUE,
+        maxPoints: Int = Int.MAX_VALUE,
     ): List<Int> {
         val ends = mutableListOf<Int>()
         var start = 0
@@ -314,7 +337,8 @@ object SyncEngine {
             val at = timesMs.getOrNull(i)
             val overBytes = size + sizes[i] > maxBytes
             val overSpan = from != null && at != null && at - from > maxSpanMs
-            if (i > start && (overBytes || overSpan)) {
+            val overCount = i - start >= maxPoints
+            if (i > start && (overBytes || overSpan || overCount)) {
                 ends += i
                 start = i
                 size = 0
@@ -326,8 +350,9 @@ object SyncEngine {
     }
 
     /**
-     * The first chunk [points] holds, cut to its own bytes and to [MAX_CHUNK_SPAN_MS], or null
-     * while they still fit in one and the buffer should keep growing.
+     * The first chunk [points] holds, cut to its own bytes, to [MAX_CHUNK_SPAN_MS] and to
+     * [MAX_CHUNK_POINTS], or null while they still fit in one and the buffer should keep
+     * growing.
      *
      * Every chunk this hands back is closed by reaching a ceiling and never by running out of
      * points, which is the whole point: what stays in the buffer is what a refusal can leave
@@ -338,20 +363,36 @@ object SyncEngine {
     private fun readyChunk(points: MutableList<JSONObject>): List<JSONObject>? {
         val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
         val times = points.map { instantMsOf(it) }
-        val ends = chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS)
-        if (ends.size < 2) return null
-        val end = ends[ends.size - 2]
+        val ends = chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS)
+        val end = flushEnd(ends) ?: return null
         val ready = points.subList(0, end).toList()
         points.subList(0, end).clear()
         return ready
     }
+
+    /**
+     * Where a flush cuts a buffer: the end of the chunk that leaves now, or null while the buffer
+     * holds no complete chunk and should keep growing.
+     *
+     * [ends] is [chunkEnds]' own answer, and its last element is always the buffer's own end,
+     * because the buffer's remainder is what chunkEnds closes last. Every end before it therefore
+     * closed a chunk at a ceiling, and the first of them is the first chunk the buffer holds.
+     *
+     * One per call, which the caller's loop repeats until this answers null. A buffer holding
+     * several of them is the ordinary case and not an exotic one: a page is records, and one
+     * heart rate record carries thousands of samples, so a single page can push the buffer past
+     * two ceilings at once. Every one of those ends is a separate request, because that is what
+     * a ceiling means; a flush that returned them together would hand one post a chunk over all
+     * three ceilings at once, which is a request the instance refuses for its count.
+     */
+    internal fun flushEnd(ends: List<Int>): Int? = if (ends.size < 2) null else ends[0]
 
     /** Whatever the buffer still holds once the read is over: the tail, cut to the same ceilings. */
     private fun chunksBySize(points: List<JSONObject>): List<List<JSONObject>> {
         val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
         val times = points.map { instantMsOf(it) }
         var from = 0
-        return chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS).map { end ->
+        return chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS, MAX_CHUNK_POINTS).map { end ->
             points.subList(from, end).toList().also { from = end }
         }
     }
@@ -424,8 +465,10 @@ object SyncEngine {
      * boundaries move compared to one-shot batching; the rows do not, because the instance
      * upserts on the natural key.
      *
-     * A chunk is bounded by bytes AND by [MAX_CHUNK_SPAN_MS], and the second one is what decides
-     * what a refusal costs. The instance's cursor is per data type - the newest end that landed,
+     * A chunk is bounded by bytes, by [MAX_CHUNK_SPAN_MS] and by [MAX_CHUNK_POINTS], and the
+     * second one is what decides what a refusal costs while the third is what keeps a dense
+     * hour postable at all: tens of thousands of small points fit inside the other two and
+     * the instance refuses the request for their count. The instance's cursor is per data type - the newest end that landed,
      * whichever source carried it - and the next sync re-reads from it minus the overlap, so
      * whatever a refusal leaves unposted behind that point is never asked for again. Bounding a
      * chunk's reach bounds that loss to half the overlap, for every type including the ones that
@@ -598,7 +641,9 @@ object SyncEngine {
         // whole page travelled under a single identity, which is why a hand-typed weight was
         // filed as the scale's and could not be excluded.
         for ((identity, group) in points.groupBy { it.source }) {
-            // The endpoint refuses more than 10000 points: send in byte-measured blocks.
+            // The endpoint refuses more than 10000 points: chunks are capped by bytes, by span
+            // and by count, and every piece of one hour is posted here in order, none skipped -
+            // a cut changes how many requests the hour travels in, never which readings travel.
             for (chunk in chunksBySize(group.map { it.body })) {
                 val outcome = postChunk(session, packageName, dataTypeId, identity, chunk, post)
                 // The first refusal stops this type: the chunks after it would carry the same

@@ -7,11 +7,14 @@ import org.junit.Test
 /**
  * The ceiling the sync has to stay under, measured instead of assumed.
  *
- * The app splits a type's points by size (SyncEngine.chunksBySize, half a mebibyte) while the
- * route refuses a request carrying more than 10000 points (ingest.ts, MAX_POINTS). Two different
- * units bounding one request is only safe while the smaller one bites first, and the window
- * stopped being 30 days, which is the change that turns that from a thought into a fact worth
- * holding: the number below is what the densest type actually costs.
+ * The app splits a type's points by size (SyncEngine.chunksBySize, half a mebibyte), by span
+ * and by count, while the route refuses a request carrying more than 10000 points (ingest.ts,
+ * MAX_POINTS). Three different units bounding one request is only safe while the smallest one
+ * bites first, and a dense hour of heart rate fits tens of thousands of small points inside the
+ * first two - which is the shape that reached the route as one 24045 point request and came
+ * back a 400 on a real phone. The measurement below stays as the check that the byte
+ * budget alone would still hold for the mapper's own shape; the count ceiling is what holds
+ * for every shape, measured or not.
  *
  * Measured on the wire shape rather than through JSONObject, which is a stub in a JVM unit test
  * ("Method put in org.json.JSONObject not mocked") and would have measured a fabricated string
@@ -131,6 +134,73 @@ class IngestChunkSizeTest {
         val span = SyncEngine.MAX_CHUNK_SPAN_MS
         // Two points a week apart: neither can be dropped, and neither can be paired.
         assertEquals(listOf(1, 2), SyncEngine.chunkEnds(listOf(1, 1), 1024, listOf(0L, 7 * 24 * hourMs), span))
+    }
+
+    // ---- The count of a chunk, which neither bytes nor span can express ----
+
+    /**
+     * A dense hour is tens of thousands of small points inside both older ceilings, and the
+     * route counts points rather than weighing them. The cut lands between two readings of the
+     * same hour, and the pieces cover every point exactly once, in order: the split changes
+     * how many requests the hour travels in, and the posting loop sends each of them, so no
+     * reading is left for the next hour's chunk to skip over.
+     */
+    @Test
+    fun `points past the count ceiling become consecutive pieces of the same hour`() {
+        val sizes = List(7) { 1 }
+        val times = List(7) { it * 1000L }
+
+        assertEquals(listOf(3, 6, 7), SyncEngine.chunkEnds(sizes, 1024, times, hourMs, 3))
+    }
+
+    @Test
+    fun `a chunk holding exactly the count ceiling is not split`() {
+        val sizes = List(3) { 1 }
+        val times = List(3) { it * 1000L }
+
+        assertEquals(listOf(3), SyncEngine.chunkEnds(sizes, 1024, times, hourMs, 3))
+    }
+
+    @Test
+    fun `the count ceiling bites first when it comes first`() {
+        // Seven tiny points in one second: nowhere near any byte budget or span, past a count
+        // of three twice over. Bytes and span say nothing here, and the cut has to land on the
+        // count alone.
+        val sizes = List(7) { 1 }
+        val times = List(7) { it * 1000L }
+
+        assertEquals(
+            listOf(3, 6, 7),
+            SyncEngine.chunkEnds(sizes, 1024 * 1024, times, SyncEngine.MAX_CHUNK_SPAN_MS, 3),
+        )
+    }
+
+    /**
+     * The night this ceiling was added for: 24045 heart rate points inside one span and one
+     * byte budget, refused as one request with a 400. Run through the production ceilings,
+     * every piece stays under the route's refusal and together they hold every point.
+     */
+    @Test
+    fun `a production dense hour travels under the route refusal with nothing left behind`() {
+        val total = 24_045
+        val sizes = List(total) { 20 }
+        val startMs = 1_700_000_000_000L
+        val times = List(total) { startMs + it * 1_800L }
+        val ends = SyncEngine.chunkEnds(
+            sizes,
+            512 * 1024,
+            times,
+            SyncEngine.MAX_CHUNK_SPAN_MS,
+            SyncEngine.MAX_CHUNK_POINTS,
+        )
+
+        var from = 0
+        for (end in ends) {
+            assertTrue("piece [$from, $end) carries more than the route accepts", end - from <= 10_000)
+            from = end
+        }
+        assertEquals("the pieces must cover every point exactly once", total, from)
+        assertTrue("the hour must travel as several requests, not one", ends.size > 1)
     }
 
     /**

@@ -17,8 +17,9 @@ import java.time.Instant
  * measured a fabricated string anyway - the same reason IngestChunkSizeTest measures bytes rather
  * than building points.
  *
- * THE CUT IS THE PRODUCTION ONE. Every boundary below comes from [SyncEngine.chunkEnds], so the
- * ceiling this file is about is the ceiling the app applies. The model is the loop around it:
+ * THE CUT IS THE PRODUCTION ONE. Every boundary below comes from [SyncEngine.chunkEnds] and the
+ * flush from [SyncEngine.flushEnd], so the ceiling this file is about is the ceiling the app
+ * applies. The model is the loop around it:
  * buffer per identity, cut when a ceiling is reached, the first permanent refusal ending the type
  * with every other buffer unsent, each identity's remainder flushed at the end. That loop cannot be
  * reached from a JVM test because uploadType reads Health Connect, and it is the part to watch if
@@ -124,9 +125,7 @@ class UploadCursorHoleTest {
 
         /** The first chunk this buffer holds, cut by the production ceilings, or null if it is one. */
         private fun readyChunk(buffer: MutableList<Point>): List<Point>? {
-            val ends = ends(buffer)
-            if (ends.size < 2) return null
-            val end = ends[ends.size - 2]
+            val end = SyncEngine.flushEnd(ends(buffer)) ?: return null
             val ready = buffer.subList(0, end).toList()
             buffer.subList(0, end).clear()
             return ready
@@ -139,7 +138,14 @@ class UploadCursorHoleTest {
         }
 
         private fun ends(points: List<Point>): List<Int> =
-            SyncEngine.chunkEnds(points.map { it.bytes + 1 }, budget, points.map { it.atMs }, spanCap)
+            SyncEngine.chunkEnds(
+                points.map { it.bytes + 1 },
+                budget,
+                points.map { it.atMs },
+                spanCap,
+                // The count ceiling, which the route counts and the other two cannot express.
+                SyncEngine.MAX_CHUNK_POINTS,
+            )
 
         /**
          * One post, asked again while the answer is the refusal and the budget has attempts left -

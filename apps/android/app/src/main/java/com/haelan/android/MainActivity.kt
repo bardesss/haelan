@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.progressindicator.CircularProgressIndicator
@@ -26,14 +27,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.time.Instant
 
 /**
  * Sync screen: permissions, one toggle per data type, and a sync button.
  * Read-only by design - it never writes to Health Connect, only reads a trailing window and
  * POSTs it to the haelan instance from sign-in.
  */
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), SyncRunState.Screen {
 
     companion object {
         /** Where the sync's own answers go, which is the only place a failure is written now. */
@@ -82,12 +82,11 @@ class MainActivity : ComponentActivity() {
      * One bar inside each card, filled as the types of that card go: the three groups are the
      * three cards the screen already has, so the bar says which part of the sync is still running
      * without a line of text for every type.
+     *
+     * The card's own keys are here because everything the bar shows is read off the run's marks:
+     * how many of them the run carries, how many have an answer, and whether one of them failed.
      */
-    private class SyncGroup(val row: View, val bar: LinearProgressIndicator) {
-        var done = 0
-        var total = 0
-        var failed = false
-    }
+    private class SyncGroup(val row: View, val bar: LinearProgressIndicator, val keys: List<String>)
 
     private lateinit var groups: Map<String, SyncGroup>
 
@@ -172,9 +171,15 @@ class MainActivity : ComponentActivity() {
         syncButton = findViewById(R.id.buttonSync)
         batteryStatus = findViewById(R.id.batteryStatus)
 
-        val activityGroup = SyncGroup(findViewById(R.id.progressActivityRow), findViewById(R.id.progressActivity))
-        val bodyGroup = SyncGroup(findViewById(R.id.progressBodyRow), findViewById(R.id.progressBody))
-        val heartGroup = SyncGroup(findViewById(R.id.progressHeartRow), findViewById(R.id.progressHeart))
+        val activityGroup = SyncGroup(
+            findViewById(R.id.progressActivityRow), findViewById(R.id.progressActivity), SyncTypes.ACTIVITY_KEYS,
+        )
+        val bodyGroup = SyncGroup(
+            findViewById(R.id.progressBodyRow), findViewById(R.id.progressBody), SyncTypes.BODY_KEYS,
+        )
+        val heartGroup = SyncGroup(
+            findViewById(R.id.progressHeartRow), findViewById(R.id.progressHeart), SyncTypes.HEART_KEYS,
+        )
         groups = buildMap {
             for (key in SyncTypes.ACTIVITY_KEYS) put(key, activityGroup)
             for (key in SyncTypes.BODY_KEYS) put(key, bodyGroup)
@@ -186,9 +191,7 @@ class MainActivity : ComponentActivity() {
         findViewById<MaterialButton>(R.id.buttonPermissions).setOnClickListener {
             scope.launch { checkProviderThen { permissionLauncher.launch(healthPermissions) } }
         }
-        syncButton.setOnClickListener {
-            scope.launch { checkProviderThen { syncNow() } }
-        }
+        syncButton.setOnClickListener { scope.launch { startSync() } }
         findViewById<MaterialButton>(R.id.buttonBattery).setOnClickListener { openBatterySettings() }
 
         buildRows(findViewById(R.id.rowsActivity), activityOptions)
@@ -196,10 +199,19 @@ class MainActivity : ComponentActivity() {
         buildRows(findViewById(R.id.rowsHeart), heartOptions)
         refreshSyncStatus()
         refreshBatteryCard()
+        // Last, and deliberately: what this paints first may be a run this activity did not start,
+        // which is what a screen created by a rotation has to show instead of an idle button.
+        SyncRun.attach(this)
     }
 
     override fun onResume() {
         super.onResume()
+        // A run outlives this screen, so it can meet a 401 while this screen is stopped, and an
+        // activity started from the background is not shown. The notice waits for the resume.
+        if (sessionEnded) {
+            goLogin(expired = true)
+            return
+        }
         refreshSyncStatus()
         refreshBatteryCard()
         scope.launch {
@@ -269,22 +281,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun recordSent(key: String, nowMs: Long) {
-        prefs().edit()
-            .putLong(SyncStatus.lastKey(key), nowMs)
-            .putBoolean(SyncStatus.emptyKey(key), false)
-            .apply()
-        rowStatus[key]?.text = statusText(key, nowMs)
-    }
-
-    private fun recordEmpty(key: String, nowMs: Long) {
-        prefs().edit()
-            .putLong(SyncStatus.lastKey(key), nowMs)
-            .putBoolean(SyncStatus.emptyKey(key), true)
-            .apply()
-        rowStatus[key]?.text = statusText(key, nowMs)
-    }
-
     /**
      * The tick and the sentence both answer one question: is there anything left to ask for.
      * [afterRequest] only changes the wording, because a request that granted everything and a
@@ -301,7 +297,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The screen goes; the run does not. The scope cancelled here is this screen's own work, the
+     * permission read and the sign-out; the sync is not in it, because a rotation that cancelled
+     * an upload would leave the instance's cursor ahead of what never landed.
+     */
     override fun onDestroy() {
+        SyncRun.detach(this)
         scope.cancel()
         super.onDestroy()
     }
@@ -425,165 +427,75 @@ class MainActivity : ComponentActivity() {
         block()
     }
 
-    // ---- Sync: read Health Connect, map to the v4 shape, POST ----
+    // ---- The sync on screen: the run belongs to SyncRun, and this screen draws it ----
 
     /**
-     * A body the instance refused, as an outcome rather than a throw. The status decides what the
-     * screen does with it, and 401 is the one that concerns every type rather than this one.
+     * Set when a run met a 401 while this screen could not act on it. Nothing resets it: the
+     * screen that reads it is on its way to login.
      */
-    private class Refused(val status: Int, val answer: String) : Exception("$status: $answer")
+    private var sessionEnded = false
 
     /**
-     * A session that is over, carried out of the one place that knows: [syncType] parks it on this
-     * field, because its own contract is to turn a failure into a mark on a row, and this is the
-     * failure that belongs to the whole sync.
+     * The tap. The toggles say what travels, the run belongs to [SyncRun] - which no rotation
+     * cancels - and this only refuses the taps that cannot start one.
      */
-    private var sessionExpired = false
-
-    private fun goLoginExpired() {
-        // The stored cookie is dead: the instance forgot it (a reset wipes sessions) or it
-        // was replaced elsewhere. Landing on the login screen with it still stored replays
-        // it straight back here through auto-login, which reads as the sync button doing
-        // nothing but bouncing between the two screens. Forget it first, the way sign-out
-        // does; the address and username stay prefilled for the next sign-in.
-        SessionStore.clearSession(SessionStore.prefs(this))
-        sessionExpired = true
-        goLogin(expired = true)
-    }
-
-    /**
-     * The sentence for a failure, in the language the phone is set to. What the instance
-     * actually answered goes to logcat, where a developer looks and a person does not.
-     */
-    private fun reasonFor(error: Throwable): String {
-        Log.w(TAG, error.message ?: error.javaClass.simpleName)
-        return when (error) {
-            is Refused -> getString(InstanceError.forStatus(error.status), error.status)
-            else -> getString(InstanceError.forThrowable(error))
-        }
-    }
-
-    private suspend fun syncNow() {
-        val allOptions = activityOptions + bodyOptions + heartOptions
-        val sending = allOptions.filter { isOn(it.key) }
+    private suspend fun startSync() {
+        val sending = (activityOptions + bodyOptions + heartOptions).filter { isOn(it.key) }
         if (sending.isEmpty()) {
             Toast.makeText(this, R.string.sync_none, Toast.LENGTH_SHORT).show()
             return
         }
         val client = healthClient() ?: return
-        syncButton.isEnabled = false
-        syncButton.setText(R.string.sync_working)
-        startProgress(sending)
-        try {
-            val session = SyncEngine.Session(server, personId, cookie)
-            val runEnd = Instant.now()
-            val runEndMs = runEnd.toEpochMilli()
-            // The box spins for as long as its type is going: the read and the upload both
-            // suspend, so this is what somebody watching the screen sees between the two marks.
-            val report = object : SyncEngine.Reporter {
-                override fun typeStarted(key: String) {
-                    rowStates[key]?.running()
-                }
-                override fun typeOk(key: String) {
-                    rowStates[key]?.synced()
-                    recordSent(key, runEndMs)
-                    // Counted whether it went or not: the bar says how much of this group has
-                    // been tried, and a type that failed is not still waiting.
-                    advance(key)
-                }
-                override fun typeEmpty(key: String) {
-                    // A finished read with nothing behind it: no tick, because nothing was
-                    // sent, and its own sentence, because never ran and nothing there are
-                    // the two answers kept apart.
-                    rowStates[key]?.hide()
-                    recordEmpty(key, runEndMs)
-                    advance(key)
-                }
-                override fun typeFailed(key: String, error: Throwable) {
-                    // A type that fails no longer stops the others: its row takes the error
-                    // icon, its group's bar turns amber, and the reason goes to logcat.
-                    Log.w(TAG, "${SyncTypes.forKey(key).dataTypeId} not sent: ${reasonFor(error)}")
-                    rowStates[key]?.failed()
-                    markGroupFailed(key)
-                    advance(key)
-                }
-                // The one answer that concerns every type rather than this one: the whole
-                // session is over, and the engine already stopped the types after it, so the
-                // screen that kept going would only open login twice.
-                override fun sessionExpired() = goLoginExpired()
-            }
-            // What the instance already holds, so each type reads its delta. A fetch
-            // that fails is not a sync failure: every type then keeps the full window.
-            val cursorsOutcome = withContext(Dispatchers.IO) {
-                InstanceClient.get(session.server, SyncCursors.pathFor(session.personId), session.cookie) {
-                    SyncCursors.parseCursorEnds(it.body)
-                }
-            }
-            if (cursorsOutcome is InstanceClient.Outcome.Failed) {
-                val error = cursorsOutcome.error
-                if (error is InstanceClient.InstanceHttpException && error.status == 401) {
-                    goLoginExpired()
-                    return
-                }
-                Log.w(TAG, "cursors not read, full window instead: ${reasonFor(error)}")
-            }
-            val cursorEnds = (cursorsOutcome as? InstanceClient.Outcome.Ok)?.value ?: emptyMap()
-            SyncEngine.syncAll(
-                client = client,
-                session = session,
-                packageName = packageName,
-                prefs = prefs(),
-                end = runEnd,
-                post = { path, payload ->
-                    // The whole exchange stays off the main thread: even reading the status line
-                    // counts as network I/O down here and throws on the UI thread.
-                    withContext(Dispatchers.IO) {
-                        InstanceClient.post(session.server, path, payload, session.cookie) { }
-                    }
-                },
-                report = report,
-                cursorEnds = cursorEnds,
-            )
-        } catch (e: Exception) {
-            Toast.makeText(this, getString(R.string.sync_failed, reasonFor(e)), Toast.LENGTH_LONG).show()
-        } finally {
-            syncButton.isEnabled = true
-            syncButton.setText(R.string.sync_action)
-        }
-        // The login screen is opened by goLoginExpired, in the one place that recognized the 401.
-        // This only clears the flag, and anything else that ever sets it has to open the screen
-        // itself: doing it here too meant a session that expired opened LoginActivity twice.
-        sessionExpired = false
+        SyncRun.start(this, client, SyncEngine.Session(server, personId, cookie), sending.map { it.key }.toSet())
     }
 
     /**
-     * A sync moves one type at a time, and each bar says how far its own group has got: a bar
-     * that only moved when the whole sync ended would say nothing while it still matters.
+     * The run, as this screen draws it: the button, the three bars and the box at the end of each
+     * row. Called whenever the run changes and once when this activity attaches, so a screen
+     * created by a rotation shows the run that is still going instead of an idle button.
      */
-    private fun startProgress(sending: List<SyncOption>) {
-        for (state in rowStates.values) state.hide()
-        for (group in groups.values.toSet()) {
-            group.row.visibility = View.VISIBLE
-            group.done = 0
-            group.total = sending.count { groups[it.key] === group }
-            group.failed = false
-            group.bar.setIndicatorColor(getColor(R.color.accent))
-            group.bar.max = maxOf(group.total, 1)
-            group.bar.setProgressCompat(0, false)
+    override fun paint(status: SyncRunState.Status) {
+        syncButton.isEnabled = !status.running
+        syncButton.setText(if (status.running) R.string.sync_working else R.string.sync_action)
+        for ((key, box) in rowStates) {
+            when (status.marks[key]) {
+                SyncRunState.Mark.RUNNING -> box.running()
+                SyncRunState.Mark.SENT -> box.synced()
+                SyncRunState.Mark.FAILED -> box.failed()
+                // A type with nothing behind it and a type the run never reached show the same box:
+                // what keeps "nothing there" and "never ran" apart is the sentence below, and that
+                // sentence is read from the prefs rather than drawn from the mark.
+                SyncRunState.Mark.EMPTY, SyncRunState.Mark.IDLE, null -> box.hide()
+            }
         }
+        for (group in groups.values.toSet()) {
+            val carrying = group.keys.filter { it in status.sending }
+            if (carrying.isEmpty()) {
+                group.row.visibility = View.GONE
+                continue
+            }
+            group.row.visibility = View.VISIBLE
+            group.bar.max = carrying.size
+            group.bar.setProgressCompat(carrying.count { status.marks[it]?.answered == true }, true)
+            val failed = carrying.any { status.marks[it] == SyncRunState.Mark.FAILED }
+            group.bar.setIndicatorColor(getColor(if (failed) R.color.warning else R.color.accent))
+        }
+        refreshSyncStatus()
     }
 
-    private fun advance(key: String) {
-        val group = groups[key] ?: return
-        group.done += 1
-        group.bar.setProgressCompat(group.done, true)
+    /**
+     * The session is over. The cookie is already forgotten by the run that met the 401, so this
+     * only says so, and only while this screen is up to say it: a run that outlives the screen can
+     * meet the 401 while it is stopped, and that case waits in [onResume].
+     */
+    override fun sessionExpired() {
+        sessionEnded = true
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) goLogin(expired = true)
     }
 
-    /** The bar of the group a failed type belongs to turns amber; the row carries its own mark. */
-    private fun markGroupFailed(key: String) {
-        val group = groups[key] ?: return
-        if (group.failed) return
-        group.failed = true
-        group.bar.setIndicatorColor(getColor(R.color.warning))
+    /** The run threw, which is not one type's failure: the screen says so once, and that is all. */
+    override fun runFailed(error: Throwable) {
+        Toast.makeText(this, getString(R.string.sync_failed, SyncRun.reasonFor(this, error)), Toast.LENGTH_LONG)
+            .show()
     }
 }
