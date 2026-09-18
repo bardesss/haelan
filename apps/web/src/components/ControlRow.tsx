@@ -91,15 +91,15 @@ export function ControlRow({
 
   return (
     <div className="controls">
-      {/* Guarded on status.data.rebuild rather than left to RebuildNotice's own null return: the
-          query answers nothing for a moment after mount (the same gap syncedLabel's own
-          three-way branch above exists for), and spreading undefined fields into RebuildNotice's
-          required props would crash it rather than quietly render its healthy state. Checking the
-          field itself, not merely that the query settled, also covers a handful of fixtures across
-          this suite that stand in for every unmatched route with a bare `{}` -- those pages have
-          nothing to say about a rebuild either, and this reads that the same way as not-yet-loaded
-          rather than as a malformed answer worth crashing over. */}
-      {status.data?.rebuild !== undefined && <RebuildNotice voice="self" {...status.data.rebuild} />}
+      {/* Guarded on status.data rather than left to RebuildNotice's own null return: the query
+          answers nothing for a moment after mount (the same gap syncedLabel's own three-way
+          branch above exists for), and status.data.rebuild does not exist yet in that instant --
+          rendering the row's other controls immediately while this waits one tick behind them.
+          SyncStatus.rebuild is a required field: a real response always carries it (runner.ts's
+          own status()), so once status.data exists, trusting its shape rather than re-checking
+          the field itself is what keeps a future malformed or legacy answer from reading as
+          "nothing to report" instead of failing where it can be seen. */}
+      {status.data !== undefined && <RebuildNotice voice="self" {...status.data.rebuild} />}
       <div className="segmented" role="group" aria-label={t('controlRow.timeRangeLabel')}>
         {RANGE_KEYS.map((key) => (
           <button key={key} type="button" className="segment" aria-pressed={key === controls.tab}

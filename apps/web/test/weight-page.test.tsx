@@ -41,9 +41,16 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 /**
  * Answers the session, /series for whichever metrics land in Weight's one 'last' request (from
- * `series`, keyed by metric name), /api/sync/status generically, and notes/events empty:
+ * `series`, keyed by metric name), /api/sync/status with a real (empty) rebuild block -- Control
+ * Row now trusts SyncStatus.rebuild to exist whenever the query has data, so a bare `{}` here
+ * would crash it rather than stand in for it -- and notes/events empty:
  * Weight issues the same three annotation requests every other page does through useAnnotations,
  * and none of this file's tests need a real row on notes or events. /overrides defaults to empty
  * too, and `overrides` is the one seam a caller can fill: what deriveDay actually leaves behind
@@ -76,6 +83,9 @@ function stubWeight(
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/events')) return json({ items: [] })
     if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }

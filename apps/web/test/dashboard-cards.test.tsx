@@ -46,6 +46,11 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
@@ -113,6 +118,9 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, excluded
       return new Response(JSON.stringify({ items: [{ id: 'heart-rate', tier: 'intraday', excluded: excluded.has('heart-rate') }] }),
         { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -162,6 +170,9 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/baselines')) return json({ baseline: null })
     if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -193,6 +204,9 @@ function stubFetchWithEvents(items: unknown[]): () => void {
     if (url.includes('/events')) return json({ items })
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/overrides')) return json({ items: [] })
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -264,6 +278,9 @@ function stubOneNight(): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -311,6 +328,9 @@ function stubNightExcludedSession(): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -355,6 +375,9 @@ function stubAppliedExclusion(): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -389,6 +412,9 @@ function stubFetchTracking(sent: { url: string }[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -428,6 +454,9 @@ function stubFetchWithNegativeSleepDelta(): () => void {
       const isSleep = new URLSearchParams(url.split('?')[1] ?? '').get('metric') === 'sleep_asleep_minutes'
       const overrides = isSleep ? { current: 401, previous: 408, delta: -7 } : {}
       return new Response(JSON.stringify(insightBody(url, overrides)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
