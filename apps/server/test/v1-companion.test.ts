@@ -104,6 +104,31 @@ describe('GET /companion/cursors', () => {
     expect(refused.statusCode).toBe(400)
   })
 
+  it('answers rather than failing when an archived row cannot be classified', async () => {
+    // The narrowing runs in SQL now, and `json_extract` raises on a requestParams that is not
+    // JSON: unguarded, one such row would make this route a 500 on every dashboard page load
+    // instead of the skip it used to be in JavaScript. Nothing writes a row like this, so the
+    // seed is direct; the endpoint is what has to survive it.
+    harness = await withServer()
+    const token = await harness.signIn()
+    if (!harness) throw new Error('no harness')
+    harness.app.haelan.instance.db.$client.prepare(
+      `insert into raw_payloads (id, person_id, data_type, request_params, window_start_ms, window_end_ms,
+        fetched_at_ms, http_status, body_gzip, body_hash, body_bytes)
+       values ('broken-1', 'p1', 'weight', 'not json at all', 1, 2, 1, 200, x'1f8b', 'h', 2)`,
+    ).run()
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-18T10:00:00Z')] })).statusCode).toBe(200)
+
+    const response = await cursors(token)
+    expect(response.statusCode).toBe(200)
+    const body = response.json() as { items: CursorItem[], historyStartMs: number | null }
+    // The phone's own row is still answered, and the unreadable one is left out of both numbers
+    // rather than dragging the history start to its own window of one millisecond past 1970.
+    expect(body.historyStartMs).toBe(Date.parse('2026-08-18T10:00:00Z'))
+    expect(body.items.find((i) => i.dataTypeId === 'weight')?.lastWindowEndMs)
+      .toBe(Date.parse('2026-08-18T10:00:00Z') + 1)
+  })
+
   it('names whether the person also has a Google path, so cards know when to clamp', async () => {
     harness = await withServer()
     // The harness finishes the wizard with a Google path for p1, so the unconnected
@@ -134,5 +159,103 @@ describe('GET /companion/cursors', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(403)
+  })
+})
+
+/**
+ * The zero row upload. A page whose points all drop is not a rare shape: the mapper drops a
+ * value it cannot parse and a session whose interval it cannot read, both of which a real
+ * Health Connect payload produces (a reading with no value, a stage with a bad bound).
+ */
+describe('a companion upload that maps to no rows', () => {
+  const RAW_PAYLOADS = "select count(*) as n from raw_payloads where person_id = 'p1'"
+
+  const archiveRows = (): number => {
+    if (!harness) throw new Error('no harness')
+    const row = harness.app.haelan.instance.db.$client.prepare(RAW_PAYLOADS).get() as { n: number }
+    return row.n
+  }
+
+  // The value parses to null, so mapSamples drops the point rather than writing a zero
+  // (spec invariant 2). The payload itself is well formed, which is what makes this reachable:
+  // `dataPoints must not be empty` is satisfied by a page of points nobody can read.
+  const unreadableValuePoint = () => samplePoint({
+    payloadKey: 'weight', valuePath: 'weightGrams', value: 'not a number',
+    physicalTime: '2026-08-18T10:00:00Z',
+  })
+
+  // An interval whose bounds are no instant at all. Both ends have to be unreadable: parseInstant
+  // falls back through physicalTime, startTime and endTime, so a bad start alone still resolves a
+  // point from its end.
+  const unreadableIntervalPoint = () => ({
+    name: 'users/me/dataTypes/sleep/dataPoints/bad',
+    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    sleep: {
+      interval: {
+        startTime: 'not an instant', startUtcOffset: '7200s',
+        endTime: 'also not an instant', endUtcOffset: '7200s',
+      },
+      type: 'STAGES',
+      metadata: { mainSleep: true, processed: true, stagesStatus: 'SUCCEEDED' },
+      stages: [{ type: 'LIGHT', startTime: '2026-08-18T06:00:00Z', endTime: '2026-08-18T07:00:00Z' }],
+    },
+  })
+
+  it('answers 200 with nothing written, and archives no window for the empty page', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await ingest(token, 'weight', { dataPoints: [unreadableValuePoint()] })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({
+      payloadId: null, deduplicated: false, rowsWritten: 0, affected: null, applied: true,
+    })
+    // Not merely "nothing written": nothing archived. A row here would carry the only window
+    // this request could state, and with no rows that window is 1970 (see the guard in ingest.ts).
+    expect(archiveRows()).toBe(0)
+  })
+
+  it('leaves the type cursor and the history start alone, so no card clamps to 1970', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    // One real upload first, so the assertions below are about what the empty page did *not*
+    // move rather than about a type that was never touched.
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-18T10:00:00Z')] })).statusCode).toBe(200)
+    const before = (await cursors(token)).json() as { items: CursorItem[], historyStartMs: number | null }
+    expect(before.historyStartMs).toBe(Date.parse('2026-08-18T10:00:00Z'))
+
+    expect((await ingest(token, 'weight', { dataPoints: [unreadableValuePoint()] })).statusCode).toBe(200)
+    expect((await ingest(token, 'steps', { dataPoints: [unreadableValuePoint()] })).statusCode).toBe(200)
+
+    const after = (await cursors(token)).json() as { items: CursorItem[], historyStartMs: number | null }
+    // The whole point of the fix: 0 would have become 1970-01-01 here, and clampFromToHistory
+    // returns the range untouched once the start is at or before it, so every card would read
+    // "1 of 30 days" over 29 days of inactivity that never happened.
+    expect(after.historyStartMs).toBe(Date.parse('2026-08-18T10:00:00Z'))
+    const weight = after.items.find((i) => i.dataTypeId === 'weight')
+    expect(weight?.lastWindowEndMs).toBe(Date.parse('2026-08-18T10:00:00Z') + 1)
+    // A type the empty page was the only upload for, so this is the untouched null: no cursor
+    // and no 1970 for a type nothing has ever reported.
+    expect(after.items.find((i) => i.dataTypeId === 'steps')?.lastWindowEndMs).toBe(null)
+  })
+
+  it('does not move the cursor on a sessions type either, so the phone asks for the window again', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await ingest(token, 'sleep', { dataPoints: [unreadableIntervalPoint()] })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ payloadId: null, rowsWritten: 0 })
+    expect(archiveRows()).toBe(0)
+
+    const body = (await cursors(token)).json() as { items: CursorItem[], historyStartMs: number | null }
+    expect(body.historyStartMs).toBe(null)
+    expect(body.items.find((i) => i.dataTypeId === 'sleep')?.lastWindowEndMs).toBe(null)
+    // No session row either, which is the invariant the guard relies on: nothing survives a
+    // point whose interval cannot be read, segments included.
+    const sessions = harness.app.haelan.instance.db.$client
+      .prepare("select count(*) as n from sessions where person_id = 'p1'").get() as { n: number }
+    expect(sessions.n).toBe(0)
   })
 })

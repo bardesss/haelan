@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { eq } from 'drizzle-orm'
 import {
-  ConfigError, RawArchive, SampleKeys, dataTypeById, localDateOf,
+  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, dataTypeById, localDateOf,
   mapSessions, mapWindowSamples, schema, supports,
 } from '@haelan/core'
 import type { DbOrTx, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
@@ -45,6 +45,10 @@ const DEFAULT_DATA_SOURCE = {
  * Samples and sessions. Observations have no writer yet, and a type fanning out to several
  * tables (electrocardiogram) would silently drop the tables no writer ran for while
  * answering 200, so both are refused with the reason rather than half written.
+ *
+ * A page that maps to no rows is answered but not archived, and that is the one case where
+ * this route writes nothing at all. See the guard below for why the window it would have
+ * stored is worse than no row.
  */
 export function registerIngestRoutes(app: FastifyInstance): void {
   app.post<{ Params: IngestParams, Body: IngestBody }>('/p/:personId/ingest/:dataTypeId', {
@@ -105,6 +109,39 @@ export function registerIngestRoutes(app: FastifyInstance): void {
         return { samples: [] as SampleRow[], sessions, segments }
       })()
 
+    // A page nobody could map anything out of is archived by nobody, and the check is first
+    // because both scales of this route reach it: a page whose single point was unreadable, and
+    // one carrying the maximum ten thousand where the mapper dropped every one of them.
+    //
+    // It is not an error - the phone sent what it had, and `dataPoints must not be empty` above
+    // already refuses the case where it sent nothing at all - and it is not a write, since the
+    // mapper drops a point it cannot read rather than inventing a zero for it (spec invariant 2).
+    // What such a page does have is a window, and both halves of one are a claim about when
+    // something happened. With no rows there is no such instant, and the only value left to
+    // store is 0, which says 1970.
+    //
+    // That 1970 is not a wrong answer to an obscure question. `GET /companion/cursors` reports
+    // the oldest window start it finds as `historyStartMs`, the web turns it into a local date
+    // and clamps every card's range to it, so one such row pins a whole instance's history to
+    // 1970-01-01 and the clamp stops doing the thing it exists for. It never heals, either: the
+    // range only ever moves earlier, and the identical retry deduplicates onto this same row
+    // instead of replacing it. So the row is not written, and the response says so: zero rows,
+    // no payload id, and `applied` true because there is nothing pending.
+    //
+    // The cost is the other half of the same coin: nothing advances, so `lastWindowEndMs` for
+    // this type stays where it was and the phone asks for the same window again next sync. A
+    // window that maps to nothing today may map to something when a reading settles or a stage
+    // is written into Health Connect, and a cursor that had moved past it would never look.
+    if (mapped.samples.length === 0 && mapped.sessions.length === 0) {
+      return reply.send({
+        payloadId: null, deduplicated: false, rowsWritten: 0, affected: null, applied: true,
+      })
+    }
+
+    // Both lists run over the same rows, and the two kinds put their instant in a different
+    // column. The guard above is what lets these be unconditional: after it, `starts` cannot be
+    // empty, so `Math.min` has something to answer and the fallback to 0 is gone with the row
+    // that needed it.
     const starts = [
       ...mapped.samples.map((row) => row.utcMs),
       ...mapped.sessions.map((row) => row.startMs),
@@ -113,15 +150,15 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       ...mapped.samples.map((row) => row.utcMs),
       ...mapped.sessions.map((row) => row.endMs),
     ]
-    const windowStartMs = starts.length > 0 ? Math.min(...starts) : 0
-    const windowEndMs = ends.length > 0 ? Math.max(...ends) + 1 : 0
+    const windowStartMs = Math.min(...starts)
+    const windowEndMs = Math.max(...ends) + 1
 
     const written = instance.db.transaction((tx) => {
       const archive = new RawArchive(tx)
       const { id, deduplicated } = archive.put({
         personId,
         dataType: dataType.id,
-        requestParams: { source: 'companion', dataType: dataType.id },
+        requestParams: { source: COMPANION_SOURCE, dataType: dataType.id },
         fetchEpisodeId: randomUUID(),
         windowStartMs,
         windowEndMs,

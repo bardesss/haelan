@@ -1,6 +1,6 @@
-﻿import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { gzipSync, gunzipSync } from 'node:zlib'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { rawPayloads } from '../db/schema/index.ts'
 import { ConfigError, TransientError } from '../errors.ts'
@@ -23,6 +23,18 @@ export interface PutInput {
 }
 
 export interface PutResult { id: string, deduplicated: boolean }
+
+/**
+ * The `requestParams.source` a companion upload is archived under, and the one value
+ * `listForSource` is asked for in practice.
+ *
+ * Spelled once because two routes have to agree on it and nothing would make them: the ingest
+ * route writes it, the cursors route filters on it, and a typo in either would look like a person
+ * whose phone has never synced - the cursors route would answer null for every type and the app
+ * would re-send its whole history on every sync, silently and forever. A Google fetch carries a
+ * `filter` instead of a `source`, which is what makes this key the phone's own marker.
+ */
+export const COMPANION_SOURCE = 'companion'
 
 export interface ArchivedPayload {
   id: string
@@ -116,6 +128,50 @@ export class RawArchive {
       fetchEpisodeId: rawPayloads.fetchEpisodeId,
     }).from(rawPayloads)
       .where(and(eq(rawPayloads.personId, personId), eq(rawPayloads.httpStatus, 200)))
+      .orderBy(asc(rawPayloads.fetchedAtMs), asc(rawPayloads.id))
+      .all()
+  }
+
+  /**
+   * The same list narrowed to the rows one caller archived, by the `source` key they wrote.
+   *
+   * A companion upload is one person's own phone pushing readings, and it is archived under
+   * `{ source: COMPANION_SOURCE }`; a Google fetch carries a filter instead. Two callers care, and
+   * they care from opposite ends: `/companion/cursors` wants only the phone's rows, and nothing
+   * else in the codebase reads a source out of this column at all.
+   *
+   * In SQL rather than in the caller, and that is the whole point of the method. `requestParams`
+   * is the archive's shape, so the predicate that reads it belongs beside the writer that defines
+   * it, and a caller left to narrow the list itself would have to parse every row it did not want
+   * first: a person's archive is every fetch ever taken, and the cursors route runs once an hour
+   * per open dashboard.
+   *
+   * `json_extract` rather than a pattern match on the text. The column is written by
+   * `JSON.stringify`, so it holds no whitespace to depend on today - and the key's position in
+   * the object is not something a reader should have to know.
+   *
+   * `json_valid` guards it, and that guard is the reason this is not simply `json_extract` in a
+   * comparison: the function *raises* `malformed JSON` rather than answering null, so one
+   * unreadable row would fail the statement and turn a dashboard page load into a 500. A row that
+   * cannot be classified is left out of the answer instead, which is the decision the caller used
+   * to make by hand (`catch { continue }`) when this narrowing lived there. Every row this class
+   * writes is valid JSON, so the guard is a guard and not a case.
+   */
+  listForSource(personId: string, source: string): ArchivedPayload[] {
+    return this.#db.select({
+      id: rawPayloads.id,
+      dataType: rawPayloads.dataType,
+      requestParams: rawPayloads.requestParams,
+      windowStartMs: rawPayloads.windowStartMs,
+      windowEndMs: rawPayloads.windowEndMs,
+      fetchedAtMs: rawPayloads.fetchedAtMs,
+      fetchEpisodeId: rawPayloads.fetchEpisodeId,
+    }).from(rawPayloads)
+      .where(and(
+        eq(rawPayloads.personId, personId),
+        eq(rawPayloads.httpStatus, 200),
+        sql`json_valid(${rawPayloads.requestParams}) AND json_extract(${rawPayloads.requestParams}, '$.source') = ${source}`,
+      ))
       .orderBy(asc(rawPayloads.fetchedAtMs), asc(rawPayloads.id))
       .all()
   }

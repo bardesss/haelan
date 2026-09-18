@@ -197,6 +197,61 @@ describe('PersonQuery.series, the metric a phone rolls up instead of a daily typ
     expect(points.map((p) => p.source)).toEqual(['merged'])
   })
 
+  // The fallback reads a second name, and the two halves of one answer have to agree about which
+  // source wins. A person on both paths keeps a Google watch and a phone reporting the same
+  // reading, so `hrv` holds a provider row and a merged one for the same date. `#rowsOf` orders by
+  // localDate alone, which is the prefix of `daily_natural`, so SQLite answers it in rowid order:
+  // the tie fell to whichever row was written last, which is the second row in each pair below.
+  // Writing the provider row there is what makes the unfixed read answer 30 for a day whose merged
+  // row says 42, so the fix is visible here and the order it depended on is pinned by the next test.
+  it('prefers merged on a day both names hold a row for, rolled fallback included', () => {
+    insertDaily({ localDate: '2026-08-01', value: 30, metric: 'hrv', agg: 'mean', source: 'provider' })
+    insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
+
+    const { points } = query.series({ metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([42])
+    expect(points.map((p) => p.source)).toEqual(['merged'])
+  })
+
+  it('picks the same row whichever order the two arrived in', () => {
+    // Passes before the fix as well, and is here for that reason: it pins the nondeterminism the
+    // test above depends on, so a reader cannot conclude that the pair is ordered by anything but
+    // insertion. A fix that only reversed the comparison would pass one of the two and fail this.
+    insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
+    insertDaily({ localDate: '2026-08-01', value: 30, metric: 'hrv', agg: 'mean', source: 'provider' })
+
+    const { points } = query.series({ metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
+    expect(points.map((p) => p.value)).toEqual([42])
+  })
+
+  it('holds the same rule on a series that mixes the two names', () => {
+    // The shape the fallback exists for: the daily name has one day, the rolled name has both,
+    // and the day only the rolled name answers is the one carrying the tie. The provider row is
+    // inserted last for the reason above, so the unfixed read answers 42 instead of 97.
+    insertDaily({ localDate: '2026-08-01', value: 55, metric: 'daily_spo2', agg: 'last', source: 'provider' })
+    insertDaily({ localDate: '2026-08-02', value: 97, metric: 'spo2', agg: 'mean', source: 'merged' })
+    insertDaily({ localDate: '2026-08-02', value: 96, metric: 'spo2', agg: 'mean', source: 'provider' })
+
+    const { points } = query.series({ metric: 'daily_spo2', agg: 'last', from: '2026-08-01', to: '2026-08-02' })
+    expect(points.map((p) => p.value)).toEqual([55, 97])
+    expect(points.map((p) => p.source)).toEqual(['provider', 'merged'])
+  })
+
+  it('still reads one source alone when a source is named, rolled fallback included', () => {
+    // The other half of the same rule. Naming a source asks what that device reported, and the
+    // fallback must not answer it with the row we merged from every device.
+    insertSource('phone')
+    insertDaily({ localDate: '2026-08-01', value: 30, metric: 'hrv', agg: 'mean', source: 'provider' })
+    insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
+    insertDaily({ localDate: '2026-08-01', value: 28, metric: 'hrv', agg: 'mean', source: 'phone' })
+
+    const { points } = query.series({
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01', source: 'phone',
+    })
+    expect(points.map((p) => p.value)).toEqual([28])
+    expect(points.map((p) => p.source)).toEqual(['phone'])
+  })
+
   it('does not take the fallback when the daily row exists, so a Google instance is unchanged', () => {
     // The one that must not move. daily_hrv is the device's own summary, and a fallback that
     // outranked it would answer a question about the watch with a number about the phone.

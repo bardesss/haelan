@@ -152,8 +152,19 @@ export class PersonQuery {
     requireSource(this.#db, this.#personId, input.source, DERIVED_SOURCES)
 
     const source = input.source
-    const rows = this.#rowsOf(input.metric, input.agg, input.from, input.to, source)
-    const ofName = source === undefined ? preferMerged(rows) : rows
+    // One reader for both names, because one rule has to pick the row on both sides. The rolled
+    // name is a fallback for the days the requested name is silent about, and a day both names
+    // hold a row for is still one answer, not two to weigh. Read raw, the fallback was a last-wins
+    // Map over a query ordered by localDate alone: that is the prefix of `daily_natural`, so SQLite
+    // answered it in rowid order and the tie between a merged row and a provider row on one date
+    // fell to whichever arrival was written last, while every other day of the series said merged.
+    // Narrowed to a source there is nothing to choose, which is why this branches on `source` too.
+    const pointsFrom = (metric: string, agg: string): DailyPoint[] => {
+      const rows = this.#rowsOf(metric, agg, input.from, input.to, source)
+      return source === undefined ? preferMerged(rows) : rows
+    }
+
+    const ofName = pointsFrom(input.metric, input.agg)
 
     // Per day, not per series: a person can have the daily name for the days Google was connected
     // and the rolled up name for the days the phone covered, and a rule that fired only on an
@@ -162,8 +173,7 @@ export class PersonQuery {
     const rolled = DEVICE_ROLLED_EQUIVALENT[input.metric]
     const rolledByDate = rolled === undefined
       ? new Map<string, DailyPoint>()
-      : new Map(this.#rowsOf(rolled.metric, rolled.agg, input.from, input.to, source)
-        .map((point) => [point.localDate, point]))
+      : new Map(pointsFrom(rolled.metric, rolled.agg).map((point) => [point.localDate, point]))
     const result = withFilledDays(ofName, rolledByDate)
 
     if (input.points === undefined) return { points: result, reduction: null }

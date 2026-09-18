@@ -17,7 +17,12 @@ import java.util.concurrent.TimeUnit
  */
 object SyncSchedule {
 
-    const val UNIQUE_NAME = "haelan-background-sync"
+    /**
+     * The name the work is enqueued under, and the tag it carries. Spelled by the worker rather
+     * than written out here: a rename that missed one of the two would leave the old schedule
+     * running and add a second one beside it, and nothing would fail loudly.
+     */
+    const val UNIQUE_NAME = SyncWorker.PERIODIC_WORK_NAME
 
     /**
      * Twice a day, only online, patient on failure. Online because the instance lives on the
@@ -46,12 +51,27 @@ object SyncSchedule {
     }
 
     /**
-     * Idempotent: the first enqueue wins and later ones keep it, so the screen can call this on
-     * every start without rescheduling. A signed-out phone enqueues too, and the worker no-ops
+     * How one enqueue meets the request an earlier one left.
+     *
+     * UPDATE, where this was KEEP. KEEP is right within one version and wrong across two: it keeps
+     * whatever the first install enqueued, so a later release that changes [Policy.repeatHours] or
+     * the backoff reaches nobody who already has the app. That matters more here than it would on
+     * Play, because the app is distributed through Obtainium and updated over the top rather than
+     * reinstalled - an install that keeps its schedule keeps it for the life of the phone.
+     *
+     * UPDATE re-registers the work and leaves a run that is already going alone, which is what the
+     * screen calling this on every start needs: enqueue stays idempotent, and the schedule a new
+     * release asks for is the schedule every install ends up with.
+     */
+    val ENQUEUE_POLICY: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.UPDATE
+
+    /**
+     * Idempotent: the same request enqueued twice is one schedule, so the screen can call this on
+     * every start without piling up work. A signed-out phone enqueues too, and the worker no-ops
      * until a sign-in gives it a session.
      */
     fun enqueue(context: Context) {
         WorkManager.getInstance(context)
-            .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, request())
+            .enqueueUniquePeriodicWork(UNIQUE_NAME, ENQUEUE_POLICY, request())
     }
 }

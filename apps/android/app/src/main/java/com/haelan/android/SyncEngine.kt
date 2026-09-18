@@ -28,11 +28,13 @@ import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlin.reflect.KClass
 
 /**
@@ -53,6 +55,47 @@ object SyncEngine {
     // thousand heart rate samples and a thousand weigh-ins differ by three orders of
     // magnitude. Half a mebibyte of JSON per request stays well inside it either way.
     private const val MAX_CHUNK_BYTES = 512 * 1024
+
+    /**
+     * How much time one request may cover, which the byte budget above cannot express.
+     *
+     * The byte budget bounds a chunk's size and nothing about its reach: a source that writes
+     * little never fills 512 KiB, so it posts once, and that one request can carry its whole
+     * window. That is the shape that loses data. The instance answers one cursor per data type -
+     * the newest end that landed, whichever source carried it - and the phone re-reads from that
+     * cursor minus SyncCursors.OVERLAP_MS, so anything a refusal leaves unposted behind that
+     * point is never asked for again. A window-sized chunk puts the whole window there.
+     *
+     * Twelve hours is half of SyncCursors.OVERLAP_MS, and half is the point: the worst a
+     * refusal can leave unposted is one chunk, so half the overlap still covers it with the
+     * other half to spare, rather than a single day balancing on the boundary.
+     *
+     * The dense case is unchanged: a day of heart rate passes 512 KiB first and is cut by bytes
+     * as it always was. This only starts biting on the sparse types, which are the ones that
+     * never split today.
+     */
+    internal const val MAX_CHUNK_SPAN_MS = 12L * 60L * 60L * 1000L
+
+    /**
+     * How many times one request is attempted before the type is told the chunk did not go.
+     *
+     * The retry is what stops a refusal from abandoning the rest of the type: the loop returns on
+     * the first permanent failure, so everything after it goes unposted too. It is safe without a
+     * request id because a post is idempotent by construction - the instance upserts samples on
+     * their natural key and files a page that maps to no rows as no write at all - so a second
+     * attempt cannot double what the first one stored.
+     */
+    internal const val POST_ATTEMPTS = 4
+
+    /** How long the first wait between two attempts is, doubling up to [MAX_RETRY_DELAY_MS]. */
+    private const val INITIAL_RETRY_DELAY_MS = 500L
+
+    /**
+     * The ceiling on one wait. Four attempts at these delays spend at most seven and a half seconds
+     * on a chunk that keeps failing - which a background sync can afford, and which is the price of
+     * not losing what the chunk carried.
+     */
+    private const val MAX_RETRY_DELAY_MS = 4_000L
 
     data class Session(val server: String, val personId: String, val cookie: String)
 
@@ -239,19 +282,39 @@ object SyncEngine {
     }
 
     /**
-     * Where one byte-budgeted chunk ends, as exclusive end indexes over per-point byte costs
-     * (separator included). Pure integers rather than JSONObjects, because JSONObject is a
-     * stub in a JVM unit test and the cut policy still needs pinning: it is what keeps a
-     * phone's heap bounded while a type streams.
+     * Where one chunk ends, as exclusive end indexes over per-point byte costs (separator
+     * included) and per-point instants. Pure integers rather than JSONObjects, because JSONObject
+     * is a stub in a JVM unit test and the cut policy still needs pinning: it is what keeps a
+     * phone's heap bounded while a type streams, and what keeps one refusal from reaching past
+     * what the next sync will re-read.
+     *
+     * Two ceilings, whichever bites first. Bytes bound the request; [maxSpanMs] bounds the time it
+     * covers, because a source that writes little never fills the byte budget and would otherwise
+     * post its entire window as one chunk. The span is measured from the chunk's own first point,
+     * not from a page or a day: this decides what travels together and nothing about what a
+     * reading means, since the instance files every row by its own instant and offset.
+     *
+     * A single point over either ceiling still travels, alone: a record the provider answered with
+     * cannot be split, and dropping it here would lose a reading the instance never got to refuse.
      */
-    internal fun chunkEnds(sizes: List<Int>, maxBytes: Int): List<Int> {
+    internal fun chunkEnds(
+        sizes: List<Int>,
+        maxBytes: Int,
+        timesMs: List<Long?> = emptyList(),
+        maxSpanMs: Long = Long.MAX_VALUE,
+    ): List<Int> {
         val ends = mutableListOf<Int>()
         var start = 0
         var size = 0
         for (i in sizes.indices) {
             // A chunk holding points [start, i) is full: close it before this point, which
-            // then opens the next one. A single point over the ceiling still travels, alone.
-            if (i > start && size + sizes[i] > maxBytes) {
+            // then opens the next one. A point whose own instant is unknown measures no span,
+            // so a type the mappers give no clock for is bounded by bytes exactly as before.
+            val from = timesMs.getOrNull(start)
+            val at = timesMs.getOrNull(i)
+            val overBytes = size + sizes[i] > maxBytes
+            val overSpan = from != null && at != null && at - from > maxSpanMs
+            if (i > start && (overBytes || overSpan)) {
                 ends += i
                 start = i
                 size = 0
@@ -263,16 +326,89 @@ object SyncEngine {
     }
 
     /**
-     * The request bodies to send for one type, none larger than [MAX_CHUNK_BYTES]. A single
-     * point over the ceiling travels alone rather than being dropped: the instance, not this
-     * app, is the one that gets to refuse it.
+     * The first chunk [points] holds, cut to its own bytes and to [MAX_CHUNK_SPAN_MS], or null
+     * while they still fit in one and the buffer should keep growing.
+     *
+     * Every chunk this hands back is closed by reaching a ceiling and never by running out of
+     * points, which is the whole point: what stays in the buffer is what a refusal can leave
+     * unposted, and a chunk closed by its own limit bounds that to one chunk's worth of time.
+     * What is left after a cut is a fragment, and it grows into the next full chunk as the pages
+     * arrive rather than being posted as it is.
      */
+    private fun readyChunk(points: MutableList<JSONObject>): List<JSONObject>? {
+        val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
+        val times = points.map { instantMsOf(it) }
+        val ends = chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS)
+        if (ends.size < 2) return null
+        val end = ends[ends.size - 2]
+        val ready = points.subList(0, end).toList()
+        points.subList(0, end).clear()
+        return ready
+    }
+
+    /** Whatever the buffer still holds once the read is over: the tail, cut to the same ceilings. */
     private fun chunksBySize(points: List<JSONObject>): List<List<JSONObject>> {
         val sizes = points.map { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
+        val times = points.map { instantMsOf(it) }
         var from = 0
-        return chunkEnds(sizes, MAX_CHUNK_BYTES).map { end ->
+        return chunkEnds(sizes, MAX_CHUNK_BYTES, times, MAX_CHUNK_SPAN_MS).map { end ->
             points.subList(from, end).toList().also { from = end }
         }
+    }
+
+    /**
+     * The instant a mapped point carries, which is the clock [chunkEnds] measures a chunk's reach
+     * with. Null for a point whose time cannot be read, which measures no span: an unreadable point
+     * is one the instance will drop anyway (parse.ts drops a point with no instant), and inventing
+     * a time for it would move a chunk boundary over a reading that does not exist.
+     *
+     * The three shapes are the ones the mappers write: a sample instant under `sampleTime`, an
+     * interval under `interval`, and a daily point's civil `date`. The precedence is the server's
+     * own (mapSamples.reads sampleTime first, then the interval), so the two sides agree on which
+     * clock a point is filed under.
+     */
+    private fun instantMsOf(body: JSONObject): Long? {
+        val key = body.keys().asSequence().firstOrNull() ?: return null
+        val payload = body.optJSONObject(key) ?: return null
+        payload.optJSONObject("sampleTime")?.let { sample ->
+            return instantMsOf(sample.optString("physicalTime"), sample.opt("utcOffset"))
+        }
+        payload.optJSONObject("interval")?.let { interval ->
+            return instantMsOf(interval.optString("startTime"), interval.opt("startUtcOffset"))
+        }
+        payload.optJSONObject("date")?.let { date ->
+            val year = date.optInt("year")
+            val month = date.optInt("month")
+            val day = date.optInt("day")
+            if (year == 0 || month == 0 || day == 0) return null
+            return LocalDate.of(year, month, day).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        }
+        return null
+    }
+
+    /**
+     * A written instant plus the offset beside it, as the local instant it names. The offset is the
+     * half that makes this a chunk boundary rather than an arbitrary one: two points either side of
+     * midnight UTC can be minutes apart locally, and pairing the instant with its own offset is what
+     * `WireTime` promises the server will read.
+     *
+     * Both spellings of the offset are accepted because the API carries both: this app writes
+     * seconds ("7200s"), and the field map records a bare number in the provider's own answers.
+     * A value with no `s` is already minutes, which is the unit the server's parse.ts reads it in.
+     */
+    private fun instantMsOf(iso: String, offset: Any?): Long? {
+        val utcMs = try {
+            Instant.parse(iso).toEpochMilli()
+        } catch (e: Exception) {
+            return null
+        }
+        val offsetSeconds = when (offset) {
+            is String -> offset.removeSuffix("s").toLongOrNull()?.takeIf { offset.endsWith("s") }
+                ?: offset.toLongOrNull()?.times(60)
+            is Number -> offset.toLong() * 60
+            else -> null
+        }
+        return utcMs + (offsetSeconds ?: 0L) * 1000L
     }
 
     /**
@@ -284,9 +420,16 @@ object SyncEngine {
      * heart-rate every few seconds, and 30 days of that is hundreds of thousands of samples.
      * Mapping them all to JSONObjects at once exhausted the 256 MB heap on a real phone
      * (OOM on the main thread, after an ANR). One page is mapped, buffered per identity
-     * and posted as soon as its buffer reaches the byte budget, then forgotten. Chunk
+     * and posted as soon as its buffer reaches a ceiling, then forgotten. Chunk
      * boundaries move compared to one-shot batching; the rows do not, because the instance
      * upserts on the natural key.
+     *
+     * A chunk is bounded by bytes AND by [MAX_CHUNK_SPAN_MS], and the second one is what decides
+     * what a refusal costs. The instance's cursor is per data type - the newest end that landed,
+     * whichever source carried it - and the next sync re-reads from it minus the overlap, so
+     * whatever a refusal leaves unposted behind that point is never asked for again. Bounding a
+     * chunk's reach bounds that loss to half the overlap, for every type including the ones that
+     * write too little to ever fill the byte budget.
      */
     private suspend fun <T : Record> uploadType(
         client: HealthConnectClient,
@@ -308,12 +451,20 @@ object SyncEngine {
                     ReadRecordsRequest(
                         recordType = type,
                         timeRangeFilter = TimeRangeFilter.between(start, end),
+                        // Written out although it is connect-client's own default (ReadRecordsRequest,
+                        // `ascendingOrder: Boolean = true`), because the cut policy below rests on it:
+                        // a chunk's reach is its last point's instant minus its first point's, so pages
+                        // that arrived out of order would measure a span that means nothing and the
+                        // ceiling would stop bounding what a refusal leaves behind. A default is a
+                        // promise the provider makes; this is the one promise this file depends on.
+                        ascendingOrder = true,
                         pageToken = pageToken,
                     ),
                 )
             }
             // CPU- and memory-bound: off the caller's thread, which is the screen's when the
-            // button started this. Only full buffers leave here as chunks; the rest stays
+            // button started this. Each identity's buffer is cut as soon as it reaches a ceiling,
+            // so what leaves here is always a full chunk and never a fragment; the rest stays
             // buffered for the next page.
             val ready: List<Pair<SourceIdentity, List<JSONObject>>> = withContext(Dispatchers.Default) {
                 val out = mutableListOf<Pair<SourceIdentity, List<JSONObject>>>()
@@ -323,9 +474,9 @@ object SyncEngine {
                 for ((identity, bodies) in page.groupBy({ it.source }, { it.body })) {
                     val buffer = buffers.getOrPut(identity) { mutableListOf() }
                     buffer += bodies
-                    if (byteSize(buffer) > MAX_CHUNK_BYTES) {
-                        out += chunksBySize(buffer).map { identity to it }
-                        buffer.clear()
+                    while (true) {
+                        val chunk = readyChunk(buffer) ?: break
+                        out += identity to chunk
                     }
                 }
                 out
@@ -350,11 +501,12 @@ object SyncEngine {
         return InstanceClient.Outcome.Ok(sentAny)
     }
 
-    /** The UTF-8 cost of points still buffered, separator included, like chunksBySize counts it. */
-    private fun byteSize(points: List<JSONObject>): Int =
-        points.sumOf { it.toString().toByteArray(Charsets.UTF_8).size + 1 }
-
-    /** One request: one identity's chunk under one dataSource. The post itself stays on IO. */
+    /**
+     * One request: one identity's chunk under one dataSource, attempted [POST_ATTEMPTS] times while
+     * the instance's answer is one that a second attempt could change.
+     *
+     * The post itself stays on IO, and so does the wait between attempts.
+     */
     private suspend fun postChunk(
         session: Session,
         packageName: String,
@@ -368,8 +520,57 @@ object SyncEngine {
             .put("dataSource", dataSourceOf(identity, packageName))
             .toString()
         return withContext(Dispatchers.IO) {
-            post("/api/v1/p/${session.personId}/ingest/$dataTypeId", payload)
+            postWithRetry(POST_ATTEMPTS, { delayMs -> delay(delayMs) }) {
+                post("/api/v1/p/${session.personId}/ingest/$dataTypeId", payload)
+            }
         }
+    }
+
+    /**
+     * Whether a refusal is worth asking again, which is the same rule the instance's own sync
+     * applies to Google (`packages/core/src/errors.ts`): a 429 or a 5xx is weather, and every other
+     * status is an answer that a repeat would receive unchanged.
+     *
+     * A status this app cannot see - a socket that timed out, a connection refused, a truncated
+     * body - carries no claim about the request, so it is worth asking again too. That is the case
+     * the budget is really for: the phone changing networks under a sync.
+     *
+     * 401 is deliberately not on this list even though it is a status: it means the session is
+     * over, and retrying it would only hammer the instance with a cookie it has already rejected.
+     * syncAll reads the same 401 to end the whole sync and open the login screen, which it can only
+     * do if this returns it rather than sleeping on it.
+     */
+    internal fun isWorthRetrying(outcome: InstanceClient.Outcome<*>): Boolean = when (outcome) {
+        is InstanceClient.Outcome.Ok -> false
+        is InstanceClient.Outcome.Failed -> when (val error = outcome.error) {
+            is InstanceClient.InstanceHttpException -> error.status == 429 || error.status >= 500
+            else -> true
+        }
+    }
+
+    /**
+     * One request, attempted until it is answered or the attempts run out, with the wait doubling
+     * after each failure so a refusing instance is not hammered in lockstep.
+     *
+     * The wait is a parameter rather than a call to `delay` so a JVM test can run the policy to its
+     * end without spending its budget in real time. It is not an abstraction for its own sake: the
+     * decision worth pinning is which failures are asked again and how many times, and neither of
+     * those needs a clock.
+     */
+    internal suspend fun <T> postWithRetry(
+        attempts: Int,
+        sleep: suspend (Long) -> Unit,
+        body: suspend () -> InstanceClient.Outcome<T>,
+    ): InstanceClient.Outcome<T> {
+        var delayMs = INITIAL_RETRY_DELAY_MS
+        var last: InstanceClient.Outcome<T> = body()
+        for (attempt in 2..attempts) {
+            if (!isWorthRetrying(last)) return last
+            sleep(delayMs)
+            delayMs = (delayMs * 2).coerceAtMost(MAX_RETRY_DELAY_MS)
+            last = body()
+        }
+        return last
     }
 
     /**
