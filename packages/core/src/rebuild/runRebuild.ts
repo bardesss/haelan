@@ -301,9 +301,24 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       // reported as unmapped, never as this string. A corrupted `bodyGzip` blob still throws
       // out of `RawArchive.getBody`, but as one of zlib's fixed messages ("incorrect header
       // check", "unexpected end of file") - a description of the compression stream, not the
-      // household's data inside it. What is left is SQLite's own constraint and corruption
-      // messages, which name a table and column, and this file's own ConfigErrors, which name a
-      // metric or data type id from the shared catalogue - never a bound value, another
+      // household's data inside it.
+      //
+      // What is left is SQLite's own constraint and corruption messages, which name a table and
+      // a column, and two families of ConfigError. Neither is thrown by this file, which throws
+      // none of its own. The mappers raise one when the catalogue and their mapping tables
+      // disagree - "<type> is not a sample type", "<type> has no observation mapping declared" -
+      // naming a data type id from the shared catalogue. `db/keys.ts` raises the other when an
+      // id or a ref it was asked to translate has no row: "no <label> for id <id>" from
+      // #resolveRef, and "no metric for ref <n>", "no sample aggregate for ref <n>" and
+      // "no <label> for ref <n>" from the readers beside it. Those are reachable from inside the
+      // transaction above, through every SampleKeys call the replay and the derive loop make,
+      // which is why they are listed rather than left to the mapper category.
+      //
+      // Both families name internal identifiers and nothing else. A source id is a sha256
+      // prefix over the person and the provider's own id for the device; a person id is this
+      // instance's key for a household member, which the affected person is already reading
+      // their own row of and an admin already sees on members.ts; a raw payload id names one
+      // archived response and a ref is a small integer. So: never a bound value, another
       // person's reading, or a location on disk.
       recordQuietly(() => input.rebuildState?.recordFailure({
         personId,

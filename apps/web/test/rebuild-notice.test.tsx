@@ -43,6 +43,24 @@ describe('RebuildNotice', () => {
     expect(html).toContain('sleep: 7 pages, UNIQUE constraint failed')
   })
 
+  /**
+   * A count of one, which both {{count}} strings can reach: a drop row counts the pages of one
+   * data type that failed one way, and the total is the sum of those. Written as _one/_other
+   * rather than left on a single string, the way the other two dozen counted strings in this
+   * catalogue are - "1 pages" is the tell of a string nobody gave a plural to.
+   */
+  it('writes a single page in the singular, in both counted strings', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} droppedPages={1} lastError={null}
+        voice="admin" personName="Robin"
+        drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 1 }]}
+      />,
+    )
+    expect(html).toContain('1 page of Robin&#x27;s history could not be rebuilt.')
+    expect(html).toContain('sleep: 1 page, UNIQUE constraint failed')
+  })
+
   // The admin voice names whose data it is, since a household's list of people reads nothing
   // like a person's own dashboard, which never needs to say its own name back to them.
   it('names the affected person in the admin voice', () => {
@@ -55,9 +73,9 @@ describe('RebuildNotice', () => {
     expect(html).toContain('Robin has stopped receiving data')
   })
 
-  // The error the rebuild reported is shown verbatim (docs/ADR or core's own store already
-  // decided lastError is safe to display -- see the commit this branch built on), and it is
-  // shown whenever there is one, independent of which of the two states above is also true.
+  // The error the rebuild reported is shown verbatim - what can and cannot reach that string is
+  // argued once, at the catch in packages/core/src/rebuild/runRebuild.ts that captures it - and
+  // it is shown whenever the store is holding one, rather than under one state above only.
   it('shows the reported error when there is one', () => {
     const html = render(
       <RebuildNotice

@@ -1236,9 +1236,11 @@
       "awaitingSelf": "Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.",
       "awaitingOther": "{{name}} is waiting for a rebuild of their history, which runs at the next restart of the server. They receive no new data until it has.",
       "droppedSelf": "Part of your history could not be rebuilt and is missing from these pages. Nothing has been deleted, and it will come back once the cause is fixed.",
-      "droppedOther": "{{count}} pages of {{name}}'s history could not be rebuilt.",
+      "droppedOther_one": "{{count}} page of {{name}}'s history could not be rebuilt.",
+      "droppedOther_other": "{{count}} pages of {{name}}'s history could not be rebuilt.",
       "dropsHeading": "What could not be rebuilt",
-      "dropRow": "{{dataType}}: {{count}} pages, {{reason}}",
+      "dropRow_one": "{{dataType}}: {{count}} page, {{reason}}",
+      "dropRow_other": "{{dataType}}: {{count}} pages, {{reason}}",
       "errorHeading": "The error the rebuild reported",
       "allWell": "Every person's history rebuilt cleanly.",
       "neverRun": "No rebuild has run on this instance yet."
