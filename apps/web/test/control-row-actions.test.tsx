@@ -55,7 +55,10 @@ const PERSON: Session = {
 function withQuery(node: ReactNode): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  client.setQueryData(syncStatusKey(PERSON.personId), {
+    running: false, lastFinishedAtMs: null,
+    rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
+  })
   client.setQueryData(sourceNamesKey(PERSON.personId), { items: [] })
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
@@ -98,7 +101,10 @@ describe('the control row actions', () => {
           status: 409, headers: { 'content-type': 'application/json' },
         })
       }
-      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null }), {
+      return new Response(JSON.stringify({
+        running: false, lastFinishedAtMs: null,
+        rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
+      }), {
         status: 200, headers: { 'content-type': 'application/json' },
       })
     }) as typeof fetch

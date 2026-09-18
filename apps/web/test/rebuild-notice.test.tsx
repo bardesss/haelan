@@ -32,8 +32,10 @@ describe('RebuildNotice', () => {
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 7 }]}
       />,
     )
-    expect(html).toContain('sleep')
-    expect(html).toContain('7')
+    // The exact row, not a bare '7': that substring stays green under a format regression that
+    // renders '17' or '70' just as happily, the same gap
+    // substring-assertions-hide-format-regressions calls out elsewhere in this codebase.
+    expect(html).toContain('sleep: 7 pages, UNIQUE constraint failed')
   })
 
   // The admin voice names whose data it is, since a household's list of people reads nothing

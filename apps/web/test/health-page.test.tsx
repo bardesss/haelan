@@ -102,7 +102,9 @@ function stubHealth(
     const json = (body: unknown) =>
       new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: null })
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
+    }
     if (url.includes('/overrides')) return json({ items: [] })
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/events')) return json({ items: [] })

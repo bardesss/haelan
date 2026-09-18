@@ -8,9 +8,18 @@ import { useSession } from '../auth/session.js'
 // The real response carries more (reason, startedAtMs, personId, userHorizonDays, backfill), none
 // of which the control row has a use for yet; naming only what is read here means that shape can
 // grow for a reason unrelated to the control row without this type silently drifting out of date.
+//
+// rebuild joins running and lastFinishedAtMs as a field this app does read. The comment above
+// still holds for the rest: naming only what is used keeps the server shape free to grow.
 export interface SyncStatus {
   running: boolean
   lastFinishedAtMs: number | null
+  rebuild: {
+    quarantined: boolean
+    droppedPages: number
+    lastError: string | null
+    drops: { dataType: string, reason: string, pages: number }[]
+  }
 }
 
 /**
