@@ -81,7 +81,11 @@ const liveRegionText = (): string =>
  * region along with everything else and making a real regression (finding 4) read as a passing
  * click with nothing to show for it.
  */
-function mockPriorityApi(sources: NamedSourceWithActivity[], initial: PriorityBody): {
+function mockPriorityApi(
+  sources: NamedSourceWithActivity[],
+  initial: PriorityBody,
+  options: { failPut?: boolean } = {},
+): {
   restore: () => void
   requests: { method: string, url: string, body: unknown }[]
 } {
@@ -98,6 +102,9 @@ function mockPriorityApi(sources: NamedSourceWithActivity[], initial: PriorityBo
     if (method === 'GET' && url.includes('/source-priority')) return json(200, priority)
     if (method === 'GET' && url.includes('/sources')) return json(200, { items: sources })
     if (method === 'PUT' && url.includes('/source-priority')) {
+      // The stale-list case named in FIX 1: a source appeared between the GET and the click, so
+      // the write this list describes no longer matches what the server has.
+      if (options.failPut) return json(400, { error: { kind: 'config', message: 'stale' } })
       const sourceIds = (body as { sourceIds: string[] }).sourceIds
       priority = {
         configured: sourceIds.length > 0,
@@ -185,5 +192,103 @@ describe('the source ranking control', () => {
     // not blank the whole card, only the section whose own query failed.
     expect(container!.querySelector('.source-name-row')).not.toBeNull()
     expect(container!.querySelector('.source-order')?.textContent).toContain('This did not load')
+  })
+
+  it('says so and announces it when a reorder is rejected', async () => {
+    const sources = [
+      namedSource({ id: 'watch', name: 'My watch', reportingNow: true }),
+      namedSource({ id: 'phone', name: 'Phone', reportingNow: true }),
+    ]
+    const priority: PriorityBody = {
+      configured: false,
+      order: [
+        { sourceId: 'watch', configured: false },
+        { sourceId: 'phone', configured: false },
+      ],
+    }
+    const client = mountSection(sources, priority)
+    const api = mockPriorityApi(sources, priority, { failPut: true })
+
+    act(() => { findButton(/move phone up/i).click() })
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    // Both come from the client's own copy, not from the rejected response: nothing came back
+    // for either one to echo.
+    expect(liveRegionText()).toBe('That did not save. Try again.')
+    expect(container!.querySelector('.source-order .field-error')?.textContent)
+      .toBe('That did not save. Try again.')
+    // The list itself is untouched: a rejected write must not reorder anything on its own.
+    expect(orderHeadings()).toEqual(['My watch', 'Phone'])
+  })
+
+  it('announces a reset the same way it announces a move', async () => {
+    const sources = [namedSource({ id: 'watch', name: 'My watch', reportingNow: true })]
+    const priority: PriorityBody = { configured: true, order: [{ sourceId: 'watch', configured: true }] }
+    const client = mountSection(sources, priority)
+    const api = mockPriorityApi(sources, priority)
+
+    const resetButton = [...container!.querySelectorAll('button')]
+      .find((b) => /default order/i.test(b.textContent ?? '')) as HTMLButtonElement
+    act(() => { resetButton.click() })
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    const put = api.requests.find((r) => r.method === 'PUT')
+    expect(put?.body).toEqual({ sourceIds: [] })
+    expect(liveRegionText()).toBe('Order reset to the default')
+  })
+
+  it('restores focus to the button that was pressed, once it is enabled again', async () => {
+    // Four sources so a move in the middle lands away from either boundary: B goes from index 1
+    // to index 2, and its own down button is still short of the last position afterward.
+    const sources = [
+      namedSource({ id: 'a1', name: 'A', reportingNow: true }),
+      namedSource({ id: 'a2', name: 'B', reportingNow: true }),
+      namedSource({ id: 'a3', name: 'C', reportingNow: true }),
+      namedSource({ id: 'a4', name: 'D', reportingNow: true }),
+    ]
+    const priority: PriorityBody = {
+      configured: false,
+      order: sources.map((s) => ({ sourceId: s.id, configured: false })),
+    }
+    const client = mountSection(sources, priority)
+    const api = mockPriorityApi(sources, priority)
+
+    const button = findButton(/move b down/i)
+    act(() => { button.click() })
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    // The whole point of buttons over drag is a screen reader driving them one press at a time;
+    // losing focus to <body> after every press, the way a disabled focused element does in every
+    // browser, would defeat that on each activation.
+    expect(document.activeElement).toBe(button)
+    expect(button.disabled).toBe(false)
+  })
+
+  it('moves focus to the row\'s other button when the pressed one lands at a boundary', async () => {
+    const sources = [
+      namedSource({ id: 'watch', name: 'My watch', reportingNow: true }),
+      namedSource({ id: 'phone', name: 'Phone', reportingNow: true }),
+    ]
+    const priority: PriorityBody = {
+      configured: false,
+      order: [
+        { sourceId: 'watch', configured: false },
+        { sourceId: 'phone', configured: false },
+      ],
+    }
+    const client = mountSection(sources, priority)
+    const api = mockPriorityApi(sources, priority)
+
+    act(() => { findButton(/move phone up/i).click() })
+    await flush(client, () => container!.innerHTML)
+    api.restore()
+
+    // Phone is first now, so its own up button is the one this press just disabled by reaching
+    // the boundary. Focus goes to its down button rather than nowhere.
+    expect(findButton(/move phone up/i).disabled).toBe(true)
+    expect(document.activeElement).toBe(findButton(/move phone down/i))
   })
 })

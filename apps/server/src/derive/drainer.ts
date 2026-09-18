@@ -5,9 +5,17 @@ import type { Stores } from '../app.ts'
 /**
  * Days per tick rather than a millisecond budget. The per-day cost is the thing that was
  * measured, and a millisecond budget silently drains fewer days on a slower disk, which is the
- * opposite of what a budget is for. 64 is runDerive's own default batch.
+ * opposite of what a budget is for.
+ *
+ * runDerive is fully synchronous, so every day in a tick blocks the event loop. Measured at 424ms
+ * a day, 8 days is about 3.4 seconds of blocked time inside a 30 second tick (DRAIN_TICK_MS): an
+ * 11 percent duty cycle, leaving the instance responsive the other 89 percent of the time while a
+ * backlog is draining. The earlier value of 64 -- runDerive's own default batch, chosen for a
+ * one-shot sync where nothing else needs the event loop -- costs about 27 seconds of every 30,
+ * which is roughly the opposite: unresponsive nine ticks in ten. Matches DRAIN_BATCH_DAYS in
+ * apps/server/src/routes/v1/annotations.ts, which is the same tradeoff on the same event loop.
  */
-export const DRAIN_DAYS_PER_TICK = 64
+export const DRAIN_DAYS_PER_TICK = 8
 
 /** Long enough that an idle instance is idle, short enough that a backlog converges in an hour. */
 export const DRAIN_TICK_MS = 30_000

@@ -66,10 +66,18 @@ export class SourcePriorityStore {
     })
   }
 
+  /**
+   * The delete runs before the contested-days scan, the opposite order from `put`, because a
+   * clear can be a genuine no-op: a person who never configured a ranking still reaches this
+   * route with `PUT { sourceIds: [] }`. `put` cannot take this shortcut, since it always inserts
+   * something, but `clear` can check first and skip the multi-second scan and the marking it
+   * feeds entirely when there was nothing stored to clear.
+   */
   clear(input: { personId: string, metric: string, nowMs: number }): void {
+    const deleted = this.#db.transaction((tx) => this.#replace(tx, input.personId, input.metric))
+    if (deleted === 0) return
     const contestedDates = this.#contestedDates(input.personId)
     this.#db.transaction((tx) => {
-      this.#replace(tx, input.personId, input.metric)
       this.#markDates(contestedDates, input.personId, input.nowMs, tx)
     })
   }
@@ -105,12 +113,13 @@ export class SourcePriorityStore {
   }
 
   // Delete then insert rather than upsert: a list that lost a source must lose its row, and an
-  // upsert would leave it behind at whatever rank it last held.
-  #replace(tx: DbOrTx, personId: string, metric: string): void {
-    tx.delete(sourcePriority).where(and(
+  // upsert would leave it behind at whatever rank it last held. Returns the row count deleted, so
+  // `clear` can tell a real clear from a no-op without a separate query.
+  #replace(tx: DbOrTx, personId: string, metric: string): number {
+    return tx.delete(sourcePriority).where(and(
       eq(sourcePriority.personId, personId),
       eq(sourcePriority.metric, metric),
-    )).run()
+    )).run().changes
   }
 
   /**
@@ -136,10 +145,12 @@ export class SourcePriorityStore {
    * that write samples, the sync runner's runJob and the companion ingest route, mark the day dirty
    * themselves and do not depend on this scan to catch it.
    *
-   * Each contested day takes its neighbours with it. A night belongs to the morning it ended in
-   * and sessionOverlap reads across midnight, so a contested day can move the day either side of
-   * it. A spare day costs one empty derive; a missed day keeps a merge computed under the list
-   * this write just replaced.
+   * Each contested day takes its neighbours with it. This is a margin, not a necessity:
+   * deriveDayInto selects sessions and filters samples on an exact equality against the day's own
+   * localDate, so nothing in a day's derivation actually reads a neighbouring day's rows. The
+   * widening is here because a spare day costs one empty derive and a missed day keeps a merge
+   * computed under the list this write just replaced, and between those two costs the cheap one
+   * wins.
    */
   #contestedDates(personId: string): string[] {
     const personRef = new SampleKeys(this.#db).personRefIfKnown(personId)
@@ -152,7 +163,7 @@ export class SourcePriorityStore {
         SELECT local_date AS localDate FROM (
           SELECT date((utc_ms + tz_offset_minutes * 60000) / 1000, 'unixepoch') AS local_date,
                  source_ref
-          FROM samples
+          FROM ${samples}
           WHERE person_ref = ${personRef}
           GROUP BY local_date, source_ref
         )

@@ -215,6 +215,18 @@ describe('marks only contested days', () => {
     expect(queuedDates()).toEqual([])
   })
 
+  it('marks nothing when clearing a list that was never configured, even on a day that would otherwise be contested', () => {
+    // Two sources on the same day, which put() would mark. Nothing was ever put for this metric,
+    // so the delete clear() runs first removes zero rows and the scan that would find this day
+    // never runs. Before this was fixed, clear() paid for the scan regardless and marked the day
+    // dirty despite changing nothing.
+    const utcMs = MIDNIGHT_UTC + 3_600_000
+    insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
+    store.clear({ personId: 'p1', metric: DEFAULT_LIST, nowMs: 1 })
+    expect(queuedDates()).toEqual([])
+  })
+
   it('rejects an unowned source even when a contested day is in play', () => {
     // A rejected put writes nothing, so nothing should be queued either, on a day that would
     // otherwise have been marked. This does not observe when the ownership check runs relative
