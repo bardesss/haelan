@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, it, expect, afterEach, beforeEach } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
@@ -192,5 +192,46 @@ describe('the admin rebuild health card', () => {
     expect(text('.maintenance-waiting')).toBe('Robin is waiting for a rebuild of their history, which runs at the next restart of the server. They receive no new data until it has.')
     expect(container!.textContent).not.toContain('rebuilt cleanly')
     expect(container!.textContent).not.toContain('Wilma')
+  })
+
+  /**
+   * rebuild_drops is keyed by (person_id, data_type, reason), so one data type failing two ways
+   * is two rows - which is exactly what #276b's per-page isolation produces, since it groups by
+   * the normalised reason. Keyed on dataType alone, React saw two children with the same key:
+   * the warning is the visible half, and the reconciler reusing the wrong child across a re-render
+   * is the half that reaches a reader.
+   *
+   * Asserted on console.error because renderToStaticMarkup never reconciles and so never warns -
+   * this file's client root is the only place the check exists at all. Both rows are asserted
+   * too, whole and by their own text, so a component that silently rendered one would fail here
+   * rather than pass quietly.
+   */
+  it('keys two drops of one data type apart when only their reason differs', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      mountRebuildHealth([
+        person({
+          personId: 'p1',
+          displayName: 'Robin',
+          droppedPages: 5,
+          drops: [
+            { dataType: 'sleep', reason: 'UNIQUE constraint failed: session_segments.id', pages: 3 },
+            { dataType: 'sleep', reason: 'NOT NULL constraint failed: sessions.start_ms', pages: 2 },
+          ],
+        }),
+      ])
+
+      const rows = [...container!.querySelectorAll('.maintenance-download-note')]
+        .map((node) => node.textContent)
+      expect(rows).toContain('sleep: 3 pages, UNIQUE constraint failed: session_segments.id')
+      expect(rows).toContain('sleep: 2 pages, NOT NULL constraint failed: sessions.start_ms')
+
+      const keyWarnings = errors.mock.calls
+        .map((call) => call.map(String).join(' '))
+        .filter((line) => line.includes('same key'))
+      expect(keyWarnings).toEqual([])
+    } finally {
+      errors.mockRestore()
+    }
   })
 })
