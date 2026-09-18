@@ -1228,6 +1228,18 @@
         "backupsDisabled": "Back-ups staan uit voor deze instantie.",
         "rebuildInProgress": "De database is nog aan het bijkomen van een herstart. Probeer het zo weer."
       }
+    },
+    "rebuild": {
+      "title": "Status van de herbouw",
+      "quarantinedSelf": "Je gegevens worden niet meer bijgewerkt. Een herbouw van je geschiedenis is niet voltooid, dus er worden geen nieuwe metingen verzameld. Een beheerder moet hiernaar kijken.",
+      "quarantinedOther": "{{name}} ontvangt geen gegevens meer. Een herbouw van hun geschiedenis is niet voltooid.",
+      "droppedSelf": "Een deel van je geschiedenis kon niet worden herbouwd en ontbreekt op deze pagina's. Er is niets verwijderd, en het komt terug zodra de oorzaak is verholpen.",
+      "droppedOther": "{{count}} pagina's van de geschiedenis van {{name}} konden niet worden herbouwd.",
+      "dropsHeading": "Wat niet kon worden herbouwd",
+      "dropRow": "{{dataType}}: {{count}} pagina's, {{reason}}",
+      "errorHeading": "De fout die de herbouw meldde",
+      "allWell": "De geschiedenis van iedereen is schoon herbouwd.",
+      "neverRun": "Op deze instantie heeft nog geen herbouw gedraaid."
     }
   },
   "records": {

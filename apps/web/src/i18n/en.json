@@ -1228,6 +1228,18 @@
         "backupsDisabled": "Backups are turned off for this instance.",
         "rebuildInProgress": "The database is still settling after a restart. Try again in a moment."
       }
+    },
+    "rebuild": {
+      "title": "Rebuild health",
+      "quarantinedSelf": "Your data has stopped updating. A rebuild of your history did not finish, so new readings are not being collected. An administrator needs to look at this.",
+      "quarantinedOther": "{{name}} has stopped receiving data. A rebuild of their history did not finish.",
+      "droppedSelf": "Part of your history could not be rebuilt and is missing from these pages. Nothing has been deleted, and it will come back once the cause is fixed.",
+      "droppedOther": "{{count}} pages of {{name}}'s history could not be rebuilt.",
+      "dropsHeading": "What could not be rebuilt",
+      "dropRow": "{{dataType}}: {{count}} pages, {{reason}}",
+      "errorHeading": "The error the rebuild reported",
+      "allWell": "Every person's history rebuilt cleanly.",
+      "neverRun": "No rebuild has run on this instance yet."
     }
   },
   "records": {
