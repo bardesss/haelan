@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { schema, DERIVATION_VERSION } from '@haelan/core'
+import { schema, DERIVATION_VERSION, DEFAULT_LIST } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -157,6 +157,37 @@ describe('PUT /sources/:sourceId/alias', () => {
     const response = await rename('theirs', 'Mine now')
     expect(response.statusCode).toBe(404)
     expect((await list()).json().items.map((s: { id: string }) => s.id)).toEqual(['watch', 'app'])
+  })
+})
+
+describe('GET /source-priority', () => {
+  const priority = () => h.app.inject({ method: 'GET', url: '/api/v1/p/p1/source-priority', headers: auth() })
+
+  it('answers the fallback order when nothing is configured', async () => {
+    const response = await priority()
+    expect(response.statusCode).toBe(200)
+    const body = response.json()
+    expect(body.configured).toBe(false)
+    // 'watch' is a device and 'app' is an app, which is fallbackOrder's own kind ordering; the
+    // two are what beforeEach seeds, and neither has a stored ranking yet.
+    expect(body.order.map((e: { sourceId: string }) => e.sourceId)).toEqual(['watch', 'app'])
+    expect(body.order.every((e: { configured: boolean }) => e.configured === false)).toBe(true)
+  })
+
+  it('answers the stored order once configured', async () => {
+    h.app.haelan.instance.sourcePriority.put({
+      personId: 'p1', metric: DEFAULT_LIST, sourceIds: ['app', 'watch'], nowMs: 1,
+    })
+    const response = await priority()
+    const body = response.json()
+    expect(body.configured).toBe(true)
+    expect(body.order.map((e: { sourceId: string }) => e.sourceId)).toEqual(['app', 'watch'])
+    expect(body.order.every((e: { configured: boolean }) => e.configured === true)).toBe(true)
+  })
+
+  it('needs a session', async () => {
+    const response = await h.app.inject({ method: 'GET', url: '/api/v1/p/p1/source-priority' })
+    expect(response.statusCode).toBe(401)
   })
 })
 

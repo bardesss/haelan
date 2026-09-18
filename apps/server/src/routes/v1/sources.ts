@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { getSource, readSourceActivity, localDateInZone } from '@haelan/core'
+import { getSource, readSourceActivity, localDateInZone, DEFAULT_LIST, fallbackOrder } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { sendHashed } from './shared.ts'
 
@@ -75,6 +75,37 @@ export function registerSourceRoutes(app: FastifyInstance): void {
     if (!getSource(app.haelan.instance.db, personId, sourceId)) return notThere(reply, sourceId)
     aliases().clear({ personId, sourceId })
     return reply.send({ name: currentName(app, personId, sourceId) })
+  })
+
+  /**
+   * The person's ranking, resolved. apps/web imports only core's browser-safe subpaths, never the
+   * root export that pulls better-sqlite3 and drizzle into the browser bundle, and priorityFrom
+   * and fallbackOrder both live in the root - so the browser has no way to work out where an
+   * unconfigured source would fall. Resolving the fallback placement here, rather than shipping
+   * the stored list alone, is the whole reason this route exists instead of a plain read of
+   * source_priority.
+   *
+   * `configured` is answered twice on purpose: once for the list as a whole and once per source.
+   * A person needs to see which sources they actually placed versus which are merely sitting
+   * where the default put them, because the two behave differently the moment a new source shows
+   * up - a placed source keeps its spot, an unplaced one moves.
+   */
+  app.get<{ Params: PersonParams }>('/p/:personId/source-priority', async (request, reply) => {
+    const { personId } = request.params
+    const stored = app.haelan.instance.sourcePriority.lists(personId)
+      .find((list) => list.metric === DEFAULT_LIST)
+    const configuredIds = stored?.sourceIds ?? []
+    // fallbackOrder wants only id and kind; listNamed's rows carry both plus the display fields
+    // the rest of this file already needs aliases() for, so this reuses the same call instead of
+    // opening a second, narrower query onto the sources table.
+    const rest = fallbackOrder(aliases().listNamed(personId)).filter((id) => !configuredIds.includes(id))
+    return sendHashed(reply, request, {
+      configured: stored !== undefined,
+      order: [
+        ...configuredIds.map((sourceId) => ({ sourceId, configured: true })),
+        ...rest.map((sourceId) => ({ sourceId, configured: false })),
+      ],
+    })
   })
 }
 

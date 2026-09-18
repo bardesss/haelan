@@ -324,6 +324,18 @@ const ROUTES: readonly RouteCase[] = [
     otherNeedle: 'leaked-source-999999',
   },
   {
+    name: 'source-priority',
+    template: '/api/v1/p/:personId/source-priority',
+    // No date range and nothing stored either: with no ranking configured, the answer is the
+    // fallback order, so the marker is a seeded source's own id showing up in that order, the
+    // same as the sources entry above.
+    path: (p) => `/api/v1/p/${p}/source-priority`,
+    seedOwn: (h) => seedSource(h, 'p1', 'own-source-ok'),
+    seedOther: (h, personId) => seedSource(h, personId, 'leaked-source-999999'),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
     name: 'data-types',
     template: '/api/v1/p/:personId/data-types',
     // This route's items are the catalogue itself, the same list for every person; the only thing
