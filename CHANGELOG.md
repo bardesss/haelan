@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.37.1](https://github.com/bardesss/haelan/compare/v1.37.0...v1.37.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* **core:** prepare the sample upsert once instead of once per row ([#281](https://github.com/bardesss/haelan/issues/281)) ([efad634](https://github.com/bardesss/haelan/commit/efad6344c208965f67fd5b66dbdab58485e8da68)), closes [#275](https://github.com/bardesss/haelan/issues/275)
+
 ## [1.37.0](https://github.com/bardesss/haelan/compare/v1.36.1...v1.37.0) (2026-09-18)
 
 
