@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { getSource, readSourceActivity, localDateInZone } from '@haelan/core'
+import { getSource, readSourceActivity, localDateInZone, ConfigError, DEFAULT_LIST, fallbackOrder } from '@haelan/core'
 import { errorBody, statusFor } from '../../api/envelope.ts'
 import { sendHashed } from './shared.ts'
 
 interface PersonParams { personId: string }
 interface SourceParams extends PersonParams { sourceId: string }
 interface AliasBody { alias?: unknown }
+interface PriorityBody { sourceIds?: unknown }
 
 /**
  * The listing this project has never had, and the rename it enables.
@@ -76,6 +77,86 @@ export function registerSourceRoutes(app: FastifyInstance): void {
     aliases().clear({ personId, sourceId })
     return reply.send({ name: currentName(app, personId, sourceId) })
   })
+
+  /**
+   * The person's ranking, resolved. apps/web imports only core's browser-safe subpaths, never the
+   * root export that pulls better-sqlite3 and drizzle into the browser bundle, and priorityFrom
+   * and fallbackOrder both live in the root - so the browser has no way to work out where an
+   * unconfigured source would fall. Resolving the fallback placement here, rather than shipping
+   * the stored list alone, is the whole reason this route exists instead of a plain read of
+   * source_priority.
+   *
+   * `configured` is answered twice on purpose: once for the list as a whole and once per source.
+   * A person needs to see which sources they actually placed versus which are merely sitting
+   * where the default put them, because the two behave differently the moment a new source shows
+   * up - a placed source keeps its spot, an unplaced one moves.
+   */
+  app.get<{ Params: PersonParams }>('/p/:personId/source-priority', async (request, reply) => {
+    const { personId } = request.params
+    return sendHashed(reply, request, priorityBodyFor(app, personId))
+  })
+
+  /**
+   * The write side of the route above. priorityFrom treats a stored list as a complete statement
+   * for its metric: any source the list omits falls to UNRANKED_BASE and loses to every ranked
+   * source on every historical day it shares with one. Accepting a partial list here would let a
+   * screen that only ever showed the person their current sources silently demote a retired watch
+   * below all of them, so a list has to name every source this person has or it is refused. An
+   * empty array is the one exception, and it means the opposite of naming none of them: clear the
+   * stored list and fall back to the default order, the same state a person who never configured
+   * anything is in.
+   */
+  app.put<{ Params: PersonParams, Body: PriorityBody }>('/p/:personId/source-priority', async (request, reply) => {
+    const { personId } = request.params
+    const sourceIds = request.body?.sourceIds
+    if (!Array.isArray(sourceIds) || !sourceIds.every((id) => typeof id === 'string')) {
+      throw new ConfigError('sourceIds must be an array of source ids')
+    }
+    if (new Set(sourceIds).size !== sourceIds.length) {
+      throw new ConfigError('sourceIds must not repeat a source')
+    }
+
+    if (sourceIds.length === 0) {
+      app.haelan.instance.sourcePriority.clear({ personId, metric: DEFAULT_LIST, nowMs: app.haelan.now() })
+    } else {
+      const owned = aliases().listNamed(personId).map((source) => source.id)
+      const missing = owned.filter((id) => !sourceIds.includes(id))
+      if (missing.length > 0) {
+        throw new ConfigError(`sourceIds must name every source this person has, missing ${missing.join(', ')}`)
+      }
+      // put()'s own #assertOwned is what turns a source id belonging to somebody else into a
+      // ConfigError, checked once in the store rather than a second time here.
+      app.haelan.instance.sourcePriority.put({
+        personId, metric: DEFAULT_LIST, sourceIds, nowMs: app.haelan.now(),
+      })
+    }
+    return reply.send(priorityBodyFor(app, personId))
+  })
+}
+
+/**
+ * The body the GET and the PUT above both answer, built once so the two cannot drift: the PUT
+ * calls this to read back what it just wrote, the same way `currentName` below lets the alias
+ * routes read back what they just wrote. Module scope and taking `app` rather than a closure over
+ * `aliases()`, for the same reason `currentName` is written that way: nothing about assembling
+ * this body needs registerSourceRoutes's local scope.
+ */
+function priorityBodyFor(app: FastifyInstance, personId: string) {
+  const stored = app.haelan.instance.sourcePriority.lists(personId)
+    .find((list) => list.metric === DEFAULT_LIST)
+  const configuredIds = stored?.sourceIds ?? []
+  // fallbackOrder wants only id and kind; listNamed's rows carry both plus the display fields the
+  // alias routes above already need, so this reuses that call instead of opening a second,
+  // narrower query onto the sources table.
+  const rest = fallbackOrder(app.haelan.instance.sourceAliases.listNamed(personId))
+    .filter((id) => !configuredIds.includes(id))
+  return {
+    configured: stored !== undefined,
+    order: [
+      ...configuredIds.map((sourceId) => ({ sourceId, configured: true })),
+      ...rest.map((sourceId) => ({ sourceId, configured: false })),
+    ],
+  }
 }
 
 function notThere(reply: FastifyReply, sourceId: string): FastifyReply {

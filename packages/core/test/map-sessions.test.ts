@@ -222,3 +222,59 @@ describe('mapSessions', () => {
     expect(sessions[0]?.id).not.toBe(sessions[1]?.id)
   })
 })
+
+// Issue #274: a rebuild died on `UNIQUE constraint failed: session_segments.id`, quarantining the
+// only person on the instance. Segment ids are stableId(sessionId, stage, stageStartMs), so a body
+// that yields the same triple twice yields the same primary key twice, and both writers -
+// replay.ts and runJob.ts's writeSessions - insert a page's segments after deleting per session,
+// which makes a duplicate *within one body* the one case the delete cannot absorb.
+//
+// Fixed here rather than at the two inserts because both of them call this mapper, and because
+// the invariant both writers state ("replaced wholesale ... merging both versions would interleave
+// them") is a statement about a body's stage timeline. Upserting at the insert would union two
+// timelines instead of replacing one.
+describe('mapSessions, a body that repeats itself', () => {
+  it('keeps one segment per stage and start, the later entry winning', () => {
+    const repeated = sleepPoint({
+      startTime: '2026-08-17T21:30:00Z',
+      endTime: '2026-08-18T05:15:00Z',
+      stages: [
+        { type: 'LIGHT', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-17T23:00:00Z' },
+        // Same type, same start, revised end: one id, and the correction is what survives.
+        { type: 'LIGHT', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-17T23:30:00Z' },
+      ],
+    })
+    const { segments } = mapSessions({ dataType: sleep, ...ctx, body: body([repeated]) })
+    expect(new Set(segments.map((s) => s.id)).size).toBe(segments.length)
+    expect(segments).toHaveLength(1)
+    expect(segments[0]?.endMs).toBe(Date.parse('2026-08-17T23:30:00Z'))
+  })
+
+  it('replaces a repeated session wholesale rather than interleaving its two timelines', () => {
+    // Same `name`, so the same externalId, so the same sessionId: one night listed twice in one
+    // page, the second carrying the revised stage list.
+    const first = sleepPoint({
+      name: 'users/me/dataTypes/sleep/dataPoints/twice',
+      startTime: '2026-08-17T21:30:00Z',
+      endTime: '2026-08-18T05:15:00Z',
+      stages: [
+        { type: 'LIGHT', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-17T23:00:00Z' },
+        { type: 'DEEP', startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T05:15:00Z' },
+      ],
+    })
+    const second = sleepPoint({
+      name: 'users/me/dataTypes/sleep/dataPoints/twice',
+      startTime: '2026-08-17T21:30:00Z',
+      endTime: '2026-08-18T05:15:00Z',
+      stages: [
+        { type: 'LIGHT', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-17T23:00:00Z' },
+        { type: 'REM', startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T05:15:00Z' },
+      ],
+    })
+    const { sessions, segments } = mapSessions({ dataType: sleep, ...ctx, body: body([first, second]) })
+    expect(sessions).toHaveLength(1)
+    expect(new Set(segments.map((s) => s.id)).size).toBe(segments.length)
+    // The DEEP segment of the superseded copy must not survive alongside the REM that replaced it.
+    expect(segments.map((s) => s.stage).sort()).toEqual(['LIGHT', 'REM'])
+  })
+})

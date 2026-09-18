@@ -1136,6 +1136,18 @@
       "volume_one": "{{count}} dag gerapporteerd",
       "volume_other": "{{count}} dagen gerapporteerd"
     },
+    "sourceOrder": {
+      "title": "Welke bron wint",
+      "intro": "Als twee van je bronnen op dezelfde dag hetzelfde melden, gelooft haelan de bovenste. Dit wijzigen berekent de dagen opnieuw waarop je bronnen van elkaar afweken, op de achtergrond.",
+      "moveUp": "{{name}} omhoog",
+      "moveDown": "{{name}} omlaag",
+      "up": "Omhoog",
+      "down": "Omlaag",
+      "reset": "Gebruik de standaardvolgorde",
+      "moved": "{{name}} is verplaatst naar positie {{position}} van {{total}}",
+      "resetAnnounced": "Volgorde teruggezet naar de standaard",
+      "saveFailed": "Dat is niet opgeslagen. Probeer het opnieuw."
+    },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",
       "detail": "Iets uitzetten stopt het ophalen ervan. Wat al is opgehaald, wordt niet verwijderd.",

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSession } from '../../auth/session.js'
 import { useTranslation } from '../../i18n/index.js'
@@ -8,6 +8,7 @@ import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { sourceActivityKey, useClearSourceName, useRenameSource, useSourcesWithActivity } from '../../data/useSourceNames.js'
 import type { NamedSourceWithActivity } from '../../data/useSourceNames.js'
+import { useSetSourcePriority, useSourcePriority } from '../../data/useSourcePriority.js'
 
 /**
  * Mirrors MAX_ALIAS_LENGTH in packages/core/src/store/sourceAliases.ts. A local constant rather
@@ -31,6 +32,59 @@ export function SourceNames() {
   const session = useSession()
   const queryClient = useQueryClient()
   const { sources, isPending, isError, error } = useSourcesWithActivity()
+  const priority = useSourcePriority()
+  const setPriority = useSetSourcePriority()
+  // Read aloud rather than shown: the whole reason reordering is two buttons and not drag is that
+  // a screen reader user drives them, and neither the row moving nor a disabled attribute changing
+  // says anything to that reader on its own, especially for a move in the middle of a long list
+  // where nothing at either end becomes newly enabled or disabled.
+  const [announcement, setAnnouncement] = useState('')
+
+  // One row's own up/down pair, captured by a callback ref rather than looked up by id on demand:
+  // React calls a callback ref with null on unmount, so a row that leaves the DOM clears itself
+  // here without this component having to notice the list changed underneath it.
+  const buttonRefs = useRef(new Map<string, { up: HTMLButtonElement | null, down: HTMLButtonElement | null }>())
+  const buttonRefFor = (sourceId: string, which: 'up' | 'down') => (el: HTMLButtonElement | null) => {
+    const entry = buttonRefs.current.get(sourceId) ?? { up: null, down: null }
+    entry[which] = el
+    buttonRefs.current.set(sourceId, entry)
+  }
+
+  // What to restore once the mutation now in flight settles. Read by the effect below rather than
+  // acted on directly in the click handler or in onSettled, because `disabled` on the button this
+  // press came from is still true at that moment -- React has not yet committed the re-render that
+  // flips setPriority.isPending back to false, and focusing a still-disabled button does nothing.
+  const pendingFocusRef = useRef<{ sourceId: string, direction: -1 | 1 } | null>(null)
+
+  // Bumped from onSettled below, once per mutation, rather than reading setPriority.isPending
+  // itself in the effect's dependency array. A round trip fast enough to resolve within the same
+  // microtask batch it was issued from lets React coalesce the pending state and the settled state
+  // into a single commit, so isPending's rendered value can go straight from false to false and
+  // never visibly pass through true -- an effect keyed on it would then see no change and never
+  // fire. A counter bumped once per settle has no such coincidence: each mutation produces a value
+  // strictly higher than the last, so the dependency always changes when one finishes.
+  const [settledCount, setSettledCount] = useState(0)
+
+  // Runs once the render carrying settledCount's new value has committed, which is the same render
+  // that carries isPending: false and the buttons' final disabled state -- both landed in the same
+  // batch as the bump that triggered this effect. Restores focus to the button that was pressed; if
+  // a move landed the row at the boundary that same button now guards, that button is disabled by
+  // design, so focus goes to the row's other button instead of vanishing to <body> the way a
+  // disabled focused element does in every browser.
+  useEffect(() => {
+    if (setPriority.isPending) return
+    const pending = pendingFocusRef.current
+    if (!pending) return
+    pendingFocusRef.current = null
+    const refs = buttonRefs.current.get(pending.sourceId)
+    if (!refs) return
+    const primary = pending.direction === -1 ? refs.up : refs.down
+    const fallback = pending.direction === -1 ? refs.down : refs.up
+    if (primary && !primary.disabled) primary.focus()
+    else if (fallback && !fallback.disabled) fallback.focus()
+    // settledCount is the trigger; setPriority.isPending is read, not depended on, since it is
+    // already implied by settledCount having just changed.
+  }, [settledCount])
 
   if (isPending) return <Loading />
   if (isError) {
@@ -55,6 +109,39 @@ export function SourceNames() {
   const live = sources.filter((source) => source.reportingNow)
   const dormant = sources.filter((source) => !source.reportingNow)
 
+  // Sourced from `sources`, not `live`: the ranking list below must include a dormant source too,
+  // since priorityFrom treats an omitted source as UNRANKED_BASE and the route would refuse a
+  // write that left one out. Falling back to the id keeps a name lookup that races the sources
+  // query from crashing the row rather than rendering it blank.
+  const nameFor = (sourceId: string): string => sources.find((s) => s.id === sourceId)?.name ?? sourceId
+  const order = (priority.data?.order ?? []).map((entry) => entry.sourceId)
+
+  // The announcement is built from `next`, the list this move is about to send, rather than
+  // read back from the server's own answer: the PUT echoes the same order it was given, so
+  // waiting for the round trip to name a position already known here would only make a screen
+  // reader wait longer than a sighted reader does for the same information.
+  const move = (sourceId: string, name: string, at: number, by: -1 | 1): void => {
+    pendingFocusRef.current = { sourceId, direction: by }
+    const next = moved(order, at, by)
+    const position = next.indexOf(sourceId) + 1
+    setPriority.mutate(next, {
+      onSuccess: () => setAnnouncement(t('settings.sourceOrder.moved', { name, position, total: next.length })),
+      // The list stays whatever it was before this click -- setPriority.mutate does not touch
+      // cached data on rejection -- so the only thing telling either kind of reader this failed is
+      // this announcement and the field-error rendered off setPriority.isError below.
+      onError: () => setAnnouncement(t('settings.sourceOrder.saveFailed')),
+      onSettled: () => setSettledCount((n) => n + 1),
+    })
+  }
+
+  const reset = (): void => {
+    setPriority.mutate([], {
+      onSuccess: () => setAnnouncement(t('settings.sourceOrder.resetAnnounced')),
+      onError: () => setAnnouncement(t('settings.sourceOrder.saveFailed')),
+      onSettled: () => setSettledCount((n) => n + 1),
+    })
+  }
+
   return (
     <>
       <ul className="source-name-list">
@@ -68,8 +155,81 @@ export function SourceNames() {
           </ul>
         </>
       )}
+      {/* Its own Loading and ErrorState rather than a third shape: the sources list above already
+          answers "what does this card show while its own query is in flight or has failed", and
+          the priority query is just as capable of either, on its own schedule - the two routes
+          answer at different times, and gating the whole card on the slower of the two would leave
+          the names blank while priority is still in flight for no reason. */}
+      <section className="source-order">
+        <h3>{t('settings.sourceOrder.title')}</h3>
+        <p>{t('settings.sourceOrder.intro')}</p>
+        {/* Present regardless of the section's own load state, so a screen reader has already
+            registered this region before the first move happens rather than discovering it at
+            the same moment its content would change. */}
+        <p className="sr-only" aria-live="polite">{announcement}</p>
+        {priority.isPending && <Loading />}
+        {priority.isError && (
+          <ErrorState onRetry={() => { void priority.refetch() }} error={priority.error} />
+        )}
+        {priority.data && (
+          <>
+            <ol className="source-order-list">
+              {priority.data.order.map((entry, at) => {
+                const name = nameFor(entry.sourceId)
+                return (
+                  // No aria-label here: ARIA 1.2 does not let role="listitem" take a name from the
+                  // author, so one never reached a screen reader, and the h4 right below already
+                  // says the same name to a sighted reader.
+                  <li key={entry.sourceId}>
+                    <h4>{name}</h4>
+                    <button
+                      type="button"
+                      ref={buttonRefFor(entry.sourceId, 'up')}
+                      disabled={at === 0 || setPriority.isPending}
+                      aria-label={t('settings.sourceOrder.moveUp', { name })}
+                      onClick={() => move(entry.sourceId, name, at, -1)}
+                    >{t('settings.sourceOrder.up')}</button>
+                    <button
+                      type="button"
+                      ref={buttonRefFor(entry.sourceId, 'down')}
+                      disabled={at === order.length - 1 || setPriority.isPending}
+                      aria-label={t('settings.sourceOrder.moveDown', { name })}
+                      onClick={() => move(entry.sourceId, name, at, 1)}
+                    >{t('settings.sourceOrder.down')}</button>
+                  </li>
+                )
+              })}
+            </ol>
+            {priority.data.configured && (
+              <button
+                type="button"
+                disabled={setPriority.isPending}
+                onClick={reset}
+              >{t('settings.sourceOrder.reset')}</button>
+            )}
+            {setPriority.isError && (
+              <p className="field-error">{t('settings.sourceOrder.saveFailed')}</p>
+            )}
+          </>
+        )}
+      </section>
     </>
   )
+}
+
+/**
+ * The list with one entry moved by one place, returned whole rather than as a patch. The route
+ * takes the complete list because priorityFrom treats it as a complete statement: a source it
+ * omits falls to UNRANKED_BASE and loses to every ranked source on every day they share, so a
+ * partial send from here would silently demote everything this helper left out.
+ */
+function moved(order: readonly string[], at: number, by: -1 | 1): string[] {
+  const next = [...order]
+  const target = at + by
+  if (target < 0 || target >= next.length) return next
+  const [item] = next.splice(at, 1)
+  next.splice(target, 0, item!)
+  return next
 }
 
 function SourceNameRow({ source }: { source: NamedSourceWithActivity }) {
