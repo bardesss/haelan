@@ -187,9 +187,10 @@ describe('marks only contested days', () => {
     expect(queuedDates()).toEqual([])
   })
 
-  it('rejects an unowned source before scanning for contested days, not after', () => {
-    // Two sources on the same day would be contested if the scan ran at all, so a nonempty
-    // queue here would mean ownership was checked too late, after the scan already ran.
+  it('rejects an unowned source even when a contested day is in play', () => {
+    // A rejected put writes nothing, so nothing should be queued either, on a day that would
+    // otherwise have been marked. This does not observe when the ownership check runs relative
+    // to the contested-day scan, only that a rejection leaves derive_queue untouched.
     const utcMs = MIDNIGHT_UTC + 3_600_000
     insertSample(test.db, { personId: 'p1', sourceId: 'watch', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
     insertSample(test.db, { personId: 'p1', sourceId: 'phone', metric: 'steps', utcMs, tzOffsetMinutes: OFFSET })
