@@ -14,8 +14,8 @@ interface CursorsQuery {
  * The archive is the source of truth: every companion upload lands in raw_payloads
  * with requestParams { source: 'companion' }, while Google fetches carry a filter.
  * This route groups those rows by data type and answers the newest window end and
- * the newest fetch time per type, plus the oldest window start as the history start
- * T5.3 names. A type with no row answers null, which is how the app tells a first
+  * the newest fetch time per type, plus the oldest window start as the history start
+  * the phone-history clamp names. A type with no row answers null, which is how the app tells a first
  * sync (send the full window) from a later one (send the delta with an overlap).
  *
  * The list is the ingest contract, not the catalogue: the same predicate ingest.ts
@@ -78,7 +78,7 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
       }
     })
     // Whether this person also walks the Google path. Cards clamp their range to the
-    // history start only without one (T5.3 passo 4): a mixed person keeps the deep archive.
+    // history start only without one (step 4 of the phone-history clamp): a mixed person keeps the deep archive.
     const googleConnected = app.haelan.instance.credentials.isConnected(personId)
     return sendHashed(reply, request, { items, historyStartMs, googleConnected })
   })

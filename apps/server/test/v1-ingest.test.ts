@@ -122,7 +122,7 @@ describe('the companion ingest route', () => {
     ])
   })
 
-  // T6.1: pairing names a person, so two phones on two members never fold into one source,
+  // Pairing names a person, so two phones on two members never fold into one source,
   // even holding the same watch. The source side was already person scoped; this pins it
   // instead of taking it for granted, the way the two-devices test above pins device scoping.
   it('files one device under two persons as two sources rather than one', async () => {
@@ -260,7 +260,7 @@ describe('the companion ingest route', () => {
   })
 
   /**
-   * T3.4's decision, held here so it cannot be quietly reversed into the refusal it was once
+   * This decision, held here so it cannot be quietly reversed into the refusal it was once
    * assumed to be. The two controls that look alike are not the same decision: the exclusion
    * list answers "what does this instance go and fetch", which is what the screen that writes
    * it says ("Turning one off stops fetching it"), and what the phone pushes is the phone's

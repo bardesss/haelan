@@ -4,12 +4,11 @@ import { useHistoryStart } from '../data/useHistoryStart.js'
 import { historyStartLocalDate } from '../controls/range.js'
 
 /**
- * Where the backfill step would be on a phone path (T5.4): there is no horizon
- * to walk, so there is no horizon to pick. What stands here instead is the T5.3
- * date, a fact rather than a choice: null until the phone first sends, the day
- * it started on afterwards. It deliberately promises no pairing screen, which is
- * T6.x work: the copy names the app's own Sync button, the same sentence T1.3
- * already uses for this path.
+ * Where the backfill step would be on a phone path: there is no horizon
+ * to walk, so there is no horizon to pick. What stands here instead is the
+ * history start date, a fact rather than a choice: null until the phone first sends, the day
+ * it started on afterwards. It deliberately promises no pairing screen: the copy names
+ * the app's own Sync button, the same sentence already used for this path.
  */
 export function CompanionHistoryStep() {
   const { t } = useTranslation()

@@ -1,4 +1,4 @@
-# The values the Google Health API v4 defines for Exercise.exerciseType (T0.5 step 3).
+# The values the Google Health API v4 defines for Exercise.exerciseType.
 #
 # Read from the reference, not from memory:
 #   https://developers.google.com/health/reference/rpc/google.devicesandservices.health.v4
@@ -6,7 +6,7 @@
 # Fetched 2026-09-14. The enum lists 182 rows, of which one is EXERCISE_TYPE_UNSPECIFIED,
 # which is not an activity and is left out here: 181 values remain.
 #
-# T4.1 asserts every value the app maps a Health Connect constant onto is one of these.
+# Every value the app maps a Health Connect constant onto is one of these.
 # Nothing in this file was written by hand.
 AEROBIC_WORKOUT
 ARCHERY

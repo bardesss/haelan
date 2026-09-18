@@ -11,7 +11,7 @@ import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 /**
- * When the background sync goes (T5.1). The policy is data so a JVM test pins it; the request
+ * When the background sync goes. The policy is data so a JVM test pins it; the request
  * is a thin shell over it, verified on the device it runs on rather than in a test that would
  * need the framework to build one.
  */

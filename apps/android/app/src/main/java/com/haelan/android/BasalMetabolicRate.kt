@@ -5,7 +5,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 
 /**
- * The fifth type A-03 invented, kept because T0.4 found a record behind it:
+ * The fifth type A-03 invented, kept because an earlier check found a record behind it:
  * `BasalMetabolicRateRecord`, one per day, `AUTOMATICALLY_RECORDED`. The generator is not back,
  * and the difference is the whole point of the measurement: this reads a figure the device
  * computed instead of rolling dice for one.

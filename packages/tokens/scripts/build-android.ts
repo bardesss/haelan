@@ -6,7 +6,7 @@ import { androidColorFiles } from '../src/android.js'
 // The Android app's generated resource directory, inside the module's build/, so the palette is
 // an output like any other and a clean removes it. The Gradle build does not run this: it fails
 // with the command to run when the two files are missing, because an Android build should not need
-// a Node toolchain to assemble (T7.1). A second Android surface would change this one path.
+// a Node toolchain to assemble. A second Android surface would change this one path.
 const res = fileURLToPath(
   new URL('../../../apps/android/app/build/haelan-tokens/res/', import.meta.url),
 )

@@ -101,7 +101,7 @@ function clickContinue(): void {
 }
 
 describe("the wizard's companion history step", () => {
-  // T6.4: a phone-only instance walks the wizard without ever seeing the data types
+  // A phone-only instance walks the wizard without ever seeing the data types
   // step either. Exclusions govern what the instance fetches from Google, and a
   // phone-only history fetches nothing, so SetupApp skips the screen instead of
   // filtering its list. No click needed: the history step is where the wizard lands
@@ -119,7 +119,7 @@ describe("the wizard's companion history step", () => {
   })
 
   // The date half of the same step: a history that already started names when, which is
-  // the T5.3 date this step stands in for rather than a horizon to pick.
+  // the history start date this step stands in for rather than a horizon to pick.
   it('names the date once the phone has sent', async () => {
     const restore = mockApi(true, Date.parse('2026-09-13T10:00:00Z'))
     mount()
@@ -133,7 +133,7 @@ describe("the wizard's companion history step", () => {
     expect(container!.textContent).toContain('2026-09-13')
   })
 
-  // Passo 2: the Google path is untouched, horizon question included.
+  // Step 2: the Google path is untouched, horizon question included.
   it('keeps the backfill step on a Google instance', async () => {
     const restore = mockApi(false, null)
     mount()

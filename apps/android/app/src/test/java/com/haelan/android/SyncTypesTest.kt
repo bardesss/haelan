@@ -47,7 +47,7 @@ class SyncTypesTest {
 
     /**
      * The fifth of A-03's invented types survived phase 2 on the strength of a measurement, not
-     * of a second look: T0.4 found BasalMetabolicRateRecord, one record a day. The four above
+     * of a second look: a measurement found BasalMetabolicRateRecord, one record a day. The four above
      * have no record class in connect-client at all.
      */
     @Test

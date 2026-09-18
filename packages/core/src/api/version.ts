@@ -46,7 +46,7 @@
  *    Sessions are a rounding error against `samples` - 434 of them against 2,138,327 sample rows
  *    on the same instance - so the disk cost is not measurable next to the rebuild the bump
  *    triggers.
- * 6: T3.1 corrects the identity of a source, in two places at once. What the companion app sends
+ * 6: corrects the identity of a source, in two places at once. What the companion app sends
  *    changed - it used to send one constant dataSource for every reading it ever pushed, so a
  *    watch's reading was filed as the phone's, a hand-typed one was indistinguishable from a
  *    scale's, and two phones collapsed onto one externalId. It now sends the device and the

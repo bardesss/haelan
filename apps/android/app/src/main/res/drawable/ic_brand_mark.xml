@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Il marchio: una H il cui traverso e' un battito. Le due forme sono quelle di
-     assets/brand/mark.svg, riscritte qui perche' una risorsa Android non legge un SVG a runtime,
-     mentre il colore non e' riscritto: e' @color/accent, cioe' il token, che cambia con il tema
-     perche' values e values-night lo definiscono due volte (T7.1).
-     Sul web il marchio prende currentColor dall'elemento che lo contiene; un vector drawable non
-     eredita nessun colore, quindi qui l'equivalente e' il token. Una superficie che lo volesse in
-     un altro tono lo tinta con app:tint sulla ImageView, che sovrascrive questo. -->
+<!-- The brand mark: an H whose crossbar is a heartbeat. The two shapes are those of
+     assets/brand/mark.svg, rewritten here because an Android resource does not read an SVG at runtime,
+     while the colour is not rewritten: it is @color/accent, that is the token, which changes with the theme
+     because values and values-night define it twice.
+     On the web the mark takes currentColor from its containing element; a vector drawable inherits
+     no colour, so the equivalent here is the token. A surface that wants it in
+     another tone tints it with app:tint on the ImageView, which overrides this. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

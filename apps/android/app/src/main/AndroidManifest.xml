@@ -22,7 +22,7 @@
     <uses-permission android:name="android.permission.health.READ_HYDRATION" />
     <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <uses-permission android:name="android.permission.health.READ_ELEVATION_GAINED" />
-    <!-- Background sync (T5.1): without this, Health Connect answers a worker's reads with an
+    <!-- Background sync: without this, Health Connect answers a worker's reads with an
          error instead of rows. Asked together with the per-type reads above. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 

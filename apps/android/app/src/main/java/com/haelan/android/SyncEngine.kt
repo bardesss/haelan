@@ -37,8 +37,8 @@ import kotlin.reflect.KClass
 
 /**
  * The sync itself: read Health Connect, map to the v4 shape, POST. Shared by the screen's
- * button and the background worker (T5.1), because the two copies that used to live in
- * `MainActivity` and `LoginActivity` had already drifted once (T3.5) and a third copy would
+ * button and the background worker, because the two copies that used to live in
+ * `MainActivity` and `LoginActivity` had already drifted once and a third copy would
  * drift again.
  *
  * Everything here is headless: progress reaches the caller through [Reporter], and the HTTP
@@ -61,7 +61,7 @@ object SyncEngine {
      * [typeStarted], then exactly one of [typeOk], [typeEmpty] or [typeFailed]. [typeEmpty] is
      * a finished read that found nothing to send, which is not a failure but must not read as
      * a send either, because a toggle with nothing in Health Connect and a toggle that never
-     * ran are two different answers (T5.2). [sessionExpired] ends the
+     * ran are two different answers. [sessionExpired] ends the
      * whole sync instead of a type: the cookie is dead and every later type would answer 401.
      */
     interface Reporter {
@@ -100,7 +100,7 @@ object SyncEngine {
         HealthPermission.getReadPermission(HydrationRecord::class),
         HealthPermission.getReadPermission(Vo2MaxRecord::class),
         HealthPermission.getReadPermission(ElevationGainedRecord::class),
-        // Background sync (T5.1): asked with the rest so the worker's reads are answered.
+        // Background sync: asked with the rest so the worker's reads are answered.
         HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND,
     )
 
@@ -174,7 +174,7 @@ object SyncEngine {
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
     ): InstanceClient.Outcome<Boolean> {
         // The key is a toggle, the id is what the instance files: SyncTypes.forKey is what
-        // ties them, and its test keeps the knot tied (T5.5).
+        // ties them, and its test keeps the knot tied.
         val dataTypeId = SyncTypes.forKey(key).dataTypeId
         when (key) {
             "basal" -> {
@@ -390,14 +390,14 @@ object SyncEngine {
         // no source the app can point at, so it stops here instead of reaching the instance.
         SyncTypes.declared(dataTypeId)
         // An empty read finished cleanly and found nothing: false tells the caller to file it
-        // as no data rather than as a send, so the two stop sharing one mark (T5.2).
+        // as no data rather than as a send, so the two stop sharing one mark.
         if (points.isEmpty()) return InstanceClient.Outcome.Ok(false)
         // One request carries one dataSource, so a page mixing a watch's readings, the phone's
         // and somebody's typed-in ones is several requests rather than one. Before this split the
         // whole page travelled under a single identity, which is why a hand-typed weight was
         // filed as the scale's and could not be excluded.
         for ((identity, group) in points.groupBy { it.source }) {
-            // L'endpoint rifiuta oltre 10000 punti: invia a blocchi misurati in byte.
+            // The endpoint refuses more than 10000 points: send in byte-measured blocks.
             for (chunk in chunksBySize(group.map { it.body })) {
                 val outcome = postChunk(session, packageName, dataTypeId, identity, chunk, post)
                 // The first refusal stops this type: the chunks after it would carry the same
@@ -444,7 +444,7 @@ object SyncEngine {
 
     /**
      * The dataSource one request carries. The package is read rather than written down: a review
-     * build installs under its own id (T8.2), and a source naming the release package would file
+     * build installs under its own id, and a source naming the release package would file
      * a reviewer's push under the app somebody actually paired.
      */
     private fun dataSourceOf(identity: SourceIdentity, packageName: String): JSONObject = JSONObject()
@@ -584,7 +584,7 @@ object SyncEngine {
                 .put("vo2Max", record.vo2MillilitersPerMinuteKilogram))
     }
 
-    // Il riepilogo notturno del respiro viaggia sul tipo sleep con fullSleepStats.
+    // The nightly breathing summary travels on the sleep type with fullSleepStats.
     private fun toSleepRespPoints(records: List<RespiratoryRateRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
             .put("respiratoryRateSleepSummary", JSONObject()

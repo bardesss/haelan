@@ -41,7 +41,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       if (typeof username !== 'string' || typeof password !== 'string') {
         return reply.code(statusFor('config')).send(errorBody('config', 'config', 'username and password are required'))
       }
-      // T6.1: whoever is invited names their own path while redeeming instead of inheriting
+      // Whoever is invited names their own path while redeeming instead of inheriting
       // the admin's. Only 'companion' writes anything, onto their own person row; 'google'
       // and an absent choice both leave the flag for a later consent or pairing. Validated
       // before the claim below so a bad value cannot burn a one-time link.

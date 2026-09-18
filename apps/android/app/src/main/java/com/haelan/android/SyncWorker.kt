@@ -11,14 +11,14 @@ import java.io.IOException
 import java.time.Instant
 
 /**
- * The sync without a screen (T5.1). Same engine the button runs, with a reporter that logs
+ * The sync without a screen. Same engine the button runs, with a reporter that logs
  * instead of drawing rows: a worker cannot touch a view, and a sync that needs one open is
  * the manual sync this task stops depending on.
  *
  * Silent by design: no notification, no toast. A background attempt that fails is retried with
  * the schedule's backoff when the failure is transient (no network, instance asleep), and
  * filed as done when it is not (a refusal would answer the same on retry). Which types went
- * and which did not is visible in the app (T5.2), not in the shade.
+ * and which did not is visible in the app, not in the shade.
  */
 class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
 
@@ -74,7 +74,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
                 override fun typeStarted(key: String) = Unit
                 override fun typeOk(key: String) {
                     // The same timestamp the screen reads, so a background run moves the rows
-                    // even when nobody watched it go (T5.2).
+                    // even when nobody watched it go.
                     prefs.edit()
                         .putLong(SyncStatus.lastKey(key), runEnd.toEpochMilli())
                         .putBoolean(SyncStatus.emptyKey(key), false)

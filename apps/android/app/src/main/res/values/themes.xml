@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- DayNight: la palette ha due temi, come il foglio di stile, e quale dei due si vede lo
-         decide il telefono invece di questa riga. I colori non sono scritti qui: arrivano dal
-         target Android di packages/tokens (T7.1), e questo file dice soltanto quale token va su
-         quale attributo di Material. -->
+    <!-- DayNight: the palette has two themes, like the style sheet, and which of the two is seen
+         is decided by the phone instead of this line. The colours are not written here: they arrive from
+         the Android target of packages/tokens, and this file only says which token goes on
+         which Material attribute. -->
     <style name="Theme.Haelan" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
         <item name="colorOnPrimary">@color/surface_page</item>
