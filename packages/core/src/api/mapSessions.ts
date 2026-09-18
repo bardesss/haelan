@@ -70,8 +70,16 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
   // an array. Iterating that throws "not iterable"; treating it as no data does not.
   const points = Array.isArray(dataPoints) ? dataPoints : []
 
-  const sessions: SessionRow[] = []
-  const segments: SegmentRow[] = []
+  // Keyed by the row's own id rather than appended to a list, because one body can name the same
+  // session twice and one session's `stages` can repeat a (type, startTime) pair. Either yields
+  // two rows sharing a primary key - segment ids are stableId(sessionId, stage, stageStartMs) -
+  // and both writers insert a page's segments without conflict handling, so the second row threw
+  // `UNIQUE constraint failed: session_segments.id` and took the person's whole rebuild with it
+  // (#274). Collapsed here, in the one place that reads a body, rather than at the two inserts:
+  // upserting there would union two stage timelines where every comment on those inserts says a
+  // revised one replaces its predecessor wholesale.
+  const sessions = new Map<string, SessionRow>()
+  const segments = new Map<string, Map<string, SegmentRow>>()
 
   for (const point of points) {
     const payload = valueAt(point, t.payloadKey)
@@ -91,7 +99,7 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
     const id = stableId(input.personId, sourceId, t.id, externalId)
 
-    sessions.push({
+    sessions.set(id, {
       id,
       personId: input.personId,
       sourceId,
@@ -139,6 +147,11 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
       rawPayloadId: input.rawPayloadId,
     })
 
+    // Installed before the `stages` guard below, so a repeat that carries no stage list at all
+    // still clears the timeline its superseded copy contributed, instead of leaving it standing.
+    const mine = new Map<string, SegmentRow>()
+    segments.set(id, mine)
+
     const stages = valueAt(payload, 'stages')
     if (!Array.isArray(stages)) continue
     for (const stage of stages) {
@@ -150,8 +163,9 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
       })
       const kind = valueAt(stage, 'type')
       if (!stageStart || !stageEnd || typeof kind !== 'string') continue
-      segments.push({
-        id: stableId(id, kind, String(stageStart.utcMs)),
+      const segmentId = stableId(id, kind, String(stageStart.utcMs))
+      mine.set(segmentId, {
+        id: segmentId,
         sessionId: id,
         stage: kind,
         startMs: stageStart.utcMs,
@@ -160,5 +174,8 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     }
   }
 
-  return { sessions, segments }
+  return {
+    sessions: [...sessions.values()],
+    segments: [...segments.values()].flatMap((forOne) => [...forOne.values()]),
+  }
 }

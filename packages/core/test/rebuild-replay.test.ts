@@ -610,3 +610,66 @@ describe('replayPerson', () => {
     expect(rows[0]?.updatedAtMs).toBe(1_700_000_000_000)
   })
 })
+
+// Issue #274: on a real instance an image update moved DERIVATION_VERSION 7 -> 9, the boot rebuild
+// that triggers threw `UNIQUE constraint failed: session_segments.id` at replay.ts's segment
+// insert, and the only person on the instance was quarantined - every sync run skipped them, on
+// every restart, with no way back without a code change. The duplicate is inside a single archived
+// body, which is the one case the per-session delete above the insert cannot absorb, because every
+// delete for a page runs before any insert for it.
+describe('replayPerson, a body that repeats itself (#274)', () => {
+  test('replays a session whose stage list repeats a type and start, rather than throwing', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'sleep', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: body([sleepPoint({
+        startTime: '2026-08-17T21:30:00Z',
+        endTime: '2026-08-18T05:15:00Z',
+        stages: [
+          { type: 'LIGHT', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-17T23:00:00Z' },
+          // Same type, same start: one segment id, two rows, and the insert threw on the second.
+          { type: 'LIGHT', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-17T23:30:00Z' },
+          { type: 'DEEP', startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T00:30:00Z' },
+        ],
+      })]),
+    })
+
+    const counts = db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    expect(counts.sessions).toBe(1)
+    expect(counts.segments).toBe(2)
+    expect(db.select().from(sessions).all()).toHaveLength(1)
+  })
+
+  test('replays one body naming the same session twice, keeping the later stage timeline', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    const night = (stage: string): Record<string, unknown> => sleepPoint({
+      name: 'users/me/dataTypes/sleep/dataPoints/twice',
+      startTime: '2026-08-17T21:30:00Z',
+      endTime: '2026-08-18T05:15:00Z',
+      stages: [{ type: stage, startTime: '2026-08-17T23:00:00Z', endTime: '2026-08-18T05:15:00Z' }],
+    })
+    archive.put({
+      personId: 'p1', dataType: 'sleep', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: body([night('DEEP'), night('REM')]),
+    })
+
+    const counts = db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1,
+    }))
+
+    expect(counts.sessions).toBe(1)
+    // One timeline, not the union of the superseded copy's and the one that replaced it.
+    expect(counts.segments).toBe(1)
+  })
+})
