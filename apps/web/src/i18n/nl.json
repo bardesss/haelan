@@ -1128,7 +1128,7 @@
       "up": "Omhoog",
       "down": "Omlaag",
       "reset": "Gebruik de standaardvolgorde",
-      "recomputing": "{{count}} dagen worden herberekend"
+      "moved": "{{name}} is verplaatst naar positie {{position}} van {{total}}"
     },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",

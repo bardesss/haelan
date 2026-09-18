@@ -34,6 +34,11 @@ export function SourceNames() {
   const { sources, isPending, isError, error } = useSourcesWithActivity()
   const priority = useSourcePriority()
   const setPriority = useSetSourcePriority()
+  // Read aloud rather than shown: the whole reason reordering is two buttons and not drag is that
+  // a screen reader user drives them, and neither the row moving nor a disabled attribute changing
+  // says anything to that reader on its own, especially for a move in the middle of a long list
+  // where nothing at either end becomes newly enabled or disabled.
+  const [announcement, setAnnouncement] = useState('')
 
   if (isPending) return <Loading />
   if (isError) {
@@ -65,6 +70,18 @@ export function SourceNames() {
   const nameFor = (sourceId: string): string => sources.find((s) => s.id === sourceId)?.name ?? sourceId
   const order = (priority.data?.order ?? []).map((entry) => entry.sourceId)
 
+  // The announcement is built from `next`, the list this move is about to send, rather than
+  // read back from the server's own answer: the PUT echoes the same order it was given, so
+  // waiting for the round trip to name a position already known here would only make a screen
+  // reader wait longer than a sighted reader does for the same information.
+  const move = (sourceId: string, name: string, at: number, by: -1 | 1): void => {
+    const next = moved(order, at, by)
+    const position = next.indexOf(sourceId) + 1
+    setPriority.mutate(next, {
+      onSuccess: () => setAnnouncement(t('settings.sourceOrder.moved', { name, position, total: next.length })),
+    })
+  }
+
   return (
     <>
       <ul className="source-name-list">
@@ -78,48 +95,56 @@ export function SourceNames() {
           </ul>
         </>
       )}
-      {/* Waits on its own query rather than sharing sources' isPending guard above: the two
-          routes answer at different times, and gating the whole card on the slower of the two
-          would leave the names blank while priority is still in flight for no reason. */}
-      {priority.data && (
-        <section className="source-order">
-          <h3>{t('settings.sourceOrder.title')}</h3>
-          <p>{t('settings.sourceOrder.intro')}</p>
-          <ol className="source-order-list">
-            {priority.data.order.map((entry, at) => {
-              const name = nameFor(entry.sourceId)
-              return (
-                <li key={entry.sourceId} aria-label={t('settings.sourceOrder.itemLabel', { name })}>
-                  <h4>{name}</h4>
-                  <button
-                    type="button"
-                    disabled={at === 0 || setPriority.isPending}
-                    aria-label={t('settings.sourceOrder.moveUp', { name })}
-                    onClick={() => setPriority.mutate(moved(order, at, -1))}
-                  >{t('settings.sourceOrder.up')}</button>
-                  <button
-                    type="button"
-                    disabled={at === order.length - 1 || setPriority.isPending}
-                    aria-label={t('settings.sourceOrder.moveDown', { name })}
-                    onClick={() => setPriority.mutate(moved(order, at, 1))}
-                  >{t('settings.sourceOrder.down')}</button>
-                </li>
-              )
-            })}
-          </ol>
-          {priority.data.configured && (
-            <button
-              type="button"
-              disabled={setPriority.isPending}
-              onClick={() => setPriority.mutate([])}
-            >{t('settings.sourceOrder.reset')}</button>
-          )}
-          {/* 'settings.sourceOrder.recomputing' has no reader yet: nothing exposes a person's derive
-              queue depth over HTTP, so the days-remaining line it belongs to is a follow up rather
-              than something this card can show today. Reserved here rather than left out, so the
-              key exists in both catalogues before the line that reads it does. */}
-        </section>
-      )}
+      {/* Its own Loading and ErrorState rather than a third shape: the sources list above already
+          answers "what does this card show while its own query is in flight or has failed", and
+          the priority query is just as capable of either, on its own schedule - the two routes
+          answer at different times, and gating the whole card on the slower of the two would leave
+          the names blank while priority is still in flight for no reason. */}
+      <section className="source-order">
+        <h3>{t('settings.sourceOrder.title')}</h3>
+        <p>{t('settings.sourceOrder.intro')}</p>
+        {/* Present regardless of the section's own load state, so a screen reader has already
+            registered this region before the first move happens rather than discovering it at
+            the same moment its content would change. */}
+        <p className="sr-only" aria-live="polite">{announcement}</p>
+        {priority.isPending && <Loading />}
+        {priority.isError && (
+          <ErrorState onRetry={() => { void priority.refetch() }} error={priority.error} />
+        )}
+        {priority.data && (
+          <>
+            <ol className="source-order-list">
+              {priority.data.order.map((entry, at) => {
+                const name = nameFor(entry.sourceId)
+                return (
+                  <li key={entry.sourceId} aria-label={t('settings.sourceOrder.itemLabel', { name })}>
+                    <h4>{name}</h4>
+                    <button
+                      type="button"
+                      disabled={at === 0 || setPriority.isPending}
+                      aria-label={t('settings.sourceOrder.moveUp', { name })}
+                      onClick={() => move(entry.sourceId, name, at, -1)}
+                    >{t('settings.sourceOrder.up')}</button>
+                    <button
+                      type="button"
+                      disabled={at === order.length - 1 || setPriority.isPending}
+                      aria-label={t('settings.sourceOrder.moveDown', { name })}
+                      onClick={() => move(entry.sourceId, name, at, 1)}
+                    >{t('settings.sourceOrder.down')}</button>
+                  </li>
+                )
+              })}
+            </ol>
+            {priority.data.configured && (
+              <button
+                type="button"
+                disabled={setPriority.isPending}
+                onClick={() => setPriority.mutate([])}
+              >{t('settings.sourceOrder.reset')}</button>
+            )}
+          </>
+        )}
+      </section>
     </>
   )
 }

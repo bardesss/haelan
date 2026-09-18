@@ -1128,7 +1128,7 @@
       "up": "Up",
       "down": "Down",
       "reset": "Use the default order",
-      "recomputing": "Recomputing {{count}} days"
+      "moved": "{{name}} moved to position {{position}} of {{total}}"
     },
     "dataTypes": {
       "title": "What to sync",

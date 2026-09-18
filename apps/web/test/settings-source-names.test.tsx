@@ -10,6 +10,7 @@ import type { Session } from '../src/auth/session.js'
 import { SourceNames } from '../src/pages/settings/SourceNames.js'
 import { sourceActivityKey } from '../src/data/useSourceNames.js'
 import type { NamedSourceWithActivity } from '../src/data/useSourceNames.js'
+import { sourcePriorityKey } from '../src/data/useSourcePriority.js'
 import { flush } from './flush.js'
 
 let container: HTMLDivElement | null = null
@@ -40,11 +41,22 @@ const PERSON: Session = {
  * query would reach the real network in this environment rather than merely running slow (see
  * apps/web/test/control-row.test.tsx's own comment on withQuery), so every test here seeds it
  * even the one passing an empty list.
+ *
+ * SourceNames also mounts useSourcePriority now, and that query gets the same treatment: seeded
+ * here rather than left to reach the network, the same reason sourceActivityKey is. Built from
+ * `sources` rather than a fixed fixture, so a test that passes its own list still gets an answer
+ * naming every source in it - an unconfigured order, since ranking is not what this file's own
+ * tests are about.
  */
+function seededPriority(sources: NamedSourceWithActivity[]) {
+  return { configured: false, order: sources.map((s) => ({ sourceId: s.id, configured: false })) }
+}
+
 function mountSection(sources: NamedSourceWithActivity[]): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(sourceActivityKey(PERSON.personId), { items: sources })
+  client.setQueryData(sourcePriorityKey(PERSON.personId), seededPriority(sources))
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
@@ -82,6 +94,7 @@ function mountForWrites(sources: NamedSourceWithActivity[]): QueryClient {
   })
   client.setQueryData(queryKeys.session(), PERSON)
   client.setQueryData(sourceActivityKey(PERSON.personId), { items: sources })
+  client.setQueryData(sourcePriorityKey(PERSON.personId), seededPriority(sources))
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
