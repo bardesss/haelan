@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  AccountStore, McpCallLog, McpTokenStore, PeopleStore, SessionStore, SettingsStore,
-  SourceRegistry, SyncStateStore, openHaelan,
+  AccountStore, McpCallLog, McpTokenStore, PeopleStore, SessionStore,
+  SettingsStore, SourceRegistry, SyncStateStore, openHaelan,
 } from '@haelan/core'
 import type { Instance } from '@haelan/core'
 import type { Stores } from '../src/app.ts'
@@ -46,6 +46,9 @@ function withInstance<T>(fn: (instance: Instance, stores: Stores) => T): T {
     excludedDataTypes: instance.excludedDataTypes,
     mcpTokens: new McpTokenStore(instance.db),
     mcpCalls: new McpCallLog(instance.db),
+    // Like credentials and archive above: the instance already owns one of these, and app.ts's
+    // own construction hands the same instance-owned store on rather than building a second.
+    rebuildState: instance.rebuildState,
   }
   // Closed before the directory is removed, in that order, inside one finally: an open handle
   // still on the file is what turns rmSync's cleanup into the real failure here rather than

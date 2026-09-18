@@ -1,7 +1,7 @@
 ﻿import {
   DATA_TYPES, RevokedError, CredentialsUnreadableError, TokenBucket, HealthClient, TokenProvider,
   peopleNeedingRebuild, runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
-  supports,
+  supports, isQuarantined,
 } from '@haelan/core'
 import type { DataType, JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -76,6 +76,29 @@ export interface BackfillSummary {
 }
 
 /**
+ * What the last rebuild of this person did, as the browser needs to say it.
+ *
+ * Per person and carried on the same envelope as the backfill array, for the same reason that
+ * array is: this is a fact about one household member's own data and belongs only to them. The
+ * admin's household-wide view is a separate, admin-gated route.
+ *
+ * `quarantined` is derived rather than stored. A person is quarantined when their last attempt
+ * ended in an error and no later attempt has committed, which is exactly "the last thing that
+ * happened was a failure" - there is no separate flag to get out of step with the timestamps.
+ * The predicate itself lives in packages/core as `isQuarantined`, not here, because this is not
+ * the only surface that needs to ask it; a person warned about here and reported clean somewhere
+ * else would be worse than either answer standing alone, so the two share one function rather
+ * than one comment describing two.
+ */
+export interface RebuildStatus {
+  quarantined: boolean
+  droppedPages: number
+  lastErrorAtMs: number | null
+  lastError: string | null
+  drops: { dataType: string, reason: string, pages: number }[]
+}
+
+/**
  * What is true of the runner itself rather than of anybody's data. The runner is one singleton
  * per instance, so these four are instance-wide facts and safe to hand to any signed-in caller.
  * Split out from RunnerStatus so that asking "is a run going" does not require naming a person
@@ -97,6 +120,7 @@ export interface RunnerStatus extends RunState {
   personId: string
   userHorizonDays: number
   backfill: BackfillSummary[]
+  rebuild: RebuildStatus
 }
 
 export class SyncRunner {
@@ -206,7 +230,24 @@ export class SyncRunner {
         horizonDays: horizonDaysFor(type, userHorizonDays),
       })
     }
-    return { ...this.runState(), personId, userHorizonDays, backfill }
+    // Read fresh on every call rather than cached anywhere on the runner: this is a fact about
+    // one row in rebuild_state, written by a boot rebuild the runner itself never drives, and a
+    // stale copy here would leave a person's dashboard reporting yesterday's quarantine after a
+    // later boot already cleared it.
+    const rebuild = this.#context.stores.rebuildState.get(personId)
+    return {
+      ...this.runState(),
+      personId,
+      userHorizonDays,
+      backfill,
+      rebuild: {
+        quarantined: isQuarantined(rebuild),
+        droppedPages: rebuild?.droppedPages ?? 0,
+        lastErrorAtMs: rebuild?.lastErrorAtMs ?? null,
+        lastError: rebuild?.lastError ?? null,
+        drops: rebuild?.drops ?? [],
+      },
+    }
   }
 
   /**

@@ -113,3 +113,13 @@ export class RebuildStateStore {
       .orderBy(asc(rebuildDrops.dataType), asc(rebuildDrops.reason)).all()
   }
 }
+
+/**
+ * The last attempt errored and nothing has committed since. Exported and shared by the two
+ * surfaces that ask, because a person warned about on one screen and clean on the other is
+ * worse than either answer on its own.
+ */
+export function isQuarantined(row: RebuildStateRow | null | undefined): boolean {
+  if (row == null || row.lastErrorAtMs === null) return false
+  return row.lastSuccessAtMs === null || row.lastSuccessAtMs < row.lastErrorAtMs
+}
