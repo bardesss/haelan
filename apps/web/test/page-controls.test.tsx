@@ -21,6 +21,12 @@ beforeEach(() => {
   // navigated to, which is the kind of order dependence that only shows up when a file is run
   // on its own months later.
   window.history.replaceState(null, '', '/')
+  // And its own storage, for the same reason plus one more: without this the bare `localStorage`
+  // that rangePreference.ts reads resolves to the inert global Node ships rather than happy-dom's
+  // working one, so the remembered range would silently never be remembered and the tests below
+  // would pass by doing nothing. rail-collapse.test.tsx's comment has the full account of why
+  // vitest's happy-dom environment leaves Node's version in place.
+  Object.defineProperty(globalThis, 'localStorage', { value: new Storage(), configurable: true, writable: true })
 })
 
 afterEach(() => {
@@ -210,6 +216,61 @@ describe('usePageControls', () => {
       // future period away from sending a range the server refuses.
       expect(seen!.from <= seen!.historicalTo).toBe(true)
       vi.useRealTimers()
+    })
+  })
+
+  // The range is the one control here a reader mostly wants set the same way every time they
+  // arrive, so it survives the visit. Nothing else does: an anchor would land them on the week
+  // they were reading last Tuesday instead of today, and a source would reapply a filter across
+  // sessions, which is how somebody ends up looking at partial data without knowing why.
+  describe('the remembered range', () => {
+    it('survives a reader arriving at a page with no query of its own', () => {
+      window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
+      mountProbe()
+      act(() => { seen!.setTab('week') })
+
+      window.history.replaceState(null, '', '/activity')
+      mountProbe()
+      expect(seen!.tab).toBe('week')
+    })
+
+    it('gives way to a range the URL names, so a shared link still means what it says', () => {
+      window.history.replaceState(null, '', '/dashboard')
+      mountProbe()
+      act(() => { seen!.setTab('week') })
+
+      window.history.replaceState(null, '', '/activity?range=year')
+      mountProbe()
+      expect(seen!.tab).toBe('year')
+    })
+
+    // A range that arrived in a link is the sender's choice, not this reader's. Adopting it would
+    // be what an effect watching controls.tab does, and is why the write sits in setTab instead.
+    it('is not adopted from a link the reader merely opened', () => {
+      window.history.replaceState(null, '', '/dashboard?range=year')
+      mountProbe()
+      expect(seen!.tab).toBe('year')
+
+      window.history.replaceState(null, '', '/activity')
+      mountProbe()
+      expect(seen!.tab).toBe('month')
+    })
+
+    it('leaves a reader who has never chosen one on the month', () => {
+      window.history.replaceState(null, '', '/dashboard')
+      mountProbe()
+      expect(seen!.tab).toBe('month')
+    })
+
+    // Stepping is not choosing: it moves within the range the reader already picked.
+    it('is not rewritten by a stepper click', () => {
+      window.history.replaceState(null, '', '/dashboard?range=week&on=2026-08-15')
+      mountProbe()
+      act(() => { seen!.step(1) })
+
+      window.history.replaceState(null, '', '/activity')
+      mountProbe()
+      expect(seen!.tab).toBe('month')
     })
   })
 })

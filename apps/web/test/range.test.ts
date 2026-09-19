@@ -99,4 +99,31 @@ describe('parseControls', () => {
   it('accepts a leap day in a leap year', () => {
     expect(parseControls('?on=2028-02-29', today).anchor).toBe('2028-02-29')
   })
+
+  // The remembered range reaches this function as an argument rather than being read here: this
+  // module is pure date arithmetic and string parsing, and the only reason it knew the word
+  // 'month' at all was that something had to decide. Now the caller decides and this still just
+  // parses.
+  describe('with a remembered range', () => {
+    it('uses it when the URL names no range', () => {
+      expect(parseControls('', today, 'week').tab).toBe('week')
+    })
+
+    // The whole point of leaving the URL authoritative: a link someone was sent, a deep link, and
+    // the demo's canonical URLs all have to mean what they say regardless of what the reader
+    // happens to have looked at last.
+    it('is overruled by a range the URL does name', () => {
+      expect(parseControls('?range=year', today, 'week').tab).toBe('year')
+    })
+
+    // A URL that names no usable range has said nothing, which is the same position as a URL that
+    // named none at all.
+    it('is used when the URL names a range this app does not have', () => {
+      expect(parseControls('?range=fortnight', today, 'week').tab).toBe('week')
+    })
+
+    it('leaves the anchor and the source alone', () => {
+      expect(parseControls('', today, 'week')).toEqual({ tab: 'week', anchor: today, source: ALL_SOURCES })
+    })
+  })
 })
