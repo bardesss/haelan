@@ -41,6 +41,12 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   // column, so this is every daily row the bound person can see - which is exactly what the
   // isolation suites then check for a second person's fingerprints.
   sql_query: { sql: 'SELECT local_date, metric, value FROM daily ORDER BY local_date' },
+  // seedToolData writes no daily_hrv, resting_heart_rate, respiratory_rate, sleep_asleep_minutes
+  // or sleep_bedtime_minutes rows for either person, so every day in this range answers
+  // `enough: false` - there is nothing of either person's to leak, but the tool still has to run
+  // (and be refused nothing) for the isolation guarantee to cover it at all. Not in
+  // ALICE_FINGERPRINTS for the same reason: there is no scored day to assert a real number from.
+  recovery_index: { from: '2026-08-01', to: '2026-08-02' },
 }
 
 /**
