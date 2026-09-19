@@ -389,8 +389,15 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
           // overcount by the empty tail page of a paginated fetch. That overcount is reachable
           // only when rows were written, and a rebuild that wrote rows is one where nothing ever
           // reads this number - producedNothing tests rowsWritten === 0 first. An episode that
-          // produced nothing is asked page by page, which is exact, and that is the case the
-          // number is read in.
+          // produced nothing is asked page by page, and that is the case the number is read in.
+          //
+          // "Exact" there is about this loop only, not about the total. A type that names
+          // alsoTargets is replayed once per target by the loop above - ECG declares target
+          // 'sessions' with alsoTargets 'samples' and 'observations' (api/catalogue.ts) - so one
+          // ECG page can reach this counter three times and the total is an upper bound rather
+          // than a page count. Harmless for what the number is for, since producedNothing only
+          // ever asks whether it is above zero, and anything reading it as a magnitude would be
+          // reading something this loop never promised.
           if (rows.length > 0) counts.payloadsWithData += pages.length
           else for (const page of pages) {
             if (carriedData(page.body, 'dataPoints')) counts.payloadsWithData += 1
