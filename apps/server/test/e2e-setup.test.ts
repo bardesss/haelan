@@ -63,7 +63,7 @@ describe('empty volume to syncing instance', () => {
     const headers = { 'content-type': 'application/json', origin: base }
 
     // 1. Empty volume: the wizard is what the browser gets.
-    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'account', companionMode: false })
+    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'account', companionMode: false, googleClientConfigured: false })
 
     // 2. First account.
     const created = await fetch(`${base}/api/setup/account`, {
@@ -101,7 +101,7 @@ describe('empty volume to syncing instance', () => {
       { headers: { cookie }, redirect: 'manual' },
     )
     expect(callback.headers.get('location')).toBe('/setup/backfill')
-    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'done', companionMode: false })
+    expect(await (await fetch(`${base}/api/setup/state`)).json()).toEqual({ step: 'done', companionMode: false, googleClientConfigured: true })
 
     // The refresh token is on disk and it is not readable as plaintext.
     const stored = instance.db.$client
@@ -194,7 +194,7 @@ describe('empty volume to syncing instance', () => {
     })
     expect(await skipped.json()).toEqual({ step: 'done' })
     expect(await (await fetch(`${base}/api/setup/state`)).json())
-      .toEqual({ step: 'done', companionMode: true })
+      .toEqual({ step: 'done', companionMode: true, googleClientConfigured: true })
     const storedClient = instance.db.$client
       .prepare('select client_id as clientId from oauth_client').get() as { clientId: string }
     expect(storedClient.clientId).toBe('id.apps.googleusercontent.com')
@@ -258,7 +258,7 @@ describe('empty volume to syncing instance', () => {
     })
     expect(await skipped.json()).toEqual({ step: 'done' })
     expect(await (await fetch(`${base}/api/setup/state`)).json())
-      .toEqual({ step: 'done', companionMode: true })
+      .toEqual({ step: 'done', companionMode: true, googleClientConfigured: false })
     expect(instance.credentials.getClient()).toBeNull()
 
     // The door: the wizard route that writes the client answers instead of 409ing, and the step
@@ -269,6 +269,9 @@ describe('empty volume to syncing instance', () => {
     })
     expect(pasted.status).toBe(200)
     expect(await pasted.json()).toEqual({ step: 'done' })
+    // And the state flips with it: the connect control enables itself on this.
+    expect(await (await fetch(`${base}/api/setup/state`)).json())
+      .toEqual({ step: 'done', companionMode: true, googleClientConfigured: true })
 
     // The same consent flow opens after it, spending the client that arrived late.
     const start = await fetch(`${base}/oauth/start`, { headers: { cookie }, redirect: 'manual' })

@@ -10,7 +10,7 @@ describe('the setup gate', () => {
     harness = await withServer()
     const response = await harness.app.inject({ method: 'GET', url: '/api/setup/state' })
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toEqual({ step: 'account', companionMode: false })
+    expect(response.json()).toEqual({ step: 'account', companionMode: false, googleClientConfigured: false })
   })
 
   it('refuses every non setup route while setup is unfinished, and names the step that is due', async () => {
@@ -120,6 +120,6 @@ describe('the setup gate', () => {
   it('still reports the step after setup is finished, because the SPA asks on every load', async () => {
     harness = await withServer()
     await harness.connectPerson()
-    expect((await harness.app.inject({ method: 'GET', url: '/api/setup/state' })).json()).toEqual({ step: 'done', companionMode: false })
+    expect((await harness.app.inject({ method: 'GET', url: '/api/setup/state' })).json()).toEqual({ step: 'done', companionMode: false, googleClientConfigured: true })
   })
 })

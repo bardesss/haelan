@@ -185,7 +185,7 @@ describe('setup routes', () => {
     expect(harness.app.haelan.stores.people.get(personId)?.companionPath).toBe(true)
 
     const state = await harness.app.inject({ method: 'GET', url: '/api/setup/state' })
-    expect(state.json()).toEqual({ step: 'done', companionMode: true })
+    expect(state.json()).toEqual({ step: 'done', companionMode: true, googleClientConfigured: false })
 
     // The gate is open now: the versioned surface answers instead of 409 setup_incomplete,
     // with no Google client and no consent anywhere behind it.
@@ -251,6 +251,16 @@ describe('setup routes', () => {
     const { cookies } = await companionInstance(harness)
     expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
 
+    // The paste form's own reads ride the same exemption: without candidates and scopes
+    // the open writer below would still be unreachable from any screen.
+    const scopes = await harness.app.inject({ method: 'GET', url: '/api/setup/scopes', headers, cookies })
+    expect(scopes.statusCode).toBe(200)
+    expect((scopes.json() as { scopes: string[] }).scopes.length).toBeGreaterThan(0)
+    const uris = await harness.app.inject({
+      method: 'GET', url: '/api/setup/redirect-uris?host=localhost', headers, cookies,
+    })
+    expect(uris.statusCode).toBe(200)
+
     const pasted = await harness.app.inject({
       method: 'POST', url: '/api/setup/google-client', headers, cookies,
       payload: { clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret' },
@@ -292,6 +302,13 @@ describe('setup routes', () => {
     expect(pasted.json()).toMatchObject({ error: { kind: 'setup_incomplete', code: 'setup_complete' } })
     // Nothing was written: the refusal is the point, not a redirect to a form.
     expect(harness.app.haelan.stores.credentials.getClient()).toBeNull()
+    // The helpers shut with the writer: on a mixed instance there is no late paste form.
+    const scopes = await harness.app.inject({ method: 'GET', url: '/api/setup/scopes', headers, cookies })
+    expect(scopes.statusCode).toBe(409)
+    const uris = await harness.app.inject({
+      method: 'GET', url: '/api/setup/redirect-uris?host=localhost', headers, cookies,
+    })
+    expect(uris.statusCode).toBe(409)
   })
 
   it('answers the failed-consent screen on a completed companion instance', async () => {
