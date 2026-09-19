@@ -8,7 +8,7 @@ import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
-import { EmptyState } from '../components/EmptyState.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
@@ -27,7 +27,6 @@ import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { oneNightPerDate, stageOf } from '../data/nights.js'
@@ -316,10 +315,6 @@ export function Sleep() {
   // drawnNights.
   const drawnNights = scheduleNights.filter((n) => n.bed !== null && n.wake !== null).length
 
-  const syncStatus = useSyncStatus()
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
@@ -346,7 +341,6 @@ export function Sleep() {
     }
     return out
   }, [rangeDates, sumSeries.data, lastSeries.data, countSeries.data])
-
 
   // Every sparkline tile on this page shares one shape: a metric, a headline the caller has
   // already computed (mean for a typical night, sum for the two episodic nap metrics), and a
@@ -400,28 +394,36 @@ export function Sleep() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the
             same reason Dashboard's own hypnogram card stays outside it. The date names the night
             actually drawn, never the range end, so an empty range never claims a night it has no
-            row for. */}
-        <Card span={7} label={t('sleep.sleepStages.label')}
-          basis={nights.isError || lastNight === null
-            ? undefined
-            : t('sleep.sleepStages.basis', { date: lastNight.localDate })}>
-          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} error={nights.error} />
-            : nights.isPending ? <Loading /> : lastNight === null ? (
-            <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
-          ) : (
-            <>
-              <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
-                label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
-              <NightExcludedSessions count={lastNight.excludedSessions.length} />
-            </>
-          )}
-        </Card>
+            row for.
+            Nothing at all rather than an empty Card, the same rule MetricCard's own no_data
+            branch follows: the shell is what reports presence to CardGrid, so an empty one would
+            keep the page claiming it has something to show. The error and pending cards stay,
+            since neither is a statement about the person's record. */}
+        {nights.isError || nights.isPending || lastNight !== null ? (
+          <Card span={7} label={t('sleep.sleepStages.label')}
+            basis={nights.isError || lastNight === null
+              ? undefined
+              : t('sleep.sleepStages.basis', { date: lastNight.localDate })}>
+            {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} error={nights.error} />
+              // lastNight && (...), not a bare fragment: the outer gate above already guarantees
+              // lastNight is non-null whenever this branch runs, but that guarantee lives in a
+              // sibling condition TypeScript's narrowing does not reach back through, so the check
+              // is repeated here, right beside the read, for the narrowing itself.
+              : nights.isPending ? <Loading /> : lastNight && (
+              <>
+                <Hypnogram segments={hypnogramSegments} startLabel={hypnogramStartLabel}
+                  label={t('sleep.sleepStages.chartLabel', { date: lastNight.localDate })} />
+                <NightExcludedSessions count={lastNight.excludedSessions.length} />
+              </>
+            )}
+          </Card>
+        ) : null}
         {/* Gated on lastSeries, the 'last' agg group sleep_bedtime_minutes/sleep_waketime_minutes
             ride in, not on the nights query: bed and wake come from that pair, and a card that
             can draw them should not sit behind a second request that only adds the nap markers.
@@ -429,19 +431,23 @@ export function Sleep() {
             naps column states that a check was made: with the nights query still in flight or
             failed there are no nap times to have checked, and a column of "none" would claim
             otherwise for every night in the range.
-            axisWindow is the wide one: see scheduleNights' own comment for why. */}
-        <Card span={5} label={t('sleep.sleepSchedule.label')}
-          basis={lastSeries.isError || scheduleNights.length === 0
-            ? undefined
-            : t('sleep.sleepSchedule.basis', { count: drawnNights })}>
-          {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} error={lastSeries.error} />
-            : lastSeries.isPending ? <Loading /> : scheduleNights.length === 0 ? (
-            <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
-          ) : (
-            <SleepSchedule nights={scheduleNights} showNaps={nights.isSuccess} axisWindow={WIDE_WINDOW}
-              label={t('common.bedWakeChartLabel', { period })} />
-          )}
-        </Card>
+            axisWindow is the wide one: see scheduleNights' own comment for why.
+            Nothing at all rather than an empty Card, the same rule MetricCard's own no_data
+            branch follows: the shell is what reports presence to CardGrid, so an empty one would
+            keep the page claiming it has something to show. The error and pending cards stay,
+            since neither is a statement about the person's record. */}
+        {lastSeries.isError || lastSeries.isPending || scheduleNights.length > 0 ? (
+          <Card span={5} label={t('sleep.sleepSchedule.label')}
+            basis={lastSeries.isError || scheduleNights.length === 0
+              ? undefined
+              : t('sleep.sleepSchedule.basis', { count: drawnNights })}>
+            {lastSeries.isError ? <ErrorState onRetry={() => void lastSeries.refetch()} error={lastSeries.error} />
+              : lastSeries.isPending ? <Loading /> : (
+              <SleepSchedule nights={scheduleNights} showNaps={nights.isSuccess} axisWindow={WIDE_WINDOW}
+                label={t('common.bedWakeChartLabel', { period })} />
+            )}
+          </Card>
+        ) : null}
 
         {tile('sleep_asleep_minutes', 4, t('sleep.asleepMinutes.label'), 'sleep.asleepMinutes.basis',
           'sleep.asleepMinutes.chartLabel', formatDuration(asleepMean), 'sleep.units.minutes', undefined,
@@ -501,7 +507,7 @@ export function Sleep() {
         <Card span={12} measured label={t('sleep.nights.label')}>
           <NightList controls={resolved} />
         </Card>
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

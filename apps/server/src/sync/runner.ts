@@ -1,7 +1,7 @@
 ﻿import {
   DATA_TYPES, RevokedError, CredentialsUnreadableError, TokenBucket, HealthClient, TokenProvider,
   peopleNeedingRebuild, runBackfill, runDerive, runSync, horizonDaysFor, DEFAULT_USER_HORIZON_DAYS,
-  supports,
+  supports, isQuarantined, producedNothing,
 } from '@haelan/core'
 import type { DataType, JobDeps, RateLimiter, SyncProgress } from '@haelan/core'
 import type { ServerContext } from '../app.ts'
@@ -76,6 +76,78 @@ export interface BackfillSummary {
 }
 
 /**
+ * What the last rebuild of this person did, as the browser needs to say it.
+ *
+ * Per person and carried on the same envelope as the backfill array, for the same reason that
+ * array is: this is a fact about one household member's own data and belongs only to them. The
+ * admin's household-wide view is a separate, admin-gated route.
+ *
+ * `quarantined` is derived rather than stored. A person is quarantined when their last attempt
+ * ended in an error and no later attempt has committed, which is exactly "the last thing that
+ * happened was a failure" - there is no separate flag to get out of step with the timestamps.
+ * The predicate itself lives in packages/core as `isQuarantined`, not here, because this is not
+ * the only surface that needs to ask it; a person warned about here and reported clean somewhere
+ * else would be worse than either answer standing alone, so the two share one function rather
+ * than one comment describing two.
+ *
+ * `awaitingRebuild` is the other way a person's data stops, and the one no rebuild attempt
+ * precedes. It comes off `peopleNeedingRebuild`, the same predicate #eligible below already
+ * skips people by, so this field cannot disagree with the decision it is reporting. Its cause
+ * is usually nothing going wrong at all: PeopleStore.setTimezone nulls builtDerivationVersion
+ * in the same statement as the zone, which the Profile form reaches, and from the next tick the
+ * runner and the derive drainer both skip that person until a boot rebuilds them. rebuild_state
+ * still holds their last actual outcome - a clean success, or no row - so `quarantined` alone
+ * reported them as fine while they had in fact stopped, for as long as nobody restarted the
+ * container.
+ *
+ * The two are not exclusive and this deliberately does not choose between them. A quarantined
+ * person is behind on their stamp as well, because the rollback took it with them, so both read
+ * true of them. Which sentence a reader is shown is a question about wording, and it is settled
+ * once in RebuildNotice rather than differently by each surface that asks.
+ */
+export interface RebuildStatus {
+  quarantined: boolean
+  awaitingRebuild: boolean
+  droppedPages: number
+  /**
+   * Their last rebuild was handed an archive and left nothing in tier 2 or tier 3.
+   *
+   * Sent as the answer rather than as the two columns behind it, unlike droppedPages beside it,
+   * because it is a conjunction and not a measurement: rows_written = 0 on its own is true of
+   * every member connected in the last hour. Deciding it here, through the same shared predicate
+   * the admin route calls, is what keeps the two surfaces from disagreeing - the argument
+   * isQuarantined is already sent as a boolean for.
+   *
+   * Not a failure. Their rebuild committed and every flag beside this one reads clean, and tier 1
+   * still holds every payload, so a later mapping version may read what this one could not.
+   */
+  producedNothing: boolean
+  lastErrorAtMs: number | null
+  /** What can and cannot end up in this string is answered once, at the catch in runRebuild.ts
+   * that captures it - not here and not on the admin route that reads the same column. */
+  lastError: string | null
+  /**
+   * When the last rebuild attempt committed. Added so the browser can date droppedPages and
+   * producedNothing above, which otherwise persist unchanged from one boot to the next: a
+   * rebuild only reruns for a person once their version stamp goes stale, so a person stamped
+   * current while still carrying a drop or an empty rebuild would show the same numbers forever
+   * with nothing on screen saying whether that happened twenty minutes or four months ago.
+   *
+   * Not when the gap ITSELF began - a data type that keeps failing to map across two
+   * MAPPING_VERSION bumps has this timestamp walk forward on every later rebuild while the
+   * underlying gap is however old the first bad rebuild was. RebuildNotice's own copy is worded
+   * around that ("as of the rebuild ... ago"), not this field's own doc comment, since the
+   * component is what a reader actually sees.
+   *
+   * Already returned by the admin route (routes/maintenance.ts); this is the per-person mirror
+   * of the same rebuild_state column, added here for the same reason lastErrorAtMs above already
+   * is.
+   */
+  lastSuccessAtMs: number | null
+  drops: { dataType: string, reason: string, pages: number }[]
+}
+
+/**
  * What is true of the runner itself rather than of anybody's data. The runner is one singleton
  * per instance, so these four are instance-wide facts and safe to hand to any signed-in caller.
  * Split out from RunnerStatus so that asking "is a run going" does not require naming a person
@@ -97,6 +169,30 @@ export interface RunnerStatus extends RunState {
   personId: string
   userHorizonDays: number
   backfill: BackfillSummary[]
+  rebuild: RebuildStatus
+  /**
+   * Whether index.ts's boot rebuild worker is running right now. Instance-wide, which is why it
+   * sits out here beside `running` rather than inside `rebuild`: one worker rebuilds the whole
+   * household in a single pass, and RebuildStatus is documented as carrying facts about one
+   * member's own data alone.
+   *
+   * It exists because `rebuild.awaitingRebuild` on its own is ambiguous at the one moment it is
+   * most likely to be read. index.ts calls app.listen BEFORE the boot rebuild starts, and that
+   * rebuild runs for as long as fifteen minutes on real data, so every person the worker has not
+   * reached yet reports a stale stamp throughout the run that is fixing them - which is exactly
+   * the state right after an upgrade. The browser used to render "a restart is what runs it" for
+   * that, and an operator who acted on it would abort the rebuild. Paired with awaitingRebuild,
+   * this is what tells "it is running now, wait" apart from "nothing is running, only a restart
+   * starts one". Which sentence a reader sees is settled in RebuildNotice, as with the other
+   * states; this route reports the fact.
+   *
+   * Read through the ServerContext the runner already holds - ServerContext extends ServerDeps,
+   * so `rebuildInFlight` is on it for the same reason routes/maintenance.ts can reach it - rather
+   * than plumbed in separately. A second copy of the boot flag is a second thing that can fall out
+   * of step with the first. Unset outside index.ts's own wiring, hence the `?? false`: a test that
+   * never rebuilds anybody has no rebuild in flight, which is the honest answer, not an absence.
+   */
+  rebuildInFlight: boolean
 }
 
 export class SyncRunner {
@@ -206,7 +302,37 @@ export class SyncRunner {
         horizonDays: horizonDaysFor(type, userHorizonDays),
       })
     }
-    return { ...this.runState(), personId, userHorizonDays, backfill }
+    // Read fresh on every call rather than cached anywhere on the runner: this is a fact about
+    // one row in rebuild_state, written by a boot rebuild the runner itself never drives, and a
+    // stale copy here would leave a person's dashboard reporting yesterday's quarantine after a
+    // later boot already cleared it.
+    const rebuild = this.#context.stores.rebuildState.get(personId)
+    // Read from the people row rather than from rebuild_state, because that is where this state
+    // lives: a stale stamp is the absence of a rebuild, so no row records it. An unknown person
+    // is behind on nothing - peopleNeedingRebuild over an empty list is an empty list - which is
+    // the same answer #eligible gives them, and #backfillPass is where a connected person with
+    // no row is actually handled.
+    const person = this.#context.stores.people.get(personId)
+    return {
+      ...this.runState(),
+      personId,
+      userHorizonDays,
+      backfill,
+      // Asked on every call, like the rebuild row above and for the same reason: the boot
+      // rebuild settles while a dashboard is open, and a copy taken when this runner was
+      // constructed would have been true for the whole life of the process.
+      rebuildInFlight: this.#context.rebuildInFlight?.() ?? false,
+      rebuild: {
+        quarantined: isQuarantined(rebuild),
+        awaitingRebuild: peopleNeedingRebuild(person === null ? [] : [person]).length > 0,
+        droppedPages: rebuild?.droppedPages ?? 0,
+        producedNothing: producedNothing(rebuild),
+        lastErrorAtMs: rebuild?.lastErrorAtMs ?? null,
+        lastError: rebuild?.lastError ?? null,
+        lastSuccessAtMs: rebuild?.lastSuccessAtMs ?? null,
+        drops: rebuild?.drops ?? [],
+      },
+    }
   }
 
   /**

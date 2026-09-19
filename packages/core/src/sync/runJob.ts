@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import type { Database } from '../db/open.ts'
 import type { DataType } from '../api/catalogue.ts'
 import { supports } from '../api/catalogue.ts'
@@ -266,21 +266,39 @@ function writeSamples(tx: Parameters<Parameters<Database['transaction']>[0]>[0],
 }): Written {
   const rows = mapWindowSamples(args)
   const localDates = new Set<string>()
+  // Prepared once per window rather than once per row, for the reason replay.ts's identical
+  // statement spells out: drizzle prepares a new better-sqlite3 statement on every
+  // `insert().values().run()`, and better-sqlite3 keeps every statement a connection ever prepares
+  // so it can finalise them on close. A forced GC reclaims none of it. The rebuild is where that
+  // became an outage (#275), and it is worth fixing here too because this connection is the
+  // server's and it lives for the life of the process: left per row, an instance's memory grew
+  // with every sample sync had ever written and only a restart gave it back.
+  const insertSample = tx.insert(samples).values({
+    personRef: sql.placeholder('personRef'),
+    sourceRef: sql.placeholder('sourceRef'),
+    metricRef: sql.placeholder('metricRef'),
+    utcMs: sql.placeholder('utcMs'),
+    tzOffsetMinutes: sql.placeholder('tzOffsetMinutes'),
+    aggRef: sql.placeholder('aggRef'),
+    value: sql.placeholder('value'),
+    n: sql.placeholder('n'),
+    rawPayloadRef: sql.placeholder('rawPayloadRef'),
+  } as unknown as typeof samples.$inferInsert).onConflictDoUpdate({
+    target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
+    set: {
+      value: sql.placeholder('value'),
+      n: sql.placeholder('n'),
+      tzOffsetMinutes: sql.placeholder('tzOffsetMinutes'),
+      rawPayloadRef: sql.placeholder('rawPayloadRef'),
+    } as unknown as Partial<typeof samples.$inferInsert>,
+  }).prepare()
   for (const row of rows) {
     // Translated here rather than in the mapper: mapWindowSamples reads a provider's JSON and has
     // no database to ask. The upsert target has to name the same five columns samples_natural is
     // built on, refs included, or the trailing window every sync re-fetches by design would insert
     // a second copy of every minute it already holds instead of updating it.
     const stored = args.keys.sampleRefs(row)
-    tx.insert(samples).values(stored).onConflictDoUpdate({
-      target: [samples.personRef, samples.sourceRef, samples.metricRef, samples.utcMs, samples.aggRef],
-      set: {
-        value: stored.value,
-        n: stored.n,
-        tzOffsetMinutes: stored.tzOffsetMinutes,
-        rawPayloadRef: stored.rawPayloadRef,
-      },
-    }).run()
+    insertSample.run(stored)
     localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
   return { rows: rows.length, localDates: [...localDates] }

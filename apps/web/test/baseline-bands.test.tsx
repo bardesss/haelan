@@ -43,6 +43,11 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
@@ -82,6 +87,9 @@ function stubHealth(baseline: BaselineStub): () => void {
     }
     if (url.includes('/baselines')) return json({ baseline })
     if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -106,6 +114,9 @@ function stubWeight(baseline: BaselineStub): () => void {
     }
     if (url.includes('/baselines')) return json({ baseline })
     if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -134,6 +145,9 @@ function stubActivity(urls: string[] = []): () => void {
     }
     if (url.includes('/insights')) return json(insightBody(url))
     if (url.includes('/sessions')) return json({ items: [], cursor: null })
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }

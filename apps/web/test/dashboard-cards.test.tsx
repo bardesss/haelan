@@ -46,6 +46,11 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
@@ -67,7 +72,10 @@ type Baseline = { center: number, spread: number, n: number, thin: boolean } | n
  * /intraday response would be indistinguishable from the no-data case those tests exist to tell
  * apart from an excluded one.
  */
-function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, excludedDataTypes?: string[] }): () => void {
+function stubFetch(opts: {
+  baseline: Baseline, hangBaselines?: boolean, excludedDataTypes?: string[],
+  emptyIntraday?: boolean, emptySeries?: boolean, suppressInsights?: boolean,
+}): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = String(input)
@@ -79,7 +87,7 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, excluded
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [seriesPoint(metric, '2026-08-15', 60)],
+          points: opts.emptySeries === true ? [] : [seriesPoint(metric, '2026-08-15', 60)],
           reduction: null,
         }
       }
@@ -95,12 +103,15 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, excluded
       return new Response(JSON.stringify({ baseline: opts.baseline }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/insights')) {
-      return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+      const body = opts.suppressInsights === true
+        ? insightBody(url, { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
+        : insightBody(url)
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/intraday')) {
       const date = new URLSearchParams(url.split('?')[1] ?? '').get('date') ?? '2026-08-15'
       return new Response(JSON.stringify({
-        points: [
+        points: opts.emptyIntraday === true ? [] : [
           { sourceId: 'watch', utcMs: Date.parse(`${date}T08:00:00Z`), min: 58, mean: 62, max: 70, n: 1, excluded: false },
         ],
         reduction: null,
@@ -112,6 +123,9 @@ function stubFetch(opts: { baseline: Baseline, hangBaselines?: boolean, excluded
       // nothing here reads any id but heart-rate's own exclusion flag.
       return new Response(JSON.stringify({ items: [{ id: 'heart-rate', tier: 'intraday', excluded: excluded.has('heart-rate') }] }),
         { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -162,6 +176,9 @@ function stubFetchValues(overrides: Record<string, number>): () => void {
     if (url.includes('/sleep/nights')) return json({ items: [], cursor: null })
     if (url.includes('/baselines')) return json({ baseline: null })
     if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -193,6 +210,9 @@ function stubFetchWithEvents(items: unknown[]): () => void {
     if (url.includes('/events')) return json({ items })
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/overrides')) return json({ items: [] })
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -264,6 +284,9 @@ function stubOneNight(): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -311,6 +334,9 @@ function stubNightExcludedSession(): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -355,6 +381,9 @@ function stubAppliedExclusion(): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -389,6 +418,9 @@ function stubFetchTracking(sent: { url: string }[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -428,6 +460,9 @@ function stubFetchWithNegativeSleepDelta(): () => void {
       const isSleep = new URLSearchParams(url.split('?')[1] ?? '').get('metric') === 'sleep_asleep_minutes'
       const overrides = isSleep ? { current: 401, previous: 408, delta: -7 } : {}
       return new Response(JSON.stringify(insightBody(url, overrides)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -584,7 +619,7 @@ describe('the remaining Dashboard cards', () => {
   // intraday point for this day, so a render that still shows no_data here would be reading the
   // hand-rolled points.length check instead of the exclusion this test is for. Scoped to the
   // "Heart rate range" card itself, not the whole page: this stub's /sleep/nights answers no
-  // nights at all, so the unrelated sleep stages card legitimately renders its own "No data yet"
+  // nights at all, so the unrelated sleep stages card renders nothing at all (Task 3's own change),
   // regardless of what this test is about.
   it('says the excluded heart rate type was never synced, not that the day has no data', async () => {
     window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
@@ -609,6 +644,36 @@ describe('the remaining Dashboard cards', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
     expect(card?.textContent).not.toContain('Not being synced')
     expect(card?.textContent).not.toContain('No data yet')
+    restore()
+  })
+
+  // stubFetch has always answered /sleep/nights with items: [], so this card has had no night to
+  // draw in every test in this file. It used to render "No data yet" for that; now it renders
+  // nothing at all, and the whole Card goes with it rather than leaving a blank shell that would
+  // still report itself present to CardGrid.
+  it('renders no sleep stages card when the range holds no night', async () => {
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep stages')
+    expect(card).toBeUndefined()
+    restore()
+  })
+
+  // The Day tab's own hand-rolled card. Its exclusion check runs first and keeps its card (the
+  // existing "says the excluded heart rate type was never synced" test pins that); only a
+  // genuinely empty day disappears.
+  it('renders no heart rate card on a Day tab with no intraday samples', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({ baseline: null, emptyIntraday: true })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
+    expect(card).toBeUndefined()
     restore()
   })
 
@@ -924,6 +989,42 @@ describe('the anomalies card', () => {
     await flush(client, () => container!.innerHTML)
     expect(container!.textContent).not.toContain('anomaly')
     expect(container!.textContent).not.toContain('Sleep anomalies')
+    restore()
+  })
+})
+
+describe('the page level empty state', () => {
+  // What prompted the whole change. A Day tab where every card has hidden itself should read as a
+  // quiet page, not a broken one: one message, and the control row above it still working.
+  //
+  // The flagged days card still renders here, and that is the point of its `ambient` prop: it
+  // reads the reader's own annotations rather than the period, so it survives a day with nothing
+  // synced, and it must not be the reason the page claims to have something to show.
+  it('shows one page level empty state on a day with nothing recorded', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({
+      baseline: null, emptySeries: true, emptyIntraday: true, suppressInsights: true,
+    })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).toContain('Nothing recorded here')
+    expect(container!.textContent).not.toContain('No data yet')
+    // The control row is outside the grid and must survive untouched, or the reader has no way
+    // back to a range that does have something in it.
+    expect(container!.querySelector('.controls')).not.toBeNull()
+    restore()
+  })
+
+  // The other half: one card with something to say is enough to silence the page level message.
+  // Without this, a fallback that rendered unconditionally would pass the test above.
+  it('says nothing of its own on a day that does have data', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).not.toContain('Nothing recorded here')
     restore()
   })
 })

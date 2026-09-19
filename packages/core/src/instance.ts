@@ -13,6 +13,7 @@ import { NoteStore } from './store/notes.ts'
 import { EventStore } from './store/events.ts'
 import { ObservationStore } from './store/observations.ts'
 import { InviteStore } from './store/invites.ts'
+import { RebuildStateStore } from './store/rebuildState.ts'
 import type { Database } from './db/open.ts'
 
 export interface Instance {
@@ -30,6 +31,7 @@ export interface Instance {
   observations: ObservationStore
   settings: SettingsStore
   invites: InviteStore
+  rebuildState: RebuildStateStore
   close: () => void
 }
 
@@ -61,6 +63,7 @@ export function openHaelan(dir: string, env: NodeJS.ProcessEnv = process.env): I
       observations: new ObservationStore(db),
       settings: new SettingsStore(db),
       invites: new InviteStore(db),
+      rebuildState: new RebuildStateStore(db),
       close: () => closeDatabase(db),
     }
   } catch (err) {

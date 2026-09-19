@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Recovery } from '../src/pages/Recovery.js'
+import { contributionRows } from '../src/pages/recovery/RecoveryIndexCard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Insight } from '../src/data/useInsight.js'
@@ -45,6 +46,11 @@ function mount(node: ReactNode): void {
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
+
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
 
 function withQuery(node: ReactNode): { client: QueryClient, tree: ReactNode } {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
@@ -92,6 +98,9 @@ function stubRecovery(
     }
     if (url.includes('/baselines')) return json({ baseline })
     if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -120,23 +129,35 @@ function stubRecoveryPerMetric(values: Record<string, number>): () => void {
     }
     if (url.includes('/baselines')) return json({ baseline: null })
     if (url.includes('/insights')) return json(insightBody(url))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
 }
 
 describe('the Recovery page', () => {
-  // All four metrics share an agg, so the page still costs one round trip. Asserting the property
-  // rather than a literal count: a pinned number once forced a chart to draw less than it claimed.
-  // Four, not three, since the respiratory card carries both of its names (Recovery.tsx's own
-  // RESPIRATORY_FALLBACK): the card draws one, and which one is not knowable until the answer is.
+  // All four metrics share an agg, so the page's own cards cost one round trip. Asserting the
+  // property rather than a literal count: a pinned number once forced a chart to draw less than it
+  // claimed. Four, not three, since the respiratory card carries both of its names (Recovery.tsx's
+  // own RESPIRATORY_FALLBACK): the card draws one, and which one is not knowable until the answer
+  // is.
+  //
+  // Filtered to exclude sleep_bedtime_minutes and sleep_asleep_minutes: RecoveryIndexCard mounts
+  // its own useRecoveryIndex, which fires two /series requests of its own (a 'last' group for
+  // hrv/restingHeartRate/respiratoryRate/bedtime and a 'sum' group for asleep minutes), over a
+  // range shifted back by the baseline window - a real, separate cost this test is not about.
+  // Those two carry sleep_bedtime_minutes or sleep_asleep_minutes and nothing else here does, so
+  // filtering them out leaves exactly the page's own group to assert against.
   it('asks for its four metrics in one request', async () => {
     const urls: string[] = []
     const restore = stubRecovery(urls)
     const { client, tree } = withQuery(<Recovery />)
     mount(tree)
     await flush(client, () => container!.innerHTML)
-    const series = urls.filter((u) => u.includes('/series'))
+    const series = urls.filter((u) =>
+      u.includes('/series') && !u.includes('sleep_bedtime_minutes') && !u.includes('sleep_asleep_minutes'))
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(4)
     restore()
@@ -213,6 +234,9 @@ describe('the Recovery page', () => {
         // of a mock that quietly answers whatever it is asked.
         if (from > to) return json({ error: { kind: 'config', message: `from (${from}) is after to (${to})` } }, 400)
         return json(insightBody(url))
+      }
+      if (url.includes('/api/sync/status')) {
+        return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
       }
       return json({})
     }) as typeof fetch
@@ -338,6 +362,9 @@ describe('the Recovery page', () => {
           reduction: null,
         }])))
       }
+      if (url.includes('/api/sync/status')) {
+        return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+      }
       return json({})
     }) as typeof fetch
     const { client, tree } = withQuery(<Recovery />)
@@ -453,5 +480,21 @@ describe('the Recovery page', () => {
       .map((u) => new URL(u, 'http://example').searchParams.get('metric'))
     expect(baselineMetrics).toContain('sleep_respiratory_rate')
     restore()
+  })
+})
+
+describe('contributionRows', () => {
+  it('orders inputs by how much they moved the score, largest first', () => {
+    const rows = contributionRows([
+      { key: 'hrv', weight: 0.35, points: 2 },
+      { key: 'restingHeartRate', weight: 0.30, points: -11 },
+      { key: 'sleep', weight: 0.25, points: 1 },
+    ])
+    expect(rows.map((row) => row.key)).toEqual(['restingHeartRate', 'hrv', 'sleep'])
+  })
+
+  it('rounds points to whole numbers, because a tenth of a point means nothing', () => {
+    const rows = contributionRows([{ key: 'hrv', weight: 1, points: -11.4 }])
+    expect(rows[0]?.points).toBe(-11)
   })
 })

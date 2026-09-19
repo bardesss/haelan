@@ -46,12 +46,19 @@
     "sourceStopped": "Gestopt met rapporteren tijdens deze periode: {{sources}}.",
     "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
-    "sync": "Synchroniseren",
-    "syncedAgo": "Gesynchroniseerd {{count}} min geleden",
-    "neverSynced": "Nog nooit gesynchroniseerd",
-    "syncUnknown": "Synchronisatiestatus onbekend",
-    "syncAlreadyRunning": "Er loopt al een synchronisatie.",
-    "syncFailed": "Synchroniseren is niet gestart."
+    "periodSheetTitle": "Periode",
+    "close": "Sluiten"
+  },
+  "sync": {
+    "run": "Synchroniseren",
+    "ago": "Gesynchroniseerd {{count}} min geleden",
+    "never": "Nog nooit gesynchroniseerd",
+    "statusUnknown": "Synchronisatiestatus onbekend",
+    "agoShort": "{{count}}m",
+    "neverShort": "–",
+    "statusUnknownShort": "–",
+    "alreadyRunning": "Er loopt al een synchronisatie.",
+    "failed": "Synchroniseren is niet gestart."
   },
   "sidebar": {
     "sectionsLabel": "Secties",
@@ -107,9 +114,9 @@
       "title": "Wordt niet gesynchroniseerd",
       "detail": "Je hebt dit gegevenstype uitgezet. Zet het weer aan in Instellingen om het weer op te halen."
     },
-    "insufficient": {
-      "title": "Onvoldoende data om samen te vatten",
-      "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen."
+    "page": {
+      "title": "Niets geregistreerd",
+      "detail": "Geen enkele kaart op deze pagina heeft iets te tonen voor de gekozen periode. Probeer hierboven een ruimere periode."
     }
   },
   "againstUsual": {
@@ -1245,6 +1252,33 @@
         "backupsDisabled": "Back-ups staan uit voor deze instantie.",
         "rebuildInProgress": "De database is nog aan het bijkomen van een herstart. Probeer het zo weer."
       }
+    },
+    "rebuild": {
+      "title": "Status van de herbouw",
+      "quarantinedSelf": "Je gegevens worden niet meer bijgewerkt. Een herbouw van je geschiedenis is niet voltooid, dus er worden geen nieuwe metingen verzameld. Een beheerder moet hiernaar kijken.",
+      "quarantinedOther": "{{name}} ontvangt geen gegevens meer. Een herbouw van hun geschiedenis is niet voltooid.",
+      "quarantinedSelfSince": "Je gegevens worden niet meer bijgewerkt. Een herbouw van je geschiedenis is {{when}} mislukt, dus er worden geen nieuwe metingen verzameld. Een beheerder moet hiernaar kijken.",
+      "quarantinedOtherSince": "{{name}} ontvangt geen gegevens meer. Een herbouw van hun geschiedenis is {{when}} mislukt.",
+      "awaitingSelf": "Je gegevens wachten op een herbouw van je geschiedenis; die draait bij de volgende herstart van de server. Er is niets misgegaan, maar tot die tijd worden er geen nieuwe metingen verzameld.",
+      "awaitingOther": "{{name}} wacht op een herbouw van hun geschiedenis; die draait bij de volgende herstart van de server. Tot die tijd komen er geen nieuwe gegevens binnen.",
+      "awaitingRunningSelf": "Je gegevens wachten op een herbouw van je geschiedenis; die draait nu. Er is niets misgegaan, maar tot die klaar is worden er geen nieuwe metingen verzameld. De herbouw voltooit zichzelf.",
+      "awaitingRunningOther": "{{name}} wacht op een herbouw van hun geschiedenis; die draait nu. Tot die klaar is komen er geen nieuwe gegevens binnen. De herbouw voltooit zichzelf.",
+      "emptySelf": "Je geschiedenis is zonder fouten herbouwd, maar leverde geen metingen op, dus deze pagina's zijn leeg. Er is niets verwijderd: alles wat ooit voor je is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.",
+      "emptyOther": "De geschiedenis van {{name}} is zonder fouten herbouwd, maar leverde geen metingen op, dus hun pagina's zijn leeg. Er is niets verwijderd: alles wat ooit voor hen is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.",
+      "droppedSelf": "Een deel van je geschiedenis kon niet worden herbouwd en ontbreekt op deze pagina's. Er is niets verwijderd, en het komt terug zodra de oorzaak is verholpen.",
+      "droppedOther_one": "{{count}} pagina van de geschiedenis van {{name}} kon niet worden herbouwd.",
+      "droppedOther_other": "{{count}} pagina's van de geschiedenis van {{name}} konden niet worden herbouwd.",
+      "emptySelfSince": "Je geschiedenis is zonder fouten herbouwd, maar leverde geen metingen op, dus deze pagina's zijn leeg, op basis van de herbouw van {{when}}. Er is niets verwijderd: alles wat ooit voor je is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.",
+      "emptyOtherSince": "De geschiedenis van {{name}} is zonder fouten herbouwd, maar leverde geen metingen op, dus hun pagina's zijn leeg, op basis van de herbouw van {{when}}. Er is niets verwijderd: alles wat ooit voor hen is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.",
+      "droppedSelfSince": "Een deel van je geschiedenis kon niet worden herbouwd en ontbreekt op deze pagina's, op basis van de herbouw van {{when}}. Er is niets verwijderd, en het komt terug zodra de oorzaak is verholpen.",
+      "droppedOtherSince_one": "{{count}} pagina van de geschiedenis van {{name}} kon niet worden herbouwd, op basis van de herbouw van {{when}}.",
+      "droppedOtherSince_other": "{{count}} pagina's van de geschiedenis van {{name}} konden niet worden herbouwd, op basis van de herbouw van {{when}}.",
+      "dropsHeading": "Wat niet kon worden herbouwd",
+      "dropRow_one": "{{dataType}}: {{count}} pagina, {{reason}}",
+      "dropRow_other": "{{dataType}}: {{count}} pagina's, {{reason}}",
+      "errorHeading": "De fout die de herbouw meldde",
+      "allWell": "De geschiedenis van iedereen is schoon herbouwd.",
+      "neverRun": "Op deze instantie heeft nog geen herbouw gedraaid."
     }
   },
   "records": {
@@ -1289,5 +1323,27 @@
       "furthest": "Verste sessie",
       "fastest-km": "Snelste kilometer"
     }
+  },
+  "recoveryIndex": {
+    "label": "Herstelindex",
+    "asOf": "op {{date}}",
+    "band": {
+      "low": "Ruim onder gebruikelijk",
+      "below": "Onder gebruikelijk",
+      "usual": "Zoals gebruikelijk",
+      "above": "Boven gebruikelijk",
+      "high": "Ruim boven gebruikelijk"
+    },
+    "basis": "vergeleken met je eigen laatste {{days}} dagen",
+    "unavailable": "Te weinig recente gegevens om met je gebruikelijke waarde te vergelijken.",
+    "degraded": "berekend zonder {{inputs}}",
+    "reducedWeight": "{{inputs}} meegeteld met verminderd gewicht",
+    "input": {
+      "hrv": "Hartslagvariabiliteit",
+      "restingHeartRate": "Hartslag in rust",
+      "sleep": "Afgelopen week aan slaap",
+      "respiratoryRate": "Ademhalingsfrequentie"
+    },
+    "points": "{{points}} punten"
   }
 }

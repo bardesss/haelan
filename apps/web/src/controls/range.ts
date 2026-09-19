@@ -127,13 +127,24 @@ export function stepAnchor(tab: RangeKey, anchor: string, direction: -1 | 1): st
   }
 }
 
-export function parseControls(search: string, today: string): PageControls {
+/**
+ * `preferredTab` is what a URL carrying no usable range falls back to: the reader's remembered
+ * choice (ui/rangePreference.ts), or 'month' for a reader who has never chosen one. It arrives as
+ * an argument rather than being read in here because this module is date arithmetic and string
+ * parsing and nothing else - it has no business touching localStorage, and a default parameter
+ * keeps every existing caller and every existing test meaning exactly what they meant before.
+ *
+ * The URL still wins whenever it names a range this app has. That is the whole reason the
+ * preference is a fallback and not a second copy of the state: a link someone was sent, a deep
+ * link into a night, and the demo's canonical URLs all have to show what they say they show.
+ */
+export function parseControls(search: string, today: string, preferredTab: RangeKey = 'month'): PageControls {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
   const tab = params.get('range')
   const anchor = params.get('on')
   const source = params.get('source')
   return {
-    tab: (RANGE_KEYS as readonly string[]).includes(tab ?? '') ? tab as RangeKey : 'month',
+    tab: (RANGE_KEYS as readonly string[]).includes(tab ?? '') ? tab as RangeKey : preferredTab,
     anchor: anchor !== null && isRealDate(anchor) ? anchor : today,
     // An empty source is a parameter that was written and left blank, not a choice. Nothing
     // narrower is possible here: which sources exist is a fact about this person's data, not

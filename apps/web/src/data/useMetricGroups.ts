@@ -27,11 +27,13 @@ export interface MetricGroup {
    * Separate from `metrics` because a card can legitimately name a metric the catalogue does not
    * offer at this agg: Dashboard.tsx's `under()` filters exactly that out of what gets requested,
    * so the group it would have ridden in still resolves the card to itself, finds no series under
-   * its own name in the response, and renders that card's own empty state. Folding `covers` into
-   * `metrics` would put the disallowed metric back on the wire and 500 every card riding along
-   * with it (requireMetricAndAgg rejects the whole call the moment one metric in it lacks the
-   * requested agg); leaving `covers` out entirely would make `queryFor`/`pointsOf` throw for a
-   * metric that is a legitimate, if unanswerable-today, card, not a typo.
+   * its own name in the response, and `pointsOf` answers undefined for it. `emptyStateFor` reads
+   * that as `no_data`, and a `no_data` card now renders nothing at all rather than an empty state
+   * — the card vanishes silently instead of announcing why. Folding `covers` into `metrics` would
+   * put the disallowed metric back on the wire and 500 every card riding along with it
+   * (requireMetricAndAgg rejects the whole call the moment one metric in it lacks the requested
+   * agg); leaving `covers` out entirely would make `queryFor`/`pointsOf` throw for a metric that is
+   * a legitimate, if unanswerable-today, card, not a typo.
    */
   covers?: readonly string[]
 }

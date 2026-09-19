@@ -42,14 +42,17 @@ const named = (id: string, displayName: string, alias: string | null): NamedSour
 
 const CONTROLS: PageControlsState = {
   tab: 'week', anchor: '2026-08-30', source: '12e34bba19af18604590e870380d9c6e',
-  from: '2026-08-24', to: '2026-08-30', historicalTo: '2026-08-30',
+  from: '2026-08-24', to: '2026-08-30', historicalTo: '2026-08-30', today: '2026-08-30',
   setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
 }
 
 function mount(node: ReactNode, sources: NamedSource[]): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  client.setQueryData(syncStatusKey(PERSON.personId), {
+    running: false, lastFinishedAtMs: null,
+    rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
+  })
   client.setQueryData(sourceNamesKey(PERSON.personId), { items: sources })
   act(() => {
     root?.render(
@@ -66,7 +69,7 @@ const optionLabels = (): string[] =>
 describe('the source picker', () => {
   it('labels a source with the name its person gave it', () => {
     mount(
-      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} syncedMinutesAgo={1} />,
+      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} />,
       [named('12e34bba19af18604590e870380d9c6e', 'Pixel Watch 4', 'My watch')],
     )
     // The whole label, not a substring: toContain('My watch') would also pass on the id.
@@ -75,7 +78,7 @@ describe('the source picker', () => {
 
   it('falls back to the provider name when nobody set one', () => {
     mount(
-      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} syncedMinutesAgo={1} />,
+      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} />,
       [named('12e34bba19af18604590e870380d9c6e', 'Pixel Watch 4', null)],
     )
     expect(optionLabels()).toEqual(['All sources', 'Pixel Watch 4'])
@@ -85,7 +88,7 @@ describe('the source picker', () => {
   // picker exactly as usable as it is today, never blank.
   it('falls back to the id when the names are not there', () => {
     mount(
-      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} syncedMinutesAgo={1} />,
+      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} />,
       [],
     )
     expect(optionLabels()).toEqual(['All sources', '12e34bba19af18604590e870380d9c6e'])
@@ -93,7 +96,7 @@ describe('the source picker', () => {
 
   it('keeps the option value as the id, so the query is unchanged', () => {
     mount(
-      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} syncedMinutesAgo={1} />,
+      <ControlRow controls={CONTROLS} sources={['12e34bba19af18604590e870380d9c6e']} />,
       [named('12e34bba19af18604590e870380d9c6e', 'Pixel Watch 4', 'My watch')],
     )
     expect([...container!.querySelectorAll('option')].map((o) => o.getAttribute('value')))

@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs'
 import type { FastifyInstance } from 'fastify'
 import {
   vacuumDecision, vacuumIfBloated, runBackup, listBackups, pruneBackups, backupDecision, databaseBloat,
+  isQuarantined, producedNothing, peopleNeedingRebuild,
 } from '@haelan/core'
 import type { BackupFile } from '@haelan/core'
 import { sendCoreError, errorBody, statusFor } from '../api/envelope.ts'
@@ -170,6 +171,78 @@ export function registerMaintenance(app: FastifyInstance): void {
       // own return type already says so. See its own comment for why refusing is not an exception.
       const outcome = vacuumIfBloated(instance.db, dataDir)
       return reply.send(outcome)
+    })
+
+    /**
+     * The household-wide view of the same state /api/sync/status carries one person at a time.
+     *
+     * Admin only, like every other route on this scope. It names other household members, which
+     * the per-person route deliberately never does, but display names are already admin-visible
+     * through members.ts - so this adds a view onto state that already exists, not a new
+     * disclosure. It exists at all because a quarantined member who is not themselves an admin
+     * has no route of their own that tells anyone with the power to fix it; without this, the
+     * operator only learns their dashboard went quiet from the member themselves.
+     *
+     * Every person in stores.people appears here, including one rebuildState has no row for at
+     * all, because "this person has never been rebuilt" is a real answer an operator can act on,
+     * not an absence to hide. isQuarantined(undefined) reads that missing row as not quarantined,
+     * which is what it means: a state map keyed by personId, not a second lookup per person.
+     *
+     * `awaitingRebuild` comes off the people rows instead, because a stale version stamp is the
+     * absence of a rebuild and nothing in rebuild_state records it. That is the case this card
+     * was blind to and actively wrong about: a member who changes their timezone in Profile has
+     * builtDerivationVersion nulled in the same statement as the zone, is skipped by sync and by
+     * the derive drainer from the next tick, and carries a clean success row the whole time - so
+     * the card printed "every person's history rebuilt cleanly" about somebody whose data had
+     * stopped. Nothing here is wrong with their archive and a restart fixes it, which is why it
+     * is a third state rather than a quarantine.
+     *
+     * `lastError` is sent verbatim, unlike the backup file's `path` two routes above - not
+     * because this route withholds less, but because there is nothing here to withhold. What
+     * that string can and cannot contain is answered once, where it is captured, in runRebuild.ts;
+     * this route and the per-person one both just forward the same column.
+     */
+    scope.get('/api/settings/rebuild', { preHandler: guard }, async (_request, reply) => {
+      const states = new Map(
+        app.haelan.stores.rebuildState.all().map((row) => [row.personId, row]),
+      )
+      const rows = app.haelan.stores.people.list()
+      // One pass over every row rather than peopleNeedingRebuild([person]) inside the map: it is
+      // the same call the sync runner makes to decide who it skips, and giving it the whole list
+      // at once is how it is meant to be asked.
+      const behind = new Set(peopleNeedingRebuild(rows).map((need) => need.personId))
+      const people = rows.map((person) => {
+        const state = states.get(person.id)
+        return {
+          personId: person.id,
+          displayName: person.displayName,
+          quarantined: isQuarantined(state),
+          awaitingRebuild: behind.has(person.id),
+          droppedPages: state?.droppedPages ?? 0,
+          // Decided here through the shared predicate rather than sent as its two columns, for
+          // the reason the per-person route gives on RebuildStatus: it is a conjunction, and
+          // rows_written = 0 on its own is true of anybody connected in the last hour.
+          producedNothing: producedNothing(state),
+          lastErrorAtMs: state?.lastErrorAtMs ?? null,
+          lastError: state?.lastError ?? null,
+          lastSuccessAtMs: state?.lastSuccessAtMs ?? null,
+          consecutiveFailures: state?.consecutiveFailures ?? 0,
+          drops: state?.drops ?? [],
+        }
+      })
+      // Once on the envelope, not once per person. One worker rebuilds the whole household in a
+      // single pass (rebuildInWorker.ts), so this is a fact about the process; repeating it on
+      // every row would let two rows of one response disagree about whether it is running.
+      //
+      // The card needs it because `awaitingRebuild` above cannot be read on its own during a
+      // boot rebuild. index.ts listens before that rebuild starts and it runs for as long as
+      // fifteen minutes, so every person the worker has not reached yet is listed here for the
+      // whole run - and the copy that state used to render told the reader a restart is what
+      // runs it. The one reader of this card is the one person who can restart the container,
+      // which is how that sentence aborts the rebuild that was already fixing them. The same
+      // seam the two POST routes above decline on, read once more rather than copied; see
+      // ServerDeps.rebuildInFlight.
+      return reply.send({ people, rebuildInFlight: app.haelan.rebuildInFlight?.() ?? false })
     })
   })
 }

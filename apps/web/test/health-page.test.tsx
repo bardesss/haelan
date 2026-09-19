@@ -102,7 +102,9 @@ function stubHealth(
     const json = (body: unknown) =>
       new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     if (url.includes('/api/auth/me')) return json(PERSON)
-    if (url.includes('/api/sync/status')) return json({ running: false, lastFinishedAtMs: null })
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
+    }
     if (url.includes('/overrides')) return json({ items: [] })
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/events')) return json({ items: [] })
@@ -242,10 +244,13 @@ describe('the Health page', () => {
   })
 
   // Vary the fixture rather than reusing the same complete body every test in this file: a
-  // suppressed response (current/previous/delta all null) is a null field this card has to fall
-  // back on rather than reach formatMetricValue with, which a fixture carrying only complete
-  // bodies could never catch.
-  it('falls back to the insufficient message when the server suppresses the daily summary insight', async () => {
+  // suppressed response (current/previous/delta all null) is a null field this card has to gate on
+  // rather than reach formatMetricValue with, which a fixture carrying only complete bodies could
+  // never catch. The gate now removes the whole card instead of swapping in an empty state, so the
+  // absent .card element is both halves of the claim: nothing was formatted, and nothing was drawn.
+  // This is a thin-days suppression specifically; thin-coverage is the deliberate exception that
+  // keeps its card, pinned separately in insight-card.test.tsx.
+  it('hides the daily summary insight card on a thin-days suppression', async () => {
     const restore = stubHealth(
       [], [], [],
       { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null },
@@ -255,8 +260,7 @@ describe('the Health page', () => {
     await flush(client, () => container!.innerHTML)
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Daily oxygen saturation, this period against the last')
-    expect(card?.textContent).toContain('too few days')
-    expect(card?.querySelector('.insight-summary')).toBeNull()
+    expect(card).toBeUndefined()
     restore()
   })
 })

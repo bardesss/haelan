@@ -6,6 +6,7 @@ import { Link, useRoute, readQuery, withQuery } from '../router.js'
 import { Members } from './settings/Members.js'
 import { InstanceUrl } from './settings/InstanceUrl.js'
 import { Maintenance } from './settings/Maintenance.js'
+import { RebuildHealth } from './settings/RebuildHealth.js'
 import { About } from './settings/About.js'
 
 /**
@@ -70,6 +71,13 @@ export function Settings() {
             </Card>
             <Card span={6} label={t('settings.maintenance.title')}>
               <Maintenance />
+            </Card>
+            {/* Full width rather than sharing a half with either card above: this can list every
+                affected person on the household, not one figure or one form, and a household with
+                several quarantined members would otherwise scroll a half-width column past two
+                unrelated cards to read the rest of its own list. */}
+            <Card span={12} measured label={t('settings.rebuild.title')}>
+              <RebuildHealth />
             </Card>
           </>
         ),

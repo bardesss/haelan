@@ -162,6 +162,12 @@ html:has(dialog.rail-dialog[open]) { overflow: hidden; }
    widest single item instead of the sum, which costs nothing where there is already room: the row
    stays one line wherever one line fits, and the band fixes itself with no third breakpoint. */
 .controls { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
+/* The rebuild notice leads the row and takes the whole of it. It is a paragraph saying the numbers
+   below are not being updated, and .controls is a wrapping flex row, so without this it sized to
+   its content and sat on the same line as the range buttons - a warning reading as one more
+   control beside them. Scoped to a direct child of the control row because .maintenance is also
+   the Settings card's own class, where it is not a flex item at all. */
+.controls > .maintenance { flex-basis: 100%; }
 .controls-end { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; flex-wrap: wrap; }
 
 .segmented { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--surface-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
@@ -188,6 +194,85 @@ a.segment { text-decoration: none; display: inline-block; }
 }
 .date-picker::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; }
 .date-picker:hover { color: var(--text-primary); }
+
+/* The phone control row, and the sheet behind it.
+   ------------------------------------------------------------------
+   Below the breakpoint the row is one line: the stepper's two arrows either side of a chip that
+   names the period and opens everything else. The arrows stay out here because stepping is the
+   frequent action - putting it behind the sheet would charge two taps for the common case to save
+   one on the rare one. */
+/* A single column stack, said here rather than left to the media block below. That block would
+   give this the same layout, but only because it happens to also match .controls - and this row
+   is chosen by matchMedia in JavaScript, not by the media query, so the two can disagree. It
+   states its own shape instead of borrowing one. */
+.controls-phone { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
+/* The chip fills whatever the two arrows leave, so the row is exactly as wide as the content
+   column at any phone width without a single measurement in it. */
+.period-chip {
+  appearance: none; border: 0; background: none; font: inherit; cursor: pointer;
+  flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;
+  gap: var(--space-2); padding: 0 var(--space-2); min-height: 44px;
+  color: var(--text-primary); border-radius: var(--radius-md);
+}
+.period-chip svg { width: 15px; height: 15px; flex: none; opacity: .55; }
+/* The range reads as the quieter half of the pair: which month you are on is the answer, and
+   "Month" is the question it answers. */
+.period-chip-range { font-size: var(--font-size-xs); color: var(--text-secondary); flex: none; }
+/* The one part allowed to shrink. A long period name ("1 jan - 31 dec 2026") ellipses rather than
+   pushing the chevron off the chip or wrapping the row onto a second line. */
+.period-chip-period {
+  font-size: var(--font-size-xs); font-weight: var(--weight-medium);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Anchored to the bottom edge, which is where a thumb is. `auto` margins on three sides and 0 on
+   the fourth is how a <dialog> is positioned without leaving the top layer, and it keeps every
+   behaviour the element gives - focus containment, Escape, an inert page - that a hand-rolled
+   panel would have to reimplement. */
+.period-sheet {
+  margin: auto auto 0; padding: 0; border: 0; max-height: 85dvh;
+  width: 100%; max-width: none;
+  background: var(--surface-card);
+  border-top: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  color: var(--text-primary);
+}
+.period-sheet::backdrop { background: color-mix(in srgb, var(--surface-page) 80%, transparent); }
+.period-sheet-body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3); }
+.period-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.period-sheet-title { font-size: var(--font-size-sm); font-weight: var(--weight-medium); }
+/* One full width row per range, not five columns. Five across a 375px phone is 59px apiece, which
+   clipped "3 maanden" to an ellipsis and left a 44px-tall target too narrow to aim at. */
+.period-options { display: flex; flex-direction: column; gap: 2px; }
+.period-option {
+  appearance: none; border: 0; background: none; font: inherit; cursor: pointer;
+  font-size: var(--font-size-sm); color: var(--text-secondary);
+  display: flex; align-items: center; min-height: 44px; padding: 0 var(--space-3);
+  border-radius: var(--radius-md); text-align: left;
+}
+.period-option[aria-pressed='true'] {
+  background: var(--surface-inset); color: var(--text-primary); font-weight: var(--weight-medium);
+}
+/* A label and its control on one line, the label naming what the control is for. The date picker
+   and the source select are both bare form elements here rather than wrapped in a .button the way
+   the row above wraps them: in a sheet there is room to say what each one is. */
+.period-sheet-field {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  min-height: 44px; font-size: var(--font-size-sm); color: var(--text-secondary);
+}
+.period-sheet-field select {
+  appearance: none; font: inherit; font-size: var(--font-size-sm); color: var(--text-primary);
+  background: var(--surface-inset); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); padding: 8px var(--space-2); max-width: 60%;
+}
+.period-sheet-field .date-picker { font-size: var(--font-size-sm); color: var(--text-primary); }
+.period-sheet-export { justify-content: center; min-height: 44px; }
+/* <dialog> makes the page behind inert for focus and for pointer targeting and says nothing about
+   scrolling, so the strip above an open sheet is still a live scroll surface. Locked from the
+   element's own open state rather than a class, so a sheet closed by Escape - which never tells
+   React anything - unlocks the page by the same declaration that locked it. The rail drawer takes
+   this exact measure for the same reason. */
+html:has(dialog.period-sheet[open]) { overflow: hidden; }
 
 .button, .icon-button { appearance: none; font: inherit; cursor: pointer; color: var(--text-secondary); border-radius: var(--radius-md); }
 .button { display: inline-flex; align-items: center; gap: 7px; font-size: var(--font-size-xs); padding: 6px 11px; background: var(--surface-card); border: 1px solid var(--border-subtle); }
@@ -232,6 +317,22 @@ a.segment { text-decoration: none; display: inline-block; }
 .icon-button { display: inline-flex; padding: 5px; background: none; border: 0; color: var(--text-muted); }
 .icon-button:hover { color: var(--text-primary); }
 .synced { font-size: var(--font-size-micro); color: var(--text-faint); }
+
+/* The sync control, in the shell rather than in the control row since M10. Two placements, one
+   rule set: the rail's foot above the breakpoint, the drawer's top bar below it. */
+.sync-control { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.sync-button { flex: none; }
+/* The freshness has the rail's width to itself in the foot and wraps to a second line rather than
+   being clipped; in the top bar it is the compact spelling, which fits on one. */
+.sync-control .synced { min-width: 0; }
+/* Collapsed, the rail is a 60px icon strip and the button is the whole of what a sighted reader
+   gets. The sentence survives on the button's own title and accessible name, which is the same
+   trade .rail-item makes with its sr-only label one rule group up. */
+.rail-collapsed .sync-control { justify-content: center; }
+.rail-collapsed .sync-control .synced, .rail-collapsed .sync-control .field-error { display: none; }
+/* Pushed to the end of the top bar so the hamburger and the wordmark keep the positions a reader
+   already knows. */
+.top-bar-end { margin-left: auto; display: flex; align-items: center; }
 
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
@@ -328,6 +429,22 @@ a.segment { text-decoration: none; display: inline-block; }
 .training-load-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
 .training-load-ratio { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
 .training-load-target { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
+
+/* The recovery index tile's own gate, following .training-load-empty's own comment above: not
+   .empty, because this says the derived score has not enough recent history to compare against,
+   not that the card's underlying metrics had no rows. */
+.recovery-index-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
+/* RecoveryIndexCard.tsx's own attribution list, below the sparkline: a plain list rather than a
+   table (each row is one input's own name against its own points, not a value under a shared
+   column header), the same reasoning .workout-comparison's own comment states. Rows separated by
+   .night-row's own bottom-border idiom rather than a gap between list items, since this list, like
+   that one, is read top to bottom as a sequence of rows rather than as a set of separate blocks. */
+.recovery-index-contributions { list-style: none; margin: var(--space-3) 0 0; padding: 0; font-size: var(--font-size-sm); }
+.recovery-index-contributions li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);
+}
+.recovery-index-contributions li:last-child { border-bottom: 0; }
 
 /* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
@@ -1020,7 +1137,11 @@ a.segment { text-decoration: none; display: inline-block; }
    states one whole fact about the shared database file rather than one record among many the way
    .source-name-row or .member-row do. */
 .maintenance { display: flex; flex-direction: column; gap: var(--space-1); }
-.maintenance-bloat, .maintenance-backups, .maintenance-credentials {
+/* .maintenance-waiting joins the three: RebuildNotice's middle state is a plain statement about
+   a person, the same weight as a statement about the file. Not .maintenance-blocked, because
+   nothing has failed and nobody has to diagnose anything, and not the muted
+   .maintenance-download-note either, because their data really has stopped arriving. */
+.maintenance-bloat, .maintenance-backups, .maintenance-credentials, .maintenance-waiting {
   font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0;
 }
 .maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); margin: 0 0 var(--space-2); }
@@ -1111,6 +1232,13 @@ a.segment { text-decoration: none; display: inline-block; }
 
   .controls { display: grid; grid-template-columns: 1fr; gap: var(--space-2); }
 
+  /* Everything from here to .synced below styles the row ControlRow renders when it has NOT taken
+     its phone branch. That happens when matchMedia is unavailable - a sandboxed iframe, or static
+     markup - where useIsPhone answers false and the desktop row renders at a phone's width. It is
+     the fallback rather than the common case since M10, and it has to keep working: a reader whose
+     browser will not answer a media query still gets a usable stack here rather than a row that
+     scrolls sideways. */
+
   /* `.controls .segmented`, not `.segmented`: the five columns are the five range buttons
      ControlRow renders, and this rule was written against that row alone. AnnotatePanel reuses the
      same two classes for a chooser of two to four actions, and M7b made that panel reachable on a
@@ -1144,7 +1272,10 @@ a.segment { text-decoration: none; display: inline-block; }
   /* margin-left: auto stops applying: nothing in a one-column stack should push anything anywhere. */
   .controls-end { width: 100%; margin-left: 0; flex-wrap: wrap; }
   .controls-end .button { min-width: 0; flex: 1 1 auto; justify-content: center; }
-  .synced { width: 100%; }
+  /* The freshness used to take a line of its own at the end of that stack. It is not in the
+     control row at all any more - it is in the drawer's top bar, beside a hamburger and a
+     wordmark, where a full width line would push the bar's own contents apart. */
+  .sync-control .synced { width: auto; }
 
   /* A finger needs about 44px in its smaller dimension and a mouse does not, so every rule below
      applies only here. min-height rather than padding on .button and its siblings, because padding

@@ -4,6 +4,7 @@ import { useSession } from '../auth/session.js'
 import { useHistoryStart } from '../data/useHistoryStart.js'
 import { parseControls, datesFor, stepAnchor, clampFromToHistory } from './range.js'
 import type { RangeKey } from './range.js'
+import { readRange, writeRange } from '../ui/rangePreference.js'
 
 export interface PageControlsState {
   tab: RangeKey
@@ -11,6 +12,16 @@ export interface PageControlsState {
   source: string
   from: string
   to: string
+  /**
+   * The person's today, resolved from their session timezone (falling back to the browser's own
+   * when a session has not loaded one yet), not the machine's UTC date. Callers that need to
+   * compare "today" against a scored or fetched date - the recovery tile's `asOfLabel` is the
+   * first - read this rather than computing their own: `new Date().toISOString().slice(0, 10)` is
+   * the UTC date, which disagrees with this value for part of every day, and this codebase already
+   * had one bug from exactly that (`historicalTo` below existed to fix it for range clamping; this
+   * field exists so a caller outside that clamp never has to reach for the UTC shortcut either).
+   */
+  today: string
   // The person's today, clamped into [from, to]. Equal to `today` while the period is still in
   // progress, `to` itself once the whole period has already finished, and `from` if the period has
   // not started yet. A baseline anchored on a date that has not happened has nothing behind it,
@@ -54,12 +65,22 @@ export function usePageControls(): PageControlsState {
   }, [session.data?.timezone])
 
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
-  const controls = parseControls(search, today)
+  // Read on every render rather than held in state, and that is the point rather than an
+  // oversight. State would be the second copy this hook's doc comment forbids, and it would need
+  // an effect to stay level with the URL - the exact mirroring shape that produced M3a's session
+  // expiry loop. A getItem is cheap, and reading it fresh is also what makes it correct: arriving
+  // on a page with no query of its own should honour whatever the reader last chose, including a
+  // choice made one route change ago.
+  const controls = parseControls(search, today, readRange() ?? 'month')
   const { from: tabFrom, to } = datesFor(controls.tab, controls.anchor)
   // A phone-only history starts at the first sync, not at the tab start:
   // every card on these pages reads from here, so one clamp honors the start in each
   // query and each "reported of total" denominator at once. Pending or Google-backed
   // histories leave the range alone, and the anchor, stepper and `to` never move.
+  //
+  // The clamp sits after the remembered range rather than before it: the range decides which
+  // window the reader asked for, and this decides how much of that window the data can honestly
+  // answer. Reversing them would clamp a window nobody had chosen yet.
   const history = useHistoryStart()
   const timezone = session.data?.timezone
   const from = timezone === undefined
@@ -74,13 +95,18 @@ export function usePageControls(): PageControlsState {
     ...controls,
     from,
     to,
+    today,
     // Lexicographic comparison is exact here: every side is YYYY-MM-DD, the one shape every local
     // date in this system has, so string order and calendar order agree. from <= to always (see
     // datesFor), so clamping today to at most `to` and at least `from`, in either order, lands on
     // the same value; capping first reads closer to "today, unless the period has already ended".
     historicalTo: today > to ? to : today < from ? from : today,
     // A tab change is a place the reader can go back from, so it pushes. A stepper click is not.
-    setTab: (tab) => { go({ range: tab }, false) },
+    //
+    // The write sits in the handler, next to the navigation it accompanies, not in an effect
+    // watching controls.tab. An effect would fire for a range that arrived in a link rather than
+    // from this reader, and quietly adopt a stranger's choice as their preference.
+    setTab: (tab) => { writeRange(tab); go({ range: tab }, false) },
     setAnchor: (anchor) => { go({ on: anchor }, true) },
     step: (direction) => { go({ on: stepAnchor(controls.tab, controls.anchor, direction) }, true) },
     setSource: (source) => { go({ source }, false) },

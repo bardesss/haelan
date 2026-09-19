@@ -49,7 +49,7 @@ It is slower than the other tools - it builds a fresh database per query - and i
 
 Pointing an LLM at this server sends that person's health data to whichever model provider is on the other end of the conversation. Self-hosting the store does not self-host the model: haelan keeps the database on your own disk, but the moment an agent calls one of these tools, the answer it reads leaves the house for wherever that model runs.
 
-## Tools (14)
+## Tools (15)
 
 ### describe_person
 
@@ -492,3 +492,27 @@ Slower than the other tools - it builds a fresh database for each query - and it
 - **rowsMayContainUntrustedText** (literal)
 - **truncated** (boolean)
 - **textTruncated** (boolean)
+
+### recovery_index
+
+The recovery index for each day in a date range, oldest first - the same number the app's own Recovery page shows when it is left on its default, all-sources view (a Recovery page narrowed to one source computes over that source alone and can disagree with this), built from heart rate variability, resting heart rate, respiratory rate and the past week's sleep duration and bedtime consistency, each read against this person's own 60-day baseline. `band` names five comparative bands around that baseline - low, below, usual, above, high - never a readiness verdict, only distance from a person's own normal. A day with `enough: false` could not be scored at all (see `missing`) and is not the same as a low score; only read `score` and `band` where `enough` is true. Each scored day's `inputs` shows how much of that day's movement each of the four inputs carried, scaled by how much every present input moved in total - on a day the inputs pulled in different directions, their points do not add up to the distance between `score` and 50, and none is reported as a total. Report a finding as association with how the day was lived, never as advice, risk or a clinical claim.
+
+**Input**
+
+- **from** (string) — YYYY-MM-DD, inclusive
+- **to** (string) — YYYY-MM-DD, inclusive
+
+**Output**
+
+- **days** (array of object)
+  - **localDate** (string)
+  - **enough** (boolean)
+  - **missing** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Null when `enough` is true. Otherwise which required inputs were absent, too thin to judge, or standing on a baseline with zero spread - this day was withheld, not scored as a zero.
+  - **score** (number, nullable) — 0-100, integer. Null when `enough` is false. Distance from this person's own baseline, not a readiness verdict.
+  - **band** ('low' | 'below' | 'usual' | 'above' | 'high', nullable) — Null when `enough` is false.
+  - **inputs** (array of object, nullable) — Null when `enough` is false.
+    - **key** ('hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate')
+    - **weight** (number) — This input's share of the composite, after redistributing any absent input's weight.
+    - **points** (number) — This input's share of the distance between score and 50, scaled by how much every present input moved in total - not by weight alone, so it can read smaller than weight would suggest on a day the inputs disagreed.
+  - **degraded** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Null when `enough` is false. Otherwise the optional inputs that were entirely ABSENT this day; their weight was redistributed across the rest, which is why a present input's weight can read higher than its nominal share. Never includes an input listed in `reducedWeight` - that input was present, just on reduced evidence, not absent.
+  - **reducedWeight** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Null when `enough` is false. Otherwise the optional inputs that WERE present this day but on less than their full evidence, and so carried less than their nominal weight rather than being dropped. Today this can only ever be `["sleep"]`, for a week with only duration or only bedtime consistency observed - never treat an input named here as absent the way one named in `degraded` is.

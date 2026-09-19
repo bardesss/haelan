@@ -53,7 +53,10 @@ const PERSON: Session = {
 function withQuery(node: ReactNode): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  client.setQueryData(syncStatusKey(PERSON.personId), {
+    running: false, lastFinishedAtMs: null,
+    rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
+  })
   client.setQueryData(sourceNamesKey(PERSON.personId), { items: [] })
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
@@ -74,7 +77,7 @@ function withQueryAwaitingStatus(node: ReactNode): ReactNode {
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
   return {
     tab: 'month', anchor: '2026-08-15', source: ALL_SOURCES,
-    from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31',
+    from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31', today: '2026-08-31',
     setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
     ...over,
   }
@@ -82,7 +85,7 @@ function stubControls(over: Partial<PageControlsState> = {}): PageControlsState 
 
 describe('ControlRow', () => {
   it('marks the active range and only the active range', () => {
-    mount(withQuery(<ControlRow controls={stubControls({ tab: 'week' })} sources={['merged']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls({ tab: 'week' })} sources={['merged']} />))
     const pressed = [...container!.querySelectorAll('.segment')]
       .filter((b) => b.getAttribute('aria-pressed') === 'true')
     expect(pressed).toHaveLength(1)
@@ -92,7 +95,7 @@ describe('ControlRow', () => {
   // and no handler behind it, so it looked right and did nothing.
   it('calls setTab when a range is clicked', () => {
     const chosen: string[] = []
-    mount(withQuery(<ControlRow controls={stubControls({ setTab: (t) => chosen.push(t) })} sources={['merged']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls({ setTab: (t) => chosen.push(t) })} sources={['merged']} />))
     const segments = [...container!.querySelectorAll('.segment')] as HTMLButtonElement[]
     act(() => { segments[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(chosen).toHaveLength(1)
@@ -100,7 +103,7 @@ describe('ControlRow', () => {
 
   it('steps backwards and forwards through the stepper buttons', () => {
     const steps: number[] = []
-    mount(withQuery(<ControlRow controls={stubControls({ step: (d) => steps.push(d) })} sources={['merged']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls({ step: (d) => steps.push(d) })} sources={['merged']} />))
     const buttons = [...container!.querySelectorAll('.stepper .icon-button')] as HTMLButtonElement[]
     act(() => { buttons[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     act(() => { buttons[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
@@ -109,7 +112,7 @@ describe('ControlRow', () => {
 
   it('sets the anchor from the calendar picker', () => {
     const picked: string[] = []
-    mount(withQuery(<ControlRow controls={stubControls({ setAnchor: (a) => picked.push(a) })} sources={['merged']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls({ setAnchor: (a) => picked.push(a) })} sources={['merged']} />))
     const picker = container!.querySelector('input[type="date"]') as HTMLInputElement
     // React installs its own setter on a controlled input's value property to track what it last
     // rendered. Assigning picker.value directly goes through that same setter, which quietly
@@ -124,7 +127,7 @@ describe('ControlRow', () => {
   })
 
   it('offers the all sources sentinel plus every source the person has, and marks the chosen one', () => {
-    mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} />))
     const select = container!.querySelector('select') as HTMLSelectElement
     expect([...select.options].map((o) => o.value)).toEqual([ALL_SOURCES, 'watch', 'phone'])
     expect(select.value).toBe('watch')
@@ -134,38 +137,32 @@ describe('ControlRow', () => {
   // dimension), and the unconditional select used to draw anyway, holding one option, "All
   // sources", choosing between nothing. A picker of one choice is not a picker.
   it('draws no source picker when there are no sources', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} />))
     expect(container!.querySelector('select')).toBeNull()
   })
 
-  // "Synced 0 min ago" reads as "synced seconds ago", and it was what a fresh instance and a
-  // page still loading both printed. A missing copy string is not a reason to print a false one.
-  it('says never synced rather than zero minutes ago when no run has finished', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={null} />))
-    expect(container!.textContent).toContain('Never synced')
-    expect(container!.textContent).not.toContain('Synced 0 min ago')
+  // Every assertion about the sync button and its freshness line moved to sync-control.test.tsx
+  // when M10 moved the control itself out of this row and into the shell. What belongs here now
+  // is the opposite claim: that this row no longer carries either of them.
+  it('carries no sync control of its own', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} />))
+    expect(container!.querySelector('.sync-control')).toBeNull()
+    expect(container!.querySelector('.synced')).toBeNull()
+    expect(container!.textContent).not.toContain('Synced')
   })
 
-  it('says the status is unknown while it is still being read', () => {
-    const original = globalThis.fetch
-    // Never settles: this is the moment between mount and the status route answering.
-    globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch
-    mount(withQueryAwaitingStatus(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={null} />))
-    expect(container!.textContent).toContain('Sync status unknown')
-    expect(container!.textContent).not.toContain('Never synced')
-    globalThis.fetch = original
-  })
-
-  it('still reports a real time as one', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={7} />))
-    expect(container!.textContent).toContain('Synced 7 min ago')
+  // A page has one accent-filled control at most, and this row's job is choosing what to look at.
+  // Nothing in it is the thing a reader came to the page to press.
+  it('leaves the accent style to the page rather than spending it on a control', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} exportPath="/x.csv" />))
+    expect(container!.querySelector('.button-primary')).toBeNull()
   })
 
   // no-hardcoded-strings.test.ts cannot see this one: its regex reads text between tags, not
   // inside an expression, so an English "to" sat in the stepper label of a Dutch page while every
   // card underneath it read Dutch.
   it('names the period in the page language, and keeps the catalogue word on the exact bounds', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={4} />), 'nl')
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} />), 'nl')
     const label = container!.querySelector('.stepper-label')!
     // The visible label is no longer a join of two dates at all: it names the period, in the
     // page's own language, through Intl rather than the catalogue. Both halves are asserted here
@@ -175,13 +172,10 @@ describe('ControlRow', () => {
     expect(label.getAttribute('title')).toBe('2026-08-01 tot en met 2026-08-31')
   })
 
-  // Before this branch the whole row was inert everywhere, so a placeholder was obviously a mock.
-  // The sync button now really posts and the label really claims a time, which a page pinned to
-  // fixtures cannot honour.
-  it('hides the sync and download controls on a page that cannot honour them', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} syncedMinutesAgo={null} canSync={false} />))
-    expect(container!.querySelector('.button-primary')).toBeNull()
-    expect(container!.querySelector('.synced')).toBeNull()
+  // The export is left out rather than rendered as an anchor going nowhere. This used to share a
+  // test with `canSync`, a prop no page ever set to false, which went with the sync button.
+  it('draws no export link on a page that offers no path for one', () => {
+    mount(withQuery(<ControlRow controls={stubControls()} sources={[]} />))
     expect(container!.querySelector('a.button')).toBeNull()
   })
 
@@ -198,7 +192,7 @@ describe('a source that stopped inside the range', () => {
   it('names it, so a thinning chart is explained where the reader is looking', () => {
     mount(withQuery(
       <ControlRow controls={stubControls({ tab: 'month' })} sources={['watch']}
-        syncedMinutesAgo={4} stoppedSources={['watch']} />,
+        stoppedSources={['watch']} />,
     ))
     expect(text('.control-row-stopped')).toBe('Stopped reporting during this range: watch.')
   })
@@ -206,7 +200,7 @@ describe('a source that stopped inside the range', () => {
   it('names all of them when more than one stopped', () => {
     mount(withQuery(
       <ControlRow controls={stubControls({ tab: 'month' })} sources={['watch', 'scale']}
-        syncedMinutesAgo={4} stoppedSources={['watch', 'scale']} />,
+        stoppedSources={['watch', 'scale']} />,
     ))
     // Intl.ListFormat, so the conjunction is the language's own rather than a hardcoded "and".
     expect(text('.control-row-stopped')).toBe('Stopped reporting during this range: watch and scale.')
@@ -214,14 +208,14 @@ describe('a source that stopped inside the range', () => {
 
   it('says nothing when none stopped', () => {
     mount(withQuery(
-      <ControlRow controls={stubControls({})} sources={['watch']} syncedMinutesAgo={4}
+      <ControlRow controls={stubControls({})} sources={['watch']}
         stoppedSources={[]} />,
     ))
     expect(container!.querySelector('.control-row-stopped')).toBeNull()
   })
 
   it('says nothing at all when the page passes none, which is every page that has not adopted it', () => {
-    mount(withQuery(<ControlRow controls={stubControls({})} sources={['watch']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls({})} sources={['watch']} />))
     expect(container!.querySelector('.control-row-stopped')).toBeNull()
   })
 })

@@ -111,12 +111,26 @@ export function formatSessionDateHeading(date: string, language: string): string
  * that has not synced in three months wants to see the number of days, not "3 months ago" rounded
  * off the edge of the problem.
  *
- * Future timestamps round to "0 minutes ago" rather than reading "in 5 minutes": a clock skew
+ * Future timestamps clamp to zero minutes rather than reading "in 5 minutes": a clock skew
  * between a server stamping and a browser reading is not something to narrate.
+ *
+ * Zero minutes is asked for as a numeral rather than through numeric:'auto's own idiom for it,
+ * and this is the one branch in this function that is not cosmetic. `relative.format(-0,
+ * 'minute')` under 'auto' is "this minute" in English, which reads fine, but "binnen een minuut"
+ * in Dutch - the FUTURE-tense idiom ("within a minute"), because -0 and +0 are the same instant to
+ * Intl and 'auto' picks one fixed idiom for that instant regardless of which side of it produced
+ * the call. That is exactly the pairing this clamp creates on purpose (a rebuild that finished
+ * thirty seconds ago and a clock running a few seconds fast both land on zero), so the callers of
+ * this function cannot avoid hitting it. "0 minutes ago" / "0 minuten geleden" has no such
+ * idiom to fall into in either language - it is graceless rather than wrong, which is the
+ * trade this branch is making.
  */
 export function formatSince(atMs: number, nowMs: number, language: string): string {
-  const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
   const minutes = Math.max(0, Math.round((nowMs - atMs) / 60_000))
+  if (minutes === 0) {
+    return new Intl.RelativeTimeFormat(language, { numeric: 'always' }).format(-minutes, 'minute')
+  }
+  const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
   if (minutes < 60) return relative.format(-minutes, 'minute')
   const hours = Math.round(minutes / 60)
   if (hours < 24) return relative.format(-hours, 'hour')
