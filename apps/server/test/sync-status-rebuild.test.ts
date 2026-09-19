@@ -15,8 +15,25 @@ describe('the runner reports a person\'s rebuild status', () => {
 
     expect(harness.app.haelan.runner.status('p1').rebuild).toEqual({
       quarantined: false, awaitingRebuild: false, droppedPages: 0, producedNothing: false,
-      lastErrorAtMs: null, lastError: null, drops: [],
+      lastErrorAtMs: null, lastError: null, lastSuccessAtMs: null, drops: [],
     })
+  })
+
+  /**
+   * The timestamp RebuildNotice needs to date droppedPages and producedNothing, which otherwise
+   * sit unchanged from one boot to the next once a person's stamp goes current again - see
+   * RebuildStatus.lastSuccessAtMs's own doc comment for why. Asserted here rather than only on
+   * the admin route (which already returned this column): the per-person route is what
+   * ControlRow reads, and until this test existed nothing caught it being absent from RunnerStatus.
+   */
+  it('reports when the last rebuild attempt committed, for dating a persistent state', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    harness.app.haelan.stores.rebuildState.recordSuccess({
+      personId: 'p1', nowMs: 555, droppedPages: 2, rowsWritten: 10, payloadsWithData: 4, drops: [],
+    })
+
+    expect(harness.app.haelan.runner.status('p1').rebuild.lastSuccessAtMs).toBe(555)
   })
 
   it('reports a person whose last rebuild failed as quarantined', async () => {
