@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS } from '../src/api/recoveryIndex.ts'
+import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries } from '../src/api/recoveryIndex.ts'
 import type { DayValue } from '../src/api/recoveryIndex.ts'
 
 /**
@@ -62,5 +62,35 @@ describe('zSeries', () => {
     const z = zSeries(days, { from: '2026-09-14', to: '2026-09-14' }, 'up')
     // If day D leaked into its own window the spread would swallow the spike and z would be small.
     expect(z.get('2026-09-14')).toBeGreaterThan(10)
+  })
+})
+
+describe('sleepWeekSeries', () => {
+  const week = (end: string, values: number[]): DayValue[] =>
+    values.map((value, index) => ({ localDate: shift(end, index - (values.length - 1)), value }))
+
+  it('averages asleep minutes over the seven days ending on each date', () => {
+    const asleep = week('2026-09-14', [400, 410, 420, 430, 440, 450, 460])
+    const { duration } = sleepWeekSeries(asleep, [], { from: '2026-09-14', to: '2026-09-14' })
+    expect(duration).toEqual([{ localDate: '2026-09-14', value: 430 }])
+  })
+
+  it('measures consistency as the spread of bedtimes, so a steady week is a small number', () => {
+    const steady = week('2026-09-14', [1380, 1380, 1380, 1380, 1380, 1380, 1380])
+    const erratic = week('2026-09-14', [1200, 1440, 1260, 1380, 1320, 1400, 1250])
+    const range = { from: '2026-09-14', to: '2026-09-14' }
+    const a = sleepWeekSeries([], steady, range).consistency[0]
+    const b = sleepWeekSeries([], erratic, range).consistency[0]
+    expect(a?.value).toBe(0)
+    expect(b?.value).toBeGreaterThan(0)
+  })
+
+  it('omits a date whose week holds too few observed nights, rather than averaging two of seven', () => {
+    const sparse: DayValue[] = [
+      { localDate: '2026-09-13', value: 400 },
+      { localDate: '2026-09-14', value: 420 },
+    ]
+    const { duration } = sleepWeekSeries(sparse, [], { from: '2026-09-14', to: '2026-09-14' })
+    expect(duration).toEqual([])
   })
 })

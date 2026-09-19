@@ -74,3 +74,61 @@ export function zSeries(
   }
   return out
 }
+
+/**
+ * How many of the week's seven nights must be observed before the week is a week.
+ *
+ * A proposal rather than a derived truth, in the manner of `MIN_WORN_ACUTE`: four of seven is the
+ * same fraction that reader settled on, and a mean over two nights called "last week's sleep"
+ * would be the most misleading thing this input could say. Argue with it here.
+ */
+export const MIN_SLEEP_NIGHTS = 4
+
+function meanOf(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0) / values.length
+}
+
+function spreadOf(values: readonly number[]): number {
+  if (values.length < 2) return 0
+  const centre = meanOf(values)
+  return Math.sqrt(values.reduce((t, v) => t + (v - centre) ** 2, 0) / (values.length - 1))
+}
+
+/**
+ * The week's sleep, as two series over `range`: duration (the mean) and consistency (the spread of
+ * bedtimes). Both are per-date statistics over the seven days ENDING on that date, which is what
+ * makes them comparable against a baseline built from the same statistic on earlier dates.
+ *
+ * A date with fewer than `MIN_SLEEP_NIGHTS` observed nights is omitted entirely rather than
+ * emitted from what few nights there are. Absence is how the caller learns to redistribute the
+ * weight; a thin mean would instead be scored as though it were a week.
+ */
+export function sleepWeekSeries(
+  asleepMinutes: readonly DayValue[],
+  bedtimeMinutes: readonly DayValue[],
+  range: DateRange,
+): { duration: DayValue[], consistency: DayValue[] } {
+  const asleepBy = new Map(asleepMinutes.map((day) => [day.localDate, day.value]))
+  const bedtimeBy = new Map(bedtimeMinutes.map((day) => [day.localDate, day.value]))
+  const duration: DayValue[] = []
+  const consistency: DayValue[] = []
+
+  for (let date = range.from; date <= range.to; date = shiftLocalDate(date, 1)) {
+    const nightsAsleep: number[] = []
+    const nightsBedtime: number[] = []
+    for (let back = SLEEP_WEEK_DAYS - 1; back >= 0; back -= 1) {
+      const night = shiftLocalDate(date, -back)
+      const asleep = asleepBy.get(night)
+      if (asleep !== undefined) nightsAsleep.push(asleep)
+      const bedtime = bedtimeBy.get(night)
+      if (bedtime !== undefined) nightsBedtime.push(bedtime)
+    }
+    if (nightsAsleep.length >= MIN_SLEEP_NIGHTS) {
+      duration.push({ localDate: date, value: meanOf(nightsAsleep) })
+    }
+    if (nightsBedtime.length >= MIN_SLEEP_NIGHTS) {
+      consistency.push({ localDate: date, value: spreadOf(nightsBedtime) })
+    }
+  }
+  return { duration, consistency }
+}
