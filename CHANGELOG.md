@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.38.1](https://github.com/bardesss/haelan/compare/v1.38.0...v1.38.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **core,web:** say when a rebuild produced nothing, and stop the hook-timeout flake ([#291](https://github.com/bardesss/haelan/issues/291)) ([d1c8c38](https://github.com/bardesss/haelan/commit/d1c8c383ed290c16525c03925c8b9c9164392741))
+
 ## [1.38.0](https://github.com/bardesss/haelan/compare/v1.37.2...v1.38.0) (2026-09-19)
 
 
