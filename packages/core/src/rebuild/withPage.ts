@@ -115,7 +115,9 @@ const SAVEPOINT_NAME = 'haelan_page'
  *
  * Issuing the savepoint under a name of our own sidesteps both: the name never depends on where
  * the caller sits, and every path below - success, a dropped unit, and a fatal rethrow - accounts
- * for exactly the one `savepoint` this call opened.
+ * for exactly the one `savepoint` this call opened. That argument is about the savepoint, not
+ * about which handle issues it, and it is why this helper takes no transaction handle at all -
+ * the next section is why the statements go to the connection instead.
  *
  * Only `fn()` is inside the `try`. The success-path `release` and `collector.succeeded()` run
  * after it, unguarded: if either of those threw while still inside the `try`, the `catch` below
