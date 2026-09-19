@@ -9,6 +9,12 @@ import { I18nProvider } from '../src/i18n/index.js'
 const render = (node: React.ReactNode): string =>
   renderToStaticMarkup(<I18nProvider lng="en">{node}</I18nProvider>)
 
+// The Dutch counterpart of the same helper, for the dated strings below - i18n-parity.test.ts
+// only proves nl.json HAS the same keys as en.json, never that a mid-clause interpolation like
+// "is {{when}} mislukt" actually reads correctly once formatSince's own output lands inside it.
+const renderNl = (node: React.ReactNode): string =>
+  renderToStaticMarkup(<I18nProvider lng="nl">{node}</I18nProvider>)
+
 describe('RebuildNotice', () => {
   it('renders nothing when there is nothing wrong', () => {
     const html = render(
@@ -443,5 +449,147 @@ describe('RebuildNotice dates the states that can go stale', () => {
     expect(html).not.toContain('ago')
     expect(html).not.toContain('Invalid Date')
     expect(html).not.toContain('NaN')
+  })
+})
+
+/**
+ * Dutch renderings of all seven dated keys, asserted as whole lines rather than merely present
+ * (i18n-parity.test.ts already proves nl.json has every key en.json has - it says nothing about
+ * whether the translation reads correctly with a real formatSince value spliced into it).
+ *
+ * The sub-minute case gets its own test per key that carries {{when}}, because that is the one a
+ * review found genuinely wrong: formatSince used to hand numeric:'auto' a zero-minute distance,
+ * and 'auto' idioms that as "binnen een minuut" (Dutch for "within a minute") - future tense,
+ * for an event the whole point of this component is to say already happened. Fixed in formatSince
+ * itself (apps/web/src/format.ts), not here, because Members.tsx's own "signed in" and "synced"
+ * lines call the same function with the same exposure and neither had a test locking in the old,
+ * wrong wording either.
+ */
+describe('RebuildNotice renders the dated strings in Dutch', () => {
+  it('dates the quarantine, self voice', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]}
+        lastError="boom" voice="self" rebuildInFlight={false}
+        lastErrorAtMs={now - 3 * HOUR_MS} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-blocked">Je gegevens worden niet meer bijgewerkt. Een herbouw van je geschiedenis is 3 uur geleden mislukt, dus er worden geen nieuwe metingen verzameld. Een beheerder moet hiernaar kijken.</p>')
+  })
+
+  // The case the review flagged: a rebuild that failed under a minute ago must still read as
+  // having already happened, not as a warning about to come true.
+  it('dates the quarantine from a moment ago without slipping into future tense', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]}
+        lastError="boom" voice="self" rebuildInFlight={false}
+        lastErrorAtMs={now} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-blocked">Je gegevens worden niet meer bijgewerkt. Een herbouw van je geschiedenis is 0 minuten geleden mislukt, dus er worden geen nieuwe metingen verzameld. Een beheerder moet hiernaar kijken.</p>')
+    expect(html).not.toContain('binnen')
+  })
+
+  it('dates the quarantine, admin voice', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]}
+        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={now - 3 * DAY_MS} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-blocked">Robin ontvangt geen gegevens meer. Een herbouw van hun geschiedenis is 3 dagen geleden mislukt.</p>')
+  })
+
+  it('dates the dropped-pages note, self voice', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={4}
+        drops={[]} lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 3 * HOUR_MS}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-download-note">Een deel van je geschiedenis kon niet worden herbouwd en ontbreekt op deze pagina&#x27;s, op basis van de herbouw van 3 uur geleden. Er is niets verwijderd, en het komt terug zodra de oorzaak is verholpen.</p>')
+  })
+
+  it('dates the dropped-pages note without slipping into future tense when the rebuild just committed', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={4}
+        drops={[]} lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now}
+      />,
+    )
+    expect(html).toContain('op basis van de herbouw van 0 minuten geleden')
+    expect(html).not.toContain('binnen')
+  })
+
+  // droppedOtherSince_one, the singular count - present in both catalogues but never rendered by
+  // any test before this one.
+  it('dates the dropped-pages note, admin voice, in the singular', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={1}
+        drops={[]} lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 3 * HOUR_MS}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-download-note">1 pagina van de geschiedenis van Robin kon niet worden herbouwd, op basis van de herbouw van 3 uur geleden.</p>')
+  })
+
+  it('dates the dropped-pages note, admin voice, in the plural', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={7}
+        drops={[]} lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 3 * HOUR_MS}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-download-note">7 pagina&#x27;s van de geschiedenis van Robin konden niet worden herbouwd, op basis van de herbouw van 3 uur geleden.</p>')
+  })
+
+  it('dates the empty-rebuild note, self voice', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 2 * HOUR_MS}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Je geschiedenis is zonder fouten herbouwd, maar leverde geen metingen op, dus deze pagina&#x27;s zijn leeg, op basis van de herbouw van 2 uur geleden. Er is niets verwijderd: alles wat ooit voor je is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.</p></div>')
+  })
+
+  it('dates the empty-rebuild note without slipping into future tense when the rebuild just committed', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now}
+      />,
+    )
+    expect(html).toContain('op basis van de herbouw van 0 minuten geleden')
+    expect(html).not.toContain('binnen')
+  })
+
+  it('dates the empty-rebuild note, admin voice', () => {
+    const now = Date.now()
+    const html = renderNl(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 2 * HOUR_MS}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">De geschiedenis van Robin is zonder fouten herbouwd, maar leverde geen metingen op, dus hun pagina&#x27;s zijn leeg, op basis van de herbouw van 2 uur geleden. Er is niets verwijderd: alles wat ooit voor hen is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.</p></div>')
   })
 })

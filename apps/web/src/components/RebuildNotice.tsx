@@ -43,8 +43,9 @@ export interface RebuildNoticeProps {
   /**
    * When the last rebuild attempt failed, which dates the quarantine paragraph below. Not the
    * same timestamp that dates droppedPages and producedNothing beneath it, and deliberately so:
-   * this is the one column recordFailure ever writes, and lastSuccessAtMs stays null for anyone
-   * who has never once had a rebuild commit, quarantined or not.
+   * recordFailure (packages/core/src/store/rebuildState.ts) never touches lastSuccessAtMs, only
+   * lastAttemptAtMs, lastErrorAtMs, lastError and consecutiveFailures - so lastSuccessAtMs stays
+   * null for anyone who has never once had a rebuild commit, quarantined or not.
    *
    * Null falls back to the undated wording rather than to "just now" - a store that never
    * recorded a failure time is not the same claim as a failure recorded a moment ago, and nothing
