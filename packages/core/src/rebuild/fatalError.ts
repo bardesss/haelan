@@ -20,7 +20,10 @@ const FATAL_PREFIXES = [
  * Without it a full disk would make the replay drop every page in turn and then commit a
  * near-empty rebuild as though it were a data fault - stamping the person current, resuming their
  * sync, and reporting an archive that is simply gone. That is the silent corruption the whole
- * surfacing half exists to prevent, so it has to be impossible rather than merely visible.
+ * surfacing half exists to prevent, and these codes are the part of it this list can rule out
+ * outright rather than leave to a count on a dashboard. Only the part: a code list closes the
+ * conditions it names, and the breakers in replay.ts back it up for the rest without pretending
+ * to cover everything.
  *
  * Reads the `code` property, never the message text. Messages are localised and reworded between
  * SQLite releases; codes are the stable contract.

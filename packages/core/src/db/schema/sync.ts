@@ -57,7 +57,8 @@ export const rebuildState = sqliteTable('rebuild_state', {
   // pages: a rebuild that committed is not a failed rebuild. It distinguishes a first occurrence
   // from a state that has survived many boots.
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
-  // Written by #276b. Zero until per-page isolation exists.
+  // Archived pages the last attempt could not replay and skipped, so the rest of the person's
+  // archive could go in. Zero for a rebuild that skipped none, which is the ordinary case.
   droppedPages: integer('dropped_pages').notNull().default(0),
 })
 
