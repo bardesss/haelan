@@ -130,7 +130,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     const rows = readSamples(db, 'p1').filter((row) => row.utcMs === 60_000)
@@ -169,7 +169,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     // The correction wins, because it was fetched second. Ordering on window bounds puts it first
@@ -200,7 +200,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     // One minute, one row per aggregate. Replaying page by page would produce two sets.
@@ -242,7 +242,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     // 60 and 80 in one minute, downsampled together. Two episodes would leave whichever page
@@ -288,7 +288,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(meanAt(db, 120_000)).toMatchObject({ value: 100, n: 1 })
@@ -320,7 +320,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     // Minute two: both pages of the first call, downsampled together, 60 and 80 to a mean of 70.
@@ -360,7 +360,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     // Minute three: the two pages with no id at all, still one call by the pageToken inference,
@@ -386,7 +386,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.providerDaily).toBe(1)
@@ -405,7 +405,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.sessions).toBe(1)
@@ -434,7 +434,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     const rows = db.select().from(sessions).where(eq(sessions.personId, 'p1')).all()
@@ -468,7 +468,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.sessions).toBe(1)
@@ -506,7 +506,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(db.select().from(sources).where(eq(sources.personId, 'p1')).all()).toHaveLength(1)
@@ -532,7 +532,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.unmappable).toBe(1)
@@ -579,7 +579,7 @@ describe('replayPerson', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.localDates).toEqual(['2026-08-01', '2026-08-05', '2026-08-18'])
@@ -602,7 +602,7 @@ describe('replayPerson', () => {
 
     db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1_700_000_000_000,
+      sources: new SourceRegistry(db), nowMs: 1_700_000_000_000, client: db.$client,
     }))
 
     const rows = db.select().from(daily).where(eq(daily.personId, 'p1')).all()
@@ -639,7 +639,7 @@ describe('replayPerson, a body that repeats itself (#274)', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.sessions).toBe(1)
@@ -665,7 +665,7 @@ describe('replayPerson, a body that repeats itself (#274)', () => {
 
     const counts = db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }))
 
     expect(counts.sessions).toBe(1)

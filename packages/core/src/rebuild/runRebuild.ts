@@ -22,6 +22,7 @@ import { peopleNeedingRebuild } from './versions.ts'
 import { replayPerson } from './replay.ts'
 import { retargetOverrides } from './retarget.ts'
 import type { OldSession, OrphanedOverride } from './retarget.ts'
+import type { Drop } from './withPage.ts'
 
 export interface RebuildPersonReport {
   personId: string
@@ -51,6 +52,16 @@ export interface RebuildPersonReport {
   overridesRetargeted: number
   overridesOrphaned: OrphanedOverride[]
   unmappablePayloads: number
+  /**
+   * Pages that could not be replayed and were skipped. Beside `unmappablePayloads` rather than
+   * folded into it: one is a data type the catalogue retired, the other is a row that would not
+   * go in, and an operator deciding whether to report a bug needs to tell those apart.
+   *
+   * Nothing is lost when this is non-zero. Tier 1 still holds every body, so a MAPPING_VERSION
+   * bump once the cause is fixed replays them with no operator action at all.
+   */
+  droppedPages: number
+  drops: Drop[]
 }
 
 /**
@@ -223,6 +234,10 @@ export function runRebuild(input: RebuildInput): RebuildReport {
 
         const counts = replayPerson(tx, {
           personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
+          // The connection this transaction is running on, which the replay's per-page
+          // savepoints are issued against. Same connection, same transaction - the property the
+          // comment above already depends on for the stores.
+          client: input.db.$client,
         })
 
         const dropped = dropUnreferencedSources(tx, personId, keys)
@@ -266,6 +281,8 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           overridesRetargeted: retarget.retargeted,
           overridesOrphaned: retarget.orphaned,
           unmappablePayloads: counts.unmappable,
+          droppedPages: counts.droppedPages,
+          drops: counts.drops,
         }
       })
     } catch (error) {
@@ -304,8 +321,18 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       // household's data inside it.
       //
       // What is left is SQLite's own constraint and corruption messages, which name a table and
-      // a column, and two families of ConfigError. Neither is thrown by this file, which throws
-      // none of its own. The mappers raise one when the catalogue and their mapping tables
+      // a column, two families of ConfigError, and the two abandonment errors replayPerson
+      // raises itself. None of them is thrown by this file, which throws none of its own.
+      //
+      // replayPerson's two are the breaker (a run of units that could not be replayed) and the
+      // replay that committed nothing. Both name this person's id and a count, and then quote
+      // the reason the last drop gave - which is not a new category of content, because that
+      // reason is one of the same SQLite or zlib strings already accounted for above, with its
+      // volatile tail stripped by dropReason. Both are deliberately worded to say what was
+      // observed and not to diagnose a cause, since this is the string the affected person
+      // reads on their own dashboard; the comment above the breaker in replay.ts has the why.
+      //
+      // The mappers raise one when the catalogue and their mapping tables
       // disagree - "<type> is not a sample type", "<type> has no observation mapping declared" -
       // naming a data type id from the shared catalogue. `db/keys.ts` raises the other when an
       // id or a ref it was asked to translate has no row: "no <label> for id <id>" from
@@ -338,11 +365,11 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     checkpointTruncate(input.db)
 
     // After the commit, for the same reason the failure is recorded after the rollback: this is
-    // a durable record of a durable outcome. droppedPages is zero and drops empty until #276b
-    // gives replayPerson per-page isolation; the columns exist now so the surfaces that render
-    // them do not have to change again when it lands.
+    // a durable record of a durable outcome, including whatever replayPerson's own per-page
+    // isolation had to skip - the same counts personReport just carried out of the transaction.
     recordQuietly(() => input.rebuildState?.recordSuccess({
-      personId, nowMs: input.nowMs, droppedPages: 0, drops: [],
+      personId, nowMs: input.nowMs,
+      droppedPages: personReport.droppedPages, drops: personReport.drops,
     }))
 
     report.people.push(personReport)

@@ -174,7 +174,7 @@ describe('runRebuild', () => {
     // rolled back stamp leaves behind and the value a leaked one writes are the same number.
     h.db.update(people).set({ builtMappingVersion: null, builtDerivationVersion: null })
       .where(eq(people.id, h.personId)).run()
-    h.corruptOneArchivedBody()
+    h.corruptArchive()
 
     const report = runRebuild({ ...h.deps, nowMs: 2 })
 
@@ -197,7 +197,7 @@ describe('runRebuild', () => {
     h = seedRebuildable()
     h.seedSecondPerson()
     // p1's archive only. p2 has an archive of their own and is untouched by this.
-    h.corruptOneArchivedBody()
+    h.corruptArchive()
 
     const report = runRebuild({ ...h.deps, nowMs: 1 })
 
