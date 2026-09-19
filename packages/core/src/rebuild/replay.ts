@@ -11,6 +11,20 @@ import { localDateOf } from '../derive/localDay.ts'
 import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { ArchivedPayload, RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
+import { makeDropCollector, withPage } from './withPage.ts'
+import type { Drop } from './withPage.ts'
+
+/**
+ * Consecutive dropped units that mean the environment is wrong rather than the data.
+ *
+ * Backs up isFatalRebuildError for whatever its code list does not know about. Consecutive
+ * rather than total, so an archive carrying scattered bad pages never trips it however large it
+ * grows, while a wholesale failure trips early and cheaply.
+ *
+ * Exported for the test fixtures, which need a person whose whole rebuild fails and can only
+ * reach that through this number now that one bad page no longer does it.
+ */
+export const DROP_BREAKER = 100
 
 export interface ReplayInput {
   personId: string
@@ -30,6 +44,10 @@ export interface ReplayCounts {
   unmappable: number
   /** Every local date a replayed row landed on, which is what needs deriving after. */
   localDates: string[]
+  /** Pages that threw and were skipped, so the rest of the archive could replay. */
+  droppedPages: number
+  /** Those pages grouped by data type and reason - see dropReason for why grouped. */
+  drops: Drop[]
 }
 
 /**
@@ -39,12 +57,26 @@ export interface ReplayCounts {
  * The caller owns the transaction and has already emptied the person's tier 2 and 3. Sources are
  * resolved fresh here rather than reused, which is the whole point of the milestone, an identity
  * the current describe() would no longer produce must not survive a rebuild.
+ *
+ * A unit that cannot be written costs that unit and nothing else. Every write below runs inside
+ * its own savepoint (see withPage), so one page whose rows will not go in is skipped and counted
+ * rather than rolling the person's whole transaction back. That is what #274 cost a real
+ * instance: one archived body threw `UNIQUE constraint failed: session_segments.id`, the failure
+ * was deterministic, so it repeated on every boot and the only person on the instance was
+ * skipped by every sync run until a code change. Nothing is lost by dropping a unit - tier 1
+ * still holds every body, so a later MAPPING_VERSION bump replays them with no operator action.
+ * Two things still abort the whole person: a fatal SQLite code (isFatalRebuildError), and
+ * DROP_BREAKER consecutive drops.
  */
 export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const counts: ReplayCounts = {
     samples: 0, sessions: 0, segments: 0, providerDaily: 0, observations: 0,
-    unmappable: 0, localDates: [],
+    unmappable: 0, localDates: [], droppedPages: 0, drops: [],
   }
+  // A dropped unit can leave its date in this set: the set is in memory and a savepoint rollback
+  // does not revert it. Harmless rather than a bug - deriving a day whose rows are absent is a
+  // no-op, and the day usually carries rows from other types anyway - and written down because
+  // the alternative reading is that it is a leak.
   const localDates = new Set<string>()
   const resolveSource = (dataSource: unknown): string =>
     input.sources.resolve(input.personId, dataSource, input.nowMs, tx)
@@ -53,6 +85,45 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // person whose rebuild rolled back. This is the hot path the cache exists for - a person's whole
   // archive replays through it, so a metric name costs one query rather than one per row.
   const keys = new SampleKeys(tx)
+
+  // One collector for the whole person. The breaker counts consecutive failures across every
+  // data type rather than per type: what it is there to catch is the environment going wrong
+  // mid-replay, which is not confined to one type's pages.
+  const collector = makeDropCollector()
+  const breaker = (): void => {
+    if (collector.consecutive < DROP_BREAKER) return
+    throw new Error(
+      `${DROP_BREAKER} consecutive pages could not be replayed for ${input.personId}, `
+      + 'which is an environment fault rather than bad data, so the rebuild is abandoned '
+      + `rather than committing a near-empty archive: ${collector.list().at(-1)?.reason ?? ''}`,
+    )
+  }
+
+  /**
+   * What has to happen after every unit, whether it committed or not.
+   *
+   * The two caches above are the reason this is not just `breaker()`. Both resolve an identifier
+   * to a row and remember the answer, and both write the row when it is missing: SourceRegistry
+   * inserts into `sources` on first sight of a dataSource, SampleKeys inserts into `metrics` on
+   * first sight of a metric name. Both were written assuming they never outlive a rollback of
+   * what they wrote - SampleKeys' class comment says so outright, and SourceRegistry.forget
+   * exists for the one caller that did - and a savepoint rollback is exactly the rollback they
+   * now do outlive. Left alone, a unit that dropped after resolving a new source hands the next
+   * unit an id whose row is gone, so that one fails its foreign key too, and so does every unit
+   * after it until the breaker fires: one bad page would cost the person their archive by a
+   * longer route than the one this change removes. A metric ref is worse than a foreign key
+   * failure, because `metrics.ref` is AUTOINCREMENT and `sqlite_sequence` rolls back with
+   * everything else, so the number is handed out again to whatever metric is inserted next and
+   * the stale cache would file one metric's readings under another's name with nothing failing
+   * at all. Clearing both costs one select per identifier on the next unit that needs it.
+   */
+  const afterUnit = (committed: boolean): void => {
+    if (!committed) {
+      input.sources.forget(input.personId)
+      keys.forget()
+    }
+    breaker()
+  }
 
   // Prepared once for the whole replay rather than rebuilt per row, and this is a memory fix
   // rather than a speed one. Drizzle compiles and prepares a fresh better-sqlite3 statement on
@@ -95,31 +166,34 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
 
     if (group.isRollup) {
       for (const page of group.pages) {
-        const mapped = mapRollups({
-          dataType: t, personId: input.personId,
-          body: input.archive.getBody(input.personId, page.id),
+        const committed = withPage(tx, { dataType: group.dataType, pages: 1 }, collector, () => {
+          const mapped = mapRollups({
+            dataType: t, personId: input.personId,
+            body: input.archive.getBody(input.personId, page.id),
+          })
+          for (const row of mapped.rows) {
+            tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).onConflictDoUpdate({
+              target: [daily.personId, daily.localDate, daily.metric, daily.agg, daily.source],
+              set: {
+                value: row.value,
+                coverage: row.coverage,
+                sourceMix: row.sourceMix,
+                derivationVersion: row.derivationVersion,
+                updatedAtMs: input.nowMs,
+              },
+            }).run()
+            // Deriving a rollup-only day writes no derived rows, so this looks like pointless
+            // work, and it is not. deriveDayInto is the only thing in the system that ever
+            // applies a day_metric exclusion to a PROVIDER_SOURCE row, and it only runs for the
+            // dates named here. Leave them out and a day whose sole content is a provider figure
+            // is never derived, so a correction somebody made on that figure is silently undone
+            // by the next rebuild. Reachable in practice, because the rollup endpoints reach
+            // further back than intraday retention: the oldest days a household carries commonly
+            // have a provider row and no samples at all.
+            localDates.add(row.localDate)
+          }
         })
-        for (const row of mapped.rows) {
-          tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).onConflictDoUpdate({
-            target: [daily.personId, daily.localDate, daily.metric, daily.agg, daily.source],
-            set: {
-              value: row.value,
-              coverage: row.coverage,
-              sourceMix: row.sourceMix,
-              derivationVersion: row.derivationVersion,
-              updatedAtMs: input.nowMs,
-            },
-          }).run()
-          // Deriving a rollup-only day writes no derived rows, so this looks like pointless
-          // work, and it is not. deriveDayInto is the only thing in the system that ever applies
-          // a day_metric exclusion to a PROVIDER_SOURCE row, and it only runs for the dates
-          // named here. Leave them out and a day whose sole content is a provider figure is
-          // never derived, so a correction somebody made on that figure is silently undone by
-          // the next rebuild. Reachable in practice, because the rollup endpoints reach further
-          // back than intraday retention: the oldest days a household carries commonly have a
-          // provider row and no samples at all.
-          localDates.add(row.localDate)
-        }
+        afterUnit(committed)
       }
       continue
     }
@@ -139,32 +213,35 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // tier 2, so every row inserted below is new: there is no previous row for any session to
         // have moved away from.
         for (const page of group.pages) {
-          const { sessions: rows, segments } = mapSessions({
-            dataType: t, personId: input.personId, resolveSource,
-            body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+          const committed = withPage(tx, { dataType: group.dataType, pages: 1 }, collector, () => {
+            const { sessions: rows, segments } = mapSessions({
+              dataType: t, personId: input.personId, resolveSource,
+              body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+            })
+            for (const row of rows) {
+              tx.insert(sessions).values(row).onConflictDoUpdate({
+                target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
+                set: {
+                  startMs: row.startMs,
+                  startOffsetMinutes: row.startOffsetMinutes,
+                  endMs: row.endMs,
+                  endOffsetMinutes: row.endOffsetMinutes,
+                  localDate: row.localDate,
+                  attrs: row.attrs,
+                  rawPayloadId: row.rawPayloadId,
+                },
+              }).run()
+              localDates.add(row.localDate)
+            }
+            // Replaced wholesale for the sessions in this page, the same as ingest, a window
+            // fetched twice legitimately revises a night's stage timeline, and merging both
+            // versions of it would interleave them.
+            for (const row of rows) {
+              tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
+            }
+            for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
           })
-          for (const row of rows) {
-            tx.insert(sessions).values(row).onConflictDoUpdate({
-              target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
-              set: {
-                startMs: row.startMs,
-                startOffsetMinutes: row.startOffsetMinutes,
-                endMs: row.endMs,
-                endOffsetMinutes: row.endOffsetMinutes,
-                localDate: row.localDate,
-                attrs: row.attrs,
-                rawPayloadId: row.rawPayloadId,
-              },
-            }).run()
-            localDates.add(row.localDate)
-          }
-          // Replaced wholesale for the sessions in this page, the same as ingest, a window fetched
-          // twice legitimately revises a night's stage timeline, and merging both versions of it
-          // would interleave them.
-          for (const row of rows) {
-            tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
-          }
-          for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
+          afterUnit(committed)
         }
         continue
       }
@@ -175,28 +252,31 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // its own, so there is no reason to reassemble fetch episodes the way the samples path below
         // has to.
         for (const page of group.pages) {
-          const rows = mapObservations({
-            dataType: t, personId: input.personId, resolveSource,
-            body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+          const committed = withPage(tx, { dataType: group.dataType, pages: 1 }, collector, () => {
+            const rows = mapObservations({
+              dataType: t, personId: input.personId, resolveSource,
+              body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+            })
+            for (const row of rows) {
+              tx.insert(observations).values(row).onConflictDoUpdate({
+                target: observations.id,
+                set: {
+                  personId: row.personId,
+                  sourceId: row.sourceId,
+                  kind: row.kind,
+                  startedAtMs: row.startedAtMs,
+                  startedAtOffsetMinutes: row.startedAtOffsetMinutes,
+                  endedAtMs: row.endedAtMs,
+                  endedAtOffsetMinutes: row.endedAtOffsetMinutes,
+                  localDate: row.localDate,
+                  value: row.value,
+                  rawPayloadId: row.rawPayloadId,
+                },
+              }).run()
+              localDates.add(row.localDate)
+            }
           })
-          for (const row of rows) {
-            tx.insert(observations).values(row).onConflictDoUpdate({
-              target: observations.id,
-              set: {
-                personId: row.personId,
-                sourceId: row.sourceId,
-                kind: row.kind,
-                startedAtMs: row.startedAtMs,
-                startedAtOffsetMinutes: row.startedAtOffsetMinutes,
-                endedAtMs: row.endedAtMs,
-                endedAtOffsetMinutes: row.endedAtOffsetMinutes,
-                localDate: row.localDate,
-                value: row.value,
-                rawPayloadId: row.rawPayloadId,
-              },
-            }).run()
-            localDates.add(row.localDate)
-          }
+          afterUnit(committed)
         }
         continue
       }
@@ -213,19 +293,32 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
       // together: a minute Google revised from 60 bpm to 100 bpm between two fetches would leave
       // min 60, mean 80, max 100, n 2, where the sync itself left min 100, mean 100, max 100, n 1.
       for (const episode of splitIntoEpisodes(group.pages)) {
-        const pages = episode.map((p) => ({
-          body: input.archive.getBody(input.personId, p.id),
-          rawPayloadId: p.id,
-        }))
-        const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
-        for (const row of rows) {
-          // The same translation and the same upsert target runJob's writeSamples uses, and they
-          // have to stay the same: a replay that keyed a row differently from the sync would
-          // upsert onto a key the sync never wrote and double the table on the first rebuild.
-          const stored = keys.sampleRefs(row)
-          insertSample.run(stored)
-          localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
-        }
+        // The whole episode is one unit, where the three loops above take a page each. Not an
+        // inconsistency: mapWindowSamples takes a fetch episode, and isolating a page inside one
+        // would mean calling it once per page, which downsamples across readings the original
+        // sync deliberately kept apart - the exact failure splitIntoEpisodes exists to prevent,
+        // and the comment above it spells out what a blended minute costs. A dropped episode
+        // therefore costs every page in it, which is why `pages` is its length rather than 1:
+        // the number an operator reads has to be how much of the archive went unreplayed, not
+        // how many times this loop gave up.
+        const unit = { dataType: group.dataType, pages: episode.length }
+        const committed = withPage(tx, unit, collector, () => {
+          const pages = episode.map((p) => ({
+            body: input.archive.getBody(input.personId, p.id),
+            rawPayloadId: p.id,
+          }))
+          const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
+          for (const row of rows) {
+            // The same translation and the same upsert target runJob's writeSamples uses, and
+            // they have to stay the same: a replay that keyed a row differently from the sync
+            // would upsert onto a key the sync never wrote and double the table on the first
+            // rebuild.
+            const stored = keys.sampleRefs(row)
+            insertSample.run(stored)
+            localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
+          }
+        })
+        afterUnit(committed)
       }
     }
   }
@@ -253,6 +346,11 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
     .from(observations).where(eq(observations.personId, input.personId)).get()?.n ?? 0
 
   counts.localDates = [...localDates].sort()
+  // Straight off the collector rather than measured against a table, unlike the five counts
+  // above: what was skipped left nothing behind to count, so the collector is the only record
+  // there is.
+  counts.droppedPages = collector.droppedPages
+  counts.drops = collector.list()
   return counts
 }
 

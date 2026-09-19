@@ -23,6 +23,7 @@ import { OverrideStore } from '../store/overrides.ts'
 import { SettingsStore } from '../store/settings.ts'
 import { body, dailyRollupBody, samplePoint, sleepPoint } from './payloads.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
+import { DROP_BREAKER } from '../rebuild/replay.ts'
 
 export interface TestDatabase { db: Database, dir: string, cleanup: () => void }
 
@@ -54,15 +55,37 @@ export function seedPerson(db: Database, id: string, overrides: SeedPersonOverri
 }
 
 /**
- * Ruins every archived body this person has, so any replay of them throws.
+ * Ruins every archived body this person has, so their whole replay throws.
  *
  * Archived first and ruined afterwards because `RawArchive.put` gzips whatever it is handed, so
  * there is no body that survives storage and then fails to decompress. What this stands in for
  * is the hazard the rebuild has to survive: a payload it cannot get through. Which payload, and
  * why, is not what the callers assert; that the throw happens inside the person's transaction
  * is.
+ *
+ * The padding is why the whole replay throws rather than one page of it. A ruined body used to
+ * be the cheapest way to fail a rebuild outright, and page isolation (#276b) is precisely the
+ * change that took that away: `replayPerson` now drops a page it cannot get through and stamps
+ * the person with the rest of their archive. Only two things still abandon a person, a fatal
+ * SQLite code and DROP_BREAKER consecutive drops, and a fixture that only writes rows cannot
+ * produce a fatal code - so this produces the other one, by giving the person more unreplayable
+ * pages in a row than the breaker tolerates. Each padding page is its own fetch episode
+ * (pageToken null, no episode id) and so its own unit, which is what makes them consecutive
+ * drops rather than one drop covering many pages. The breaker's message ends with the last
+ * drop's reason, so a caller asserting on the zlib text still reads it.
  */
 export function corruptArchivedBodies(db: Database, personId: string): void {
+  const archive = new RawArchive(db)
+  for (let i = 0; i < DROP_BREAKER; i += 1) {
+    archive.put({
+      personId, dataType: 'heart-rate', requestParams: { filter: 'x', pageSize: 1000, pageToken: null },
+      windowStartMs: 0, windowEndMs: 86_400_000,
+      // Distinct bodies, or RawArchive.put deduplicates all but the first away and the padding
+      // is one page rather than a hundred. Distinct fetch times so listFor's order is settled
+      // rather than falling through to its random id tiebreak.
+      fetchedAtMs: 1_000_000 + i, httpStatus: 200, body: `{"dataPoints":[],"padding":${i}}`,
+    })
+  }
   db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
     .where(eq(rawPayloads.personId, personId)).run()
 }
@@ -250,8 +273,15 @@ export interface Rebuildable {
    * samples would let a delete that forgot its person filter on sessions or daily pass.
    */
   seedSecondPerson: () => SecondPersonRows
-  /** Makes one archived body ungzippable, which is the cheapest honest way to fail a replay. */
-  corruptOneArchivedBody: () => void
+  /**
+   * Makes this person's whole replay fail, which is what the callers of it are about.
+   *
+   * Ruining one body used to be enough and is not any more, because dropping a page rather than
+   * a person is the change #276b made; see `corruptArchivedBodies`, which this delegates to for
+   * the whole of how it now gets there. Named for the outcome rather than the mechanism, since
+   * no caller asserts on which body was ruined and the mechanism has already changed once.
+   */
+  corruptArchive: () => void
   /**
    * Every row of the five tables a rebuild writes, each sorted by its own full natural key
    * rather than however sqlite happens to have stored it. A property asserting that a second
@@ -519,15 +549,12 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
         daily: db.select().from(daily).where(eq(daily.personId, otherId)).all(),
       }
     },
-    corruptOneArchivedBody: () => {
-      // Ordered, so which body is ruined is the same on every run. An unordered get() would
-      // leave a rollback test that passes or fails on sqlite's row order.
-      const row = db.select({ id: rawPayloads.id }).from(rawPayloads)
-        .where(eq(rawPayloads.personId, personId))
-        .orderBy(asc(rawPayloads.dataType), asc(rawPayloads.id)).get()
-      if (!row) throw new Error('seedRebuildable archived nothing to corrupt')
-      db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
-        .where(eq(rawPayloads.id, row.id)).run()
+    corruptArchive: () => {
+      if (db.select({ id: rawPayloads.id }).from(rawPayloads)
+        .where(eq(rawPayloads.personId, personId)).get() === undefined) {
+        throw new Error('seedRebuildable archived nothing to corrupt')
+      }
+      corruptArchivedBodies(db, personId)
     },
     snapshot: () => snapshotOf(db),
   }

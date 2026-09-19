@@ -68,6 +68,31 @@ export class SampleKeys {
   constructor(db: DbOrTx) { this.#db = db }
 
   /**
+   * Drops every cached id, for a caller whose writes were rolled back underneath it.
+   *
+   * The class comment above says this instance must not outlive a rollback, and until page
+   * isolation landed that was true by construction: one instance per transaction, and a
+   * transaction that rolled back was the end of it. `replayPerson` now rolls a dropped page back
+   * to a savepoint instead, which is a rollback this instance does outlive, so it calls this
+   * whenever one drops. Both directions of all four caches, not only the metric pair the drop
+   * could have written: a rolled-back savepoint takes the `sources` row a page created with it
+   * too, and `sourceRef` is just as happy to be holding its number.
+   *
+   * Nothing here is state of its own - every entry is an answer a select would give again - so
+   * the only cost of clearing it is one select per identifier the caller goes on to use.
+   */
+  forget(): void {
+    this.#metricRefByName.clear()
+    this.#metricNameByRef.clear()
+    this.#personRefById.clear()
+    this.#personIdByRef.clear()
+    this.#sourceRefById.clear()
+    this.#sourceIdByRef.clear()
+    this.#rawPayloadRefById.clear()
+    this.#rawPayloadIdByRef.clear()
+  }
+
+  /**
    * Assigns on first sight: a metric name the dictionary has never stored gets a new row. Unlike
    * people, sources and raw_payloads, `metricDictionary.ref` is a real AUTOINCREMENT primary key
    * rather than a placeholder overwritten by an AFTER INSERT trigger, so RETURNING here answers
