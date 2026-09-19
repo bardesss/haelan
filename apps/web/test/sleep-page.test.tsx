@@ -156,6 +156,13 @@ function stubSleep(
   // The hypnogram night's own excluded sleep sessions, for the excluded-sessions line below it.
   // Appended last for the same reason as every other optional parameter here.
   excludedSessions: string[] = [],
+  // For the two "renders nothing" tests below: /sleep/nights answers no night at all (the
+  // hypnogram card's own emptiness) when true, appended last for the same reason as every other
+  // optional parameter here.
+  emptyNights = false,
+  // Same shape, for the schedule card: withholds both sleep_bedtime_minutes and
+  // sleep_waketime_minutes points, which is exactly what scheduleNights.length === 0 reads.
+  emptySchedule = false,
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -168,6 +175,11 @@ function stubSleep(
       const metrics = new URLSearchParams(url.split('?')[1] ?? '').getAll('metric')
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
+        const isSchedule = metric === 'sleep_bedtime_minutes' || metric === 'sleep_waketime_minutes'
+        if (isSchedule && emptySchedule) {
+          body[metric] = { points: [], reduction: null }
+          continue
+        }
         const value = metric === 'sleep_bedtime_minutes' ? schedule.bedtimeMinutes
           : metric === 'sleep_waketime_minutes' ? schedule.waketimeMinutes
           : 420
@@ -178,7 +190,9 @@ function stubSleep(
       }
       return json(body)
     }
-    if (url.includes('/sleep/nights')) return json(hypnogramNightsResponse(naps, excludedSessions))
+    if (url.includes('/sleep/nights')) {
+      return json(emptyNights ? { items: [], cursor: null } : hypnogramNightsResponse(naps, excludedSessions))
+    }
     if (url.includes('/baselines')) {
       return hangBaselines ? new Promise<Response>(() => {}) : json({ baseline })
     }
@@ -748,6 +762,35 @@ describe('the Sleep page', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
     expect(card?.textContent).toContain('too few days')
     expect(card?.querySelector('.insight-summary')).toBeNull()
+    restore()
+  })
+
+  // stubSleep's own hypnogramNightsResponse has answered a real night in every test above; this
+  // one asks for none at all. The card used to render "No data yet" for that; now it renders
+  // nothing, and the whole Card goes with it rather than leaving a blank shell that would still
+  // report itself present to CardGrid.
+  it('renders no sleep stages card when the range holds no night', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [], [], true)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep stages')
+    expect(card).toBeUndefined()
+    restore()
+  })
+
+  // Same rule, for the card gated on lastSeries/scheduleNights rather than on useNights: withholds
+  // both sleep_bedtime_minutes and sleep_waketime_minutes points, which is exactly what
+  // scheduleNights.length === 0 reads.
+  it('renders no sleep schedule card when neither bedtime nor wake time has a point', async () => {
+    const restore = stubSleep([], undefined, false, {}, null, [], [], false, true)
+    const { client, tree } = withQuery(<Sleep />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Sleep schedule')
+    expect(card).toBeUndefined()
     restore()
   })
 })

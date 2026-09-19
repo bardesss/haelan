@@ -663,28 +663,34 @@ export function Dashboard() {
           // range) and emptyStateFor's gate was built to read the latter, so this hand rolls the
           // same error/pending/empty order MetricCard enforces elsewhere, the same shape the sleep
           // stages and flagged days cards already use for a query MetricCard cannot gate on.
-          <Card span={8} label={t('dashboard.heartRateRange.label')}
-            basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
-            {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} error={intraday.error} />
-              : intraday.isPending ? <Loading />
-              // Checked ahead of the real no-data branch below, the same precedence emptyStateFor
-              // gives excludedTypes over both of its own no_data and not_worn checks: an excluded
-              // type has nothing this request could ever have answered, so the exclusion is the
-              // more specific and more actionable truth. dataTypeForMetric('heart_rate') is
-              // 'heart-rate', an ordinary excludable catalogue entry, so this is exactly the
-              // dataTypes/excludedTypes pair MetricCard's own gate reads, not a second rule.
-              : excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '') ? (
-                <EmptyState title={t('emptyState.not_synced.title')} detail={t('emptyState.not_synced.detail')} />
-              ) : intraday.data.points.length === 0 ? (
-                <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
-              ) : (
-                <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
-                  label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })}
-                  onPointClick={(point) => setAnnotateTarget({
-                    scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
-                  })} />
-              )}
-          </Card>
+          // Nothing at all rather than an empty Card when the day truly has no samples, the same
+          // rule the sleep stages card follows just below: the exclusion branch keeps its card,
+          // since "not being synced" is still something to say about the day, and only the
+          // genuinely empty points.length === 0 case disappears.
+          intraday.isError || intraday.isPending
+            || excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '')
+            || intraday.data.points.length > 0 ? (
+            <Card span={8} label={t('dashboard.heartRateRange.label')}
+              basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
+              {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} error={intraday.error} />
+                : intraday.isPending ? <Loading />
+                // Checked ahead of the real no-data branch below, the same precedence emptyStateFor
+                // gives excludedTypes over both of its own no_data and not_worn checks: an excluded
+                // type has nothing this request could ever have answered, so the exclusion is the
+                // more specific and more actionable truth. dataTypeForMetric('heart_rate') is
+                // 'heart-rate', an ordinary excludable catalogue entry, so this is exactly the
+                // dataTypes/excludedTypes pair MetricCard's own gate reads, not a second rule.
+                : excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '') ? (
+                  <EmptyState title={t('emptyState.not_synced.title')} detail={t('emptyState.not_synced.detail')} />
+                ) : (
+                  <IntradayHeartRate points={intraday.data.points} reduction={intraday.data.reduction}
+                    label={t('dashboard.heartRateRange.intradayChartLabel', { date: controls.from })}
+                    onPointClick={(point) => setAnnotateTarget({
+                      scope: 'sample', localDate: controls.from, metric: 'heart_rate', ...point,
+                    })} />
+                )}
+            </Card>
+          ) : null
         ) : (
           <MetricCard metric="heart_rate" span={8} label={t('dashboard.heartRateRange.label')} basisPlacement="header"
             query={{ isError: heartRateFailed, isPending: heartRatePending, refetch: retryHeartRate, error: heartRateError }}
@@ -710,8 +716,13 @@ export function Dashboard() {
             the three query states are handled by hand instead, the same shape the sleep stages
             card below already uses for the same reason (gated on useNights, not a metric). Zero
             flagged days in the period renders the empty state honestly rather than falsely: it
-            says nothing is flagged, not that nothing could be. */}
-        <Card span={4} label={t('dashboard.flaggedDays.label')}>
+            says nothing is flagged, not that nothing could be.
+            ambient: this card reads the reader's own annotations, not the period's data, so it
+            renders on a day where nothing was synced at all. Counting like any other card, it
+            alone would hold the Dashboard's tally above zero and make the page level empty state
+            unreachable here, on the one page that prompted the whole change. See Card.tsx's own
+            prop comment. */}
+        <Card span={4} ambient label={t('dashboard.flaggedDays.label')}>
           {overridesQuery.events.isError ? <ErrorState onRetry={() => void overridesQuery.events.refetch()} error={overridesQuery.events.error} />
             : overridesQuery.events.isPending ? <Loading />
             : flaggedDates.length === 0 ? (
@@ -733,28 +744,36 @@ export function Dashboard() {
             head an empty state with the range's own last date, naming a night it was not drawing
             and had no row for, which is what the guard below avoids by naming lastNight's own
             date rather than the range end.
-            Not a MetricCard: gated on a night from useNights, not a metric and its points. */}
-        <Card span={7} label={t('dashboard.sleepStages.label')}
-          basis={nights.isError || lastNight === null
-            ? undefined
-            : t('dashboard.sleepStages.basis', { date: lastNight.localDate })}>
-          {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} error={nights.error} />
-            : nights.isPending ? <Loading /> : lastNight === null ? (
-            <EmptyState title={t('emptyState.no_data.title')} detail={t('emptyState.no_data.detail')} />
-          ) : (
-            <>
-              <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
-                label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
-              {/* Reused from Sleep.tsx rather than a second copy of this paragraph: both pages
-                  build their hypnogram from the same useNights row, so a night an exclusion
-                  shortened needs the same explanation here that Sleep.tsx already drew, the defect
-                  a reader excluding a sleep session used to see (an unexplained short night on
-                  this page, an explained one on Sleep) otherwise reopens on every edit to one page
-                  that forgets the other. */}
-              <NightExcludedSessions count={lastNight.excludedSessions.length} />
-            </>
-          )}
-        </Card>
+            Not a MetricCard: gated on a night from useNights, not a metric and its points.
+            Nothing at all rather than an empty Card, the same rule MetricCard's own no_data
+            branch follows: the shell is what reports presence to CardGrid, so an empty one would
+            keep the page claiming it has something to show. The error and pending cards stay,
+            since neither is a statement about the person's record. */}
+        {nights.isError || nights.isPending || lastNight !== null ? (
+          <Card span={7} label={t('dashboard.sleepStages.label')}
+            basis={nights.isError || lastNight === null
+              ? undefined
+              : t('dashboard.sleepStages.basis', { date: lastNight.localDate })}>
+            {nights.isError ? <ErrorState onRetry={() => void nights.refetch()} error={nights.error} />
+              // lastNight && (...), not a bare fragment: the outer gate above already guarantees
+              // lastNight is non-null whenever this branch runs, but that guarantee lives in a
+              // sibling condition TypeScript's narrowing does not reach back through, so the check
+              // is repeated here, right beside the read, for the narrowing itself.
+              : nights.isPending ? <Loading /> : lastNight && (
+              <>
+                <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
+                  label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
+                {/* Reused from Sleep.tsx rather than a second copy of this paragraph: both pages
+                    build their hypnogram from the same useNights row, so a night an exclusion
+                    shortened needs the same explanation here that Sleep.tsx already drew, the defect
+                    a reader excluding a sleep session used to see (an unexplained short night on
+                    this page, an explained one on Sleep) otherwise reopens on every edit to one page
+                    that forgets the other. */}
+                <NightExcludedSessions count={lastNight.excludedSessions.length} />
+              </>
+            )}
+          </Card>
+        ) : null}
         {/* metric is sleep_bedtime_minutes only to pick the plain key: neither bedtime nor
             waketime carries a wear signal (every sleep metric says false, see coverageIsMeaningful),
             so MetricCard always resolves to basisKey here, and basisWornKey is never reached; it is
