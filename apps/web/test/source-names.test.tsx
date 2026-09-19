@@ -49,7 +49,10 @@ const CONTROLS: PageControlsState = {
 function mount(node: ReactNode, sources: NamedSource[]): void {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null })
+  client.setQueryData(syncStatusKey(PERSON.personId), {
+    running: false, lastFinishedAtMs: null,
+    rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
+  })
   client.setQueryData(sourceNamesKey(PERSON.personId), { items: sources })
   act(() => {
     root?.render(

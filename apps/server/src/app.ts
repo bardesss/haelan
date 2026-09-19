@@ -5,7 +5,9 @@ import {
   AccountStore, CredentialStore, McpCallLog, McpTokenStore, PeopleStore, RawArchive, SessionStore,
   SettingsStore, SourceRegistry, SyncStateStore,
 } from '@haelan/core'
-import type { ExcludedDataTypeStore, Instance, RateLimiter } from '@haelan/core'
+import type {
+  ExcludedDataTypeStore, Instance, RateLimiter, RebuildStateStore,
+} from '@haelan/core'
 import { registerSetupGate } from './routes/setupGate.ts'
 import { registerAuth } from './routes/auth.ts'
 import { registerSetup } from './routes/setup.ts'
@@ -127,6 +129,7 @@ export interface Stores {
   excludedDataTypes: ExcludedDataTypeStore
   mcpTokens: McpTokenStore
   mcpCalls: McpCallLog
+  rebuildState: RebuildStateStore
 }
 
 export interface ServerContext extends ServerDeps {
@@ -164,6 +167,7 @@ export function buildServer(deps: ServerDeps): FastifyInstance {
     excludedDataTypes: deps.instance.excludedDataTypes,
     mcpTokens: new McpTokenStore(deps.instance.db),
     mcpCalls: new McpCallLog(deps.instance.db),
+    rebuildState: deps.instance.rebuildState,
   }
   // The runner takes the context and the context holds the runner, so it is assigned rather
   // than passed. One object, so a route reaching app.haelan.runner reaches the same instance

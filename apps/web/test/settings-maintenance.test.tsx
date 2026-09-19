@@ -94,6 +94,7 @@ function mountSettingsAs(overrides: Partial<Session>): void {
   client.setQueryData(membersKey(), { items: [] })
   client.setQueryData(maintenanceKey(), status({}))
   client.setQueryData(instanceUrlKey(), { baseUrl: 'http://localhost:4235', redirectUri: 'http://localhost:4235/oauth/callback' })
+  client.setQueryData(queryKeys.rebuildHealth(), { people: [] })
   window.history.replaceState(null, '', '/settings?tab=instance')
   act(() => {
     root?.render(

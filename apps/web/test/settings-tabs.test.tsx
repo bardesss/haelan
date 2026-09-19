@@ -57,6 +57,7 @@ function mountAt(path: string, overrides: Partial<Session> = {}): void {
   client.setQueryData(maintenanceKey(), {
     bytes: 1_000, bloat: { bytes: 0, fraction: 0 }, backups: { keep: 3, intervalHours: 24, last: null },
   })
+  client.setQueryData(queryKeys.rebuildHealth(), { people: [] })
   window.history.replaceState(null, '', path)
   act(() => {
     root?.render(
@@ -87,9 +88,10 @@ describe('the settings tabs', () => {
   it('opens the tab the url names, so a link and a reload land in the same place', () => {
     mountAt('/settings?tab=instance')
     expect(currentTab()).toBe('Instance')
-    // Both of this tab's cards, in order: the pair was a half-width row on the old page and stays
-    // one here, which is the whole reason they share a tab rather than having one each.
-    expect(cardLabels()).toEqual(['Instance address', 'Database maintenance'])
+    // All three of this tab's cards, in order: the address/maintenance pair was a half-width row
+    // on the old page and stays one here, and the rebuild card joins them full width below rather
+    // than needing a tab of its own.
+    expect(cardLabels()).toEqual(['Instance address', 'Database maintenance', 'Rebuild health'])
   })
 
   it('links each tab to its own url rather than acting on the page in place', () => {

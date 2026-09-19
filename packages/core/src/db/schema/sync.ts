@@ -38,3 +38,41 @@ export const excludedDataTypes = sqliteTable('excluded_data_types', {
   dataTypeId: text('data_type_id').notNull(),
   excludedAtMs: integer('excluded_at_ms').notNull(),
 }, (t) => [primaryKey({ columns: [t.personId, t.dataTypeId] })])
+
+/**
+ * What the last rebuild of this person did. Shaped after `sync_state` above, which is the
+ * existing precedent for per-person operational state carrying an error and a failure count.
+ *
+ * Written from outside the person's rebuild transaction, never inside it. The failure path
+ * exists to record a transaction that rolled back, and a write enlisted in that transaction
+ * would roll back with it - see RebuildStateStore.
+ */
+export const rebuildState = sqliteTable('rebuild_state', {
+  personId: text('person_id').primaryKey().references(() => people.id),
+  lastAttemptAtMs: integer('last_attempt_at_ms'),
+  lastSuccessAtMs: integer('last_success_at_ms'),
+  lastErrorAtMs: integer('last_error_at_ms'),
+  lastError: text('last_error'),
+  // Increments on a quarantine, resets on any attempt that commits, including one that dropped
+  // pages: a rebuild that committed is not a failed rebuild. It distinguishes a first occurrence
+  // from a state that has survived many boots.
+  consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+  // Written by #276b. Zero until per-page isolation exists.
+  droppedPages: integer('dropped_pages').notNull().default(0),
+})
+
+// Grouped, never one row per dropped page. A systematic fault drops every page of a type for the
+// same reason, and an operator needs one readable line rather than thousands of identical rows.
+// Page ids are not stored because nothing reads them: retry is a MAPPING_VERSION bump over the
+// whole archive, never a list of ids.
+//
+// Replaced wholesale for a person at the END of each attempt. Clearing at the start would mean an
+// attempt that then aborted had erased the previous record without writing a replacement.
+export const rebuildDrops = sqliteTable('rebuild_drops', {
+  personId: text('person_id').notNull().references(() => people.id),
+  // Not a foreign key anywhere, for the reason excluded_data_types gives: the catalogue is code,
+  // and a type removed from it should leave a harmless orphan rather than block a migration.
+  dataType: text('data_type').notNull(),
+  reason: text('reason').notNull(),
+  pages: integer('pages').notNull(),
+}, (t) => [primaryKey({ columns: [t.personId, t.dataType, t.reason] })])

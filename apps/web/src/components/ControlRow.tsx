@@ -9,6 +9,7 @@ import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
 import { useSourceNames } from '../data/useSourceNames.js'
 import { ALL_SOURCES } from '../controls/source.js'
 import { periodLabel } from '../controls/periodLabel.js'
+import { RebuildNotice } from './RebuildNotice.js'
 
 // A frozen module constant, not a fresh `[]` default: a new array identity on every render is
 // what chart-lifecycle.test.tsx exists to catch elsewhere in this app, and a default parameter
@@ -90,6 +91,23 @@ export function ControlRow({
 
   return (
     <div className="controls">
+      {/* Guarded on status.data rather than left to RebuildNotice's own null return: the query
+          answers nothing for a moment after mount (the same gap syncedLabel's own three-way
+          branch above exists for), and status.data.rebuild does not exist yet in that instant --
+          rendering the row's other controls immediately while this waits one tick behind them.
+          SyncStatus.rebuild is a required field: a real response always carries it (runner.ts's
+          own status()), so once status.data exists, trusting its shape rather than re-checking
+          the field itself is what keeps a future malformed or legacy answer from reading as
+          "nothing to report" instead of failing where it can be seen. */}
+      {/* rebuildInFlight is passed by name rather than arriving in the spread: it is not in
+          status.data.rebuild, because it is one fact about the server process and that object
+          carries facts about this person's own data. The spread would silently stop supplying it
+          if it ever moved, which the required prop on RebuildNotice is what catches. */}
+      {status.data !== undefined && (
+        <RebuildNotice
+          voice="self" rebuildInFlight={status.data.rebuildInFlight} {...status.data.rebuild}
+        />
+      )}
       <div className="segmented" role="group" aria-label={t('controlRow.timeRangeLabel')}>
         {RANGE_KEYS.map((key) => (
           <button key={key} type="button" className="segment" aria-pressed={key === controls.tab}

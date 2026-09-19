@@ -49,6 +49,11 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 /**
  * A client that does not retry and never treats cached data as stale, following
  * page-controls.test.tsx's pattern: the session is seeded directly rather than fetched, so the
@@ -88,6 +93,9 @@ function stubFetch(seen: string[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -134,6 +142,9 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -186,6 +197,9 @@ function stubFetchBySource(seen: string[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch

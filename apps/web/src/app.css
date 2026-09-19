@@ -1016,7 +1016,11 @@ a.segment { text-decoration: none; display: inline-block; }
    states one whole fact about the shared database file rather than one record among many the way
    .source-name-row or .member-row do. */
 .maintenance { display: flex; flex-direction: column; gap: var(--space-1); }
-.maintenance-bloat, .maintenance-backups, .maintenance-credentials {
+/* .maintenance-waiting joins the three: RebuildNotice's middle state is a plain statement about
+   a person, the same weight as a statement about the file. Not .maintenance-blocked, because
+   nothing has failed and nobody has to diagnose anything, and not the muted
+   .maintenance-download-note either, because their data really has stopped arriving. */
+.maintenance-bloat, .maintenance-backups, .maintenance-credentials, .maintenance-waiting {
   font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0;
 }
 .maintenance-retention { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal); margin: 0 0 var(--space-2); }

@@ -42,6 +42,7 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildRep
     priority: deps.instance.sourcePriority,
     overrides: deps.instance.overrides,
     settings: deps.instance.settings,
+    rebuildState: deps.instance.rebuildState,
   }
 
   const reports: RebuildReport = { people: [], failures: [] }
