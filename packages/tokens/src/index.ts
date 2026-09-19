@@ -6,6 +6,10 @@ export {
 } from './semantic.js'
 export { chartTokens, resolveChart, STAGE_KEYS, SCALE_KEYS, CHART_KEYS, type ChartToken } from './chart.js'
 export { emitCss, semanticVar, chartVar, themeVarNames } from './emit.js'
+export {
+  emitAndroidColors, androidColorFiles, resolveAndroidColors, ANDROID_COLOR_NAMES,
+  type AndroidColorName,
+} from './android.js'
 export { simulate, minSeparation, CVD_KINDS, type CvdKind } from './color/cvd.js'
 export { contrast } from './color/contrast.js'
 export { deltaE, toLab } from './color/convert.js'

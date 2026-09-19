@@ -8,5 +8,8 @@
     ".": "./src/index.ts",
     "./theme.css": "./dist/theme.css"
   },
-  "scripts": { "build:css": "vite-node scripts/build-css.ts" }
+  "scripts": {
+    "build:css": "vite-node scripts/build-css.ts",
+    "build:android": "vite-node scripts/build-android.ts"
+  }
 }

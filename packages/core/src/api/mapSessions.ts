@@ -70,6 +70,12 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
   // an array. Iterating that throws "not iterable"; treating it as no data does not.
   const points = Array.isArray(dataPoints) ? dataPoints : []
 
+  // The source a page names for all of its points. The companion route archives the one identity
+  // a request carries here rather than inside every point (ingest.ts), and a rebuild has nothing
+  // but the archive to read: without this fallback every session of such a page replays under
+  // `unknown`, an identity no describe() would ever have produced for it.
+  const pageSource = (parsed as { dataSource?: unknown }).dataSource
+
   // Keyed by the row's own id rather than appended to a list, because one body can name the same
   // session twice and one session's `stages` can repeat a (type, startTime) pair. Either yields
   // two rows sharing a primary key - segment ids are stableId(sessionId, stage, stageStartMs) -
@@ -96,7 +102,7 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     const externalId = typeof valueAt(point, 'name') === 'string'
       ? String(valueAt(point, 'name'))
       : `${t.id}:${start.utcMs}`
-    const sourceId = input.resolveSource(valueAt(point, 'dataSource'))
+    const sourceId = input.resolveSource(valueAt(point, 'dataSource') ?? pageSource)
     const id = stableId(input.personId, sourceId, t.id, externalId)
 
     sessions.set(id, {

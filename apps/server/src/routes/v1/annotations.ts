@@ -316,16 +316,23 @@ function personIdOf(request: FastifyRequest<{ Params: PersonParams }>): string {
  */
 function applyOverride(app: FastifyInstance, personId: string, localDate: string | null): WriteResult {
   if (localDate === null) return { affected: null, applied: true }
-  drain(app, personId)
+  drainPersonDerivation(app, personId)
   return { affected: { from: localDate, to: localDate }, applied: !stillQueued(app, personId, localDate) }
 }
 
 /**
- * Failures stay inside, the way SyncRunner#derive keeps its own: the override is committed
- * whatever happens here, and a 500 over a saved correction invites the reader to write it a
+ * Derives one person's queued days inside a request, within a real time budget.
+ *
+ * Shared with the companion ingest route: with no Google sync running for a person,
+ * nothing else drains what an ingest marks, so without this the uploaded days would sit
+ * queued and the dashboard would never show them. The budget and the rebuild quarantine
+ * below are what make it safe to call from a request handler rather than a background job.
+ *
+ * Failures stay inside, the way SyncRunner#derive keeps its own: the write is committed
+ * whatever happens here, and a 500 over saved rows invites the caller to send them a
  * second time. What the caller gets instead is `applied: false`, which is true.
  */
-function drain(app: FastifyInstance, personId: string): void {
+export function drainPersonDerivation(app: FastifyInstance, personId: string, source = 'overrides'): void {
   const instance = app.haelan.instance
 
   // The gate SyncRunner#eligible puts in front of its own loop, and for the reason that method
@@ -357,13 +364,13 @@ function drain(app: FastifyInstance, personId: string): void {
       if (performance.now() - startedAtMs >= DRAIN_BUDGET_MS) {
         // Neither line claims anything about what is left queued. A final full batch can have
         // emptied the queue, and stillQueued asks a line later rather than guessing here.
-        console.log(`overrides: derivation for ${personId} stopped at its ${DRAIN_BUDGET_MS}ms budget`)
+        console.log(`${source}: derivation for ${personId} stopped at its ${DRAIN_BUDGET_MS}ms budget`)
         return
       }
     }
-    console.log(`overrides: derivation for ${personId} stopped after ${MAX_DRAIN_BATCHES} batches`)
+    console.log(`${source}: derivation for ${personId} stopped after ${MAX_DRAIN_BATCHES} batches`)
   } catch (error) {
-    console.error(`overrides: derivation for ${personId} failed, ${messageOf(error)}`)
+    console.error(`${source}: derivation for ${personId} failed, ${messageOf(error)}`)
   }
 }
 

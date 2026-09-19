@@ -36,7 +36,7 @@ describe('the wizard screens', () => {
     const screens = [
       render(<AccountStep onDone={() => {}} />),
       render(<InstanceUrlStep onDone={() => {}} />),
-      render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />),
+      render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />),
     ]
     for (const html of screens) {
       // The literal failure this exists to prevent: http://<your-ip>:4235/oauth/callback.
@@ -46,7 +46,7 @@ describe('the wizard screens', () => {
   })
 
   it('shows both loopback URIs complete, with the port', () => {
-    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
     expect(html).toContain('http://localhost:4235/oauth/callback')
     expect(html).toContain('http://127.0.0.1:4235/oauth/callback')
   })
@@ -57,7 +57,7 @@ describe('the wizard screens', () => {
         uri: 'https://192.168.178.82/oauth/callback', labelKey: 'proxyOrTailscale',
         registrable: false, reason: 'Hosts cannot be raw IP addresses. Localhost IP addresses are exempted from this rule.',
       }]}
-      error={null} onDone={() => {}}
+      error={null} onDone={() => {}} onCompanion={() => {}}
     />)
     expect(html).toContain('Hosts cannot be raw IP addresses')
     expect(html).toContain('data-registrable="false"')
@@ -69,7 +69,7 @@ describe('the wizard screens', () => {
       registrable: false, reason: 'Hosts cannot be raw IP addresses.',
     }
     const html = render(<GoogleStep
-      candidates={[...CANDIDATES, rejected]} error={null} onDone={() => {}}
+      candidates={[...CANDIDATES, rejected]} error={null} onDone={() => {}} onCompanion={() => {}}
     />)
     // Two copy buttons, not three: a value Google refuses must not be offered for copying,
     // which is the difference between a wizard that helps and one that wastes a console trip.
@@ -85,14 +85,14 @@ describe('the wizard screens', () => {
       'https://www.googleapis.com/auth/googlehealth.sleep.readonly',
     ]
     const html = render(
-      <GoogleStep candidates={CANDIDATES} scopes={scopes} error={null} onDone={() => {}} />,
+      <GoogleStep candidates={CANDIDATES} scopes={scopes} error={null} onDone={() => {}} onCompanion={() => {}} />,
     )
     for (const scope of scopes) expect(html).toContain(scope)
   })
 
   it('counts the scopes it was given rather than claiming a number', () => {
     const html = render(
-      <GoogleStep candidates={CANDIDATES} scopes={['a', 'b', 'c']} error={null} onDone={() => {}} />,
+      <GoogleStep candidates={CANDIDATES} scopes={['a', 'b', 'c']} error={null} onDone={() => {}} onCompanion={() => {}} />,
     )
     // The instruction has to agree with the list under it. A hard coded "six" beside a list of
     // three is how somebody declares the wrong set and finds out at consent.
@@ -103,19 +103,19 @@ describe('the wizard screens', () => {
   it('offers the whole scope list as one copyable value', () => {
     const scopes = ['https://example.invalid/a', 'https://example.invalid/b']
     const html = render(
-      <GoogleStep candidates={CANDIDATES} scopes={scopes} error={null} onDone={() => {}} />,
+      <GoogleStep candidates={CANDIDATES} scopes={scopes} error={null} onDone={() => {}} onCompanion={() => {}} />,
     )
     // Pasting them one at a time into the console is six round trips through this page.
     expect(html).toContain(`data-copy-for="${scopes.join('\n')}"`)
   })
 
   it('says the unverified app warning is expected, because that is where installs are abandoned', () => {
-    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
     expect(html).toMatch(/unverified/i)
   })
 
   it('makes the console a link, and opens it in a new tab so the form below survives', () => {
-    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
     // The whole anchor, not just the href: the step read as plain text for a milestone, and a
     // test matching only the URL would have passed throughout that.
     expect(html).toContain(
@@ -129,7 +129,7 @@ describe('the wizard screens', () => {
     // nl is the only way to catch it - every other test here pins English and would stay green.
     const dutch = renderToStaticMarkup(
       <I18nProvider lng="nl">
-        <GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />
+        <GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />
       </I18nProvider>,
     )
     expect(dutch).toContain('Deze machine')
@@ -137,17 +137,53 @@ describe('the wizard screens', () => {
   })
 
   it('tells the owner to switch publishing to In production, which M0 found is required', () => {
-    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} />)
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
     expect(html).toContain('In production')
   })
 
   it('shows the callback error where the owner can act on it', () => {
     const html = render(<GoogleStep
-      candidates={CANDIDATES} onDone={() => {}}
+      candidates={CANDIDATES} onDone={() => {}} onCompanion={() => {}}
       error={{ code: 'exchange_failed', message: 'redirect_uri_mismatch: the redirect URI this instance sent is not registered' }}
     />)
     expect(html).toContain('redirect_uri_mismatch')
     expect(html).toContain('role="alert"')
+  })
+
+  it('offers finishing without Google beside the client form', () => {
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
+    expect(html).toContain('Continue without Google')
+    expect(html).toContain('No Google Cloud project needed')
+    // Still a Google screen first: the client form stays the primary path.
+    expect(html).toContain('Save and grant consent')
+  })
+
+  it('offers the way out before the console instructions, not after them', () => {
+    // Whoever syncs from a phone should not have to read six console steps to find
+    // the exit: the way out sits above the instructions it skips.
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
+    expect(html.indexOf('Continue without Google')).toBeLessThan(html.indexOf('setup-instructions'))
+  })
+
+  it('offers the two connection paths as two sections, phone first', () => {
+    // The Google step is a choice between two paths, not Google instructions with an
+    // escape hatch: the companion section stands above with its own heading, and the
+    // console steps below belong to the Google section only.
+    const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
+    expect(html).toContain('How will you connect?')
+    expect(html).toContain('With the Android app')
+    expect(html.indexOf('With the Android app')).toBeLessThan(html.indexOf('Connect Google'))
+    expect(html.indexOf('Continue without Google')).toBeLessThan(html.indexOf('setup-instructions'))
+  })
+
+  it('translates the companion alternative too, not just the Google path', () => {
+    const dutch = renderToStaticMarkup(
+      <I18nProvider lng="nl">
+        <GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />
+      </I18nProvider>,
+    )
+    expect(dutch).toContain('Doorgaan zonder Google')
+    expect(dutch).not.toContain('Continue without Google')
   })
 
   it('names every data type it is backfilling and how far back it is going', () => {

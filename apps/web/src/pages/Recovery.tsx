@@ -29,12 +29,12 @@ import { distinctSources, sourcesStoppedInRange, exportPathFor } from '../data/p
 import { deltaFor, formatMetricValue, formatWithUnit } from '../format.js'
 import type { Translate, Polarity } from '../format.js'
 
-// Recovery is one request: resting_heart_rate, daily_hrv and respiratory_rate are all `aggs:
-// ['last']` in packages/core/src/derive/metrics.ts, so one group covers the whole page the way
-// Dashboard.tsx's REQUESTS/under pair covers its own five. Kept as the same REQUESTS/under shape
-// as Dashboard even though there is only one agg here, both so a second agg (a future card) has
-// somewhere to go and so the daily_hrv/hrv distinction below is a change to one array entry rather
-// than a literal buried in a hook call.
+// Recovery is one request: resting_heart_rate, daily_hrv and both names the respiratory card can
+// draw are all `aggs: ['last']` in packages/core/src/derive/metrics.ts, so one group covers the
+// whole page the way Dashboard.tsx's REQUESTS/under pair covers its own five. Kept as the same
+// REQUESTS/under shape as Dashboard even though there is only one agg here, both so a second agg
+// (a future card) has somewhere to go and so the daily_hrv/hrv distinction below is a change to one
+// array entry rather than a literal buried in a hook call.
 //
 // It is daily_hrv, not hrv: daily_hrv is the once a day summary (aggs: ['last']), hrv is the
 // intraday series (aggs: ['min', 'mean', 'max', 'count']). Swapping this constant to 'hrv' is the
@@ -42,8 +42,13 @@ import type { Translate, Polarity } from '../format.js'
 // 'last' in its own aggs, so `under('last')` filters it back out before it ever reaches the wire,
 // the same protection that turns an unanswerable pairing into a quietly dropped card everywhere
 // else on this page's sibling, Dashboard.tsx, rather than a 500 for the whole group.
+// sleep_respiratory_rate rides the same request as the other three, which is why it is a
+// REQUESTS entry rather than a second useSeries call: it is `aggs: ['last']` too
+// (packages/core/src/derive/metrics.ts), so one `agg` still covers the whole page. It is
+// `covers`' job and not the card's to name it here: see RESPIRATORY_FALLBACK below for which of
+// the two the respiratory card actually draws, and that choice's own comment for why.
 export const REQUESTS = {
-  last: ['resting_heart_rate', 'daily_hrv', 'respiratory_rate'],
+  last: ['resting_heart_rate', 'daily_hrv', 'respiratory_rate', 'sleep_respiratory_rate'],
 } as const satisfies Partial<Record<DailyAgg, readonly string[]>>
 
 function under(agg: keyof typeof REQUESTS): string[] {
@@ -55,6 +60,49 @@ const LAST_METRICS = under('last')
 const GROUPS: readonly MetricGroup[] = [
   { agg: 'last', metrics: LAST_METRICS, covers: REQUESTS.last },
 ]
+
+/**
+ * The respiratory card's two names for one reading, in the order it prefers them.
+ *
+ * `respiratory_rate` arrives only from Google's `daily-respiratory-rate`, while the companion app
+ * posts Health Connect's night summary, which the catalogue files under `sleep_respiratory_rate`
+ * (packages/core/src/api/catalogue.ts, whose own comment says why the two cannot share a name).
+ * An instance fed by the phone alone therefore has the second and never the first, and the card
+ * drew nothing at all: personQuery.ts's own comment on DEVICE_ROLLED_EQUIVALENT records that
+ * decision (mapping the day's name onto the night's number "would answer a question about the day
+ * with a number about the night, so the day's card stays empty rather than lying in the right
+ * shape") and measured the empty card on this household.
+ *
+ * This card keeps that refusal at the level it belongs to: it never passes the night's number off
+ * as the day's, it says in the title which of the two it is drawing. The alternative it replaces
+ * is the one personQuery.ts rejected for a reason that still holds - a card headed "Respiratory
+ * rate" over a nightly figure is exactly the lie in the right shape - so the title is not a
+ * cosmetic detail here, it is the thing that makes the fallback honest.
+ */
+const RESPIRATORY_FALLBACK = { preferred: 'respiratory_rate', fallback: 'sleep_respiratory_rate' } as const
+
+/** Either of the two names above. Named once so the choice below and the key lookup stay tied. */
+type RespiratoryMetric = typeof RESPIRATORY_FALLBACK[keyof typeof RESPIRATORY_FALLBACK]
+
+/**
+ * The label, chart label and unit keys for whichever of the two the card is drawing. Separate
+ * subtrees rather than one key pair with a suffix chosen at the call site, so each name's own
+ * wording is one edit in one place per language, and a missing translation is a missing key
+ * rather than a silently empty suffix.
+ *
+ * basisKey is shared: both are the same sentence over a different series, and the sentence names
+ * no metric (see recovery.respiratoryRate.basis).
+ */
+const RESPIRATORY_KEYS = {
+  [RESPIRATORY_FALLBACK.preferred]: {
+    label: 'recovery.respiratoryRate.label',
+    chartLabel: 'recovery.respiratoryRate.chartLabel',
+  },
+  [RESPIRATORY_FALLBACK.fallback]: {
+    label: 'recovery.respiratoryRateSleep.label',
+    chartLabel: 'recovery.respiratoryRateSleep.chartLabel',
+  },
+} as const
 
 const values = (points: SeriesPoint[]): number[] =>
   points.map((p) => p.value).filter((v): v is number => v !== null)
@@ -148,15 +196,42 @@ export function Recovery() {
   const metricGroups = useMetricGroups(GROUPS, range)
   const lastSeries = metricGroups.queryForAgg('last')
 
+  // Which of the respiratory card's two names this render draws, decided from the data rather than
+  // from a preference: the day's own series when it has a row in the range, the night's otherwise.
+  // See RESPIRATORY_FALLBACK above for why the card is allowed to fall back at all and why the
+  // title has to move with it.
+  //
+  // Both metrics are requested either way (LAST_METRICS), so this choice costs no request: it
+  // picks which of the two already-answered series the one card reads. Deliberately not a
+  // "respiratory_rate has no rows at all" test against the whole history: useSeries answers the
+  // period the reader picked, so a card asked for a week before the first reading is genuinely
+  // empty, and falling back there would answer a question about July with August's numbers.
+  const respiratory = useMemo<{ metric: RespiratoryMetric, points: SeriesPoint[] }>(() => {
+    const preferred = RESPIRATORY_FALLBACK.preferred
+    const points = metricGroups.pointsOf(preferred)
+    if (points.length > 0) return { metric: preferred, points }
+    return { metric: RESPIRATORY_FALLBACK.fallback, points: metricGroups.pointsOf(RESPIRATORY_FALLBACK.fallback) }
+  }, [lastSeries.data])
+
   // One useBaseline call per card, not one shared like Dashboard's single heart_rate band: each
   // metric's history is its own, so resting heart rate's 60 days says nothing about HRV's. 'last'
-  // explicitly, the same reason Dashboard passes 'mean' rather than the default 'sum': these three
-  // metrics carry no other agg to compute a baseline from.
+  // explicitly, the same reason Dashboard passes 'mean' rather than the default 'sum': every metric
+  // here carries no other agg to compute a baseline from.
   // historicalTo, not controls.to: see Dashboard.tsx's own hrBaseline comment for why a Month or
   // Year view's calendar end is not the same date as the last day that has actually happened.
+  //
+  // The respiratory card asks twice, once per name, and draws whichever one `respiratory` chose.
+  // Both calls are unconditional despite only one being read: a hook behind a condition is the
+  // hook order bug, and the branch is free to move between renders (a rebuild or a wider range can
+  // give respiratory_rate its first row) which is exactly when a conditional call would break.
+  // The unused one answers `{ baseline: null }` and costs one cached request, the same price the
+  // two metrics' own series already pay in the group above.
   const restingHrBaseline = useBaseline('resting_heart_rate', controls.historicalTo, source, 'last')
   const hrvBaseline = useBaseline('daily_hrv', controls.historicalTo, source, 'last')
-  const respiratoryBaseline = useBaseline('respiratory_rate', controls.historicalTo, source, 'last')
+  const respiratoryBaseline = useBaseline(RESPIRATORY_FALLBACK.preferred, controls.historicalTo, source, 'last')
+  const sleepRespiratoryBaseline = useBaseline(RESPIRATORY_FALLBACK.fallback, controls.historicalTo, source, 'last')
+  const chosenRespiratoryBaseline =
+    respiratory.metric === RESPIRATORY_FALLBACK.preferred ? respiratoryBaseline : sleepRespiratoryBaseline
 
   // The one insight card the brief's own table gives this page: resting_heart_rate at the last
   // agg the card above already requests (REQUESTS.last). /insights is its own, unbatched request,
@@ -198,7 +273,14 @@ export function Recovery() {
 
   const restingHrBand = useMemo(() => bandFrom(restingHrBaseline.data?.baseline ?? null), [restingHrBaseline.data])
   const hrvBand = useMemo(() => bandFrom(hrvBaseline.data?.baseline ?? null), [hrvBaseline.data])
-  const respiratoryBand = useMemo(() => bandFrom(respiratoryBaseline.data?.baseline ?? null), [respiratoryBaseline.data])
+  // The respiratory band reads whichever baseline the card's own chosen metric was asked for: a
+  // band computed from respiratory_rate's history drawn over sleep_respiratory_rate's points would
+  // be two different series' numbers on one chart, which is the comparison the card exists to make
+  // and would then be making wrongly.
+  const respiratoryBand = useMemo(
+    () => bandFrom(chosenRespiratoryBaseline.data?.baseline ?? null),
+    [chosenRespiratoryBaseline.data],
+  )
 
   // Three sparkline cards over the one 'last' group: exactly MetricCard's fit, no ancestor-basis
   // restructuring needed the way four of Dashboard's cards did. basisPlacement is 'body' at every
@@ -211,12 +293,16 @@ export function Recovery() {
   // coverageIsMeaningful/coverageIsWearSignal reads only the intraday set), so MetricCard's wear
   // branch can never fire for them. This is the same choice Dashboard.tsx's sleep schedule card
   // already made for the same reason, rather than a second, unreachable literal per metric.
+  // points is a parameter rather than `metricGroups.pointsOf(metric)` read in here, which is what
+  // it used to be: the respiratory card draws one of two metrics the group answers for, and the
+  // pair of them has to stay the one `respiratory` above chose. Derived in here instead, a caller
+  // passing the night's metric would have been handed the day's points back for it, since pointsOf
+  // resolves by name and the two names are two different series.
   const card = (
-    metric: string, labelKey: string, basisKey: string, chartLabelKey: string,
+    metric: string, points: SeriesPoint[], labelKey: string, basisKey: string, chartLabelKey: string,
     unitKey: string, shortUnitKey: string, polarity: Polarity,
     baselineQuery: UseQueryResult<{ baseline: Baseline | null }>, band: { low: number, high: number } | undefined,
   ) => {
-    const points = metricGroups.pointsOf(metric)
     const headline = mean(values(points))
     // historicalTo, not controls.to: this is the date restingHrBaseline/hrvBaseline/
     // respiratoryBaseline were actually anchored on above, and the note has to name the date the
@@ -259,15 +345,22 @@ export function Recovery() {
       <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <div className="grid">
-        {card('resting_heart_rate', 'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
+        {card('resting_heart_rate', metricGroups.pointsOf('resting_heart_rate'),
+          'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
           'recovery.restingHeartRate.chartLabel', 'recovery.units.beatsPerMinute', 'recovery.units.bpm',
           'lower-is-better', restingHrBaseline, restingHrBand)}
-        {card('daily_hrv', 'recovery.dailyHrv.label', 'recovery.dailyHrv.basis',
+        {card('daily_hrv', metricGroups.pointsOf('daily_hrv'),
+          'recovery.dailyHrv.label', 'recovery.dailyHrv.basis',
           'recovery.dailyHrv.chartLabel', 'recovery.units.milliseconds', 'recovery.units.ms',
           'higher-is-better', hrvBaseline, hrvBand)}
-        {card('respiratory_rate', 'recovery.respiratoryRate.label', 'recovery.respiratoryRate.basis',
-          'recovery.respiratoryRate.chartLabel', 'recovery.units.breathsPerMinute', 'recovery.units.breathsPerMinuteShort',
-          'neutral', respiratoryBaseline, respiratoryBand)}
+        {/* Whichever of the two names `respiratory` above chose, with that name's own title,
+            chart label and baseline. The keys are looked up by the chosen metric rather than
+            passed as two more literals here, so the metric the card draws, the number it formats
+            and the title over it cannot come from three different decisions. */}
+        {card(respiratory.metric, respiratory.points,
+          RESPIRATORY_KEYS[respiratory.metric].label, 'recovery.respiratoryRate.basis',
+          RESPIRATORY_KEYS[respiratory.metric].chartLabel, 'recovery.units.breathsPerMinute', 'recovery.units.breathsPerMinuteShort',
+          'neutral', chosenRespiratoryBaseline, respiratoryBand)}
 
         {/* label is its own catalogue string, not recovery.restingHeartRate.label reused: a
             second card sharing "Resting heart rate" would make a label lookup by exact text

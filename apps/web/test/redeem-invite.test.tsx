@@ -38,8 +38,9 @@ const TOKEN = 'TOKEN123'
  * its own error state instead of hanging on the real network or requiring this test to know
  * Dashboard's endpoints.
  */
-function mockInviteApi(info: { displayName: string, timezone: string } | null): { restore: () => void } {
+function mockInviteApi(info: { displayName: string, timezone: string } | null): { restore: () => void, lastRedeemBody: () => Record<string, unknown> | null } {
   let redeemed: { personId: string, username: string } | null = null
+  let lastBody: Record<string, unknown> | null = null
   const original = globalThis.fetch
   const json = (status: number, payload: unknown) =>
     new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
@@ -56,6 +57,7 @@ function mockInviteApi(info: { displayName: string, timezone: string } | null): 
     if (method === 'POST' && url.endsWith(`/api/invite/${TOKEN}`)) {
       if (info === null) return notFound()
       const body = JSON.parse(String(init?.body)) as { username: string, password: string }
+      lastBody = body
       redeemed = { personId: 'new-person', username: body.username }
       return json(201, redeemed)
     }
@@ -71,7 +73,7 @@ function mockInviteApi(info: { displayName: string, timezone: string } | null): 
     return notFound()
   }) as typeof fetch
 
-  return { restore: () => { globalThis.fetch = original } }
+  return { restore: () => { globalThis.fetch = original }, lastRedeemBody: () => lastBody }
 }
 
 // Native setter, not `input.value =`: the latter goes through React's own tracked setter and
@@ -123,6 +125,49 @@ describe('the invite screen', () => {
     api.restore()
 
     expect(container!.textContent).toContain('This invite is no longer valid')
+  })
+
+  // On the web half, whoever is invited names their own path while redeeming
+  // instead of inheriting the admin's. Picking the phone sends path companion, which is
+  // what records people.companion_path on their own row (apps/server/src/routes/invite.ts).
+  it('sends the phone path when the member picks it', async () => {
+    window.history.replaceState(null, '', `/invite/${TOKEN}`)
+    const api = mockInviteApi({ displayName: 'Bob', timezone: 'Europe/Amsterdam' })
+    const client = mountShell()
+    await flush(client, () => container!.innerHTML)
+
+    const inputs = [...container!.querySelectorAll('input')] as HTMLInputElement[]
+    type(inputs[0]!, 'bob')
+    type(inputs[1]!, 'a good long password')
+    const phone = container!.querySelector('input[value="companion"]')!
+    click(phone)
+    click(container!.querySelector('button[type="submit"]')!)
+
+    await flush(client, () => container!.innerHTML)
+    const sent = api.lastRedeemBody()
+    api.restore()
+
+    expect(sent).toMatchObject({ username: 'bob', path: 'companion' })
+  })
+
+  // The default leaves the phone flag off: an explicit google choice and an absent one
+  // both mean no write, so the default must read as google rather than as nothing picked.
+  it('sends the google path when the member picks nothing', async () => {
+    window.history.replaceState(null, '', `/invite/${TOKEN}`)
+    const api = mockInviteApi({ displayName: 'Bob', timezone: 'Europe/Amsterdam' })
+    const client = mountShell()
+    await flush(client, () => container!.innerHTML)
+
+    const inputs = [...container!.querySelectorAll('input')] as HTMLInputElement[]
+    type(inputs[0]!, 'bob')
+    type(inputs[1]!, 'a good long password')
+    click(container!.querySelector('button[type="submit"]')!)
+
+    await flush(client, () => container!.innerHTML)
+    const sent = api.lastRedeemBody()
+    api.restore()
+
+    expect(sent).toMatchObject({ username: 'bob', path: 'google' })
   })
 
   it('signs the member in on success', async () => {

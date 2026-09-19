@@ -106,6 +106,10 @@ export const instanceSettings = sqliteTable('instance_settings', {
   // request for one public release tag and nothing about this instance beyond the fact that it
   // asked. See apps/server/src/updates.ts for what goes over the wire.
   updateCheckEnabled: integer('update_check_enabled', { mode: 'boolean' }).notNull().default(false),
+  // True when the wizard was finished through the companion app instead of Google OAuth.
+  // The step derivation reads it to skip the client and consent steps, and it stays readable
+  // afterwards so the dashboard can say where this instance's data comes from.
+  companionMode: integer('companion_mode', { mode: 'boolean' }).notNull().default(false),
   updatedAtMs: integer('updated_at_ms').notNull(),
 })
 

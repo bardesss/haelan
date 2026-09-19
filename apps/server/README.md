@@ -32,12 +32,13 @@ above do.
 | Route | Auth | What it does |
 |---|---|---|
 | `GET /api/health` | none | Liveness. Open during setup, because a container probe has no cookie. |
-| `GET /api/setup/state` | none | The step that is due. Open in both directions; the SPA asks on every load. |
+| `GET /api/setup/state` | none | The step that is due, the companion flag, and whether a readable Google client is on file. Open in both directions; the SPA asks on every load. |
 | `POST /api/setup/account` | none | Creates the first person and account together, and logs the owner in. |
 | `POST /api/setup/instance-url` | session | Stores the base URL and returns the exact redirect URI to register. |
 | `GET /api/setup/redirect-uris` | session | Concrete, complete candidates. Never a placeholder. |
 | `GET /api/setup/scopes` | session | The six scopes the consent screen declares, for the wizard to list. |
 | `POST /api/setup/google-client` | session | Stores the pasted OAuth client, encrypted. |
+| `POST /api/setup/companion` | session | Finishes setup without a Google client, for the companion app. |
 | `GET /api/setup/last-error` | session | The message from the last failed callback, for the wizard to show. |
 | `GET /oauth/start` | session | Redirects to Google with a signed state. |
 | `GET /oauth/callback` | none | Exchanges the code, probes access, stores the token, marks setup complete. |
@@ -55,7 +56,9 @@ above do.
 While setup is unfinished, every API route that is not a setup route answers `409
 setup_incomplete` and names the step that is due. Once setup is finished, the setup routes
 themselves answer `409 setup_complete`: after the wizard there is nothing left to paste and no
-client left to configure.
+client left to configure - except on a companion instance that has never connected Google,
+where the client writer, its two read-only helpers and the last-error read stay open so the
+phone path keeps a way back (setupGate.ts opensForCompanion).
 
 **Every route after the account step takes a session.** The account step cannot, because it is
 what mints the one the others present. `/api/setup/instance-url`, `/api/setup/redirect-uris`,

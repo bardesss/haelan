@@ -84,22 +84,27 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   {
     route: 'GET /api/setup/redirect-uris',
     auth: 'session',
-    why: 'the same wizard window: a session from the account step, and closed by the gate afterwards',
+    why: 'the same wizard window: a session from the account step, and closed by the gate afterwards, a completed companion instance that has never connected Google being the one exception',
   },
   {
     route: 'GET /api/setup/scopes',
     auth: 'session',
-    why: 'the same wizard window; it returns this build\'s scope list, which is not instance state',
+    why: 'the same wizard window; it returns this build\'s scope list, which is not instance state, and it stays open beside the client writer on the same companion exception',
   },
   {
     route: 'POST /api/setup/google-client',
     auth: 'session',
-    why: 'the same wizard window; re-running it on a finished instance is what the gate\'s 409 exists to stop',
+    why: 'the same wizard window; re-running it on a finished instance is what the gate\'s 409 exists to stop, a completed companion instance that has never connected Google being the one exception',
   },
   {
     route: 'GET /api/setup/last-error',
     auth: 'session',
-    why: 'the same wizard window; it reports the last consent failure to whoever is walking the wizard',
+    why: 'the same wizard window; it reports the last consent failure to whoever is walking the wizard, and stays open on a completed companion instance for the member whose consent just failed',
+  },
+  {
+    route: 'POST /api/setup/companion',
+    auth: 'session',
+    why: 'the same wizard window; it finishes setup without a Google client, and the gate shuts it once setup is done',
   },
 
   {
@@ -229,6 +234,13 @@ const MUTATING = new Set<InjectableMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
  * their session guard at all is the one they exist for: an instance mid-wizard. Derived from the
  * path rather than declared per entry, because that is precisely the rule the gate itself applies,
  * so a new /api/setup route lands on the right side of it without a second edit here.
+ *
+   * Four of them are exempt from that rule on a completed companion instance (opensForCompanion in
+   * setupGate.ts: the client writer, the two read-only helpers its form is built from, and the
+   * last-error read - which is what lets the phone path paste a client later). The derivation stays
+ * right anyway, because neither harness below is that instance: afterSetup connects Google, so it
+ * is companionMode false and the gate still shuts those two there. A companion harness would need
+ * the other side of the exemption proven as well - setup-routes.test.ts does that.
  *
  * /api/setup/state is in the gate's ALWAYS_OPEN and passes in both states; taking the mid-wizard
  * harness for it is harmless, since it is open either way.

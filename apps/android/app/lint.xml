@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One scoped suppression: the launcher icon lives in mipmap-anydpi-v26 although minSdk is 26,
+     because an adaptive icon outside a v26 folder is not read at all. Merging it down would remove
+     the icon instead of silencing the check, so the folder is kept and only its own warning goes. -->
+<lint>
+    <issue id="ObsoleteSdkInt">
+        <ignore path="src/main/res/mipmap-anydpi-v26" />
+    </issue>
+</lint>

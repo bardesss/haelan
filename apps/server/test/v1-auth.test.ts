@@ -73,7 +73,7 @@ describe('requireSession with a bearer token', () => {
 
   it('rejects a bearer token that resolves to nothing', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const response = await harness.app.inject({
       method: 'GET', url: '/api/auth/me',
       headers: { authorization: 'Bearer not-a-session' },
@@ -85,7 +85,7 @@ describe('requireSession with a bearer token', () => {
   // session that happened to share the connection.
   it('does not clear the cookie when a bearer token failed', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const response = await harness.app.inject({
       method: 'GET', url: '/api/auth/me',
       headers: { authorization: 'Bearer not-a-session' },
@@ -115,7 +115,7 @@ describe('the shape a failed session check answers with', () => {
   // versioned, admin gated or not, answers the same body on a missing session.
   it('answers the envelope on every route family, not only /api/v1', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const urls = [
       '/api/auth/me',
       '/api/members',

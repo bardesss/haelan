@@ -1,0 +1,86 @@
+name: Android
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/android
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The palette this module compiles is generated from @haelan/tokens, so this job needs the
+      # Node side of the repository as well. The Gradle build does not run the generator: it fails
+      # with the command to run, because assembling an app should not need a Node toolchain.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install the workspace
+        run: pnpm install --frozen-lockfile
+        working-directory: .
+
+      - name: Generate the token palette
+        run: pnpm --filter @haelan/tokens build:android
+        working-directory: .
+
+      # 17 is what the module compiles against, and the Gradle version is the wrapper's, so the
+      # build here is the build somebody runs on their own machine rather than a second one.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Sets up the command line tools and accepts the SDK licences, so the platform and build
+      # tools this module names are downloaded rather than assumed to be in the runner image.
+      - uses: android-actions/setup-android@v4
+
+      # Basic caching on purpose: the default provider is a commercial service, and a build of
+      # this project should not need one. Basic is the open source path over actions/cache.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      # The wrapper loses its executable bit when committed from Windows (git then
+      # stores 100644 instead of 100755), and the checkout on Linux keeps it that
+      # way, failing with "./gradlew: Permission denied". Belt and suspenders:
+      # the bit is set in the index, this step keeps CI green if it is ever lost.
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --console=plain
+
+      # Lint is the gate that has already caught one real defect here: LocalDate.ofInstant exists
+      # from API 34 while the app runs from 26, and MissingTranslation is the native counterpart
+      # of the web catalogue test.
+      - name: Lint
+        run: ./gradlew lintDebug --console=plain
+
+      - name: Assemble the debug APK
+        run: ./gradlew assembleDebug --console=plain
+
+      # No secret is read anywhere in this workflow, and that is the point: GitHub does not pass
+      # secrets to pull requests from forks, so a workflow that wanted the release key would hand
+      # the project's signing identity to whoever opens one. A review build is debug and installs
+      # beside the real app, which is what a reviewer needs and all this job may produce.
+      - name: Upload the review APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: haelan-android-debug-apk
+          path: apps/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 90

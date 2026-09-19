@@ -437,6 +437,10 @@ a.segment { text-decoration: none; display: inline-block; }
 .setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 .setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
+/* The two option headings on the connection choice: smaller than the page title, with
+   air above so the second reads as a second option rather than a continuation. */
+.setup-step h2 { font-size: var(--font-size-md); margin: var(--space-5) 0 var(--space-2); letter-spacing: -.01em; }
+.setup-step h2:first-of-type { margin-top: 0; }
 .setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-4); }
 .setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
 .setup-instructions li { margin-bottom: var(--space-2); }

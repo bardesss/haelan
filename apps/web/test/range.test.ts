@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { datesFor, stepAnchor, parseControls } from '../src/controls/range.js'
+import { datesFor, stepAnchor, parseControls, clampFromToHistory } from '../src/controls/range.js'
+import { normalizeHistoryStart, historyStartPath } from '../src/data/useHistoryStart.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 
 describe('datesFor', () => {
@@ -98,5 +99,43 @@ describe('parseControls', () => {
 
   it('accepts a leap day in a leap year', () => {
     expect(parseControls('?on=2028-02-29', today).anchor).toBe('2028-02-29')
+  })
+})
+
+describe('clampFromToHistory', () => {
+  // A phone-only history starting 2026-09-13T10:00:00Z, read in the person's own zone.
+  const history = { historyStartMs: Date.parse('2026-09-13T10:00:00Z'), googleConnected: false }
+  const timezone = 'Europe/Amsterdam'
+
+  it('starts the range on the history start instead of the tab start', () => {
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', history, timezone)).toBe('2026-09-13')
+  })
+
+  it('leaves a range that starts after the history alone', () => {
+    expect(clampFromToHistory('2026-09-20', '2026-09-30', history, timezone)).toBe('2026-09-20')
+  })
+
+  it('leaves the range alone without a history start', () => {
+    const none = { historyStartMs: null as number | null, googleConnected: false }
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', none, timezone)).toBe('2026-09-01')
+  })
+
+  it('never clamps a person who also walks the Google path', () => {
+    const mixed = { ...history, googleConnected: true }
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', mixed, timezone)).toBe('2026-09-01')
+  })
+
+  it('never inverts a range that ends before the history starts', () => {
+    expect(clampFromToHistory('2026-08-01', '2026-08-31', history, timezone)).toBe('2026-08-01')
+  })
+
+  it('reads a body with nothing numeric in it as no history', () => {
+    expect(normalizeHistoryStart({} as never)).toEqual({ historyStartMs: null, googleConnected: false })
+    expect(normalizeHistoryStart({ historyStartMs: 'soon' as never, googleConnected: 0 as never }))
+      .toEqual({ historyStartMs: null, googleConnected: false })
+  })
+
+  it('asks the companion cursors for this person as an Android client', () => {
+    expect(historyStartPath('p1')).toBe('/api/v1/p/p1/companion/cursors?platform=android')
   })
 })

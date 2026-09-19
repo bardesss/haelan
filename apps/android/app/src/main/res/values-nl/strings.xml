@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nederlands naast het Engels: elke string in values/strings.xml staat hier ook, met dezelfde
+         naam en dezelfde plaatsaanduidingen. De naam (app_name) staat hier niet: die is Hælan in elke
+         taal en dus niet vertaalbaar. Lint-controle MissingTranslation bewaakt de pariteit, net als
+         i18n-parity.test.ts dat voor de webcatalogi doet. Waar de webapp al een woord had (inloggen,
+         gebruikersnaam, doorgaan) staat hier hetzelfde woord. -->
+    <string name="login_title">Inloggen</string>
+    <string name="login_server">Adres van de instantie</string>
+    <string name="login_server_hint">http://192.168.x.x:4235</string>
+    <string name="login_username">Gebruikersnaam</string>
+    <string name="login_password">Wachtwoord</string>
+    <string name="login_submit">Inloggen</string>
+    <string name="login_working">Bezig met inloggen</string>
+    <string name="login_failed">Deze gebruikersnaam en dit wachtwoord horen niet bij een account op deze instantie.</string>
+    <string name="login_server_invalid">Dat is geen adres van een instantie. Het ziet eruit als http://192.168.1.10:4235.</string>
+    <string name="login_expired">De sessie is beëindigd. Log opnieuw in om verder te gaan.</string>
+    <string name="login_insecure">Veilige opslag is niet beschikbaar op dit apparaat, dus instellingen worden onversleuteld bewaard.</string>
+
+    <string name="error_unknown_host">Dat adres is niet te vinden. Controleer de naam en dat de telefoon op hetzelfde netwerk zit.</string>
+    <string name="error_refused">Niets luistert op dat adres. Controleer dat de instantie draait en dat de poort klopt.</string>
+    <string name="error_timeout">De instantie gaf niet op tijd antwoord.</string>
+    <string name="error_certificate">De telefoon weigerde het certificaat van de instantie, dus er is niets verstuurd. De instantie moet over http op het lokale netwerk worden bereikt, of achter een certificaat dat de telefoon vertrouwt.</string>
+    <string name="error_not_instance">Iets gaf antwoord, en het is geen Hælan-instantie.</string>
+    <string name="error_broken">De verbinding met de instantie brak af voordat deze antwoordde.</string>
+    <string name="error_not_your_person">Met deze login kunnen geen gegevens voor die persoon worden verstuurd. Log opnieuw in.</string>
+    <string name="error_too_large">De instantie weigerde het verzoek om zijn omvang. De sync stuurt een type in blokken, dus dit is een punt dat te groot is om alleen te versturen.</string>
+    <string name="error_instance">De instantie antwoordde %1$d.</string>
+
+    <string name="main_account">Ingelogd als %1$s</string>
+    <string name="main_sign_out">Uitloggen</string>
+
+    <string name="perm_title">Health Connect</string>
+    <string name="perm_body">Hælan leest activiteit, lichaamsmaten en hartgegevens uit Health Connect om ze op je eigen dashboard te tonen. Niets verlaat je thuisnetwerk.</string>
+    <string name="perm_action">Toestemmingen vragen</string>
+    <string name="perm_granted">Alle toestemmingen gegeven.</string>
+    <string name="perm_already">Alle toestemmingen zijn al gegeven.</string>
+    <string name="perm_missing">Nog open: %1$s</string>
+    <string name="perm_unavailable">Health Connect is hier niet beschikbaar. Installeer het eerst.</string>
+
+    <string name="sync_title">Synchronisatie</string>
+    <string name="sync_body">Verstuurt wat er nieuw is sinds de laatste synchronisatie, of de laatste 30 dagen de eerste keer.</string>
+    <string name="sync_action">Nu synchroniseren</string>
+    <string name="sync_working">Bezig met synchroniseren…</string>
+    <string name="sync_none">Zet minimaal één gegevenstype aan.</string>
+    <string name="sync_failed">Synchronisatie gestopt: %1$s</string>
+    <string name="type_failed">Dit type is niet verstuurd.</string>
+    <string name="type_sent">Dit type is verstuurd.</string>
+
+    <string name="status_never">Nooit gesynchroniseerd</string>
+    <string name="status_at">%1$s (%2$s)</string>
+    <string name="status_sent_today">Vandaag voor het laatst verstuurd</string>
+    <plurals name="status_sent_days">
+        <item quantity="one">Laatst verstuurd %d dag geleden</item>
+        <item quantity="other">Laatst verstuurd %d dagen geleden</item>
+    </plurals>
+    <string name="status_empty_today">Vandaag gecontroleerd, geen gegevens in Health Connect</string>
+    <plurals name="status_empty_days">
+        <item quantity="one">Geen gegevens, laatst gecontroleerd %d dag geleden</item>
+        <item quantity="other">Geen gegevens, laatst gecontroleerd %d dagen geleden</item>
+    </plurals>
+
+    <string name="battery_title">Achtergrondsynchronisatie</string>
+    <string name="battery_body">Android kan Hælan pauzeren om batterij te besparen, waardoor de tweemaal daagse sync dagenlang niet loopt. Schakel batterijoptimalisatie voor Hælan uit om hem op schema te houden. Verder verandert er niets.</string>
+    <string name="battery_exempt">Batterijoptimalisatie staat uit voor Hælan, dus de achtergrondsynchronisatie kan lopen.</string>
+    <string name="battery_action">Batterijinstellingen openen</string>
+
+    <string name="section_activity">Activiteit</string>
+    <string name="section_body">Lichaam</string>
+    <string name="section_heart">Hart en ademhaling</string>
+
+    <string name="src_health_connect">Health Connect</string>
+
+    <string name="type_steps">Stappen</string>
+    <string name="type_distance">Afstand</string>
+    <string name="type_elevation">Hoogtewinst</string>
+    <string name="type_active_energy">Actieve energie</string>
+    <string name="type_basal">Basale energie</string>
+    <string name="type_exercise">Workouts</string>
+    <string name="type_sleep">Slaap</string>
+
+    <string name="type_weight">Gewicht</string>
+    <string name="type_height">Lengte</string>
+    <string name="type_body_fat">Lichaamsvet</string>
+    <string name="type_body_temp">Lichaamstemperatuur</string>
+    <string name="type_glucose">Bloedglucose</string>
+    <string name="type_hydration">Hydratatie</string>
+
+    <string name="type_heart_rate">Hartslag</string>
+    <string name="type_resting">Rusthartslag</string>
+    <string name="type_hrv">Hartritmevariabiliteit</string>
+    <string name="type_spo2">Zuurstofsaturatie</string>
+    <string name="type_breathing">Ademhaling</string>
+    <string name="type_vo2">VO2 max</string>
+
+    <string name="rationale_text">Hælan leest activiteit, lichaamsmaten en hartgegevens uit Health Connect om ze op je eigen Hælan-dashboard te tonen. Niets verlaat je thuisnetwerk.</string>
+    <string name="rationale_continue">Doorgaan</string>
+</resources>
