@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.40.0](https://github.com/bardesss/haelan/compare/v1.39.0...v1.40.0) (2026-09-19)
+
+
+### Features
+
+* a recovery index, haelan's own version of a score no API will hand over ([#296](https://github.com/bardesss/haelan/issues/296)) ([a9e0ab3](https://github.com/bardesss/haelan/commit/a9e0ab35a9814cc6d584b3c73f6ce6331ab2da91))
+
 ## [1.39.0](https://github.com/bardesss/haelan/compare/v1.38.1...v1.39.0) (2026-09-19)
 
 
