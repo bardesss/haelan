@@ -20,6 +20,7 @@ export interface RebuildPersonState {
   quarantined: boolean
   awaitingRebuild: boolean
   droppedPages: number
+  producedNothing: boolean
   lastErrorAtMs: number | null
   lastError: string | null
   lastSuccessAtMs: number | null
@@ -94,8 +95,15 @@ export function RebuildHealth() {
   // Profile does - carries a clean success row, so on the two flags this used to read they were
   // indistinguishable from somebody fine, and the card printed "every person's history rebuilt
   // cleanly" about a member sync had already stopped. allWell has to mean what it says.
+  //
+  // producedNothing is here for exactly that reason and it is the last of the four. A rebuild
+  // that read an archive and wrote no rows commits, drops no page and records no error, so on
+  // the three flags above that person was clean while their pages were empty - and the route
+  // has already applied the payload count that keeps a new member out of this list, so what
+  // reaches here is only the case worth a line.
   const affected = people.filter(
-    (person) => person.quarantined || person.awaitingRebuild || person.droppedPages > 0,
+    (person) => person.quarantined || person.awaitingRebuild
+      || person.droppedPages > 0 || person.producedNothing,
   )
 
   if (affected.length === 0) {
@@ -123,7 +131,10 @@ export function RebuildHealth() {
           awaitingRebuild={person.awaitingRebuild}
           rebuildInFlight={rebuildInFlight}
           droppedPages={person.droppedPages}
+          producedNothing={person.producedNothing}
           lastError={person.lastError}
+          lastErrorAtMs={person.lastErrorAtMs}
+          lastSuccessAtMs={person.lastSuccessAtMs}
           drops={person.drops}
         />
       ))}

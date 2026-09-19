@@ -95,4 +95,38 @@ describe('the recovery index tile', () => {
     expect(html).toContain('against your own last')
     expect(html).toContain('Recovery index')
   })
+
+  // The design spec's own rule: a day this component cannot score must still state why, never
+  // render as an empty tile. CardGrid's page level empty state (dashboard-cards.test.tsx) covers
+  // the day where nothing was recorded at all; this covers the other day the same branch renders
+  // for, where the rest of the archive has plenty and only the index itself has nothing to say.
+  // Both reach this branch, and neither may lose the sentence: see Card.tsx's `ambient` doc for why
+  // keeping the tile off the page level tally does not mean keeping it silent.
+  it('states its reason rather than rendering empty, on a day nothing here can score', () => {
+    const end = '2026-09-14'
+    const range = { from: end, to: end }
+    const fetchRange = { ...recoveryFetchRange(range), source: ALL_SOURCES }
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+    client.setQueryData(queryKeys.session(), PERSON)
+    client.setQueryData(
+      queryKeys.resource(PERSON.personId, 'series', { metrics: LAST_METRICS, ...fetchRange, agg: 'last' }),
+      Object.fromEntries(LAST_METRICS.map((metric) => [metric, { points: [], reduction: null }])),
+    )
+    client.setQueryData(
+      queryKeys.resource(PERSON.personId, 'series', { metrics: SUM_METRICS, ...fetchRange, agg: 'sum' }),
+      Object.fromEntries(SUM_METRICS.map((metric) => [metric, { points: [], reduction: null }])),
+    )
+
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider lng="en">
+          <RecoveryIndexTile from={end} to={end} source={ALL_SOURCES} today={end} />
+        </I18nProvider>
+      </QueryClientProvider>,
+    )
+
+    expect(html).toContain('Not enough recent data to compare against your usual.')
+    expect(html).toContain('Recovery index')
+  })
 })

@@ -55,8 +55,16 @@ export function RecoveryIndexTile({ from, to, source, today, span = 4 }: {
   if (latest === undefined) {
     // Settled with nothing scorable. Say why rather than "no data", which a reader cannot tell
     // apart from a broken card.
+    //
+    // `ambient`, not the default: this branch fires alike on a day with a full archive but a thin
+    // baseline or a missing HRV row, and on a day nothing was recorded at all. Design spec
+    // ("M8's `RecoveryIndexUnavailable`... must render as a stated reason rather than an error or
+    // an empty tile") rules out MetricCard's render-nothing answer, so the message has to stay on
+    // screen; `ambient` is what keeps that message from being the one thing standing between the
+    // page and its own empty state on the second of those two days. See Card.tsx for the shared
+    // reasoning with the flagged days card.
     return (
-      <Card span={span} label={t('recoveryIndex.label')}>
+      <Card span={span} label={t('recoveryIndex.label')} ambient>
         <p className="recovery-index-empty">{t('recoveryIndex.unavailable')}</p>
       </Card>
     )

@@ -14,9 +14,26 @@ describe('the runner reports a person\'s rebuild status', () => {
     await harness.completeSetup()
 
     expect(harness.app.haelan.runner.status('p1').rebuild).toEqual({
-      quarantined: false, awaitingRebuild: false, droppedPages: 0, lastErrorAtMs: null,
-      lastError: null, drops: [],
+      quarantined: false, awaitingRebuild: false, droppedPages: 0, producedNothing: false,
+      lastErrorAtMs: null, lastError: null, lastSuccessAtMs: null, drops: [],
     })
+  })
+
+  /**
+   * The timestamp RebuildNotice needs to date droppedPages and producedNothing, which otherwise
+   * sit unchanged from one boot to the next once a person's stamp goes current again - see
+   * RebuildStatus.lastSuccessAtMs's own doc comment for why. Asserted here rather than only on
+   * the admin route (which already returned this column): the per-person route is what
+   * ControlRow reads, and until this test existed nothing caught it being absent from RunnerStatus.
+   */
+  it('reports when the last rebuild attempt committed, for dating a persistent state', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    harness.app.haelan.stores.rebuildState.recordSuccess({
+      personId: 'p1', nowMs: 555, droppedPages: 2, rowsWritten: 10, payloadsWithData: 4, drops: [],
+    })
+
+    expect(harness.app.haelan.runner.status('p1').rebuild.lastSuccessAtMs).toBe(555)
   })
 
   it('reports a person whose last rebuild failed as quarantined', async () => {
@@ -36,9 +53,44 @@ describe('the runner reports a person\'s rebuild status', () => {
     await harness.completeSetup()
     const store = harness.app.haelan.stores.rebuildState
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
-    store.recordSuccess({ personId: 'p1', nowMs: 200, droppedPages: 0, drops: [] })
+    store.recordSuccess({
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 90, payloadsWithData: 4, drops: [],
+    })
 
     expect(harness.app.haelan.runner.status('p1').rebuild.quarantined).toBe(false)
+  })
+
+  /**
+   * The member's own half of issue 289. Their rebuild committed, dropped nothing and failed at
+   * nothing, so every flag beside this one reads clean - and the archive it read produced not a
+   * single row. Before this the control row had no way to know and showed them nothing at all.
+   */
+  it('reports a rebuild that read an archive and wrote no rows', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    harness.app.haelan.stores.rebuildState.recordSuccess({
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 40, drops: [],
+    })
+
+    const status = harness.app.haelan.runner.status('p1').rebuild
+    expect(status.producedNothing).toBe(true)
+    // None of the existing signals say anything, which is the whole reason the pair was added.
+    expect(status.quarantined).toBe(false)
+    expect(status.droppedPages).toBe(0)
+    expect(status.lastError).toBeNull()
+  })
+
+  // The false alarm the payload count removes, asserted at the surface rather than only at the
+  // predicate: a member connected an hour ago has nothing archived and nothing derived, and must
+  // not be told their history came back empty.
+  it('stays quiet about a person who had no archive to replay', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+    harness.app.haelan.stores.rebuildState.recordSuccess({
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 0, drops: [],
+    })
+
+    expect(harness.app.haelan.runner.status('p1').rebuild.producedNothing).toBe(false)
   })
 
   /**
@@ -56,7 +108,7 @@ describe('the runner reports a person\'s rebuild status', () => {
     harness = await withServer()
     await harness.completeSetup()
     harness.app.haelan.stores.rebuildState.recordSuccess({
-      personId: 'p1', nowMs: 100, droppedPages: 0, drops: [],
+      personId: 'p1', nowMs: 100, droppedPages: 0, rowsWritten: 90, payloadsWithData: 4, drops: [],
     })
 
     harness.app.haelan.stores.people.setTimezone('p1', 'Pacific/Auckland')

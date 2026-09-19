@@ -4,6 +4,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import type { Polarity } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -346,7 +347,7 @@ export function Activity() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} error={stepsQuery.error} />
             : stepsQuery.isPending ? <Loading /> : (
@@ -437,7 +438,7 @@ export function Activity() {
         <Card span={12} measured label={t('activity.sessions.label')}>
           <SessionList controls={resolved} />
         </Card>
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

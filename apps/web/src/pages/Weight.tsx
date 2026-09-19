@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -261,7 +262,7 @@ export function Weight() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('weight.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.readings',
           'weight.weight.chartLabel', 'weight.units.kilograms', 'weight.units.kg',
           // weight is stored in grams with precision 1 (METRICS.weight, declared in grams, the
@@ -291,7 +292,7 @@ export function Weight() {
             Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
           label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

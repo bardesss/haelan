@@ -54,13 +54,20 @@ export function seedPerson(db: Database, id: string, overrides: SeedPersonOverri
 }
 
 /**
- * Ruins every archived body this person has, so any replay of them throws.
+ * Ruins every archived body this person has, so their whole replay throws.
  *
  * Archived first and ruined afterwards because `RawArchive.put` gzips whatever it is handed, so
  * there is no body that survives storage and then fails to decompress. What this stands in for
  * is the hazard the rebuild has to survive: a payload it cannot get through. Which payload, and
  * why, is not what the callers assert; that the throw happens inside the person's transaction
  * is.
+ *
+ * EVERY body, which matters more than it used to. Page isolation (#276b) means one ruined body
+ * no longer fails a rebuild - `replayPerson` drops that page and stamps the person with the rest
+ * of their archive. What still abandons a person is a replay in which nothing at all committed,
+ * so leaving even one readable body here would quietly turn every caller below into a test of
+ * the degraded path rather than the failed one. The breaker's message ends with the last drop's
+ * reason, so a caller asserting on the zlib text still reads it.
  */
 export function corruptArchivedBodies(db: Database, personId: string): void {
   db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
@@ -110,16 +117,7 @@ export function seedSample(db: Database, input: SeedSampleInput): string {
   return input.sourceId
 }
 
-/**
- * One `samples` row from the text a test can read, translated to refs on the way in.
- *
- * Every test that wants a sample goes through this rather than `db.insert(samples)`, for the
- * reason the table's own comment gives: the columns are integers now, and a test spelling
- * `metricRef: 3` would assert nothing a reader could check against the metric it meant. The
- * person and the source have to exist already - `seedSample` above is the sugar that creates the
- * source too - because their refs are assigned by the insert that created them.
- */
-export function insertSample(db: DbOrTx, input: {
+export interface InsertSampleInput {
   personId: string
   sourceId: string
   metric: string
@@ -131,7 +129,23 @@ export function insertSample(db: DbOrTx, input: {
   tzOffsetMinutes?: number
   n?: number
   rawPayloadId?: string | null
-}): void {
+}
+
+/**
+ * One `samples` row from the text a test can read, translated to refs on the way in.
+ *
+ * Every test that wants a sample goes through this rather than `db.insert(samples)`, for the
+ * reason the table's own comment gives: the columns are integers now, and a test spelling
+ * `metricRef: 3` would assert nothing a reader could check against the metric it meant. The
+ * person and the source have to exist already - `seedSample` above is the sugar that creates the
+ * source too - because their refs are assigned by the insert that created them.
+ *
+ * One row at a time, on purpose: this constructs a `SampleKeys` and prepares a fresh statement on
+ * every call, which is fine for the handful of rows most tests seed. A hook seeding hundreds or
+ * thousands of rows should use `insertSamples` below instead - see its comment for why the
+ * per-call cost stops being free at that volume.
+ */
+export function insertSample(db: DbOrTx, input: InsertSampleInput): void {
   const keys = new SampleKeys(db)
   db.insert(samples).values(keys.sampleRefs({
     personId: input.personId,
@@ -144,6 +158,49 @@ export function insertSample(db: DbOrTx, input: {
     n: input.n ?? 1,
     rawPayloadId: input.rawPayloadId ?? null,
   })).run()
+}
+
+// `samples` has 9 columns (db/schema/derived.ts: personRef, sourceRef, metricRef, utcMs,
+// tzOffsetMinutes, aggRef, value, n, rawPayloadRef), and SQLite's conservative default caps a
+// single statement at 999 bound parameters. floor(999 / 9) = 111 rows is the most one multi-row
+// `values(...)` insert can carry without tripping that limit.
+const SAMPLES_COLUMN_COUNT = 9
+const SAMPLES_INSERT_CHUNK = Math.floor(999 / SAMPLES_COLUMN_COUNT)
+
+/**
+ * The batched sibling to `insertSample`: many rows through one `SampleKeys` instance and chunked
+ * multi-row inserts, rather than one instance and one freshly-prepared statement per row.
+ *
+ * This is the `.run()`-per-row pattern the project has hit twice before outside of tests - the
+ * replay's sample upsert now hoists one prepared statement for the whole transaction (#275, see
+ * replay.ts), and deriveDayInto chunks its own insert the same way this does (#281, see
+ * deriveDay.ts) - because drizzle compiles and prepares a fresh better-sqlite3 statement on every
+ * `insert().values().run()`, and better-sqlite3 keeps every statement a connection has ever
+ * prepared until that connection closes. A test fixture is not on a production memory budget, but
+ * it pays the same wall-clock cost: a `beforeEach` seeding a couple thousand rows one at a time
+ * also builds a couple thousand `SampleKeys` instances, each re-resolving the same person and
+ * source ids that every other one already resolved.
+ *
+ * Rows are translated to refs through the one shared `SampleKeys` before any chunk is written, so
+ * the ref each row gets is identical to what `insertSample` would have produced for it - this
+ * changes how the rows get written, not what gets written or in what order.
+ */
+export function insertSamples(db: DbOrTx, rows: InsertSampleInput[]): void {
+  const keys = new SampleKeys(db)
+  const refs = rows.map((input) => keys.sampleRefs({
+    personId: input.personId,
+    sourceId: input.sourceId,
+    metric: input.metric,
+    utcMs: input.utcMs,
+    tzOffsetMinutes: input.tzOffsetMinutes ?? 0,
+    agg: input.agg ?? 'raw',
+    value: input.value === undefined ? 1 : input.value,
+    n: input.n ?? 1,
+    rawPayloadId: input.rawPayloadId ?? null,
+  }))
+  for (let i = 0; i < refs.length; i += SAMPLES_INSERT_CHUNK) {
+    db.insert(samples).values(refs.slice(i, i + SAMPLES_INSERT_CHUNK)).run()
+  }
 }
 
 /**
@@ -250,8 +307,15 @@ export interface Rebuildable {
    * samples would let a delete that forgot its person filter on sessions or daily pass.
    */
   seedSecondPerson: () => SecondPersonRows
-  /** Makes one archived body ungzippable, which is the cheapest honest way to fail a replay. */
-  corruptOneArchivedBody: () => void
+  /**
+   * Makes this person's whole replay fail, which is what the callers of it are about.
+   *
+   * Ruining one body used to be enough and is not any more, because dropping a page rather than
+   * a person is the change #276b made; see `corruptArchivedBodies`, which this delegates to for
+   * the whole of how it now gets there. Named for the outcome rather than the mechanism, since
+   * no caller asserts on which body was ruined and the mechanism has already changed once.
+   */
+  corruptArchive: () => void
   /**
    * Every row of the five tables a rebuild writes, each sorted by its own full natural key
    * rather than however sqlite happens to have stored it. A property asserting that a second
@@ -519,15 +583,12 @@ export function seedRebuildable(options: SeedRebuildableOptions = {}): Rebuildab
         daily: db.select().from(daily).where(eq(daily.personId, otherId)).all(),
       }
     },
-    corruptOneArchivedBody: () => {
-      // Ordered, so which body is ruined is the same on every run. An unordered get() would
-      // leave a rollback test that passes or fails on sqlite's row order.
-      const row = db.select({ id: rawPayloads.id }).from(rawPayloads)
-        .where(eq(rawPayloads.personId, personId))
-        .orderBy(asc(rawPayloads.dataType), asc(rawPayloads.id)).get()
-      if (!row) throw new Error('seedRebuildable archived nothing to corrupt')
-      db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
-        .where(eq(rawPayloads.id, row.id)).run()
+    corruptArchive: () => {
+      if (db.select({ id: rawPayloads.id }).from(rawPayloads)
+        .where(eq(rawPayloads.personId, personId)).get() === undefined) {
+        throw new Error('seedRebuildable archived nothing to corrupt')
+      }
+      corruptArchivedBodies(db, personId)
     },
     snapshot: () => snapshotOf(db),
   }

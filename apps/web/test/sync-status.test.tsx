@@ -35,7 +35,8 @@ function Probe() {
 }
 
 const NO_REBUILD_NEWS = {
-  quarantined: false, awaitingRebuild: false, droppedPages: 0, lastError: null, drops: [],
+  quarantined: false, awaitingRebuild: false, droppedPages: 0, producedNothing: false,
+  lastError: null, lastErrorAtMs: null, lastSuccessAtMs: null, drops: [],
 }
 
 describe('syncPollInterval', () => {

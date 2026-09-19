@@ -9,6 +9,30 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.39.0](https://github.com/bardesss/haelan/compare/v1.38.1...v1.39.0) (2026-09-19)
+
+
+### Features
+
+* **web:** a card with nothing to show renders nothing at all ([#293](https://github.com/bardesss/haelan/issues/293)) ([cea5f18](https://github.com/bardesss/haelan/commit/cea5f185a7fa7564f9098e4b00fbabc34aead370))
+* **web:** the rebuild notice says how old it is ([#295](https://github.com/bardesss/haelan/issues/295)) ([e664c26](https://github.com/bardesss/haelan/commit/e664c262cff4d73c4ca71654a83cf85431b33143))
+
+## [1.38.1](https://github.com/bardesss/haelan/compare/v1.38.0...v1.38.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **core,web:** say when a rebuild produced nothing, and stop the hook-timeout flake ([#291](https://github.com/bardesss/haelan/issues/291)) ([d1c8c38](https://github.com/bardesss/haelan/commit/d1c8c383ed290c16525c03925c8b9c9164392741))
+
+## [1.38.0](https://github.com/bardesss/haelan/compare/v1.37.2...v1.38.0) (2026-09-19)
+
+
+### Features
+
+* **core,server,web:** a person whose rebuild failed is finally told so ([#285](https://github.com/bardesss/haelan/issues/285)) ([e91fe35](https://github.com/bardesss/haelan/commit/e91fe352db91ccf4b843fef75531deb49737403c))
+* **core:** one unreplayable page costs that page, not the whole archive ([#288](https://github.com/bardesss/haelan/issues/288)) ([7dfd3ad](https://github.com/bardesss/haelan/commit/7dfd3adc43bf6598a6031eaf94f120807abd4f61))
+* **web:** one control row line on a phone, and sync moved to the shell ([#287](https://github.com/bardesss/haelan/issues/287)) ([c95c811](https://github.com/bardesss/haelan/commit/c95c81167dcd78b3be20b149d71cacf4c3fa19b8))
+
 ## [1.37.2](https://github.com/bardesss/haelan/compare/v1.37.1...v1.37.2) (2026-09-18)
 
 

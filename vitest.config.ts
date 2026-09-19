@@ -35,6 +35,25 @@ export default defineConfig({
     // roughly one fork per core: how much CPU any one test gets depends on what else is running,
     // which is why a test with less than a 2x margin here eventually flakes.
     testTimeout: 20_000,
+    // The same budget for hooks, which vitest otherwise leaves at its own 10s default while the
+    // number above is deliberate. (10s, not the 5s vitest defaults testTimeout to: hookTimeout
+    // has always had a default of its own, `resolved.hookTimeout ??= browser ? 30_000 : 10_000`.
+    // Halving the gap does not change the argument - the hook still had a tighter budget than
+    // the test it was setting up - but the number matters, because it is the one the failure
+    // below actually printed.) Every word of the reasoning above applies to a beforeEach exactly
+    // as it applies to a test body: the hook runs under the same uncapped parallelism, gets the
+    // same share of CPU, and has the same 2x margin to lose. Leaving the two to drift meant
+    // setup, which is where this suite does its expensive work, was the first thing to give -
+    // since a test that needs rows has to write them first.
+    //
+    // session-heart-rate.test.ts is what found it: its beforeEach writes 700 minutes on one
+    // source and 90 on another, each across three aggregates, so 2,370 rows before each of seven
+    // tests, and the file needs about 21s alone.
+    // A full run failed all six of its tests on "Hook timed out in 10000ms" and the next run of
+    // the same tree passed, which is the least useful shape a red suite can have - it teaches
+    // people to re-run rather than to look. Raising the ceiling stops the flake; the hook is
+    // still heavier than it needs to be, which is the other half of #290.
+    hookTimeout: 20_000,
     // Capped, because uncapped was both slower and unreliable.
     //
     // vitest defaults to roughly one fork per core, which is 22 on this machine. A lot of this

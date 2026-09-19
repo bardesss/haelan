@@ -29,8 +29,30 @@ export interface SyncStatus {
   rebuild: {
     quarantined: boolean
     awaitingRebuild: boolean
+    /**
+     * Their last rebuild read archived payloads and left no readings behind. Already decided by
+     * the server, which calls the same predicate the admin route does, so the two surfaces
+     * cannot draw different conclusions from the same pair of columns.
+     */
+    producedNothing: boolean
     droppedPages: number
     lastError: string | null
+    /**
+     * When the last rebuild attempt failed, which RebuildNotice uses to date the quarantine line.
+     * Already on the server's RebuildStatus (runner.ts); missing from this mirror until now
+     * because nothing here had read it yet - the doc comment atop this interface says why that is
+     * not a licence to leave a field off indefinitely, and this one really was needed the moment
+     * RebuildNotice grew a date for the quarantined state.
+     */
+    lastErrorAtMs: number | null
+    /**
+     * When the last rebuild attempt committed, which RebuildNotice uses to date droppedPages and
+     * producedNothing above - see RebuildStatus.lastSuccessAtMs in runner.ts for why that is "as
+     * of the rebuild" and not "since the gap began". Added to runner.ts's RunnerStatus.rebuild for
+     * this: the admin route already returned it, but this per-person mirror, which ControlRow
+     * reads, did not.
+     */
+    lastSuccessAtMs: number | null
     drops: { dataType: string, reason: string, pages: number }[]
   }
 }

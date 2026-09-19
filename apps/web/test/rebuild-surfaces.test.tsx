@@ -46,12 +46,18 @@ interface RebuildNews {
   quarantined: boolean
   awaitingRebuild: boolean
   droppedPages: number
+  producedNothing: boolean
   lastError: string | null
+  // Both null by default in NO_REBUILD_NEWS below: dating a quarantine or a drop is what this
+  // task adds, and a case that is not about it should not have to name either field.
+  lastErrorAtMs: number | null
+  lastSuccessAtMs: number | null
   drops: { dataType: string, reason: string, pages: number }[]
 }
 
 const NO_REBUILD_NEWS: RebuildNews = {
-  quarantined: false, awaitingRebuild: false, droppedPages: 0, lastError: null, drops: [],
+  quarantined: false, awaitingRebuild: false, droppedPages: 0, producedNothing: false,
+  lastError: null, lastErrorAtMs: null, lastSuccessAtMs: null, drops: [],
 }
 
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
@@ -97,12 +103,32 @@ describe('the control row surfaces a rebuild problem', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} />,
       {
-        quarantined: true, awaitingRebuild: true, droppedPages: 0, drops: [],
-        lastError: 'UNIQUE constraint failed: samples.id',
+        quarantined: true, awaitingRebuild: true, droppedPages: 0, producedNothing: false, drops: [],
+        lastError: 'UNIQUE constraint failed: samples.id', lastErrorAtMs: null, lastSuccessAtMs: null,
       },
     ))
     expect(text('.maintenance-blocked')).toBe('Your data has stopped updating. A rebuild of your history did not finish, so new readings are not being collected. An administrator needs to look at this.')
     expect(text('.maintenance-download-note')).toBe('UNIQUE constraint failed: samples.id')
+  })
+
+  /**
+   * The end-to-end path this task adds: useSyncStatus.ts's SyncStatus.rebuild did not carry
+   * lastErrorAtMs at all before this, so ControlRow's spread of status.data.rebuild into
+   * RebuildNotice silently dropped it and every quarantine on this row rendered undated. Checked
+   * here rather than only on RebuildNotice's own suite, which proves the wording is right but not
+   * that the fetched status actually reaches the prop that picks it.
+   */
+  it('dates the quarantine on the control row from the failure time the status carries', () => {
+    const now = Date.now()
+    mount(withQuery(
+      <ControlRow controls={stubControls()} sources={['watch']} />,
+      {
+        quarantined: true, awaitingRebuild: true, droppedPages: 0, producedNothing: false, drops: [],
+        lastError: 'UNIQUE constraint failed: samples.id',
+        lastErrorAtMs: now - 3 * 60 * 60 * 1000, lastSuccessAtMs: null,
+      },
+    ))
+    expect(text('.maintenance-blocked')).toBe('Your data has stopped updating. A rebuild of your history failed 3 hours ago, so new readings are not being collected. An administrator needs to look at this.')
   })
 
   // The state nothing on this row could say before: their stamp is stale, sync has been skipping
@@ -110,7 +136,10 @@ describe('the control row surfaces a rebuild problem', () => {
   it('renders the notice when the status says a rebuild is merely awaited', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} />,
-      { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
+      {
+        quarantined: false, awaitingRebuild: true, droppedPages: 0, producedNothing: false, lastError: null,
+        lastErrorAtMs: null, lastSuccessAtMs: null, drops: [],
+      },
     ))
     expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.')
     expect(container!.querySelector('.maintenance-blocked')).toBeNull()
@@ -129,7 +158,10 @@ describe('the control row surfaces a rebuild problem', () => {
   it('tells the person a rebuild is running now while the boot rebuild is in flight', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} />,
-      { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
+      {
+        quarantined: false, awaitingRebuild: true, droppedPages: 0, producedNothing: false, lastError: null,
+        lastErrorAtMs: null, lastSuccessAtMs: null, drops: [],
+      },
       true,
     ))
     expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which is running now. Nothing has gone wrong, and no new readings are collected until it finishes, which it will do on its own.')
@@ -148,6 +180,7 @@ function person(overrides: Partial<RebuildPersonState>): RebuildPersonState {
     quarantined: false,
     awaitingRebuild: false,
     droppedPages: 0,
+    producedNothing: false,
     lastErrorAtMs: null,
     lastError: null,
     lastSuccessAtMs: 1_770_000_000_000,
@@ -176,12 +209,31 @@ function mountRebuildHealth(people: RebuildPersonState[], rebuildInFlight = fals
 describe('the admin rebuild health card', () => {
   it('lists a quarantined person by name', () => {
     mountRebuildHealth([
-      person({ personId: 'p1', displayName: 'Robin', quarantined: true, lastErrorAtMs: 1, lastError: 'boom' }),
+      // lastErrorAtMs left null on purpose: this test is about the listing, not the date, and a
+      // non-null value here would print "failed ... ago" instead of the plain sentence asserted
+      // below - the dated wording gets its own test right after this one.
+      person({ personId: 'p1', displayName: 'Robin', quarantined: true, lastErrorAtMs: null, lastError: 'boom' }),
       person({ personId: 'p2', displayName: 'Wilma' }),
     ])
     expect(text('.maintenance-blocked')).toBe('Robin has stopped receiving data. A rebuild of their history did not finish.')
     // Wilma is clean and must not appear beside Robin's own notice.
     expect(container!.textContent).not.toContain('Wilma')
+  })
+
+  /**
+   * The admin card's own copy of the plumbing check above: routes/maintenance.ts already returned
+   * lastErrorAtMs before this task, but nothing had ever asked RebuildHealth.tsx to pass it on to
+   * RebuildNotice, so a quarantine on this card rendered undated regardless of what the route sent.
+   */
+  it('dates a quarantined person\'s notice from the failure time the route carries', () => {
+    const now = Date.now()
+    mountRebuildHealth([
+      person({
+        personId: 'p1', displayName: 'Robin', quarantined: true,
+        lastErrorAtMs: now - 3 * 24 * 60 * 60 * 1000, lastError: 'boom',
+      }),
+    ])
+    expect(text('.maintenance-blocked')).toBe('Robin has stopped receiving data. A rebuild of their history failed 3 days ago.')
   })
 
   it('says every history rebuilt cleanly when nobody is affected but rebuilds have run', () => {
@@ -233,6 +285,35 @@ describe('the admin rebuild health card', () => {
   it('tells the operator a rebuild is running now rather than to restart the server', () => {
     mountRebuildHealth([person({ personId: 'p1', displayName: 'Robin', awaitingRebuild: true })], true)
     expect(text('.maintenance-waiting')).toBe('Robin is waiting for a rebuild of their history, which is running now. They receive no new data until it finishes, which it will do on its own.')
+  })
+
+  /**
+   * The last route to "every person's history rebuilt cleanly" being said over somebody's head.
+   * A rebuild that read an archive and wrote nothing commits, drops no page and records no
+   * error, so on the three flags this filter read before, that person was clean - and the card
+   * said so about a member with empty pages.
+   */
+  it('names a person whose rebuild produced nothing rather than calling the household clean', () => {
+    mountRebuildHealth([
+      // lastSuccessAtMs left null, for the same reason the quarantine listing test above does:
+      // this is about the listing, not the date, which gets its own test on RebuildNotice's suite.
+      person({ personId: 'p1', displayName: 'Robin', producedNothing: true, lastSuccessAtMs: null }),
+      person({ personId: 'p2', displayName: 'Wilma' }),
+    ])
+    expect(text('.maintenance-waiting')).toBe('Robin\'s history was rebuilt without any error, but it produced no readings, so their pages are empty. Nothing has been deleted: everything ever collected for them is still stored, and a later version may be able to read it.')
+    expect(container!.textContent).not.toContain('rebuilt cleanly')
+    expect(container!.textContent).not.toContain('Wilma')
+  })
+
+  // The false alarm the payload count removes, asserted where an operator would actually meet
+  // it. A household of new members replays to no rows at all, and a card that listed every one
+  // of them is a card its one reader stops reading.
+  it('still calls the household clean when nobody\'s rebuild had an archive to read', () => {
+    mountRebuildHealth([
+      person({ personId: 'p1', displayName: 'Robin' }),
+      person({ personId: 'p2', displayName: 'Wilma' }),
+    ])
+    expect(text('.maintenance-backups')).toBe('Every person\'s history rebuilt cleanly.')
   })
 
   /**

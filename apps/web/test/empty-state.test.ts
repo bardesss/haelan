@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { emptyStateFor, wornOn, coverageIsWearSignal, NOT_WORN_MAX_COVERAGE } from '../src/data/emptyState.js'
+import { emptyStateFor, wornOn, coverageIsWearSignal, NOT_WORN_MAX_COVERAGE, hidesWhenEmpty } from '../src/data/emptyState.js'
 import type { SeriesPoint } from '../src/data/useSeries.js'
 
 const point = (value: number | null, coverage: number | null): SeriesPoint =>
@@ -114,5 +114,15 @@ describe('emptyStateFor', () => {
   // 'exercise' sessions, not from a catalogue entry of their own.
   it('is excluded through the session type that derives it, for exercise', () => {
     expect(emptyStateFor('workout_count', [point(2, null)], ['exercise'])).toBe('not_synced')
+  })
+})
+
+describe('hidesWhenEmpty', () => {
+  // The rule the spec names: an absence the reader can act on stays on screen, an absence they
+  // can only wait out disappears.
+  it('hides only the state that names no remedy', () => {
+    expect(hidesWhenEmpty('no_data')).toBe(true)
+    expect(hidesWhenEmpty('not_worn')).toBe(false)
+    expect(hidesWhenEmpty('not_synced')).toBe(false)
   })
 })
