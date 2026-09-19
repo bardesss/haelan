@@ -85,3 +85,36 @@ describe('the runner reports a person\'s rebuild status', () => {
     expect(status.awaitingRebuild).toBe(true)
   })
 })
+
+/**
+ * The instance-wide half of the same question, and the reason it had to be asked at all.
+ *
+ * index.ts calls app.listen BEFORE the boot rebuild starts, and that rebuild runs in its own
+ * process for as long as fifteen minutes on real data. Every person it has not reached yet has a
+ * stale stamp for the whole of that window, so awaitingRebuild reads true for them during the
+ * one run that is actually fixing them - and the copy that state used to render told the reader
+ * a restart is what runs it. An operator who believed it would restart the container and kill the
+ * rebuild. The flag below is what lets the browser tell "it is running now" apart from "nothing
+ * is running and only a restart will start one".
+ *
+ * It sits on the envelope rather than inside `rebuild`, which is documented as carrying facts
+ * about one household member's own data. Whether a boot rebuild is in flight is a fact about the
+ * process, true of everybody at once, so it belongs beside running and lastFinishedAtMs.
+ */
+describe('the runner reports whether a boot rebuild is in flight', () => {
+  it('reports no rebuild in flight on an instance whose boot rebuild has settled', async () => {
+    harness = await withServer()
+    await harness.completeSetup()
+
+    expect(harness.app.haelan.runner.status('p1').rebuildInFlight).toBe(false)
+  })
+
+  // The same seam routes/maintenance.ts's two POST routes already gate on, read through the
+  // ServerContext the runner is constructed with rather than plumbed in a second time.
+  it('reports a rebuild in flight while the boot rebuild worker is still running', async () => {
+    harness = await withServer({ rebuildInFlight: () => true })
+    await harness.completeSetup()
+
+    expect(harness.app.haelan.runner.status('p1').rebuildInFlight).toBe(true)
+  })
+})

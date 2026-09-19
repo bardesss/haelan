@@ -99,7 +99,15 @@ export function ControlRow({
           own status()), so once status.data exists, trusting its shape rather than re-checking
           the field itself is what keeps a future malformed or legacy answer from reading as
           "nothing to report" instead of failing where it can be seen. */}
-      {status.data !== undefined && <RebuildNotice voice="self" {...status.data.rebuild} />}
+      {/* rebuildInFlight is passed by name rather than arriving in the spread: it is not in
+          status.data.rebuild, because it is one fact about the server process and that object
+          carries facts about this person's own data. The spread would silently stop supplying it
+          if it ever moved, which the required prop on RebuildNotice is what catches. */}
+      {status.data !== undefined && (
+        <RebuildNotice
+          voice="self" rebuildInFlight={status.data.rebuildInFlight} {...status.data.rebuild}
+        />
+      )}
       <div className="segmented" role="group" aria-label={t('controlRow.timeRangeLabel')}>
         {RANGE_KEYS.map((key) => (
           <button key={key} type="button" className="segment" aria-pressed={key === controls.tab}

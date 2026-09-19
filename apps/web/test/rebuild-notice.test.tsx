@@ -14,7 +14,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={0} drops={[]}
-        lastError={null} voice="self"
+        lastError={null} voice="self" rebuildInFlight={false}
       />,
     )
     expect(html).toBe('')
@@ -24,6 +24,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError="boom" voice="self"
+        rebuildInFlight={false}
       />,
     )
     expect(html).toContain('Your data has stopped updating')
@@ -34,6 +35,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={7} lastError={null} voice="self"
+        rebuildInFlight={false}
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 7 }]}
       />,
     )
@@ -53,7 +55,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={1} lastError={null}
-        voice="admin" personName="Robin"
+        voice="admin" personName="Robin" rebuildInFlight={false}
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 1 }]}
       />,
     )
@@ -67,7 +69,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError={null}
-        voice="admin" personName="Robin"
+        voice="admin" personName="Robin" rebuildInFlight={false}
       />,
     )
     expect(html).toContain('Robin has stopped receiving data')
@@ -80,7 +82,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} drops={[]} voice="self"
-        lastError="UNIQUE constraint failed: samples.id"
+        lastError="UNIQUE constraint failed: samples.id" rebuildInFlight={false}
       />,
     )
     expect(html).toContain('UNIQUE constraint failed: samples.id')
@@ -90,6 +92,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+        rebuildInFlight={false}
       />,
     )
     expect(html).not.toContain('The error the rebuild reported')
@@ -105,10 +108,13 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null} voice="self"
+        rebuildInFlight={false}
       />,
     )
-    expect(html).toContain('waiting for a rebuild of your history')
-    expect(html).toContain('at the next restart of the server')
+    // The whole paragraph, not a fragment of it: half this sentence is the promise about when
+    // the rebuild runs, and a substring assertion on the other half stays green if that promise
+    // is reworded into something untrue.
+    expect(html).toContain('<p class="maintenance-waiting">Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.</p>')
     // Nothing failed, so nothing on screen may say an administrator has to go and look.
     expect(html).not.toContain('An administrator needs to look at this')
   })
@@ -117,7 +123,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null}
-        voice="admin" personName="Robin"
+        voice="admin" personName="Robin" rebuildInFlight={false}
       />,
     )
     expect(html).toContain('Robin is waiting for a rebuild of their history')
@@ -134,9 +140,82 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+        rebuildInFlight={false}
       />,
     )
     expect(html).toContain('Your data has stopped updating')
     expect(html).not.toContain('at the next restart of the server')
+  })
+
+  /**
+   * The variant that exists because the sentence above is actively harmful at the one moment it
+   * is most likely to be read.
+   *
+   * apps/server/src/index.ts calls app.listen BEFORE the boot rebuild starts, and that rebuild
+   * runs in its own process for as long as fifteen minutes on real data while holding the write
+   * lock. For the whole of that window every person the worker has not reached yet has a stale
+   * stamp, so awaitingRebuild is true of them - during the run that is fixing them. Right after
+   * an upgrade is the single most likely moment anybody sees this state at all, and the reader
+   * being told a restart is what runs it is how an operator aborts a rebuild that would have
+   * finished.
+   *
+   * Hiding the line while a rebuild runs was the alternative and was rejected: a person whose
+   * data has stopped should not be told nothing. So this says the same thing about their data
+   * and a different, true thing about what happens next.
+   */
+  it('tells a person a rebuild is running now rather than to restart the server', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null} voice="self"
+        rebuildInFlight
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-waiting">Your data is waiting for a rebuild of your history, which is running now. Nothing has gone wrong, and no new readings are collected until it finishes, which it will do on its own.</p>')
+    // The one sentence a reader must not act on while the thing it describes is already running.
+    expect(html).not.toContain('at the next restart of the server')
+  })
+
+  it('names the person a running rebuild is catching up on, in the admin voice', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null}
+        voice="admin" personName="Robin" rebuildInFlight
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-waiting">Robin is waiting for a rebuild of their history, which is running now. They receive no new data until it finishes, which it will do on its own.</p>')
+    expect(html).not.toContain('at the next restart of the server')
+  })
+
+  /**
+   * A refinement of the awaiting line, not a fourth independent one, so it inherits the awaiting
+   * line's own suppression under a quarantine rather than restating the rule. A quarantined
+   * person reads true on every one of these flags at once - the rollback took their stamp with
+   * them, and a boot rebuild may well be running while their own rebuild is the one that failed
+   * in it - and "a rebuild is running now" would read as reassurance about a failure that is
+   * deterministic and will happen again in exactly the same place.
+   */
+  it('says only the quarantine when a quarantined person is caught in a running rebuild', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+        rebuildInFlight
+      />,
+    )
+    expect(html).toContain('Your data has stopped updating')
+    expect(html).not.toContain('which is running now')
+    expect(html).not.toContain('at the next restart of the server')
+  })
+
+  // A rebuild in flight says nothing at all about anybody who is not behind on their stamp: the
+  // flag is instance-wide, so without this guard every household member would be told their data
+  // is waiting for a rebuild every time the container restarts.
+  it('stays silent about a running rebuild for a person who is not behind on their stamp', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} droppedPages={0} drops={[]} lastError={null}
+        voice="self" rebuildInFlight
+      />,
+    )
+    expect(html).toBe('')
   })
 })

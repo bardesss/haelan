@@ -1235,6 +1235,8 @@
       "quarantinedOther": "{{name}} has stopped receiving data. A rebuild of their history did not finish.",
       "awaitingSelf": "Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.",
       "awaitingOther": "{{name}} is waiting for a rebuild of their history, which runs at the next restart of the server. They receive no new data until it has.",
+      "awaitingRunningSelf": "Your data is waiting for a rebuild of your history, which is running now. Nothing has gone wrong, and no new readings are collected until it finishes, which it will do on its own.",
+      "awaitingRunningOther": "{{name}} is waiting for a rebuild of their history, which is running now. They receive no new data until it finishes, which it will do on its own.",
       "droppedSelf": "Part of your history could not be rebuilt and is missing from these pages. Nothing has been deleted, and it will come back once the cause is fixed.",
       "droppedOther_one": "{{count}} page of {{name}}'s history could not be rebuilt.",
       "droppedOther_other": "{{count}} pages of {{name}}'s history could not be rebuilt.",

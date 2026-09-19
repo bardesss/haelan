@@ -67,11 +67,18 @@ function stubControls(over: Partial<PageControlsState> = {}): PageControlsState 
  * The same seeding control-row.test.tsx's own withQuery uses, so the row mounts with no real
  * fetch reached: the session, the sync status (carrying whichever `rebuild` block a case names)
  * and the source names, all of which ControlRow reads through TanStack Query.
+ *
+ * rebuildInFlight is seeded beside `rebuild` rather than inside it, which is where the runner
+ * puts it: whether the boot rebuild worker is running is one fact about the process, not one
+ * per household member. It defaults to false so a case only names it when that is the axis it
+ * is about.
  */
-function withQuery(node: ReactNode, rebuild: RebuildNews): ReactNode {
+function withQuery(node: ReactNode, rebuild: RebuildNews, rebuildInFlight = false): ReactNode {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), PERSON)
-  client.setQueryData(syncStatusKey(PERSON.personId), { running: false, lastFinishedAtMs: null, rebuild })
+  client.setQueryData(syncStatusKey(PERSON.personId), {
+    running: false, lastFinishedAtMs: null, rebuild, rebuildInFlight,
+  })
   client.setQueryData(sourceNamesKey(PERSON.personId), { items: [] })
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
@@ -108,6 +115,25 @@ describe('the control row surfaces a rebuild problem', () => {
     expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.')
     expect(container!.querySelector('.maintenance-blocked')).toBeNull()
   })
+
+  /**
+   * The same person, the same stale stamp, during the boot rebuild that is fixing it. The server
+   * listens before that rebuild starts and the rebuild can run for fifteen minutes, so this is
+   * the state a reader most often lands on right after an upgrade - and the sentence above,
+   * rendered here, would send them to restart the container and abort the run.
+   *
+   * Asserted through the whole row rather than on RebuildNotice alone, because the flag has to
+   * survive the trip from the route's envelope to a prop: ControlRow spreads status.data.rebuild
+   * into the notice, and rebuildInFlight is deliberately not in that object.
+   */
+  it('tells the person a rebuild is running now while the boot rebuild is in flight', () => {
+    mount(withQuery(
+      <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />,
+      { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
+      true,
+    ))
+    expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which is running now. Nothing has gone wrong, and no new readings are collected until it finishes, which it will do on its own.')
+  })
 })
 
 /**
@@ -131,12 +157,12 @@ function person(overrides: Partial<RebuildPersonState>): RebuildPersonState {
   }
 }
 
-function mountRebuildHealth(people: RebuildPersonState[]): QueryClient {
+function mountRebuildHealth(people: RebuildPersonState[], rebuildInFlight = false): QueryClient {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   })
   client.setQueryData(queryKeys.session(), { ...PERSON, isAdmin: true })
-  client.setQueryData(queryKeys.rebuildHealth(), { people })
+  client.setQueryData(queryKeys.rebuildHealth(), { people, rebuildInFlight })
   act(() => {
     root?.render(
       <QueryClientProvider client={client}>
@@ -192,6 +218,21 @@ describe('the admin rebuild health card', () => {
     expect(text('.maintenance-waiting')).toBe('Robin is waiting for a rebuild of their history, which runs at the next restart of the server. They receive no new data until it has.')
     expect(container!.textContent).not.toContain('rebuilt cleanly')
     expect(container!.textContent).not.toContain('Wilma')
+  })
+
+  /**
+   * The operator's copy of the same correction. This card is the surface an administrator reads
+   * right after an upgrade, which is exactly when the boot rebuild is in flight and everybody it
+   * has not reached yet is listed here - and telling the one person who can restart the container
+   * that a restart is the remedy is how the rebuild gets killed halfway through.
+   *
+   * One flag on the envelope drives every row, which is the point of putting it there: one
+   * worker rebuilds the whole household in a single pass, so two rows cannot disagree about
+   * whether it is running.
+   */
+  it('tells the operator a rebuild is running now rather than to restart the server', () => {
+    mountRebuildHealth([person({ personId: 'p1', displayName: 'Robin', awaitingRebuild: true })], true)
+    expect(text('.maintenance-waiting')).toBe('Robin is waiting for a rebuild of their history, which is running now. They receive no new data until it finishes, which it will do on its own.')
   })
 
   /**

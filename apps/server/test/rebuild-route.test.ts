@@ -131,4 +131,40 @@ describe('GET /api/settings/rebuild', () => {
     expect(person?.quarantined).toBe(false)
     expect(person?.lastError).toBeNull()
   })
+
+  /**
+   * Whether the boot rebuild is running right now, reported once on the envelope rather than
+   * once per person: one worker rebuilds the whole household in a single pass, so it is a fact
+   * about the process and repeating it on every row would invite two rows to disagree about it.
+   *
+   * The admin card needs it for the same reason the per-person row does. index.ts listens before
+   * the boot rebuild starts, so throughout a run that can last fifteen minutes every person it
+   * has not reached is awaitingRebuild - and the copy for that state told the reader a restart
+   * runs it, which during a run is advice that kills the rebuild in progress.
+   */
+  it('reports no rebuild in flight on an instance whose boot rebuild has settled', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/rebuild',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as { rebuildInFlight: boolean }).rebuildInFlight).toBe(false)
+  })
+
+  // Read through app.haelan.rebuildInFlight, the same seam the reclaim and backup routes on this
+  // very scope already decline on - not a second flag that could fall out of step with theirs.
+  it('reports a rebuild in flight while the boot rebuild worker is still running', async () => {
+    harness = await withServer({ rebuildInFlight: () => true })
+    const token = await harness.signIn()
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/rebuild',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as { rebuildInFlight: boolean }).rebuildInFlight).toBe(true)
+  })
 })

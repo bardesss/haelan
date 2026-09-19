@@ -29,6 +29,13 @@ export interface RebuildPersonState {
 
 interface RebuildHealthStatus {
   people: RebuildPersonState[]
+  /**
+   * Whether the boot rebuild worker is running right now, sent once for the whole household
+   * because one worker rebuilds all of it in a single pass. On the envelope rather than on each
+   * RebuildPersonState above, which is where the route puts it and for the same reason: two rows
+   * of one response must not be able to disagree about whether a rebuild is going.
+   */
+  rebuildInFlight: boolean
 }
 
 /**
@@ -81,7 +88,7 @@ export function RebuildHealth() {
     )
   }
 
-  const { people } = status.data
+  const { people, rebuildInFlight } = status.data
   // awaitingRebuild counts as affected, and it is the reason this filter had to change. A person
   // whose version stamp went stale with no attempt behind it - which changing a timezone in
   // Profile does - carries a clean success row, so on the two flags this used to read they were
@@ -99,6 +106,12 @@ export function RebuildHealth() {
     )
   }
 
+  // One envelope-level flag handed to every notice below, since one worker rebuilds the whole
+  // household at once. It matters most on this card of all of them: an operator reads it right
+  // after an upgrade, which is precisely when the boot rebuild is in flight and everybody it has
+  // not reached yet is listed here - and they are the one person who can restart the container,
+  // so "a restart is what runs it" is the sentence that must not appear while the rebuild
+  // already is running.
   return (
     <>
       {affected.map((person) => (
@@ -108,6 +121,7 @@ export function RebuildHealth() {
           personName={person.displayName}
           quarantined={person.quarantined}
           awaitingRebuild={person.awaitingRebuild}
+          rebuildInFlight={rebuildInFlight}
           droppedPages={person.droppedPages}
           lastError={person.lastError}
           drops={person.drops}

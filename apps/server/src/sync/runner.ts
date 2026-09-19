@@ -139,6 +139,29 @@ export interface RunnerStatus extends RunState {
   userHorizonDays: number
   backfill: BackfillSummary[]
   rebuild: RebuildStatus
+  /**
+   * Whether index.ts's boot rebuild worker is running right now. Instance-wide, which is why it
+   * sits out here beside `running` rather than inside `rebuild`: one worker rebuilds the whole
+   * household in a single pass, and RebuildStatus is documented as carrying facts about one
+   * member's own data alone.
+   *
+   * It exists because `rebuild.awaitingRebuild` on its own is ambiguous at the one moment it is
+   * most likely to be read. index.ts calls app.listen BEFORE the boot rebuild starts, and that
+   * rebuild runs for as long as fifteen minutes on real data, so every person the worker has not
+   * reached yet reports a stale stamp throughout the run that is fixing them - which is exactly
+   * the state right after an upgrade. The browser used to render "a restart is what runs it" for
+   * that, and an operator who acted on it would abort the rebuild. Paired with awaitingRebuild,
+   * this is what tells "it is running now, wait" apart from "nothing is running, only a restart
+   * starts one". Which sentence a reader sees is settled in RebuildNotice, as with the other
+   * states; this route reports the fact.
+   *
+   * Read through the ServerContext the runner already holds - ServerContext extends ServerDeps,
+   * so `rebuildInFlight` is on it for the same reason routes/maintenance.ts can reach it - rather
+   * than plumbed in separately. A second copy of the boot flag is a second thing that can fall out
+   * of step with the first. Unset outside index.ts's own wiring, hence the `?? false`: a test that
+   * never rebuilds anybody has no rebuild in flight, which is the honest answer, not an absence.
+   */
+  rebuildInFlight: boolean
 }
 
 export class SyncRunner {
@@ -264,6 +287,10 @@ export class SyncRunner {
       personId,
       userHorizonDays,
       backfill,
+      // Asked on every call, like the rebuild row above and for the same reason: the boot
+      // rebuild settles while a dashboard is open, and a copy taken when this runner was
+      // constructed would have been true for the whole life of the process.
+      rebuildInFlight: this.#context.rebuildInFlight?.() ?? false,
       rebuild: {
         quarantined: isQuarantined(rebuild),
         awaitingRebuild: peopleNeedingRebuild(person === null ? [] : [person]).length > 0,

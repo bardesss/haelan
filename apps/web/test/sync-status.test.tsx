@@ -40,8 +40,8 @@ const NO_REBUILD_NEWS = {
 
 describe('syncPollInterval', () => {
   it('polls only while a run is going', () => {
-    expect(syncPollInterval({ running: true, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })).toBe(SYNC_POLL_MS)
-    expect(syncPollInterval({ running: false, lastFinishedAtMs: 1, rebuild: NO_REBUILD_NEWS })).toBe(false)
+    expect(syncPollInterval({ running: true, lastFinishedAtMs: null, rebuildInFlight: false, rebuild: NO_REBUILD_NEWS })).toBe(SYNC_POLL_MS)
+    expect(syncPollInterval({ running: false, lastFinishedAtMs: 1, rebuildInFlight: false, rebuild: NO_REBUILD_NEWS })).toBe(false)
     // Nothing fetched yet is not a run: the first fetch is already on its way.
     expect(syncPollInterval(undefined)).toBe(false)
   })

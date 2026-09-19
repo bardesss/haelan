@@ -226,7 +226,19 @@ export function registerMaintenance(app: FastifyInstance): void {
           drops: state?.drops ?? [],
         }
       })
-      return reply.send({ people })
+      // Once on the envelope, not once per person. One worker rebuilds the whole household in a
+      // single pass (rebuildInWorker.ts), so this is a fact about the process; repeating it on
+      // every row would let two rows of one response disagree about whether it is running.
+      //
+      // The card needs it because `awaitingRebuild` above cannot be read on its own during a
+      // boot rebuild. index.ts listens before that rebuild starts and it runs for as long as
+      // fifteen minutes, so every person the worker has not reached yet is listed here for the
+      // whole run - and the copy that state used to render told the reader a restart is what
+      // runs it. The one reader of this card is the one person who can restart the container,
+      // which is how that sentence aborts the rebuild that was already fixing them. The same
+      // seam the two POST routes above decline on, read once more rather than copied; see
+      // ServerDeps.rebuildInFlight.
+      return reply.send({ people, rebuildInFlight: app.haelan.rebuildInFlight?.() ?? false })
     })
   })
 }
