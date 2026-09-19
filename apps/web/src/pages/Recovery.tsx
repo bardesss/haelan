@@ -12,6 +12,7 @@ import { ControlRow } from '../components/ControlRow.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
 import { Sparkline } from '../charts/Sparkline.js'
+import { RecoveryIndexCard } from './recovery/RecoveryIndexCard.js'
 import { usePageControls } from '../controls/usePageControls.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { useSession } from '../auth/session.js'
@@ -255,6 +256,7 @@ export function Recovery() {
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <CardGrid>
+        <RecoveryIndexCard from={controls.from} to={controls.to} source={source} today={controls.today} span={8} />
         {card('resting_heart_rate', 'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
           'recovery.restingHeartRate.chartLabel', 'recovery.units.beatsPerMinute', 'recovery.units.bpm',
           'lower-is-better', restingHrBaseline, restingHrBand)}

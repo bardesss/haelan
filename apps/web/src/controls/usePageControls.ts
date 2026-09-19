@@ -11,6 +11,16 @@ export interface PageControlsState {
   source: string
   from: string
   to: string
+  /**
+   * The person's today, resolved from their session timezone (falling back to the browser's own
+   * when a session has not loaded one yet), not the machine's UTC date. Callers that need to
+   * compare "today" against a scored or fetched date - the recovery tile's `asOfLabel` is the
+   * first - read this rather than computing their own: `new Date().toISOString().slice(0, 10)` is
+   * the UTC date, which disagrees with this value for part of every day, and this codebase already
+   * had one bug from exactly that (`historicalTo` below existed to fix it for range clamping; this
+   * field exists so a caller outside that clamp never has to reach for the UTC shortcut either).
+   */
+  today: string
   // The person's today, clamped into [from, to]. Equal to `today` while the period is still in
   // progress, `to` itself once the whole period has already finished, and `from` if the period has
   // not started yet. A baseline anchored on a date that has not happened has nothing behind it,
@@ -71,6 +81,7 @@ export function usePageControls(): PageControlsState {
     ...controls,
     from,
     to,
+    today,
     // Lexicographic comparison is exact here: every side is YYYY-MM-DD, the one shape every local
     // date in this system has, so string order and calendar order agree. from <= to always (see
     // datesFor), so clamping today to at most `to` and at least `from`, in either order, lands on

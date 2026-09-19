@@ -235,16 +235,20 @@ describe('the Dashboard round trip', () => {
   // a metric only has rows under the aggs its own catalogue entry lists, so one shared request
   // would ask at least one card for an agg its metric refuses and 400 the lot
   // (requireMetricAndAgg's ConfigError). What batching by agg actually buys is fewer requests than
-  // cards: metrics that share an agg ride together.
+  // cards: metrics that share an agg AND range ride together.
   //
-  // Asserted as a property, not a count. The number of distinct aggs the dashboard needs is a
-  // detail of which cards exist and what each draws (task 10 added two more requests, 'min' and
-  // 'max', so the range card could draw a real band instead of a bare mean line), and a count
-  // pinned here is a count someone has to remember to update every time a card's data needs
-  // change, or worse, a count that quietly starts arguing a chart out of a series it should draw
-  // rather than the other way around. What is actually worth defending: requests are batched by
-  // agg (one request per distinct agg value, not one per metric), and that is fewer requests than
-  // there are metrics to fetch.
+  // Asserted as a property, not a count. The number of distinct (agg, range) pairs the dashboard
+  // needs is a detail of which cards exist and what each draws (task 10 added two more requests,
+  // 'min' and 'max', so the range card could draw a real band instead of a bare mean line; task 7
+  // added a second 'sum' and a second 'last' request, because useRecoveryIndex fetches its own
+  // wider window - recoveryWindowStart(controls.from) through controls.to, not controls.from
+  // through controls.to - so every date it scores has a full baseline-plus-sleep-week behind it,
+  // and that window cannot ride in the same request as a card asking for the visible range only),
+  // and a count pinned here is a count someone has to remember to update every time a card's data
+  // needs change, or worse, a count that quietly starts arguing a chart out of a series it should
+  // draw rather than the other way around. What is actually worth defending: requests are batched
+  // by agg within a shared range (one request per distinct (agg, from, to) triple, not one per
+  // metric), and that is fewer requests than there are metrics to fetch.
   //
   // "Fewer than there are METRICS ASKED FOR", not "fewer than there are cards on the page", and
   // the difference is not cosmetic. The rendered card count was never the quantity this test had
@@ -262,7 +266,7 @@ describe('the Dashboard round trip', () => {
   // flush() rather than a single microtask, for the same reason: one `await Promise.resolve()`
   // settles whichever stubs happen to have resolved already, so the request log itself could be
   // sampled half written. Every other test in this file already waits this way.
-  it('batches by shared agg rather than firing one request per metric', async () => {
+  it('batches by shared agg and range rather than firing one request per metric', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
@@ -272,15 +276,19 @@ describe('the Dashboard round trip', () => {
     await flush(client, () => container!.innerHTML)
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
-    const distinctAggs = new Set(seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg')))
+    const shapeOf = (u: string) => {
+      const params = new URLSearchParams(u.split('?')[1] ?? '')
+      return `${params.get('agg')}|${params.get('from')}|${params.get('to')}`
+    }
+    const distinctShapes = new Set(seriesCalls.map(shapeOf))
     const metricsAsked = seriesCalls
       .reduce((total, u) => total + new URLSearchParams(u.split('?')[1] ?? '').getAll('metric').length, 0)
     // Guards both assertions below against agreeing with an empty log: with no requests at all,
-    // toHaveLength(distinctAggs.size) is 0 against 0 and metricsAsked is 0 as well.
+    // toHaveLength(distinctShapes.size) is 0 against 0 and metricsAsked is 0 as well.
     expect(seriesCalls.length).toBeGreaterThan(0)
-    // One request per distinct agg: if two metrics sharing an agg fired separate requests instead
-    // of riding one together, seriesCalls.length would exceed distinctAggs.size.
-    expect(seriesCalls).toHaveLength(distinctAggs.size)
+    // One request per distinct (agg, range) shape: if two metrics sharing both fired separate
+    // requests instead of riding one together, seriesCalls.length would exceed distinctShapes.size.
+    expect(seriesCalls).toHaveLength(distinctShapes.size)
     // And that the batching bought something: strictly fewer requests than metrics fetched.
     expect(seriesCalls.length).toBeLessThan(metricsAsked)
     expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
@@ -324,21 +332,24 @@ describe('the Dashboard round trip', () => {
     // 5 stat tiles (steps, resting heart rate, sleep, mean heart rate, and recovery since the M3
     // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus flagged
     // days and sleep schedule, plus the three insight cards (steps, resting_heart_rate,
-    // sleep_asleep_minutes): ten, not 4 or 5. This test predates all of their returns and only
-    // ever meant "every card on the page", not "exactly the tiles"; the count is here so the NaN
-    // and delta assertions below cannot pass on a page that rendered nothing at all. Daily steps
-    // (the heatmap) is not among them: M3d2 moved it to Activity.tsx. Neither is the anomalies
-    // placeholder - it was a card whose entire content said that a feature nobody had scheduled
-    // did not exist.
+    // sleep_asleep_minutes), plus the recovery index tile this task (7) put first on the page: 11,
+    // not 4, 5 or 13. This test predates all of their returns and only ever meant "every card on
+    // the page", not "exactly the tiles"; the count is here so the NaN and delta assertions below
+    // cannot pass on a page that rendered nothing at all. Daily steps (the heatmap) is not among
+    // them: M3d2 moved it to Activity.tsx. Neither is the anomalies placeholder - it was a card
+    // whose entire content said that a feature nobody had scheduled did not exist.
     //
-    // Ten rather than the twelve this pinned before hide-empty-cards, and the two that left are
-    // the feature rather than a regression. Both are cards this stub deliberately gives nothing
-    // to draw: the heart rate range card reads /intraday, which stubFetchOnePointPerMetric
-    // answers with `points: []`, and the sleep stages card reads /sleep/nights, answered with
-    // `items: []`. A card with no rows for the period now renders no shell at all rather than an
-    // empty state inside one. Neither is an error, pending or not-synced card - those still
-    // render, since none of them is a statement about the person's record.
-    expect(container!.querySelectorAll('.card')).toHaveLength(10)
+    // Eleven, not the twelve hide-empty-cards left before this task's tile, and the two that left
+    // (heart rate range, sleep stages) are the feature rather than a regression. Both are cards
+    // this stub deliberately gives nothing to draw: the heart rate range card reads /intraday,
+    // which stubFetchOnePointPerMetric answers with `points: []`, and the sleep stages card reads
+    // /sleep/nights, answered with `items: []`. A card with no rows for the period now renders no
+    // shell at all rather than an empty state inside one. The recovery index tile is not a third:
+    // per its own design (docs/superpowers/specs/2026-09-19-recovery-index-design.md), a day it
+    // cannot score states why rather than rendering nothing, the same as an error, pending or
+    // not-synced card - none of those is a statement about the person's record either, and none
+    // of them hides.
+    expect(container!.querySelectorAll('.card')).toHaveLength(11)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

@@ -1306,5 +1306,27 @@
       "furthest": "Verste sessie",
       "fastest-km": "Snelste kilometer"
     }
+  },
+  "recoveryIndex": {
+    "label": "Herstelindex",
+    "asOf": "op {{date}}",
+    "band": {
+      "low": "Ruim onder gebruikelijk",
+      "below": "Onder gebruikelijk",
+      "usual": "Zoals gebruikelijk",
+      "above": "Boven gebruikelijk",
+      "high": "Ruim boven gebruikelijk"
+    },
+    "basis": "vergeleken met je eigen laatste {{days}} dagen",
+    "unavailable": "Te weinig recente gegevens om met je gebruikelijke waarde te vergelijken.",
+    "degraded": "berekend zonder {{inputs}}",
+    "reducedWeight": "{{inputs}} meegeteld met verminderd gewicht",
+    "input": {
+      "hrv": "Hartslagvariabiliteit",
+      "restingHeartRate": "Hartslag in rust",
+      "sleep": "Afgelopen week aan slaap",
+      "respiratoryRate": "Ademhalingsfrequentie"
+    },
+    "points": "{{points}} punten"
   }
 }
