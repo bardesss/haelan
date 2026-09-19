@@ -9,7 +9,7 @@ const HOUR_MS = 3_600_000
 // Walking back an hour at a time from a known instant inside the day, until the local date
 // changes, finds local midnight without needing the offset. That matters because the offset is
 // not constant: a DST day is 23 or 25 hours long, and a fixed 24 hour step would drift.
-function startOfLocalDay(ms: number, timeZone: string): number {
+export function startOfLocalDay(ms: number, timeZone: string): number {
   // Local midnight is always minute aligned, since no IANA zone has a sub-minute offset, so
   // flooring the seed onto the absolute minute grid first keeps every probe on that grid too.
   // Without this, a seed carrying a sub-minute residue (Date.now() is never exactly :00.000)

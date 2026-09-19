@@ -23,7 +23,7 @@ import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import {
   AccountStore, ConfigError, DATABASE_FILENAME, EventStore, HaelanError, McpTokenStore, PeopleStore,
-  closeDatabase, localDateInZone, openDatabase,
+  closeDatabase, localDateInZone, openDatabase, startOfLocalDay,
 } from '@haelan/core'
 import type { Database } from '@haelan/core'
 import { readConfig } from './config.ts'
@@ -277,44 +277,26 @@ async function harvestRecovery(
   return 0
 }
 
-const HOUR_MS = 3_600_000
-const DAY_MS = 24 * HOUR_MS
+const DAY_MS = 86_400_000
 
 /**
  * The UTC instant of local midnight opening `localDate` in `timeZone`, and the offset in force at
  * that instant, in minutes.
  *
- * `sync/windows.ts`'s private `startOfLocalDay` already does exactly this - walking back an hour
- * at a time and bisecting to the minute, because a DST day is 23 or 25 hours long and a fixed 24
- * hour step would drift - but it is not exported, and it seeds from an instant already known to
- * fall inside the target local day rather than from a date string. Task 10 touches only this file,
- * so rather than exporting that helper (or hand rolling a second, independent way to turn an
- * offset into an instant) this reproduces its walk-and-bisect using the one piece of that
- * machinery the package does export: `localDateInZone`, the same IANA aware day-comparison
- * `startOfLocalDay` itself is built on.
- *
- * The seed is UTC midnight of `localDate`, nudged forward a day when that seed lands in the
- * previous local day - the one case it can, for any real offset (UTC-12 to UTC+14, the same range
- * `widenedUtcWindow` guards elsewhere): a zone behind UTC reads UTC midnight as still being the
- * previous local day, and a zone ahead of UTC never does, because no zone is a full day ahead.
+ * `startOfLocalDay` (exported from `sync/windows.ts`, the same module `dayWindows` uses it in)
+ * already walks back an hour at a time and bisects to the minute to find this - because a DST day
+ * is 23 or 25 hours long and a fixed 24 hour step would drift - but it seeds from an instant
+ * already known to fall inside the target local day, not from a date string. The seed here is UTC
+ * midnight of `localDate`, nudged forward a day when that seed lands in the previous local day -
+ * the one case it can, for any real offset (UTC-12 to UTC+14, the same range `widenedUtcWindow`
+ * guards elsewhere): a zone behind UTC reads UTC midnight as still being the previous local day,
+ * and a zone ahead of UTC never does, because no zone is a full day ahead.
  */
 function localMidnight(localDate: string, timeZone: string): { startedAtMs: number, offsetMinutes: number } {
   let seed = Date.parse(`${localDate}T00:00:00Z`)
   if (localDateInZone(seed, timeZone) !== localDate) seed += DAY_MS
-  const target = localDateInZone(seed, timeZone)
+  const startedAtMs = startOfLocalDay(seed, timeZone)
 
-  let probe = seed
-  while (localDateInZone(probe - HOUR_MS, timeZone) === target) probe -= HOUR_MS
-  let lo = probe - HOUR_MS
-  let hi = probe
-  while (hi - lo > 60_000) {
-    const mid = lo + Math.floor((hi - lo) / 2 / 60_000) * 60_000
-    if (mid === lo) break
-    if (localDateInZone(mid, timeZone) === target) hi = mid
-    else lo = mid
-  }
-
-  const startedAtMs = hi
   const utcMidnight = Date.parse(`${localDate}T00:00:00Z`)
   // Local wall clock at startedAtMs is midnight of localDate; that wall clock, read as if it were
   // itself UTC, is utcMidnight. So utcMidnight = startedAtMs + offsetMinutes * 60_000 - the same
