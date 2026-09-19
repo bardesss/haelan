@@ -162,7 +162,7 @@ describe('the natural key, rebuilt on refs', () => {
 
     const replayOnce = (): number => db.transaction((tx) => replayPerson(tx, {
       personId: 'p1', payloads: archive.listFor('p1'), archive,
-      sources: new SourceRegistry(db), nowMs: 1,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
     }).samples)
 
     const afterFirst = replayOnce()

@@ -234,6 +234,10 @@ export function runRebuild(input: RebuildInput): RebuildReport {
 
         const counts = replayPerson(tx, {
           personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
+          // The connection this transaction is running on, which the replay's per-page
+          // savepoints are issued against. Same connection, same transaction - the property the
+          // comment above already depends on for the stores.
+          client: input.db.$client,
         })
 
         const dropped = dropUnreferencedSources(tx, personId, keys)

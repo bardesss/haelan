@@ -12,7 +12,7 @@ import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { ArchivedPayload, RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
 import { makeDropCollector, withPage } from './withPage.ts'
-import type { Drop } from './withPage.ts'
+import type { Drop, PageConnection } from './withPage.ts'
 
 /**
  * Consecutive dropped units that mean the environment is wrong rather than the data.
@@ -29,6 +29,18 @@ export interface ReplayInput {
   archive: RawArchive
   sources: SourceRegistry
   nowMs: number
+  /**
+   * The connection `tx` is running on, which is `db.$client` at every caller.
+   *
+   * Passed beside the transaction handle rather than derived from it because a drizzle
+   * transaction handle has no `$client` - that is the whole reason `DbOrTx` exists (see
+   * db/open.ts). withPage needs the connection to open and close its savepoints without
+   * preparing a statement per unit, and the WHY comment there has the measurement. Handing it
+   * in rather than reaching into drizzle's internals for it keeps the dependency on drizzle to
+   * the one thing this file already relies on: that both handles are the same connection, so
+   * statements issued through either join the same transaction.
+   */
+  client: PageConnection
 }
 
 export interface ReplayCounts {
@@ -165,7 +177,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
 
     if (group.isRollup) {
       for (const page of group.pages) {
-        const committed = withPage(tx, { dataType: group.dataType, pages: 1 }, collector, () => {
+        const committed = withPage(input.client, { dataType: group.dataType, pages: 1 }, collector, () => {
           const mapped = mapRollups({
             dataType: t, personId: input.personId,
             body: input.archive.getBody(input.personId, page.id),
@@ -212,7 +224,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // tier 2, so every row inserted below is new: there is no previous row for any session to
         // have moved away from.
         for (const page of group.pages) {
-          const committed = withPage(tx, { dataType: group.dataType, pages: 1 }, collector, () => {
+          const committed = withPage(input.client, { dataType: group.dataType, pages: 1 }, collector, () => {
             const { sessions: rows, segments } = mapSessions({
               dataType: t, personId: input.personId, resolveSource,
               body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
@@ -251,7 +263,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // its own, so there is no reason to reassemble fetch episodes the way the samples path below
         // has to.
         for (const page of group.pages) {
-          const committed = withPage(tx, { dataType: group.dataType, pages: 1 }, collector, () => {
+          const committed = withPage(input.client, { dataType: group.dataType, pages: 1 }, collector, () => {
             const rows = mapObservations({
               dataType: t, personId: input.personId, resolveSource,
               body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
@@ -301,7 +313,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // the number an operator reads has to be how much of the archive went unreplayed, not
         // how many times this loop gave up.
         const unit = { dataType: group.dataType, pages: episode.length }
-        const committed = withPage(tx, unit, collector, () => {
+        const committed = withPage(input.client, unit, collector, () => {
           const pages = episode.map((p) => ({
             body: input.archive.getBody(input.personId, p.id),
             rawPayloadId: p.id,

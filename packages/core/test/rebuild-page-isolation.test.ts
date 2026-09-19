@@ -25,7 +25,7 @@ const CUT_SHORT = 'unexpected end of file'
 const replay = (db: TestDatabase['db'], archive: RawArchive): ReturnType<typeof replayPerson> =>
   db.transaction((tx) => replayPerson(tx, {
     personId: 'p1', payloads: archive.listFor('p1'), archive,
-    sources: new SourceRegistry(db), nowMs: 1,
+    sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
   }))
 
 // A distinct night per call, so two pages of one window are two different sessions rather than

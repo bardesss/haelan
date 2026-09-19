@@ -1,7 +1,19 @@
-import { sql } from 'drizzle-orm'
-import type { DbOrTx } from '../db/open.ts'
 import { dropReason } from './dropReason.ts'
 import { isFatalRebuildError } from './fatalError.ts'
+
+/**
+ * The connection underneath the transaction, which is all withPage needs.
+ *
+ * Structurally satisfied by better-sqlite3's own `Database`, so callers pass `db.$client`. Named
+ * as a one-method interface rather than importing better-sqlite3's type because the one method is
+ * genuinely all of it, and because that keeps this file out of the driver's type surface.
+ *
+ * `exec` rather than the transaction handle's `run`, and that is a memory fix - see the WHY on
+ * withPage.
+ */
+export interface PageConnection {
+  exec: (source: string) => unknown
+}
 
 export interface PageUnit {
   dataType: string
@@ -109,11 +121,34 @@ const SAVEPOINT_NAME = 'haelan_page'
  * after it, unguarded: if either of those threw while still inside the `try`, the `catch` below
  * would treat that as fn()'s own failure and issue `rollback to savepoint` - against a savepoint
  * that a successful `release` had already popped, and that no longer exists to roll back to.
+ *
+ * ## Why the connection's `exec`, and not the transaction handle's `run`
+ *
+ * The three statements below started life as `tx.run(sql.raw(...))`, which is the leak #275 was
+ * about, reopened one level up. Drizzle compiles and prepares a fresh better-sqlite3 statement on
+ * every `run()`, better-sqlite3 holds what a connection prepares, and nothing inside a long
+ * transaction releases any of it - the same mechanism, and the same fix, as the `insertSample`
+ * hoist in replay.ts. Measured here on drizzle-orm 0.45.2, 100,000 units inside one transaction,
+ * two statements each: RSS 196.7 -> 608.4 MB, about 4.3 KB a unit, JS heap flat throughout and
+ * no part of it returned by an explicit gc(). The same loop through `exec` grew RSS by 0.3 MB.
+ *
+ * `exec` prepares, steps and finalises internally, so it leaves nothing behind to accumulate, and
+ * there is no statement object for this helper to own, cache or accidentally carry to a second
+ * connection. Hoisting three prepared statements instead also holds flat and is faster (146 ms
+ * against 242 ms over those 100,000 units), and that difference - under a microsecond a unit -
+ * is nothing beside the mapping and the inserts a page already costs, so it does not buy back
+ * the lifetime the statements would need managing over.
+ *
+ * Issuing them against the connection rather than the transaction handle keeps them in the
+ * transaction all the same: better-sqlite3 runs one connection, so every statement issued while
+ * the transaction callback executes is part of that transaction whichever handle issued it. That
+ * is the same property runRebuild's comment on peopleStore leans on, and the one
+ * RebuildStateStore exists to stay out of the way of.
  */
 export function withPage(
-  tx: DbOrTx, unit: PageUnit, collector: DropCollector, fn: () => void,
+  sqlite: PageConnection, unit: PageUnit, collector: DropCollector, fn: () => void,
 ): boolean {
-  tx.run(sql.raw(`savepoint ${SAVEPOINT_NAME}`))
+  sqlite.exec(`savepoint ${SAVEPOINT_NAME}`)
   try {
     fn()
   } catch (error) {
@@ -121,7 +156,7 @@ export function withPage(
     // `rollback to` issued against it can fail in turn, which would surface that secondary
     // failure in place of the real one. The outer transaction is about to be abandoned anyway.
     if (isFatalRebuildError(error)) throw error
-    tx.run(sql.raw(`rollback to savepoint ${SAVEPOINT_NAME}`))
+    sqlite.exec(`rollback to savepoint ${SAVEPOINT_NAME}`)
     // ROLLBACK TO does not pop the savepoint - it only undoes the writes since it was taken and
     // leaves it on the stack so it could be rolled back to again. RELEASE is what pops it.
     //
@@ -133,11 +168,11 @@ export function withPage(
     // rolling back to it, sitting open for the rest of the person's rebuild. On an archive with
     // thousands of bad pages that is thousands of pinned sub-journals never released until the
     // whole rebuild ends, not a correctness bug but a real resource cost this avoids.
-    tx.run(sql.raw(`release savepoint ${SAVEPOINT_NAME}`))
+    sqlite.exec(`release savepoint ${SAVEPOINT_NAME}`)
     collector.record(unit, error)
     return false
   }
-  tx.run(sql.raw(`release savepoint ${SAVEPOINT_NAME}`))
+  sqlite.exec(`release savepoint ${SAVEPOINT_NAME}`)
   collector.succeeded()
   return true
 }
