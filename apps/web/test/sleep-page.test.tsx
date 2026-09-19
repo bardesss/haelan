@@ -751,17 +751,18 @@ describe('the Sleep page', () => {
   })
 
   // Suppression, exercised with a null current rather than the suppressed flag alone: this pins
-  // the hazard note's own "vary your fixtures" example (a null field), and confirms the card falls
-  // back to the safe empty state rather than reaching formatDuration with a null it cannot handle.
-  it('falls back to the insufficient message when the server suppresses the sleep insight', async () => {
+  // the hazard note's own "vary your fixtures" example (a null field), and confirms the card gates
+  // on the null rather than reaching formatDuration with one it cannot handle. The gate now drops
+  // the whole card rather than swapping in an empty state, so the absent .card element is both
+  // halves of the claim: nothing was formatted, and nothing was drawn.
+  it('hides the sleep insight card when the server suppresses it', async () => {
     const restore = stubSleep([], undefined, false, { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
     const { client, tree } = withQuery(<Sleep />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
     await flush(client, () => container!.innerHTML)
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Time asleep, this period against the last')
-    expect(card?.textContent).toContain('too few days')
-    expect(card?.querySelector('.insight-summary')).toBeNull()
+    expect(card).toBeUndefined()
     restore()
   })
 
