@@ -70,9 +70,11 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
  * A third state, `insufficient`, lived here until M3e-2 marked it for removal: no caller in
  * apps/web ever passed a baseline, since Dashboard.tsx withholds one on purpose (a thin baseline
  * should blank the band a chart draws rather than the lines themselves), so the branch could
- * never fire through this function. Its copy lives on as a suppressed insight card's own
- * `thin-days` reason (InsightCard.tsx), which reuses the `emptyState.insufficient` translation
- * key verbatim without ever calling this function.
+ * never fire through this function. Its copy used to live on as a suppressed insight card's own
+ * `thin-days` reason (InsightCard.tsx), reusing the `emptyState.insufficient` translation key
+ * verbatim without ever calling this function; the hide-empty-cards feature retired that branch
+ * too, so `thin-days` now renders nothing and the `insufficient` key is gone from both catalogues.
+ * This paragraph stays as the record of why `emptyStateFor` has three kinds and not four.
  */
 export function emptyStateFor(
   metric: string, points: SeriesPoint[] | undefined, excludedTypes: readonly string[] = [],
