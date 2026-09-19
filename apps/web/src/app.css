@@ -559,9 +559,15 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .setup-step h2 { font-size: var(--font-size-md); margin: var(--space-5) 0 var(--space-2); letter-spacing: -.01em; }
 .setup-step h2:first-of-type { margin-top: 0; }
 .setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-4); }
-.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
-.setup-instructions li { margin-bottom: var(--space-2); }
-.setup-instructions li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+/* .setup-costs reads identically and is a separate class on purpose: setup-screens.test.tsx pins
+   that the phone path's button sits above the console instructions by looking for
+   `setup-instructions` in the rendered markup, and a costs list sharing that class would be found
+   first and read as the instructions it is meant to sit above. Two lists on one screen that mean
+   different things, one to follow and one to weigh, and the guard can only tell them apart if the
+   class does. */
+.setup-instructions, .setup-costs { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
+.setup-instructions li, .setup-costs li { margin-bottom: var(--space-2); }
+.setup-instructions li::marker, .setup-costs li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-relaxed); background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
 .setup-uris { margin-bottom: var(--space-4); }
 .setup-scopes { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }

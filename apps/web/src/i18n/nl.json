@@ -18,7 +18,9 @@
     "failed": "Dat is niet gelukt. Probeer het opnieuw.",
     "pathTitle": "Hoe verbind je?",
     "pathGoogle": "Met Google",
-    "pathCompanion": "Met de Android-app"
+    "pathCompanion": "Met de Android-app",
+    "pathGoogleHint": "De Google client van je huishouden. Alles wat haelan kan lezen.",
+    "pathCompanionHint": "Geen Google account. Alleen Android, ongeveer 30 dagen geschiedenis, geen ECG."
   },
   "shell": {
     "signOut": "Uitloggen",
@@ -836,9 +838,16 @@
       "saving": "Bezig met opslaan",
       "submit": "Opslaan en toestemming geven",
       "withoutGoogle": "Doorgaan zonder Google",
-      "withoutGoogleNote": "Geen Google Cloud-project nodig. Gebruik in plaats daarvan de Android-companion-app met Health Connect en druk daar op Synchroniseren om metingen hierheen te sturen.",
+      "withoutGoogleNote": "Geen Google Cloud project, geen console stappen, en geen waarschuwing over een niet geverifieerde app. De Android app leest Health Connect en stuurt metingen hierheen.",
       "choiceTitle": "Hoe verbind je?",
-      "companionTitle": "Met de Android-app"
+      "companionTitle": "Met de Android-app",
+      "withoutGoogleCostsIntro": "Dit pad is kleiner. Dit kan het niet:",
+      "withoutGoogleCost1": "Alleen Android. Een huisgenoot met een iPhone heeft nog steeds een Google client nodig.",
+      "withoutGoogleCost2": "Geen ECG en geen meldingen voor onregelmatig hartritme. Health Connect kent ze allebei niet.",
+      "withoutGoogleCost3": "Geen dagoverzichten. Slaaptemperatuur, zone minuten en ademhalingsfrequentie rekent Google op zijn eigen servers uit.",
+      "withoutGoogleCost4": "Ongeveer 30 dagen geschiedenis, en niets van voor je de app installeert.",
+      "withoutGoogleCost5": "Alleen wat andere apps naar Health Connect hebben geschreven.",
+      "withoutGoogleCost6": "Synchroniseren hangt af van de telefoon. Doze en batterijbesparing veroorzaken gaten, en die gaten zie je niet."
     },
     "backfill": {
       "title": "De geschiedenis wordt aangevuld",

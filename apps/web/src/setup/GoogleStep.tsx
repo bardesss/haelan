@@ -36,6 +36,22 @@ export function GoogleStep({ candidates, scopes = [], error, onDone, onCompanion
           beside the client form below rather than inside it. */}
       <h2>{t('setup.google.companionTitle')}</h2>
       <p>{t('setup.google.withoutGoogleNote')}</p>
+      {/* Every cost on the screen rather than behind a disclosure, because this choice is one a
+          household lives with: an instance that skips the Cloud project is a smaller instance, and
+          the six below are what it cannot do. `.setup-costs` reads exactly like the console steps'
+          own list, so the alternative sits in the same rhythm as the thing it is an alternative to,
+          but it is a class of its own because setup-screens.test.tsx locates those instructions by
+          class to pin that this button sits above them. The note above leads with what the path
+          removes, so the step reads as a choice rather than a warning. */}
+      <p>{t('setup.google.withoutGoogleCostsIntro')}</p>
+      <ul className="setup-costs">
+        <li>{t('setup.google.withoutGoogleCost1')}</li>
+        <li>{t('setup.google.withoutGoogleCost2')}</li>
+        <li>{t('setup.google.withoutGoogleCost3')}</li>
+        <li>{t('setup.google.withoutGoogleCost4')}</li>
+        <li>{t('setup.google.withoutGoogleCost5')}</li>
+        <li>{t('setup.google.withoutGoogleCost6')}</li>
+      </ul>
       <div className="form-actions">
         <button
           type="button"
