@@ -153,7 +153,13 @@ describe('the wizard screens', () => {
   it('offers finishing without Google beside the client form', () => {
     const html = render(<GoogleStep candidates={CANDIDATES} error={null} onDone={() => {}} onCompanion={() => {}} />)
     expect(html).toContain('Continue without Google')
-    expect(html).toContain('No Google Cloud project needed')
+    expect(html).toContain('no unverified app warning')
+    // Every cost of the phone path is on the screen, not behind a disclosure: somebody choosing it
+    // is choosing a smaller instance, and the first and last of the six are the ones that decide
+    // whether they can use it at all. Asserting two of the six rather than a count, so adding a
+    // seventh is not a failure while dropping the platform limit is.
+    expect(html).toContain('Android only')
+    expect(html).toContain('the gaps are silent')
     // Still a Google screen first: the client form stays the primary path.
     expect(html).toContain('Save and grant consent')
   })

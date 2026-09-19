@@ -98,16 +98,24 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
 
         <fieldset className="field">
           <legend className="label">{t('invite.pathTitle')}</legend>
+          {/* A hint under each label rather than the six costs the wizard's own step lists: a
+              member redeeming an invite gets a radio button and not a screen. The three named are
+              the ones that decide whether somebody can use the path at all, the platform, the depth
+              and the missing type; the rest are quality of life and live in the README. Three words
+              per option was the whole of this choice before, which is less than the admin gets for
+              the same decision. */}
           <label>
             <input type="radio" name="path" value="google" checked={path === 'google'}
               onChange={() => setPath('google')} />
             {t('invite.pathGoogle')}
           </label>
+          <p className="field-hint">{t('invite.pathGoogleHint')}</p>
           <label>
             <input type="radio" name="path" value="companion" checked={path === 'companion'}
               onChange={() => setPath('companion')} />
             {t('invite.pathCompanion')}
           </label>
+          <p className="field-hint">{t('invite.pathCompanionHint')}</p>
         </fieldset>
 
         <div className="form-actions">

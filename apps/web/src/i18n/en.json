@@ -18,7 +18,9 @@
     "failed": "That did not work. Try again.",
     "pathTitle": "How will you connect?",
     "pathGoogle": "With Google",
-    "pathCompanion": "With the Android app"
+    "pathCompanion": "With the Android app",
+    "pathGoogleHint": "Your household's Google client. Everything haelan can read.",
+    "pathCompanionHint": "No Google account. Android only, about 30 days of history, no ECG."
   },
   "shell": {
     "signOut": "Sign out",
@@ -836,9 +838,16 @@
       "saving": "Saving",
       "submit": "Save and grant consent",
       "withoutGoogle": "Continue without Google",
-      "withoutGoogleNote": "No Google Cloud project needed. Use the Android companion app with Health Connect instead, and press its Sync button to send readings here.",
+      "withoutGoogleNote": "No Google Cloud project, no console steps, and no unverified app warning. The Android app reads Health Connect and sends readings here.",
       "choiceTitle": "How will you connect?",
-      "companionTitle": "With the Android app"
+      "companionTitle": "With the Android app",
+      "withoutGoogleCostsIntro": "This path is smaller. It cannot do these:",
+      "withoutGoogleCost1": "Android only. A member on an iPhone still needs a Google client.",
+      "withoutGoogleCost2": "No ECG and no irregular rhythm notifications. Health Connect has neither.",
+      "withoutGoogleCost3": "No daily summaries. Sleep temperature, zone minutes and respiratory rate are computed on Google's servers.",
+      "withoutGoogleCost4": "About 30 days of history, and nothing from before you install the app.",
+      "withoutGoogleCost5": "Only what other apps have written to Health Connect.",
+      "withoutGoogleCost6": "Sync depends on the phone. Doze and battery saving cause gaps, and the gaps are silent."
     },
     "backfill": {
       "title": "Filling in your history",
