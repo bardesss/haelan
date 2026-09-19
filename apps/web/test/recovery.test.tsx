@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { Recovery } from '../src/pages/Recovery.js'
+import { contributionRows } from '../src/pages/recovery/RecoveryIndexCard.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Insight } from '../src/data/useInsight.js'
@@ -130,15 +131,24 @@ function stubRecoveryPerMetric(values: Record<string, number>): () => void {
 }
 
 describe('the Recovery page', () => {
-  // All three metrics share an agg, so the page costs one round trip. Asserting the property
-  // rather than a literal count: a pinned number once forced a chart to draw less than it claimed.
+  // All three metrics share an agg, so the page's own three cards cost one round trip. Asserting
+  // the property rather than a literal count: a pinned number once forced a chart to draw less
+  // than it claimed.
+  //
+  // Filtered to exclude sleep_bedtime_minutes and sleep_asleep_minutes: Task 8's RecoveryIndexCard
+  // mounts its own useRecoveryIndex, which fires two /series requests of its own (a 'last' group
+  // for hrv/restingHeartRate/respiratoryRate/bedtime and a 'sum' group for asleep minutes), over a
+  // range shifted back by the baseline window - a real, separate cost this test is not about.
+  // Those two carry sleep_bedtime_minutes or sleep_asleep_minutes and nothing else here does, so
+  // filtering them out leaves exactly the page's own three-metric group to assert against.
   it('asks for its three metrics in one request', async () => {
     const urls: string[] = []
     const restore = stubRecovery(urls)
     const { client, tree } = withQuery(<Recovery />)
     mount(tree)
     await flush(client, () => container!.innerHTML)
-    const series = urls.filter((u) => u.includes('/series'))
+    const series = urls.filter((u) =>
+      u.includes('/series') && !u.includes('sleep_bedtime_minutes') && !u.includes('sleep_asleep_minutes'))
     expect(series).toHaveLength(1)
     expect(series[0]!.match(/metric=/g)).toHaveLength(3)
     restore()
@@ -397,5 +407,21 @@ describe('the Recovery page', () => {
     expect(card?.textContent).toContain('device')
     expect(card?.querySelector('.insight-summary')).toBeNull()
     restore()
+  })
+})
+
+describe('contributionRows', () => {
+  it('orders inputs by how much they moved the score, largest first', () => {
+    const rows = contributionRows([
+      { key: 'hrv', z: 0.2, weight: 0.35, points: 2 },
+      { key: 'restingHeartRate', z: -1.4, weight: 0.30, points: -11 },
+      { key: 'sleep', z: 0.1, weight: 0.25, points: 1 },
+    ])
+    expect(rows.map((row) => row.key)).toEqual(['restingHeartRate', 'hrv', 'sleep'])
+  })
+
+  it('rounds points to whole numbers, because a tenth of a point means nothing', () => {
+    const rows = contributionRows([{ key: 'hrv', z: 0.2, weight: 1, points: -11.4 }])
+    expect(rows[0]?.points).toBe(-11)
   })
 })

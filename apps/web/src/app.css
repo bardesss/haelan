@@ -434,6 +434,17 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    .empty, because this says the derived score has not enough recent history to compare against,
    not that the card's underlying metrics had no rows. */
 .recovery-index-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
+/* RecoveryIndexCard.tsx's own attribution list, below the sparkline: a plain list rather than a
+   table (each row is one input's own name against its own points, not a value under a shared
+   column header), the same reasoning .workout-comparison's own comment states. Rows separated by
+   .night-row's own bottom-border idiom rather than a gap between list items, since this list, like
+   that one, is read top to bottom as a sequence of rows rather than as a set of separate blocks. */
+.recovery-index-contributions { list-style: none; margin: var(--space-3) 0 0; padding: 0; font-size: var(--font-size-sm); }
+.recovery-index-contributions li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-subtle); color: var(--text-secondary);
+}
+.recovery-index-contributions li:last-child { border-bottom: 0; }
 
 /* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
