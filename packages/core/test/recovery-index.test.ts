@@ -279,14 +279,14 @@ describe('recoveryIndex', () => {
 describe('bandOf', () => {
   it('names five comparative bands with 50 sitting in the middle one', () => {
     expect(bandOf(50)).toBe('usual')
-    expect(bandOf(37)).toBe('usual')
+    expect(bandOf(34)).toBe('usual')
     expect(bandOf(63)).toBe('usual')
-    expect(bandOf(36)).toBe('below')
+    expect(bandOf(33)).toBe('below')
     expect(bandOf(64)).toBe('above')
-    expect(bandOf(21)).toBe('below')
-    expect(bandOf(79)).toBe('above')
-    expect(bandOf(20)).toBe('low')
-    expect(bandOf(80)).toBe('high')
+    expect(bandOf(14)).toBe('below')
+    expect(bandOf(81)).toBe('above')
+    expect(bandOf(13)).toBe('low')
+    expect(bandOf(82)).toBe('high')
   })
 
   it('covers 0 and 100, so no score is unlabelled', () => {

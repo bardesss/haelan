@@ -387,23 +387,29 @@ export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
  * person's own normal and stop.
  *
  * The cut points are derived, not round numbers: they mark the score below which the bottom tenth
- * of days fall, the score below which the next fifth fall, and so on outward from the middle,
- * symmetrically - bottom tenth / next fifth / middle two-fifths / next fifth / top tenth. Each cut
- * was found by taking the percentile's z-score under a normal approximation of the composite's
- * measured spread, then mapping it through the same logistic curve `recoveryIndexSeries` uses to
- * turn a composite into a score, at the current `RECOVERY_SCALE`. That derivation depends on this
- * household's archive, so the numbers behind it are not repeated here - what is fixed, and what a
- * refit must reproduce, is the percentile intent below.
+ * of days fall, the score below which the next fifth fall, and so on outward from the middle - NOT
+ * symmetrically, because there is no reason to expect the composite is: bottom tenth / next fifth /
+ * middle two-fifths / next fifth / top tenth. Each cut was found by reading that percentile of the
+ * composite straight off `scripts/probe-recovery-scale.mjs`'s output against this household's
+ * archive, then mapping it through the same logistic curve `recoveryIndexSeries` uses to turn a
+ * composite into a score, at the current `RECOVERY_SCALE`. Deliberately not estimated from a single
+ * tail under an assumed distribution shape - an earlier version of this comment did that, and two
+ * reasonable-looking single-tail estimates disagreed by several points because the composite is not
+ * symmetric. Reading the percentile the cut actually needs, rather than inferring it, is what makes
+ * that disagreement impossible. That derivation depends on this household's archive, so the numbers
+ * behind it are not repeated here - what is fixed, and what a refit must reproduce, is the
+ * percentile intent below.
  *
  * **If `RECOVERY_SCALE` is ever refit** against harvested Google Health scores, these five cuts do
- * not follow along automatically - they must be re-derived from the same intent (bottom tenth, next
- * fifth, middle two-fifths, next fifth, top tenth) using the new scale. Leaving the old cuts in
- * place after a refit would silently change what fraction of days each band actually covers.
+ * not follow along automatically - the probe must be re-run and these five cuts re-derived from the
+ * same intent (bottom tenth, next fifth, middle two-fifths, next fifth, top tenth) against the new
+ * scale. Leaving the old cuts in place after a refit would silently change what fraction of days
+ * each band actually covers.
  */
 export function bandOf(score: number): RecoveryBand {
-  if (score < 21) return 'low'
-  if (score < 37) return 'below'
+  if (score < 14) return 'low'
+  if (score < 34) return 'below'
   if (score <= 63) return 'usual'
-  if (score <= 79) return 'above'
+  if (score <= 81) return 'above'
   return 'high'
 }

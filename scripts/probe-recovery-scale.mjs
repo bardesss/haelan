@@ -3,7 +3,7 @@
 // off a household archive.
 //
 //   node --experimental-strip-types scripts/probe-recovery-scale.mjs .local-archive/haelan.sqlite
-import { recoveryIndexSeries, recoveryWindowStart } from '../packages/core/src/api/recoveryIndex.ts'
+import { recoveryIndexSeries, recoveryWindowStart, RECOVERY_SCALE } from '../packages/core/src/api/recoveryIndex.ts'
 
 // better-sqlite3 is a dependency of packages/core, not of the repo root, so pnpm only links it
 // under packages/core/node_modules - a bare `import Database from 'better-sqlite3'` run from here
@@ -71,4 +71,18 @@ for (const [personId, input] of byPerson) {
   // k such that the 5th and 95th percentile land near 10 and 90, which is a score using its range.
   const suggested = Math.log(9) / Math.max(Math.abs(at(0.05)), Math.abs(at(0.95)))
   console.log(`  suggested RECOVERY_SCALE: ${suggested.toFixed(3)}`)
+  // The four percentiles bandOf's five-way split needs (bottom tenth / next fifth / middle two
+  // fifths / next fifth / top tenth), read straight off the data rather than estimated from a
+  // single tail under a normality assumption - the composite need not be symmetric.
+  console.log(`  p10 ${at(0.10).toFixed(3)}  p30 ${at(0.30).toFixed(3)}  p70 ${at(0.70).toFixed(3)}  p90 ${at(0.90).toFixed(3)}`)
+  // Each mapped through the same curve recoveryIndexSeries uses, at the shipped RECOVERY_SCALE, so
+  // this prints the bandOf cut points directly rather than leaving that arithmetic to be redone by
+  // hand from the raw composite percentiles above.
+  const scoreAt = (composite) => 100 / (1 + Math.exp(-RECOVERY_SCALE * composite))
+  console.log(
+    `  band cuts (score)  low/below ${scoreAt(at(0.10)).toFixed(2)}` +
+    `  below/usual ${scoreAt(at(0.30)).toFixed(2)}` +
+    `  usual/above ${scoreAt(at(0.70)).toFixed(2)}` +
+    `  above/high ${scoreAt(at(0.90)).toFixed(2)}`,
+  )
 }
