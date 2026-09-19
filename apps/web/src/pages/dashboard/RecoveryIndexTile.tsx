@@ -73,7 +73,7 @@ export function RecoveryIndexTile({ from, to, source, today, span = 4 }: {
   ].filter((part): part is string => part !== undefined).join('; ')
 
   return (
-    <Card span={span}>
+    <Card span={span} label={t('recoveryIndex.label')}>
       <StatTile
         label={t(`recoveryIndex.band.${bandOf(latest.index.score)}`)}
         value={String(latest.index.score)}
