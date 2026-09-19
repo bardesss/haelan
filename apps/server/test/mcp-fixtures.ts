@@ -1,7 +1,8 @@
 import {
-  schema, DERIVATION_VERSION, insertSample, NoteStore, EventStore,
+  schema, DERIVATION_VERSION, insertSample, NoteStore, EventStore, shiftLocalDate,
 } from '@haelan/core'
 import type { DbOrTx } from '@haelan/core'
+import { recoveryWindowStart } from '@haelan/core/recovery-index'
 
 /**
  * Representative arguments for every tool in CATALOGUE, keyed by name.
@@ -17,6 +18,16 @@ import type { DbOrTx } from '@haelan/core'
  * to alice answers rather than what it refuses. The one refusal worth its own case -
  * `get_workout` handed bart's session id - is written out in each file.
  */
+
+/**
+ * The day `recovery_index` is scored on for both isolation suites, and the first day `insertRecoverySeries`
+ * writes real numbers for below. `recoveryWindowStart` (not a hand counted number) is what the day
+ * needs behind it: a 60-day baseline ending the day before, and each of those days needs its own
+ * 6-day sleep week, which is what pushes the earliest written row back to `2026-06-03`.
+ */
+export const RECOVERY_ON = '2026-08-08'
+const RECOVERY_START = recoveryWindowStart(RECOVERY_ON)
+
 export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   describe_person: {},
   list_metrics: {},
@@ -41,12 +52,10 @@ export const TOOL_INPUTS: Record<string, Record<string, unknown>> = {
   // column, so this is every daily row the bound person can see - which is exactly what the
   // isolation suites then check for a second person's fingerprints.
   sql_query: { sql: 'SELECT local_date, metric, value FROM daily ORDER BY local_date' },
-  // seedToolData writes no daily_hrv, resting_heart_rate, respiratory_rate, sleep_asleep_minutes
-  // or sleep_bedtime_minutes rows for either person, so every day in this range answers
-  // `enough: false` - there is nothing of either person's to leak, but the tool still has to run
-  // (and be refused nothing) for the isolation guarantee to cover it at all. Not in
-  // ALICE_FINGERPRINTS for the same reason: there is no scored day to assert a real number from.
-  recovery_index: { from: '2026-08-01', to: '2026-08-02' },
+  // A single scored day, backed by 67 days of real per-person recovery numbers
+  // `insertRecoverySeries` writes below - both people score `enough: true` here, which is what
+  // makes this tool's entry in ALICE_FINGERPRINTS mean something.
+  recovery_index: { from: RECOVERY_ON, to: RECOVERY_ON },
 }
 
 /**
@@ -97,7 +106,7 @@ export function numberLeak(json: string, fingerprint: string): string | null {
  * *nobody* anything would satisfy that perfectly - thirteen empty results contain no
  * fingerprints - and both isolation suites would stay green while proving nothing at all.
  *
- * A map rather than a list, and six tools rather than thirteen, because not every tool answers
+ * A map rather than a list, and seven tools rather than fourteen, because not every tool answers
  * with a person's own data: `list_metrics` returns the metric catalogue, which is identical for
  * every member. Each value below is a string `seedToolData` wrote for alice, so a tool that
  * stopped reaching her rows fails here rather than passing quietly.
@@ -113,6 +122,13 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // Both the 08-05..08 period and its computed previous period (08-01..04) carry alice's own
   // 1200, so a suppressed answer (every field null) fails this the same way a missing tool would.
   compare_periods: '1200',
+  // `insertRecoverySeries` below gives alice her own 67 days of hrv/resting-heart-rate/
+  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 75 - checked
+  // against the real recoveryIndexSeries output for these exact fixture values, not guessed. '75'
+  // is boundary-matched (see numberLeak), and nowhere else in this tool's own answer does a bare
+  // 75 occur - every other digit run in it is either a decimal fraction or embedded in a longer
+  // number, neither of which the boundary anchors match.
+  recovery_index: '75',
 }
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
@@ -132,6 +148,71 @@ export function insertSession(
     id, personId, sourceId, kind, externalId: id, startMs, startOffsetMinutes: 0,
     endMs, endOffsetMinutes: 0, localDate, attrs: JSON.stringify(attrs), rawPayloadId: null,
   }).run()
+}
+
+const RECOVERY_METRICS = [
+  { metric: 'daily_hrv', agg: 'last' as const, key: 'hrv' as const },
+  { metric: 'resting_heart_rate', agg: 'last' as const, key: 'restingHeartRate' as const },
+  { metric: 'respiratory_rate', agg: 'last' as const, key: 'respiratoryRate' as const },
+  { metric: 'sleep_asleep_minutes', agg: 'sum' as const, key: 'asleepMinutes' as const },
+  { metric: 'sleep_bedtime_minutes', agg: 'last' as const, key: 'bedtimeMinutes' as const },
+]
+
+type RecoveryInputKey = typeof RECOVERY_METRICS[number]['key']
+
+/** One person's five recovery inputs, as the centre/amplitude/spike `insertRecoverySeries` reads. */
+type RecoveryCentres = Record<RecoveryInputKey, { centre: number, amplitude: number, spike: number }>
+
+// Alice and bart's centres are far enough apart (hrv 50 vs 80, resting heart rate 55 vs 65, and
+// so on) that recovery_index leaking one person's rows into the other's answer reads as an
+// obviously wrong number, not a coincidentally similar one - the isolation suites' own bar. Each
+// spikes on RECOVERY_ON in the direction that scores well for that person (higher hrv, lower
+// resting heart rate) so the tool actually answers `enough: true` with a real, non-boundary
+// score rather than sitting at the baseline z of zero every non-spiked day gets.
+const ALICE_RECOVERY: RecoveryCentres = {
+  hrv: { centre: 50, amplitude: 4, spike: 53 },
+  restingHeartRate: { centre: 55, amplitude: 4, spike: 52 },
+  respiratoryRate: { centre: 14, amplitude: 1, spike: 13.5 },
+  asleepMinutes: { centre: 420, amplitude: 15, spike: 426 },
+  bedtimeMinutes: { centre: 1380, amplitude: 15, spike: 1378 },
+}
+
+const BART_RECOVERY: RecoveryCentres = {
+  hrv: { centre: 80, amplitude: 4, spike: 65 },
+  restingHeartRate: { centre: 65, amplitude: 4, spike: 80 },
+  respiratoryRate: { centre: 16, amplitude: 1, spike: 18 },
+  asleepMinutes: { centre: 350, amplitude: 15, spike: 300 },
+  bedtimeMinutes: { centre: 1440, amplitude: 15, spike: 1470 },
+}
+
+/**
+ * Real `daily_hrv`/`resting_heart_rate`/`respiratory_rate`/`sleep_asleep_minutes`/
+ * `sleep_bedtime_minutes` rows for one person, from `RECOVERY_START` through `RECOVERY_ON`
+ * inclusive - the exact window `recoveryWindowStart(RECOVERY_ON)` says scoring `RECOVERY_ON`
+ * needs.
+ *
+ * The daily value is `centre + amplitude * sin(i * 0.37)` for every day except the last, which
+ * gets `spike` outright. 0.37 cycles/day is deliberately not aligned with the 7-day sleep week or
+ * any small integer period: a perfectly repeating cycle (the flat ±1 this fixture tried first)
+ * gives every 7-day window, and every 60-day baseline sample, close to the same mean and spread,
+ * which sends `baselineOf`'s spread toward zero and a single day's z score toward infinity on the
+ * smallest wobble - see `packages/core/src/query/baseline.ts` and the trap Task 1 of this plan
+ * hit for the same reason. This shape keeps the baseline's own spread real, so `RECOVERY_ON`
+ * scores as an ordinary, finite, reproducible number instead.
+ */
+function insertRecoverySeries(db: DbOrTx, personId: string, centres: RecoveryCentres): void {
+  let i = 0
+  for (let date = RECOVERY_START; date <= RECOVERY_ON; date = shiftLocalDate(date, 1)) {
+    for (const { metric, agg, key } of RECOVERY_METRICS) {
+      const { centre, amplitude, spike } = centres[key]
+      const value = date === RECOVERY_ON ? spike : centre + amplitude * Math.sin(i * 0.37)
+      db.insert(schema.daily).values({
+        personId, localDate: date, metric, agg, source: 'merged',
+        value, coverage: null, sourceMix: null, derivationVersion: DERIVATION_VERSION,
+      }).run()
+    }
+    i += 1
+  }
 }
 
 /**
@@ -198,4 +279,7 @@ export function seedToolData(db: DbOrTx): void {
     personId: 'bart', kind: 'illness', startedAtMs: NINE_AM, startedAtOffsetMinutes: 0,
     note: 'bart-event-sentinel',
   })
+
+  insertRecoverySeries(db, 'alice', ALICE_RECOVERY)
+  insertRecoverySeries(db, 'bart', BART_RECOVERY)
 }
