@@ -126,6 +126,24 @@ export interface RebuildStatus {
   /** What can and cannot end up in this string is answered once, at the catch in runRebuild.ts
    * that captures it - not here and not on the admin route that reads the same column. */
   lastError: string | null
+  /**
+   * When the last rebuild attempt committed. Added so the browser can date droppedPages and
+   * producedNothing above, which otherwise persist unchanged from one boot to the next: a
+   * rebuild only reruns for a person once their version stamp goes stale, so a person stamped
+   * current while still carrying a drop or an empty rebuild would show the same numbers forever
+   * with nothing on screen saying whether that happened twenty minutes or four months ago.
+   *
+   * Not when the gap ITSELF began - a data type that keeps failing to map across two
+   * MAPPING_VERSION bumps has this timestamp walk forward on every later rebuild while the
+   * underlying gap is however old the first bad rebuild was. RebuildNotice's own copy is worded
+   * around that ("as of the rebuild ... ago"), not this field's own doc comment, since the
+   * component is what a reader actually sees.
+   *
+   * Already returned by the admin route (routes/maintenance.ts); this is the per-person mirror
+   * of the same rebuild_state column, added here for the same reason lastErrorAtMs above already
+   * is.
+   */
+  lastSuccessAtMs: number | null
   drops: { dataType: string, reason: string, pages: number }[]
 }
 
@@ -311,6 +329,7 @@ export class SyncRunner {
         producedNothing: producedNothing(rebuild),
         lastErrorAtMs: rebuild?.lastErrorAtMs ?? null,
         lastError: rebuild?.lastError ?? null,
+        lastSuccessAtMs: rebuild?.lastSuccessAtMs ?? null,
         drops: rebuild?.drops ?? [],
       },
     }
