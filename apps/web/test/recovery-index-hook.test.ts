@@ -54,16 +54,20 @@ describe('selectRecoveryQuery', () => {
     expect(query.error).toBe(error)
   })
 
-  it('surfaces the last query error over a settled sum query', () => {
-    // Error dominance was previously only exercised from the sumQuery side (plus one
-    // errored-vs-pending case). This covers the `lastQuery.isError` branch against a sumQuery that
-    // is neither erroring nor pending, so that branch fails if it is ever removed.
-    const error = new Error('last query failed')
-    const lastQuery = errored(error)
-    const sumQuery = settled({ sleep_asleep_minutes: { points: [], reduction: null } })
+  it('the last query wins when both queries are erroring', () => {
+    // A settled or absent sumQuery does not discriminate `if (lastQuery.isError) return lastQuery`:
+    // with that line deleted, control falls through the (false) sumQuery/pending checks to the
+    // final `return lastQuery` anyway, so the same lastQuery comes back either way. The only input
+    // where deleting that line changes the answer is a sumQuery that is ALSO erroring - then the
+    // fallen-through path hits `if (sumQuery.isError) return sumQuery` instead and returns the
+    // wrong query.
+    const lastError = new Error('last query failed')
+    const sumError = new Error('sum query failed')
+    const lastQuery = errored(lastError)
+    const sumQuery = errored(sumError)
     const query = selectRecoveryQuery(lastQuery, sumQuery)
-    expect(query.isError).toBe(true)
-    expect(query.error).toBe(error)
+    expect(query).toBe(lastQuery)
+    expect(query.error).toBe(lastError)
   })
 
   it('surfaces a pending sum query when the last query has already settled', () => {
@@ -73,14 +77,15 @@ describe('selectRecoveryQuery', () => {
     expect(query.isPending).toBe(true)
   })
 
-  it('surfaces a pending last query when the sum query has already settled', () => {
-    // Without this case, `if (lastQuery.isPending) return lastQuery` is dead code as far as the
-    // tests can tell: every other test either has lastQuery settled or has an error take priority
-    // before pending is ever checked.
+  it('the last query wins when both queries are pending', () => {
+    // Same reasoning as the both-erroring case above, one priority level down: a settled sumQuery
+    // does not discriminate `if (lastQuery.isPending) return lastQuery`, because the fallthrough
+    // path (both isPending checks false) still ends at `return lastQuery`. Only a sumQuery that is
+    // ALSO pending makes the fallthrough diverge, landing on `if (sumQuery.isPending) return
+    // sumQuery` instead.
     const lastQuery = pending()
-    const sumQuery = settled({ sleep_asleep_minutes: { points: [], reduction: null } })
+    const sumQuery = pending()
     const query = selectRecoveryQuery(lastQuery, sumQuery)
-    expect(query.isPending).toBe(true)
     expect(query).toBe(lastQuery)
   })
 
