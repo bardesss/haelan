@@ -1,5 +1,5 @@
 import { shiftLocalDate } from '../derive/localDay.ts'
-import { BASELINE_WINDOW_DAYS, baselineOf, zScoreOf } from '../query/baseline.ts'
+import { BASELINE_WINDOW_DAYS, baselineOf, baselineWindow, zScoreOf } from '../query/baseline.ts'
 
 /** One observed day of one metric. A day nobody wore a device is ABSENT, never present as zero. */
 export interface DayValue {
@@ -60,8 +60,7 @@ export function zSeries(
       out.set(date, null)
       continue
     }
-    const windowFrom = shiftLocalDate(date, -BASELINE_WINDOW_DAYS)
-    const windowTo = shiftLocalDate(date, -1)
+    const { from: windowFrom, to: windowTo } = baselineWindow(date)
     const history = sorted
       .filter((day) => day.localDate >= windowFrom && day.localDate <= windowTo)
       .map((day) => day.value)
