@@ -86,7 +86,7 @@ function withQuery(node: ReactNode, rebuild: RebuildNews, rebuildInFlight = fals
 describe('the control row surfaces a rebuild problem', () => {
   it('says nothing when the sync status carries no rebuild news', () => {
     mount(withQuery(
-      <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />, NO_REBUILD_NEWS,
+      <ControlRow controls={stubControls()} sources={['watch']} />, NO_REBUILD_NEWS,
     ))
     expect(container!.querySelector('.maintenance')).toBeNull()
   })
@@ -95,7 +95,7 @@ describe('the control row surfaces a rebuild problem', () => {
   // reaches their own dashboard, not only the admin's household list.
   it('renders the notice when the status carries a quarantine', () => {
     mount(withQuery(
-      <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />,
+      <ControlRow controls={stubControls()} sources={['watch']} />,
       {
         quarantined: true, awaitingRebuild: true, droppedPages: 0, drops: [],
         lastError: 'UNIQUE constraint failed: samples.id',
@@ -109,7 +109,7 @@ describe('the control row surfaces a rebuild problem', () => {
   // them since the tick after they changed their timezone, and no rebuild has failed.
   it('renders the notice when the status says a rebuild is merely awaited', () => {
     mount(withQuery(
-      <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />,
+      <ControlRow controls={stubControls()} sources={['watch']} />,
       { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
     ))
     expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.')
@@ -128,7 +128,7 @@ describe('the control row surfaces a rebuild problem', () => {
    */
   it('tells the person a rebuild is running now while the boot rebuild is in flight', () => {
     mount(withQuery(
-      <ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />,
+      <ControlRow controls={stubControls()} sources={['watch']} />,
       { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
       true,
     ))

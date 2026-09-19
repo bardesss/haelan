@@ -35,7 +35,6 @@ import { useInsight } from '../data/useInsight.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { oneNightPerDate, stageOf } from '../data/nights.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useIntraday } from '../data/useIntraday.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
@@ -303,7 +302,6 @@ export function Dashboard() {
   // for history that does not exist rather than the sixty real days behind today.
   const hrBaseline = useBaseline('heart_rate', controls.historicalTo, source, 'mean')
   const nights = useNights(range)
-  const syncStatus = useSyncStatus()
 
   // /insights takes exactly one metric and one agg per call and, unlike /series, does not batch, so
   // each of the three below is its own request rather than a shared one: three requests added on
@@ -338,12 +336,6 @@ export function Dashboard() {
   const restingHrFormat = (value: number | null, absent: string): string =>
     formatWithUnit(value, absent, (v) => formatMetricValue(v, 'resting_heart_rate', i18n.language, ''), t('dashboard.units.bpm'))
 
-  // Minutes ago, not a timestamp, because syncedAgo's own message reads "Synced N min ago". Null
-  // rather than zero when no run has ever finished: the row has its own copy for that now, and
-  // for the moment before the status query has answered.
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
@@ -599,7 +591,7 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <div className="grid">
         {/* Renders nothing once connected (ConnectGoogle.tsx's own doc comment), so a household

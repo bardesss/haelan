@@ -27,7 +27,6 @@ import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useNights } from '../data/useNights.js'
 import type { Night } from '../data/useNights.js'
 import { oneNightPerDate, stageOf } from '../data/nights.js'
@@ -316,10 +315,6 @@ export function Sleep() {
   // drawnNights.
   const drawnNights = scheduleNights.filter((n) => n.bed !== null && n.wake !== null).length
 
-  const syncStatus = useSyncStatus()
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
@@ -346,7 +341,6 @@ export function Sleep() {
     }
     return out
   }, [rangeDates, sumSeries.data, lastSeries.data, countSeries.data])
-
 
   // Every sparkline tile on this page shares one shape: a metric, a headline the caller has
   // already computed (mean for a typical night, sum for the two episodic nap metrics), and a
@@ -400,7 +394,7 @@ export function Sleep() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <div className="grid">
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the

@@ -3,6 +3,7 @@ import { useRoute, navigate, withQuery } from '../router.js'
 import { useSession } from '../auth/session.js'
 import { parseControls, datesFor, stepAnchor } from './range.js'
 import type { RangeKey } from './range.js'
+import { readRange, writeRange } from '../ui/rangePreference.js'
 
 export interface PageControlsState {
   tab: RangeKey
@@ -53,7 +54,13 @@ export function usePageControls(): PageControlsState {
   }, [session.data?.timezone])
 
   const search = route.includes('?') ? route.slice(route.indexOf('?')) : ''
-  const controls = parseControls(search, today)
+  // Read on every render rather than held in state, and that is the point rather than an
+  // oversight. State would be the second copy this hook's doc comment forbids, and it would need
+  // an effect to stay level with the URL - the exact mirroring shape that produced M3a's session
+  // expiry loop. A getItem is cheap, and reading it fresh is also what makes it correct: arriving
+  // on a page with no query of its own should honour whatever the reader last chose, including a
+  // choice made one route change ago.
+  const controls = parseControls(search, today, readRange() ?? 'month')
   const { from, to } = datesFor(controls.tab, controls.anchor)
 
   const go = (patch: Record<string, string | null>, replace: boolean) => {
@@ -70,7 +77,11 @@ export function usePageControls(): PageControlsState {
     // the same value; capping first reads closer to "today, unless the period has already ended".
     historicalTo: today > to ? to : today < from ? from : today,
     // A tab change is a place the reader can go back from, so it pushes. A stepper click is not.
-    setTab: (tab) => { go({ range: tab }, false) },
+    //
+    // The write sits in the handler, next to the navigation it accompanies, not in an effect
+    // watching controls.tab. An effect would fire for a range that arrived in a link rather than
+    // from this reader, and quietly adopt a stranger's choice as their preference.
+    setTab: (tab) => { writeRange(tab); go({ range: tab }, false) },
     setAnchor: (anchor) => { go({ on: anchor }, true) },
     step: (direction) => { go({ on: stepAnchor(controls.tab, controls.anchor, direction) }, true) },
     setSource: (source) => { go({ source }, false) },

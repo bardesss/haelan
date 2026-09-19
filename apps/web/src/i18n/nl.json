@@ -43,12 +43,19 @@
     "sourceStopped": "Gestopt met rapporteren tijdens deze periode: {{sources}}.",
     "sourceAll": "Alle bronnen",
     "downloadTotals": "Dagtotalen downloaden",
-    "sync": "Synchroniseren",
-    "syncedAgo": "Gesynchroniseerd {{count}} min geleden",
-    "neverSynced": "Nog nooit gesynchroniseerd",
-    "syncUnknown": "Synchronisatiestatus onbekend",
-    "syncAlreadyRunning": "Er loopt al een synchronisatie.",
-    "syncFailed": "Synchroniseren is niet gestart."
+    "periodSheetTitle": "Periode",
+    "close": "Sluiten"
+  },
+  "sync": {
+    "run": "Synchroniseren",
+    "ago": "Gesynchroniseerd {{count}} min geleden",
+    "never": "Nog nooit gesynchroniseerd",
+    "statusUnknown": "Synchronisatiestatus onbekend",
+    "agoShort": "{{count}}m",
+    "neverShort": "–",
+    "statusUnknownShort": "–",
+    "alreadyRunning": "Er loopt al een synchronisatie.",
+    "failed": "Synchroniseren is niet gestart."
   },
   "sidebar": {
     "sectionsLabel": "Secties",
