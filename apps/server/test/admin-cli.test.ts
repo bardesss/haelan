@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs'
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { AccountStore, McpTokenStore, createTestDatabase, seedPerson } from '@haelan/core'
+import { AccountStore, EventStore, McpTokenStore, createTestDatabase, seedPerson } from '@haelan/core'
 import type { TestDatabase } from '@haelan/core'
-import { runAdmin } from '../src/admin.ts'
+import { HARVEST_KIND, parseHarvestLines, runAdmin } from '../src/admin.ts'
 import type { AdminDeps } from '../src/admin.ts'
 
 const CREATED_MS = 1000
@@ -31,7 +31,7 @@ afterEach(() => { fixture.cleanup() })
 
 interface Capture { deps: AdminDeps, out: string[], err: string[] }
 
-function capture(secrets: readonly string[], nowMs = NOW_MS, dir?: string): Capture {
+function capture(secrets: readonly string[], nowMs = NOW_MS, dir?: string, stdin = ''): Capture {
   const out: string[] = []
   const err: string[] = []
   const queued = [...secrets]
@@ -48,6 +48,7 @@ function capture(secrets: readonly string[], nowMs = NOW_MS, dir?: string): Capt
         if (next === undefined) throw new Error('asked for more passwords than the test queued')
         return next
       },
+      readStdin: async () => stdin,
       now: () => nowMs,
       env: { HAELAN_DATA_DIR: dir ?? fixture.dir },
     },
@@ -59,6 +60,20 @@ interface LockColumns { password_hash: string, failed_attempts: number, locked_u
 const columns = (): LockColumns => fixture.db.$client
   .prepare('select password_hash, failed_attempts, locked_until_ms from accounts where id = ?')
   .get('a1') as LockColumns
+
+interface EventColumns {
+  kind: string
+  started_at_ms: number
+  started_at_offset_minutes: number
+  value: number | null
+}
+
+const eventRows = (): EventColumns[] => fixture.db.$client
+  .prepare(
+    'select kind, started_at_ms, started_at_offset_minutes, value from events '
+      + 'where person_id = ? order by started_at_ms',
+  )
+  .all('p1') as EventColumns[]
 
 async function lockTheAccount(): Promise<void> {
   for (let i = 0; i < 10; i++) {
@@ -241,5 +256,118 @@ describe('admin with no command', () => {
     expect(run.out).toEqual([])
     expect(run.err).toHaveLength(1)
     expect(run.err[0]).toContain('passwd <username>')
+  })
+})
+
+describe('parseHarvestLines', () => {
+  it('rejects a harvest line that is not a date and a number', () => {
+    const parsed = parseHarvestLines(['2026-09-14 53', 'rubbish'])
+    expect(parsed.ok).toBe(false)
+    if (parsed.ok) return
+    expect(parsed.message).toBe('line 2 is not "YYYY-MM-DD <score>": rubbish')
+  })
+
+  it('accepts well formed lines and keeps their dates and scores', () => {
+    const parsed = parseHarvestLines(['2026-09-14 53', '2026-09-13 61'])
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.rows).toEqual([
+      { localDate: '2026-09-14', score: 53 },
+      { localDate: '2026-09-13', score: 61 },
+    ])
+  })
+
+  it("rejects a score outside 0 to 100, which is the app's own scale", () => {
+    const parsed = parseHarvestLines(['2026-09-14 153'])
+    expect(parsed.ok).toBe(false)
+  })
+})
+
+describe('admin harvest-recovery', () => {
+  // seedPerson defaults to Europe/Amsterdam, which is CEST (UTC+2) in September, so local
+  // midnight of a September date is 22:00 UTC the day before, and the stored offset is 120.
+  it("writes one event per line, at local midnight in the person's own timezone", async () => {
+    const run = capture([], NOW_MS, undefined, '2026-09-14 53\n2026-09-13 61\n')
+    expect(await runAdmin(['harvest-recovery', 'robin'], run.deps)).toBe(0)
+    expect(run.err).toEqual([])
+    expect(run.out).toEqual(['2 recovery scores written for robin: 2 new, 0 replaced.'])
+
+    expect(eventRows()).toEqual([
+      {
+        kind: HARVEST_KIND,
+        started_at_ms: Date.parse('2026-09-12T22:00:00Z'),
+        started_at_offset_minutes: 120,
+        value: 61,
+      },
+      {
+        kind: HARVEST_KIND,
+        started_at_ms: Date.parse('2026-09-13T22:00:00Z'),
+        started_at_offset_minutes: 120,
+        value: 53,
+      },
+    ])
+  })
+
+  it('replaces an existing harvested score for the same date rather than duplicating it', async () => {
+    const first = capture([], NOW_MS, undefined, '2026-09-14 53\n')
+    expect(await runAdmin(['harvest-recovery', 'robin'], first.deps)).toBe(0)
+
+    const second = capture([], NOW_MS, undefined, '2026-09-14 61\n')
+    expect(await runAdmin(['harvest-recovery', 'robin'], second.deps)).toBe(0)
+    expect(second.out).toEqual(['1 recovery score written for robin: 0 new, 1 replaced.'])
+
+    const rows = eventRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.value).toBe(61)
+  })
+
+  it('never touches another kind of event on the same local day', async () => {
+    new EventStore(fixture.db).add({
+      personId: 'p1',
+      kind: 'illness',
+      startedAtMs: Date.parse('2026-09-13T22:00:00Z'),
+      startedAtOffsetMinutes: 120,
+    })
+
+    const run = capture([], NOW_MS, undefined, '2026-09-14 53\n')
+    expect(await runAdmin(['harvest-recovery', 'robin'], run.deps)).toBe(0)
+    expect(run.out).toEqual(['1 recovery score written for robin: 1 new, 0 replaced.'])
+
+    const kinds = eventRows().map((row) => row.kind).sort()
+    expect(kinds).toEqual(['illness', HARVEST_KIND].sort())
+  })
+
+  it('rejects the whole batch on the first bad line and writes nothing', async () => {
+    const run = capture([], NOW_MS, undefined, '2026-09-14 53\nrubbish\n')
+    expect(await runAdmin(['harvest-recovery', 'robin'], run.deps)).toBe(1)
+    expect(run.err).toEqual(['line 2 is not "YYYY-MM-DD <score>": rubbish'])
+    expect(run.out).toEqual([])
+    expect(eventRows()).toEqual([])
+  })
+
+  it('names an account it cannot find rather than reading stdin', async () => {
+    const run = capture([], NOW_MS, undefined, '2026-09-14 53\n')
+    expect(await runAdmin(['harvest-recovery', 'nobody'], run.deps)).toBe(1)
+    expect(run.err).toEqual(['no account named nobody'])
+    expect(eventRows()).toEqual([])
+  })
+
+  it('writes nothing and says so for an empty input', async () => {
+    const run = capture([], NOW_MS, undefined, '')
+    expect(await runAdmin(['harvest-recovery', 'robin'], run.deps)).toBe(0)
+    expect(run.out).toEqual(['no lines to harvest.'])
+    expect(eventRows()).toEqual([])
+  })
+
+  it('requires a username', async () => {
+    const run = capture([])
+    expect(await runAdmin(['harvest-recovery'], run.deps)).toBe(1)
+    expect(run.err).toEqual(['usage: harvest-recovery <username>'])
+  })
+
+  it('takes one username and rejects a trailing argument', async () => {
+    const run = capture([])
+    expect(await runAdmin(['harvest-recovery', 'robin', 'extra'], run.deps)).toBe(1)
+    expect(run.err).toEqual(['harvest-recovery takes one username and nothing else'])
   })
 })

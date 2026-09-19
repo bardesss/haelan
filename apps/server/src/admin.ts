@@ -22,16 +22,20 @@ import { createInterface } from 'node:readline/promises'
 import { Writable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import {
-  AccountStore, ConfigError, DATABASE_FILENAME, HaelanError, McpTokenStore, closeDatabase, openDatabase,
+  AccountStore, ConfigError, DATABASE_FILENAME, EventStore, HaelanError, McpTokenStore, PeopleStore,
+  closeDatabase, localDateInZone, openDatabase,
 } from '@haelan/core'
 import type { Database } from '@haelan/core'
 import { readConfig } from './config.ts'
 
 const USAGE = `usage: node --experimental-strip-types apps/server/src/admin.ts <command>
 
-  list               every account, with whether it is an admin, disabled or locked
-  passwd <username>  set a new password, asked for twice on stdin and never echoed
-  unlock <username>  clear a lockout for somebody who knows their password
+  list                        every account, with whether it is an admin, disabled or locked
+  passwd <username>           set a new password, asked for twice on stdin and never echoed
+  unlock <username>           clear a lockout for somebody who knows their password
+  harvest-recovery <username> read "YYYY-MM-DD <score>" lines on stdin and store them as that
+                               person's Google Health recovery scores, typed by hand off the
+                               app's own history screens - there is no API for this number
 
 The data directory comes from HAELAN_DATA_DIR, the same as the server reads it.`
 
@@ -46,14 +50,51 @@ export interface AdminDeps {
   err: (line: string) => void
   /** Asks for one line and returns it without it ever reaching the terminal. */
   readSecret: (label: string) => Promise<string>
+  /** Reads stdin to its end and returns everything written to it, unmasked. */
+  readStdin: () => Promise<string>
   now: () => number
   env: NodeJS.ProcessEnv
+}
+
+/** The `kind` harvested Google Health recovery scores are stored under. */
+export const HARVEST_KIND = 'google_recovery_score'
+
+export interface HarvestRow {
+  localDate: string
+  score: number
+}
+
+export type HarvestParse =
+  | { ok: true, rows: HarvestRow[] }
+  | { ok: false, message: string }
+
+/**
+ * Parses `YYYY-MM-DD <score>` lines.
+ *
+ * Rejects the whole batch on the first bad line rather than skipping it. A harvest is typed by
+ * hand off an app's history tabs, and silently dropping a misread line would leave somebody
+ * believing they had logged a day they had not.
+ */
+export function parseHarvestLines(lines: readonly string[]): HarvestParse {
+  const rows: HarvestRow[] = []
+  for (const [index, raw] of lines.entries()) {
+    const line = raw.trim()
+    if (line === '') continue
+    const match = /^(\d{4}-\d{2}-\d{2})\s+(\d{1,3})$/.exec(line)
+    const score = match === null ? NaN : Number(match[2])
+    if (match === null || !Number.isInteger(score) || score < 0 || score > 100) {
+      return { ok: false, message: `line ${index + 1} is not "YYYY-MM-DD <score>": ${line}` }
+    }
+    rows.push({ localDate: match[1] as string, score })
+  }
+  return { ok: true, rows }
 }
 
 type Command =
   | { name: 'list' }
   | { name: 'passwd', username: string }
   | { name: 'unlock', username: string }
+  | { name: 'harvest-recovery', username: string }
 
 type ParseResult = { ok: true, command: Command } | { ok: false, message: string }
 
@@ -61,6 +102,11 @@ function parse(argv: readonly string[]): ParseResult {
   const [name, username, ...rest] = argv
   if (name === 'list') {
     return argv.length === 1 ? { ok: true, command: { name } } : { ok: false, message: 'list takes no arguments' }
+  }
+  if (name === 'harvest-recovery') {
+    if (username === undefined) return { ok: false, message: 'usage: harvest-recovery <username>' }
+    if (rest.length > 0) return { ok: false, message: 'harvest-recovery takes one username and nothing else' }
+    return { ok: true, command: { name, username } }
   }
   if (name !== 'passwd' && name !== 'unlock') return { ok: false, message: USAGE }
   if (username === undefined) return { ok: false, message: `usage: ${name} <username>` }
@@ -102,7 +148,9 @@ export async function runAdmin(argv: readonly string[], deps: AdminDeps): Promis
   let db: Database | null = null
   try {
     db = openDatabase(dataDir)
-    return await execute(parsed.command, new AccountStore(db), new McpTokenStore(db), deps)
+    return await execute(
+      parsed.command, new AccountStore(db), new McpTokenStore(db), new PeopleStore(db), new EventStore(db), deps,
+    )
   } catch (err) {
     if (isBusy(err)) {
       deps.err(BUSY_MESSAGE)
@@ -123,7 +171,8 @@ export async function runAdmin(argv: readonly string[], deps: AdminDeps): Promis
 }
 
 async function execute(
-  command: Command, accounts: AccountStore, mcpTokens: McpTokenStore, deps: AdminDeps,
+  command: Command, accounts: AccountStore, mcpTokens: McpTokenStore, people: PeopleStore, events: EventStore,
+  deps: AdminDeps,
 ): Promise<number> {
   if (command.name === 'list') {
     listAccounts(accounts, deps)
@@ -133,6 +182,9 @@ async function execute(
     accounts.clearLockout(command.username)
     deps.out(`lockout cleared for ${command.username}. Their existing password still works.`)
     return 0
+  }
+  if (command.name === 'harvest-recovery') {
+    return await harvestRecovery(command.username, accounts, people, events, deps)
   }
 
   const password = await deps.readSecret('new password')
@@ -150,6 +202,126 @@ async function execute(
   mcpTokens.revokeAllForAccount(accountId, deps.now())
   deps.out(`password set for ${command.username}, and any lockout cleared.`)
   return 0
+}
+
+/**
+ * Stores one Google Health recovery score per parsed line, as an `events` row under
+ * `HARVEST_KIND`.
+ *
+ * A date that already carries a harvested score is replaced, not duplicated. The typical way this
+ * command runs twice for the same person is a typo: sixty scores typed by hand off the app's
+ * history screens, one misread, corrected and re-run. Two rows for one day would silently double
+ * count in any aggregate that ever reads this kind, which is worse than the alternative of quietly
+ * overwriting - so long as the operator can see which happened, which is what `written` and
+ * `replaced` in the final line are for. Refusing outright was the other option; it would have made
+ * the ordinary correction path a manual SQL delete for a tool whose whole reason to exist is that
+ * a person should not have to touch the database directly.
+ */
+async function harvestRecovery(
+  username: string, accounts: AccountStore, people: PeopleStore, events: EventStore, deps: AdminDeps,
+): Promise<number> {
+  // Same lookup mcp.ts's --person flag uses to turn a username into a personId: AccountStore has
+  // no getByUsername, and accounts.list() is already the public surface that carries personId
+  // alongside username.
+  const normalised = username.trim().toLowerCase()
+  const account = accounts.list().find((row) => row.username === normalised)
+  if (account === undefined) {
+    deps.err(`no account named ${normalised}`)
+    return 1
+  }
+  // accounts.personId is a foreign key into people, so this is unreachable in practice - kept as
+  // a named failure rather than a thrown TypeError because this is the console tool for when
+  // things have already gone wrong, and a stack trace here would replace a sentence that says
+  // exactly what is.
+  const person = people.get(account.personId)
+  if (person === null) {
+    deps.err(`account ${normalised} has no person record`)
+    return 1
+  }
+
+  const raw = await deps.readStdin()
+  const parsed = parseHarvestLines(raw.split('\n'))
+  if (!parsed.ok) {
+    deps.err(parsed.message)
+    return 1
+  }
+  if (parsed.rows.length === 0) {
+    deps.out('no lines to harvest.')
+    return 0
+  }
+
+  let replaced = 0
+  for (const row of parsed.rows) {
+    // Only a prior harvest is replaced, never another kind of event that happens to land on the
+    // same day: illness, travel and the rest are a different person's record of a different
+    // thing, and this command has no business touching them.
+    const already = events.listFor(person.id, row.localDate, row.localDate)
+      .filter((event) => event.kind === HARVEST_KIND)
+    for (const dupe of already) events.remove({ personId: person.id, id: dupe.id })
+    if (already.length > 0) replaced += 1
+
+    const { startedAtMs, offsetMinutes } = localMidnight(row.localDate, person.timezone)
+    events.add({
+      personId: person.id,
+      kind: HARVEST_KIND,
+      startedAtMs,
+      startedAtOffsetMinutes: offsetMinutes,
+      value: row.score,
+    })
+  }
+
+  const written = parsed.rows.length
+  const fresh = written - replaced
+  deps.out(`${written} recovery score${written === 1 ? '' : 's'} written for ${normalised}: `
+    + `${fresh} new, ${replaced} replaced.`)
+  return 0
+}
+
+const HOUR_MS = 3_600_000
+const DAY_MS = 24 * HOUR_MS
+
+/**
+ * The UTC instant of local midnight opening `localDate` in `timeZone`, and the offset in force at
+ * that instant, in minutes.
+ *
+ * `sync/windows.ts`'s private `startOfLocalDay` already does exactly this - walking back an hour
+ * at a time and bisecting to the minute, because a DST day is 23 or 25 hours long and a fixed 24
+ * hour step would drift - but it is not exported, and it seeds from an instant already known to
+ * fall inside the target local day rather than from a date string. Task 10 touches only this file,
+ * so rather than exporting that helper (or hand rolling a second, independent way to turn an
+ * offset into an instant) this reproduces its walk-and-bisect using the one piece of that
+ * machinery the package does export: `localDateInZone`, the same IANA aware day-comparison
+ * `startOfLocalDay` itself is built on.
+ *
+ * The seed is UTC midnight of `localDate`, nudged forward a day when that seed lands in the
+ * previous local day - the one case it can, for any real offset (UTC-12 to UTC+14, the same range
+ * `widenedUtcWindow` guards elsewhere): a zone behind UTC reads UTC midnight as still being the
+ * previous local day, and a zone ahead of UTC never does, because no zone is a full day ahead.
+ */
+function localMidnight(localDate: string, timeZone: string): { startedAtMs: number, offsetMinutes: number } {
+  let seed = Date.parse(`${localDate}T00:00:00Z`)
+  if (localDateInZone(seed, timeZone) !== localDate) seed += DAY_MS
+  const target = localDateInZone(seed, timeZone)
+
+  let probe = seed
+  while (localDateInZone(probe - HOUR_MS, timeZone) === target) probe -= HOUR_MS
+  let lo = probe - HOUR_MS
+  let hi = probe
+  while (hi - lo > 60_000) {
+    const mid = lo + Math.floor((hi - lo) / 2 / 60_000) * 60_000
+    if (mid === lo) break
+    if (localDateInZone(mid, timeZone) === target) hi = mid
+    else lo = mid
+  }
+
+  const startedAtMs = hi
+  const utcMidnight = Date.parse(`${localDate}T00:00:00Z`)
+  // Local wall clock at startedAtMs is midnight of localDate; that wall clock, read as if it were
+  // itself UTC, is utcMidnight. So utcMidnight = startedAtMs + offsetMinutes * 60_000 - the same
+  // relationship derive/localDay.ts's localDateOf builds forward from an offset; this solves it
+  // backwards from two already-known instants instead of asking the timezone database twice.
+  const offsetMinutes = Math.round((utcMidnight - startedAtMs) / 60_000)
+  return { startedAtMs, offsetMinutes }
 }
 
 interface Cells { username: string, admin: string, disabled: string, locked: string }
@@ -233,6 +405,19 @@ function secretReader(): { read: (label: string) => Promise<string>, close: () =
   }
 }
 
+/**
+ * Everything written to `process.stdin` before it ends, as one string.
+ *
+ * A harvest is piped in from a file or typed and closed with EOF, not answered line by line like
+ * `secretReader`'s prompts - there is nothing to prompt for, and nothing to hide - so this reads
+ * the whole stream rather than negotiating one line at a time.
+ */
+async function readAllStdin(): Promise<string> {
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  return Buffer.concat(chunks).toString('utf8')
+}
+
 // Not `import.meta.main`: it landed in Node 22.18 and this package's engines floor is >=22.14,
 // where it is `undefined` and this gate would be silently false. That matters most here - this is
 // the tool somebody runs when they are locked out, and it would print nothing and exit 0. Keep the
@@ -245,6 +430,7 @@ if (entry !== undefined && resolve(entry) === fileURLToPath(import.meta.url)) {
       out: (line) => { process.stdout.write(`${line}\n`) },
       err: (line) => { process.stderr.write(`${line}\n`) },
       readSecret: secrets.read,
+      readStdin: readAllStdin,
       now: Date.now,
       env: process.env,
     })
