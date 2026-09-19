@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from 'vitest'
+import { and, eq } from 'drizzle-orm'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
 import { RebuildStateStore } from '../src/store/rebuildState.ts'
+import { rawPayloads } from '../src/db/schema/index.ts'
+import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { seedRebuildable } from '../src/testing/fixtures.ts'
 import type { Rebuildable } from '../src/testing/fixtures.ts'
 
@@ -28,8 +31,8 @@ describe('runRebuild, recording each person\'s outcome', () => {
 
   test('records a failure that its own transaction rolled back', () => {
     h = seedRebuildable()
-    // Leaves the person with more unreplayable pages in a row than the breaker tolerates, so
-    // replayPerson abandons them rather than dropping page by page - inside the person's
+    // Corrupts every archived body, so nothing at all commits and replayPerson abandons the person
+    // through the zero-committed rule rather than recording page by page - inside the person's
     // transaction, which then rolls back. This is
     // the test that proves the store write survives: recordFailure only shows up here if
     // runRebuild calls it from the catch block, after the rollback has already happened, rather
@@ -47,6 +50,32 @@ describe('runRebuild, recording each person\'s outcome', () => {
     expect(row?.lastErrorAtMs).toBe(7_000)
     // The rebuild never committed for this person, so there is nothing to call a success.
     expect(row?.lastSuccessAtMs).toBeNull()
+  })
+
+  test('records what a partial rebuild dropped, and still stamps the person', () => {
+    h = seedRebuildable()
+    // Ruins only the archived sleep body, leaving the heart-rate window and the rollup readable:
+    // one unreplayable page among several good ones, which is the whole point of #276b - the
+    // person still commits and gets stamped, carrying one drop rather than losing the rebuild.
+    h.db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
+      .where(and(eq(rawPayloads.personId, h.personId), eq(rawPayloads.dataType, 'sleep')))
+      .run()
+    const store = new RebuildStateStore(h.db)
+
+    const report = runRebuild({ ...h.deps, rebuildState: store, nowMs: 5_000 })
+
+    expect(report.failures).toHaveLength(0)
+    expect(report.people[0]?.droppedPages).toBe(1)
+    const row = store.get(h.personId)
+    expect(row?.droppedPages).toBe(1)
+    expect(row?.drops).toHaveLength(1)
+    expect(row?.consecutiveFailures).toBe(0)
+    // The stamp is what resumes their sync, and it is the whole point of the change: a person who
+    // dropped pages must not be left on their old derivation version waiting for a human to
+    // notice. Reading it straight off the people store, not off the report, is deliberate - this
+    // is the same column peopleNeedingRebuild reads to decide whether sync may resume for them.
+    expect(h.deps.peopleStore.list().find((p) => p.id === h.personId)?.builtDerivationVersion)
+      .toBe(DERIVATION_VERSION)
   })
 })
 

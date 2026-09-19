@@ -22,6 +22,7 @@ import { peopleNeedingRebuild } from './versions.ts'
 import { replayPerson } from './replay.ts'
 import { retargetOverrides } from './retarget.ts'
 import type { OldSession, OrphanedOverride } from './retarget.ts'
+import type { Drop } from './withPage.ts'
 
 export interface RebuildPersonReport {
   personId: string
@@ -51,6 +52,16 @@ export interface RebuildPersonReport {
   overridesRetargeted: number
   overridesOrphaned: OrphanedOverride[]
   unmappablePayloads: number
+  /**
+   * Pages that could not be replayed and were skipped. Beside `unmappablePayloads` rather than
+   * folded into it: one is a data type the catalogue retired, the other is a row that would not
+   * go in, and an operator deciding whether to report a bug needs to tell those apart.
+   *
+   * Nothing is lost when this is non-zero. Tier 1 still holds every body, so a MAPPING_VERSION
+   * bump once the cause is fixed replays them with no operator action at all.
+   */
+  droppedPages: number
+  drops: Drop[]
 }
 
 /**
@@ -266,6 +277,8 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           overridesRetargeted: retarget.retargeted,
           overridesOrphaned: retarget.orphaned,
           unmappablePayloads: counts.unmappable,
+          droppedPages: counts.droppedPages,
+          drops: counts.drops,
         }
       })
     } catch (error) {
@@ -338,11 +351,11 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     checkpointTruncate(input.db)
 
     // After the commit, for the same reason the failure is recorded after the rollback: this is
-    // a durable record of a durable outcome. droppedPages is zero and drops empty until #276b
-    // gives replayPerson per-page isolation; the columns exist now so the surfaces that render
-    // them do not have to change again when it lands.
+    // a durable record of a durable outcome, including whatever replayPerson's own per-page
+    // isolation had to skip - the same counts personReport just carried out of the transaction.
     recordQuietly(() => input.rebuildState?.recordSuccess({
-      personId, nowMs: input.nowMs, droppedPages: 0, drops: [],
+      personId, nowMs: input.nowMs,
+      droppedPages: personReport.droppedPages, drops: personReport.drops,
     }))
 
     report.people.push(personReport)
