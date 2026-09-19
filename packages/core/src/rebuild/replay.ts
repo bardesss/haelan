@@ -186,7 +186,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
 
     if (group.isRollup) {
       for (const page of group.pages) {
-        const committed = withPage(input.client, { dataType: group.dataType, pages: 1 }, collector, () => {
+        const unit = { dataType: group.dataType, pages: 1 }
+        const committed = withPage(input.client, unit, collector, () => {
           const mapped = mapRollups({
             dataType: t, personId: input.personId,
             body: input.archive.getBody(input.personId, page.id),
@@ -233,7 +234,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // tier 2, so every row inserted below is new: there is no previous row for any session to
         // have moved away from.
         for (const page of group.pages) {
-          const committed = withPage(input.client, { dataType: group.dataType, pages: 1 }, collector, () => {
+          const unit = { dataType: group.dataType, pages: 1 }
+          const committed = withPage(input.client, unit, collector, () => {
             const { sessions: rows, segments } = mapSessions({
               dataType: t, personId: input.personId, resolveSource,
               body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
@@ -272,7 +274,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         // its own, so there is no reason to reassemble fetch episodes the way the samples path below
         // has to.
         for (const page of group.pages) {
-          const committed = withPage(input.client, { dataType: group.dataType, pages: 1 }, collector, () => {
+          const unit = { dataType: group.dataType, pages: 1 }
+          const committed = withPage(input.client, unit, collector, () => {
             const rows = mapObservations({
               dataType: t, personId: input.personId, resolveSource,
               body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
