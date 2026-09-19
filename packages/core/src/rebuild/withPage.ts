@@ -30,7 +30,13 @@ export function makeDropCollector(): DropCollector {
     consecutive: 0,
     record(unit, error) {
       const reason = dropReason(error)
-      const key = `${unit.dataType} ${reason}`
+      // A plain space cannot separate these unambiguously: a dataType of "a b" and reason "c"
+      // would key identically to dataType "a" and reason "b c". Today's dataTypes are URL path
+      // segments (see PageUnit), which cannot contain a space, so the collision cannot fire yet -
+      // but nothing enforces that here, and \u001f (ASCII unit separator) is not a character
+      // either a dataType or a human-readable SQLite error message would ever contain, which a
+      // plain space very much is.
+      const key = `${unit.dataType}\u001f${reason}`
       const existing = drops.get(key)
       if (existing) existing.pages += unit.pages
       else drops.set(key, { dataType: unit.dataType, reason, pages: unit.pages })
@@ -87,6 +93,11 @@ const SAVEPOINT_NAME = 'haelan_page'
  * Issuing the savepoint under a name of our own sidesteps both: the name never depends on where
  * the caller sits, and every path below - success, a dropped unit, and a fatal rethrow - accounts
  * for exactly the one `savepoint` this call opened.
+ *
+ * Only `fn()` is inside the `try`. The success-path `release` and `collector.succeeded()` run
+ * after it, unguarded: if either of those threw while still inside the `try`, the `catch` below
+ * would treat that as fn()'s own failure and issue `rollback to savepoint` - against a savepoint
+ * that a successful `release` had already popped, and that no longer exists to roll back to.
  */
 export function withPage(
   tx: DbOrTx, unit: PageUnit, collector: DropCollector, fn: () => void,
@@ -94,9 +105,6 @@ export function withPage(
   tx.run(sql.raw(`savepoint ${SAVEPOINT_NAME}`))
   try {
     fn()
-    tx.run(sql.raw(`release savepoint ${SAVEPOINT_NAME}`))
-    collector.succeeded()
-    return true
   } catch (error) {
     // Before any recovery SQL: a fatal code means the disk or the connection is suspect, and a
     // `rollback to` issued against it can fail in turn, which would surface that secondary
@@ -104,10 +112,21 @@ export function withPage(
     if (isFatalRebuildError(error)) throw error
     tx.run(sql.raw(`rollback to savepoint ${SAVEPOINT_NAME}`))
     // ROLLBACK TO does not pop the savepoint - it only undoes the writes since it was taken and
-    // leaves it on the stack so it could be rolled back to again. RELEASE is what pops it, and
-    // skipping this is exactly the leak described above, just self-inflicted instead of drizzle's.
+    // leaves it on the stack so it could be rolled back to again. RELEASE is what pops it.
+    //
+    // Skipping this release does not fail the outer commit and does not change what ends up in
+    // any table: SQLite silently releases every savepoint still open when the transaction that
+    // contains it commits, so a rebuild that leaked one per drop would still commit cleanly with
+    // exactly the right rows (checked directly - see with-page.test.ts). The actual cost is an
+    // ever-growing savepoint stack, and the sub-journal SQLite pins per open savepoint to allow
+    // rolling back to it, sitting open for the rest of the person's rebuild. On an archive with
+    // thousands of bad pages that is thousands of pinned sub-journals never released until the
+    // whole rebuild ends, not a correctness bug but a real resource cost this avoids.
     tx.run(sql.raw(`release savepoint ${SAVEPOINT_NAME}`))
     collector.record(unit, error)
     return false
   }
+  tx.run(sql.raw(`release savepoint ${SAVEPOINT_NAME}`))
+  collector.succeeded()
+  return true
 }
