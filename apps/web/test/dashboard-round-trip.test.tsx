@@ -244,22 +244,45 @@ describe('the Dashboard round trip', () => {
   // change, or worse, a count that quietly starts arguing a chart out of a series it should draw
   // rather than the other way around. What is actually worth defending: requests are batched by
   // agg (one request per distinct agg value, not one per metric), and that is fewer requests than
-  // there are cards on the page.
-  it('batches by shared agg rather than firing one request per card', async () => {
+  // there are metrics to fetch.
+  //
+  // "Fewer than there are METRICS ASKED FOR", not "fewer than there are cards on the page", and
+  // the difference is not cosmetic. The rendered card count was never the quantity this test had
+  // an opinion about - it stood in for "how many things want data", which is the metric count -
+  // and as a premise it has two faults. It is read off the live DOM one microtask after mount, so
+  // it depends on how far the stubbed fetches have got by the time it is sampled, which is why
+  // this test has been seen both passing and failing on identical source. And it erodes:
+  // hide-empty-cards makes a card with nothing to draw render nothing, so the same batching
+  // behaviour scores a smaller right hand side every time a fixture gets sparser, until a page
+  // that batched perfectly fails anyway. Both faults come from measuring the page instead of the
+  // requests. Counting the `metric` parameters in the request log measures what batching is
+  // actually about, is read from `seen` rather than from the DOM, and does not move when a card
+  // hides.
+  //
+  // flush() rather than a single microtask, for the same reason: one `await Promise.resolve()`
+  // settles whichever stubs happen to have resolved already, so the request log itself could be
+  // sampled half written. Every other test in this file already waits this way.
+  it('batches by shared agg rather than firing one request per metric', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
 
-    mount(withQuery(<Dashboard />).tree)
-    await act(async () => { await Promise.resolve() })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
     const distinctAggs = new Set(seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg')))
-    const cardCount = container!.querySelectorAll('.card').length
+    const metricsAsked = seriesCalls
+      .reduce((total, u) => total + new URLSearchParams(u.split('?')[1] ?? '').getAll('metric').length, 0)
+    // Guards both assertions below against agreeing with an empty log: with no requests at all,
+    // toHaveLength(distinctAggs.size) is 0 against 0 and metricsAsked is 0 as well.
+    expect(seriesCalls.length).toBeGreaterThan(0)
     // One request per distinct agg: if two metrics sharing an agg fired separate requests instead
     // of riding one together, seriesCalls.length would exceed distinctAggs.size.
     expect(seriesCalls).toHaveLength(distinctAggs.size)
-    expect(seriesCalls.length).toBeLessThan(cardCount)
+    // And that the batching bought something: strictly fewer requests than metrics fetched.
+    expect(seriesCalls.length).toBeLessThan(metricsAsked)
     expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
     restore()
   })
@@ -299,15 +322,23 @@ describe('the Dashboard round trip', () => {
     await flush(client, () => container!.innerHTML)
 
     // 5 stat tiles (steps, resting heart rate, sleep, mean heart rate, and recovery since the M3
-    // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus the five
-    // remaining non-tile cards task 10 restored (heart rate range, flagged days, sleep stages,
-    // sleep schedule), plus the three insight cards this task added (steps, resting_heart_rate,
-    // sleep_asleep_minutes), 12 not 4 or 10: this test predates all of their returns and only ever
-    // meant "every card on the page", not "exactly the tiles". Daily steps (the heatmap) is not
-    // among them any more: M3d2 moved it to Activity.tsx. Twelve rather than thirteen since the
-    // anomalies placeholder was removed - it was a card whose entire content said that a feature
-    // nobody had scheduled did not exist.
-    expect(container!.querySelectorAll('.card')).toHaveLength(12)
+    // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus flagged
+    // days and sleep schedule, plus the three insight cards (steps, resting_heart_rate,
+    // sleep_asleep_minutes): ten, not 4 or 5. This test predates all of their returns and only
+    // ever meant "every card on the page", not "exactly the tiles"; the count is here so the NaN
+    // and delta assertions below cannot pass on a page that rendered nothing at all. Daily steps
+    // (the heatmap) is not among them: M3d2 moved it to Activity.tsx. Neither is the anomalies
+    // placeholder - it was a card whose entire content said that a feature nobody had scheduled
+    // did not exist.
+    //
+    // Ten rather than the twelve this pinned before hide-empty-cards, and the two that left are
+    // the feature rather than a regression. Both are cards this stub deliberately gives nothing
+    // to draw: the heart rate range card reads /intraday, which stubFetchOnePointPerMetric
+    // answers with `points: []`, and the sleep stages card reads /sleep/nights, answered with
+    // `items: []`. A card with no rows for the period now renders no shell at all rather than an
+    // empty state inside one. Neither is an error, pending or not-synced card - those still
+    // render, since none of them is a statement about the person's record.
+    expect(container!.querySelectorAll('.card')).toHaveLength(10)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

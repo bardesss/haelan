@@ -261,13 +261,16 @@ describe('the Weight page', () => {
 
   // The other half of the brief's own note: weight will suppress often, and correctly, because a
   // seven day window frequently holds too few of the household's 130 readings across 236 days.
-  // Suppressed rather than a guessed number is the feature working, the same emptyState.insufficient
-  // copy insight-card.test.tsx already pins for the generic component.
-  it('suppresses the weight insight rather than guessing across a thin window', async () => {
+  // A thin-days suppression now draws no card at all rather than a card saying "too few days":
+  // that sentence is not news to the reader and it landed on every insight on the page at once.
+  // Pinned on the .card element, not on the page's text, because the absence of a phrase was
+  // already true of plenty of pages that do render this card; only the missing shell is the claim.
+  // insight-card.test.tsx pins the same rule for the generic component, including the
+  // thin-coverage reason that deliberately keeps its card.
+  it('hides the weight insight rather than guessing across a thin window', async () => {
     await mount(<Weight />, {}, undefined, [], [], { suppressed: true, reason: 'thin-days' })
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
-    expect(card?.textContent).toContain('too few days')
-    expect(card?.querySelector('.insight-summary')).toBeNull()
+    expect(card).toBeUndefined()
   })
 })

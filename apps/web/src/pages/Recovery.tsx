@@ -3,6 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -253,7 +254,7 @@ export function Recovery() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('recovery.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {card('resting_heart_rate', 'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
           'recovery.restingHeartRate.chartLabel', 'recovery.units.beatsPerMinute', 'recovery.units.bpm',
           'lower-is-better', restingHrBaseline, restingHrBand)}
@@ -270,7 +271,7 @@ export function Recovery() {
             length. */}
         <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
           label={t('recovery.insights.restingHeartRate')} formatValue={restingHrInsightFormat} />
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

@@ -82,13 +82,30 @@ export function InsightCard({ insight, query, metric, span, label, formatValue, 
   // `thin-coverage` gets its own copy rather than sharing `thin-days`'s, because the two name
   // different remedies: a thin `reason` about days means wait longer, a thin `reason` about
   // coverage means wear the device more consistently. A reader told "not enough data" for both
-  // would have no way to tell which fix applies to them. `emptyState.insufficient` is reused
-  // verbatim for `thin-days`, not reimplemented, because that string already says exactly this
-  // ("There are too few days here to say anything useful yet"). The key stays live through this
-  // card alone: `emptyStateFor` carried an `insufficient` branch of its own once, gated on a thin
-  // baseline no caller ever passed it, which M3e-2 marked for removal and this task removed as
-  // dead code; this card never called `emptyStateFor` and never consulted a baseline, so nothing
-  // here depended on it.
+  // would have no way to tell which fix applies to them. `thin-days` renders nothing at all now
+  // (the branch below this one): "wait longer" is not news, and it is not a remedy the reader
+  // wanted to hear repeated on every one of these cards that lands on it at once on a Day tab.
+  //
+  // thin-coverage keeps its card for the reason not_worn keeps its own (emptyState.ts's
+  // hidesWhenEmpty): it names a remedy the reader can act on, and without it they blame the app
+  // for a gap their own week caused. It is checked first because the condition below subsumes it.
+  if (insight.suppressed && insight.reason === 'thin-coverage') {
+    return (
+      <Card span={span} label={label}>
+        <EmptyState title={t('insightCard.thinCoverage.title')} detail={t('insightCard.thinCoverage.detail')} />
+      </Card>
+    )
+  }
+  // Nothing at all, not an empty Card: the shell reports a card's presence to the enclosing
+  // CardGrid, so an empty one would keep the page claiming it has something to show.
+  //
+  // Two different absences share this line. thin-days says to wait, which the reader already
+  // knows and which every one of these cards says at once on a Day tab. The `== null` half is the
+  // defensive guard for a malformed or version-skewed payload — apiGet casts any JSON straight to
+  // Insight with no runtime check, and `{}` reads every field as undefined rather than null,
+  // which is why this is `==` and not `===`. It exists to stop that reaching the format calls
+  // below and taking the whole page down, not only this card; a card that does not appear serves
+  // that as well as a fallback message did, and claims nothing about the person's record.
   //
   // The second half of this condition guards two different gaps, not one. `current`/`previous`/
   // `delta` do go null together with `suppressed`/`reason` (`insights.ts`'s own `refuse`), so a
@@ -107,19 +124,11 @@ export function InsightCard({ insight, query, metric, span, label, formatValue, 
   // the gap that used to let `formatMetricValue` reach `undefined.toLocaleString()` below and take
   // the whole page down with it, not only this card: nothing in apps/web catches a render error.
   // `== null` treats `undefined` the same as the typed `null` case already handled above, so an
-  // incomplete or version-skewed response falls back to the same "not enough data" empty state a
-  // deliberately null field already does, rather than reaching the format calls at all.
+  // incomplete or version-skewed response now renders nothing at all, rather than reaching the
+  // format calls below.
   if (insight.suppressed || insight.current == null || insight.previous == null || insight.delta == null
     || insight.currentRange == null || insight.previousRange == null) {
-    const thinCoverage = insight.suppressed && insight.reason === 'thin-coverage'
-    return (
-      <Card span={span} label={label}>
-        <EmptyState
-          title={t(thinCoverage ? 'insightCard.thinCoverage.title' : 'emptyState.insufficient.title')}
-          detail={t(thinCoverage ? 'insightCard.thinCoverage.detail' : 'emptyState.insufficient.detail')}
-        />
-      </Card>
-    )
+    return null
   }
 
   // `delta` is taken straight off `insight` by default, never recomputed from `current` and

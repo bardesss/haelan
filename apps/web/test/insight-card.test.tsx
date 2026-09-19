@@ -45,26 +45,27 @@ describe('InsightCard', () => {
     expect(html).toContain('Aug 3, 2026')
   })
 
-  it('says too few days when the server suppressed on thin-days', () => {
-    const html = render({ ...base, suppressed: true, reason: 'thin-days' })
-    expect(html).toContain('too few days')
-    expect(html).not.toContain('against')
+  // thin-days says wait, which is not news, and on a Day tab all three of these land in it at
+  // once. render() returns markup, so an absent card is the empty string.
+  it('renders nothing when the server suppressed on thin-days', () => {
+    expect(render({ ...base, suppressed: true, reason: 'thin-days' })).toBe('')
   })
 
   it('names the device when the server suppressed on thin-coverage', () => {
     const html = render({ ...base, suppressed: true, reason: 'thin-coverage' })
+    expect(html).toContain('Not enough device coverage to summarise')
     expect(html).not.toContain('too few days')
   })
 
-  // The two suppressed branches read the same emptyState-shaped component, so a text difference
-  // is the only proof left that they are not the same message wearing two reason strings. Pinned
-  // as its own assertion, not folded into the two tests above, so a future edit that makes them
-  // collapse fails here even if it happens to keep dodging "too few days" some other way.
-  it('gives thin-days and thin-coverage genuinely different copy', () => {
+  // The pair this file used to pin as two different messages is now a message and an absence.
+  // Kept as its own test for the same reason the old one was: the two reasons must not collapse
+  // into one behaviour, and the proof has to be an assertion about both, not about either alone.
+  it('keeps the thin-coverage card while thin-days disappears', () => {
     const days = render({ ...base, suppressed: true, reason: 'thin-days' })
     const coverage = render({ ...base, suppressed: true, reason: 'thin-coverage' })
-    expect(coverage).not.toBe(days)
+    expect(days).toBe('')
     expect(coverage).toContain('device')
+    expect(coverage).toContain('class="card"')
   })
 
   // Wrapped in I18nProvider like every other test here, not left bare the way MetricCard's own
@@ -103,10 +104,12 @@ describe('InsightCard', () => {
   // in this component's own contract rules out a caller handing it suppressed: false beside a
   // null value. Without a guard the sentence renders with a gap where the missing piece should
   // be; this pins the safer fallback instead.
-  it('falls back to the insufficient message rather than a sentence with holes in it', () => {
-    const html = render({ ...base, suppressed: false, reason: null, current: null })
-    expect(html).toContain('Not enough data to summarise')
-    expect(html).not.toContain('insight-summary')
+  // A malformed or version-skewed payload: apiGet casts any JSON straight to Insight with no
+  // runtime check, and `{}` reads every field as undefined. The guard exists to stop that
+  // reaching formatMetricValue and taking the whole page down; a card that quietly does not
+  // appear serves that as well as a fallback message did, and says nothing untrue.
+  it('renders nothing rather than a sentence with holes in it', () => {
+    expect(render({ ...base, suppressed: false, reason: null, current: null })).toBe('')
   })
 
   // 'tot' alone is the exclusive Dutch preposition; these windows are inclusive
