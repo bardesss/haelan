@@ -1,6 +1,10 @@
 import { useId } from 'react'
 import { BasisContext } from './basis.js'
 import { ErrorBoundary } from './ErrorBoundary.js'
+// Circular with CardGrid.tsx (which imports Card from here). Safe only because both sides defer
+// their use to a function-body call site — Card is a hoisted function declaration, and
+// useCardPresence is only read inside a hook body — so it never matters which module evaluates
+// first. Hoisting either use to module-evaluation scope would break that silently.
 import { useCardPresence } from './CardGrid.js'
 
 export function Card({ span, label, basis, measured = false, ambient, children }: {

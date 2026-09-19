@@ -755,7 +755,9 @@ describe('the Sleep page', () => {
   // on the null rather than reaching formatDuration with one it cannot handle. The gate now drops
   // the whole card rather than swapping in an empty state, so the absent .card element is both
   // halves of the claim: nothing was formatted, and nothing was drawn.
-  it('hides the sleep insight card when the server suppresses it', async () => {
+  // This is a thin-days suppression specifically; thin-coverage is the deliberate exception that
+  // keeps its card, pinned separately in insight-card.test.tsx.
+  it('hides the sleep insight card on a thin-days suppression', async () => {
     const restore = stubSleep([], undefined, false, { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
     const { client, tree } = withQuery(<Sleep />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)

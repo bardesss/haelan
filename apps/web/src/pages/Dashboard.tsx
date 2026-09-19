@@ -97,8 +97,9 @@ export const REQUESTS = {
  * a whole call and rejects the call outright if any metric in it has no rows under that agg, so an
  * unanswerable pairing does not cost one card its number: it 500s the request and blanks every
  * card riding along with it, three of them in the 'last' group. Dropping the pair here keeps the
- * request valid and leaves the one bad card to fall through to its own empty state, which is a
- * failure this page knows how to render.
+ * request valid; the one bad card falls through to `pointsOf` returning undefined, `emptyStateFor`
+ * answering `no_data`, and that card rendering nothing at all — it vanishes rather than announcing
+ * a failure.
  *
  * It should never come to that: dashboard-metrics.test.ts holds every pairing above to the
  * catalogue, so a metric renamed or an agg dropped upstream is a red test rather than a card that

@@ -12,7 +12,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 // which is exactly what Dashboard.tsx's sleep stages card does. The first version of this file was
 // keyed on that one name, so a page that hand rolled every part of the pattern except that one
 // call passed it without the trigger ever firing. The \w+ requires a literal kind (no_data,
-// not_worn, insufficient), not the templated `emptyState.${empty}.title` MetricCard itself renders
+// not_worn, not_synced), not the templated `emptyState.${empty}.title` MetricCard itself renders
 // internally, which is what keeps a page that only reaches empty state text through MetricCard
 // from tripping its own guard.
 const HAND_ROLLED_GATING = /<ErrorState[\s>]|<Loading[\s/>]|emptyState\.\w+\.(?:title|detail)/

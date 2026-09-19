@@ -248,7 +248,9 @@ describe('the Health page', () => {
   // rather than reach formatMetricValue with, which a fixture carrying only complete bodies could
   // never catch. The gate now removes the whole card instead of swapping in an empty state, so the
   // absent .card element is both halves of the claim: nothing was formatted, and nothing was drawn.
-  it('hides the daily summary insight card when the server suppresses it', async () => {
+  // This is a thin-days suppression specifically; thin-coverage is the deliberate exception that
+  // keeps its card, pinned separately in insight-card.test.tsx.
+  it('hides the daily summary insight card on a thin-days suppression', async () => {
     const restore = stubHealth(
       [], [], [],
       { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null },

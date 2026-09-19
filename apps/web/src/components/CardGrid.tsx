@@ -1,6 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
+// Circular with Card.tsx (which imports useCardPresence from here). Safe only because both sides
+// defer their use to a function-body call site — Card is a hoisted function declaration, and
+// useCardPresence is only read inside a hook body — so it never matters which module evaluates
+// first. Hoisting either use to module-evaluation scope would break that silently.
 import { Card } from './Card.js'
 import { EmptyState } from './EmptyState.js'
 

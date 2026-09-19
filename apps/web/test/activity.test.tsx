@@ -495,7 +495,9 @@ describe('the Activity page', () => {
   // rather than reach formatMetricValue with, which a fixture carrying only complete bodies could
   // never catch. The gate now removes the whole card instead of swapping in an empty state, so the
   // absent .card element is both halves of the claim: nothing was formatted, and nothing was drawn.
-  it('hides the steps insight card when the server suppresses it', async () => {
+  // This is a thin-days suppression specifically; thin-coverage is the deliberate exception that
+  // keeps its card, pinned separately in insight-card.test.tsx.
+  it('hides the steps insight card on a thin-days suppression', async () => {
     const restore = stubActivity([], { suppressed: true, reason: 'thin-days', current: null, previous: null, delta: null })
     const { client, tree } = withQuery(<Activity />)
     mount(<I18nProvider lng="en">{tree}</I18nProvider>)
