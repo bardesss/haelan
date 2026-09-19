@@ -84,12 +84,12 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   {
     route: 'GET /api/setup/redirect-uris',
     auth: 'session',
-    why: 'the same wizard window: a session from the account step, and closed by the gate afterwards',
+    why: 'the same wizard window: a session from the account step, and closed by the gate afterwards, a completed companion instance that has never connected Google being the one exception',
   },
   {
     route: 'GET /api/setup/scopes',
     auth: 'session',
-    why: 'the same wizard window; it returns this build\'s scope list, which is not instance state',
+    why: 'the same wizard window; it returns this build\'s scope list, which is not instance state, and it stays open beside the client writer on the same companion exception',
   },
   {
     route: 'POST /api/setup/google-client',
@@ -235,8 +235,9 @@ const MUTATING = new Set<InjectableMethod>(['POST', 'PUT', 'PATCH', 'DELETE'])
  * path rather than declared per entry, because that is precisely the rule the gate itself applies,
  * so a new /api/setup route lands on the right side of it without a second edit here.
  *
- * Two of them are exempt from that rule on a completed companion instance (opensForCompanion in
- * setupGate.ts, which is what lets the phone path paste a client later). The derivation stays
+   * Four of them are exempt from that rule on a completed companion instance (opensForCompanion in
+   * setupGate.ts: the client writer, the two read-only helpers its form is built from, and the
+   * last-error read - which is what lets the phone path paste a client later). The derivation stays
  * right anyway, because neither harness below is that instance: afterSetup connects Google, so it
  * is companionMode false and the gate still shuts those two there. A companion harness would need
  * the other side of the exemption proven as well - setup-routes.test.ts does that.
