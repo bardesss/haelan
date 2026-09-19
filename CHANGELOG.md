@@ -9,6 +9,15 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.38.0](https://github.com/bardesss/haelan/compare/v1.37.2...v1.38.0) (2026-09-19)
+
+
+### Features
+
+* **core,server,web:** a person whose rebuild failed is finally told so ([#285](https://github.com/bardesss/haelan/issues/285)) ([e91fe35](https://github.com/bardesss/haelan/commit/e91fe352db91ccf4b843fef75531deb49737403c))
+* **core:** one unreplayable page costs that page, not the whole archive ([#288](https://github.com/bardesss/haelan/issues/288)) ([7dfd3ad](https://github.com/bardesss/haelan/commit/7dfd3adc43bf6598a6031eaf94f120807abd4f61))
+* **web:** one control row line on a phone, and sync moved to the shell ([#287](https://github.com/bardesss/haelan/issues/287)) ([c95c811](https://github.com/bardesss/haelan/commit/c95c81167dcd78b3be20b149d71cacf4c3fa19b8))
+
 ## [1.37.2](https://github.com/bardesss/haelan/compare/v1.37.1...v1.37.2) (2026-09-18)
 
 
