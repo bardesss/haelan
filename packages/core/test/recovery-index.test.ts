@@ -189,7 +189,7 @@ describe('recoveryIndex', () => {
     expect(breathing?.z).toBe(0)
   })
 
-  it('attributes points that sum exactly to the distance from 50', () => {
+  it('attributes points that sum exactly to the distance from 50 when every input pushes the same way', () => {
     const end = '2026-09-14'
     const input = inputAt(end)
     const worse = input.restingHeartRate.map((d) => d.localDate === end ? { ...d, value: 70 } : d)
@@ -199,6 +199,31 @@ describe('recoveryIndex', () => {
     const summed = result.inputs.reduce((sum, i) => sum + i.points, 0)
     expect(summed).toBeCloseTo(result.score - 50, 6)
     expect(result.score).toBeLessThan(50)
+  })
+
+  it('bounds every input\'s points by the distance from 50 even when inputs pull opposite ways', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    // HRV pulled well above its own baseline (good, direction 'up') and resting heart rate pulled
+    // well above its own baseline too (bad, direction 'down') give roughly opposite z of about 3 and
+    // -3: the two largest-weighted inputs mostly cancelling. Dividing an individual share by the
+    // signed composite (rather than the total movement) would send that share far past the distance
+    // whenever a day like this pulls the composite itself close to zero - this is the regression
+    // guard for that: the existing "sum exactly" test above cannot see it, because it only ever
+    // pushes one input away from baseline.
+    const betterHrv = input.hrv.map((d) => d.localDate === end ? { ...d, value: 42.5 } : d)
+    const worseRhr = input.restingHeartRate.map((d) => d.localDate === end ? { ...d, value: 57.5 } : d)
+    const result = recoveryIndex({ ...input, hrv: betterHrv, restingHeartRate: worseRhr }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    const distance = Math.abs(result.score - 50)
+    for (const i of result.inputs) {
+      expect(Math.abs(i.points)).toBeLessThanOrEqual(distance)
+    }
+    // The honest statement that opposing inputs partly cancelled: the signed sum falls short of the
+    // full distance rather than accounting for all of it.
+    const summed = result.inputs.reduce((sum, i) => sum + i.points, 0)
+    expect(Math.abs(summed)).toBeLessThan(distance)
   })
 
   it('keeps every score inside 0 and 100 however extreme the day', () => {
@@ -223,5 +248,23 @@ describe('recoveryIndex', () => {
     const end = '2026-09-14'
     const result = recoveryIndex(inputAt(end), end)
     expect(result.enough).toBe(true)
+  })
+
+  it('gives sleep only half its weight when just one of duration and consistency is available', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    // A genuinely steady bedtime is the ordinary way to lose the consistency half: a constant week
+    // has zero spread, so its z is null and duration alone is left standing in for sleep. Dropping
+    // bedtime data entirely reaches the same state without relying on that zero-spread coincidence.
+    const bothHalves = recoveryIndex(input, end)
+    const durationOnly = recoveryIndex({ ...input, bedtimeMinutes: [] }, end)
+    expect(bothHalves.enough).toBe(true)
+    expect(durationOnly.enough).toBe(true)
+    if (!bothHalves.enough || !durationOnly.enough) return
+    expect(durationOnly.degraded).toContain('sleep')
+    const fullWeight = bothHalves.inputs.find((i) => i.key === 'sleep')?.weight
+    const halfWeight = durationOnly.inputs.find((i) => i.key === 'sleep')?.weight
+    expect(fullWeight).toBeCloseTo(0.25, 10)
+    expect(halfWeight).toBeLessThan(fullWeight as number)
   })
 })
