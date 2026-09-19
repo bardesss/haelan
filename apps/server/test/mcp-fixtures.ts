@@ -123,12 +123,19 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // 1200, so a suppressed answer (every field null) fails this the same way a missing tool would.
   compare_periods: '1200',
   // `insertRecoverySeries` below gives alice her own 67 days of hrv/resting-heart-rate/
-  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 75 - checked
-  // against the real recoveryIndexSeries output for these exact fixture values, not guessed. '75'
-  // is boundary-matched (see numberLeak), and nowhere else in this tool's own answer does a bare
-  // 75 occur - every other digit run in it is either a decimal fraction or embedded in a longer
-  // number, neither of which the boundary anchors match.
-  recovery_index: '75',
+  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 75, band
+  // 'above' - both checked against the real recoveryIndexSeries/bandOf output for these exact
+  // fixture values, not guessed.
+  //
+  // ALICE_FINGERPRINTS holds one fingerprint per tool, and `found` below only knows two matchers
+  // - a boundary-anchored bare number (numberLeak) or a plain substring - so a lone '75' would
+  // prove the score but say nothing about `band`: bandOf is a second, independent step (a
+  // cut-point change or a wrong lookup could move the band while the score stays exactly 75), and
+  // a score-only fingerprint would not notice. The fingerprint below is the two fields' own exact
+  // JSON adjacency - `score` immediately followed by `band` in dayOf's own field order - so it
+  // only matches when both are simultaneously correct - not a looser substring of either value
+  // alone the way a bare '75' or a bare 'above' could be.
+  recovery_index: '"score":75,"band":"above"',
 }
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
