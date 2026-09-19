@@ -23,6 +23,20 @@ export interface RebuildNoticeProps {
    */
   rebuildInFlight: boolean
   droppedPages: number
+  /**
+   * Their last rebuild was handed archived payloads and left no readings behind at all.
+   *
+   * Arrives already decided, unlike droppedPages beside it: the two columns behind it mean
+   * nothing apart, since writing no rows is the ordinary outcome for a member connected an hour
+   * ago. Both routes call the same predicate in packages/core, which is where the argument is.
+   *
+   * The mildest of the four states and deliberately worded that way. Nothing failed, nothing was
+   * deleted, tier 1 still holds every payload, and the remedy is a version of this software that
+   * can read them - which is not something the person reading their own dashboard can do, and
+   * not something an administrator can do today either. So the line reports and asks for
+   * nothing.
+   */
+  producedNothing: boolean
   drops: { dataType: string, reason: string, pages: number }[]
   lastError: string | null
   /** 'self' addresses the person whose data it is, 'admin' describes someone else's. */
@@ -40,18 +54,21 @@ export interface RebuildNoticeProps {
  * again" - in two wordings, because whether that rebuild is already running changes the only
  * thing the reader could do about it, and telling somebody to restart a server that is rebuilding
  * makes their situation worse. Dropped pages mean "some history is missing and will return on its
- * own". Collapsing them into one severity would either alarm people about a gap that heals itself
- * or bury an outage inside a footnote.
+ * own". A rebuild that produced nothing means "all of it is missing and none of it is lost",
+ * which is the same reassurance at a different scale and reads as a fifth wording rather than a
+ * fourth severity. Collapsing them into one severity would either alarm people about a gap that
+ * heals itself or bury an outage inside a footnote.
  *
  * Returns null when there is nothing to say, so both call sites render it unconditionally rather
  * than each repeating the same guard.
  */
 export function RebuildNotice({
-  quarantined, awaitingRebuild, rebuildInFlight, droppedPages, drops, lastError, voice, personName,
+  quarantined, awaitingRebuild, rebuildInFlight, droppedPages, producedNothing, drops, lastError,
+  voice, personName,
 }: RebuildNoticeProps) {
   const { t } = useTranslation()
 
-  if (!quarantined && !awaitingRebuild && droppedPages === 0) return null
+  if (!quarantined && !awaitingRebuild && droppedPages === 0 && !producedNothing) return null
 
   return (
     <div className="maintenance">
@@ -105,6 +122,29 @@ export function RebuildNotice({
             : (voice === 'self'
                 ? t('settings.rebuild.awaitingSelf')
                 : t('settings.rebuild.awaitingOther', { name: personName }))}
+        </p>
+      )}
+      {/* Suppressed while quarantined, for the reason the awaiting line above is. The two
+          columns behind this flag hold whatever the last attempt that COMMITTED left there, and
+          a quarantined person's last commit can perfectly well have been an empty one - so the
+          flag survives their failure. "Your history was rebuilt without any error" is then
+          flatly untrue of the rebuild that is actually the matter with them, and it is printed
+          directly under a line that has just told them their data has stopped.
+
+          Said beside a drop rather than instead of it, which is why it is not also suppressed by
+          droppedPages: "some pages would not go in" and "what did go in produced nothing" are
+          two different facts about one rebuild, and a reader shown only the first would take the
+          rest of the archive to have replayed fine.
+
+          .maintenance-waiting rather than the muted note the drop count gets. Their pages are
+          empty, which is a larger thing than a gap in them, but nothing has failed and nobody is
+          being asked to do anything - the same register the awaiting line uses, and for the same
+          reason it is neither the blocked box nor the footnote. */}
+      {producedNothing && !quarantined && (
+        <p className="maintenance-waiting">
+          {voice === 'self'
+            ? t('settings.rebuild.emptySelf')
+            : t('settings.rebuild.emptyOther', { name: personName })}
         </p>
       )}
       {/* .maintenance-download-note: the same muted register Maintenance.tsx uses for a fact that

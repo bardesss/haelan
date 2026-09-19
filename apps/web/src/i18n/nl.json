@@ -1244,6 +1244,8 @@
       "awaitingOther": "{{name}} wacht op een herbouw van hun geschiedenis; die draait bij de volgende herstart van de server. Tot die tijd komen er geen nieuwe gegevens binnen.",
       "awaitingRunningSelf": "Je gegevens wachten op een herbouw van je geschiedenis; die draait nu. Er is niets misgegaan, maar tot die klaar is worden er geen nieuwe metingen verzameld. De herbouw voltooit zichzelf.",
       "awaitingRunningOther": "{{name}} wacht op een herbouw van hun geschiedenis; die draait nu. Tot die klaar is komen er geen nieuwe gegevens binnen. De herbouw voltooit zichzelf.",
+      "emptySelf": "Je geschiedenis is zonder fouten herbouwd, maar leverde geen metingen op, dus deze pagina's zijn leeg. Er is niets verwijderd: alles wat ooit voor je is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.",
+      "emptyOther": "De geschiedenis van {{name}} is zonder fouten herbouwd, maar leverde geen metingen op, dus hun pagina's zijn leeg. Er is niets verwijderd: alles wat ooit voor hen is verzameld wordt nog bewaard, en een latere versie kan het misschien wel lezen.",
       "droppedSelf": "Een deel van je geschiedenis kon niet worden herbouwd en ontbreekt op deze pagina's. Er is niets verwijderd, en het komt terug zodra de oorzaak is verholpen.",
       "droppedOther_one": "{{count}} pagina van de geschiedenis van {{name}} kon niet worden herbouwd.",
       "droppedOther_other": "{{count}} pagina's van de geschiedenis van {{name}} konden niet worden herbouwd.",

@@ -13,7 +13,7 @@ describe('RebuildNotice', () => {
   it('renders nothing when there is nothing wrong', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined={false} droppedPages={0} drops={[]}
+        awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing={false} drops={[]}
         lastError={null} voice="self" rebuildInFlight={false}
       />,
     )
@@ -23,7 +23,7 @@ describe('RebuildNotice', () => {
   it('tells the person their data has stopped, not that pages were dropped', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError="boom" voice="self"
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} lastError="boom" voice="self"
         rebuildInFlight={false}
       />,
     )
@@ -34,7 +34,7 @@ describe('RebuildNotice', () => {
   it('names every dropped data type with its count', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined={false} droppedPages={7} lastError={null} voice="self"
+        awaitingRebuild={false} quarantined={false} droppedPages={7} producedNothing={false} lastError={null} voice="self"
         rebuildInFlight={false}
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 7 }]}
       />,
@@ -54,7 +54,7 @@ describe('RebuildNotice', () => {
   it('writes a single page in the singular, in both counted strings', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined={false} droppedPages={1} lastError={null}
+        awaitingRebuild={false} quarantined={false} droppedPages={1} producedNothing={false} lastError={null}
         voice="admin" personName="Robin" rebuildInFlight={false}
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 1 }]}
       />,
@@ -68,7 +68,7 @@ describe('RebuildNotice', () => {
   it('names the affected person in the admin voice', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError={null}
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null}
         voice="admin" personName="Robin" rebuildInFlight={false}
       />,
     )
@@ -81,7 +81,7 @@ describe('RebuildNotice', () => {
   it('shows the reported error when there is one', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} voice="self"
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} voice="self"
         lastError="UNIQUE constraint failed: samples.id" rebuildInFlight={false}
       />,
     )
@@ -91,7 +91,7 @@ describe('RebuildNotice', () => {
   it('says nothing about an error when the store never recorded one', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
         rebuildInFlight={false}
       />,
     )
@@ -107,7 +107,7 @@ describe('RebuildNotice', () => {
   it('tells a person waiting for a rebuild that a restart is what runs it', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null} voice="self"
+        awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
         rebuildInFlight={false}
       />,
     )
@@ -122,7 +122,7 @@ describe('RebuildNotice', () => {
   it('names the person waiting for a rebuild in the admin voice', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null}
+        awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null}
         voice="admin" personName="Robin" rebuildInFlight={false}
       />,
     )
@@ -139,7 +139,7 @@ describe('RebuildNotice', () => {
   it('says only the quarantine when a quarantined person is also behind on their stamp', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+        awaitingRebuild quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
         rebuildInFlight={false}
       />,
     )
@@ -166,7 +166,7 @@ describe('RebuildNotice', () => {
   it('tells a person a rebuild is running now rather than to restart the server', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null} voice="self"
+        awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
         rebuildInFlight
       />,
     )
@@ -178,7 +178,7 @@ describe('RebuildNotice', () => {
   it('names the person a running rebuild is catching up on, in the admin voice', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild quarantined={false} droppedPages={0} drops={[]} lastError={null}
+        awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null}
         voice="admin" personName="Robin" rebuildInFlight
       />,
     )
@@ -197,7 +197,7 @@ describe('RebuildNotice', () => {
   it('says only the quarantine when a quarantined person is caught in a running rebuild', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild quarantined droppedPages={0} drops={[]} lastError={null} voice="self"
+        awaitingRebuild quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
         rebuildInFlight
       />,
     )
@@ -212,10 +212,72 @@ describe('RebuildNotice', () => {
   it('stays silent about a running rebuild for a person who is not behind on their stamp', () => {
     const html = render(
       <RebuildNotice
-        awaitingRebuild={false} quarantined={false} droppedPages={0} drops={[]} lastError={null}
+        awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null}
         voice="self" rebuildInFlight
       />,
     )
     expect(html).toBe('')
+  })
+
+  /**
+   * The fourth state, and the one that made "nothing to say" wrong. A rebuild that reads an
+   * archive and writes no rows commits, drops no page and records no error, so every flag above
+   * reads clean and this component used to return null for a person whose pages had gone empty.
+   *
+   * The whole paragraph, not a fragment. Half of this sentence is the promise that the payloads
+   * are still held, and a substring assertion on the other half would stay green if that promise
+   * were reworded into something that implies data was deleted.
+   */
+  it('tells a person their history came back empty, and that nothing was deleted', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing drops={[]}
+        lastError={null} voice="self" rebuildInFlight={false}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Your history was rebuilt without any error, but it produced no readings, so these pages are empty. Nothing has been deleted: everything ever collected for you is still stored, and a later version may be able to read it.</p></div>')
+  })
+
+  it('names the person whose history came back empty, in the admin voice', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing drops={[]}
+        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Robin&#x27;s history was rebuilt without any error, but it produced no readings, so their pages are empty. Nothing has been deleted: everything ever collected for them is still stored, and a later version may be able to read it.</p></div>')
+  })
+
+  /**
+   * Suppressed under a quarantine, like the awaiting line and for the same reason. A person whose
+   * rebuild rolled back has whatever their last committed attempt left in the two columns, which
+   * can be an empty pair, and "it rebuilt without any error" is flatly untrue of somebody whose
+   * rebuild is the one that failed. The quarantine is the sentence that survives.
+   */
+  it('says only the quarantine when a quarantined person also carries an empty rebuild', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="self" rebuildInFlight={false}
+      />,
+    )
+    expect(html).toContain('Your data has stopped updating')
+    expect(html).not.toContain('produced no readings')
+  })
+
+  /**
+   * Said beside a drop rather than instead of it. The two are different facts about the same
+   * rebuild - some pages would not go in, and what did go in produced nothing - and an operator
+   * reading only the drop count would conclude the rest of the archive replayed fine.
+   */
+  it('says both when a rebuild dropped pages and still produced nothing', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={3}
+        drops={[]} lastError={null} voice="self" rebuildInFlight={false}
+      />,
+    )
+    expect(html).toContain('it produced no readings')
+    expect(html).toContain('Part of your history could not be rebuilt')
   })
 })

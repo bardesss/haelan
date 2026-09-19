@@ -46,12 +46,14 @@ interface RebuildNews {
   quarantined: boolean
   awaitingRebuild: boolean
   droppedPages: number
+  producedNothing: boolean
   lastError: string | null
   drops: { dataType: string, reason: string, pages: number }[]
 }
 
 const NO_REBUILD_NEWS: RebuildNews = {
-  quarantined: false, awaitingRebuild: false, droppedPages: 0, lastError: null, drops: [],
+  quarantined: false, awaitingRebuild: false, droppedPages: 0, producedNothing: false,
+  lastError: null, drops: [],
 }
 
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
@@ -97,7 +99,7 @@ describe('the control row surfaces a rebuild problem', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} />,
       {
-        quarantined: true, awaitingRebuild: true, droppedPages: 0, drops: [],
+        quarantined: true, awaitingRebuild: true, droppedPages: 0, producedNothing: false, drops: [],
         lastError: 'UNIQUE constraint failed: samples.id',
       },
     ))
@@ -110,7 +112,7 @@ describe('the control row surfaces a rebuild problem', () => {
   it('renders the notice when the status says a rebuild is merely awaited', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} />,
-      { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
+      { quarantined: false, awaitingRebuild: true, droppedPages: 0, producedNothing: false, lastError: null, drops: [] },
     ))
     expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which runs at the next restart of the server. Nothing has gone wrong, and no new readings are collected until it has run.')
     expect(container!.querySelector('.maintenance-blocked')).toBeNull()
@@ -129,7 +131,7 @@ describe('the control row surfaces a rebuild problem', () => {
   it('tells the person a rebuild is running now while the boot rebuild is in flight', () => {
     mount(withQuery(
       <ControlRow controls={stubControls()} sources={['watch']} />,
-      { quarantined: false, awaitingRebuild: true, droppedPages: 0, lastError: null, drops: [] },
+      { quarantined: false, awaitingRebuild: true, droppedPages: 0, producedNothing: false, lastError: null, drops: [] },
       true,
     ))
     expect(text('.maintenance-waiting')).toBe('Your data is waiting for a rebuild of your history, which is running now. Nothing has gone wrong, and no new readings are collected until it finishes, which it will do on its own.')
@@ -148,6 +150,7 @@ function person(overrides: Partial<RebuildPersonState>): RebuildPersonState {
     quarantined: false,
     awaitingRebuild: false,
     droppedPages: 0,
+    producedNothing: false,
     lastErrorAtMs: null,
     lastError: null,
     lastSuccessAtMs: 1_770_000_000_000,
@@ -233,6 +236,33 @@ describe('the admin rebuild health card', () => {
   it('tells the operator a rebuild is running now rather than to restart the server', () => {
     mountRebuildHealth([person({ personId: 'p1', displayName: 'Robin', awaitingRebuild: true })], true)
     expect(text('.maintenance-waiting')).toBe('Robin is waiting for a rebuild of their history, which is running now. They receive no new data until it finishes, which it will do on its own.')
+  })
+
+  /**
+   * The last route to "every person's history rebuilt cleanly" being said over somebody's head.
+   * A rebuild that read an archive and wrote nothing commits, drops no page and records no
+   * error, so on the three flags this filter read before, that person was clean - and the card
+   * said so about a member with empty pages.
+   */
+  it('names a person whose rebuild produced nothing rather than calling the household clean', () => {
+    mountRebuildHealth([
+      person({ personId: 'p1', displayName: 'Robin', producedNothing: true }),
+      person({ personId: 'p2', displayName: 'Wilma' }),
+    ])
+    expect(text('.maintenance-waiting')).toBe('Robin\'s history was rebuilt without any error, but it produced no readings, so their pages are empty. Nothing has been deleted: everything ever collected for them is still stored, and a later version may be able to read it.')
+    expect(container!.textContent).not.toContain('rebuilt cleanly')
+    expect(container!.textContent).not.toContain('Wilma')
+  })
+
+  // The false alarm the payload count removes, asserted where an operator would actually meet
+  // it. A household of new members replays to no rows at all, and a card that listed every one
+  // of them is a card its one reader stops reading.
+  it('still calls the household clean when nobody\'s rebuild had an archive to read', () => {
+    mountRebuildHealth([
+      person({ personId: 'p1', displayName: 'Robin' }),
+      person({ personId: 'p2', displayName: 'Wilma' }),
+    ])
+    expect(text('.maintenance-backups')).toBe('Every person\'s history rebuilt cleanly.')
   })
 
   /**
