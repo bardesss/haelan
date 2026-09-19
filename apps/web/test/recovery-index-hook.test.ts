@@ -54,11 +54,34 @@ describe('selectRecoveryQuery', () => {
     expect(query.error).toBe(error)
   })
 
+  it('surfaces the last query error over a settled sum query', () => {
+    // Error dominance was previously only exercised from the sumQuery side (plus one
+    // errored-vs-pending case). This covers the `lastQuery.isError` branch against a sumQuery that
+    // is neither erroring nor pending, so that branch fails if it is ever removed.
+    const error = new Error('last query failed')
+    const lastQuery = errored(error)
+    const sumQuery = settled({ sleep_asleep_minutes: { points: [], reduction: null } })
+    const query = selectRecoveryQuery(lastQuery, sumQuery)
+    expect(query.isError).toBe(true)
+    expect(query.error).toBe(error)
+  })
+
   it('surfaces a pending sum query when the last query has already settled', () => {
     const lastQuery = settled({ daily_hrv: { points: [], reduction: null } })
     const sumQuery = pending()
     const query = selectRecoveryQuery(lastQuery, sumQuery)
     expect(query.isPending).toBe(true)
+  })
+
+  it('surfaces a pending last query when the sum query has already settled', () => {
+    // Without this case, `if (lastQuery.isPending) return lastQuery` is dead code as far as the
+    // tests can tell: every other test either has lastQuery settled or has an error take priority
+    // before pending is ever checked.
+    const lastQuery = pending()
+    const sumQuery = settled({ sleep_asleep_minutes: { points: [], reduction: null } })
+    const query = selectRecoveryQuery(lastQuery, sumQuery)
+    expect(query.isPending).toBe(true)
+    expect(query).toBe(lastQuery)
   })
 
   it('falls back to the last query once both have settled without error', () => {
