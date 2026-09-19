@@ -72,52 +72,9 @@ function stubControls(over: Partial<PageControlsState> = {}): PageControlsState 
   }
 }
 
+// The two sync tests that opened this describe moved to sync-control.test.tsx in M10, when the
+// button itself moved out of this row and into the shell.
 describe('the control row actions', () => {
-  it('posts to the sync route when sync is clicked', async () => {
-    const posted: string[] = []
-    const original = globalThis.fetch
-    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === 'POST') posted.push(String(input))
-      return new Response('{}', { status: 202, headers: { 'content-type': 'application/json' } })
-    }) as typeof fetch
-
-    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />))
-    const sync = container!.querySelector('.button-primary') as HTMLButtonElement
-    act(() => { sync.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await act(async () => { await Promise.resolve() })
-
-    globalThis.fetch = original
-    expect(posted).toEqual(['/api/sync/run'])
-  })
-
-  // /api/sync/run answers 409 when a run is already going, apiSend maps 409 to its
-  // setup_incomplete kind, and runSync had no onError, so a refused click did nothing at all and
-  // said nothing about it.
-  it('says so when a run is refused because one is already going', async () => {
-    const original = globalThis.fetch
-    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        return new Response(JSON.stringify({ error: { code: 'sync_running' } }), {
-          status: 409, headers: { 'content-type': 'application/json' },
-        })
-      }
-      return new Response(JSON.stringify({
-        running: false, lastFinishedAtMs: null,
-        rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
-      }), {
-        status: 200, headers: { 'content-type': 'application/json' },
-      })
-    }) as typeof fetch
-
-    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />))
-    const sync = container!.querySelector('.button-primary') as HTMLButtonElement
-    act(() => { sync.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)) })
-
-    globalThis.fetch = original
-    expect(container!.textContent).toContain('A sync is already running.')
-  })
-
   // The export route answers a file. A link is the right element for that: it needs no fetch, no
   // blob and no object URL, and the browser's own download handling does the rest.
   //
@@ -131,7 +88,7 @@ describe('the control row actions', () => {
     const exportPath = exportPathFor(
       'p1', ['steps'], 'sum', { from: '2026-08-01', to: '2026-08-31', source: ALL_SOURCES },
     )
-    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4}
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']}
       exportPath={exportPath} />))
     const link = container!.querySelector('a[href*="/export"]') as HTMLAnchorElement
     expect(link.getAttribute('href')).toContain('format=csv')
@@ -140,8 +97,12 @@ describe('the control row actions', () => {
     // sending it literally is the 400 this test exists to catch.
     expect(link.getAttribute('href')).not.toContain('source=')
     // One /export call takes one agg, so this link genuinely cannot carry heart rate. The label
-    // names the scope it does carry rather than implying every number on the page.
-    expect(link.textContent).toBe('Download daily totals')
+    // names the scope it does carry rather than implying every number on the page. It is the
+    // accessible name that is asserted rather than the text, because M10 made this icon only:
+    // it was the longest label in the row and the rarest control in it, and it was what pushed
+    // the row onto a second line on a laptop. The words have to survive that, and this is where.
+    expect(link.getAttribute('aria-label')).toBe('Download daily totals')
+    expect(link.getAttribute('title')).toBe('Download daily totals')
   })
 
   // The positive control for the assertion above: a real device name must still reach the server,
@@ -151,14 +112,14 @@ describe('the control row actions', () => {
     const exportPath = exportPathFor(
       'p1', ['steps'], 'sum', { from: '2026-08-01', to: '2026-08-31', source: 'watch' },
     )
-    mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch']} syncedMinutesAgo={4}
+    mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch']}
       exportPath={exportPath} />))
     const link = container!.querySelector('a[href*="/export"]') as HTMLAnchorElement
     expect(link.getAttribute('href')).toContain('source=watch')
   })
 
   it('offers no download link at all on a page with no export path', () => {
-    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} syncedMinutesAgo={4} />))
+    mount(withQuery(<ControlRow controls={stubControls()} sources={['watch']} />))
     expect(container!.querySelector('a.button')).toBeNull()
   })
 })

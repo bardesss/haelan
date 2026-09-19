@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { BrandMark } from './BrandMark.js'
 import { Icon } from './icons.js'
@@ -93,11 +94,17 @@ function isVisible(path: string, excluded: ReadonlySet<string>): boolean {
 }
 
 
-export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true, excludedDataTypes }: {
+export function Sidebar({ active, person, onSignOut, signOutError, collapsible = true, excludedDataTypes, sync }: {
   active: string
   person: string
   onSignOut: () => void
   signOutError?: string | null
+  // The sync control, or nothing. A node rather than a component this renders itself, for the
+  // reason excludedDataTypes gives just below and one more: SyncControl reads two queries, and
+  // this component is mounted by a handful of tests with no QueryClientProvider above it. Shell
+  // builds the element, where a client is guaranteed; every other caller leaves it out and gets
+  // the rail it always had.
+  sync?: ReactNode
   // False inside the drawer, where the rail is already as wide as the drawer and the icon strip
   // has nothing to save. The stored preference is still read and still never written here, so a
   // reader who crosses back above the breakpoint finds the rail as they left it.
@@ -172,6 +179,10 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
         </div>
       ))}
       <div className="rail-foot">
+        {/* Above the account rather than below it, because the account is the last thing in the
+            rail by design and a housekeeping control should not come after a reader's own name.
+            Absent entirely when no node is passed, which is every caller but the shell. */}
+        {sync}
         {/* A Link at last: this was a plain div for as long as the account page it wanted to
             point at did not exist, and the comment here said so since M3e. It leads where a
             reader expects their own name to lead - their profile, their data types, their tokens

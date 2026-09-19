@@ -43,12 +43,19 @@
     "sourceStopped": "Stopped reporting during this range: {{sources}}.",
     "sourceAll": "All sources",
     "downloadTotals": "Download daily totals",
-    "sync": "Sync",
-    "syncedAgo": "Synced {{count}} min ago",
-    "neverSynced": "Never synced",
-    "syncUnknown": "Sync status unknown",
-    "syncAlreadyRunning": "A sync is already running.",
-    "syncFailed": "Sync did not start."
+    "periodSheetTitle": "Period",
+    "close": "Close"
+  },
+  "sync": {
+    "run": "Sync",
+    "ago": "Synced {{count}} min ago",
+    "never": "Never synced",
+    "statusUnknown": "Sync status unknown",
+    "agoShort": "{{count}}m",
+    "neverShort": "–",
+    "statusUnknownShort": "–",
+    "alreadyRunning": "A sync is already running.",
+    "failed": "Sync did not start."
   },
   "sidebar": {
     "sectionsLabel": "Sections",

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Sidebar } from './components/Sidebar.js'
 import { RailDrawer } from './components/RailDrawer.js'
+import { SyncControl } from './components/SyncControl.js'
 import { useIsPhone } from './ui/breakpoint.js'
 import { SetupApp } from './setup/SetupApp.js'
 import { SignIn } from './auth/SignIn.js'
@@ -142,6 +143,11 @@ export function Shell() {
           person={session.data.displayName}
           excludedDataTypes={excludedDataTypes}
           signOutError={signOutError}
+          // Built here rather than inside the rail, because SyncControl reads two queries and
+          // both rail components are mounted by tests that provide no client. Here a client is
+          // guaranteed, and the control renders once for the whole app instead of once per page,
+          // which is what it did until M10.
+          sync={<SyncControl compact={isPhone} />}
           onSignOut={() => {
             setSignOutError(null)
             // See signOutRequest.ts for why this resets rather than clears the cache: clearing
