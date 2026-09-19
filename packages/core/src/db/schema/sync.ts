@@ -60,6 +60,24 @@ export const rebuildState = sqliteTable('rebuild_state', {
   // Archived pages the last attempt could not replay and skipped, so the rest of the person's
   // archive could go in. Zero for a rebuild that skipped none, which is the ordinary case.
   droppedPages: integer('dropped_pages').notNull().default(0),
+  // What the last rebuild actually left behind: tier 2 and tier 3 rows added together, measured
+  // against the tables rather than summed from what the mappers returned (replayPerson's own
+  // comment has the argument for the difference).
+  //
+  // Here because a rebuild can read an entire archive, write nothing, and raise nothing. Every
+  // mapper treats a body it cannot parse or cannot recognise as an empty answer rather than an
+  // error, which is the right call one level down - one unreadable body must not cost the rest of
+  // the archive - but it means catalogue drift maps a whole archive to zero rows with no page
+  // dropped, no breaker tripped and a clean success recorded here. The log already printed the
+  // figures; nothing in the database held them, so the two web surfaces read an empty rebuild as
+  // a healthy one and said so.
+  rowsWritten: integer('rows_written').notNull().default(0),
+  // How many archived payloads that rebuild was handed. The only reason this column exists is to
+  // keep the one above from crying wolf: a member connected an hour ago, or one whose windows
+  // were genuinely quiet, replays to zero rows and is perfectly fine. Only rows_written = 0 with
+  // payloads_seen > 0 says an archive existed and produced nothing, and noise on a safety surface
+  // is how its one reader learns to stop reading it.
+  payloadsSeen: integer('payloads_seen').notNull().default(0),
 })
 
 // Grouped, never one row per dropped page. A systematic fault drops every page of a type for the

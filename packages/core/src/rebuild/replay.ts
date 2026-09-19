@@ -57,6 +57,17 @@ export interface ReplayCounts {
   localDates: string[]
   /** Pages that threw and were skipped, so the rest of the archive could replay. */
   droppedPages: number
+  /**
+   * How many archived payloads this replay was handed, before any of them were grouped into
+   * windows or tried. Straight off the input rather than counted along the way, because that is
+   * exactly what it has to mean: the question it answers upstream is "was there an archive at
+   * all", which must stay true of an archive every one of whose bodies mapped to nothing.
+   *
+   * Only ever read beside the row counts above. Zero rows out of zero payloads is a new member
+   * or a quiet window and is nobody's problem; zero rows out of thousands of payloads is the
+   * silent outcome issue 289 describes, and neither number says that on its own.
+   */
+  payloadsSeen: number
   /** Those pages grouped by data type and reason - see dropReason for why grouped. */
   drops: Drop[]
 }
@@ -82,7 +93,8 @@ export interface ReplayCounts {
 export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const counts: ReplayCounts = {
     samples: 0, sessions: 0, segments: 0, providerDaily: 0, observations: 0,
-    unmappable: 0, localDates: [], droppedPages: 0, drops: [],
+    unmappable: 0, localDates: [], droppedPages: 0, payloadsSeen: input.payloads.length,
+    drops: [],
   }
   // A dropped unit can leave its date in this set: the set is in memory and a savepoint rollback
   // does not revert it. Harmless rather than a bug - deriving a day whose rows are absent is a

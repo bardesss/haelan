@@ -20,6 +20,8 @@ export interface RebuildStateRow {
   lastError: string | null
   consecutiveFailures: number
   droppedPages: number
+  rowsWritten: number
+  payloadsSeen: number
   drops: RebuildDrop[]
 }
 
@@ -55,7 +57,8 @@ export class RebuildStateStore {
   }
 
   recordSuccess(input: {
-    personId: string, nowMs: number, droppedPages: number, drops: readonly RebuildDrop[],
+    personId: string, nowMs: number, droppedPages: number,
+    rowsWritten: number, payloadsSeen: number, drops: readonly RebuildDrop[],
   }): void {
     this.#db.transaction((tx) => {
       tx.insert(rebuildState).values({
@@ -64,6 +67,8 @@ export class RebuildStateStore {
         lastSuccessAtMs: input.nowMs,
         consecutiveFailures: 0,
         droppedPages: input.droppedPages,
+        rowsWritten: input.rowsWritten,
+        payloadsSeen: input.payloadsSeen,
       }).onConflictDoUpdate({
         target: rebuildState.personId,
         set: {
@@ -87,6 +92,12 @@ export class RebuildStateStore {
           lastErrorAtMs: null,
           lastError: null,
           droppedPages: input.droppedPages,
+          // Overwritten rather than accumulated, exactly like droppedPages and the drops table
+          // below: this row describes the most recent attempt and nothing before it. A person
+          // whose drifted payloads start mapping again after a MAPPING_VERSION bump has to stop
+          // being reported the moment that rebuild commits, with nobody clearing anything.
+          rowsWritten: input.rowsWritten,
+          payloadsSeen: input.payloadsSeen,
         },
       }).run()
       // Replaced wholesale, so the table always describes the most recent attempt. Inside this
@@ -142,4 +153,30 @@ export class RebuildStateStore {
  */
 export function isQuarantined(row: RebuildStateRow | null | undefined): boolean {
   return row != null && row.lastErrorAtMs !== null
+}
+
+/**
+ * The last rebuild was handed an archive and left nothing behind. Exported and shared by the two
+ * surfaces for the reason isQuarantined is: a person reported on one screen and clean on the
+ * other is worse than either answer alone, and the condition is a conjunction that each surface
+ * would otherwise have to get right on its own.
+ *
+ * Not an error and deliberately not treated as one anywhere. Every mapper answers a body it
+ * cannot read with an empty result rather than a throw, which is what keeps one unreadable page
+ * from costing the rest of an archive; the cost is that a whole archive of drifted bodies commits
+ * cleanly and writes nothing. Nothing is lost when this is true - tier 1 still holds every
+ * payload, so a later mapping version replays them with no operator action - so it is reportable
+ * rather than categorical, and making it abort would quarantine people for having no data yet.
+ *
+ * Both halves of the conjunction are load-bearing. `rowsWritten === 0` alone is true of a member
+ * connected an hour ago and of anyone whose windows were genuinely quiet, and reporting them
+ * would be noise on a surface whose whole value is that it stays silent until something is worth
+ * reading. `payloadsSeen > 0` is what makes it a statement about an archive that exists.
+ *
+ * Reads a missing row as nothing to report, the same way isQuarantined does and for the same
+ * reason: the admin route keys a state map by personId and hands this whatever it found, which
+ * for a person who has never been rebuilt is nothing at all.
+ */
+export function producedNothing(row: RebuildStateRow | null | undefined): boolean {
+  return row != null && row.payloadsSeen > 0 && row.rowsWritten === 0
 }

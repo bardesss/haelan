@@ -1,7 +1,8 @@
+import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, test } from 'vitest'
 import { and, eq } from 'drizzle-orm'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
-import { RebuildStateStore } from '../src/store/rebuildState.ts'
+import { RebuildStateStore, producedNothing } from '../src/store/rebuildState.ts'
 import { rawPayloads } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { seedRebuildable } from '../src/testing/fixtures.ts'
@@ -76,6 +77,45 @@ describe('runRebuild, recording each person\'s outcome', () => {
     // is the same column peopleNeedingRebuild reads to decide whether sync may resume for them.
     expect(h.deps.peopleStore.list().find((p) => p.id === h.personId)?.builtDerivationVersion)
       .toBe(DERIVATION_VERSION)
+  })
+
+  // The silent outcome of issue 289, reproduced rather than described. Every archived body is
+  // replaced with a well-formed JSON object of a shape no current mapper recognises, which is
+  // what catalogue drift produces in the field: the body gunzips, parses, passes each mapper's
+  // type guard and yields nothing. Nothing throws, so no page is dropped, no breaker fires and
+  // the person is stamped current - and before this pair of columns existed, rebuild_state held
+  // a row indistinguishable from a healthy rebuild's.
+  test('records a rebuild that read the whole archive and wrote no rows', () => {
+    h = seedRebuildable()
+    h.db.update(rawPayloads).set({ bodyGzip: gzipSync(Buffer.from('{}', 'utf8')) })
+      .where(eq(rawPayloads.personId, h.personId)).run()
+    const store = new RebuildStateStore(h.db)
+
+    const report = runRebuild({ ...h.deps, nowMs: 5_000, rebuildState: store })
+
+    // Not a failure and not a drop: the point of the test is that every existing signal is clean.
+    expect(report.failures).toEqual([])
+    expect(report.people[0]?.droppedPages).toBe(0)
+    expect(report.people[0]?.rowsWritten).toBe(0)
+    // Asserted as a positive number rather than pinned to the fixture's own page count, which is
+    // the fixture's business and changes whenever a data source is added to it.
+    expect(report.people[0]?.payloadsSeen).toBeGreaterThan(0)
+    const row = store.get(h.personId)
+    expect(row?.rowsWritten).toBe(0)
+    expect(row?.payloadsSeen).toBe(report.people[0]?.payloadsSeen)
+    expect(producedNothing(row)).toBe(true)
+  })
+
+  // The other half of the pair, and the reason there are two columns. A rebuild that did read
+  // rows must leave producedNothing false, or the surfaces would report every healthy person.
+  test('leaves a rebuild that wrote rows reporting nothing', () => {
+    h = seedRebuildable()
+    const store = new RebuildStateStore(h.db)
+
+    const report = runRebuild({ ...h.deps, nowMs: 5_000, rebuildState: store })
+
+    expect(report.people[0]?.rowsWritten).toBeGreaterThan(0)
+    expect(producedNothing(store.get(h.personId))).toBe(false)
   })
 })
 
