@@ -13,6 +13,7 @@ import { AgainstUsual } from '../components/AgainstUsual.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
 import { ControlRow } from '../components/ControlRow.js'
+import { RecoveryIndexTile } from './dashboard/RecoveryIndexTile.js'
 import { NightExcludedSessions } from '../components/NightExcludedSessions.js'
 import { AnnotatePanel } from '../components/AnnotatePanel.js'
 import type { AnnotateTarget } from '../components/AnnotatePanel.js'
@@ -598,6 +599,12 @@ export function Dashboard() {
             that finished setup sees no change here at all; this is only ever visible to a member
             who still needs it, first in line above every card that has nothing to show them yet. */}
         <ConnectGoogle />
+        {/* First card on the page: the one number summarising the four signals underneath it.
+            today comes from controls, not from a fresh Date() here - see usePageControls's own
+            `today` field and RecoveryIndexTile's doc comment for why a second, UTC-based notion
+            of "today" would disagree with it for part of every day. */}
+        <RecoveryIndexTile from={controls.from} to={controls.to} source={source}
+          today={controls.today} span={4} />
         {tile('steps', 3, 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
           'dashboard.steps.chartLabel', 'dashboard.units.steps',
           (p) => formatMetricValue(values(p).reduce((a, b) => a + b, 0), 'steps', i18n.language, ''), 'higher-is-better',

@@ -430,6 +430,11 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .training-load-ratio { font-size: var(--font-size-sm); color: var(--text-secondary); margin: var(--space-2) 0 0; }
 .training-load-target { font-size: var(--font-size-xs); color: var(--text-muted); margin: var(--space-1) 0 0; }
 
+/* The recovery index tile's own gate, following .training-load-empty's own comment above: not
+   .empty, because this says the derived score has not enough recent history to compare against,
+   not that the card's underlying metrics had no rows. */
+.recovery-index-empty { color: var(--text-muted); font-size: var(--font-size-sm); line-height: var(--leading-normal); padding: var(--space-4) 0 var(--space-1); }
+
 /* Stands in for a chart on a one day range (ChartNote.tsx), not for a card's whole content the
    way .empty is: the value, delta and basis around it still render, so this reads as a small,
    muted caption like .basis rather than as the padded, body sized block .empty is. */

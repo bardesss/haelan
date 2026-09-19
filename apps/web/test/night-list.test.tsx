@@ -37,7 +37,7 @@ const PERSON: Session = {
 
 const CONTROLS = {
   tab: 'month' as const, anchor: '2026-08-15', source: ALL_SOURCES,
-  from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31',
+  from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31', today: '2026-08-31',
   setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
 }
 

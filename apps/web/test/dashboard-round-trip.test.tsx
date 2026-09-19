@@ -235,17 +235,21 @@ describe('the Dashboard round trip', () => {
   // a metric only has rows under the aggs its own catalogue entry lists, so one shared request
   // would ask at least one card for an agg its metric refuses and 400 the lot
   // (requireMetricAndAgg's ConfigError). What batching by agg actually buys is fewer requests than
-  // cards: metrics that share an agg ride together.
+  // cards: metrics that share an agg AND range ride together.
   //
-  // Asserted as a property, not a count. The number of distinct aggs the dashboard needs is a
-  // detail of which cards exist and what each draws (task 10 added two more requests, 'min' and
-  // 'max', so the range card could draw a real band instead of a bare mean line), and a count
-  // pinned here is a count someone has to remember to update every time a card's data needs
-  // change, or worse, a count that quietly starts arguing a chart out of a series it should draw
-  // rather than the other way around. What is actually worth defending: requests are batched by
-  // agg (one request per distinct agg value, not one per metric), and that is fewer requests than
-  // there are cards on the page.
-  it('batches by shared agg rather than firing one request per card', async () => {
+  // Asserted as a property, not a count. The number of distinct (agg, range) pairs the dashboard
+  // needs is a detail of which cards exist and what each draws (task 10 added two more requests,
+  // 'min' and 'max', so the range card could draw a real band instead of a bare mean line; task 7
+  // added a second 'sum' and a second 'last' request, because useRecoveryIndex fetches its own
+  // wider window - recoveryWindowStart(controls.from) through controls.to, not controls.from
+  // through controls.to - so every date it scores has a full baseline-plus-sleep-week behind it,
+  // and that window cannot ride in the same request as a card asking for the visible range only),
+  // and a count pinned here is a count someone has to remember to update every time a card's data
+  // needs change, or worse, a count that quietly starts arguing a chart out of a series it should
+  // draw rather than the other way around. What is actually worth defending: requests are batched
+  // by agg within a shared range (one request per distinct (agg, from, to) triple, not one per
+  // metric), and that is fewer requests than there are cards on the page.
+  it('batches by shared agg and range rather than firing one request per card', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
@@ -254,11 +258,15 @@ describe('the Dashboard round trip', () => {
     await act(async () => { await Promise.resolve() })
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
-    const distinctAggs = new Set(seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg')))
+    const shapeOf = (u: string) => {
+      const params = new URLSearchParams(u.split('?')[1] ?? '')
+      return `${params.get('agg')}|${params.get('from')}|${params.get('to')}`
+    }
+    const distinctShapes = new Set(seriesCalls.map(shapeOf))
     const cardCount = container!.querySelectorAll('.card').length
-    // One request per distinct agg: if two metrics sharing an agg fired separate requests instead
-    // of riding one together, seriesCalls.length would exceed distinctAggs.size.
-    expect(seriesCalls).toHaveLength(distinctAggs.size)
+    // One request per distinct (agg, range) shape: if two metrics sharing both fired separate
+    // requests instead of riding one together, seriesCalls.length would exceed distinctShapes.size.
+    expect(seriesCalls).toHaveLength(distinctShapes.size)
     expect(seriesCalls.length).toBeLessThan(cardCount)
     expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
     restore()
@@ -302,12 +310,13 @@ describe('the Dashboard round trip', () => {
     // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus the five
     // remaining non-tile cards task 10 restored (heart rate range, flagged days, sleep stages,
     // sleep schedule), plus the three insight cards this task added (steps, resting_heart_rate,
-    // sleep_asleep_minutes), 12 not 4 or 10: this test predates all of their returns and only ever
-    // meant "every card on the page", not "exactly the tiles". Daily steps (the heatmap) is not
-    // among them any more: M3d2 moved it to Activity.tsx. Twelve rather than thirteen since the
-    // anomalies placeholder was removed - it was a card whose entire content said that a feature
-    // nobody had scheduled did not exist.
-    expect(container!.querySelectorAll('.card')).toHaveLength(12)
+    // sleep_asleep_minutes), plus the recovery index tile this task (7) put first on the page, 13
+    // not 4 or 10: this test predates all of their returns and only ever meant "every card on the
+    // page", not "exactly the tiles". Daily steps (the heatmap) is not among them any more: M3d2
+    // moved it to Activity.tsx. Twelve, not thirteen, before this task added a card: the anomalies
+    // placeholder was removed - it was a card whose entire content said that a feature nobody had
+    // scheduled did not exist.
+    expect(container!.querySelectorAll('.card')).toHaveLength(13)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

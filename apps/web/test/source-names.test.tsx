@@ -42,7 +42,7 @@ const named = (id: string, displayName: string, alias: string | null): NamedSour
 
 const CONTROLS: PageControlsState = {
   tab: 'week', anchor: '2026-08-30', source: '12e34bba19af18604590e870380d9c6e',
-  from: '2026-08-24', to: '2026-08-30', historicalTo: '2026-08-30',
+  from: '2026-08-24', to: '2026-08-30', historicalTo: '2026-08-30', today: '2026-08-30',
   setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
 }
 

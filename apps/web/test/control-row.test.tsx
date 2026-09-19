@@ -77,7 +77,7 @@ function withQueryAwaitingStatus(node: ReactNode): ReactNode {
 function stubControls(over: Partial<PageControlsState> = {}): PageControlsState {
   return {
     tab: 'month', anchor: '2026-08-15', source: ALL_SOURCES,
-    from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31',
+    from: '2026-08-01', to: '2026-08-31', historicalTo: '2026-08-31', today: '2026-08-31',
     setTab: () => {}, setAnchor: () => {}, step: () => {}, setSource: () => {},
     ...over,
   }
