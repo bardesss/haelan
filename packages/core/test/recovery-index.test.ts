@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries } from '../src/api/recoveryIndex.ts'
+import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS } from '../src/api/recoveryIndex.ts'
 import type { DayValue } from '../src/api/recoveryIndex.ts'
+import type { RecoveryIndexInput } from '../src/api/recoveryIndex.ts'
 
 /**
  * 60 days alternating one unit either side of `flat`, then one day that deviates sharply.
@@ -92,5 +93,135 @@ describe('sleepWeekSeries', () => {
     ]
     const { duration } = sleepWeekSeries(sparse, [], { from: '2026-09-14', to: '2026-09-14' })
     expect(duration).toEqual([])
+  })
+})
+
+/** 67 days of flat history with a little noise, so baselines are neither thin nor zero-spread. */
+function history(end: string, centre: number): DayValue[] {
+  const days: DayValue[] = []
+  for (let back = 66; back >= 0; back -= 1) {
+    days.push({ localDate: shift(end, -back), value: centre + (back % 3) - 1 })
+  }
+  return days
+}
+
+function inputAt(end: string): RecoveryIndexInput {
+  return {
+    hrv: history(end, 40),
+    restingHeartRate: history(end, 55),
+    respiratoryRate: history(end, 14),
+    asleepMinutes: history(end, 430),
+    bedtimeMinutes: history(end, 1380),
+  }
+}
+
+describe('recoveryIndex', () => {
+  it('scores a day sitting on its own baseline at 50', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    // Put the final day of each autonomic series exactly on its own baseline centre, so each z is
+    // 0. `history` cycles -1/0/+1 over a window of 60, which is a multiple of 3, so the centre is
+    // the bare value.
+    const flatten = (days: readonly DayValue[], centre: number): DayValue[] =>
+      days.map((day) => day.localDate === end ? { ...day, value: centre } : day)
+    // Sleep is handed an unvarying history on purpose. A constant series has zero spread, so its z
+    // is null and the input drops out - which is the ONLY way to get a sleep contribution of
+    // exactly zero, since a varying week never lands precisely on its own baseline. The weights
+    // renormalise over the three that remain and the composite is still 0.
+    const constant = (value: number): DayValue[] =>
+      input.hrv.map((day) => ({ localDate: day.localDate, value }))
+    const result = recoveryIndex({
+      hrv: flatten(input.hrv, 40),
+      restingHeartRate: flatten(input.restingHeartRate, 55),
+      respiratoryRate: flatten(input.respiratoryRate, 14),
+      asleepMinutes: constant(430),
+      bedtimeMinutes: constant(1380),
+    }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    expect(result.score).toBe(50)
+    expect(result.degraded).toEqual(['sleep'])
+  })
+
+  it('withholds entirely when HRV is missing for the day', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    const result = recoveryIndex(
+      { ...input, hrv: input.hrv.filter((day) => day.localDate !== end) },
+      end,
+    )
+    expect(result.enough).toBe(false)
+    if (result.enough) return
+    expect(result.missing).toEqual(['hrv'])
+  })
+
+  it('withholds entirely when resting heart rate is missing for the day', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    const result = recoveryIndex(
+      { ...input, restingHeartRate: input.restingHeartRate.filter((d) => d.localDate !== end) },
+      end,
+    )
+    expect(result.enough).toBe(false)
+    if (result.enough) return
+    expect(result.missing).toEqual(['restingHeartRate'])
+  })
+
+  it('redistributes weight and names the gap when only an optional input is missing', () => {
+    const end = '2026-09-14'
+    const result = recoveryIndex({ ...inputAt(end), respiratoryRate: [] }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    expect(result.degraded).toEqual(['respiratoryRate'])
+    const total = result.inputs.reduce((sum, i) => sum + i.weight, 0)
+    expect(total).toBeCloseTo(1, 10)
+    expect(result.inputs.some((i) => i.key === 'respiratoryRate')).toBe(false)
+  })
+
+  it('gives a breathing rate below baseline no credit, because low is not recovered', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    const lower = input.respiratoryRate.map((d) => d.localDate === end ? { ...d, value: 9 } : d)
+    const result = recoveryIndex({ ...input, respiratoryRate: lower }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    const breathing = result.inputs.find((i) => i.key === 'respiratoryRate')
+    expect(breathing?.z).toBe(0)
+  })
+
+  it('attributes points that sum exactly to the distance from 50', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    const worse = input.restingHeartRate.map((d) => d.localDate === end ? { ...d, value: 70 } : d)
+    const result = recoveryIndex({ ...input, restingHeartRate: worse }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    const summed = result.inputs.reduce((sum, i) => sum + i.points, 0)
+    expect(summed).toBeCloseTo(result.score - 50, 6)
+    expect(result.score).toBeLessThan(50)
+  })
+
+  it('keeps every score inside 0 and 100 however extreme the day', () => {
+    const end = '2026-09-14'
+    const input = inputAt(end)
+    const absurd = input.hrv.map((d) => d.localDate === end ? { ...d, value: 100_000 } : d)
+    const result = recoveryIndex({ ...input, hrv: absurd }, end)
+    expect(result.enough).toBe(true)
+    if (!result.enough) return
+    expect(result.score).toBeGreaterThanOrEqual(0)
+    expect(result.score).toBeLessThanOrEqual(100)
+  })
+
+  it('weights sum to one, so a redistribution has something to redistribute', () => {
+    const total = Object.values(RECOVERY_WEIGHTS).reduce((sum, weight) => sum + weight, 0)
+    expect(total).toBeCloseTo(1, 10)
+  })
+
+  it('scores a day whose sleep rows carry no coverage, because coverage is not the wear signal', () => {
+    // DayValue has no coverage field at all. This test exists so that a future gate written
+    // against coverage has to delete an assertion rather than silently drop every sleep row.
+    const end = '2026-09-14'
+    const result = recoveryIndex(inputAt(end), end)
+    expect(result.enough).toBe(true)
   })
 })

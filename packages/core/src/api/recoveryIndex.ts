@@ -132,3 +132,188 @@ export function sleepWeekSeries(
   }
   return { duration, consistency }
 }
+
+/**
+ * How much each input moves the index.
+ *
+ * Proposals carrying their reasoning, in the manner of `MIN_WORN_ACUTE`, NOT derived truths. HRV
+ * and resting heart rate are the autonomic core and take the larger share; the week's sleep
+ * modifies; respiratory rate is a small early illness signal. Google does not publish its own
+ * weighting, so there is nothing to copy and something had to be chosen.
+ *
+ * **This object is the calibration target.** Fitting against harvested app scores later must be a
+ * change to these four numbers and nothing else.
+ */
+export const RECOVERY_WEIGHTS: Readonly<Record<RecoveryInputKey, number>> = {
+  hrv: 0.35,
+  restingHeartRate: 0.30,
+  sleep: 0.25,
+  respiratoryRate: 0.10,
+}
+
+/**
+ * The `k` in `100 / (1 + e^(-k·z))`, where z is the weighted composite.
+ *
+ * PROVISIONAL. Set by `scripts/probe-recovery-scale.mjs` against a real archive's own distribution
+ * (see the spec, "The scale is measured, not chosen"). A constant picked to read well in a unit
+ * test can put every real day between 47 and 54 and no test would notice.
+ */
+export const RECOVERY_SCALE = 1
+
+/** The two inputs without which this is a different statistic wearing the same name. */
+export const REQUIRED_INPUTS: readonly RecoveryInputKey[] = ['hrv', 'restingHeartRate']
+
+export interface RecoveryInput {
+  key: RecoveryInputKey
+  /** Sign-corrected: positive always means better recovered. */
+  z: number
+  /** After any redistribution, so the weights present always sum to 1. */
+  weight: number
+  /** This input's share of the distance from 50. The four sum to `score - 50` exactly. */
+  points: number
+}
+
+export interface RecoveryIndexUnavailable {
+  enough: false
+  /** Which required inputs were absent or too thin to judge. Never empty. */
+  missing: readonly RecoveryInputKey[]
+}
+
+export interface RecoveryIndexAvailable {
+  enough: true
+  localDate: string
+  /** 0-100, integer. */
+  score: number
+  /** The weighted composite behind it, kept so a probe can study the distribution. */
+  composite: number
+  inputs: readonly RecoveryInput[]
+  /** Optional inputs that were absent; their weight was redistributed across the rest. */
+  degraded: readonly RecoveryInputKey[]
+}
+
+/**
+ * A union rather than `RecoveryIndex | null`, following `TrainingLoad`: a caller cannot read a
+ * score without having passed the gate, and the unavailable case still carries something worth
+ * rendering.
+ */
+export type RecoveryIndex = RecoveryIndexUnavailable | RecoveryIndexAvailable
+
+/**
+ * The five raw series, each already filtered to merged daily rows over `recoveryWindowStart(on)`
+ * through `on`. A day nobody wore a device is ABSENT rather than present as zero.
+ */
+export interface RecoveryIndexInput {
+  hrv: readonly DayValue[]
+  restingHeartRate: readonly DayValue[]
+  respiratoryRate: readonly DayValue[]
+  asleepMinutes: readonly DayValue[]
+  bedtimeMinutes: readonly DayValue[]
+}
+
+/**
+ * The recovery index for every date in `range`.
+ *
+ * **This reader feeds a printed number, so it states what it honours** (CONTRIBUTING.md, "A reader
+ * that feeds a number says what it honours"):
+ *
+ * - **Session kinds: none.** It reads merged daily rows and never touches sessions, so the sleep
+ *   against exercise confusion that once answered 65.10 TRIMP cannot arise here.
+ * - **Override actions: both, already applied upstream.** Exclusions and corrections are resolved
+ *   at derivation; `daily` excludes an overridden value by construction.
+ * - **Thinned: no.** The caller must not pass `points` to `/series`. A point budget is an argument
+ *   about display, and an index that moved when a chart's budget moved would not be measuring
+ *   anything. Anything added here that starts passing `points` breaks the number.
+ *
+ * **Nothing re-scales per person or per period.** The composite is plain `Σ wᵢzᵢ`, so zero always
+ * means "at your baseline" rather than relative to something that moves, and `RECOVERY_SCALE` does
+ * the range work once for everyone. Dividing by the composite's own spread was considered and
+ * dropped: it needs a 126-day window rather than this one's 66, it drifts as a person's volatility
+ * changes, and it makes two people's numbers incomparable.
+ */
+export function recoveryIndexSeries(
+  input: RecoveryIndexInput,
+  range: DateRange,
+): Map<string, RecoveryIndex> {
+  // A z on day D reads a baseline over [D-60, D-1], so the sleep week statistic has to exist for
+  // those earlier days too - and each of THOSE needs the six days before it, which is exactly what
+  // `recoveryWindowStart` reaches back for.
+  const sleep = sleepWeekSeries(input.asleepMinutes, input.bedtimeMinutes, {
+    from: shiftLocalDate(range.from, -BASELINE_WINDOW_DAYS),
+    to: range.to,
+  })
+
+  const zRange = range
+
+  const z = {
+    hrv: zSeries(input.hrv, zRange, 'up'),
+    restingHeartRate: zSeries(input.restingHeartRate, zRange, 'down'),
+    respiratoryRate: zSeries(input.respiratoryRate, zRange, 'down'),
+    sleepDuration: zSeries(sleep.duration, zRange, 'up'),
+    sleepConsistency: zSeries(sleep.consistency, zRange, 'down'),
+  }
+
+  /** The four inputs' sign-corrected z for one date, with absent ones omitted. */
+  const inputsOn = (date: string): Partial<Record<RecoveryInputKey, number>> => {
+    const out: Partial<Record<RecoveryInputKey, number>> = {}
+    const hrv = z.hrv.get(date)
+    if (hrv !== null && hrv !== undefined) out.hrv = hrv
+    const rhr = z.restingHeartRate.get(date)
+    if (rhr !== null && rhr !== undefined) out.restingHeartRate = rhr
+    const breathing = z.respiratoryRate.get(date)
+    // One-sided: a breathing rate below baseline is not evidence of better recovery, so a positive
+    // sign-corrected z (meaning "lower than usual") clamps to zero rather than lifting the score.
+    if (breathing !== null && breathing !== undefined) out.respiratoryRate = Math.min(breathing, 0)
+    const duration = z.sleepDuration.get(date)
+    const consistency = z.sleepConsistency.get(date)
+    const halves = [duration, consistency].filter((half): half is number => half !== null && half !== undefined)
+    if (halves.length > 0) out.sleep = meanOf(halves)
+    return out
+  }
+
+  const out = new Map<string, RecoveryIndex>()
+  for (let date = range.from; date <= range.to; date = shiftLocalDate(date, 1)) {
+    const present = inputsOn(date)
+    const missing = REQUIRED_INPUTS.filter((key) => present[key] === undefined)
+    if (missing.length > 0) {
+      out.set(date, { enough: false, missing })
+      continue
+    }
+
+    const keys = (Object.keys(present) as RecoveryInputKey[])
+    // Weights are renormalised over the inputs actually present, so a redistribution never changes
+    // what zero means - only how much each survivor carries.
+    const weightPresent = keys.reduce((sum, key) => sum + RECOVERY_WEIGHTS[key], 0)
+    const composite = keys
+      .reduce((sum, key) => sum + (RECOVERY_WEIGHTS[key] / weightPresent) * (present[key] as number), 0)
+    const score = Math.round(100 / (1 + Math.exp(-RECOVERY_SCALE * composite)))
+    const distance = score - 50
+    const inputs: RecoveryInput[] = keys.map((key) => {
+      const weight = RECOVERY_WEIGHTS[key] / weightPresent
+      const contribution = weight * (present[key] as number)
+      return {
+        key,
+        z: present[key] as number,
+        weight,
+        // Shares of the composite, so the four points sum to the distance exactly. A composite of
+        // zero is a day with no distance to attribute, and every share is then zero too.
+        points: composite === 0 ? 0 : distance * (contribution / composite),
+      }
+    })
+
+    out.set(date, {
+      enough: true,
+      localDate: date,
+      score,
+      composite,
+      inputs,
+      degraded: (Object.keys(RECOVERY_WEIGHTS) as RecoveryInputKey[]).filter((k) => present[k] === undefined),
+    })
+  }
+  return out
+}
+
+/** One day's index. The same computation as `recoveryIndexSeries` over a range of one. */
+export function recoveryIndex(input: RecoveryIndexInput, on: string): RecoveryIndex {
+  return recoveryIndexSeries(input, { from: on, to: on }).get(on)
+    ?? { enough: false, missing: REQUIRED_INPUTS }
+}
