@@ -992,3 +992,39 @@ describe('the anomalies card', () => {
     restore()
   })
 })
+
+describe('the page level empty state', () => {
+  // What prompted the whole change. A Day tab where every card has hidden itself should read as a
+  // quiet page, not a broken one: one message, and the control row above it still working.
+  //
+  // The flagged days card still renders here, and that is the point of its `ambient` prop: it
+  // reads the reader's own annotations rather than the period, so it survives a day with nothing
+  // synced, and it must not be the reason the page claims to have something to show.
+  it('shows one page level empty state on a day with nothing recorded', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({
+      baseline: null, emptySeries: true, emptyIntraday: true, suppressInsights: true,
+    })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).toContain('Nothing recorded here')
+    expect(container!.textContent).not.toContain('No data yet')
+    // The control row is outside the grid and must survive untouched, or the reader has no way
+    // back to a range that does have something in it.
+    expect(container!.querySelector('.controls')).not.toBeNull()
+    restore()
+  })
+
+  // The other half: one card with something to say is enough to silence the page level message.
+  // Without this, a fallback that rendered unconditionally would pass the test above.
+  it('says nothing of its own on a day that does have data', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({ baseline: null })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.textContent).not.toContain('Nothing recorded here')
+    restore()
+  })
+})

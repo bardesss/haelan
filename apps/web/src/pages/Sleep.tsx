@@ -8,6 +8,7 @@ import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
 import { InsightCard } from '../components/InsightCard.js'
 import { Card } from '../components/Card.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { EmptyState } from '../components/EmptyState.js'
 import { Loading } from '../components/Loading.js'
 import { ErrorState } from '../components/ErrorState.js'
@@ -396,7 +397,7 @@ export function Sleep() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('sleep.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {/* Not a MetricCard: gated on a night from useNights, not a metric and its points, the
             same reason Dashboard's own hypnogram card stays outside it. The date names the night
             actually drawn, never the range end, so an empty range never claims a night it has no
@@ -507,7 +508,7 @@ export function Sleep() {
         <Card span={12} measured label={t('sleep.nights.label')}>
           <NightList controls={resolved} />
         </Card>
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

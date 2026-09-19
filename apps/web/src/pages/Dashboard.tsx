@@ -4,6 +4,7 @@ import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { InsightCard } from '../components/InsightCard.js'
@@ -593,7 +594,7 @@ export function Dashboard() {
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {/* Renders nothing once connected (ConnectGoogle.tsx's own doc comment), so a household
             that finished setup sees no change here at all; this is only ever visible to a member
             who still needs it, first in line above every card that has nothing to show them yet. */}
@@ -810,7 +811,7 @@ export function Dashboard() {
             {t('dashboard.recovery.viewAll')}
           </Link>, t('dashboard.units.ms'))}
 
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )
