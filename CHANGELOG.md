@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.39.0](https://github.com/bardesss/haelan/compare/v1.38.1...v1.39.0) (2026-09-19)
+
+
+### Features
+
+* **web:** a card with nothing to show renders nothing at all ([#293](https://github.com/bardesss/haelan/issues/293)) ([cea5f18](https://github.com/bardesss/haelan/commit/cea5f185a7fa7564f9098e4b00fbabc34aead370))
+* **web:** the rebuild notice says how old it is ([#295](https://github.com/bardesss/haelan/issues/295)) ([e664c26](https://github.com/bardesss/haelan/commit/e664c262cff4d73c4ca71654a83cf85431b33143))
+
 ## [1.38.1](https://github.com/bardesss/haelan/compare/v1.38.0...v1.38.1) (2026-09-19)
 
 
