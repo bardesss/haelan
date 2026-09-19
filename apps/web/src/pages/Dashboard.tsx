@@ -205,7 +205,7 @@ export function Dashboard() {
   // Day tab's intraday heart rate card below is not a MetricCard -- see its own comment for why --
   // and used to have no exclusion check at all, claiming "no data" for a type nobody had asked
   // haelan to fetch in the first place.
-  const { items: dashboardDataTypes } = useDataTypes()
+  const { items: dashboardDataTypes, isPending: dataTypesPending } = useDataTypes()
   const excludedDataTypes = dashboardDataTypes.filter((d) => d.excluded).map((d) => d.id)
   const period = `${controls.from} ${t('common.to')} ${controls.to}`
 
@@ -676,13 +676,22 @@ export function Dashboard() {
           // rule the sleep stages card follows just below: the exclusion branch keeps its card,
           // since "not being synced" is still something to say about the day, and only the
           // genuinely empty points.length === 0 case disappears.
-          intraday.isError || intraday.isPending
+          // dataTypesPending joins the conditions that KEEP this card for the same reason
+          // MetricCard's own gate reads it (see that file): excludedDataTypes is [] while the data
+          // types request is in flight, which is indistinguishable from a loaded list excluding
+          // nothing, so without it a reader who turned heart rate off watches this card vanish for
+          // a moment instead of being told it is not being synced.
+          intraday.isError || intraday.isPending || dataTypesPending
             || excludedDataTypes.includes(dataTypeForMetric('heart_rate') ?? '')
             || intraday.data.points.length > 0 ? (
             <Card span={8} label={t('dashboard.heartRateRange.label')}
               basis={intraday.data ? intradayBasis(t, intraday.data.reduction, intraday.data.points.length) : undefined}>
               {intraday.isError ? <ErrorState onRetry={() => void intraday.refetch()} error={intraday.error} />
                 : intraday.isPending ? <Loading />
+                // Ahead of the exclusion check below, which cannot be trusted until the list it
+                // reads has arrived: an unloaded list would answer "not excluded" and fall through
+                // to a chart drawn over zero points.
+                : dataTypesPending ? <Loading />
                 // Checked ahead of the real no-data branch below, the same precedence emptyStateFor
                 // gives excludedTypes over both of its own no_data and not_worn checks: an excluded
                 // type has nothing this request could ever have answered, so the exclusion is the
