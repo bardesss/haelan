@@ -161,6 +161,10 @@ export const RECOVERY_WEIGHTS: Readonly<Record<RecoveryInputKey, number>> = {
  * landing somewhat less extreme than its counterpart - this composite's own asymmetry, not a flaw
  * in the scale. A constant picked to read well in a unit test can put every real day between 47 and
  * 54 and no test would notice.
+ *
+ * **Placeholder, not settled.** 1.69 is this household's own measurement, kept for now rather than
+ * chosen for behaviour. It is expected to be refit once there are harvested Google Health scores to
+ * calibrate against - read it as provisional, not as a constant anyone has signed off on.
  */
 export const RECOVERY_SCALE = 1.69
 
@@ -352,4 +356,26 @@ export function recoveryIndexSeries(
 export function recoveryIndex(input: RecoveryIndexInput, on: string): RecoveryIndex {
   return recoveryIndexSeries(input, { from: on, to: on }).get(on)
     ?? { enough: false, missing: REQUIRED_INPUTS }
+}
+
+export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
+
+/**
+ * Which of five comparative bands a score falls in.
+ *
+ * Deliberately NOT a readiness verdict. Google's tile says the body is recovered and ready for a
+ * workout; a personal archive is not licensed to say that, so these describe distance from the
+ * person's own normal and stop. The cut points are symmetric about 50 and are a copy decision, not
+ * a derived one: inverting the curve at `RECOVERY_SCALE = 1.69` puts a score of 56 at a composite of
+ * about 0.14 - close to a seventh of a sigma, not the quarter an earlier draft of this comment
+ * claimed. That is fine; 44-56 is where this design chooses to call a day "around your usual"
+ * rather than a boundary the scale implies. Re-scaling the constant later must not move these cuts
+ * to keep some sigma reading true - they were never derived from it.
+ */
+export function bandOf(score: number): RecoveryBand {
+  if (score < 25) return 'low'
+  if (score < 44) return 'below'
+  if (score <= 56) return 'usual'
+  if (score <= 75) return 'above'
+  return 'high'
 }

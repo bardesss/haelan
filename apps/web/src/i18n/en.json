@@ -1297,5 +1297,26 @@
       "furthest": "Furthest session",
       "fastest-km": "Fastest kilometre"
     }
+  },
+  "recoveryIndex": {
+    "label": "Recovery index",
+    "asOf": "as of {{date}}",
+    "band": {
+      "low": "Well below your usual",
+      "below": "Below your usual",
+      "usual": "Around your usual",
+      "above": "Above your usual",
+      "high": "Well above your usual"
+    },
+    "basis": "against your own last {{days}} days",
+    "unavailable": "Not enough recent data to compare against your usual.",
+    "degraded": "computed without {{inputs}}",
+    "input": {
+      "hrv": "Heart rate variability",
+      "restingHeartRate": "Resting heart rate",
+      "sleep": "Last week's sleep",
+      "respiratoryRate": "Breathing rate"
+    },
+    "points": "{{points}} points"
   }
 }

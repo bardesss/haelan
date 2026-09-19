@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS, RECOVERY_SCALE } from '../src/api/recoveryIndex.ts'
+import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS, RECOVERY_SCALE, bandOf } from '../src/api/recoveryIndex.ts'
 import type { DayValue } from '../src/api/recoveryIndex.ts'
 import type { RecoveryIndexInput } from '../src/api/recoveryIndex.ts'
 
@@ -273,5 +273,22 @@ describe('recoveryIndex', () => {
     const oneSigma = 100 / (1 + Math.exp(-RECOVERY_SCALE * 1))
     expect(oneSigma).toBeGreaterThan(60)
     expect(oneSigma).toBeLessThan(85)
+  })
+})
+
+describe('bandOf', () => {
+  it('names five comparative bands with 50 sitting in the middle one', () => {
+    expect(bandOf(50)).toBe('usual')
+    expect(bandOf(44)).toBe('usual')
+    expect(bandOf(56)).toBe('usual')
+    expect(bandOf(43)).toBe('below')
+    expect(bandOf(57)).toBe('above')
+    expect(bandOf(24)).toBe('low')
+    expect(bandOf(76)).toBe('high')
+  })
+
+  it('covers 0 and 100, so no score is unlabelled', () => {
+    expect(bandOf(0)).toBe('low')
+    expect(bandOf(100)).toBe('high')
   })
 })
