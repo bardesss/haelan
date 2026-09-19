@@ -111,6 +111,10 @@
       "title": "Wordt niet gesynchroniseerd",
       "detail": "Je hebt dit gegevenstype uitgezet. Zet het weer aan in Instellingen om het weer op te halen."
     },
+    "page": {
+      "title": "Niets geregistreerd",
+      "detail": "Geen enkele kaart op deze pagina heeft iets te tonen voor de gekozen periode. Probeer hierboven een ruimere periode."
+    },
     "insufficient": {
       "title": "Onvoldoende data om samen te vatten",
       "detail": "Er zijn te weinig dagen in deze periode om al iets zinnigs te zeggen."

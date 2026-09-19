@@ -1,8 +1,9 @@
 import { useId } from 'react'
 import { BasisContext } from './basis.js'
 import { ErrorBoundary } from './ErrorBoundary.js'
+import { useCardPresence } from './CardGrid.js'
 
-export function Card({ span, label, basis, measured = false, children }: {
+export function Card({ span, label, basis, measured = false, ambient, children }: {
   span: number
   label?: string
   basis?: string
@@ -14,8 +15,24 @@ export function Card({ span, label, basis, measured = false, children }: {
    * chart, and a free-form class would invite answers to other questions.
    */
   measured?: boolean
+  /**
+   * A card whose content does not come from the period the page is showing, so it must not speak
+   * for the page. It renders exactly as any other card; it simply does not count toward the tally
+   * CardGrid reads to decide whether every card has hidden itself.
+   *
+   * One card carries this today: Dashboard's flagged days, which reads the reader's own
+   * annotations rather than anything synced, and so renders on a day where nothing was recorded
+   * at all. Without this prop it alone would hold that tally above zero and make the page level
+   * empty state unreachable on the one page that prompted the feature. That is what this exists
+   * for, and why it is not a simplification waiting to be made.
+   */
+  ambient?: boolean
   children: React.ReactNode
 }) {
+  // Reports this card to the enclosing CardGrid, so a page whose cards have all hidden themselves
+  // can say so once instead of rendering a bare control row. A no-op outside a CardGrid. See
+  // CardGrid.tsx for why the shell reports rather than each gate.
+  useCardPresence(ambient !== true)
   const basisId = useId()
   return (
     <section className={measured ? 'card card-measured' : 'card'}

@@ -111,6 +111,10 @@
       "title": "Not being synced",
       "detail": "You turned this data type off. Turn it back on in Settings to start fetching it."
     },
+    "page": {
+      "title": "Nothing recorded here",
+      "detail": "No card on this page has anything to show for the selected period. Try a wider range above."
+    },
     "insufficient": {
       "title": "Not enough data to summarise",
       "detail": "There are too few days here to say anything useful yet."
