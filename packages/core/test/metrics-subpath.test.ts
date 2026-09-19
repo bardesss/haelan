@@ -55,7 +55,7 @@ describe('the @haelan/core/metrics subpath', () => {
     // over dates and imports nothing at all.
     expect(Object.keys(pkg.exports).sort()).toEqual([
       '.', './baseline-window', './cardio-load', './coverage-signal', './metric-data-type', SUBPATH,
-      './source-cadence', './split-heart-rate', './target-key', './training-load',
+      './recovery-index', './source-cadence', './split-heart-rate', './target-key', './training-load',
       './workout-comparison', './workout-summary',
     ])
   })

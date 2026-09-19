@@ -104,7 +104,7 @@ A few people, one instance, each seeing only their own data. An admin invites a 
 chooses their own password, and each person connects their own Google account and picks which data
 types get fetched for them.
 
-### 🧰 Fourteen typed tools for an agent, read-only and person-bound
+### 🧰 Fifteen typed tools for an agent, read-only and person-bound
 
 They sit over the same person bound query layer the browser reads through, reachable over stdio
 from inside the container or over `POST /mcp` from anywhere else. An HTTP call needs a token
