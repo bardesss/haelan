@@ -1302,11 +1302,11 @@
     "label": "Herstelindex",
     "asOf": "op {{date}}",
     "band": {
-      "low": "Ruim onder je gebruikelijke waarde",
-      "below": "Onder je gebruikelijke waarde",
-      "usual": "Rond je gebruikelijke waarde",
-      "above": "Boven je gebruikelijke waarde",
-      "high": "Ruim boven je gebruikelijke waarde"
+      "low": "Ruim onder gebruikelijk",
+      "below": "Onder gebruikelijk",
+      "usual": "Zoals gebruikelijk",
+      "above": "Boven gebruikelijk",
+      "high": "Ruim boven gebruikelijk"
     },
     "basis": "vergeleken met je eigen laatste {{days}} dagen",
     "unavailable": "Te weinig recente gegevens om met je gebruikelijke waarde te vergelijken.",

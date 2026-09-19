@@ -89,6 +89,9 @@ function meanOf(values: readonly number[]): number {
 }
 
 function spreadOf(values: readonly number[]): number {
+  // Unreachable at the only call site - bedtime consistency is gated at MIN_SLEEP_NIGHTS (4) - but
+  // kept anyway: a spread over one value is undefined, and zero is the honest floor, exactly the
+  // reasoning `baselineOf`'s own `n < 2` branch uses in `packages/core/src/query/baseline.ts`.
   if (values.length < 2) return 0
   const centre = meanOf(values)
   return Math.sqrt(values.reduce((t, v) => t + (v - centre) ** 2, 0) / (values.length - 1))
@@ -188,7 +191,11 @@ export interface RecoveryInput {
 
 export interface RecoveryIndexUnavailable {
   enough: false
-  /** Which required inputs were absent or too thin to judge. Never empty. */
+  /**
+   * Which required inputs were absent, too thin to judge, or standing on a baseline whose spread
+   * is zero - a real third case, and the one a person with perfectly regular habits for that input
+   * hits, not a data shortage at all. Never empty.
+   */
   missing: readonly RecoveryInputKey[]
 }
 
@@ -212,8 +219,13 @@ export interface RecoveryIndexAvailable {
 export type RecoveryIndex = RecoveryIndexUnavailable | RecoveryIndexAvailable
 
 /**
- * The five raw series, each already filtered to merged daily rows over `recoveryWindowStart(on)`
- * through `on`. A day nobody wore a device is ABSENT rather than present as zero.
+ * The five raw series, already filtered to merged daily rows covering every date that scoring the
+ * caller's range needs. A caller scoring one date `on` fetches `recoveryWindowStart(on)` through
+ * `on`. A caller scoring a `range` must fetch from `recoveryWindowStart(range.from)` - not from a
+ * window anchored on `range.to` - through `range.to`, because each date in the range carries its
+ * own baseline-plus-sleep-week window behind it, and the earliest of those belongs to the range's
+ * earliest date. `apps/web/src/data/useRecoveryIndex.ts`'s `recoveryFetchRange` does this correctly.
+ * A day nobody wore a device is ABSENT rather than present as zero.
  */
 export interface RecoveryIndexInput {
   hrv: readonly DayValue[]
@@ -255,14 +267,12 @@ export function recoveryIndexSeries(
     to: range.to,
   })
 
-  const zRange = range
-
   const z = {
-    hrv: zSeries(input.hrv, zRange, 'up'),
-    restingHeartRate: zSeries(input.restingHeartRate, zRange, 'down'),
-    respiratoryRate: zSeries(input.respiratoryRate, zRange, 'down'),
-    sleepDuration: zSeries(sleep.duration, zRange, 'up'),
-    sleepConsistency: zSeries(sleep.consistency, zRange, 'down'),
+    hrv: zSeries(input.hrv, range, 'up'),
+    restingHeartRate: zSeries(input.restingHeartRate, range, 'down'),
+    respiratoryRate: zSeries(input.respiratoryRate, range, 'down'),
+    sleepDuration: zSeries(sleep.duration, range, 'up'),
+    sleepConsistency: zSeries(sleep.consistency, range, 'down'),
   }
 
   /**
@@ -354,8 +364,17 @@ export function recoveryIndexSeries(
 
 /** One day's index. The same computation as `recoveryIndexSeries` over a range of one. */
 export function recoveryIndex(input: RecoveryIndexInput, on: string): RecoveryIndex {
-  return recoveryIndexSeries(input, { from: on, to: on }).get(on)
-    ?? { enough: false, missing: REQUIRED_INPUTS }
+  const result = recoveryIndexSeries(input, { from: on, to: on }).get(on)
+  // `recoveryIndexSeries`'s date loop runs from `range.from` to `range.to` inclusive and sets the
+  // map entry for every date it visits, so a range of exactly `{ from: on, to: on }` always sets
+  // `on`. A missing entry here cannot mean "not enough data" - that state already has its own,
+  // checked, representation - so treating it as one would name both required inputs as missing
+  // without having looked at either. If this ever fires, `recoveryIndexSeries`'s date loop has
+  // stopped covering the range it is given: that is a bug in this file, not a data state.
+  if (result === undefined) {
+    throw new Error(`recoveryIndexSeries did not score ${on} against a range of itself - this is a bug in recoveryIndexSeries, not a data state`)
+  }
+  return result
 }
 
 export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
@@ -365,17 +384,26 @@ export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
  *
  * Deliberately NOT a readiness verdict. Google's tile says the body is recovered and ready for a
  * workout; a personal archive is not licensed to say that, so these describe distance from the
- * person's own normal and stop. The cut points are symmetric about 50 and are a copy decision, not
- * a derived one: inverting the curve at `RECOVERY_SCALE = 1.69` puts a score of 56 at a composite of
- * about 0.14 - close to a seventh of a sigma, not the quarter an earlier draft of this comment
- * claimed. That is fine; 44-56 is where this design chooses to call a day "around your usual"
- * rather than a boundary the scale implies. Re-scaling the constant later must not move these cuts
- * to keep some sigma reading true - they were never derived from it.
+ * person's own normal and stop.
+ *
+ * The cut points are derived, not round numbers: they mark the score below which the bottom tenth
+ * of days fall, the score below which the next fifth fall, and so on outward from the middle,
+ * symmetrically - bottom tenth / next fifth / middle two-fifths / next fifth / top tenth. Each cut
+ * was found by taking the percentile's z-score under a normal approximation of the composite's
+ * measured spread, then mapping it through the same logistic curve `recoveryIndexSeries` uses to
+ * turn a composite into a score, at the current `RECOVERY_SCALE`. That derivation depends on this
+ * household's archive, so the numbers behind it are not repeated here - what is fixed, and what a
+ * refit must reproduce, is the percentile intent below.
+ *
+ * **If `RECOVERY_SCALE` is ever refit** against harvested Google Health scores, these five cuts do
+ * not follow along automatically - they must be re-derived from the same intent (bottom tenth, next
+ * fifth, middle two-fifths, next fifth, top tenth) using the new scale. Leaving the old cuts in
+ * place after a refit would silently change what fraction of days each band actually covers.
  */
 export function bandOf(score: number): RecoveryBand {
-  if (score < 25) return 'low'
-  if (score < 44) return 'below'
-  if (score <= 56) return 'usual'
-  if (score <= 75) return 'above'
+  if (score < 21) return 'low'
+  if (score < 37) return 'below'
+  if (score <= 63) return 'usual'
+  if (score <= 79) return 'above'
   return 'high'
 }

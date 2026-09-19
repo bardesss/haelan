@@ -3,11 +3,26 @@
 // off a household archive.
 //
 //   node --experimental-strip-types scripts/probe-recovery-scale.mjs .local-archive/haelan.sqlite
+import { recoveryIndexSeries, recoveryWindowStart } from '../packages/core/src/api/recoveryIndex.ts'
+
 // better-sqlite3 is a dependency of packages/core, not of the repo root, so pnpm only links it
 // under packages/core/node_modules - a bare `import Database from 'better-sqlite3'` run from here
-// cannot see it. Importing it by that path is a resolution detail, not a change to the query.
-import Database from '../packages/core/node_modules/better-sqlite3/lib/index.js'
-import { recoveryIndexSeries, recoveryWindowStart } from '../packages/core/src/api/recoveryIndex.ts'
+// cannot see it. Importing it by that relative path is a resolution detail, not a change to the
+// query - but that path is fragile to a pnpm layout change, so a failure here is disambiguated
+// below rather than left to surface as a bare module-not-found.
+let Database
+try {
+  ;({ default: Database } = await import('../packages/core/node_modules/better-sqlite3/lib/index.js'))
+} catch (cause) {
+  console.error(
+    'Could not load better-sqlite3 via packages/core/node_modules. ' +
+    'This probe reaches into that package\'s own node_modules because better-sqlite3 is a ' +
+    'dependency of packages/core, not of the repo root, so pnpm does not hoist it here - if ' +
+    'that layout has changed, this relative import needs updating.',
+  )
+  console.error(cause)
+  process.exit(1)
+}
 
 const file = process.argv[2]
 if (file === undefined) {
