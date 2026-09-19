@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { createTestDatabase, seedPerson, insertSample } from '../src/testing/fixtures.ts'
-import type { TestDatabase } from '../src/testing/fixtures.ts'
+import { createTestDatabase, seedPerson, insertSample, insertSamples } from '../src/testing/fixtures.ts'
+import type { TestDatabase, InsertSampleInput } from '../src/testing/fixtures.ts'
 import { readSessionHeartRateMinutes } from '../src/query/sessionHeartRate.ts'
 import { sources } from '../src/db/schema/index.ts'
 
@@ -34,26 +34,36 @@ beforeEach(() => {
   // test could not have told a real unthinned read apart from an accidentally-default one. Heart
   // rate is stored downsampled to the minute, so each minute needs all three of min/mean/max
   // written (the pattern intraday-window.test.ts uses).
+  // Built up as plain rows and written with one batched `insertSamples` call per source rather
+  // than 2,100 individual `insertSample` calls: each of those would construct its own `SampleKeys`
+  // (re-resolving the same person/source/metric ids every time) and pay for a freshly-prepared
+  // statement, which is exactly the `.run()`-per-row cost that made this hook the slowest in the
+  // suite. See `insertSamples`' own comment in fixtures.ts. The rows themselves, and their order,
+  // are unchanged from the per-row loops this replaced.
+  const watchRows: InsertSampleInput[] = []
   for (let i = 0; i < 700; i += 1) {
     for (const agg of ['min', 'mean', 'max'] as const) {
-      insertSample(test.db, {
+      watchRows.push({
         personId: 'p1', sourceId: 'watch', metric: 'heart_rate',
         utcMs: START + i * MINUTE, tzOffsetMinutes: OFFSET, agg, value: 100 + (i % 60),
       })
     }
   }
+  insertSamples(test.db, watchRows)
   // Ninety minutes on 'phone', overlapping watch's own span. This is what makes the pinned test
   // below meaningful - if the reader ever blended sources instead of pinning, its count would be
   // 90 either way, but its values would shift - and it is also what the fallback test falls back
   // to.
+  const phoneRows: InsertSampleInput[] = []
   for (let i = 0; i < 90; i += 1) {
     for (const agg of ['min', 'mean', 'max'] as const) {
-      insertSample(test.db, {
+      phoneRows.push({
         personId: 'p1', sourceId: 'phone', metric: 'heart_rate',
         utcMs: START + i * MINUTE, tzOffsetMinutes: OFFSET, agg, value: 130 + i,
       })
     }
   }
+  insertSamples(test.db, phoneRows)
 })
 afterEach(() => test.cleanup())
 

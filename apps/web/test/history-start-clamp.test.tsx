@@ -70,6 +70,16 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
       }
       return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    // ControlRow spreads status.data.rebuild into RebuildNotice and deliberately does not
+    // re-check the fields, so a status body without a rebuild object fails loudly rather than
+    // reading as nothing to report (ControlRow.tsx's own comment). The fallback below answers
+    // every unmatched URL, so without this branch that is exactly what this stub hands it.
+    if (url.includes('/sync/status')) {
+      return new Response(JSON.stringify({
+        running: false, lastFinishedAtMs: null,
+        rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     if (url.includes('/sleep/nights')) {
       return new Response(JSON.stringify({ items: [], cursor: null }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
@@ -80,6 +90,19 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
   }) as typeof fetch
   return () => { globalThis.fetch = original }
 }
+
+/**
+ * The series requests the page's own cards send, without the ones RecoveryIndexTile sends for
+ * itself. That tile mounts its own useRecoveryIndex, which asks over a range shifted back by the
+ * baseline window, so its `from` is deliberately not the tab start and deliberately not the history
+ * start either. Both assertions below are about what the cards ask for, and a tile that asks for
+ * something else is a separate, real cost rather than a clamp that failed.
+ *
+ * Filtered on the two metrics only it carries, which is the same seam recovery.test.tsx uses for
+ * the same reason.
+ */
+const cardSeries = (seen: string[]): string[] => seen.filter((u) =>
+  u.includes('/series') && !u.includes('sleep_bedtime_minutes') && !u.includes('sleep_asleep_minutes'))
 
 describe('a phone-only history start', () => {
   // An all time card on a phone-only instance must not show a 30 day
@@ -93,7 +116,7 @@ describe('a phone-only history start', () => {
     act(() => { root?.render(tree) })
     await flush(client, () => container!.innerHTML)
 
-    const series = seen.filter((u) => u.includes('/series'))
+    const series = cardSeries(seen)
     expect(series.length).toBeGreaterThan(0)
     // The first wave fires before the history answer lands, so it still carries the
     // tab start. What matters is convergence: once a clamped request goes out, no
@@ -113,7 +136,7 @@ describe('a phone-only history start', () => {
     act(() => { root?.render(tree) })
     await flush(client, () => container!.innerHTML)
 
-    const series = seen.filter((u) => u.includes('/series'))
+    const series = cardSeries(seen)
     expect(series.length).toBeGreaterThan(0)
     expect(series.every((u) => u.includes('from=2026-09-01'))).toBe(true)
     restore()

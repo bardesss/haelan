@@ -2,7 +2,6 @@ import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
 import { ControlRow } from '../components/ControlRow.js'
 import { usePageControls } from '../controls/usePageControls.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { NotesList } from './notes/NotesList.js'
 
 /**
@@ -26,15 +25,10 @@ export function Notes() {
   const controls = usePageControls()
   const range = { from: controls.from, to: controls.to }
 
-  const syncStatus = useSyncStatus()
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
-
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('notes.title')}</h1>
-      <ControlRow controls={controls} sources={[]} syncedMinutesAgo={syncedMinutesAgo} />
+      <ControlRow controls={controls} sources={[]} />
       <div className="grid">
         <Card span={12} label={t('notes.list.title')}>
           <NotesList range={range} />

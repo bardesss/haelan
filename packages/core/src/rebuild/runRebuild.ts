@@ -16,11 +16,13 @@ import type { PeopleStore } from '../store/people.ts'
 import type { OverrideStore } from '../store/overrides.ts'
 import type { SourcePriorityStore } from '../store/sourcePriority.ts'
 import type { SettingsStore } from '../store/settings.ts'
+import type { RebuildStateStore } from '../store/rebuildState.ts'
 import { ObservationStore } from '../store/observations.ts'
 import { peopleNeedingRebuild } from './versions.ts'
 import { replayPerson } from './replay.ts'
 import { retargetOverrides } from './retarget.ts'
 import type { OldSession, OrphanedOverride } from './retarget.ts'
+import type { Drop } from './withPage.ts'
 
 export interface RebuildPersonReport {
   personId: string
@@ -50,6 +52,45 @@ export interface RebuildPersonReport {
   overridesRetargeted: number
   overridesOrphaned: OrphanedOverride[]
   unmappablePayloads: number
+  /**
+   * Pages that could not be replayed and were skipped. Beside `unmappablePayloads` rather than
+   * folded into it: one is a data type the catalogue retired, the other is a row that would not
+   * go in, and an operator deciding whether to report a bug needs to tell those apart.
+   *
+   * Nothing is lost when this is non-zero. Tier 1 still holds every body, so a MAPPING_VERSION
+   * bump once the cause is fixed replays them with no operator action at all.
+   */
+  droppedPages: number
+  /**
+   * Everything this rebuild left in tier 2 and tier 3 added together: `samples`, `sessions`,
+   * session segments, `observations` and `dailyRows`, each measured against its own table rather
+   * than summed from mapper output.
+   *
+   * Segments are in it although no field above carries them. They are rows a rebuild writes and
+   * a person's sleep detail is made of them, so a replay that produced segments and nothing else
+   * did produce something - leaving them out would have been the one way this number could read
+   * zero over a person who has data.
+   *
+   * One number rather than five because of the one question it exists to answer - did this
+   * rebuild produce anything at all - and because the surfaces that ask are not reporting volume.
+   * Which table is empty is a diagnostic an operator reads out of the log line that already
+   * prints them separately.
+   *
+   * A sum, and so blind to partial drift: one data type drifting while the rest map fine leaves
+   * this large and nothing says a word. Accepted, and written down on the column in
+   * db/schema/sync.ts rather than implied away.
+   */
+  rowsWritten: number
+  /**
+   * How many archived payloads carried at least one data point, straight off replayPerson.
+   *
+   * Beside `rowsWritten` and useless without it. A rebuild that wrote nothing is an ordinary
+   * outcome for a member connected an hour ago, and only the fact that the archive held data
+   * turns it into something worth reporting - see producedNothing in store/rebuildState.ts,
+   * which is where the pair is read and where the argument lives.
+   */
+  payloadsWithData: number
+  drops: Drop[]
 }
 
 /**
@@ -93,6 +134,43 @@ export interface RebuildInput {
   force?: boolean
   /** Called after each person's transaction commits, so what it reports is durable. */
   onPersonDone?: (report: RebuildPersonReport) => void
+  /**
+   * Where each person's outcome is recorded. Optional so existing callers and tests compile
+   * unchanged; an instance always passes it.
+   *
+   * Called from the catch below and from after the commit, never from inside the transaction
+   * callback - see the class comment on RebuildStateStore for why that distinction is the whole
+   * point of this field.
+   */
+  rebuildState?: RebuildStateStore
+}
+
+/**
+ * Runs one RebuildStateStore write and lets nothing it throws escape.
+ *
+ * Both recording calls sit outside the person's transaction, which is the whole point of them -
+ * a write enlisted in a rebuild that rolled back would roll back with it. The cost of that
+ * placement is that they are separate statements against a live database, and recordSuccess
+ * opens a write transaction of its own. So they can fail for reasons that have nothing to do
+ * with the rebuild they describe: SQLITE_BUSY past the busy timeout is the realistic one, since
+ * the boot rebuild runs while the HTTP server is already answering requests, and better-sqlite3
+ * throws rather than queueing once that timeout is spent.
+ *
+ * Unguarded, such a throw escaped the per-person catch below - it is raised from outside the try
+ * - abandoned the loop, and rejected runRebuild. `runBootSequence` reads a rejection as
+ * structural and deliberately does not start sync, so a lock held for a second longer than the
+ * timeout would stop ingestion for every household member, after the person it happened to had
+ * already committed. Contention there was caught per person before this branch existed; letting
+ * it out again would be a change to rebuild behaviour, which #276a exists precisely not to make.
+ *
+ * Swallowed rather than reported, the same way runJob guards `onProgress`. What is lost is the
+ * durable record of one attempt, and the caller still receives that attempt in the report it
+ * returns, which is what `rebuildIfNeeded` logs line by line. The surfaces reading rebuild_state
+ * then show the previous attempt until the next rebuild of that person writes over it - stale,
+ * and a great deal better than a household that silently stopped syncing.
+ */
+function recordQuietly(write: () => void): void {
+  try { write() } catch { /* the record, not the rebuild */ }
 }
 
 /**
@@ -185,6 +263,10 @@ export function runRebuild(input: RebuildInput): RebuildReport {
 
         const counts = replayPerson(tx, {
           personId, payloads, archive: input.archive, sources: registry, nowMs: input.nowMs,
+          // The connection this transaction is running on, which the replay's per-page
+          // savepoints are issued against. Same connection, same transaction - the property the
+          // comment above already depends on for the stores.
+          client: input.db.$client,
         })
 
         const dropped = dropUnreferencedSources(tx, personId, keys)
@@ -228,6 +310,15 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           overridesRetargeted: retarget.retargeted,
           overridesOrphaned: retarget.orphaned,
           unmappablePayloads: counts.unmappable,
+          droppedPages: counts.droppedPages,
+          // Summed here rather than in the store, so the one definition of "what a rebuild
+          // produced" sits beside the counts it adds up and moves with them if a sixth table is
+          // ever rebuilt. dailyRows is the figure measured after the derive loop just above, not
+          // counts.providerDaily, which is a subset of it.
+          rowsWritten: counts.samples + counts.sessions + counts.segments
+            + counts.observations + dailyRows,
+          payloadsWithData: counts.payloadsWithData,
+          drops: counts.drops,
         }
       })
     } catch (error) {
@@ -246,6 +337,57 @@ export function runRebuild(input: RebuildInput): RebuildReport {
         reasons,
         error: error instanceof Error ? error : new Error(String(error)),
       })
+      // After the push and outside the transaction, which has already rolled back by the time
+      // this runs. That is what makes the write durable: enlisted in the rebuild's own
+      // transaction it would roll back with the failure it exists to record.
+      //
+      // `error.message` is stored and later shown whole - to the affected person on their own
+      // sync status, and to any admin on the household-wide route - so this is the one place to
+      // ask what can actually reach it, once, rather than trusting each reader to have checked.
+      // Nothing inside this try touches the filesystem: every store call here runs against the
+      // db handle this function was already given, and reading it does not open anything of its
+      // own the way `db/open.ts` does at boot, so there is no path for a Node ENOENT/EACCES
+      // message - the kind that embeds a filesystem path - to originate here. A body that fails
+      // to parse cannot surface either: mapSamples, mapSessions and mapObservations each wrap
+      // their own `JSON.parse(body)` and return no rows rather than throw, and replay.ts's two
+      // `JSON.parse(requestParams)` calls do the same, so a corrupted or drifted payload is
+      // reported as unmapped, never as this string. A corrupted `bodyGzip` blob still throws
+      // out of `RawArchive.getBody`, but as one of zlib's fixed messages ("incorrect header
+      // check", "unexpected end of file") - a description of the compression stream, not the
+      // household's data inside it.
+      //
+      // What is left is SQLite's own constraint and corruption messages, which name a table and
+      // a column, two families of ConfigError, and the two abandonment errors replayPerson
+      // raises itself. None of them is thrown by this file, which throws none of its own.
+      //
+      // replayPerson's two are the breaker (a run of units that could not be replayed) and the
+      // replay that committed nothing. Both name this person's id and a count, and then quote
+      // the reason the last drop gave - which is not a new category of content, because that
+      // reason is one of the same SQLite or zlib strings already accounted for above, with its
+      // volatile tail stripped by dropReason. Both are deliberately worded to say what was
+      // observed and not to diagnose a cause, since this is the string the affected person
+      // reads on their own dashboard; the comment above the breaker in replay.ts has the why.
+      //
+      // The mappers raise one when the catalogue and their mapping tables
+      // disagree - "<type> is not a sample type", "<type> has no observation mapping declared" -
+      // naming a data type id from the shared catalogue. `db/keys.ts` raises the other when an
+      // id or a ref it was asked to translate has no row: "no <label> for id <id>" from
+      // #resolveRef, and "no metric for ref <n>", "no sample aggregate for ref <n>" and
+      // "no <label> for ref <n>" from the readers beside it. Those are reachable from inside the
+      // transaction above, through every SampleKeys call the replay and the derive loop make,
+      // which is why they are listed rather than left to the mapper category.
+      //
+      // Both families name internal identifiers and nothing else. A source id is a sha256
+      // prefix over the person and the provider's own id for the device; a person id is this
+      // instance's key for a household member, which the affected person is already reading
+      // their own row of and an admin already sees on members.ts; a raw payload id names one
+      // archived response and a ref is a small integer. So: never a bound value, another
+      // person's reading, or a location on disk.
+      recordQuietly(() => input.rebuildState?.recordFailure({
+        personId,
+        nowMs: input.nowMs,
+        error: error instanceof Error ? error.message : String(error),
+      }))
       continue
     }
 
@@ -257,6 +399,15 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     // the space will be reclaimed by the next one; this person's rows are committed either way,
     // and failing their rebuild over a disk tidy-up would be a far worse outcome than a large file.
     checkpointTruncate(input.db)
+
+    // After the commit, for the same reason the failure is recorded after the rollback: this is
+    // a durable record of a durable outcome, including whatever replayPerson's own per-page
+    // isolation had to skip - the same counts personReport just carried out of the transaction.
+    recordQuietly(() => input.rebuildState?.recordSuccess({
+      personId, nowMs: input.nowMs,
+      droppedPages: personReport.droppedPages, drops: personReport.drops,
+      rowsWritten: personReport.rowsWritten, payloadsWithData: personReport.payloadsWithData,
+    }))
 
     report.people.push(personReport)
     input.onPersonDone?.(personReport)

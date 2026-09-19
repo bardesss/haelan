@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -20,7 +21,6 @@ import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
@@ -130,10 +130,6 @@ export function Health() {
   const maxSpo2 = useSeries(['spo2'], range, 'max')
   const countSpo2 = useSeries(['spo2'], range, 'count')
 
-  const syncStatus = useSyncStatus()
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
 
@@ -232,9 +228,9 @@ export function Health() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('health.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {/* basisPlacement 'header': the range chart carries no StatTile of its own to fold a basis
             into, the same reason Dashboard.tsx's heart rate range card takes 'header' rather than
             'body'. spo2 is an intraday metric (packages/core/src/api/catalogue.ts gives it `tier:
@@ -295,7 +291,7 @@ export function Health() {
             the same collision Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={dailySpo2Insight.data} query={dailySpo2Insight} metric="daily_spo2" span={4}
           label={t('health.insights.dailySpo2')} formatValue={dailySpo2InsightFormat} />
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

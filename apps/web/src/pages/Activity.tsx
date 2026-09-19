@@ -4,6 +4,7 @@ import type { DailyAgg } from '@haelan/core/metrics'
 import type { Polarity } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
 import { Card } from '../components/Card.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -26,7 +27,6 @@ import { useSession } from '../auth/session.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useInsight } from '../data/useInsight.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
@@ -167,10 +167,6 @@ export function Activity() {
   // counted into periodDays.
   const stepsInsight = useInsight('steps', 'sum', { from: controls.from, to: controls.historicalTo }, source)
 
-  const syncStatus = useSyncStatus()
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, SUM_METRICS, 'sum', range) : undefined
 
@@ -349,9 +345,9 @@ export function Activity() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('activity.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         <Card span={12} label={t('activity.dailySteps.label')} basis={stepsBasis()}>
           {stepsQuery.isError ? <ErrorState onRetry={() => void stepsQuery.refetch()} error={stepsQuery.error} />
             : stepsQuery.isPending ? <Loading /> : (
@@ -442,7 +438,7 @@ export function Activity() {
         <Card span={12} measured label={t('activity.sessions.label')}>
           <SessionList controls={resolved} />
         </Card>
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

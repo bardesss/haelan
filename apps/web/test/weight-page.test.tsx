@@ -41,9 +41,16 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 /**
  * Answers the session, /series for whichever metrics land in Weight's one 'last' request (from
- * `series`, keyed by metric name), /api/sync/status generically, and notes/events empty:
+ * `series`, keyed by metric name), /api/sync/status with a real (empty) rebuild block -- Control
+ * Row now trusts SyncStatus.rebuild to exist whenever the query has data, so a bare `{}` here
+ * would crash it rather than stand in for it -- and notes/events empty:
  * Weight issues the same three annotation requests every other page does through useAnnotations,
  * and none of this file's tests need a real row on notes or events. /overrides defaults to empty
  * too, and `overrides` is the one seam a caller can fill: what deriveDay actually leaves behind
@@ -76,6 +83,9 @@ function stubWeight(
     if (url.includes('/notes')) return json({ items: [] })
     if (url.includes('/events')) return json({ items: [] })
     if (url.includes('/insights')) return json(insightBody(url, insightOverrides))
+    if (url.includes('/api/sync/status')) {
+      return json({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS })
+    }
     return json({})
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -251,13 +261,16 @@ describe('the Weight page', () => {
 
   // The other half of the brief's own note: weight will suppress often, and correctly, because a
   // seven day window frequently holds too few of the household's 130 readings across 236 days.
-  // Suppressed rather than a guessed number is the feature working, the same emptyState.insufficient
-  // copy insight-card.test.tsx already pins for the generic component.
-  it('suppresses the weight insight rather than guessing across a thin window', async () => {
+  // A thin-days suppression now draws no card at all rather than a card saying "too few days":
+  // that sentence is not news to the reader and it landed on every insight on the page at once.
+  // Pinned on the .card element, not on the page's text, because the absence of a phrase was
+  // already true of plenty of pages that do render this card; only the missing shell is the claim.
+  // insight-card.test.tsx pins the same rule for the generic component, including the
+  // thin-coverage reason that deliberately keeps its card.
+  it('hides the weight insight rather than guessing across a thin window', async () => {
     await mount(<Weight />, {}, undefined, [], [], { suppressed: true, reason: 'thin-days' })
     const card = [...container!.querySelectorAll('.card')]
       .find((c) => c.querySelector('.label')?.textContent === 'Weight, this period against the last')
-    expect(card?.textContent).toContain('too few days')
-    expect(card?.querySelector('.insight-summary')).toBeNull()
+    expect(card).toBeUndefined()
   })
 })

@@ -42,6 +42,7 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildRep
     priority: deps.instance.sourcePriority,
     overrides: deps.instance.overrides,
     settings: deps.instance.settings,
+    rebuildState: deps.instance.rebuildState,
   }
 
   const reports: RebuildReport = { people: [], failures: [] }
@@ -94,6 +95,18 @@ export async function rebuildIfNeeded(deps: BootRebuildDeps): Promise<RebuildRep
       }
       if (person.unmappablePayloads > 0) {
         deps.log(`${person.unmappablePayloads} payloads had no current mapper and were skipped`)
+      }
+      // Its own line and only when there is something to say, like the rankings and the names
+      // above. This one says a person is now stamped current while carrying less history than
+      // their archive holds, which is a different kind of fact from every count beside it.
+      if (person.droppedPages > 0) {
+        deps.log(
+          `${person.droppedPages} pages of ${person.personId}'s archive could not be replayed `
+          + 'and were skipped; tier 1 still holds them, so a later mapping version replays them',
+        )
+        for (const drop of person.drops) {
+          deps.log(`  ${drop.dataType}: ${drop.pages} pages, ${drop.reason}`)
+        }
       }
     }
     // Back to the event loop, so requests queued during that person's transaction are answered

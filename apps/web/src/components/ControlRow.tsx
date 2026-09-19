@@ -1,14 +1,15 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { Icon } from './icons.js'
+import { PeriodSheet } from './PeriodSheet.js'
 import { RANGE_KEYS } from '../controls/range.js'
 import type { PageControlsState } from '../controls/usePageControls.js'
-import { apiSend, ApiError } from '../api/client.js'
-import { useSession } from '../auth/session.js'
-import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
 import { useSourceNames } from '../data/useSourceNames.js'
+import { useSyncStatus } from '../data/useSyncStatus.js'
 import { ALL_SOURCES } from '../controls/source.js'
 import { periodLabel } from '../controls/periodLabel.js'
+import { useIsPhone } from '../ui/breakpoint.js'
+import { RebuildNotice } from './RebuildNotice.js'
 
 // A frozen module constant, not a fresh `[]` default: a new array identity on every render is
 // what chart-lifecycle.test.tsx exists to catch elsewhere in this app, and a default parameter
@@ -20,8 +21,22 @@ const EMPTY_SOURCES: string[] = Object.freeze([]) as never[]
 const listFormat = (language: string): Intl.ListFormat =>
   new Intl.ListFormat(language, { style: 'long', type: 'conjunction' })
 
+/**
+ * Which range, which period, which source - and on a phone, one row instead of five.
+ *
+ * Until M10 this row also carried the sync button and its freshness line. Both have moved to the
+ * shell (SyncControl.tsx), where they render once rather than once per page: a sync is an
+ * instance-wide action and had no business being the loudest control on a page about September.
+ * Losing it is most of why the phone layout below is possible at all.
+ *
+ * Two layouts, chosen by the same breakpoint the rail uses. Above it, one line: the five ranges,
+ * the stepper with its date picker, the source picker, and the export. Below it, one line of a
+ * different shape - the stepper arrows either side of a chip naming the period, with everything
+ * else behind the chip in a sheet. The arrows stay out here on purpose; stepping is the frequent
+ * action and must not cost a sheet.
+ */
 export function ControlRow({
-  controls, sources, syncedMinutesAgo, exportPath, canSync = true, stoppedSources = EMPTY_SOURCES,
+  controls, sources, exportPath, stoppedSources = EMPTY_SOURCES,
 }: {
   controls: PageControlsState
   sources: string[]
@@ -34,19 +49,20 @@ export function ControlRow({
    * the points a page has already loaded.
    */
   stoppedSources?: string[]
-  // null when no run has ever finished. It used to be a plain number, and nothing synced yet was
-  // reported as 0, so a fresh instance and a page still loading both read "Synced 0 min ago",
-  // which a reader takes to mean seconds ago. A missing copy string is not a reason to print a
-  // false one.
-  syncedMinutesAgo: number | null
   // Optional rather than required: a page with no range of its own has no export to offer, and
   // the link is left out rather than rendered with no href.
   exportPath?: string
-  // False on a page that cannot honour a sync: the button really posts and the label really
-  // claims a time, so offering either from a page pinned to fixtures is a control that lies.
-  canSync?: boolean
 }) {
   const { t, i18n } = useTranslation()
+  const { nameOf } = useSourceNames()
+  const isPhone = useIsPhone()
+  const [sheetOpen, setSheetOpen] = useState(false)
+  // Still read here after M10 moved the sync button out, and deliberately so. The button was an
+  // instance-wide action that had no business on a page; the notice below is the opposite - it
+  // says the numbers on this page are not being updated, which is a fact about exactly what the
+  // reader is looking at, and it belongs directly above them.
+  const status = useSyncStatus()
+
   // Shown exactly as handed over. controls.source has already been resolved against this same
   // list in the state layer (controls/source.ts), so the label here and the source the page is
   // querying under cannot drift apart: they are one value.
@@ -57,39 +73,80 @@ export function ControlRow({
   // not a picker.
   const hasSourcePicker = sources.length > 0
 
-  const session = useSession()
-  const personId = session.data?.personId
-  const queryClient = useQueryClient()
-  const status = useSyncStatus()
-  const { nameOf } = useSourceNames()
-  // tryStart on the server takes the mutex synchronously and answers before the run finishes
-  // (routes/sync.ts, runner.ts's tryStart), so this mutation's own pending state is only the
-  // moment of that one request, not the run it kicks off. status.data?.running, refreshed by the
-  // invalidation below, is what actually disables the button for the run's whole duration.
-  const runSync = useMutation({
-    mutationFn: () => apiSend('POST', '/api/sync/run'),
-    onSuccess: () => {
-      if (personId !== undefined) void queryClient.invalidateQueries({ queryKey: syncStatusKey(personId) })
-    },
-  })
+  const period = periodLabel(controls.tab, controls.from, controls.to, i18n.language)
+  const exactBounds = `${controls.from} ${t('common.to')} ${controls.to}`
 
-  // Three different states, three different sentences. The status query answering nothing yet is
-  // not the same as an instance that has never finished a run, and neither is a real time.
-  const syncedLabel = status.data === undefined
-    ? t('controlRow.syncUnknown')
-    : syncedMinutesAgo === null
-      ? t('controlRow.neverSynced')
-      : t('controlRow.syncedAgo', { count: syncedMinutesAgo })
+  /* Guarded on status.data rather than left to RebuildNotice's own null return: the query
+     answers nothing for a moment after mount, and status.data.rebuild does not exist yet in that
+     instant -- rendering the row's other controls immediately while this waits one tick behind
+     them. SyncStatus.rebuild is a required field: a real response always carries it (runner.ts's
+     own status()), so once status.data exists, trusting its shape rather than re-checking the
+     field itself is what keeps a future malformed or legacy answer from reading as "nothing to
+     report" instead of failing where it can be seen.
 
-  // /api/sync/run answers 409 for both a run already going and the instance shutting down, kind
-  // 'transient' either way, so the status is what tells this apart from every other error rather
-  // than the kind. Without this a refused click did nothing and said nothing.
-  const syncErrorLabel = runSync.error instanceof ApiError && runSync.error.status === 409
-    ? t('controlRow.syncAlreadyRunning')
-    : t('controlRow.syncFailed')
+     rebuildInFlight is passed by name rather than arriving in the spread: it is not in
+     status.data.rebuild, because it is one fact about the server process and that object carries
+     facts about this person's own data. The spread would silently stop supplying it if it ever
+     moved, which the required prop on RebuildNotice is what catches.
+
+     Held in a variable so both layouts below render the same one. It leads each of them, because
+     "your data has stopped updating" outranks every control underneath it. */
+  const rebuildNotice = status.data !== undefined && (
+    <RebuildNotice
+      voice="self" rebuildInFlight={status.data.rebuildInFlight} {...status.data.rebuild}
+    />
+  )
+
+  const stopped = stoppedSources.length > 0 && (
+    /* The answer to what a thinning chart actually raises: did the person do less, or did the
+       device stop. Said once for the page rather than on each card, because every card on a
+       page reads the same range and would otherwise repeat one sentence up to twelve times.
+       Named, because "a source stopped" sends the reader to Settings to find out which.
+
+       The names never begin the sentence, which is why the copy reads "Stopped reporting
+       during this range: X" rather than "X stopped reporting". A source is called whatever
+       its device or its owner called it - "com.lyfta", "My watch" - so a sentence-initial
+       name either renders lowercase mid-sentence or gets capitalised into something nobody
+       typed. */
+    <p className="control-row-stopped">
+      {t('controlRow.sourceStopped', {
+        sources: listFormat(i18n.language).format(stoppedSources.map(nameOf)),
+        count: stoppedSources.length,
+      })}
+    </p>
+  )
+
+  if (isPhone) {
+    return (
+      <div className="controls controls-phone">
+        {rebuildNotice}
+        <div className="stepper">
+          <button type="button" className="icon-button" aria-label={t('controlRow.previousPeriod')}
+            onClick={() => controls.step(-1)}><Icon name="chevronLeft" /></button>
+          {/* The chip is the whole of the rest of this row. Its accessible name says the range as
+              well as the period, because "september 2026" alone does not tell a reader whether
+              they are looking at a month or at the three ending in it. */}
+          <button type="button" className="period-chip" data-testid="period-chip"
+            aria-haspopup="dialog" title={exactBounds}
+            aria-label={`${t(`controlRow.ranges.${controls.tab}`)} · ${period}`}
+            onClick={() => setSheetOpen(true)}>
+            <span className="period-chip-range">{t(`controlRow.ranges.${controls.tab}`)}</span>
+            <span className="period-chip-period">{period}</span>
+            <Icon name="chevronDown" />
+          </button>
+          <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}
+            onClick={() => controls.step(1)}><Icon name="chevronRight" /></button>
+        </div>
+        <PeriodSheet controls={controls} sources={sources} exportPath={exportPath} label={period}
+          open={sheetOpen} onClose={() => setSheetOpen(false)} />
+        {stopped}
+      </div>
+    )
+  }
 
   return (
     <div className="controls">
+      {rebuildNotice}
       <div className="segmented" role="group" aria-label={t('controlRow.timeRangeLabel')}>
         {RANGE_KEYS.map((key) => (
           <button key={key} type="button" className="segment" aria-pressed={key === controls.tab}
@@ -106,9 +163,7 @@ export function ControlRow({
             period ("september 2026") and a reader who wants to know which days that covers can
             hover for them. The pretty name is what a screen reader gets, which is an improvement
             on two ISO dates rather than a loss, so nothing here is sr-only. */}
-        <span className="stepper-label" title={`${controls.from} ${t('common.to')} ${controls.to}`}>
-          {periodLabel(controls.tab, controls.from, controls.to, i18n.language)}
-        </span>
+        <span className="stepper-label" title={exactBounds}>{period}</span>
         <button type="button" className="icon-button" aria-label={t('controlRow.nextPeriod')}
           onClick={() => controls.step(1)}><Icon name="chevronRight" /></button>
         <input type="date" className="date-picker" aria-label={t('controlRow.pickDate')}
@@ -131,43 +186,19 @@ export function ControlRow({
         )}
         {/* A link, not a fetch: the export route answers a file and the browser already knows how
             to save one, so there is no blob and no object URL for this component to manage. Left
-            out entirely without a path, rather than rendered as an anchor that goes nowhere. */}
-        {exportPath !== undefined && (
-          <a className="button" href={exportPath}><Icon name="download" />{t('controlRow.downloadTotals')}</a>
-        )}
-        {/* personId === undefined guards the same race useSeries and useSyncStatus guard with
-            their own `enabled` checks: a click before the session resolves would still post
-            (apiSend needs no personId), but onSuccess's invalidation is keyed on personId and
-            silently does nothing without it, leaving the status stale with no retry. Disabling
-            here means that request is never sent in the first place. */}
-        {canSync && (
-          <button type="button" className="button button-primary"
-            disabled={personId === undefined || runSync.isPending || status.data?.running === true}
-            onClick={() => runSync.mutate()}>
-            <Icon name="sync" />{t('controlRow.sync')}
-          </button>
-        )}
-        {canSync && <span className="synced">{syncedLabel}</span>}
-        {canSync && runSync.isError && <span className="field-error">{syncErrorLabel}</span>}
-      </div>
-      {/* The answer to what a thinning chart actually raises: did the person do less, or did the
-          device stop. Said once for the page rather than on each card, because every card on a
-          page reads the same range and would otherwise repeat one sentence up to twelve times.
-          Named, because "a source stopped" sends the reader to Settings to find out which.
+            out entirely without a path, rather than rendered as an anchor that goes nowhere.
 
-          The names never begin the sentence, which is why the copy reads "Stopped reporting
-          during this range: X" rather than "X stopped reporting". A source is called whatever
-          its device or its owner called it - "com.lyfta", "My watch" - so a sentence-initial
-          name either renders lowercase mid-sentence or gets capitalised into something nobody
-          typed. */}
-      {stoppedSources.length > 0 && (
-        <p className="control-row-stopped">
-          {t('controlRow.sourceStopped', {
-            sources: listFormat(i18n.language).format(stoppedSources.map(nameOf)),
-            count: stoppedSources.length,
-          })}
-        </p>
-      )}
+            Icon only since M10, with the words on the title and in the accessible name. It is the
+            rarest control in this row and it carried the longest label in it - "Download daily
+            totals", "Dagtotalen downloaden" - which is what made the row wrap on a laptop. */}
+        {exportPath !== undefined && (
+          <a className="button icon-button" href={exportPath}
+            title={t('controlRow.downloadTotals')} aria-label={t('controlRow.downloadTotals')}>
+            <Icon name="download" />
+          </a>
+        )}
+      </div>
+      {stopped}
     </div>
   )
 }

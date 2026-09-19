@@ -34,10 +34,15 @@ function Probe() {
   return <span>{status.data?.running === true ? 'running' : 'idle'}</span>
 }
 
+const NO_REBUILD_NEWS = {
+  quarantined: false, awaitingRebuild: false, droppedPages: 0, producedNothing: false,
+  lastError: null, lastErrorAtMs: null, lastSuccessAtMs: null, drops: [],
+}
+
 describe('syncPollInterval', () => {
   it('polls only while a run is going', () => {
-    expect(syncPollInterval({ running: true, lastFinishedAtMs: null })).toBe(SYNC_POLL_MS)
-    expect(syncPollInterval({ running: false, lastFinishedAtMs: 1 })).toBe(false)
+    expect(syncPollInterval({ running: true, lastFinishedAtMs: null, rebuildInFlight: false, rebuild: NO_REBUILD_NEWS })).toBe(SYNC_POLL_MS)
+    expect(syncPollInterval({ running: false, lastFinishedAtMs: 1, rebuildInFlight: false, rebuild: NO_REBUILD_NEWS })).toBe(false)
     // Nothing fetched yet is not a run: the first fetch is already on its way.
     expect(syncPollInterval(undefined)).toBe(false)
   })

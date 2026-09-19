@@ -149,4 +149,49 @@ describe('MetricCard', () => {
     ))
     expect(container!.textContent).toContain('drawn')
   })
+
+  // The feature. A card whose only job was to show this period, saying it has nothing to show for
+  // this period, is a sentence the reader already knows the answer to.
+  it('renders nothing at all for a period with no rows', () => {
+    mount(withQuery(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK}
+      points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
+    expect(container!.querySelectorAll('.card')).toHaveLength(0)
+    expect(container!.textContent).toBe('')
+  })
+
+  // The half that must NOT hide: not_worn names a remedy (wear the device), so it keeps its card.
+  // point(0, 0) is a row whose coverage is below NOT_WORN_MAX_COVERAGE, which is what makes this
+  // not_worn rather than no_data.
+  it('keeps the card for a period where nothing was worn', () => {
+    mount(withQuery(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK}
+      points={[point(0, 0)]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
+    expect(container!.querySelectorAll('.card')).toHaveLength(1)
+    expect(container!.textContent).toContain('emptyState.not_worn.title')
+  })
+
+  // The other half that must not hide: not_synced is the only state the reader can act on in
+  // Settings, and it is the last trace that the data type exists.
+  it('keeps the card for a data type the person excluded', () => {
+    mount(withQuery(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK}
+      points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>,
+      [{ id: 'steps', tier: 'intraday', excluded: true }]))
+    expect(container!.querySelectorAll('.card')).toHaveLength(1)
+    expect(container!.textContent).toContain('emptyState.not_synced.title')
+  })
+
+  // Hiding must not swallow a failure or a request still in flight: both are cards the reader
+  // needs, and both reach this component with points: [], the same shape no_data does.
+  it('keeps the card for a failed request', () => {
+    mount(withQuery(<MetricCard metric="steps" span={1} basisPlacement="body"
+      query={{ isError: true, isPending: false, refetch: () => {} }}
+      points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
+    expect(container!.querySelectorAll('.card')).toHaveLength(1)
+  })
+
+  it('keeps the card while the request is still in flight', () => {
+    mount(withQuery(<MetricCard metric="steps" span={1} basisPlacement="body"
+      query={{ isError: false, isPending: true, refetch: () => {} }}
+      points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
+    expect(container!.querySelectorAll('.card')).toHaveLength(1)
+  })
 })

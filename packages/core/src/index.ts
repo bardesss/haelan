@@ -48,7 +48,7 @@ export type { Instance } from './instance.ts'
 export { SourceRegistry } from './store/sources.ts'
 export { SyncStateStore } from './store/syncState.ts'
 export type { SyncJob, SyncStateRow } from './store/syncState.ts'
-export { dayWindows } from './sync/windows.ts'
+export { dayWindows, startOfLocalDay } from './sync/windows.ts'
 export type { Window } from './sync/windows.ts'
 export { TokenBucket } from './sync/tokenBucket.ts'
 export type { TokenBucketDeps } from './sync/tokenBucket.ts'
@@ -109,6 +109,8 @@ export type {
   RebuildInput, RebuildReport, RebuildPersonReport, RebuildFailure,
 } from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
+export { RebuildStateStore, isQuarantined, producedNothing } from './store/rebuildState.ts'
+export type { RebuildDrop, RebuildStateRow } from './store/rebuildState.ts'
 export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
 // The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.
 // Aliased because the two cannot share a name and a caller holding a person's `timezone` string

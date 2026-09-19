@@ -104,7 +104,7 @@ A few people, one instance, each seeing only their own data. An admin invites a 
 chooses their own password, and each person connects their own Google account and picks which data
 types get fetched for them.
 
-### 🧰 Fourteen typed tools for an agent, read-only and person-bound
+### 🧰 Fifteen typed tools for an agent, read-only and person-bound
 
 They sit over the same person bound query layer the browser reads through, reachable over stdio
 from inside the container or over `POST /mcp` from anywhere else. An HTTP call needs a token
@@ -489,12 +489,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 925 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 971 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 925 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 971 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

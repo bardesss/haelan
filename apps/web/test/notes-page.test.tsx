@@ -82,7 +82,9 @@ function mockFetch(
     const url = String(input)
     const method = init?.method ?? 'GET'
     sent.push({ url, method })
-    if (url.includes('/api/sync/status')) return respond(200, { running: false, lastFinishedAtMs: null })
+    if (url.includes('/api/sync/status')) {
+      return respond(200, { running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
+    }
     if (method === 'DELETE' && url.includes('/events/')) {
       // A real delay, not zero, is what gives the pending removing test below a window to observe:
       // this stub otherwise resolves inside one microtask, too fast for any poll to ever catch.
@@ -357,7 +359,9 @@ describe('the query states', () => {
     const original = globalThis.fetch
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('/api/sync/status')) return respond(200, { running: false, lastFinishedAtMs: null })
+      if (url.includes('/api/sync/status')) {
+        return respond(200, { running: false, lastFinishedAtMs: null, rebuild: { quarantined: false, droppedPages: 0, lastError: null, drops: [] } })
+      }
       return respond(500, { error: { message: 'boom' } })
     }) as typeof fetch
     restoreFetch = () => { globalThis.fetch = original }

@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
+import { RECOVERY_HARVEST_EVENT_KIND } from '@haelan/core/recovery-index'
 import { useTranslation } from '../i18n/index.js'
 import type { Translate } from '../format.js'
 import { SEED_KINDS } from './eventKinds.js'
@@ -43,6 +44,17 @@ function eventText(t: Translate, event: StoredEvent): string {
  * reading, so this carries no metric and reaches every chart on a page alike (see the pages that
  * call mergeDayAnnotations below).
  *
+ * A harvested Google Health recovery score (`events.kind === RECOVERY_HARVEST_EVENT_KIND`,
+ * `apps/server/src/admin.ts`'s `harvest-recovery` console command) is excluded here rather than
+ * flattened in with the rest: it is real household data worth keeping, but unlike a note or a
+ * travel/illness event it is not something that happened to the person that day, and one harvest
+ * run can write up to sixty of them. Flattened in the same way as everything else, sixty of them
+ * would put sixty markers on every chart on every page (Sparkline/ActivityHeatmap/HeartRateRange
+ * all draw every entry this function returns), for data unrelated to whatever that chart measures.
+ * The row itself is untouched and still reachable through NotesList.tsx's own management list,
+ * which reads notes and events directly rather than through this function - only the per-chart
+ * marker is what this filters away.
+ *
  * An event is placed on its own `localDate` alone. A multi day event (one with `endedAtMs` set)
  * marks only the day it started, never every day it spans: the server resolves a local date for
  * `startedAtMs` alone (see StoredEvent's own comment on why that arithmetic is not duplicated
@@ -56,10 +68,11 @@ function eventText(t: Translate, event: StoredEvent): string {
 export function dayAnnotationsFrom(
   notes: readonly StoredNote[], events: readonly StoredEvent[], t: Translate,
 ): { date: string; text: string }[] {
-  if (notes.length === 0 && events.length === 0) return EMPTY
+  const chartEvents = events.filter((e) => e.kind !== RECOVERY_HARVEST_EVENT_KIND)
+  if (notes.length === 0 && chartEvents.length === 0) return EMPTY
   return [
     ...notes.map((n) => ({ date: n.localDate, text: n.body })),
-    ...events.map((e) => ({ date: e.localDate, text: eventText(t, e) })),
+    ...chartEvents.map((e) => ({ date: e.localDate, text: eventText(t, e) })),
   ].sort((a, b) => a.date.localeCompare(b.date))
 }
 

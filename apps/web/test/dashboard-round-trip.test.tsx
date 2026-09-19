@@ -49,6 +49,11 @@ const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
+// The control row's own rebuild field, carrying no news: ControlRow now trusts SyncStatus.rebuild
+// to exist whenever status.data does (see its own comment), so a fixture whose /api/sync/status
+// answer omits it is not a smaller, harmless stub -- it is a shape the real route never sends.
+const NO_REBUILD_NEWS = { quarantined: false, droppedPages: 0, lastError: null, drops: [] }
+
 /**
  * A client that does not retry and never treats cached data as stale, following
  * page-controls.test.tsx's pattern: the session is seeded directly rather than fetched, so the
@@ -88,6 +93,9 @@ function stubFetch(seen: string[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -134,6 +142,9 @@ function stubFetchOnePointPerMetric(seen: string[]): () => void {
     }
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
@@ -187,6 +198,9 @@ function stubFetchBySource(seen: string[]): () => void {
     if (url.includes('/insights')) {
       return new Response(JSON.stringify(insightBody(url)), { status: 200, headers: { 'content-type': 'application/json' } })
     }
+    if (url.includes('/api/sync/status')) {
+      return new Response(JSON.stringify({ running: false, lastFinishedAtMs: null, rebuild: NO_REBUILD_NEWS }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ baseline: null }), { status: 200, headers: { 'content-type': 'application/json' } })
   }) as typeof fetch
   return () => { globalThis.fetch = original }
@@ -221,31 +235,62 @@ describe('the Dashboard round trip', () => {
   // a metric only has rows under the aggs its own catalogue entry lists, so one shared request
   // would ask at least one card for an agg its metric refuses and 400 the lot
   // (requireMetricAndAgg's ConfigError). What batching by agg actually buys is fewer requests than
-  // cards: metrics that share an agg ride together.
+  // cards: metrics that share an agg AND range ride together.
   //
-  // Asserted as a property, not a count. The number of distinct aggs the dashboard needs is a
-  // detail of which cards exist and what each draws (task 10 added two more requests, 'min' and
-  // 'max', so the range card could draw a real band instead of a bare mean line), and a count
-  // pinned here is a count someone has to remember to update every time a card's data needs
-  // change, or worse, a count that quietly starts arguing a chart out of a series it should draw
-  // rather than the other way around. What is actually worth defending: requests are batched by
-  // agg (one request per distinct agg value, not one per metric), and that is fewer requests than
-  // there are cards on the page.
-  it('batches by shared agg rather than firing one request per card', async () => {
+  // Asserted as a property, not a count. The number of distinct (agg, range) pairs the dashboard
+  // needs is a detail of which cards exist and what each draws (task 10 added two more requests,
+  // 'min' and 'max', so the range card could draw a real band instead of a bare mean line; task 7
+  // added a second 'sum' and a second 'last' request, because useRecoveryIndex fetches its own
+  // wider window - recoveryWindowStart(controls.from) through controls.to, not controls.from
+  // through controls.to - so every date it scores has a full baseline-plus-sleep-week behind it,
+  // and that window cannot ride in the same request as a card asking for the visible range only),
+  // and a count pinned here is a count someone has to remember to update every time a card's data
+  // needs change, or worse, a count that quietly starts arguing a chart out of a series it should
+  // draw rather than the other way around. What is actually worth defending: requests are batched
+  // by agg within a shared range (one request per distinct (agg, from, to) triple, not one per
+  // metric), and that is fewer requests than there are metrics to fetch.
+  //
+  // "Fewer than there are METRICS ASKED FOR", not "fewer than there are cards on the page", and
+  // the difference is not cosmetic. The rendered card count was never the quantity this test had
+  // an opinion about - it stood in for "how many things want data", which is the metric count -
+  // and as a premise it has two faults. It is read off the live DOM one microtask after mount, so
+  // it depends on how far the stubbed fetches have got by the time it is sampled, which is why
+  // this test has been seen both passing and failing on identical source. And it erodes:
+  // hide-empty-cards makes a card with nothing to draw render nothing, so the same batching
+  // behaviour scores a smaller right hand side every time a fixture gets sparser, until a page
+  // that batched perfectly fails anyway. Both faults come from measuring the page instead of the
+  // requests. Counting the `metric` parameters in the request log measures what batching is
+  // actually about, is read from `seen` rather than from the DOM, and does not move when a card
+  // hides.
+  //
+  // flush() rather than a single microtask, for the same reason: one `await Promise.resolve()`
+  // settles whichever stubs happen to have resolved already, so the request log itself could be
+  // sampled half written. Every other test in this file already waits this way.
+  it('batches by shared agg and range rather than firing one request per metric', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen)
     window.history.replaceState(null, '', '/dashboard?range=month&on=2026-08-15')
 
-    mount(withQuery(<Dashboard />).tree)
-    await act(async () => { await Promise.resolve() })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
 
     const seriesCalls = seen.filter((u) => u.includes('/series'))
-    const distinctAggs = new Set(seriesCalls.map((u) => new URLSearchParams(u.split('?')[1] ?? '').get('agg')))
-    const cardCount = container!.querySelectorAll('.card').length
-    // One request per distinct agg: if two metrics sharing an agg fired separate requests instead
-    // of riding one together, seriesCalls.length would exceed distinctAggs.size.
-    expect(seriesCalls).toHaveLength(distinctAggs.size)
-    expect(seriesCalls.length).toBeLessThan(cardCount)
+    const shapeOf = (u: string) => {
+      const params = new URLSearchParams(u.split('?')[1] ?? '')
+      return `${params.get('agg')}|${params.get('from')}|${params.get('to')}`
+    }
+    const distinctShapes = new Set(seriesCalls.map(shapeOf))
+    const metricsAsked = seriesCalls
+      .reduce((total, u) => total + new URLSearchParams(u.split('?')[1] ?? '').getAll('metric').length, 0)
+    // Guards both assertions below against agreeing with an empty log: with no requests at all,
+    // toHaveLength(distinctShapes.size) is 0 against 0 and metricsAsked is 0 as well.
+    expect(seriesCalls.length).toBeGreaterThan(0)
+    // One request per distinct (agg, range) shape: if two metrics sharing both fired separate
+    // requests instead of riding one together, seriesCalls.length would exceed distinctShapes.size.
+    expect(seriesCalls).toHaveLength(distinctShapes.size)
+    // And that the batching bought something: strictly fewer requests than metrics fetched.
+    expect(seriesCalls.length).toBeLessThan(metricsAsked)
     expect(seriesCalls.some((u) => u.match(/metric=/g)!.length > 1)).toBe(true)
     restore()
   })
@@ -285,15 +330,26 @@ describe('the Dashboard round trip', () => {
     await flush(client, () => container!.innerHTML)
 
     // 5 stat tiles (steps, resting heart rate, sleep, mean heart rate, and recovery since the M3
-    // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus the five
-    // remaining non-tile cards task 10 restored (heart rate range, flagged days, sleep stages,
-    // sleep schedule), plus the three insight cards this task added (steps, resting_heart_rate,
-    // sleep_asleep_minutes), 12 not 4 or 10: this test predates all of their returns and only ever
-    // meant "every card on the page", not "exactly the tiles". Daily steps (the heatmap) is not
-    // among them any more: M3d2 moved it to Activity.tsx. Twelve rather than thirteen since the
-    // anomalies placeholder was removed - it was a card whose entire content said that a feature
-    // nobody had scheduled did not exist.
-    expect(container!.querySelectorAll('.card')).toHaveLength(12)
+    // phase review's B3 fix turned it into a fifth tile() card reading daily_hrv) plus flagged
+    // days and sleep schedule, plus the three insight cards (steps, resting_heart_rate,
+    // sleep_asleep_minutes), plus the recovery index tile this task (7) put first on the page: 11,
+    // not 4, 5 or 13. This test predates all of their returns and only ever meant "every card on
+    // the page", not "exactly the tiles"; the count is here so the NaN and delta assertions below
+    // cannot pass on a page that rendered nothing at all. Daily steps (the heatmap) is not among
+    // them: M3d2 moved it to Activity.tsx. Neither is the anomalies placeholder - it was a card
+    // whose entire content said that a feature nobody had scheduled did not exist.
+    //
+    // Eleven, not the twelve hide-empty-cards left before this task's tile, and the two that left
+    // (heart rate range, sleep stages) are the feature rather than a regression. Both are cards
+    // this stub deliberately gives nothing to draw: the heart rate range card reads /intraday,
+    // which stubFetchOnePointPerMetric answers with `points: []`, and the sleep stages card reads
+    // /sleep/nights, answered with `items: []`. A card with no rows for the period now renders no
+    // shell at all rather than an empty state inside one. The recovery index tile is not a third:
+    // per its own design (docs/superpowers/specs/2026-09-19-recovery-index-design.md), a day it
+    // cannot score states why rather than rendering nothing, the same as an error, pending or
+    // not-synced card - none of those is a statement about the person's record either, and none
+    // of them hides.
+    expect(container!.querySelectorAll('.card')).toHaveLength(11)
     expect(container!.innerHTML).not.toContain('NaN')
     expect(container!.innerHTML).not.toContain('Infinity')
     // Not just absent text: no delta chip should exist at all for a window with one point, since

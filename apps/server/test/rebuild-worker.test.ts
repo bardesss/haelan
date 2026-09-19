@@ -229,8 +229,10 @@ describe('a failure crossing the process boundary', () => {
     // A real Error on this side, not the plain object that crossed: RebuildFailure promises its
     // callers an Error and runBootSequence hands it straight to logError.
     expect(error).toBeInstanceOf(Error)
-    // The message itself, quoted, because this is the string the operator reads and the exact
-    // thing the channel's JSON drops.
+    // The message itself, quoted, because the exact thing the channel's JSON drops has to survive
+    // the crossing. The operator now reads the abandonment message replayPerson raises when
+    // nothing at all committed, not this zlib text on its own - it appears only as that message's
+    // trailing reason, which is what this substring check still finds.
     expect(error.message).toContain('incorrect header check')
     expect(error.name).toBe('Error')
     // And the reasons ride along beside it, since the person is named by the same line.

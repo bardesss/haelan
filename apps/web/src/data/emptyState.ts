@@ -70,9 +70,11 @@ export function wornOn(metric: string, point: SeriesPoint): boolean | null {
  * A third state, `insufficient`, lived here until M3e-2 marked it for removal: no caller in
  * apps/web ever passed a baseline, since Dashboard.tsx withholds one on purpose (a thin baseline
  * should blank the band a chart draws rather than the lines themselves), so the branch could
- * never fire through this function. Its copy lives on as a suppressed insight card's own
- * `thin-days` reason (InsightCard.tsx), which reuses the `emptyState.insufficient` translation
- * key verbatim without ever calling this function.
+ * never fire through this function. Its copy used to live on as a suppressed insight card's own
+ * `thin-days` reason (InsightCard.tsx), reusing the `emptyState.insufficient` translation key
+ * verbatim without ever calling this function; the hide-empty-cards feature retired that branch
+ * too, so `thin-days` now renders nothing and the `insufficient` key is gone from both catalogues.
+ * This paragraph stays as the record of why `emptyStateFor` has three kinds and not four.
  */
 export function emptyStateFor(
   metric: string, points: SeriesPoint[] | undefined, excludedTypes: readonly string[] = [],
@@ -103,4 +105,26 @@ export function emptyStateFor(
   if (answers.length > 0 && !answers.includes(true)) return 'not_worn'
 
   return null
+}
+
+/**
+ * Whether a card in this state should render nothing at all rather than an empty shell.
+ *
+ * The rule, which is what a later reader should apply to a fourth kind: an absence the reader can
+ * act on stays on screen; an absence they can only wait out disappears. `not_synced` names a
+ * switch in Settings and is the last trace that the data type exists at all. `not_worn` names a
+ * remedy too — wear the device — and without it the reader blames the app for a gap their own
+ * week caused. `no_data` names neither: a card whose only job was to show this period, saying it
+ * has nothing to show for this period, tells the reader something they already know.
+ *
+ * A function over the kind rather than a set literal or a field on each kind, so a fourth kind is
+ * a type error here until someone classifies it, rather than defaulting silently into either
+ * behaviour.
+ */
+export function hidesWhenEmpty(kind: EmptyStateKind): boolean {
+  switch (kind) {
+    case 'no_data': return true
+    case 'not_worn': return false
+    case 'not_synced': return false
+  }
 }

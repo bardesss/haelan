@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { METRICS } from '@haelan/core/metrics'
 import type { DailyAgg } from '@haelan/core/metrics'
 import { useTranslation } from '../i18n/index.js'
+import { CardGrid } from '../components/CardGrid.js'
 import { StatTile } from '../components/StatTile.js'
 import { MetricCard } from '../components/MetricCard.js'
 import { ChartNote } from '../components/ChartNote.js'
@@ -19,7 +20,6 @@ import { useTrend } from '../data/useTrend.js'
 import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
-import { useSyncStatus } from '../data/useSyncStatus.js'
 import { useAnnotations } from '../data/useAnnotations.js'
 import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
@@ -104,10 +104,6 @@ export function Weight() {
   const metricGroups = useMetricGroups(GROUPS, range)
   const lastSeries = metricGroups.queryForAgg('last')
 
-  const syncStatus = useSyncStatus()
-  const syncedMinutesAgo = syncStatus.data?.lastFinishedAtMs != null
-    ? Math.max(0, Math.round((Date.now() - syncStatus.data.lastFinishedAtMs) / 60_000))
-    : null
   const personId = session.data?.personId
   const exportPath = personId !== undefined ? exportPathFor(personId, LAST_METRICS, 'last', range) : undefined
 
@@ -264,9 +260,9 @@ export function Weight() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('weight.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
-      <div className="grid">
+      <CardGrid>
         {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.readings',
           'weight.weight.chartLabel', 'weight.units.kilograms', 'weight.units.kg',
           // weight is stored in grams with precision 1 (METRICS.weight, declared in grams, the
@@ -296,7 +292,7 @@ export function Weight() {
             Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
           label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
-      </div>
+      </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>
   )

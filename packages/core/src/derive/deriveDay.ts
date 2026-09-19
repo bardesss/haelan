@@ -224,7 +224,23 @@ export function deriveDayInto(tx: DbOrTx, input: DeriveDayInput): number {
     )).run()
   }
 
-  for (const row of rows) tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).run()
+  // One multi-row insert per chunk rather than one statement per row. drizzle compiles and
+  // prepares a fresh better-sqlite3 statement on every `.run()`, and a rebuild calls this function
+  // once per local date, so a per-row loop here prepared a statement for every derived row of
+  // every day a person has. That was the whole of the rebuild's remaining memory climb after
+  // #281 fixed the sample path: 392 MB to 646 MB over the derive phase alone. Batching cannot be
+  // replaced by hoisting a prepared statement the way the sample upsert was, because this function
+  // is entered afresh per day and a statement prepared inside it would not outlive one.
+  //
+  // Chunked because SQLite binds a limited number of parameters per statement (999 on the
+  // conservative default). `daily` has ten columns, so 80 rows is 800 parameters, and the chunk
+  // count is what bounds the distinct statements this prepares rather than the row count.
+  const DAILY_INSERT_CHUNK = 80
+  for (let i = 0; i < rows.length; i += DAILY_INSERT_CHUNK) {
+    const chunk = rows.slice(i, i + DAILY_INSERT_CHUNK)
+      .map((row) => ({ ...row, updatedAtMs: input.nowMs }))
+    tx.insert(daily).values(chunk).run()
+  }
 
   return rows.length
 }

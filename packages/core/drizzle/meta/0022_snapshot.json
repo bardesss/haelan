@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "98f4295c-692b-4a22-9cf5-f953822e8fe2",
+  "id": "a71d9b85-97e5-445d-912c-c9b5751188d3",
   "prevId": "c39579ac-6c33-4692-a3f2-af525a7721c1",
   "tables": {
     "accounts": {
@@ -642,14 +642,6 @@
         },
         "update_check_enabled": {
           "name": "update_check_enabled",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
-        "companion_mode": {
-          "name": "companion_mode",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -1358,13 +1350,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "companion_path": {
-          "name": "companion_path",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "built_mapping_version": {
           "name": "built_mapping_version",
           "type": "integer",
@@ -1530,6 +1515,142 @@
         "raw_payloads_person_id_people_id_fk": {
           "name": "raw_payloads_person_id_people_id_fk",
           "tableFrom": "raw_payloads",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "rebuild_drops": {
+      "name": "rebuild_drops",
+      "columns": {
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "data_type": {
+          "name": "data_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pages": {
+          "name": "pages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rebuild_drops_person_id_people_id_fk": {
+          "name": "rebuild_drops_person_id_people_id_fk",
+          "tableFrom": "rebuild_drops",
+          "tableTo": "people",
+          "columnsFrom": [
+            "person_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "rebuild_drops_person_id_data_type_reason_pk": {
+          "columns": [
+            "person_id",
+            "data_type",
+            "reason"
+          ],
+          "name": "rebuild_drops_person_id_data_type_reason_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "rebuild_state": {
+      "name": "rebuild_state",
+      "columns": {
+        "person_id": {
+          "name": "person_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_attempt_at_ms": {
+          "name": "last_attempt_at_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_success_at_ms": {
+          "name": "last_success_at_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error_at_ms": {
+          "name": "last_error_at_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "consecutive_failures": {
+          "name": "consecutive_failures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "dropped_pages": {
+          "name": "dropped_pages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "rebuild_state_person_id_people_id_fk": {
+          "name": "rebuild_state_person_id_people_id_fk",
+          "tableFrom": "rebuild_state",
           "tableTo": "people",
           "columnsFrom": [
             "person_id"
