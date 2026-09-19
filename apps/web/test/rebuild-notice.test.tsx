@@ -14,7 +14,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing={false} drops={[]}
-        lastError={null} voice="self" rebuildInFlight={false}
+        lastError={null} voice="self" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toBe('')
@@ -24,7 +24,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} lastError="boom" voice="self"
-        rebuildInFlight={false}
+        rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('Your data has stopped updating')
@@ -35,7 +35,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={7} producedNothing={false} lastError={null} voice="self"
-        rebuildInFlight={false}
+        rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 7 }]}
       />,
     )
@@ -55,7 +55,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={1} producedNothing={false} lastError={null}
-        voice="admin" personName="Robin" rebuildInFlight={false}
+        voice="admin" personName="Robin" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
         drops={[{ dataType: 'sleep', reason: 'UNIQUE constraint failed', pages: 1 }]}
       />,
     )
@@ -69,7 +69,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null}
-        voice="admin" personName="Robin" rebuildInFlight={false}
+        voice="admin" personName="Robin" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('Robin has stopped receiving data')
@@ -82,7 +82,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} voice="self"
-        lastError="UNIQUE constraint failed: samples.id" rebuildInFlight={false}
+        lastError="UNIQUE constraint failed: samples.id" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('UNIQUE constraint failed: samples.id')
@@ -92,7 +92,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
-        rebuildInFlight={false}
+        rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).not.toContain('The error the rebuild reported')
@@ -108,7 +108,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
-        rebuildInFlight={false}
+        rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     // The whole paragraph, not a fragment of it: half this sentence is the promise about when
@@ -123,7 +123,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null}
-        voice="admin" personName="Robin" rebuildInFlight={false}
+        voice="admin" personName="Robin" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('Robin is waiting for a rebuild of their history')
@@ -140,7 +140,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
-        rebuildInFlight={false}
+        rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('Your data has stopped updating')
@@ -167,7 +167,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
-        rebuildInFlight
+        rebuildInFlight lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('<p class="maintenance-waiting">Your data is waiting for a rebuild of your history, which is running now. Nothing has gone wrong, and no new readings are collected until it finishes, which it will do on its own.</p>')
@@ -179,7 +179,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null}
-        voice="admin" personName="Robin" rebuildInFlight
+        voice="admin" personName="Robin" rebuildInFlight lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('<p class="maintenance-waiting">Robin is waiting for a rebuild of their history, which is running now. They receive no new data until it finishes, which it will do on its own.</p>')
@@ -198,7 +198,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined droppedPages={0} producedNothing={false} drops={[]} lastError={null} voice="self"
-        rebuildInFlight
+        rebuildInFlight lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('Your data has stopped updating')
@@ -213,7 +213,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing={false} drops={[]} lastError={null}
-        voice="self" rebuildInFlight
+        voice="self" rebuildInFlight lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toBe('')
@@ -232,7 +232,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing drops={[]}
-        lastError={null} voice="self" rebuildInFlight={false}
+        lastError={null} voice="self" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Your history was rebuilt without any error, but it produced no readings, so these pages are empty. Nothing has been deleted: everything ever collected for you is still stored, and a later version may be able to read it.</p></div>')
@@ -242,7 +242,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} droppedPages={0} producedNothing drops={[]}
-        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Robin&#x27;s history was rebuilt without any error, but it produced no readings, so their pages are empty. Nothing has been deleted: everything ever collected for them is still stored, and a later version may be able to read it.</p></div>')
@@ -258,7 +258,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined producedNothing droppedPages={0} drops={[]}
-        lastError={null} voice="self" rebuildInFlight={false}
+        lastError={null} voice="self" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('Your data has stopped updating')
@@ -277,7 +277,7 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild quarantined={false} producedNothing droppedPages={0} drops={[]}
-        lastError={null} voice="self" rebuildInFlight
+        lastError={null} voice="self" rebuildInFlight lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('which is running now')
@@ -293,10 +293,155 @@ describe('RebuildNotice', () => {
     const html = render(
       <RebuildNotice
         awaitingRebuild={false} quarantined={false} producedNothing droppedPages={3}
-        drops={[]} lastError={null} voice="self" rebuildInFlight={false}
+        drops={[]} lastError={null} voice="self" rebuildInFlight={false} lastErrorAtMs={null} lastSuccessAtMs={null}
       />,
     )
     expect(html).toContain('it produced no readings')
     expect(html).toContain('Part of your history could not be rebuilt')
+  })
+})
+
+const HOUR_MS = 3_600_000
+const DAY_MS = 24 * HOUR_MS
+
+/**
+ * The reason this whole change exists: three of the four states above persist unchanged from one
+ * boot to the next once a person's stamp goes current again, so an undated line reads like a live
+ * emergency whether it started twenty minutes ago or four months ago. These date the three that
+ * can go stale; awaitingRebuild is not among them, and its own comment in RebuildNotice.tsx says
+ * why (nothing records when a stamp went stale, and a boot rebuild clears it outright rather than
+ * leaving a number sitting there).
+ */
+describe('RebuildNotice dates the states that can go stale', () => {
+  it('dates the quarantine from when the rebuild failed', () => {
+    const now = Date.now()
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]}
+        lastError="boom" voice="self" rebuildInFlight={false}
+        lastErrorAtMs={now - 3 * DAY_MS} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-blocked">Your data has stopped updating. A rebuild of your history failed 3 days ago, so new readings are not being collected. An administrator needs to look at this.</p>')
+  })
+
+  it('dates the quarantine from when the rebuild failed, in the admin voice', () => {
+    const now = Date.now()
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]}
+        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={now - 3 * DAY_MS} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-blocked">Robin has stopped receiving data. A rebuild of their history failed 3 days ago.</p>')
+  })
+
+  /**
+   * "as of the rebuild ... ago", never "missing for ... ago". lastSuccessAtMs is when the figures
+   * were last MEASURED, not when the drop began - a data type stuck failing across a
+   * MAPPING_VERSION bump moves this timestamp forward on every later rebuild while the drop
+   * itself is however old the first bad rebuild was, so the copy must not claim an onset.
+   */
+  it('dates the dropped-pages note, in the self voice', () => {
+    const now = Date.now()
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={4}
+        drops={[]} lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 3 * HOUR_MS}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-download-note">Part of your history could not be rebuilt and is missing from these pages, as of the rebuild 3 hours ago. Nothing has been deleted, and it will come back once the cause is fixed.</p>')
+  })
+
+  it('dates the dropped-pages note, in the admin voice, with its count', () => {
+    const now = Date.now()
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={7}
+        drops={[]} lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 3 * HOUR_MS}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-download-note">7 pages of Robin&#x27;s history could not be rebuilt, as of the rebuild 3 hours ago.</p>')
+  })
+
+  it('dates the empty-rebuild note from when the rebuild last committed', () => {
+    const now = Date.now()
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 2 * HOUR_MS}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Your history was rebuilt without any error, but it produced no readings, so these pages are empty, as of the rebuild 2 hours ago. Nothing has been deleted: everything ever collected for you is still stored, and a later version may be able to read it.</p></div>')
+  })
+
+  it('dates the empty-rebuild note, in the admin voice', () => {
+    const now = Date.now()
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="admin" personName="Robin" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={now - 2 * HOUR_MS}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Robin&#x27;s history was rebuilt without any error, but it produced no readings, so their pages are empty, as of the rebuild 2 hours ago. Nothing has been deleted: everything ever collected for them is still stored, and a later version may be able to read it.</p></div>')
+  })
+
+  /**
+   * The null path. A person can be quarantined by their very first ever attempt, which sets
+   * lastErrorAtMs - so this specific pairing (quarantined true, lastErrorAtMs null) is not one
+   * today's two callers can actually produce, since isQuarantined is defined as "this timestamp
+   * is not null" (packages/core/src/store/rebuildState.ts). It is still asserted here because
+   * nothing about this component's own prop types enforces that pairing, and the fallback exists
+   * precisely so a caller that ever did fall out of step gets the plain sentence back rather than
+   * a rendered "Invalid Date", "null" or "NaN".
+   */
+  it('falls back to the undated quarantine wording when no failure time is on file', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined droppedPages={0} producedNothing={false} drops={[]}
+        lastError="boom" voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-blocked">Your data has stopped updating. A rebuild of your history did not finish, so new readings are not being collected. An administrator needs to look at this.</p>')
+    expect(html).not.toContain('ago')
+    expect(html).not.toContain('Invalid Date')
+    expect(html).not.toContain('NaN')
+  })
+
+  // The other reachable half of the same null path: a rebuild can commit and drop pages, or
+  // commit and write nothing, with no success time on file only if the row itself is absent -
+  // asserted here at this component's own boundary rather than assumed impossible.
+  it('falls back to the undated dropped-pages wording when no success time is on file', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing={false} droppedPages={4}
+        drops={[]} lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toContain('<p class="maintenance-download-note">Part of your history could not be rebuilt and is missing from these pages. Nothing has been deleted, and it will come back once the cause is fixed.</p>')
+    expect(html).not.toContain('ago')
+    expect(html).not.toContain('Invalid Date')
+    expect(html).not.toContain('NaN')
+  })
+
+  it('falls back to the undated empty-rebuild wording when no success time is on file', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild={false} quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="self" rebuildInFlight={false}
+        lastErrorAtMs={null} lastSuccessAtMs={null}
+      />,
+    )
+    expect(html).toBe('<div class="maintenance"><p class="maintenance-waiting">Your history was rebuilt without any error, but it produced no readings, so these pages are empty. Nothing has been deleted: everything ever collected for you is still stored, and a later version may be able to read it.</p></div>')
+    expect(html).not.toContain('ago')
+    expect(html).not.toContain('Invalid Date')
+    expect(html).not.toContain('NaN')
   })
 })

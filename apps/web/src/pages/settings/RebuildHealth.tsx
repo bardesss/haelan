@@ -133,6 +133,8 @@ export function RebuildHealth() {
           droppedPages={person.droppedPages}
           producedNothing={person.producedNothing}
           lastError={person.lastError}
+          lastErrorAtMs={person.lastErrorAtMs}
+          lastSuccessAtMs={person.lastSuccessAtMs}
           drops={person.drops}
         />
       ))}

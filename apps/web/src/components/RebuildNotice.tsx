@@ -1,4 +1,5 @@
 import { useTranslation } from '../i18n/index.js'
+import { formatSince } from '../format.js'
 
 export interface RebuildNoticeProps {
   quarantined: boolean
@@ -39,6 +40,33 @@ export interface RebuildNoticeProps {
   producedNothing: boolean
   drops: { dataType: string, reason: string, pages: number }[]
   lastError: string | null
+  /**
+   * When the last rebuild attempt failed, which dates the quarantine paragraph below. Not the
+   * same timestamp that dates droppedPages and producedNothing beneath it, and deliberately so:
+   * this is the one column recordFailure ever writes, and lastSuccessAtMs stays null for anyone
+   * who has never once had a rebuild commit, quarantined or not.
+   *
+   * Null falls back to the undated wording rather than to "just now" - a store that never
+   * recorded a failure time is not the same claim as a failure recorded a moment ago, and nothing
+   * upstream promises this is only null in step with quarantined being false. Reachable at this
+   * component's own boundary regardless of what today's two callers happen to keep in sync.
+   */
+  lastErrorAtMs: number | null
+  /**
+   * When the last rebuild attempt COMMITTED, which dates droppedPages and producedNothing below.
+   *
+   * Not when either gap ITSELF began. A data type that keeps failing to map across two
+   * MAPPING_VERSION bumps has this timestamp move forward on every later rebuild - each one still
+   * drops the same pages or still writes nothing - while the gap those pages describe is however
+   * old the FIRST bad rebuild was. So the copy below reads "as of the rebuild ... ago", which is a
+   * true claim about when the figures were last measured, never "missing for ... ago", which
+   * would claim an onset this timestamp does not know.
+   *
+   * Null falls back to the undated wording for the same reason lastErrorAtMs above does: nothing
+   * ties this prop to droppedPages or producedNothing being true at the type level, even though
+   * today's two callers only ever set either flag from the same row recordSuccess just stamped.
+   */
+  lastSuccessAtMs: number | null
   /** 'self' addresses the person whose data it is, 'admin' describes someone else's. */
   voice: 'self' | 'admin'
   personName?: string
@@ -64,11 +92,17 @@ export interface RebuildNoticeProps {
  */
 export function RebuildNotice({
   quarantined, awaitingRebuild, rebuildInFlight, droppedPages, producedNothing, drops, lastError,
-  voice, personName,
+  lastErrorAtMs, lastSuccessAtMs, voice, personName,
 }: RebuildNoticeProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
 
   if (!quarantined && !awaitingRebuild && droppedPages === 0 && !producedNothing) return null
+
+  // Read at render rather than captured once, the same reason Members.tsx's own activity line
+  // takes Date.now() at render instead of a stored clock: every "... ago" below is read off a
+  // dashboard a person may leave open, and a timestamp captured on mount would quietly go stale
+  // while the tab stayed open.
+  const nowMs = Date.now()
 
   return (
     <div className="maintenance">
@@ -77,9 +111,19 @@ export function RebuildNotice({
           register, since it names something already broken and waiting on a person to act. */}
       {quarantined && (
         <p className="maintenance-blocked">
-          {voice === 'self'
-            ? t('settings.rebuild.quarantinedSelf')
-            : t('settings.rebuild.quarantinedOther', { name: personName })}
+          {/* Dated from lastErrorAtMs when the store has one, which recordFailure always sets
+              alongside quarantined turning true - see this component's own doc comment on the
+              prop for the one case (a caller out of step with today's two) where it would not,
+              and why null still has to render the plain sentence rather than crash on it. */}
+          {lastErrorAtMs === null
+            ? (voice === 'self'
+                ? t('settings.rebuild.quarantinedSelf')
+                : t('settings.rebuild.quarantinedOther', { name: personName }))
+            : (voice === 'self'
+                ? t('settings.rebuild.quarantinedSelfSince', { when: formatSince(lastErrorAtMs, nowMs, i18n.language) })
+                : t('settings.rebuild.quarantinedOtherSince', {
+                    name: personName, when: formatSince(lastErrorAtMs, nowMs, i18n.language),
+                  }))}
         </p>
       )}
       {/* Suppressed while quarantined, although both flags are true of a quarantined person:
@@ -95,6 +139,14 @@ export function RebuildNotice({
           not the muted note either, but nothing is broken and nobody has to diagnose anything. */}
       {awaitingRebuild && !quarantined && (
         <p className="maintenance-waiting">
+          {/* Deliberately undated, unlike the three states around it. Nothing records the moment
+              a version stamp went stale - PeopleStore.setTimezone nulls builtDerivationVersion in
+              the same statement as the zone, and that null is the whole of what this state is,
+              with no companion column recording when it happened the way lastErrorAtMs and
+              lastSuccessAtMs do for the other three. It also cannot go stale the way they can: the
+              next boot rebuild clears it outright rather than leaving a number sitting there
+              across restarts, so there is no multi-month gap for a reader to be misled about in
+              the first place. */}
           {/* Two wordings of one state, chosen on whether the rebuild that fixes it is running.
               A refinement of this line rather than a fourth line of its own, which is why it
               inherits the quarantine suppression above instead of restating it: a quarantined
@@ -154,9 +206,19 @@ export function RebuildNotice({
           reason it is neither the blocked box nor the footnote. */}
       {producedNothing && !quarantined && !awaitingRebuild && (
         <p className="maintenance-waiting">
-          {voice === 'self'
-            ? t('settings.rebuild.emptySelf')
-            : t('settings.rebuild.emptyOther', { name: personName })}
+          {/* Dated from lastSuccessAtMs, which is when this outcome was last MEASURED, not when
+              it started - see the prop's own doc comment for the archive-that-never-remaps case
+              this distinction exists for. Null falls back to the plain sentence rather than
+              rendering an invalid date. */}
+          {lastSuccessAtMs === null
+            ? (voice === 'self'
+                ? t('settings.rebuild.emptySelf')
+                : t('settings.rebuild.emptyOther', { name: personName }))
+            : (voice === 'self'
+                ? t('settings.rebuild.emptySelfSince', { when: formatSince(lastSuccessAtMs, nowMs, i18n.language) })
+                : t('settings.rebuild.emptyOtherSince', {
+                    name: personName, when: formatSince(lastSuccessAtMs, nowMs, i18n.language),
+                  }))}
         </p>
       )}
       {/* .maintenance-download-note: the same muted register Maintenance.tsx uses for a fact that
@@ -164,9 +226,20 @@ export function RebuildNotice({
           same way that note's own credentials caveat is a condition rather than a failure. */}
       {droppedPages > 0 && (
         <p className="maintenance-download-note">
-          {voice === 'self'
-            ? t('settings.rebuild.droppedSelf')
-            : t('settings.rebuild.droppedOther', { count: droppedPages, name: personName })}
+          {/* Dated from lastSuccessAtMs, same as producedNothing above and for the same reason:
+              this is when the drop was last measured, not when it started, which matters because
+              a data type stuck failing across a MAPPING_VERSION bump keeps this timestamp moving
+              forward on every later rebuild while the drop it describes is however old the first
+              bad rebuild was. Null falls back to the plain sentence. */}
+          {lastSuccessAtMs === null
+            ? (voice === 'self'
+                ? t('settings.rebuild.droppedSelf')
+                : t('settings.rebuild.droppedOther', { count: droppedPages, name: personName }))
+            : (voice === 'self'
+                ? t('settings.rebuild.droppedSelfSince', { when: formatSince(lastSuccessAtMs, nowMs, i18n.language) })
+                : t('settings.rebuild.droppedOtherSince', {
+                    count: droppedPages, name: personName, when: formatSince(lastSuccessAtMs, nowMs, i18n.language),
+                  }))}
         </p>
       )}
       {drops.length > 0 && (
