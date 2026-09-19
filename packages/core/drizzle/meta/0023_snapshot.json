@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9957eda3-b346-40de-84bb-2b1f0a7288cf",
+  "id": "e7a4cd74-528b-4466-b69b-ae44a38350e4",
   "prevId": "a71d9b85-97e5-445d-912c-c9b5751188d3",
   "tables": {
     "accounts": {
@@ -1653,8 +1653,8 @@
           "autoincrement": false,
           "default": 0
         },
-        "payloads_seen": {
-          "name": "payloads_seen",
+        "payloads_with_data": {
+          "name": "payloads_with_data",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

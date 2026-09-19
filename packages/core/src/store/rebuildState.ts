@@ -21,7 +21,7 @@ export interface RebuildStateRow {
   consecutiveFailures: number
   droppedPages: number
   rowsWritten: number
-  payloadsSeen: number
+  payloadsWithData: number
   drops: RebuildDrop[]
 }
 
@@ -58,7 +58,7 @@ export class RebuildStateStore {
 
   recordSuccess(input: {
     personId: string, nowMs: number, droppedPages: number,
-    rowsWritten: number, payloadsSeen: number, drops: readonly RebuildDrop[],
+    rowsWritten: number, payloadsWithData: number, drops: readonly RebuildDrop[],
   }): void {
     this.#db.transaction((tx) => {
       tx.insert(rebuildState).values({
@@ -68,7 +68,7 @@ export class RebuildStateStore {
         consecutiveFailures: 0,
         droppedPages: input.droppedPages,
         rowsWritten: input.rowsWritten,
-        payloadsSeen: input.payloadsSeen,
+        payloadsWithData: input.payloadsWithData,
       }).onConflictDoUpdate({
         target: rebuildState.personId,
         set: {
@@ -97,7 +97,7 @@ export class RebuildStateStore {
           // whose drifted payloads start mapping again after a MAPPING_VERSION bump has to stop
           // being reported the moment that rebuild commits, with nobody clearing anything.
           rowsWritten: input.rowsWritten,
-          payloadsSeen: input.payloadsSeen,
+          payloadsWithData: input.payloadsWithData,
         },
       }).run()
       // Replaced wholesale, so the table always describes the most recent attempt. Inside this
@@ -156,7 +156,7 @@ export function isQuarantined(row: RebuildStateRow | null | undefined): boolean 
 }
 
 /**
- * The last rebuild was handed an archive and left nothing behind. Exported and shared by the two
+ * The last rebuild read archived data and left nothing behind. Exported and shared by the two
  * surfaces for the reason isQuarantined is: a person reported on one screen and clean on the
  * other is worse than either answer alone, and the condition is a conjunction that each surface
  * would otherwise have to get right on its own.
@@ -168,15 +168,24 @@ export function isQuarantined(row: RebuildStateRow | null | undefined): boolean 
  * payload, so a later mapping version replays them with no operator action - so it is reportable
  * rather than categorical, and making it abort would quarantine people for having no data yet.
  *
- * Both halves of the conjunction are load-bearing. `rowsWritten === 0` alone is true of a member
- * connected an hour ago and of anyone whose windows were genuinely quiet, and reporting them
- * would be noise on a surface whose whole value is that it stays silent until something is worth
- * reading. `payloadsSeen > 0` is what makes it a statement about an archive that exists.
+ * Both halves of the conjunction are load-bearing, and the second half is the one that was wrong
+ * first. It counted archived PAGES, and api/client.ts archives a response before parsing it and
+ * unconditionally, so a 200 carrying an empty point list is archived exactly like a full one: a
+ * connected member whose devices reported nothing across the horizon held hundreds of pages,
+ * derived zero rows, and was flagged for it. `payloadsWithData` counts only bodies that carried
+ * at least one data point, which is what makes this a statement about an archive that had
+ * something in it rather than about an archive that merely existed.
+ *
+ * What it still does NOT catch, stated rather than implied: partial drift. `rowsWritten` is a sum
+ * over every rebuilt table, so one data type drifting while the others map fine leaves it large
+ * and this predicate false, and neither surface says a word. Catching that needs a row count per
+ * data type, which issue 289 weighed and set aside; what is here catches the wholesale case,
+ * which is the one where an operator was previously told there was nothing to fix.
  *
  * Reads a missing row as nothing to report, the same way isQuarantined does and for the same
  * reason: the admin route keys a state map by personId and hands this whatever it found, which
  * for a person who has never been rebuilt is nothing at all.
  */
 export function producedNothing(row: RebuildStateRow | null | undefined): boolean {
-  return row != null && row.payloadsSeen > 0 && row.rowsWritten === 0
+  return row != null && row.payloadsWithData > 0 && row.rowsWritten === 0
 }

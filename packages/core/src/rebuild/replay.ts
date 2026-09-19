@@ -11,6 +11,7 @@ import { localDateOf } from '../derive/localDay.ts'
 import { PROVIDER_SOURCE } from '../derive/rollup.ts'
 import type { ArchivedPayload, RawArchive } from '../store/rawArchive.ts'
 import type { SourceRegistry } from '../store/sources.ts'
+import { readEnvelope } from '../api/envelope.ts'
 import { makeDropCollector, withPage } from './withPage.ts'
 import type { Drop, PageConnection } from './withPage.ts'
 
@@ -24,6 +25,31 @@ import type { Drop, PageConnection } from './withPage.ts'
  * and the replay has no way to tell those apart - see the message below.
  */
 const DROP_BREAKER = 100
+
+/**
+ * Whether one archived body carried data the mappers should have turned into rows.
+ *
+ * Only ever asked of a body whose own unit wrote NOTHING, and that restriction is what makes it
+ * affordable. It is a second JSON.parse of a body the mapper has already parsed, and on a day of
+ * minute-level heart rate - 264 KiB, 1440 points, the shape that dominates a real archive - that
+ * parse was measured at 5.0ms against the 10.0ms the replay already spends gunzipping and mapping
+ * the same body. Paid on every page it would be half as much work again on the one path that
+ * holds the write lock for the length of a rebuild, which is not a price worth paying for a
+ * diagnostic. Paid only where a unit produced nothing, a healthy archive never pays it at all:
+ * its big bodies write rows, and the bodies that do not write rows are the empty ones, where the
+ * same call was measured at 0.001ms. The archive that does pay it in full is the wholly drifted
+ * one, which is producing nothing anyway and is the case this exists to name.
+ *
+ * An unreadable body counts as carrying data. A renamed envelope is exactly the drift this is
+ * here to catch, and readEnvelope already refuses to confuse it with a quiet window - it returns
+ * readable for a body with no points key and no moved-looking sibling, which is the proto3 shape
+ * of a window with nothing in it, and unreadable only when a list of objects is sitting under a
+ * name we do not know.
+ */
+function carriedData(body: string, pointsKey: string): boolean {
+  const envelope = readEnvelope(body, pointsKey)
+  return !envelope.readable || envelope.points.length > 0
+}
 
 export interface ReplayInput {
   personId: string
@@ -58,16 +84,20 @@ export interface ReplayCounts {
   /** Pages that threw and were skipped, so the rest of the archive could replay. */
   droppedPages: number
   /**
-   * How many archived payloads this replay was handed, before any of them were grouped into
-   * windows or tried. Straight off the input rather than counted along the way, because that is
-   * exactly what it has to mean: the question it answers upstream is "was there an archive at
-   * all", which must stay true of an archive every one of whose bodies mapped to nothing.
+   * How many archived payloads carried at least one data point. NOT how many payloads there
+   * were, which is the number this started as and which was wrong.
    *
-   * Only ever read beside the row counts above. Zero rows out of zero payloads is a new member
-   * or a quiet window and is nobody's problem; zero rows out of thousands of payloads is the
-   * silent outcome issue 289 describes, and neither number says that on its own.
+   * api/client.ts archives a response before parsing it and unconditionally, so a 200 carrying
+   * an empty `dataPoints` list is archived exactly like a full one. A connected member whose
+   * devices reported nothing across the horizon therefore holds hundreds of payloads and derives
+   * zero rows, and is entirely healthy - a count of pages flagged every one of them and told
+   * them a later version might read what was never there. Counting only bodies that carried
+   * points is what separates "the archive was empty" from "the archive had data and none of it
+   * became rows".
+   *
+   * Only ever read beside the row counts above, by producedNothing in store/rebuildState.ts.
    */
-  payloadsSeen: number
+  payloadsWithData: number
   /** Those pages grouped by data type and reason - see dropReason for why grouped. */
   drops: Drop[]
 }
@@ -93,8 +123,7 @@ export interface ReplayCounts {
 export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const counts: ReplayCounts = {
     samples: 0, sessions: 0, segments: 0, providerDaily: 0, observations: 0,
-    unmappable: 0, localDates: [], droppedPages: 0, payloadsSeen: input.payloads.length,
-    drops: [],
+    unmappable: 0, localDates: [], droppedPages: 0, payloadsWithData: 0, drops: [],
   }
   // A dropped unit can leave its date in this set: the set is in memory and a savepoint rollback
   // does not revert it. Harmless rather than a bug - deriving a day whose rows are absent is a
@@ -204,6 +233,9 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
             dataType: t, personId: input.personId,
             body: input.archive.getBody(input.personId, page.id),
           })
+          // Free here, unlike the three paths below: mapRollups is the one mapper that already
+          // reports what its envelope held, so this path never pays a second parse at all.
+          if (mapped.points > 0 || !mapped.readable) counts.payloadsWithData += 1
           for (const row of mapped.rows) {
             tx.insert(daily).values({ ...row, updatedAtMs: input.nowMs }).onConflictDoUpdate({
               target: [daily.personId, daily.localDate, daily.metric, daily.agg, daily.source],
@@ -248,10 +280,15 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         for (const page of group.pages) {
           const unit = { dataType: group.dataType, pages: 1 }
           const committed = withPage(input.client, unit, collector, () => {
+            const body = input.archive.getBody(input.personId, page.id)
             const { sessions: rows, segments } = mapSessions({
               dataType: t, personId: input.personId, resolveSource,
-              body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+              body, rawPayloadId: page.id,
             })
+            // Rows imply points, since a row is made out of one, so a productive page is counted
+            // without re-reading it. Only a page that produced nothing is asked, which is where
+            // the two answers actually differ and where the cost is worth paying.
+            if (rows.length > 0 || carriedData(body, 'dataPoints')) counts.payloadsWithData += 1
             for (const row of rows) {
               tx.insert(sessions).values(row).onConflictDoUpdate({
                 target: [sessions.personId, sessions.sourceId, sessions.kind, sessions.externalId],
@@ -288,10 +325,13 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         for (const page of group.pages) {
           const unit = { dataType: group.dataType, pages: 1 }
           const committed = withPage(input.client, unit, collector, () => {
+            const body = input.archive.getBody(input.personId, page.id)
             const rows = mapObservations({
               dataType: t, personId: input.personId, resolveSource,
-              body: input.archive.getBody(input.personId, page.id), rawPayloadId: page.id,
+              body, rawPayloadId: page.id,
             })
+            // Same lazy test the sessions path above makes, for the same reason.
+            if (rows.length > 0 || carriedData(body, 'dataPoints')) counts.payloadsWithData += 1
             for (const row of rows) {
               tx.insert(observations).values(row).onConflictDoUpdate({
                 target: observations.id,
@@ -343,6 +383,18 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
             rawPayloadId: p.id,
           }))
           const rows = mapWindowSamples({ dataType: t, personId: input.personId, resolveSource, pages })
+          // The one path where a unit is more than one page, so the same lazy test needs a word
+          // about what it can get wrong. An episode that produced rows counts all of its pages,
+          // which is exact for the single-page episode that is the overwhelming majority and can
+          // overcount by the empty tail page of a paginated fetch. That overcount is reachable
+          // only when rows were written, and a rebuild that wrote rows is one where nothing ever
+          // reads this number - producedNothing tests rowsWritten === 0 first. An episode that
+          // produced nothing is asked page by page, which is exact, and that is the case the
+          // number is read in.
+          if (rows.length > 0) counts.payloadsWithData += pages.length
+          else for (const page of pages) {
+            if (carriedData(page.body, 'dataPoints')) counts.payloadsWithData += 1
+          }
           for (const row of rows) {
             // The same translation and the same upsert target runJob's writeSamples uses, and
             // they have to stay the same: a replay that keyed a row differently from the sync

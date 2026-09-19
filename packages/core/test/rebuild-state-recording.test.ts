@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, test } from 'vitest'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { runRebuild } from '../src/rebuild/runRebuild.ts'
 import { RebuildStateStore, producedNothing } from '../src/store/rebuildState.ts'
 import { rawPayloads } from '../src/db/schema/index.ts'
@@ -79,15 +79,23 @@ describe('runRebuild, recording each person\'s outcome', () => {
       .toBe(DERIVATION_VERSION)
   })
 
-  // The silent outcome of issue 289, reproduced rather than described. Every archived body is
-  // replaced with a well-formed JSON object of a shape no current mapper recognises, which is
-  // what catalogue drift produces in the field: the body gunzips, parses, passes each mapper's
-  // type guard and yields nothing. Nothing throws, so no page is dropped, no breaker fires and
-  // the person is stamped current - and before this pair of columns existed, rebuild_state held
-  // a row indistinguishable from a healthy rebuild's.
-  test('records a rebuild that read the whole archive and wrote no rows', () => {
+  /**
+   * The silent outcome of issue 289, reproduced rather than described.
+   *
+   * Every archived body is replaced with one that carries a real, non-empty list of data points
+   * whose inner shape no current mapper recognises - the payload key and the value key have both
+   * moved. That is what catalogue drift produces in the field, and it is the distinction the
+   * whole design turns on: the envelope is intact and full, so the archive plainly HELD data,
+   * while every mapper walks the points, finds nothing it knows, and returns empty. Nothing
+   * throws, so no page is dropped, no breaker fires, and the person is stamped current.
+   *
+   * An earlier version of this test used `{}`, which proved only that the columns were wired up:
+   * `{}` is structurally an empty answer, indistinguishable from the healthy quiet member the
+   * test below rebuilds, and a predicate that flagged both would have passed it.
+   */
+  test('reports a rebuild whose archive held data that no mapper could read', () => {
     h = seedRebuildable()
-    h.db.update(rawPayloads).set({ bodyGzip: gzipSync(Buffer.from('{}', 'utf8')) })
+    h.db.update(rawPayloads).set({ bodyGzip: gzipSync(Buffer.from(DRIFTED_BODY, 'utf8')) })
       .where(eq(rawPayloads.personId, h.personId)).run()
     const store = new RebuildStateStore(h.db)
 
@@ -99,11 +107,47 @@ describe('runRebuild, recording each person\'s outcome', () => {
     expect(report.people[0]?.rowsWritten).toBe(0)
     // Asserted as a positive number rather than pinned to the fixture's own page count, which is
     // the fixture's business and changes whenever a data source is added to it.
-    expect(report.people[0]?.payloadsSeen).toBeGreaterThan(0)
+    expect(report.people[0]?.payloadsWithData).toBeGreaterThan(0)
     const row = store.get(h.personId)
     expect(row?.rowsWritten).toBe(0)
-    expect(row?.payloadsSeen).toBe(report.people[0]?.payloadsSeen)
+    expect(row?.payloadsWithData).toBe(report.people[0]?.payloadsWithData)
     expect(producedNothing(row)).toBe(true)
+  })
+
+  /**
+   * The member this feature must never speak about, and the case the first design got wrong.
+   *
+   * Every archived body is a well-formed, entirely ordinary EMPTY answer: a 200 whose dataPoints
+   * list has nothing in it. api/client.ts archives a response before parsing it and
+   * unconditionally, so these are archived exactly like full ones - which means a connected
+   * member whose devices reported nothing across the horizon holds a page per window per data
+   * type and derives not one row. Counting pages, as the column first did, flagged them and told
+   * them a later version might read what was never there.
+   *
+   * So the assertion that matters here is the negative one. It fails against a `payloads_seen`
+   * that counts pages, and passes only against one that counts payloads carrying data.
+   */
+  test('stays quiet about a member whose archive is full of empty answers', () => {
+    h = seedRebuildable()
+    h.db.update(rawPayloads).set({ bodyGzip: gzipSync(Buffer.from(EMPTY_ANSWER_BODY, 'utf8')) })
+      .where(eq(rawPayloads.personId, h.personId)).run()
+    const store = new RebuildStateStore(h.db)
+
+    const report = runRebuild({ ...h.deps, nowMs: 5_000, rebuildState: store })
+
+    expect(report.failures).toEqual([])
+    expect(report.people[0]?.rowsWritten).toBe(0)
+    // Asserted so the zero below cannot pass vacuously: the archive really does hold pages, and
+    // the old page-counting column returned exactly this number. Without it, an empty archive
+    // would satisfy the whole test.
+    const pages = h.db.select({ n: sql<number>`count(*)` }).from(rawPayloads)
+      .where(eq(rawPayloads.personId, h.personId)).get()?.n ?? 0
+    expect(pages).toBeGreaterThan(0)
+    // Only the answers are empty, not the archive. This asserts the column is not a page count.
+    expect(report.people[0]?.payloadsWithData).toBe(0)
+    const row = store.get(h.personId)
+    expect(row?.payloadsWithData).toBe(0)
+    expect(producedNothing(row)).toBe(false)
   })
 
   // The other half of the pair, and the reason there are two columns. A rebuild that did read
@@ -117,7 +161,59 @@ describe('runRebuild, recording each person\'s outcome', () => {
     expect(report.people[0]?.rowsWritten).toBeGreaterThan(0)
     expect(producedNothing(store.get(h.personId))).toBe(false)
   })
+
+  /**
+   * Segments count as rows written. A person whose archive replays to sleep stages and nothing
+   * else has data, and a sum that left segments out would report them as having produced
+   * nothing. Asserted through the arithmetic rather than by seeding a segments-only archive:
+   * the report's own figures are what the sum is made of, so this catches a term going missing
+   * from it whatever the fixture holds.
+   */
+  test('counts every rebuilt table in rowsWritten, segments included', () => {
+    h = seedRebuildable()
+
+    const report = runRebuild({ ...h.deps, nowMs: 5_000 })
+    const person = report.people[0]!
+
+    const rows = h.snapshot()
+    expect(rows.sessionSegments.length).toBeGreaterThan(0)
+    expect(person.rowsWritten).toBe(
+      person.samples + person.sessions + rows.sessionSegments.length
+      + person.observations + person.dailyRows,
+    )
+  })
 })
+
+/**
+ * One archived body whose envelope is intact and full, and whose points nothing can read.
+ *
+ * `heartRateV2` and `beatsPerMinuteV2` are both invented: the catalogue's heart-rate type looks
+ * for `heartRate.beatsPerMinute`, finds neither, and skips the point. The shape is otherwise a
+ * real one, down to the dataSource and the sample time, which is what a renamed field looks like
+ * coming back from a live API.
+ *
+ * Used for every data type in the fixture, not only heart rate. The sessions and observations
+ * mappers walk the same `dataPoints` list and find nothing they know either, and for the rollup
+ * page readEnvelope reports the body unreadable - there is no `rollupDataPoints` key, and a
+ * non-empty list of objects is sitting under a name it does not expect, which is the envelope
+ * reader's own definition of a field that has moved.
+ */
+const DRIFTED_BODY = JSON.stringify({
+  dataPoints: [{
+    dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
+    heartRateV2: {
+      sampleTime: { physicalTime: '2026-08-18T10:00:00Z', utcOffset: '7200s' },
+      beatsPerMinuteV2: '62',
+    },
+  }],
+})
+
+/**
+ * The ordinary empty answer, which proto3 JSON emits as an omitted repeated field or as an empty
+ * list. Spelled with the key present and empty rather than omitted because that is the harder
+ * case for the envelope reader to get right, and because it is unambiguous to read here.
+ */
+const EMPTY_ANSWER_BODY = JSON.stringify({ dataPoints: [] })
 
 /**
  * A store whose writes fail the way a real one can: SQLITE_BUSY past the busy timeout.

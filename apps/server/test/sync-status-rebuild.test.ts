@@ -37,7 +37,7 @@ describe('the runner reports a person\'s rebuild status', () => {
     const store = harness.app.haelan.stores.rebuildState
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
     store.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 90, payloadsSeen: 4, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 90, payloadsWithData: 4, drops: [],
     })
 
     expect(harness.app.haelan.runner.status('p1').rebuild.quarantined).toBe(false)
@@ -52,7 +52,7 @@ describe('the runner reports a person\'s rebuild status', () => {
     harness = await withServer()
     await harness.completeSetup()
     harness.app.haelan.stores.rebuildState.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsSeen: 40, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 40, drops: [],
     })
 
     const status = harness.app.haelan.runner.status('p1').rebuild
@@ -70,7 +70,7 @@ describe('the runner reports a person\'s rebuild status', () => {
     harness = await withServer()
     await harness.completeSetup()
     harness.app.haelan.stores.rebuildState.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsSeen: 0, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 0, drops: [],
     })
 
     expect(harness.app.haelan.runner.status('p1').rebuild.producedNothing).toBe(false)
@@ -91,7 +91,7 @@ describe('the runner reports a person\'s rebuild status', () => {
     harness = await withServer()
     await harness.completeSetup()
     harness.app.haelan.stores.rebuildState.recordSuccess({
-      personId: 'p1', nowMs: 100, droppedPages: 0, rowsWritten: 90, payloadsSeen: 4, drops: [],
+      personId: 'p1', nowMs: 100, droppedPages: 0, rowsWritten: 90, payloadsWithData: 4, drops: [],
     })
 
     harness.app.haelan.stores.people.setTimezone('p1', 'Pacific/Auckland')

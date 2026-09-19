@@ -97,7 +97,7 @@ describe('GET /api/settings/rebuild', () => {
     const store = harness.app.haelan.stores.rebuildState
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
     store.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 3, rowsWritten: 90, payloadsSeen: 12, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 3, rowsWritten: 90, payloadsWithData: 12, drops: [],
     })
 
     const response = await harness.app.inject({
@@ -122,7 +122,7 @@ describe('GET /api/settings/rebuild', () => {
     harness = await withServer()
     const token = await harness.signIn()
     harness.app.haelan.stores.rebuildState.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 90, payloadsSeen: 12, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 90, payloadsWithData: 12, drops: [],
     })
     harness.app.haelan.stores.people.setTimezone('p1', 'Pacific/Auckland')
 
@@ -152,12 +152,12 @@ describe('GET /api/settings/rebuild', () => {
     const token = await harness.signIn()
     const store = harness.app.haelan.stores.rebuildState
     store.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsSeen: 40, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 40, drops: [],
     })
     // Nothing archived and nothing derived, which is every new member's first hours. The second
     // column exists so this person is not listed beside the one above.
     store.recordSuccess({
-      personId: 'p2', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsSeen: 0, drops: [],
+      personId: 'p2', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 0, drops: [],
     })
 
     const response = await harness.app.inject({
