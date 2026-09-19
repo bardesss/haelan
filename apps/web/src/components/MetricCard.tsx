@@ -4,7 +4,7 @@ import { Card } from './Card.js'
 import { ErrorState } from './ErrorState.js'
 import { Loading } from './Loading.js'
 import { EmptyState } from './EmptyState.js'
-import { emptyStateFor, wornOn, coverageIsWearSignal } from '../data/emptyState.js'
+import { emptyStateFor, hidesWhenEmpty, wornOn, coverageIsWearSignal } from '../data/emptyState.js'
 import { useDataTypes } from '../data/useDataTypes.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 
@@ -120,6 +120,12 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // translation happens on either side of this comparison.
   const excludedTypes = dataTypes.filter((d) => d.excluded).map((d) => d.id)
   const empty = emptyStateFor(metric, points, excludedTypes)
+  // Nothing at all, not an empty Card: the shell is what reports a card's presence to the
+  // enclosing CardGrid (CardGrid.tsx), so returning `<Card/>` with nothing in it would keep the
+  // page claiming it has something to show. `after` goes with it — a card link like "View
+  // activity" survives every other state on purpose, but there is nothing left here for it to sit
+  // beside, and the sidebar still carries every page.
+  if (empty !== null && hidesWhenEmpty(empty)) return null
   if (empty !== null) {
     return (
       <Card span={span} label={label}>

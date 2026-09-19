@@ -104,3 +104,25 @@ export function emptyStateFor(
 
   return null
 }
+
+/**
+ * Whether a card in this state should render nothing at all rather than an empty shell.
+ *
+ * The rule, which is what a later reader should apply to a fourth kind: an absence the reader can
+ * act on stays on screen; an absence they can only wait out disappears. `not_synced` names a
+ * switch in Settings and is the last trace that the data type exists at all. `not_worn` names a
+ * remedy too — wear the device — and without it the reader blames the app for a gap their own
+ * week caused. `no_data` names neither: a card whose only job was to show this period, saying it
+ * has nothing to show for this period, tells the reader something they already know.
+ *
+ * A function over the kind rather than a set literal or a field on each kind, so a fourth kind is
+ * a type error here until someone classifies it, rather than defaulting silently into either
+ * behaviour.
+ */
+export function hidesWhenEmpty(kind: EmptyStateKind): boolean {
+  switch (kind) {
+    case 'no_data': return true
+    case 'not_worn': return false
+    case 'not_synced': return false
+  }
+}
