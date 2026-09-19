@@ -3,6 +3,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { loadOrCreateKey } from '../src/crypto/key.ts'
 import { AccountStore } from '../src/store/accounts.ts'
 import { CredentialStore } from '../src/store/credentials.ts'
+import { PeopleStore } from '../src/store/people.ts'
 import {
   SettingsStore, setupStep, DEFAULT_BACKUP_KEEP, DEFAULT_BACKUP_INTERVAL_HOURS,
 } from '../src/store/settings.ts'
@@ -16,6 +17,7 @@ let fixture: TestDatabase
 let accounts: AccountStore
 let credentials: CredentialStore
 let settings: SettingsStore
+let people: PeopleStore
 
 beforeEach(() => {
   fixture = createTestDatabase()
@@ -23,6 +25,7 @@ beforeEach(() => {
   accounts = new AccountStore(fixture.db)
   credentials = new CredentialStore(fixture.db, loadOrCreateKey(fixture.dir, {}))
   settings = new SettingsStore(fixture.db)
+  people = new PeopleStore(fixture.db)
 })
 afterEach(() => fixture.cleanup())
 
@@ -32,18 +35,18 @@ const addAccount = () => accounts.create({
 
 describe('setupStep', () => {
   it('starts at the account step on an empty instance', () => {
-    expect(setupStep({ accounts, settings, credentials })).toBe('account')
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('account')
   })
 
   it('asks for the instance URL once an account exists', async () => {
     await addAccount()
-    expect(setupStep({ accounts, settings, credentials })).toBe('instance-url')
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('instance-url')
   })
 
   it('asks for the Google client once the URL is known', async () => {
     await addAccount()
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
-    expect(setupStep({ accounts, settings, credentials })).toBe('google-client')
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('google-client')
   })
 
   it('treats a refresh token without the completion mark as an interrupted consent', async () => {
@@ -51,9 +54,46 @@ describe('setupStep', () => {
     settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
     credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 1 })
     credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 1 })
-    expect(setupStep({ accounts, settings, credentials })).toBe('consent')
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('consent')
     settings.markSetupComplete(2)
-    expect(setupStep({ accounts, settings, credentials })).toBe('done')
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
+  })
+
+  // The phone path, at the level of the store rather than the gate. Closing the wizard without
+  // Google stamps both columns, and the step has to be 'done' from that alone: falling through to
+  // the client check below would answer 'google-client', which shuts every route outside the
+  // wizard (setupGate.ts) and stops the phone syncing, with no way back to done.
+  it('treats a companion instance as done with no client at all', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('google-client')
+
+    settings.completeCompanionSetup(2)
+    expect(credentials.getClient()).toBeNull()
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
+  })
+
+  it('stays done when a companion instance gains a Google token later', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    settings.completeCompanionSetup(2)
+    credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 3 })
+    credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 3 })
+
+    // A member consenting later is what a mixed instance looks like, and it reopens nothing: the
+    // phone choice on people.companionPath survives beside the Google row.
+    people.setCompanionPath('p1', true)
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
+  })
+
+  it('does not read the companion flag without its completion stamp as done', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    // Written directly because completeCompanionSetup writes both columns: a row carries the flag
+    // alone only through an interrupted write or a restored backup, and the short-circuit must not
+    // fire on it - the step has to land somewhere the wizard can still finish from.
+    fixture.db.$client.prepare('update instance_settings set companion_mode = 1').run()
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('google-client')
   })
 
   // A backup restored without instance.key, at the point it is decided. The client secret is
@@ -67,10 +107,10 @@ describe('setupStep', () => {
     credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 1 })
     credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 1 })
     settings.markSetupComplete(2)
-    expect(setupStep({ accounts, settings, credentials })).toBe('done')
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
 
     const restored = new CredentialStore(fixture.db, Buffer.alloc(32, 7))
-    expect(setupStep({ accounts, settings, credentials: restored })).toBe('google-client')
+    expect(setupStep({ accounts, settings, credentials: restored, people })).toBe('google-client')
   })
 
   it('keeps the settings row single, so a second put updates rather than duplicates', () => {

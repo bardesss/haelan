@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DayNight: the palette has two themes, like the style sheet, and which of the two is seen
+         is decided by the phone instead of this line. The colours are not written here: they arrive from
+         the Android target of packages/tokens, and this file only says which token goes on
+         which Material attribute. -->
+    <style name="Theme.Haelan" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorOnPrimary">@color/surface_page</item>
+        <item name="colorPrimaryContainer">@color/surface_selected</item>
+        <item name="colorOnPrimaryContainer">@color/accent_soft</item>
+        <item name="colorSecondary">@color/accent_soft</item>
+        <item name="android:windowBackground">@color/surface_page</item>
+        <item name="colorSurface">@color/surface_card</item>
+        <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorSurfaceVariant">@color/surface_inset</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorError">@color/negative</item>
+    </style>
+</resources>

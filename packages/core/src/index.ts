@@ -13,7 +13,7 @@ export { loadOrCreateKey, KEY_FILENAME, KEY_ENV_VAR } from './crypto/key.ts'
 export { seal, unseal } from './crypto/secretBox.ts'
 export { CredentialStore } from './store/credentials.ts'
 export type { ClientCredentials, StoredRefreshToken } from './store/credentials.ts'
-export { RawArchive } from './store/rawArchive.ts'
+export { RawArchive, COMPANION_SOURCE } from './store/rawArchive.ts'
 export type { PutInput, PutResult, ArchivedPayload } from './store/rawArchive.ts'
 // insertSample and readSamples are here rather than only in the package's own tests because
 // `samples` is keyed on integers now: a caller outside this package that reached for

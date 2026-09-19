@@ -30,9 +30,10 @@ export function Account() {
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('account.title')}</h1>
       <div className="grid">
-        {/* A person whose token was revoked lands here with somewhere to reconnect from that is
-            not the Dashboard's front page forever: ConnectGoogle renders nothing once connected
-            (its own doc comment), so this is silent for the common case. */}
+        {/* A person whose token was revoked lands here with somewhere to reconnect
+            from: ConnectGoogle renders nothing once connected (its own doc comment), so this
+            is silent for the common case. It lives here and not on the Dashboard, where a
+            phone-only member would read it as an instruction seconds after choosing not to. */}
         <ConnectGoogle />
         {/* Half width and side by side, the pairing Settings.tsx established: a form of three
             fields and a list of checkboxes are both narrow enough to earn it, where the three

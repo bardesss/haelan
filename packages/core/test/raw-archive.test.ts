@@ -2,11 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { sql } from 'drizzle-orm'
+import { sql, and, eq } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../src/db/open.ts'
 import { migrateToLatest } from '../src/db/migrate.ts'
 import { people, rawPayloads } from '../src/db/schema/index.ts'
-import { RawArchive } from '../src/store/rawArchive.ts'
+import { COMPANION_SOURCE, RawArchive } from '../src/store/rawArchive.ts'
 import type { Database } from '../src/db/open.ts'
 
 const body = JSON.stringify({ dataPoints: [{ steps: { count: 1 } }] })
@@ -274,5 +274,101 @@ describe('listFor', () => {
     expect(listed.map((p) => p.id)).toEqual([
       'aaaaaaaa-0000-0000-0000-000000000000', 'zzzzzzzz-0000-0000-0000-000000000000',
     ])
+  })
+})
+
+/**
+ * The narrowed read `/companion/cursors` asks for. Its whole reason to exist is that the
+ * caller should never see the rows it is not asking about, and the rows a person's archive
+ * holds are almost all of them: a companion upload is one marker among every fetch ever taken.
+ */
+describe('listForSource', () => {
+  let dir: string
+  let db: Database
+  let archive: RawArchive
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'haelan-'))
+    db = openDatabase(dir)
+    migrateToLatest(db)
+    db.insert(people).values({
+      id: 'p1', displayName: 'Test', timezone: 'Europe/Amsterdam', createdAtMs: 0,
+    }).run()
+    archive = new RawArchive(db)
+  })
+  afterEach(() => { closeDatabase(db); rmSync(dir, { recursive: true, force: true }) })
+
+  const googleRow = (fetchedAtMs: number) => ({
+    personId: 'p1', dataType: 'steps', requestParams: { filter: 'steps.interval.civil_start_time >= "2026-08-01"', pageSize: 10000 },
+    windowStartMs: 1000, windowEndMs: 2000, fetchedAtMs, httpStatus: 200, body: `{"g":${fetchedAtMs}}`,
+  })
+  const phoneRow = (fetchedAtMs: number) => ({
+    personId: 'p1', dataType: 'weight', requestParams: { source: COMPANION_SOURCE, dataType: 'weight' },
+    windowStartMs: 3000, windowEndMs: 4000, fetchedAtMs, httpStatus: 200, body: `{"p":${fetchedAtMs}}`,
+  })
+
+  it('returns the phone\'s own uploads and nothing else, oldest fetch first', () => {
+    archive.put(googleRow(1))
+    archive.put(phoneRow(3))
+    archive.put(googleRow(2))
+    archive.put(phoneRow(2))
+
+    const listed = archive.listForSource('p1', COMPANION_SOURCE)
+
+    expect(listed.map((p) => p.fetchedAtMs)).toEqual([2, 3])
+    expect(listed.map((p) => p.dataType)).toEqual(['weight', 'weight'])
+    // The full list is still the full list: this is a narrowing, not a replacement.
+    expect(archive.listFor('p1')).toHaveLength(4)
+  })
+
+  it('leaves a row it cannot classify out of the answer rather than throwing on it', () => {
+    // A row whose requestParams is not JSON at all cannot be produced through put(), which is
+    // exactly why inserting one directly is the test: `json_extract` raises `malformed JSON` on
+    // it, and this read runs on every dashboard page load, so a raise here is a 500 for a person
+    // who did nothing. It is skipped instead, the same decision the caller used to make by hand
+    // (`catch { continue }`) before the narrowing moved into SQL. Nothing writes such a row
+    // today, so this is a guard rather than a case.
+    db.insert(rawPayloads).values({
+      id: 'broken-0000-0000-0000-000000000000', personId: 'p1', dataType: 'steps',
+      requestParams: 'not json at all', windowStartMs: 1, windowEndMs: 2,
+      fetchedAtMs: 1, httpStatus: 200, bodyGzip: Buffer.from('{}'), bodyHash: 'h-broken', bodyBytes: 2,
+    }).run()
+    archive.put(phoneRow(5))
+
+    const listed = archive.listForSource('p1', COMPANION_SOURCE)
+
+    expect(listed.map((p) => p.fetchedAtMs)).toEqual([5])
+    // And it is still there for the readers that take everything: listFor hands it back, which
+    // is why the two methods cannot be one with an optional filter bolted on.
+    expect(archive.listFor('p1').map((p) => p.id)).toContain('broken-0000-0000-0000-000000000000')
+  })
+
+  it('tells the truth about a Google row, which carries no source to match', () => {
+    archive.put(googleRow(1))
+
+    expect(archive.listForSource('p1', COMPANION_SOURCE)).toEqual([])
+  })
+
+  it('narrows as far as a non-200 response, the same way listFor does', () => {
+    archive.put({ ...phoneRow(1), httpStatus: 429, body: '{"error":"slow down"}' })
+
+    expect(archive.listForSource('p1', COMPANION_SOURCE)).toEqual([])
+  })
+
+  it('asks SQL for the narrowed rows rather than narrowing afterwards', () => {
+    // The assertion is on the generated SQL because the property that matters is not visible in
+    // any answer: the same rows would come back either way, and the difference is a full walk of
+    // the largest table plus a JSON.parse per row, once an hour per open dashboard, on instances
+    // whose answer is null every time. Binding is asserted alongside it so a source cannot become
+    // a fragment of the statement it is tested against.
+    const built = db.select({ id: rawPayloads.id }).from(rawPayloads)
+      .where(and(
+        eq(rawPayloads.personId, 'p1'),
+        eq(rawPayloads.httpStatus, 200),
+        eq(sql`json_extract(${rawPayloads.requestParams}, '$.source')`, COMPANION_SOURCE),
+      )).toSQL()
+
+    expect(built.sql).toContain('json_extract')
+    expect(built.params).toContain(COMPANION_SOURCE)
   })
 })

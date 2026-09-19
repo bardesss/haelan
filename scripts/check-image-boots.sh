@@ -6,6 +6,14 @@
 # passes for an image that can only ever be installed, never upgraded.
 set -euo pipefail
 
+# Every path this script hands to a container is an absolute container path (/data/haelan.sqlite),
+# and Git Bash rewrites a leading-slash argument into a Windows path before it reaches docker.exe:
+# the container was asked for `C:/Program Files/Git/data/haelan.sqlite` and answered, correctly,
+# that no such file exists. That is what made this check fail on Windows while passing on Linux,
+# and it is set globally rather than per command so the next container path added here cannot
+# reintroduce it. Unset on Linux and macOS, where it means nothing.
+export MSYS_NO_PATHCONV=1
+
 IMAGE="${1:?usage: check-image-boots.sh <image-tag> [platform]}"
 PLATFORM="${2:-}"
 VOLUME="haelan-boot-check-$$"
@@ -50,8 +58,21 @@ boot() {
     *) echo "boot $attempt: expected the account step, got: $body" >&2; return 1 ;;
   esac
 
-  docker exec "$CONTAINER" test -f /data/haelan.sqlite \
-    || { echo "boot $attempt: /data/haelan.sqlite was not created" >&2; return 1; }
+  # Polled for the same reason the API above is, and measured rather than assumed: on this
+  # machine the API answers about 120ms *before* the database file exists, because opening the
+  # connection creates it and the first route that reads it can be served in between. A single
+  # test -f therefore loses a race it has no way to win, and reports an image as broken for being
+  # fast. The file only ever appears, never disappears, so waiting for it cannot mask a failure.
+  #
+  # Polled through `ls` rather than `test -f` for a second reason: this script runs under `set -e`,
+  # and an exit status used as a condition on its own line ends the script instead of looping.
+  local created=""
+  for _ in $(seq 1 40); do
+    created=$(docker exec "$CONTAINER" ls /data/haelan.sqlite 2>/dev/null || true)
+    [ -n "$created" ] && break
+    sleep 0.5
+  done
+  [ -n "$created" ] || { echo "boot $attempt: /data/haelan.sqlite was not created" >&2; return 1; }
 
   # Inode, not mtime: a migrate-over-existing-database boot still opens (and often writes to,
   # via WAL checkpointing on connection close) a database it did not create, so mtime moves on

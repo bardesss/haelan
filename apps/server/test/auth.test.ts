@@ -76,13 +76,13 @@ describe('auth', () => {
 
   it('refuses /api/auth/me without a session', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     expect((await harness.app.inject({ method: 'GET', url: '/api/auth/me' })).statusCode).toBe(401)
   })
 
   it('answers /api/auth/me with the person the session belongs to', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const cookie = cookieFrom(await login(harness))!
     const response = await harness.app.inject({
       method: 'GET', url: '/api/auth/me', cookies: { haelan_session: cookie.value },
@@ -90,14 +90,17 @@ describe('auth', () => {
     expect(response.json()).toEqual({
       personId: 'p1', displayName: 'Robin', username: 'robin', isAdmin: true,
       timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
-      connected: false, credentialsUnreadable: false,
+      connected: true, credentialsUnreadable: false,
       baseUrl: 'http://localhost:4235',
     })
   })
 
   it('reports a person with no Google credentials as not connected', async () => {
     harness = await withServer()
-    const token = await harness.signIn()
+    // p1 leaves the harness connected, so the unconnected case needs a member
+    // of its own: addPerson creates one with no token behind it.
+    await harness.addPerson({ id: 'p2', displayName: 'Other', username: 'other' })
+    const token = await harness.signIn('other', 'a good long password')
     expect((await me(harness, token)).json()).toMatchObject({ connected: false })
   })
 
@@ -114,8 +117,10 @@ describe('auth', () => {
   it('reports a revoked person as not connected', async () => {
     harness = await withServer()
     await harness.connectPerson()
-    harness.app.haelan.stores.credentials.markRevoked('p1', harness.clock.nowMs)
     const token = await harness.signIn()
+    // Revoked after the sign-in that connected them: signIn itself leaves a token,
+    // so revoking first would prove nothing about the flag.
+    harness.app.haelan.stores.credentials.markRevoked('p1', harness.clock.nowMs)
     expect((await me(harness, token)).json()).toMatchObject({ connected: false })
   })
 
@@ -141,7 +146,7 @@ describe('auth', () => {
 
   it('makes logout immediate rather than eventual', async () => {
     harness = await withServer()
-    await harness.completeSetup()
+    await harness.connectPerson()
     const cookie = cookieFrom(await login(harness))!
     await harness.app.inject({
       method: 'POST', url: '/api/auth/logout', headers, cookies: { haelan_session: cookie.value },

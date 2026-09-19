@@ -130,6 +130,11 @@ export function registerOauth(app: FastifyInstance): void {
   }
 
   function currentStep() {
-    return setupStep({ accounts: stores().accounts, settings: stores().settings, credentials: stores().credentials })
+    return setupStep({
+      accounts: stores().accounts,
+      settings: stores().settings,
+      credentials: stores().credentials,
+      people: stores().people,
+    })
   }
 }

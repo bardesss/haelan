@@ -20,6 +20,7 @@ COPY packages/tokens/package.json packages/tokens/
 COPY packages/core/package.json packages/core/
 COPY apps/web/package.json apps/web/
 COPY apps/server/package.json apps/server/
+COPY apps/android/package.json apps/android/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
@@ -36,6 +37,7 @@ COPY packages/tokens/package.json packages/tokens/
 COPY packages/core/package.json packages/core/
 COPY apps/web/package.json apps/web/
 COPY apps/server/package.json apps/server/
+COPY apps/android/package.json apps/android/
 # autoInstallPeers=false here only: pnpm was filling peer slots for i18next/react-i18next and
 # drizzle-orm with typescript and @types/* packages, which then rode --prod into this stage since
 # a peer dependency isn't a dev dependency pnpm knows to drop. The build stage still needs the
@@ -73,6 +75,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/core/src packages/core/src
 COPY packages/core/drizzle packages/core/drizzle
 COPY apps/server/package.json apps/server/
+COPY apps/android/package.json apps/android/
 COPY apps/server/src apps/server/src
 COPY --from=build /app/apps/web/dist apps/web/dist
 

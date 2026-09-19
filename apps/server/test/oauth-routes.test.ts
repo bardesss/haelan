@@ -76,7 +76,7 @@ describe('the consent handoff', () => {
   // redirect has to key off instead.
   it('sends an invited member to the dashboard, not the wizard, once setup is already done', async () => {
     harness = await withServer({ google: 'ok' })
-    await harness.completeSetup()
+    await harness.connectPerson()
     const { personId } = await harness.addPerson({ id: 'p2', displayName: 'Member', username: 'member' })
 
     const login = await harness.app.inject({

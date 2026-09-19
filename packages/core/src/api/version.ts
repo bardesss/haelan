@@ -46,5 +46,15 @@
  *    Sessions are a rounding error against `samples` - 434 of them against 2,138,327 sample rows
  *    on the same instance - so the disk cost is not measurable next to the rebuild the bump
  *    triggers.
+ * 6: corrects the identity of a source, in two places at once. What the companion app sends
+ *    changed - it used to send one constant dataSource for every reading it ever pushed, so a
+ *    watch's reading was filed as the phone's, a hand-typed one was indistinguishable from a
+ *    scale's, and two phones collapsed onto one externalId. It now sends the device and the
+ *    recording method each record carries, and splits a read by identity because a request names
+ *    one source. What the mapper reads changed with it: the request's dataSource is archived
+ *    beside the points and `mapSamples`/`mapSessions` fall back to it when a point names none,
+ *    which is what keeps a replayed body filed under the identity the live write used rather than
+ *    under `unknown`. Either half alone would justify this bump; the second is why a rebuild
+ *    following it produces the same sources rather than different ones.
  */
-export const MAPPING_VERSION = 5
+export const MAPPING_VERSION = 6

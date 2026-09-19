@@ -27,7 +27,6 @@ import { deepLink } from '../controls/deepLink.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
-import { ConnectGoogle } from '../auth/ConnectGoogle.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
@@ -602,10 +601,6 @@ export function Dashboard() {
       <ControlRow controls={resolved} sources={sources} syncedMinutesAgo={syncedMinutesAgo} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <div className="grid">
-        {/* Renders nothing once connected (ConnectGoogle.tsx's own doc comment), so a household
-            that finished setup sees no change here at all; this is only ever visible to a member
-            who still needs it, first in line above every card that has nothing to show them yet. */}
-        <ConnectGoogle />
         {tile('steps', 3, 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
           'dashboard.steps.chartLabel', 'dashboard.units.steps',
           (p) => formatMetricValue(values(p).reduce((a, b) => a + b, 0), 'steps', i18n.language, ''), 'higher-is-better',

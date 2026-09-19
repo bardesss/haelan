@@ -61,9 +61,16 @@ type BaselineStub = { center: number, spread: number, n: number, thin: boolean }
  * baseline `baseline` names, and /insights with metricCoverage.ts's own insightBody plus
  * `insightOverrides` folded in. One baseline for all three cards, since none of these tests need
  * them to differ.
+ *
+ * `emptyMetrics` names the metrics whose series answer with no rows, which every other test here
+ * leaves unset so all four report a value: that is the state the respiratory card's own fallback
+ * (Recovery.tsx's RESPIRATORY_FALLBACK) turns on, and the one a daily-only stub could never
+ * produce. A metric left out of the set answers a point exactly as before, so naming one does not
+ * disturb the other three.
  */
 function stubRecovery(
   urls: string[], baseline: BaselineStub = null, insightOverrides: Partial<Insight> = {},
+  emptyMetrics: readonly string[] = [],
 ): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -77,7 +84,7 @@ function stubRecovery(
       const body: Record<string, unknown> = {}
       for (const metric of metrics) {
         body[metric] = {
-          points: [seriesPoint(metric, '2026-08-15', 60)],
+          points: emptyMetrics.includes(metric) ? [] : [seriesPoint(metric, '2026-08-15', 60)],
           reduction: null,
         }
       }
@@ -91,10 +98,10 @@ function stubRecovery(
 }
 
 /**
- * Same three routes as stubRecovery, but each of the three 'last' metrics answers its own
- * value rather than the shared 60 every other test in this file uses: the precision test above
- * needs the three cards to disagree, since a formatter that quietly used the same precision for
- * all three could not be told apart from one that reads each metric's own.
+ * Same routes as stubRecovery, but each of the 'last' metrics answers its own value rather than the
+ * shared 60 every other test in this file uses: the precision test above needs the cards to
+ * disagree, since a formatter that quietly used the same precision for all of them could not be
+ * told apart from one that reads each metric's own.
  */
 function stubRecoveryPerMetric(values: Record<string, number>): () => void {
   const original = globalThis.fetch
@@ -119,9 +126,11 @@ function stubRecoveryPerMetric(values: Record<string, number>): () => void {
 }
 
 describe('the Recovery page', () => {
-  // All three metrics share an agg, so the page costs one round trip. Asserting the property
+  // All four metrics share an agg, so the page still costs one round trip. Asserting the property
   // rather than a literal count: a pinned number once forced a chart to draw less than it claimed.
-  it('asks for its three metrics in one request', async () => {
+  // Four, not three, since the respiratory card carries both of its names (Recovery.tsx's own
+  // RESPIRATORY_FALLBACK): the card draws one, and which one is not knowable until the answer is.
+  it('asks for its four metrics in one request', async () => {
     const urls: string[] = []
     const restore = stubRecovery(urls)
     const { client, tree } = withQuery(<Recovery />)
@@ -129,7 +138,7 @@ describe('the Recovery page', () => {
     await flush(client, () => container!.innerHTML)
     const series = urls.filter((u) => u.includes('/series'))
     expect(series).toHaveLength(1)
-    expect(series[0]!.match(/metric=/g)).toHaveLength(3)
+    expect(series[0]!.match(/metric=/g)).toHaveLength(4)
     restore()
   })
 
@@ -149,9 +158,12 @@ describe('the Recovery page', () => {
 
     const baselineUrls = urls.filter((u) => u.includes('/baselines'))
     const insightUrls = urls.filter((u) => u.includes('/insights'))
-    // Three baselines (resting_heart_rate, daily_hrv, respiratory_rate) and one insight
-    // (resting_heart_rate): if either list came back empty the loop below would pass on nothing.
-    expect(baselineUrls).toHaveLength(3)
+    // Four baselines (resting_heart_rate, daily_hrv and both of the respiratory card's two names)
+    // and one insight (resting_heart_rate): if either list came back empty the loop below would
+    // pass on nothing. Four rather than three because both of the respiratory card's baselines are
+    // requested on every render, not only the one it draws: a hook behind the card's own
+    // data-driven branch would change the hook count between renders.
+    expect(baselineUrls).toHaveLength(4)
     expect(insightUrls).toHaveLength(1)
     for (const url of baselineUrls) {
       expect(new URL(url, 'http://example').searchParams.get('on')).toBe('2026-09-05')
@@ -379,6 +391,67 @@ describe('the Recovery page', () => {
       .find((c) => c.querySelector('.label')?.textContent === 'Resting heart rate, this period against the last')
     expect(card?.textContent).toContain('device')
     expect(card?.querySelector('.insight-summary')).toBeNull()
+    restore()
+  })
+
+  // The fallback Recovery.tsx's RESPIRATORY_FALLBACK exists for, and the state this household's
+  // own instance is actually in: the companion app posts Health Connect's night summary, which the
+  // catalogue files under sleep_respiratory_rate, while respiratory_rate comes only from Google's
+  // own daily type and is never written by a phone. Before this the card drew its empty state over
+  // thirty days of real readings.
+  it('draws the sleeping series, and says so in the title, when the daily one has no rows', async () => {
+    window.history.replaceState(null, '', '/recovery?range=month&on=2026-08-15')
+    const restore = stubRecovery([], null, {}, ['respiratory_rate'])
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+
+    const labels = [...container!.querySelectorAll('.card .label')].map((el) => el.textContent)
+    expect(labels).toContain('Respiratory rate, during sleep')
+    // Not both: the day's title must not survive beside the night's, or the page would claim two
+    // cards where it draws one.
+    expect(labels).not.toContain('Respiratory rate')
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Respiratory rate, during sleep')
+    // A number, not the empty state: 60 is what this stub answers every metric with, and
+    // sleep_respiratory_rate's own catalogue precision is 1, so a card that had fallen through to
+    // "no data" would render no .value at all and one formatted under the wrong metric's precision
+    // would drop the decimal.
+    expect(card?.querySelector('.value')?.textContent).toBe('60.0 breaths/min')
+    restore()
+  })
+
+  // The other half of the rule above. respiratory_rate is the preferred name and keeps the card
+  // whenever it has a row, even though sleep_respiratory_rate also answered: a fallback that took
+  // over a populated card would report the night's number under the day's title, which is the
+  // substitution personQuery.ts's own DEVICE_ROLLED_EQUIVALENT comment refuses.
+  it('keeps the daily series and its own title when the daily one has rows', async () => {
+    window.history.replaceState(null, '', '/recovery?range=month&on=2026-08-15')
+    const restore = stubRecovery([], null, {}, ['sleep_respiratory_rate'])
+    const { client, tree } = withQuery(<Recovery />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+
+    const labels = [...container!.querySelectorAll('.card .label')].map((el) => el.textContent)
+    expect(labels).toContain('Respiratory rate')
+    expect(labels).not.toContain('Respiratory rate, during sleep')
+    restore()
+  })
+
+  // The band is a fact about one metric's own history, so the card has to read the baseline of the
+  // series it actually drew. Both baselines are answered with the same stub here, which is why this
+  // asserts the request side too: /baselines is asked for both names whatever the choice is, and
+  // the day's own request is the one that must not be the only one on the wire.
+  it('asks for both respiratory baselines, whichever series it ends up drawing', async () => {
+    const urls: string[] = []
+    const restore = stubRecovery(urls, null, {}, ['respiratory_rate'])
+    const { client, tree } = withQuery(<Recovery />)
+    mount(tree)
+    await flush(client, () => container!.innerHTML)
+    const baselineMetrics = urls
+      .filter((u) => u.includes('/baselines'))
+      .map((u) => new URL(u, 'http://example').searchParams.get('metric'))
+    expect(baselineMetrics).toContain('sleep_respiratory_rate')
     restore()
   })
 })

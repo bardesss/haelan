@@ -3,11 +3,19 @@ import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
 import { act } from 'react'
+import { readFileSync, existsSync } from 'node:fs'
+import { resolve, join } from 'node:path'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { ConnectGoogle } from '../src/auth/ConnectGoogle.js'
+
+// The same locator brand-mark.test.tsx uses: cwd is the workspace root under `pnpm test`
+// but apps/web under a package-scoped vitest run.
+const WEB = [process.cwd(), resolve(process.cwd(), 'apps/web')]
+  .find((dir) => existsSync(join(dir, 'src/auth/ConnectGoogle.tsx')))!
+const repo = (path: string) => resolve(WEB, path)
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -115,5 +123,23 @@ describe('the connect control', () => {
     mountWith({ connected: false, credentialsUnreadable: false, baseUrl: window.location.origin })
     expect(container!.querySelector('.connect-detail')!.textContent)
       .toBe('haelan reads your health data from Google. Nothing appears here until you connect.')
+  })
+})
+
+// Placement, read as source the way brand-mark.test.tsx reads SetupApp: the invitation
+// belongs to the Account page, where connecting is the task, and not to the Dashboard,
+// where a phone-only member would read "connect your Google account" seconds after
+// choosing not to. A full Dashboard render harness for one line is not worth it; the
+// import and the element are the two things that would put it back.
+describe('the invitation lives on the Account page, not on the Dashboard', () => {
+  const dashboard = readFileSync(repo('src/pages/Dashboard.tsx'), 'utf8')
+  const account = readFileSync(repo('src/pages/Account.tsx'), 'utf8')
+
+  it('does not invite on the Dashboard', () => {
+    expect(dashboard).not.toContain('ConnectGoogle')
+  })
+
+  it('still invites on the Account page', () => {
+    expect(account).toContain('<ConnectGoogle />')
   })
 })

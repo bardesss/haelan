@@ -76,7 +76,7 @@ describe('a database restored without its instance.key', () => {
     // which made this 500 and took every /api/* and /oauth/* route with it.
     const state = await app.inject({ method: 'GET', url: '/api/setup/state' })
     expect(state.statusCode).toBe(200)
-    expect(state.json()).toEqual({ step: 'google-client' })
+      expect(state.json()).toEqual({ step: 'google-client', companionMode: false, googleClientConfigured: false })
 
     // What the browser asks first. 409 is the wizard's cue; a 500 was nothing's cue. The step
     // itself was already asserted above through /api/setup/state, the endpoint whose entire job
