@@ -29,6 +29,12 @@ export interface SyncStatus {
   rebuild: {
     quarantined: boolean
     awaitingRebuild: boolean
+    /**
+     * Their last rebuild read archived payloads and left no readings behind. Already decided by
+     * the server, which calls the same predicate the admin route does, so the two surfaces
+     * cannot draw different conclusions from the same pair of columns.
+     */
+    producedNothing: boolean
     droppedPages: number
     lastError: string | null
     drops: { dataType: string, reason: string, pages: number }[]

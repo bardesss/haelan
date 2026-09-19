@@ -61,6 +61,35 @@ export interface RebuildPersonReport {
    * bump once the cause is fixed replays them with no operator action at all.
    */
   droppedPages: number
+  /**
+   * Everything this rebuild left in tier 2 and tier 3 added together: `samples`, `sessions`,
+   * session segments, `observations` and `dailyRows`, each measured against its own table rather
+   * than summed from mapper output.
+   *
+   * Segments are in it although no field above carries them. They are rows a rebuild writes and
+   * a person's sleep detail is made of them, so a replay that produced segments and nothing else
+   * did produce something - leaving them out would have been the one way this number could read
+   * zero over a person who has data.
+   *
+   * One number rather than five because of the one question it exists to answer - did this
+   * rebuild produce anything at all - and because the surfaces that ask are not reporting volume.
+   * Which table is empty is a diagnostic an operator reads out of the log line that already
+   * prints them separately.
+   *
+   * A sum, and so blind to partial drift: one data type drifting while the rest map fine leaves
+   * this large and nothing says a word. Accepted, and written down on the column in
+   * db/schema/sync.ts rather than implied away.
+   */
+  rowsWritten: number
+  /**
+   * How many archived payloads carried at least one data point, straight off replayPerson.
+   *
+   * Beside `rowsWritten` and useless without it. A rebuild that wrote nothing is an ordinary
+   * outcome for a member connected an hour ago, and only the fact that the archive held data
+   * turns it into something worth reporting - see producedNothing in store/rebuildState.ts,
+   * which is where the pair is read and where the argument lives.
+   */
+  payloadsWithData: number
   drops: Drop[]
 }
 
@@ -282,6 +311,13 @@ export function runRebuild(input: RebuildInput): RebuildReport {
           overridesOrphaned: retarget.orphaned,
           unmappablePayloads: counts.unmappable,
           droppedPages: counts.droppedPages,
+          // Summed here rather than in the store, so the one definition of "what a rebuild
+          // produced" sits beside the counts it adds up and moves with them if a sixth table is
+          // ever rebuilt. dailyRows is the figure measured after the derive loop just above, not
+          // counts.providerDaily, which is a subset of it.
+          rowsWritten: counts.samples + counts.sessions + counts.segments
+            + counts.observations + dailyRows,
+          payloadsWithData: counts.payloadsWithData,
           drops: counts.drops,
         }
       })
@@ -370,6 +406,7 @@ export function runRebuild(input: RebuildInput): RebuildReport {
     recordQuietly(() => input.rebuildState?.recordSuccess({
       personId, nowMs: input.nowMs,
       droppedPages: personReport.droppedPages, drops: personReport.drops,
+      rowsWritten: personReport.rowsWritten, payloadsWithData: personReport.payloadsWithData,
     }))
 
     report.people.push(personReport)

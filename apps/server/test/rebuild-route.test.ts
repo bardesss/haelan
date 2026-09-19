@@ -44,6 +44,7 @@ describe('GET /api/settings/rebuild', () => {
         quarantined: boolean
         awaitingRebuild: boolean
         droppedPages: number
+        producedNothing: boolean
         lastErrorAtMs: number | null
         lastError: string | null
         lastSuccessAtMs: number | null
@@ -62,6 +63,7 @@ describe('GET /api/settings/rebuild', () => {
       // reads true here as well; sync-status-rebuild.test.ts pins that pairing.
       awaitingRebuild: false,
       droppedPages: 0,
+      producedNothing: false,
       lastErrorAtMs: 100,
       lastError: 'boom',
       lastSuccessAtMs: null,
@@ -78,6 +80,9 @@ describe('GET /api/settings/rebuild', () => {
       quarantined: false,
       awaitingRebuild: false,
       droppedPages: 0,
+      // A person with no row at all is not an empty rebuild, it is no rebuild. The route
+      // defaults both columns to zero for them, which producedNothing reads as nothing to say.
+      producedNothing: false,
       lastErrorAtMs: null,
       lastError: null,
       lastSuccessAtMs: null,
@@ -91,7 +96,9 @@ describe('GET /api/settings/rebuild', () => {
     const token = await harness.signIn()
     const store = harness.app.haelan.stores.rebuildState
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
-    store.recordSuccess({ personId: 'p1', nowMs: 200, droppedPages: 3, drops: [] })
+    store.recordSuccess({
+      personId: 'p1', nowMs: 200, droppedPages: 3, rowsWritten: 90, payloadsWithData: 12, drops: [],
+    })
 
     const response = await harness.app.inject({
       method: 'GET', url: '/api/settings/rebuild',
@@ -115,7 +122,7 @@ describe('GET /api/settings/rebuild', () => {
     harness = await withServer()
     const token = await harness.signIn()
     harness.app.haelan.stores.rebuildState.recordSuccess({
-      personId: 'p1', nowMs: 200, droppedPages: 0, drops: [],
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 90, payloadsWithData: 12, drops: [],
     })
     harness.app.haelan.stores.people.setTimezone('p1', 'Pacific/Auckland')
 
@@ -130,6 +137,41 @@ describe('GET /api/settings/rebuild', () => {
     expect(person?.awaitingRebuild).toBe(true)
     expect(person?.quarantined).toBe(false)
     expect(person?.lastError).toBeNull()
+  })
+
+  /**
+   * The admin's half of issue 289, and the counterpart of the stale-stamp test above: a person
+   * whose rebuild committed, dropped nothing and errored at nothing, and produced no rows out of
+   * an archive that was not empty. On the three flags this card read before, they were
+   * indistinguishable from somebody fine, so it printed "every person's history rebuilt cleanly"
+   * about a member with nothing on their dashboard.
+   */
+  it('reports a person whose rebuild read an archive and wrote no rows', async () => {
+    harness = await withServer()
+    await harness.addPerson({ id: 'p2', displayName: 'Quiet', username: 'quiet' })
+    const token = await harness.signIn()
+    const store = harness.app.haelan.stores.rebuildState
+    store.recordSuccess({
+      personId: 'p1', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 40, drops: [],
+    })
+    // Nothing archived and nothing derived, which is every new member's first hours. The second
+    // column exists so this person is not listed beside the one above.
+    store.recordSuccess({
+      personId: 'p2', nowMs: 200, droppedPages: 0, rowsWritten: 0, payloadsWithData: 0, drops: [],
+    })
+
+    const response = await harness.app.inject({
+      method: 'GET', url: '/api/settings/rebuild',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const body = response.json() as {
+      people: { personId: string, producedNothing: boolean, quarantined: boolean, droppedPages: number }[]
+    }
+    const empty = body.people.find((p) => p.personId === 'p1')
+    expect(empty?.producedNothing).toBe(true)
+    expect(empty?.quarantined).toBe(false)
+    expect(empty?.droppedPages).toBe(0)
+    expect(body.people.find((p) => p.personId === 'p2')?.producedNothing).toBe(false)
   })
 
   /**

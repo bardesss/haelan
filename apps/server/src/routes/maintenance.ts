@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs'
 import type { FastifyInstance } from 'fastify'
 import {
   vacuumDecision, vacuumIfBloated, runBackup, listBackups, pruneBackups, backupDecision, databaseBloat,
-  isQuarantined, peopleNeedingRebuild,
+  isQuarantined, producedNothing, peopleNeedingRebuild,
 } from '@haelan/core'
 import type { BackupFile } from '@haelan/core'
 import { sendCoreError, errorBody, statusFor } from '../api/envelope.ts'
@@ -219,6 +219,10 @@ export function registerMaintenance(app: FastifyInstance): void {
           quarantined: isQuarantined(state),
           awaitingRebuild: behind.has(person.id),
           droppedPages: state?.droppedPages ?? 0,
+          // Decided here through the shared predicate rather than sent as its two columns, for
+          // the reason the per-person route gives on RebuildStatus: it is a conjunction, and
+          // rows_written = 0 on its own is true of anybody connected in the last hour.
+          producedNothing: producedNothing(state),
           lastErrorAtMs: state?.lastErrorAtMs ?? null,
           lastError: state?.lastError ?? null,
           lastSuccessAtMs: state?.lastSuccessAtMs ?? null,

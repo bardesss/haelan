@@ -117,16 +117,7 @@ export function seedSample(db: Database, input: SeedSampleInput): string {
   return input.sourceId
 }
 
-/**
- * One `samples` row from the text a test can read, translated to refs on the way in.
- *
- * Every test that wants a sample goes through this rather than `db.insert(samples)`, for the
- * reason the table's own comment gives: the columns are integers now, and a test spelling
- * `metricRef: 3` would assert nothing a reader could check against the metric it meant. The
- * person and the source have to exist already - `seedSample` above is the sugar that creates the
- * source too - because their refs are assigned by the insert that created them.
- */
-export function insertSample(db: DbOrTx, input: {
+export interface InsertSampleInput {
   personId: string
   sourceId: string
   metric: string
@@ -138,7 +129,23 @@ export function insertSample(db: DbOrTx, input: {
   tzOffsetMinutes?: number
   n?: number
   rawPayloadId?: string | null
-}): void {
+}
+
+/**
+ * One `samples` row from the text a test can read, translated to refs on the way in.
+ *
+ * Every test that wants a sample goes through this rather than `db.insert(samples)`, for the
+ * reason the table's own comment gives: the columns are integers now, and a test spelling
+ * `metricRef: 3` would assert nothing a reader could check against the metric it meant. The
+ * person and the source have to exist already - `seedSample` above is the sugar that creates the
+ * source too - because their refs are assigned by the insert that created them.
+ *
+ * One row at a time, on purpose: this constructs a `SampleKeys` and prepares a fresh statement on
+ * every call, which is fine for the handful of rows most tests seed. A hook seeding hundreds or
+ * thousands of rows should use `insertSamples` below instead - see its comment for why the
+ * per-call cost stops being free at that volume.
+ */
+export function insertSample(db: DbOrTx, input: InsertSampleInput): void {
   const keys = new SampleKeys(db)
   db.insert(samples).values(keys.sampleRefs({
     personId: input.personId,
@@ -151,6 +158,49 @@ export function insertSample(db: DbOrTx, input: {
     n: input.n ?? 1,
     rawPayloadId: input.rawPayloadId ?? null,
   })).run()
+}
+
+// `samples` has 9 columns (db/schema/derived.ts: personRef, sourceRef, metricRef, utcMs,
+// tzOffsetMinutes, aggRef, value, n, rawPayloadRef), and SQLite's conservative default caps a
+// single statement at 999 bound parameters. floor(999 / 9) = 111 rows is the most one multi-row
+// `values(...)` insert can carry without tripping that limit.
+const SAMPLES_COLUMN_COUNT = 9
+const SAMPLES_INSERT_CHUNK = Math.floor(999 / SAMPLES_COLUMN_COUNT)
+
+/**
+ * The batched sibling to `insertSample`: many rows through one `SampleKeys` instance and chunked
+ * multi-row inserts, rather than one instance and one freshly-prepared statement per row.
+ *
+ * This is the `.run()`-per-row pattern the project has hit twice before outside of tests - the
+ * replay's sample upsert now hoists one prepared statement for the whole transaction (#275, see
+ * replay.ts), and deriveDayInto chunks its own insert the same way this does (#281, see
+ * deriveDay.ts) - because drizzle compiles and prepares a fresh better-sqlite3 statement on every
+ * `insert().values().run()`, and better-sqlite3 keeps every statement a connection has ever
+ * prepared until that connection closes. A test fixture is not on a production memory budget, but
+ * it pays the same wall-clock cost: a `beforeEach` seeding a couple thousand rows one at a time
+ * also builds a couple thousand `SampleKeys` instances, each re-resolving the same person and
+ * source ids that every other one already resolved.
+ *
+ * Rows are translated to refs through the one shared `SampleKeys` before any chunk is written, so
+ * the ref each row gets is identical to what `insertSample` would have produced for it - this
+ * changes how the rows get written, not what gets written or in what order.
+ */
+export function insertSamples(db: DbOrTx, rows: InsertSampleInput[]): void {
+  const keys = new SampleKeys(db)
+  const refs = rows.map((input) => keys.sampleRefs({
+    personId: input.personId,
+    sourceId: input.sourceId,
+    metric: input.metric,
+    utcMs: input.utcMs,
+    tzOffsetMinutes: input.tzOffsetMinutes ?? 0,
+    agg: input.agg ?? 'raw',
+    value: input.value === undefined ? 1 : input.value,
+    n: input.n ?? 1,
+    rawPayloadId: input.rawPayloadId ?? null,
+  }))
+  for (let i = 0; i < refs.length; i += SAMPLES_INSERT_CHUNK) {
+    db.insert(samples).values(refs.slice(i, i + SAMPLES_INSERT_CHUNK)).run()
+  }
 }
 
 /**

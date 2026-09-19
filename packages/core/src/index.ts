@@ -109,7 +109,7 @@ export type {
   RebuildInput, RebuildReport, RebuildPersonReport, RebuildFailure,
 } from './rebuild/runRebuild.ts'
 export type { OrphanedOverride } from './rebuild/retarget.ts'
-export { RebuildStateStore, isQuarantined } from './store/rebuildState.ts'
+export { RebuildStateStore, isQuarantined, producedNothing } from './store/rebuildState.ts'
 export type { RebuildDrop, RebuildStateRow } from './store/rebuildState.ts'
 export { localDateOf, localHourOf, shiftLocalDate, widenedUtcWindow } from './derive/localDay.ts'
 // The same question as localDateOf above, asked with an IANA zone rather than a fixed offset.

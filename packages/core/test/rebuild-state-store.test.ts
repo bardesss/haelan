@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { rebuildDrops, rebuildState } from '../src/db/schema/index.ts'
 import type { TestDatabase } from '../src/testing/fixtures.ts'
-import { RebuildStateStore, isQuarantined } from '../src/store/rebuildState.ts'
+import { RebuildStateStore, isQuarantined, producedNothing } from '../src/store/rebuildState.ts'
 
 let fixture: TestDatabase
 
@@ -19,6 +19,11 @@ describe('rebuild tables', () => {
     expect(row?.consecutiveFailures).toBe(0)
     expect(row?.droppedPages).toBe(0)
     expect(row?.lastError).toBeNull()
+    // Zero on both, which is what an upgraded instance holds for every person until their next
+    // rebuild writes the real figures. producedNothing reads that pair as "nothing to report",
+    // not as an empty rebuild - see its own comment.
+    expect(row?.rowsWritten).toBe(0)
+    expect(row?.payloadsWithData).toBe(0)
   })
 
   it('keys drops by person, type and reason, so one fault is one row', () => {
@@ -55,7 +60,7 @@ describe('RebuildStateStore', () => {
     const store = new RebuildStateStore(fixture.db)
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
     store.recordSuccess({
-      personId: 'p1', nowMs: 300, droppedPages: 7,
+      personId: 'p1', nowMs: 300, droppedPages: 7, rowsWritten: 40, payloadsWithData: 12,
       drops: [{ dataType: 'sleep', reason: 'UNIQUE constraint failed: session_segments.id', pages: 7 }],
     })
     const row = store.get('p1')
@@ -70,10 +75,10 @@ describe('RebuildStateStore', () => {
   it('replaces drops wholesale, so a clean rebuild leaves none behind', () => {
     const store = new RebuildStateStore(fixture.db)
     store.recordSuccess({
-      personId: 'p1', nowMs: 300, droppedPages: 2,
+      personId: 'p1', nowMs: 300, droppedPages: 2, rowsWritten: 1, payloadsWithData: 3,
       drops: [{ dataType: 'sleep', reason: 'a', pages: 2 }],
     })
-    store.recordSuccess({ personId: 'p1', nowMs: 400, droppedPages: 0, drops: [] })
+    store.recordSuccess({ personId: 'p1', nowMs: 400, droppedPages: 0, rowsWritten: 5, payloadsWithData: 3, drops: [] })
     expect(store.get('p1')?.drops).toEqual([])
     expect(store.get('p1')?.droppedPages).toBe(0)
   })
@@ -87,7 +92,7 @@ describe('RebuildStateStore', () => {
   it('clears the recorded error when a later rebuild commits', () => {
     const store = new RebuildStateStore(fixture.db)
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'UNIQUE constraint failed: samples.id' })
-    store.recordSuccess({ personId: 'p1', nowMs: 300, droppedPages: 0, drops: [] })
+    store.recordSuccess({ personId: 'p1', nowMs: 300, droppedPages: 0, rowsWritten: 5, payloadsWithData: 3, drops: [] })
     const row = store.get('p1')
     expect(row?.lastError).toBeNull()
     expect(row?.lastErrorAtMs).toBeNull()
@@ -101,11 +106,79 @@ describe('RebuildStateStore', () => {
   // makes the two timestamps unable to coexist at all, so the question no longer arises.
   it('reads a failure recorded in the same millisecond as an earlier success as quarantined', () => {
     const store = new RebuildStateStore(fixture.db)
-    store.recordSuccess({ personId: 'p1', nowMs: 100, droppedPages: 0, drops: [] })
+    store.recordSuccess({ personId: 'p1', nowMs: 100, droppedPages: 0, rowsWritten: 5, payloadsWithData: 3, drops: [] })
     store.recordFailure({ personId: 'p1', nowMs: 100, error: 'boom' })
     expect(isQuarantined(store.get('p1'))).toBe(true)
   })
 
+  it('records what the rebuild produced and how much archive it was given', () => {
+    const store = new RebuildStateStore(fixture.db)
+    store.recordSuccess({
+      personId: 'p1', nowMs: 300, droppedPages: 0, rowsWritten: 812, payloadsWithData: 40, drops: [],
+    })
+    const row = store.get('p1')
+    expect(row?.rowsWritten).toBe(812)
+    expect(row?.payloadsWithData).toBe(40)
+  })
+
+  // Overwritten, not accumulated, for the reason drops are replaced wholesale: the row describes
+  // the most recent attempt and nothing else. A person whose drifted payloads start mapping again
+  // after a MAPPING_VERSION bump has to stop being reported the moment that rebuild commits.
+  it('replaces the pair on the next rebuild rather than adding to it', () => {
+    const store = new RebuildStateStore(fixture.db)
+    store.recordSuccess({
+      personId: 'p1', nowMs: 300, droppedPages: 0, rowsWritten: 0, payloadsWithData: 40, drops: [],
+    })
+    expect(producedNothing(store.get('p1'))).toBe(true)
+    store.recordSuccess({
+      personId: 'p1', nowMs: 400, droppedPages: 0, rowsWritten: 812, payloadsWithData: 40, drops: [],
+    })
+    expect(store.get('p1')?.rowsWritten).toBe(812)
+    expect(producedNothing(store.get('p1'))).toBe(false)
+  })
+})
+
+/**
+ * The predicate both surfaces read, tested against the four combinations of the pair rather than
+ * only the one it fires on. Three of them are ordinary states and the whole design of the second
+ * column is that they stay quiet: a surface that cried wolf over a new member would teach its one
+ * reader to stop looking at it.
+ */
+describe('producedNothing', () => {
+  const row = (rowsWritten: number, payloadsWithData: number) => ({
+    personId: 'p1', lastAttemptAtMs: 1, lastSuccessAtMs: 1, lastErrorAtMs: null, lastError: null,
+    consecutiveFailures: 0, droppedPages: 0, rowsWritten, payloadsWithData, drops: [],
+  })
+
+  it('reports an archive whose data replayed to nothing', () => {
+    expect(producedNothing(row(0, 40))).toBe(true)
+  })
+
+  // The false alarm the second column exists to remove, at the predicate. What makes it a real
+  // case rather than a theoretical one is that the column counts payloads that CARRIED DATA, not
+  // payloads: api/client.ts archives a 200 with an empty point list exactly like a full one, so a
+  // connected member whose devices reported nothing across the horizon holds hundreds of pages
+  // and derives nothing. rebuild-state-recording.test.ts rebuilds that member for real; this
+  // pins the arithmetic they depend on.
+  it('stays quiet about a person whose archive carried no data', () => {
+    expect(producedNothing(row(0, 0))).toBe(false)
+  })
+
+  it('stays quiet about a rebuild that wrote rows', () => {
+    expect(producedNothing(row(812, 40))).toBe(false)
+    expect(producedNothing(row(812, 0))).toBe(false)
+  })
+
+  // Same shape as isQuarantined's own tolerance of a missing row: the admin route keys a state map
+  // by personId and hands this whatever it found, which for a person who has never been rebuilt
+  // is nothing at all.
+  it('stays quiet about a person who has never been rebuilt', () => {
+    expect(producedNothing(null)).toBe(false)
+    expect(producedNothing(undefined)).toBe(false)
+  })
+})
+
+describe('RebuildStateStore, transaction placement', () => {
   it('survives the rollback of an unrelated transaction, which is the whole point', () => {
     const store = new RebuildStateStore(fixture.db)
     expect(() => fixture.db.transaction(() => {
