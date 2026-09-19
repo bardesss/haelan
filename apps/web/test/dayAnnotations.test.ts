@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { RECOVERY_HARVEST_EVENT_KIND } from '@haelan/core/recovery-index'
 import { dayAnnotationsFrom, mergeDayAnnotations, annotationsWithDay } from '../src/data/dayAnnotations.js'
 import type { StoredEvent, StoredNote } from '../src/data/useAnnotations.js'
 import type { MetricAnnotations } from '../src/data/chartAnnotations.js'
@@ -108,6 +109,30 @@ describe('dayAnnotationsFrom', () => {
   // notes or events a new build identity every render.
   it('returns the same frozen empty array, by identity, when there is nothing to annotate', () => {
     expect(dayAnnotationsFrom([], [], t)).toBe(dayAnnotationsFrom([], [], t))
+  })
+
+  // The review's own finding: apps/server/src/admin.ts's harvest-recovery command can write up to
+  // sixty events in one run, one per harvested Google Health recovery score, all under this one
+  // kind. Flattened in the same way as a travel or illness event, sixty of them would put sixty
+  // markers on every chart on every page - data about a different number entirely, on charts it
+  // says nothing about.
+  it('excludes a harvested recovery score from the chart markers, unlike an ordinary event', () => {
+    const result = dayAnnotationsFrom(
+      [], [event({ kind: RECOVERY_HARVEST_EVENT_KIND, note: null })], t,
+    )
+    expect(result).toEqual([])
+  })
+
+  it('still marks an ordinary event on the same day a harvested score was written', () => {
+    const result = dayAnnotationsFrom(
+      [],
+      [
+        event({ id: 'e1', kind: RECOVERY_HARVEST_EVENT_KIND, note: null }),
+        event({ id: 'e2', kind: 'illness', note: null }),
+      ],
+      t,
+    )
+    expect(result).toEqual([{ date: '2026-08-11', text: 'Illness' }])
   })
 })
 

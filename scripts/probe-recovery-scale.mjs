@@ -3,7 +3,9 @@
 // off a household archive.
 //
 //   node --experimental-strip-types scripts/probe-recovery-scale.mjs .local-archive/haelan.sqlite
-import { recoveryIndexSeries, recoveryWindowStart, RECOVERY_SCALE } from '../packages/core/src/api/recoveryIndex.ts'
+import { recoveryIndexSeries, RECOVERY_SCALE, SLEEP_WEEK_DAYS, RECOVERY_METRIC_SOURCES } from '../packages/core/src/api/recoveryIndex.ts'
+import { shiftLocalDate } from '../packages/core/src/derive/localDay.ts'
+import { BASELINE_WINDOW_DAYS } from '../packages/core/src/query/baseline.ts'
 
 // better-sqlite3 is a dependency of packages/core, not of the repo root, so pnpm only links it
 // under packages/core/node_modules - a bare `import Database from 'better-sqlite3'` run from here
@@ -47,18 +49,21 @@ const collect = (field, metric, agg) => {
     byPerson.set(row.person_id, person)
   }
 }
-collect('hrv', 'daily_hrv', 'last')
-collect('restingHeartRate', 'resting_heart_rate', 'last')
-collect('respiratoryRate', 'respiratory_rate', 'last')
-collect('asleepMinutes', 'sleep_asleep_minutes', 'sum')
-collect('bedtimeMinutes', 'sleep_bedtime_minutes', 'last')
+// The same metric/agg pairing every surface reads, rather than a sixth independent copy of it.
+for (const source of RECOVERY_METRIC_SOURCES) collect(source.key, source.metric, source.agg)
 
 for (const [personId, input] of byPerson) {
   const dates = input.hrv.map((d) => d.localDate)
   if (dates.length === 0) continue
   const to = dates[dates.length - 1]
-  // Start scoring only once a full window exists behind the first scorable day.
-  const from = recoveryWindowStart(to)
+  // Score every day the data can support, not only the final ~67 days. `recoveryWindowStart(to)`
+  // is the window BEHIND the last date - anchoring `from` on it scores only the tail of the
+  // archive regardless of how much history actually exists. The first day that can be scored at
+  // all is the earliest day whose own baseline-plus-sleep-week window (recoveryWindowStart) does
+  // not reach earlier than this person's first recorded day - which inverts to: this person's
+  // first recorded day, walked forward by that same window length.
+  const earliest = dates[0]
+  const from = shiftLocalDate(earliest, BASELINE_WINDOW_DAYS + SLEEP_WEEK_DAYS - 1)
   const series = recoveryIndexSeries(input, { from, to })
   const composites = [...series.values()].filter((r) => r.enough).map((r) => r.composite).sort((a, b) => a - b)
   if (composites.length === 0) {
@@ -80,9 +85,18 @@ for (const [personId, input] of byPerson) {
   // hand from the raw composite percentiles above.
   const scoreAt = (composite) => 100 / (1 + Math.exp(-RECOVERY_SCALE * composite))
   console.log(
-    `  band cuts (score)  low/below ${scoreAt(at(0.10)).toFixed(2)}` +
+    `  band cuts at shipped scale (score)  low/below ${scoreAt(at(0.10)).toFixed(2)}` +
     `  below/usual ${scoreAt(at(0.30)).toFixed(2)}` +
     `  usual/above ${scoreAt(at(0.70)).toFixed(2)}` +
     `  above/high ${scoreAt(at(0.90)).toFixed(2)}`,
+  )
+  // The same four cuts, but mapped through the scale this run just suggested - what bandOf's cut
+  // points must become if RECOVERY_SCALE is refit to this sample.
+  const scoreAtSuggested = (composite) => 100 / (1 + Math.exp(-suggested * composite))
+  console.log(
+    `  band cuts at suggested scale (score)  low/below ${scoreAtSuggested(at(0.10)).toFixed(2)}` +
+    `  below/usual ${scoreAtSuggested(at(0.30)).toFixed(2)}` +
+    `  usual/above ${scoreAtSuggested(at(0.70)).toFixed(2)}` +
+    `  above/high ${scoreAtSuggested(at(0.90)).toFixed(2)}`,
   )
 }

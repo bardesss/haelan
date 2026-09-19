@@ -51,7 +51,6 @@ export function zSeries(
   direction: Direction,
 ): Map<string, number | null> {
   const byDate = new Map(days.map((day) => [day.localDate, day.value]))
-  const sorted = [...days].sort((a, b) => a.localDate < b.localDate ? -1 : 1)
   const out = new Map<string, number | null>()
 
   for (let date = range.from; date <= range.to; date = shiftLocalDate(date, 1)) {
@@ -61,7 +60,10 @@ export function zSeries(
       continue
     }
     const { from: windowFrom, to: windowTo } = baselineWindow(date)
-    const history = sorted
+    // baselineOf only ever sums and averages `history`, so the order it is handed in does not
+    // matter - it used to be filtered from a copy sorted by date for no reason this function
+    // depends on.
+    const history = days
       .filter((day) => day.localDate >= windowFrom && day.localDate <= windowTo)
       .map((day) => day.value)
     const baseline = baselineOf(history)
@@ -158,26 +160,33 @@ export const RECOVERY_WEIGHTS: Readonly<Record<RecoveryInputKey, number>> = {
 /**
  * The `k` in `100 / (1 + e^(-k·z))`, where z is the weighted composite.
  *
- * Measured on 2026-09-19 by `scripts/probe-recovery-scale.mjs` against this household's own
- * archive (see the spec, "The scale is measured, not chosen"): `k` was set so the more extreme of
- * the 5th/95th percentile composites lands at a score of 10 or 90, with the archive's other tail
- * landing somewhat less extreme than its counterpart - this composite's own asymmetry, not a flaw
- * in the scale. A constant picked to read well in a unit test can put every real day between 47 and
- * 54 and no test would notice.
+ * Measured by `scripts/probe-recovery-scale.mjs` against this household's own archive (see the
+ * spec, "The scale is measured, not chosen"): `k` was set so the more extreme of the 5th/95th
+ * percentile composites lands at a score of 10 or 90, with the archive's other tail landing
+ * somewhat less extreme than its counterpart - this composite's own asymmetry, not a flaw in the
+ * scale. A constant picked to read well in a unit test can put every real day between 47 and 54
+ * and no test would notice.
  *
- * **Placeholder, not settled.** 1.69 is this household's own measurement, kept for now rather than
- * chosen for behaviour. It is expected to be refit once there are harvested Google Health scores to
- * calibrate against - read it as provisional, not as a constant anyone has signed off on.
+ * Re-measured 2026-09-19 over every day the archive can support, superseding a first measurement
+ * that only covered its final ~67 days: the probe's own `from` had been anchored on the window
+ * behind the LAST scored day (`recoveryWindowStart(to)`) rather than the earliest day with a full
+ * window behind it, so the original 1.69 and the four `bandOf` cuts below were fit on a small tail
+ * of the household's history rather than the history itself. The wider sample moved the fitted
+ * scale from 1.69 to 1.76 and shifted each `bandOf` cut by a few points - a real change, not a
+ * rounding difference, though not one that turns the shape of the distribution upside down either.
+ *
+ * **Placeholder, not settled.** This is still this household's own measurement, kept for now
+ * rather than chosen for behaviour. It is expected to be refit again once there are harvested
+ * Google Health scores to calibrate against - read it as provisional, not as a constant anyone has
+ * signed off on.
  */
-export const RECOVERY_SCALE = 1.69
+export const RECOVERY_SCALE = 1.76
 
 /** The two inputs without which this is a different statistic wearing the same name. */
 export const REQUIRED_INPUTS: readonly RecoveryInputKey[] = ['hrv', 'restingHeartRate']
 
 export interface RecoveryInput {
   key: RecoveryInputKey
-  /** Sign-corrected: positive always means better recovered. */
-  z: number
   /** After any redistribution, so the weights present always sum to 1. */
   weight: number
   /**
@@ -201,14 +210,28 @@ export interface RecoveryIndexUnavailable {
 
 export interface RecoveryIndexAvailable {
   enough: true
-  localDate: string
   /** 0-100, integer. */
   score: number
   /** The weighted composite behind it, kept so a probe can study the distribution. */
   composite: number
   inputs: readonly RecoveryInput[]
-  /** Optional inputs that were absent; their weight was redistributed across the rest. */
+  /**
+   * Optional inputs that were entirely ABSENT this day; their weight was redistributed across the
+   * rest. Never includes an input that is present but standing on reduced evidence - see
+   * `reducedWeight` for that case, which both surfaces must report differently from an absence.
+   */
   degraded: readonly RecoveryInputKey[]
+  /**
+   * Optional inputs that WERE present this day but on less than their full evidence, and so
+   * carried less than their nominal weight rather than being redistributed away entirely. Today
+   * this can only ever be `['sleep']`, for the case `sleepHalfOnly` computes below: one of
+   * duration or bedtime consistency was observed and the other was not, so sleep stands on half
+   * its usual weight rather than being dropped. A reader must not describe an input in this list
+   * the way it would describe one in `degraded` - the tile and the MCP tool both used to say
+   * "computed without last week's sleep" on a day sleep was very much present, just at half
+   * weight, which is the defect this field exists to make impossible to repeat.
+   */
+  reducedWeight: readonly RecoveryInputKey[]
 }
 
 /**
@@ -234,6 +257,48 @@ export interface RecoveryIndexInput {
   asleepMinutes: readonly DayValue[]
   bedtimeMinutes: readonly DayValue[]
 }
+
+/**
+ * Every `RecoveryIndexInput` field's own `/series` metric and aggregation - the mapping five call
+ * sites once held five independent copies of (apps/web/src/data/useRecoveryIndex.ts,
+ * apps/server/src/mcp/tools/recovery.ts, scripts/probe-recovery-scale.mjs,
+ * apps/server/test/mcp-fixtures.ts, apps/web/test/recovery-index-tile.test.tsx), with nothing
+ * holding the copies to each other: a sixth input, or a changed agg for one already here, meant
+ * finding and editing all five by hand, and no test noticed when one drifted.
+ *
+ * `key` is the `RecoveryIndexInput` field the pair fills. A caller that fetches `/series` builds
+ * its request from `metric`/`agg` here; a caller that already has the five series in hand (the
+ * probe, which reads `daily` rows directly) still keys its own local shape by `key`, so the field
+ * name a value is stored under is never re-typed by hand either.
+ */
+export interface RecoveryMetricSource {
+  key: keyof RecoveryIndexInput
+  metric: string
+  agg: 'last' | 'sum'
+}
+
+export const RECOVERY_METRIC_SOURCES: readonly RecoveryMetricSource[] = [
+  { key: 'hrv', metric: 'daily_hrv', agg: 'last' },
+  { key: 'restingHeartRate', metric: 'resting_heart_rate', agg: 'last' },
+  { key: 'respiratoryRate', metric: 'respiratory_rate', agg: 'last' },
+  { key: 'asleepMinutes', metric: 'sleep_asleep_minutes', agg: 'sum' },
+  { key: 'bedtimeMinutes', metric: 'sleep_bedtime_minutes', agg: 'last' },
+]
+
+/**
+ * The `events.kind` a harvested Google Health recovery score is stored under
+ * (`apps/server/src/admin.ts`'s `harvest-recovery` console command - there is no API for this
+ * number, so it is typed in by hand off the app's own history screens and kept as an event rather
+ * than a schema change).
+ *
+ * Shared here, a browser-safe module, rather than kept only in admin.ts: `apps/web/src/data/
+ * dayAnnotations.ts` needs to name it too. A harvested score is real household data worth keeping,
+ * but it is not something that happened to the person that day the way a note or an illness event
+ * is, and every chart on every page marking a day an `events` row falls on would otherwise grow a
+ * marker for each of the (up to) sixty scores one harvest run writes - sixty markers on every chart
+ * in the app for what is, to every one of those charts, unrelated data.
+ */
+export const RECOVERY_HARVEST_EVENT_KIND = 'google_recovery_score'
 
 /**
  * The recovery index for every date in `range`.
@@ -342,21 +407,20 @@ export function recoveryIndexSeries(
     // on exactly the days that reading would be most misleading.
     const inputs: RecoveryInput[] = contributions.map(({ key, weight, contribution }) => ({
       key,
-      z: present[key] as number,
       weight,
       points: totalMovement === 0 ? 0 : Math.abs(distance) * (contribution / totalMovement),
     }))
 
     out.set(date, {
       enough: true,
-      localDate: date,
       score,
       composite,
       inputs,
-      degraded: [
-        ...(Object.keys(RECOVERY_WEIGHTS) as RecoveryInputKey[]).filter((k) => present[k] === undefined),
-        ...(sleepHalfOnly ? (['sleep'] as const) : []),
-      ],
+      // Entirely absent, never sleep-at-half-weight: that case is present, just reduced, and
+      // belongs in reducedWeight below - see RecoveryIndexAvailable's own comment on why the two
+      // must not be conflated.
+      degraded: (Object.keys(RECOVERY_WEIGHTS) as RecoveryInputKey[]).filter((k) => present[k] === undefined),
+      reducedWeight: sleepHalfOnly ? ['sleep'] : [],
     })
   }
   return out
@@ -405,11 +469,15 @@ export type RecoveryBand = 'low' | 'below' | 'usual' | 'above' | 'high'
  * same intent (bottom tenth, next fifth, middle two-fifths, next fifth, top tenth) against the new
  * scale. Leaving the old cuts in place after a refit would silently change what fraction of days
  * each band actually covers.
+ *
+ * Re-derived 2026-09-19 alongside `RECOVERY_SCALE`'s own re-measurement (see its comment): the
+ * probe that produced the first four cuts here had the same `from` bug that gave `RECOVERY_SCALE`
+ * its first, too-narrow sample, so these moved too, by a few points each.
  */
 export function bandOf(score: number): RecoveryBand {
-  if (score < 14) return 'low'
-  if (score < 34) return 'below'
-  if (score <= 63) return 'usual'
-  if (score <= 81) return 'above'
+  if (score < 17) return 'low'
+  if (score < 33) return 'below'
+  if (score <= 64) return 'usual'
+  if (score <= 83) return 'above'
   return 'high'
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { RECOVERY_METRIC_SOURCES } from '@haelan/core/recovery-index'
 import { asOfLabel, RecoveryIndexTile } from '../src/pages/dashboard/RecoveryIndexTile.js'
 import { recoveryFetchRange } from '../src/data/useRecoveryIndex.js'
 import { I18nProvider } from '../src/i18n/index.js'
@@ -18,13 +19,16 @@ describe('asOfLabel', () => {
   })
 })
 
-// Mirrors useRecoveryIndex.ts's own LAST_METRICS/SUM_METRICS: neither is exported, so the query
-// keys the loaded-state test seeds below are rebuilt by hand rather than imported. If that
-// module's own lists ever drift from these, the seeded cache misses and the render below is stuck
-// pending instead of loaded - a loud failure, not a silent false pass, the same trade
-// settings-about.test.tsx accepts for the query keys it seeds by hand.
-const LAST_METRICS = ['daily_hrv', 'resting_heart_rate', 'respiratory_rate', 'sleep_bedtime_minutes']
-const SUM_METRICS = ['sleep_asleep_minutes']
+// Derived from RECOVERY_METRIC_SOURCES (@haelan/core/recovery-index), the one shared mapping of
+// metric to agg, rather than a second hand-typed copy of it: useRecoveryIndex.ts's own
+// LAST_METRICS/SUM_METRICS are unexported, so the query keys the loaded-state test seeds below
+// still have to be rebuilt here rather than imported directly - but rebuilt from the same source
+// of truth production code reads, not from a guess at what it currently says. If useRecoveryIndex
+// ever stops deriving its own lists from RECOVERY_METRIC_SOURCES the same way, the seeded cache
+// misses and the render below is stuck pending instead of loaded - a loud failure, not a silent
+// false pass, the same trade settings-about.test.tsx accepts for the query keys it seeds by hand.
+const LAST_METRICS = RECOVERY_METRIC_SOURCES.filter((s) => s.agg === 'last').map((s) => s.metric)
+const SUM_METRICS = RECOVERY_METRIC_SOURCES.filter((s) => s.agg === 'sum').map((s) => s.metric)
 
 const PERSON: Session = {
   personId: 'p1', displayName: 'Test', username: 'test', isAdmin: true, timezone: 'Europe/Amsterdam', birthDate: null, sex: null, connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',

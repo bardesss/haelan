@@ -26,6 +26,7 @@ import {
   closeDatabase, localDateInZone, openDatabase, startOfLocalDay,
 } from '@haelan/core'
 import type { Database } from '@haelan/core'
+import { RECOVERY_HARVEST_EVENT_KIND } from '@haelan/core/recovery-index'
 import { readConfig } from './config.ts'
 
 const USAGE = `usage: node --experimental-strip-types apps/server/src/admin.ts <command>
@@ -56,8 +57,13 @@ export interface AdminDeps {
   env: NodeJS.ProcessEnv
 }
 
-/** The `kind` harvested Google Health recovery scores are stored under. */
-export const HARVEST_KIND = 'google_recovery_score'
+/**
+ * The `kind` harvested Google Health recovery scores are stored under. Re-exported from
+ * `@haelan/core/recovery-index` rather than declared here: `apps/web/src/data/dayAnnotations.ts`
+ * needs the same string, to keep a harvested score from marking every chart on every page (see
+ * RECOVERY_HARVEST_EVENT_KIND's own comment).
+ */
+export const HARVEST_KIND = RECOVERY_HARVEST_EVENT_KIND
 
 export interface HarvestRow {
   localDate: string

@@ -6,6 +6,7 @@ import { StatTile } from '../../components/StatTile.js'
 import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { useRecoveryIndex } from '../../data/useRecoveryIndex.js'
+import { formatLocalDate } from '../../format.js'
 
 /**
  * The scored date, or null when it IS today.
@@ -38,7 +39,7 @@ export function RecoveryIndexTile({ from, to, source, today, span = 4 }: {
   today: string
   span?: number
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { query, latest } = useRecoveryIndex({ from, to }, source)
 
   if (query.isError) {
@@ -64,11 +65,19 @@ export function RecoveryIndexTile({ from, to, source, today, span = 4 }: {
   const asOf = asOfLabel(latest.date, today)
   const basis = [
     t('recoveryIndex.basis', { days: BASELINE_WINDOW_DAYS }),
-    asOf === null ? undefined : t('recoveryIndex.asOf', { date: asOf }),
+    asOf === null ? undefined : t('recoveryIndex.asOf', { date: formatLocalDate(asOf, i18n.language) }),
     latest.index.degraded.length === 0
       ? undefined
       : t('recoveryIndex.degraded', {
         inputs: latest.index.degraded.map((key) => t(`recoveryIndex.input.${key}`)).join(', '),
+      }),
+    // Distinct from degraded above: these inputs were present, just standing on reduced evidence,
+    // and reporting them as absent is the exact defect a fix-round review caught (a half-observed
+    // week of sleep rendered as "computed without last week's sleep").
+    latest.index.reducedWeight.length === 0
+      ? undefined
+      : t('recoveryIndex.reducedWeight', {
+        inputs: latest.index.reducedWeight.map((key) => t(`recoveryIndex.input.${key}`)).join(', '),
       }),
   ].filter((part): part is string => part !== undefined).join('; ')
 

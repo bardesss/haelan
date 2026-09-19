@@ -1311,6 +1311,7 @@
     "basis": "against your own last {{days}} days",
     "unavailable": "Not enough recent data to compare against your usual.",
     "degraded": "computed without {{inputs}}",
+    "reducedWeight": "{{inputs}} counted at reduced weight",
     "input": {
       "hrv": "Heart rate variability",
       "restingHeartRate": "Resting heart rate",

@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { recoveryIndexSeries, recoveryWindowStart, bandOf } from '@haelan/core/recovery-index'
-import type { DayValue, RecoveryIndex } from '@haelan/core/recovery-index'
+import { recoveryIndexSeries, recoveryWindowStart, bandOf, RECOVERY_METRIC_SOURCES } from '@haelan/core/recovery-index'
+import type { DayValue, RecoveryIndex, RecoveryMetricSource } from '@haelan/core/recovery-index'
 import type { SeriesResult } from '@haelan/core'
 import type { PersonQuery } from '@haelan/core'
 import type { Tool } from '../contract.ts'
@@ -39,9 +39,17 @@ const RECOVERY_DAY = z.object({
     ),
   })).nullable().describe('Null when `enough` is false.'),
   degraded: z.array(RECOVERY_INPUT_KEY).nullable().describe(
-    'Null when `enough` is false. Otherwise the optional inputs that were absent this day; their '
-    + 'weight was redistributed across the rest, which is why a present input\'s weight can read '
-    + 'higher than its nominal share.',
+    'Null when `enough` is false. Otherwise the optional inputs that were entirely ABSENT this '
+    + 'day; their weight was redistributed across the rest, which is why a present input\'s '
+    + 'weight can read higher than its nominal share. Never includes an input listed in '
+    + '`reducedWeight` - that input was present, just on reduced evidence, not absent.',
+  ),
+  reducedWeight: z.array(RECOVERY_INPUT_KEY).nullable().describe(
+    'Null when `enough` is false. Otherwise the optional inputs that WERE present this day but on '
+    + 'less than their full evidence, and so carried less than their nominal weight rather than '
+    + 'being dropped. Today this can only ever be `["sleep"]`, for a week with only duration or '
+    + 'only bedtime consistency observed - never treat an input named here as absent the way one '
+    + 'named in `degraded` is.',
   ),
 })
 
@@ -69,13 +77,21 @@ function fetchRecoveryInput(q: PersonQuery, range: { from: string, to: string })
   const from = recoveryWindowStart(range.from)
   const toDayValues = (result: SeriesResult): DayValue[] =>
     result.points.map((point) => ({ localDate: point.localDate, value: point.value }))
+  // RECOVERY_METRIC_SOURCES (@haelan/core/recovery-index) is the one place that says which
+  // /series metric and agg fill each of the five inputs - fetched here by `source.key` rather
+  // than re-typing the pairing, so this can never drift from what the web hook and the probe read.
+  const fetch = (key: RecoveryMetricSource['key']): DayValue[] => {
+    const source = RECOVERY_METRIC_SOURCES.find((s) => s.key === key)
+    if (source === undefined) throw new Error(`no recovery metric source declared for '${key}'`)
+    return toDayValues(q.series({ metric: source.metric, agg: source.agg, from, to: range.to }))
+  }
 
   return {
-    hrv: toDayValues(q.series({ metric: 'daily_hrv', agg: 'last', from, to: range.to })),
-    restingHeartRate: toDayValues(q.series({ metric: 'resting_heart_rate', agg: 'last', from, to: range.to })),
-    respiratoryRate: toDayValues(q.series({ metric: 'respiratory_rate', agg: 'last', from, to: range.to })),
-    asleepMinutes: toDayValues(q.series({ metric: 'sleep_asleep_minutes', agg: 'sum', from, to: range.to })),
-    bedtimeMinutes: toDayValues(q.series({ metric: 'sleep_bedtime_minutes', agg: 'last', from, to: range.to })),
+    hrv: fetch('hrv'),
+    restingHeartRate: fetch('restingHeartRate'),
+    respiratoryRate: fetch('respiratoryRate'),
+    asleepMinutes: fetch('asleepMinutes'),
+    bedtimeMinutes: fetch('bedtimeMinutes'),
   }
 }
 
@@ -84,7 +100,10 @@ function fetchRecoveryInput(q: PersonQuery, range: { from: string, to: string })
 // this function reading it off `index`.
 function dayOf(localDate: string, index: RecoveryIndex): z.infer<typeof RECOVERY_DAY> {
   if (!index.enough) {
-    return { localDate, enough: false, missing: [...index.missing], score: null, band: null, inputs: null, degraded: null }
+    return {
+      localDate, enough: false, missing: [...index.missing], score: null, band: null, inputs: null,
+      degraded: null, reducedWeight: null,
+    }
   }
   return {
     localDate,
@@ -94,6 +113,7 @@ function dayOf(localDate: string, index: RecoveryIndex): z.infer<typeof RECOVERY
     band: bandOf(index.score),
     inputs: index.inputs.map((input) => ({ key: input.key, weight: input.weight, points: input.points })),
     degraded: [...index.degraded],
+    reducedWeight: [...index.reducedWeight],
   }
 }
 
@@ -101,7 +121,9 @@ export const recoveryIndexTool = defineTool({
   name: 'recovery_index',
   description:
     'The recovery index for each day in a date range, oldest first - the same number the app\'s '
-    + 'own Recovery page shows, built from heart rate variability, resting heart rate, respiratory '
+    + 'own Recovery page shows when it is left on its default, all-sources view (a Recovery page '
+    + 'narrowed to one source computes over that source alone and can disagree with this), built '
+    + 'from heart rate variability, resting heart rate, respiratory '
     + 'rate and the past week\'s sleep duration and bedtime consistency, each read against this '
     + 'person\'s own 60-day baseline. `band` names five comparative bands around that baseline - '
     + 'low, below, usual, above, high - never a readiness verdict, only distance from a person\'s '

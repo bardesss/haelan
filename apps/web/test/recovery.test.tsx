@@ -413,15 +413,15 @@ describe('the Recovery page', () => {
 describe('contributionRows', () => {
   it('orders inputs by how much they moved the score, largest first', () => {
     const rows = contributionRows([
-      { key: 'hrv', z: 0.2, weight: 0.35, points: 2 },
-      { key: 'restingHeartRate', z: -1.4, weight: 0.30, points: -11 },
-      { key: 'sleep', z: 0.1, weight: 0.25, points: 1 },
+      { key: 'hrv', weight: 0.35, points: 2 },
+      { key: 'restingHeartRate', weight: 0.30, points: -11 },
+      { key: 'sleep', weight: 0.25, points: 1 },
     ])
     expect(rows.map((row) => row.key)).toEqual(['restingHeartRate', 'hrv', 'sleep'])
   })
 
   it('rounds points to whole numbers, because a tenth of a point means nothing', () => {
-    const rows = contributionRows([{ key: 'hrv', z: 0.2, weight: 1, points: -11.4 }])
+    const rows = contributionRows([{ key: 'hrv', weight: 1, points: -11.4 }])
     expect(rows[0]?.points).toBe(-11)
   })
 })

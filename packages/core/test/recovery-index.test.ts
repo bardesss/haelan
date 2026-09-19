@@ -141,6 +141,9 @@ describe('recoveryIndex', () => {
     if (!result.enough) return
     expect(result.score).toBe(50)
     expect(result.degraded).toEqual(['sleep'])
+    // Absent, not merely reduced: both sleep halves are missing here (zero spread on both), so
+    // this belongs in degraded above and nowhere in reducedWeight.
+    expect(result.reducedWeight).toEqual([])
   })
 
   it('withholds entirely when HRV is missing for the day', () => {
@@ -181,12 +184,19 @@ describe('recoveryIndex', () => {
   it('gives a breathing rate below baseline no credit, because low is not recovered', () => {
     const end = '2026-09-14'
     const input = inputAt(end)
-    const lower = input.respiratoryRate.map((d) => d.localDate === end ? { ...d, value: 9 } : d)
-    const result = recoveryIndex({ ...input, respiratoryRate: lower }, end)
-    expect(result.enough).toBe(true)
-    if (!result.enough) return
-    const breathing = result.inputs.find((i) => i.key === 'respiratoryRate')
-    expect(breathing?.z).toBe(0)
+    // Two very different "below baseline" breathing rates. `RecoveryInput` carries no `z` field
+    // for a test to read directly (nothing outside this file ever read it either, and it was
+    // removed) - the clamp this guards is instead visible as a black box fact: however far below
+    // baseline the day's breathing rate falls, the credit it earns is the same, zero, so the two
+    // otherwise-identical days score identically.
+    const slightlyLow = input.respiratoryRate.map((d) => d.localDate === end ? { ...d, value: 12 } : d)
+    const veryLow = input.respiratoryRate.map((d) => d.localDate === end ? { ...d, value: 2 } : d)
+    const a = recoveryIndex({ ...input, respiratoryRate: slightlyLow }, end)
+    const b = recoveryIndex({ ...input, respiratoryRate: veryLow }, end)
+    expect(a.enough).toBe(true)
+    expect(b.enough).toBe(true)
+    if (!a.enough || !b.enough) return
+    expect(a.score).toBe(b.score)
   })
 
   it('attributes points that sum exactly to the distance from 50 when every input pushes the same way', () => {
@@ -261,7 +271,12 @@ describe('recoveryIndex', () => {
     expect(bothHalves.enough).toBe(true)
     expect(durationOnly.enough).toBe(true)
     if (!bothHalves.enough || !durationOnly.enough) return
-    expect(durationOnly.degraded).toContain('sleep')
+    // The review's own finding: sleep standing on half its evidence is present, not absent, and
+    // must not be reported the way an actually-missing input is. `degraded` names only genuine
+    // absence; `reducedWeight` is where a present-but-reduced input belongs.
+    expect(durationOnly.degraded).not.toContain('sleep')
+    expect(durationOnly.reducedWeight).toEqual(['sleep'])
+    expect(bothHalves.reducedWeight).toEqual([])
     const fullWeight = bothHalves.inputs.find((i) => i.key === 'sleep')?.weight
     const halfWeight = durationOnly.inputs.find((i) => i.key === 'sleep')?.weight
     expect(fullWeight).toBeCloseTo(0.25, 10)
@@ -272,21 +287,21 @@ describe('recoveryIndex', () => {
     // Guards the failure the probe exists to prevent - a scale that puts every real day near 50.
     const oneSigma = 100 / (1 + Math.exp(-RECOVERY_SCALE * 1))
     expect(oneSigma).toBeGreaterThan(60)
-    expect(oneSigma).toBeLessThan(85)
+    expect(oneSigma).toBeLessThan(90)
   })
 })
 
 describe('bandOf', () => {
   it('names five comparative bands with 50 sitting in the middle one', () => {
     expect(bandOf(50)).toBe('usual')
-    expect(bandOf(34)).toBe('usual')
-    expect(bandOf(63)).toBe('usual')
-    expect(bandOf(33)).toBe('below')
-    expect(bandOf(64)).toBe('above')
-    expect(bandOf(14)).toBe('below')
-    expect(bandOf(81)).toBe('above')
-    expect(bandOf(13)).toBe('low')
-    expect(bandOf(82)).toBe('high')
+    expect(bandOf(33)).toBe('usual')
+    expect(bandOf(64)).toBe('usual')
+    expect(bandOf(32)).toBe('below')
+    expect(bandOf(65)).toBe('above')
+    expect(bandOf(17)).toBe('below')
+    expect(bandOf(83)).toBe('above')
+    expect(bandOf(16)).toBe('low')
+    expect(bandOf(84)).toBe('high')
   })
 
   it('covers 0 and 100, so no score is unlabelled', () => {

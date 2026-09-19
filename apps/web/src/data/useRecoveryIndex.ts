@@ -1,12 +1,19 @@
 import { useMemo } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { recoveryIndexSeries, recoveryWindowStart } from '@haelan/core/recovery-index'
-import type { RecoveryIndex, RecoveryIndexAvailable, DayValue } from '@haelan/core/recovery-index'
+import { recoveryIndexSeries, recoveryWindowStart, RECOVERY_METRIC_SOURCES } from '@haelan/core/recovery-index'
+import type { RecoveryIndex, RecoveryIndexAvailable, DayValue, RecoveryMetricSource } from '@haelan/core/recovery-index'
 import { useSeries } from './useSeries.js'
 import type { MetricSeries, SeriesPoint } from './useSeries.js'
 
-const LAST_METRICS = ['daily_hrv', 'resting_heart_rate', 'respiratory_rate', 'sleep_bedtime_minutes']
-const SUM_METRICS = ['sleep_asleep_minutes']
+// Derived from RECOVERY_METRIC_SOURCES (@haelan/core/recovery-index), the one place that says
+// which metric carries which agg, rather than a second, hand-typed copy of that pairing.
+const LAST_METRICS = RECOVERY_METRIC_SOURCES.filter((s) => s.agg === 'last').map((s) => s.metric)
+const SUM_METRICS = RECOVERY_METRIC_SOURCES.filter((s) => s.agg === 'sum').map((s) => s.metric)
+const metricFor = (key: RecoveryMetricSource['key']): string => {
+  const source = RECOVERY_METRIC_SOURCES.find((s) => s.key === key)
+  if (source === undefined) throw new Error(`no recovery metric source declared for '${key}'`)
+  return source.metric
+}
 
 /**
  * The span that must be fetched in order to score every day in `range`.
@@ -77,12 +84,13 @@ export function useRecoveryIndex(range: { from: string, to: string }, source: st
 
   const byDate = useMemo(() => {
     if (lastQuery.data === undefined || sumQuery.data === undefined) return undefined
+    const merged = { ...lastQuery.data, ...sumQuery.data }
     return recoveryIndexSeries({
-      hrv: toDayValues(lastQuery.data.daily_hrv),
-      restingHeartRate: toDayValues(lastQuery.data.resting_heart_rate),
-      respiratoryRate: toDayValues(lastQuery.data.respiratory_rate),
-      bedtimeMinutes: toDayValues(lastQuery.data.sleep_bedtime_minutes),
-      asleepMinutes: toDayValues(sumQuery.data.sleep_asleep_minutes),
+      hrv: toDayValues(merged[metricFor('hrv')]),
+      restingHeartRate: toDayValues(merged[metricFor('restingHeartRate')]),
+      respiratoryRate: toDayValues(merged[metricFor('respiratoryRate')]),
+      bedtimeMinutes: toDayValues(merged[metricFor('bedtimeMinutes')]),
+      asleepMinutes: toDayValues(merged[metricFor('asleepMinutes')]),
     }, range)
   }, [lastQuery.data, sumQuery.data, range.from, range.to])
 

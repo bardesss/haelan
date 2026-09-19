@@ -255,7 +255,7 @@ export function Recovery() {
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <div className="grid">
-        <RecoveryIndexCard from={controls.from} to={controls.to} source={source} span={8} />
+        <RecoveryIndexCard from={controls.from} to={controls.to} source={source} today={controls.today} span={8} />
         {card('resting_heart_rate', 'recovery.restingHeartRate.label', 'recovery.restingHeartRate.basis',
           'recovery.restingHeartRate.chartLabel', 'recovery.units.beatsPerMinute', 'recovery.units.bpm',
           'lower-is-better', restingHrBaseline, restingHrBand)}

@@ -2,7 +2,7 @@ import {
   schema, DERIVATION_VERSION, insertSample, NoteStore, EventStore, shiftLocalDate,
 } from '@haelan/core'
 import type { DbOrTx } from '@haelan/core'
-import { recoveryWindowStart } from '@haelan/core/recovery-index'
+import { recoveryWindowStart, RECOVERY_METRIC_SOURCES } from '@haelan/core/recovery-index'
 
 /**
  * Representative arguments for every tool in CATALOGUE, keyed by name.
@@ -123,19 +123,21 @@ export const ALICE_FINGERPRINTS: Record<string, string> = {
   // 1200, so a suppressed answer (every field null) fails this the same way a missing tool would.
   compare_periods: '1200',
   // `insertRecoverySeries` below gives alice her own 67 days of hrv/resting-heart-rate/
-  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 75, band
+  // respiratory-rate/sleep numbers, distinct from bart's, and RECOVERY_ON scores as 76, band
   // 'above' - both checked against the real recoveryIndexSeries/bandOf output for these exact
-  // fixture values, not guessed.
+  // fixture values, not guessed. (76, not 75: RECOVERY_SCALE moved from 1.69 to 1.76 when the
+  // probe's own window bug was fixed and re-measured against the archive's full history rather
+  // than only its final ~67 days - see recoveryIndex.ts's own comment on RECOVERY_SCALE.)
   //
   // ALICE_FINGERPRINTS holds one fingerprint per tool, and `found` below only knows two matchers
-  // - a boundary-anchored bare number (numberLeak) or a plain substring - so a lone '75' would
+  // - a boundary-anchored bare number (numberLeak) or a plain substring - so a lone '76' would
   // prove the score but say nothing about `band`: bandOf is a second, independent step (a
-  // cut-point change or a wrong lookup could move the band while the score stays exactly 75), and
+  // cut-point change or a wrong lookup could move the band while the score stays exactly 76), and
   // a score-only fingerprint would not notice. The fingerprint below is the two fields' own exact
   // JSON adjacency - `score` immediately followed by `band` in dayOf's own field order - so it
   // only matches when both are simultaneously correct - not a looser substring of either value
-  // alone the way a bare '75' or a bare 'above' could be.
-  recovery_index: '"score":75,"band":"above"',
+  // alone the way a bare '76' or a bare 'above' could be.
+  recovery_index: '"score":76,"band":"above"',
 }
 
 const NINE_AM = Date.UTC(2026, 7, 1, 9, 0)
@@ -157,15 +159,10 @@ export function insertSession(
   }).run()
 }
 
-const RECOVERY_METRICS = [
-  { metric: 'daily_hrv', agg: 'last' as const, key: 'hrv' as const },
-  { metric: 'resting_heart_rate', agg: 'last' as const, key: 'restingHeartRate' as const },
-  { metric: 'respiratory_rate', agg: 'last' as const, key: 'respiratoryRate' as const },
-  { metric: 'sleep_asleep_minutes', agg: 'sum' as const, key: 'asleepMinutes' as const },
-  { metric: 'sleep_bedtime_minutes', agg: 'last' as const, key: 'bedtimeMinutes' as const },
-]
-
-type RecoveryInputKey = typeof RECOVERY_METRICS[number]['key']
+// RECOVERY_METRIC_SOURCES (@haelan/core/recovery-index) is the one place that says which metric
+// and agg fill each recovery input - this fixture used to hold a sixth, independent copy of that
+// same pairing.
+type RecoveryInputKey = typeof RECOVERY_METRIC_SOURCES[number]['key']
 
 /** One person's five recovery inputs, as the centre/amplitude/spike `insertRecoverySeries` reads. */
 type RecoveryCentres = Record<RecoveryInputKey, { centre: number, amplitude: number, spike: number }>
@@ -210,7 +207,7 @@ const BART_RECOVERY: RecoveryCentres = {
 function insertRecoverySeries(db: DbOrTx, personId: string, centres: RecoveryCentres): void {
   let i = 0
   for (let date = RECOVERY_START; date <= RECOVERY_ON; date = shiftLocalDate(date, 1)) {
-    for (const { metric, agg, key } of RECOVERY_METRICS) {
+    for (const { metric, agg, key } of RECOVERY_METRIC_SOURCES) {
       const { centre, amplitude, spike } = centres[key]
       const value = date === RECOVERY_ON ? spike : centre + amplitude * Math.sin(i * 0.37)
       db.insert(schema.daily).values({

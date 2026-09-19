@@ -8,7 +8,8 @@ import { ErrorState } from '../../components/ErrorState.js'
 import { Loading } from '../../components/Loading.js'
 import { Sparkline } from '../../charts/Sparkline.js'
 import { useRecoveryIndex } from '../../data/useRecoveryIndex.js'
-import { formatNumber } from '../../format.js'
+import { formatNumber, formatLocalDate } from '../../format.js'
+import { asOfLabel } from '../dashboard/RecoveryIndexTile.js'
 
 export interface ContributionRow {
   key: RecoveryInput['key']
@@ -35,10 +36,11 @@ export function contributionRows(inputs: readonly RecoveryInput[]): Contribution
 }
 
 /** The index's own history over the page's range, and what moved the latest one. */
-export function RecoveryIndexCard({ from, to, source, span = 8 }: {
+export function RecoveryIndexCard({ from, to, source, today, span = 8 }: {
   from: string
   to: string
   source: string
+  today: string
   span?: number
 }) {
   const { t, i18n } = useTranslation()
@@ -79,12 +81,21 @@ export function RecoveryIndexCard({ from, to, source, span = 8 }: {
   // back to `formatMetricValue(value, metric, ...)` when a caller omits `formatValue`.
   const formatScore = (value: number | null, absent: string): string => formatNumber(value, 0, i18n.language, absent)
 
+  // The same staleness the Dashboard tile already states (RecoveryIndexTile.tsx's own asOfLabel):
+  // this archive routinely lags sync by several days, and this card's headline used to say nothing
+  // about it even though the tile right next to it does.
+  const asOf = asOfLabel(latest.date, today)
+  const basis = [
+    t('recoveryIndex.basis', { days: BASELINE_WINDOW_DAYS }),
+    asOf === null ? undefined : t('recoveryIndex.asOf', { date: formatLocalDate(asOf, i18n.language) }),
+  ].filter((part): part is string => part !== undefined).join('; ')
+
   return (
     <Card span={span} label={t('recoveryIndex.label')}>
       <StatTile
         label={t(`recoveryIndex.band.${bandOf(latest.index.score)}`)}
         value={String(latest.index.score)}
-        basis={t('recoveryIndex.basis', { days: BASELINE_WINDOW_DAYS })}
+        basis={basis}
       >
         <Sparkline values={values} labels={labels} metric="recovery_index" formatValue={formatScore}
           label={t('recoveryIndex.label')} unit={t('recoveryIndex.label')} />

@@ -1311,6 +1311,7 @@
     "basis": "vergeleken met je eigen laatste {{days}} dagen",
     "unavailable": "Te weinig recente gegevens om met je gebruikelijke waarde te vergelijken.",
     "degraded": "berekend zonder {{inputs}}",
+    "reducedWeight": "{{inputs}} meegeteld met verminderd gewicht",
     "input": {
       "hrv": "Hartslagvariabiliteit",
       "restingHeartRate": "Hartslag in rust",
