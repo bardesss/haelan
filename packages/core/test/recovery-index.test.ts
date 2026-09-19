@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS } from '../src/api/recoveryIndex.ts'
+import { recoveryWindowStart, zSeries, SLEEP_WEEK_DAYS, sleepWeekSeries, recoveryIndex, RECOVERY_WEIGHTS, RECOVERY_SCALE } from '../src/api/recoveryIndex.ts'
 import type { DayValue } from '../src/api/recoveryIndex.ts'
 import type { RecoveryIndexInput } from '../src/api/recoveryIndex.ts'
 
@@ -266,5 +266,12 @@ describe('recoveryIndex', () => {
     const halfWeight = durationOnly.inputs.find((i) => i.key === 'sleep')?.weight
     expect(fullWeight).toBeCloseTo(0.25, 10)
     expect(halfWeight).toBeLessThan(fullWeight as number)
+  })
+
+  it('uses its range: a one sigma composite is a visibly different score from 50', () => {
+    // Guards the failure the probe exists to prevent - a scale that puts every real day near 50.
+    const oneSigma = 100 / (1 + Math.exp(-RECOVERY_SCALE * 1))
+    expect(oneSigma).toBeGreaterThan(60)
+    expect(oneSigma).toBeLessThan(85)
   })
 })

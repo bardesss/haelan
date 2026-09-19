@@ -155,11 +155,14 @@ export const RECOVERY_WEIGHTS: Readonly<Record<RecoveryInputKey, number>> = {
 /**
  * The `k` in `100 / (1 + e^(-k·z))`, where z is the weighted composite.
  *
- * PROVISIONAL. Set by `scripts/probe-recovery-scale.mjs` against a real archive's own distribution
- * (see the spec, "The scale is measured, not chosen"). A constant picked to read well in a unit
- * test can put every real day between 47 and 54 and no test would notice.
+ * Measured on 2026-09-19 by `scripts/probe-recovery-scale.mjs` against this household's own
+ * archive (see the spec, "The scale is measured, not chosen"): `k` was set so the more extreme of
+ * the 5th/95th percentile composites lands at a score of 10 or 90, with the archive's other tail
+ * landing somewhat less extreme than its counterpart - this composite's own asymmetry, not a flaw
+ * in the scale. A constant picked to read well in a unit test can put every real day between 47 and
+ * 54 and no test would notice.
  */
-export const RECOVERY_SCALE = 1
+export const RECOVERY_SCALE = 1.69
 
 /** The two inputs without which this is a different statistic wearing the same name. */
 export const REQUIRED_INPUTS: readonly RecoveryInputKey[] = ['hrv', 'restingHeartRate']
