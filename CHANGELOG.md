@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.40.1](https://github.com/bardesss/haelan/compare/v1.40.0...v1.40.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **web:** do not hide a card on an exclusion list that has not arrived ([#298](https://github.com/bardesss/haelan/issues/298)) ([7b6fba5](https://github.com/bardesss/haelan/commit/7b6fba5b734e801f735e4a99554884b1198d3050))
+
 ## [1.40.0](https://github.com/bardesss/haelan/compare/v1.39.0...v1.40.0) (2026-09-19)
 
 
