@@ -20,11 +20,8 @@ import type { Drop } from './withPage.ts'
  * Backs up isFatalRebuildError for whatever its code list does not know about. Consecutive
  * rather than total, so an archive carrying scattered bad pages never trips it however large it
  * grows, while a wholesale failure trips early and cheaply.
- *
- * Exported for the test fixtures, which need a person whose whole rebuild fails and can only
- * reach that through this number now that one bad page no longer does it.
  */
-export const DROP_BREAKER = 100
+const DROP_BREAKER = 100
 
 export interface ReplayInput {
   personId: string
@@ -65,8 +62,8 @@ export interface ReplayCounts {
  * was deterministic, so it repeated on every boot and the only person on the instance was
  * skipped by every sync run until a code change. Nothing is lost by dropping a unit - tier 1
  * still holds every body, so a later MAPPING_VERSION bump replays them with no operator action.
- * Two things still abort the whole person: a fatal SQLite code (isFatalRebuildError), and
- * DROP_BREAKER consecutive drops.
+ * Three things still abort the whole person: a fatal SQLite code (isFatalRebuildError),
+ * DROP_BREAKER consecutive drops, and a replay in which nothing at all committed.
  */
 export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const counts: ReplayCounts = {
@@ -90,12 +87,13 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // data type rather than per type: what it is there to catch is the environment going wrong
   // mid-replay, which is not confined to one type's pages.
   const collector = makeDropCollector()
+  let committedUnits = 0
   const breaker = (): void => {
     if (collector.consecutive < DROP_BREAKER) return
     throw new Error(
       `${DROP_BREAKER} consecutive pages could not be replayed for ${input.personId}, `
       + 'which is an environment fault rather than bad data, so the rebuild is abandoned '
-      + `rather than committing a near-empty archive: ${collector.list().at(-1)?.reason ?? ''}`,
+      + `rather than committing a near-empty archive: ${collector.lastReason ?? ''}`,
     )
   }
 
@@ -118,7 +116,8 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
    * at all. Clearing both costs one select per identifier on the next unit that needs it.
    */
   const afterUnit = (committed: boolean): void => {
-    if (!committed) {
+    if (committed) committedUnits += 1
+    else {
       input.sources.forget(input.personId)
       keys.forget()
     }
@@ -321,6 +320,30 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
         afterUnit(committed)
       }
     }
+  }
+
+  // The second breaker, and the one that catches what DROP_BREAKER cannot.
+  //
+  // A hundred consecutive drops is a threshold, so an archive smaller than a hundred units can
+  // never reach it: a household member with forty archived pages, all failing for an
+  // environmental reason isFatalRebuildError's code list does not know, would be stamped current
+  // carrying an empty tier 2, their sync resumed, and their history simply gone. That is the
+  // silent corruption fatalError.ts says has to be impossible rather than merely visible, and
+  // the threshold left it merely visible for every small archive.
+  //
+  // Categorical rather than a fraction: "not one unit went in" is a fact about the replay, where
+  // any percentage would be a number nobody can defend. And it keys on having dropped something,
+  // not on having committed nothing. A person whose every payload belongs to a data type the
+  // catalogue retired replays to nothing too, and that is an ordinary answer rather than a fault
+  // - those payloads are counted in `unmappable`, no error was raised, and abandoning them would
+  // quarantine a person for the crime of holding only old data.
+  if (committedUnits === 0 && collector.droppedPages > 0) {
+    throw new Error(
+      `nothing at all could be replayed for ${input.personId}: every one of the `
+      + `${collector.droppedPages} archived pages that were tried failed and none committed, `
+      + 'which is an environment fault rather than bad data, so the rebuild is abandoned rather '
+      + `than stamping the person with an empty archive: ${collector.lastReason ?? ''}`,
+    )
   }
 
   // Measured against the table rather than accumulated from what each mapper call returned. The

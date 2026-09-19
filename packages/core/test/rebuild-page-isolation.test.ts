@@ -330,4 +330,172 @@ describe('a dropped unit does not poison the units after it', () => {
       { dataType: 'sleep', reason: 'this row will not go in', pages: 1 },
     ])
   })
+
+  test('a later reading is filed under its own metric, not the one whose ref rolled back', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // The worse half of the same hazard, and the one a foreign key cannot catch. `metrics.ref`
+    // is AUTOINCREMENT and `sqlite_sequence` rolls back with everything else, so a ref the
+    // dropped unit was assigned is handed straight back out to the next metric inserted. Three
+    // windows in a row, in this order: heart rate whose write fails after `metrics` gained
+    // `heart_rate`, then HRV, which is given the number `heart_rate` just gave up, then heart
+    // rate again. Separate windows rather than separate pages of one, because the replay walks
+    // a whole window group at a time and the HRV insert has to fall BETWEEN the two heart-rate
+    // episodes for the ref to be reused in the middle.
+    const doomed = 60_000
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 1, httpStatus: 200,
+      body: beatsBody([{ atMs: doomed, bpm: 60 }]),
+    })
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate-variability', requestParams: listParams,
+      windowStartMs: 86_400_000, windowEndMs: 172_800_000, fetchedAtMs: 2, httpStatus: 200,
+      body: body([samplePoint({
+        payloadKey: 'heartRateVariability',
+        valuePath: 'rootMeanSquareOfSuccessiveDifferencesMilliseconds', value: '42',
+        physicalTime: new Date(86_460_000).toISOString(),
+        dataSource: { platform: 'FITBIT', recordingMethod: 'PASSIVELY_MEASURED' },
+      })]),
+    })
+    archive.put({
+      personId: 'p1', dataType: 'heart-rate', requestParams: listParams,
+      windowStartMs: 172_800_000, windowEndMs: 259_200_000, fetchedAtMs: 3, httpStatus: 200,
+      body: beatsBody([{ atMs: 172_860_000, bpm: 70 }]),
+    })
+    // Fails the first episode's write, after keys.sampleRefs has already put `heart_rate` in the
+    // dictionary. Pinned to that one minute so the third window writes normally.
+    db.run(sql.raw(
+      `create trigger refuse_first before insert on samples when new.utc_ms = ${doomed} `
+      + "begin select raise(abort, 'this row will not go in'); end",
+    ))
+
+    const counts = replay(db, archive)
+
+    // Every stored row under the metric its reading actually came from. This is the assertion
+    // the foreign keys cannot make for us: with the metric cache left stale the third window's
+    // readings go in as `hrv`, every constraint is satisfied, one drop is reported, and nothing
+    // anywhere says a heart rate was filed as a variability measurement.
+    const stored = readSamples(db, 'p1')
+    expect(stored.filter((r) => r.utcMs === 86_460_000).map((r) => r.metric)).toEqual(['hrv'])
+    expect(new Set(stored.filter((r) => r.utcMs === 172_860_000).map((r) => r.metric)))
+      .toEqual(new Set(['heart_rate']))
+    expect(stored.filter((r) => r.metric === 'hrv')).toHaveLength(1)
+    expect(counts.droppedPages).toBe(1)
+  })
+})
+
+describe('replayPerson abandons a person whose replay committed nothing', () => {
+  test('aborts on an archive far smaller than the consecutive breaker', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // Three units, which is two orders of magnitude short of DROP_BREAKER, so the consecutive
+    // breaker can never see them. Without the second condition this commits an empty tier 2 and
+    // stamps the person current: their sync resumes and their history is simply gone, which is
+    // the outcome fatalError.ts says has to be impossible rather than merely visible.
+    const ids = [1, 2, 3].map((n) => archive.put({
+      personId: 'p1', dataType: 'sleep', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: n, httpStatus: 200,
+      body: nightBody(n),
+    }).id)
+    ruin(db, ids)
+
+    expect(() => replay(db, archive)).toThrow(new Error(
+      'nothing at all could be replayed for p1: every one of the 3 archived pages that were '
+      + 'tried failed and none committed, which is an environment fault rather than bad data, '
+      + 'so the rebuild is abandoned rather than stamping the person with an empty archive: '
+      + NOT_GZIP_AT_ALL,
+    ))
+    expect(db.select().from(sessions).all()).toEqual([])
+  })
+
+  test('one surviving unit out of many is a degraded rebuild, not an abandoned one', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // The boundary the condition sits on. Three units again, two of them ruined: something
+    // committed, so the person is stamped with what could be read rather than abandoned. A
+    // condition written as "almost nothing committed" would have to pick a fraction here, and
+    // there is no fraction anybody could defend.
+    const ids = [1, 2, 3].map((n) => archive.put({
+      personId: 'p1', dataType: 'sleep', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: n, httpStatus: 200,
+      body: nightBody(n),
+    }).id)
+    ruin(db, [ids[0]!, ids[1]!])
+
+    const counts = replay(db, archive)
+
+    expect(counts.sessions).toBe(1)
+    expect(counts.droppedPages).toBe(2)
+  })
+
+  test('an archive that is entirely unmappable still commits, because nothing failed', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // Every payload belongs to a data type the catalogue no longer describes. This replays to
+    // nothing as well, and it is an ordinary answer rather than a fault: no unit was tried, no
+    // error was raised, and the payloads are counted in `unmappable` where an operator can read
+    // them. Abandoning this person would quarantine them for holding only old data, which is
+    // #274's own failure wearing a different hat - which is why the condition keys on having
+    // dropped something and not merely on having committed nothing.
+    for (const n of [1, 2, 3]) {
+      archive.put({
+        personId: 'p1', dataType: 'retired-type', requestParams: listParams,
+        windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: n, httpStatus: 200,
+        body: `{"dataPoints":[],"n":${n}}`,
+      })
+    }
+
+    const counts = replay(db, archive)
+
+    expect(counts.unmappable).toBe(3)
+    expect(counts.droppedPages).toBe(0)
+    expect(counts.drops).toEqual([])
+  })
+
+  test('an archive with nothing in it at all commits, the same as any other empty replay', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+
+    const counts = replay(db, archive)
+
+    expect(counts.droppedPages).toBe(0)
+    expect(counts.samples).toBe(0)
+  })
+})
+
+describe('the breaker names the fault that actually stopped it', () => {
+  test('quotes the last drop, not the first of the reasons it has seen', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    // Faults in the order A, B, A: `collector.list()` groups by (dataType, reason) in first-seen
+    // order, so its last entry is B while the drop that tripped the breaker was an A. An
+    // operator reading the message goes looking for whichever fault it names, so naming the
+    // wrong one sends them at the wrong archive rows.
+    const ids: string[] = []
+    for (let n = 0; n < 150; n += 1) {
+      ids.push(archive.put({
+        personId: 'p1', dataType: 'sleep', requestParams: listParams,
+        windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: n + 1, httpStatus: 200,
+        body: nightBody(n),
+      }).id)
+    }
+    // A for everything but one page early on, which gets B. Truncating has to happen to a body
+    // that is still valid gzip, so it is done to a page `ruin` deliberately skipped: that is
+    // enough to put B last in the grouped list and nowhere near last in the drops themselves.
+    ruin(db, ids.filter((_, i) => i !== 1))
+    truncate(db, ids[1]!)
+
+    expect(() => replay(db, archive)).toThrow(new Error(
+      '100 consecutive pages could not be replayed for p1, which is an environment fault '
+      + 'rather than bad data, so the rebuild is abandoned rather than committing a near-empty '
+      + `archive: ${NOT_GZIP_AT_ALL}`,
+    ))
+  })
 })

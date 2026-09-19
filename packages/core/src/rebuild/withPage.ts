@@ -17,6 +17,15 @@ export interface DropCollector {
   droppedPages: number
   /** Drops since the last unit that committed. Backs the breaker in replayPerson. */
   consecutive: number
+  /**
+   * The reason the most recent drop gave, or null before there is one.
+   *
+   * Kept separately because `list()` cannot answer it: that returns the groups in the order each
+   * was first seen, so with faults A, B, A its last entry is B while the last drop was an A. The
+   * breaker quotes this in the message an operator reads, and quoting the wrong fault sends them
+   * looking at the wrong thing.
+   */
+  lastReason: string | null
   record(unit: PageUnit, error: unknown): void
   succeeded(): void
   list(): Drop[]
@@ -28,8 +37,10 @@ export function makeDropCollector(): DropCollector {
     drops,
     droppedPages: 0,
     consecutive: 0,
+    lastReason: null,
     record(unit, error) {
       const reason = dropReason(error)
+      this.lastReason = reason
       // A plain space cannot separate these unambiguously: a dataType of "a b" and reason "c"
       // would key identically to dataType "a" and reason "b c". Today's dataTypes are URL path
       // segments (see PageUnit), which cannot contain a space, so the collision cannot fire yet -

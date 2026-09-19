@@ -23,7 +23,6 @@ import { OverrideStore } from '../store/overrides.ts'
 import { SettingsStore } from '../store/settings.ts'
 import { body, dailyRollupBody, samplePoint, sleepPoint } from './payloads.ts'
 import { DERIVATION_VERSION } from '../derive/version.ts'
-import { DROP_BREAKER } from '../rebuild/replay.ts'
 
 export interface TestDatabase { db: Database, dir: string, cleanup: () => void }
 
@@ -63,29 +62,14 @@ export function seedPerson(db: Database, id: string, overrides: SeedPersonOverri
  * why, is not what the callers assert; that the throw happens inside the person's transaction
  * is.
  *
- * The padding is why the whole replay throws rather than one page of it. A ruined body used to
- * be the cheapest way to fail a rebuild outright, and page isolation (#276b) is precisely the
- * change that took that away: `replayPerson` now drops a page it cannot get through and stamps
- * the person with the rest of their archive. Only two things still abandon a person, a fatal
- * SQLite code and DROP_BREAKER consecutive drops, and a fixture that only writes rows cannot
- * produce a fatal code - so this produces the other one, by giving the person more unreplayable
- * pages in a row than the breaker tolerates. Each padding page is its own fetch episode
- * (pageToken null, no episode id) and so its own unit, which is what makes them consecutive
- * drops rather than one drop covering many pages. The breaker's message ends with the last
- * drop's reason, so a caller asserting on the zlib text still reads it.
+ * EVERY body, which matters more than it used to. Page isolation (#276b) means one ruined body
+ * no longer fails a rebuild - `replayPerson` drops that page and stamps the person with the rest
+ * of their archive. What still abandons a person is a replay in which nothing at all committed,
+ * so leaving even one readable body here would quietly turn every caller below into a test of
+ * the degraded path rather than the failed one. The breaker's message ends with the last drop's
+ * reason, so a caller asserting on the zlib text still reads it.
  */
 export function corruptArchivedBodies(db: Database, personId: string): void {
-  const archive = new RawArchive(db)
-  for (let i = 0; i < DROP_BREAKER; i += 1) {
-    archive.put({
-      personId, dataType: 'heart-rate', requestParams: { filter: 'x', pageSize: 1000, pageToken: null },
-      windowStartMs: 0, windowEndMs: 86_400_000,
-      // Distinct bodies, or RawArchive.put deduplicates all but the first away and the padding
-      // is one page rather than a hundred. Distinct fetch times so listFor's order is settled
-      // rather than falling through to its random id tiebreak.
-      fetchedAtMs: 1_000_000 + i, httpStatus: 200, body: `{"dataPoints":[],"padding":${i}}`,
-    })
-  }
   db.update(rawPayloads).set({ bodyGzip: Buffer.from('not gzip at all', 'utf8') })
     .where(eq(rawPayloads.personId, personId)).run()
 }
