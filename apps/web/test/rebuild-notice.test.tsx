@@ -266,6 +266,25 @@ describe('RebuildNotice', () => {
   })
 
   /**
+   * Suppressed under a pending rebuild too, and for a different reason than the quarantine. This
+   * flag describes a replay that has already finished; awaitingRebuild says another one is due,
+   * at the next restart or running right now. Printing a verdict about to be recomputed beside
+   * "a rebuild is running now" gives the reader two answers where the second is the useful one.
+   * It returns on its own if the new rebuild is empty as well, since recordSuccess overwrites
+   * both columns every time.
+   */
+  it('says only the pending rebuild when a person awaiting one also carries an empty rebuild', () => {
+    const html = render(
+      <RebuildNotice
+        awaitingRebuild quarantined={false} producedNothing droppedPages={0} drops={[]}
+        lastError={null} voice="self" rebuildInFlight
+      />,
+    )
+    expect(html).toContain('which is running now')
+    expect(html).not.toContain('produced no readings')
+  })
+
+  /**
    * Said beside a drop rather than instead of it. The two are different facts about the same
    * rebuild - some pages would not go in, and what did go in produced nothing - and an operator
    * reading only the drop count would conclude the rest of the archive replayed fine.

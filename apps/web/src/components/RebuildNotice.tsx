@@ -124,23 +124,35 @@ export function RebuildNotice({
                 : t('settings.rebuild.awaitingOther', { name: personName }))}
         </p>
       )}
-      {/* Suppressed while quarantined, for the reason the awaiting line above is. The two
-          columns behind this flag hold whatever the last attempt that COMMITTED left there, and
-          a quarantined person's last commit can perfectly well have been an empty one - so the
-          flag survives their failure. "Your history was rebuilt without any error" is then
-          flatly untrue of the rebuild that is actually the matter with them, and it is printed
-          directly under a line that has just told them their data has stopped.
+      {/* Suppressed while quarantined AND while awaiting a rebuild, which is two suppressions
+          and two different reasons.
 
-          Said beside a drop rather than instead of it, which is why it is not also suppressed by
-          droppedPages: "some pages would not go in" and "what did go in produced nothing" are
-          two different facts about one rebuild, and a reader shown only the first would take the
-          rest of the archive to have replayed fine.
+          Quarantine, for the reason the awaiting line has it: the two columns behind this flag
+          hold whatever the last attempt that COMMITTED left there, and a quarantined person's
+          last commit can perfectly well have been an empty one, so the flag survives their
+          failure. "Your history was rebuilt without any error" is then flatly untrue of the
+          rebuild that is actually the matter with them, printed directly under a line that has
+          just told them their data has stopped.
+
+          Awaiting, because this flag is about a rebuild that has already happened and that state
+          says another one is due - at the next restart, or running right now. The empty result
+          describes a replay this build has superseded or is in the middle of superseding, so
+          reporting it beside "a rebuild is running now" tells the reader about an outcome that
+          may not survive the next few minutes. The awaiting line is also the one that says what
+          happens next, which is the more useful of the two sentences; this one would only add a
+          verdict that is about to be recomputed. It comes back on its own if the new rebuild is
+          empty too, since recordSuccess overwrites both columns.
+
+          Said beside a drop rather than instead of it, which is why droppedPages is NOT a third
+          suppression: "some pages would not go in" and "what did go in produced nothing" are two
+          facts about one rebuild that already happened, and a reader shown only the first would
+          take the rest of the archive to have replayed fine.
 
           .maintenance-waiting rather than the muted note the drop count gets. Their pages are
           empty, which is a larger thing than a gap in them, but nothing has failed and nobody is
           being asked to do anything - the same register the awaiting line uses, and for the same
           reason it is neither the blocked box nor the footnote. */}
-      {producedNothing && !quarantined && (
+      {producedNothing && !quarantined && !awaitingRebuild && (
         <p className="maintenance-waiting">
           {voice === 'self'
             ? t('settings.rebuild.emptySelf')
