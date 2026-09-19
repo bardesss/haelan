@@ -38,7 +38,7 @@ export interface DateRange {
  * Sign-corrected z-scores for every date in `range`, against a rolling 60-day baseline ending the
  * day before each one.
  *
- * Null where the day has no value, where its baseline is thin, or where the spread is zero — the
+ * Null where the day has no value, where its baseline is thin, or where the spread is zero, the
  * three cases `baselineOf` and `zScoreOf` already distinguish, kept distinct here rather than
  * collapsed into a number that would read as "average".
  *
