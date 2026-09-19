@@ -15,11 +15,13 @@ import { makeDropCollector, withPage } from './withPage.ts'
 import type { Drop, PageConnection } from './withPage.ts'
 
 /**
- * Consecutive dropped units that mean the environment is wrong rather than the data.
+ * Consecutive dropped units after which the replay stops trying and abandons the person.
  *
  * Backs up isFatalRebuildError for whatever its code list does not know about. Consecutive
  * rather than total, so an archive carrying scattered bad pages never trips it however large it
- * grows, while a wholesale failure trips early and cheaply.
+ * grows, while a wholesale failure trips early and cheaply. An unbroken run this long is a
+ * reason to stop, not a diagnosis: what is behind it could as easily be the machine as the data,
+ * and the replay has no way to tell those apart - see the message below.
  */
 const DROP_BREAKER = 100
 
@@ -100,12 +102,19 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // mid-replay, which is not confined to one type's pages.
   const collector = makeDropCollector()
   let committedUnits = 0
+  // Both abandonment messages below state what was observed and nothing about why, and that is
+  // deliberate. They reach runRebuild's catch, are stored in rebuild_state.last_error, and are
+  // rendered verbatim to the household member on their own sync status and to an admin on the
+  // settings route. An earlier wording asserted "an environment fault rather than bad data",
+  // which the replay cannot know: a small archive that is genuinely bad data trips the rule at
+  // the bottom of this function just as readily as a broken disk does. A count somebody can act
+  // on is worth more than a confident misdiagnosis of their own data on their own dashboard.
   const breaker = (): void => {
     if (collector.consecutive < DROP_BREAKER) return
     throw new Error(
-      `${DROP_BREAKER} consecutive pages could not be replayed for ${input.personId}, `
-      + 'which is an environment fault rather than bad data, so the rebuild is abandoned '
-      + `rather than committing a near-empty archive: ${collector.lastReason ?? ''}`,
+      `${DROP_BREAKER} units in a row could not be replayed for ${input.personId}, so the `
+      + 'rebuild is abandoned rather than committing a near-empty archive. The last one failed '
+      + `with: ${collector.lastReason ?? ''}`,
     )
   }
 
@@ -337,24 +346,41 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // The second breaker, and the one that catches what DROP_BREAKER cannot.
   //
   // A hundred consecutive drops is a threshold, so an archive smaller than a hundred units can
-  // never reach it: a household member with forty archived pages, all failing for an
-  // environmental reason isFatalRebuildError's code list does not know, would be stamped current
-  // carrying an empty tier 2, their sync resumed, and their history simply gone. That is the
-  // silent corruption fatalError.ts says has to be impossible rather than merely visible, and
-  // the threshold left it merely visible for every small archive.
+  // never reach it: a household member with forty archived pages, all failing for a reason
+  // isFatalRebuildError's code list does not know, would be stamped current carrying an empty
+  // tier 2 and have their sync resumed, with nothing separating that from a rebuild that worked.
+  // This rule is what stops it passing for one.
   //
-  // Categorical rather than a fraction: "not one unit went in" is a fact about the replay, where
-  // any percentage would be a number nobody can defend. And it keys on having dropped something,
-  // not on having committed nothing. A person whose every payload belongs to a data type the
-  // catalogue retired replays to nothing too, and that is an ordinary answer rather than a fault
-  // - those payloads are counted in `unmappable`, no error was raised, and abandoning them would
-  // quarantine a person for the crime of holding only old data.
-  if (committedUnits === 0 && collector.droppedPages > 0) {
+  // It fires only when the replay tried the whole archive and not one unit of it went in.
+  // Categorical rather than a fraction: "not one unit committed" is a fact about the replay,
+  // where any percentage would be a number nobody could defend.
+  //
+  // The third condition is the one that is easy to get wrong, and it was wrong here first.
+  // `committedUnits` only counts units that reached withPage, and an unmappable group never
+  // does - it is counted into `unmappable` and skipped above, before any write is attempted. So
+  // a person holding payloads of a type the catalogue retired, plus one page that will not read,
+  // has committed nothing and dropped something, and the rule without this condition abandoned
+  // them for it: deterministically, on every boot, which is #274's own failure restored for that
+  // shape. The single marginal page is what makes it indefensible. Take it away and the same
+  // person is stamped and keeps syncing, because an archive that is wholly unmappable is an
+  // ordinary answer rather than a fault - no unit was tried and no error was raised, and
+  // abandoning them would quarantine somebody for the crime of holding only old data. Put it
+  // back and they lose every future sync as well, while their tier 2 is empty in both worlds and
+  // tier 1 keeps every body either way.
+  //
+  // So unmappable payloads are evidence in their own right: part of this archive was accounted
+  // for by an ordinary route rather than a fault, and "nothing could be replayed" is simply not
+  // true of that person. It does leave one narrow case committing - an archive under a hundred
+  // units, at least one unmappable page, and every unit that was tried failing. That person is
+  // stamped, counted in `dropped_pages`, shown their own drop count by #276a, and replayed whole
+  // by the next MAPPING_VERSION bump. Visible rather than prevented, which is the trade this
+  // milestone makes everywhere else too.
+  if (committedUnits === 0 && collector.droppedPages > 0 && counts.unmappable === 0) {
     throw new Error(
-      `nothing at all could be replayed for ${input.personId}: every one of the `
-      + `${collector.droppedPages} archived pages that were tried failed and none committed, `
-      + 'which is an environment fault rather than bad data, so the rebuild is abandoned rather '
-      + `than stamping the person with an empty archive: ${collector.lastReason ?? ''}`,
+      `nothing could be replayed for ${input.personId}: all ${collector.droppedPages} archived `
+      + 'pages the replay tried failed and none committed, so the rebuild is abandoned rather '
+      + 'than stamping the person with an empty archive. The last one failed with: '
+      + `${collector.lastReason ?? ''}`,
     )
   }
 

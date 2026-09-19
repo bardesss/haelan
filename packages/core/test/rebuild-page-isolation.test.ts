@@ -255,9 +255,9 @@ describe('replayPerson still abandons the person when the environment is at faul
     // rebuild abandons a person, and a substring check stays green while the half that names the
     // cause rots away.
     expect(() => replay(db, archive)).toThrow(new Error(
-      '100 consecutive pages could not be replayed for p1, which is an environment fault '
-      + 'rather than bad data, so the rebuild is abandoned rather than committing a near-empty '
-      + `archive: ${NOT_GZIP_AT_ALL}`,
+      '100 units in a row could not be replayed for p1, so the rebuild is abandoned rather '
+      + 'than committing a near-empty archive. The last one failed with: '
+      + NOT_GZIP_AT_ALL,
     ))
   })
 
@@ -392,9 +392,9 @@ describe('replayPerson abandons a person whose replay committed nothing', () => 
     seedPerson(db, 'p1')
     const archive = new RawArchive(db)
     // Three units, which is two orders of magnitude short of DROP_BREAKER, so the consecutive
-    // breaker can never see them. Without the second condition this commits an empty tier 2 and
-    // stamps the person current: their sync resumes and their history is simply gone, which is
-    // the outcome fatalError.ts says has to be impossible rather than merely visible.
+    // breaker can never see them. Without this rule the replay commits an empty tier 2 and
+    // stamps the person current: their sync resumes and their history is simply gone, with
+    // nothing in the run to tell that apart from a rebuild that had nothing to do.
     const ids = [1, 2, 3].map((n) => archive.put({
       personId: 'p1', dataType: 'sleep', requestParams: listParams,
       windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: n, httpStatus: 200,
@@ -403,10 +403,9 @@ describe('replayPerson abandons a person whose replay committed nothing', () => 
     ruin(db, ids)
 
     expect(() => replay(db, archive)).toThrow(new Error(
-      'nothing at all could be replayed for p1: every one of the 3 archived pages that were '
-      + 'tried failed and none committed, which is an environment fault rather than bad data, '
-      + 'so the rebuild is abandoned rather than stamping the person with an empty archive: '
-      + NOT_GZIP_AT_ALL,
+      'nothing could be replayed for p1: all 3 archived pages the replay tried failed and none '
+      + 'committed, so the rebuild is abandoned rather than stamping the person with an empty '
+      + 'archive. The last one failed with: ' + NOT_GZIP_AT_ALL,
     ))
     expect(db.select().from(sessions).all()).toEqual([])
   })
@@ -457,6 +456,42 @@ describe('replayPerson abandons a person whose replay committed nothing', () => 
     expect(counts.drops).toEqual([])
   })
 
+  // Retired types plus one page that will not read: the shape the whole-branch review found
+  // still quarantining a person. `committedUnits` is only ever incremented by a unit that went
+  // through withPage, and an unmappable group `continue`s long before that, so this person used
+  // to hit "nothing committed and something dropped" and be abandoned - deterministically, on
+  // every boot, which is #274's failure restored for exactly this shape.
+  //
+  // The marginal page is what makes it indefensible. Drop the bad page from this archive and the
+  // person is stamped and their sync resumes (the test above); add it back and they lose
+  // everything, including every sync that would have brought them data they do not have yet.
+  // Their tier 2 is empty either way, so the quarantine buys nothing and costs them the future.
+  test('retired types beside one bad page is a degraded rebuild, not an abandoned one', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    for (const n of [1, 2, 3]) {
+      archive.put({
+        personId: 'p1', dataType: 'retired-type', requestParams: listParams,
+        windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: n, httpStatus: 200,
+        body: `{"dataPoints":[],"n":${n}}`,
+      })
+    }
+    const bad = archive.put({
+      personId: 'p1', dataType: 'sleep', requestParams: listParams,
+      windowStartMs: 0, windowEndMs: 86_400_000, fetchedAtMs: 9, httpStatus: 200,
+      body: nightBody(9),
+    }).id
+    ruin(db, [bad])
+
+    const counts = replay(db, archive)
+
+    expect(counts.unmappable).toBe(3)
+    expect(counts.droppedPages).toBe(1)
+    expect(counts.drops).toEqual([{ dataType: 'sleep', reason: NOT_GZIP_AT_ALL, pages: 1 }])
+    expect(counts.sessions).toBe(0)
+  })
+
   test('an archive with nothing in it at all commits, the same as any other empty replay', () => {
     const db = freshDb()
     seedPerson(db, 'p1')
@@ -493,9 +528,9 @@ describe('the breaker names the fault that actually stopped it', () => {
     truncate(db, ids[1]!)
 
     expect(() => replay(db, archive)).toThrow(new Error(
-      '100 consecutive pages could not be replayed for p1, which is an environment fault '
-      + 'rather than bad data, so the rebuild is abandoned rather than committing a near-empty '
-      + `archive: ${NOT_GZIP_AT_ALL}`,
+      '100 units in a row could not be replayed for p1, so the rebuild is abandoned rather '
+      + 'than committing a near-empty archive. The last one failed with: '
+      + NOT_GZIP_AT_ALL,
     ))
   })
 })

@@ -321,8 +321,18 @@ export function runRebuild(input: RebuildInput): RebuildReport {
       // household's data inside it.
       //
       // What is left is SQLite's own constraint and corruption messages, which name a table and
-      // a column, and two families of ConfigError. Neither is thrown by this file, which throws
-      // none of its own. The mappers raise one when the catalogue and their mapping tables
+      // a column, two families of ConfigError, and the two abandonment errors replayPerson
+      // raises itself. None of them is thrown by this file, which throws none of its own.
+      //
+      // replayPerson's two are the breaker (a run of units that could not be replayed) and the
+      // replay that committed nothing. Both name this person's id and a count, and then quote
+      // the reason the last drop gave - which is not a new category of content, because that
+      // reason is one of the same SQLite or zlib strings already accounted for above, with its
+      // volatile tail stripped by dropReason. Both are deliberately worded to say what was
+      // observed and not to diagnose a cause, since this is the string the affected person
+      // reads on their own dashboard; the comment above the breaker in replay.ts has the why.
+      //
+      // The mappers raise one when the catalogue and their mapping tables
       // disagree - "<type> is not a sample type", "<type> has no observation mapping declared" -
       // naming a data type id from the shared catalogue. `db/keys.ts` raises the other when an
       // id or a ref it was asked to translate has no row: "no <label> for id <id>" from
