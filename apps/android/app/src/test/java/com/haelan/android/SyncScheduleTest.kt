@@ -13,8 +13,21 @@ import org.junit.Test
 class SyncScheduleTest {
 
     @Test
-    fun `the background sync goes twice a day`() {
-        assertEquals(12L, SyncSchedule.policy().repeatHours)
+    fun `the background sync goes every two hours`() {
+        // Twelve was right for data that goes stale by the day and wrong for a workout: somebody
+        // who has just finished a run wants to see it, and half a day is not an answer. A run with
+        // nothing new costs a delta read that finds nothing, because the cursor says where to
+        // start.
+        assertEquals(2L, SyncSchedule.policy().repeatHours)
+    }
+
+    @Test
+    fun `the background sync is not the fifteen minute floor WorkManager allows`() {
+        // Health Connect gives third parties no push, so this is polling. Polling six times an
+        // hour to catch something that happens twice a week spends the battery on the three
+        // hundred and thirty runs that find nothing. The manual button and the sync on open cover
+        // the moment somebody actually cares.
+        assertTrue(SyncSchedule.policy().repeatHours >= 1L)
     }
 
     @Test
