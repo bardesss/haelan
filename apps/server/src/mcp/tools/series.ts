@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { metricSpec } from '@haelan/core/metrics'
 import type { MetricSpec } from '@haelan/core/metrics'
-import { BASELINE_WINDOW_DAYS, baselineWindow } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
 import type { DailyPoint } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
@@ -48,6 +48,22 @@ const FILLED_DAYS = z.object({
 
 function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
   return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
+
+/**
+ * `points` narrowed to the ones `PersonQuery.baseline()` actually averages, by the identical
+ * filter it applies itself (packages/core/src/query/personQuery.ts).
+ *
+ * Needed because a coverage judged metric (steps, heart rate, ...) drops a barely observed day
+ * before averaging, so counting filled over the raw fetch overstates `of` against `baseline.n` -
+ * a real defect the scoped re-review caught (seeded steps gave `n: 4` but `of: 6`). Mirroring the
+ * filter here, through the same exported `coverageIsMeaningful`/`INSIGHT_MIN_COVERAGE` baseline()
+ * itself uses rather than a second invented threshold, keeps `filledDays.of` equal to `n` instead
+ * of merely close to it.
+ */
+function baselineContributingPoints(points: readonly DailyPoint[], metric: string): readonly DailyPoint[] {
+  const judgeCoverage = coverageIsMeaningful(metric)
+  return points.filter((point) => !(judgeCoverage && point.coverage !== null && point.coverage < INSIGHT_MIN_COVERAGE))
 }
 
 export const querySeries = defineTool({
@@ -194,17 +210,18 @@ export const getBaselines = defineTool({
   run: (q, args) => {
     // baseline() answers center, spread and n, none of which carries `filled`, so its own window
     // (the same rule baselineWindow names, which baseline() calls too) is reopened here through a
-    // fresh series() call - precise for exactly the metrics that can ever be filled (daily_hrv,
-    // daily_spo2): coverageIsMeaningful is false for both, so baseline()'s own coverage filter
-    // never drops a row for them and this `points` array is the same set baseline() averaged over.
+    // fresh series() call, then narrowed through baselineContributingPoints to the same days
+    // baseline() itself averaged, so filledDays.of equals baseline.n exactly rather than
+    // overcounting a day a coverage gate excluded.
     const windowDays = args.windowDays ?? BASELINE_WINDOW_DAYS
     const { from, to } = baselineWindow(args.on, windowDays)
     const { points } = q.series({ metric: args.metric, agg: args.agg, from, to, source: args.source })
+    const contributing = baselineContributingPoints(points, args.metric)
     return {
       baseline: q.baseline({
         metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
       }),
-      filledDays: filledCountOf(points),
+      filledDays: filledCountOf(contributing),
     }
   },
 })

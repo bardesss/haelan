@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, baselineWindow } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
 import type { Stamp } from '../../api/etag.ts'
@@ -69,6 +69,22 @@ function stampOf(points: readonly DailyPoint[]): Stamp {
  */
 function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
   return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
+
+/**
+ * `points` narrowed to the ones `PersonQuery.baseline()` actually averages, by the identical
+ * filter it applies itself (packages/core/src/query/personQuery.ts).
+ *
+ * Needed because a coverage judged metric (steps, heart rate, ...) drops a barely observed day
+ * before averaging, so counting filled over the raw fetch overstates `of` against `baseline.n` -
+ * a real defect the scoped re-review caught (seeded steps gave `n: 4` but `of: 6`). Mirroring the
+ * filter here, through the same exported `coverageIsMeaningful`/`INSIGHT_MIN_COVERAGE` baseline()
+ * itself uses rather than a second invented threshold, keeps `filledDays.of` equal to `n` instead
+ * of merely close to it.
+ */
+function baselineContributingPoints(points: readonly DailyPoint[], metric: string): readonly DailyPoint[] {
+  const judgeCoverage = coverageIsMeaningful(metric)
+  return points.filter((point) => !(judgeCoverage && point.coverage !== null && point.coverage < INSIGHT_MIN_COVERAGE))
 }
 
 /**
@@ -155,13 +171,13 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own
     // window (the same rule baselineWindow names, which baseline() now calls too) is reopened
     // here through a fresh series() call, to read the two things baseline()'s return value drops:
-    // updatedAtMs for the stamp, and filled for filledDays. Precise for exactly the metrics that
-    // can ever be filled (daily_hrv, daily_spo2): coverageIsMeaningful is false for both, so
-    // baseline()'s own coverage filter never drops a row for them and this `points` array is the
-    // same set baseline() actually averaged over.
+    // updatedAtMs for the stamp, and filled for filledDays. Narrowed through
+    // baselineContributingPoints to the same days baseline() itself averaged, so filledDays.of
+    // equals baseline.n exactly rather than overcounting a day a coverage gate excluded.
     const { from, to } = baselineWindow(on, windowDays)
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, { baseline, filledDays: filledCountOf(points) }, [stampOf(points)])
+    const contributing = baselineContributingPoints(points, metric)
+    return sendStamped(reply, request, { baseline, filledDays: filledCountOf(contributing) }, [stampOf(points)])
   })
 
   app.get<{ Params: PersonParams, Querystring: InsightsQuery }>('/p/:personId/insights', async (request, reply) => {

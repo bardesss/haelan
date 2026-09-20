@@ -34,6 +34,7 @@ function seedDaily(input: {
   metric?: string
   agg?: string
   source?: string
+  coverage?: number | null
 }): void {
   test.db.insert(schema.daily).values({
     personId: 'robin',
@@ -42,7 +43,7 @@ function seedDaily(input: {
     agg: input.agg ?? 'sum',
     source: input.source ?? 'merged',
     value: input.value,
-    coverage: null,
+    coverage: input.coverage === undefined ? null : input.coverage,
     sourceMix: null,
     derivationVersion: DERIVATION_VERSION,
     updatedAtMs: null,
@@ -338,6 +339,25 @@ describe('get_baselines, filledDays', () => {
     }) as { filledDays: { filled: number, of: number } }
 
     expect(out.filledDays).toEqual({ filled: 1, of: 2 })
+  })
+
+  // The scoped re-review's own defect, reproduced: steps is coverage judged (an intraday tier
+  // metric), so baseline() drops a barely observed day before averaging. filledDays.of has to
+  // drop the same two days rather than counting all six fetched, or it overstates against
+  // baseline.n.
+  it('excludes a coverage gated day from filledDays.of the same way baseline.n excludes it', () => {
+    for (let day = 1; day <= 4; day += 1) {
+      seedDaily({ localDate: `2026-08-0${day}`, value: 1000, coverage: 0.9 })
+    }
+    seedDaily({ localDate: '2026-08-05', value: 1000, coverage: 0.1 })
+    seedDaily({ localDate: '2026-08-06', value: 1000, coverage: 0.1 })
+
+    const out = tool('get_baselines').run(q(), {
+      metric: 'steps', agg: 'sum', on: '2026-08-07', windowDays: 6,
+    }) as { baseline: { n: number } | null, filledDays: { filled: number, of: number } }
+
+    expect(out.baseline?.n).toBe(4)
+    expect(out.filledDays).toEqual({ filled: 0, of: 4 })
   })
 })
 
