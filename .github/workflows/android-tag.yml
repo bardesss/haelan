@@ -1,0 +1,77 @@
+name: Android tag
+
+# The missing half of the app's release automation, and the smallest thing that closes it.
+#
+# release-please owns apps/android's version: a feat or fix under that path opens its own release
+# pull request, and merging it bumps apps/android/package.json. It does NOT create the tag, because
+# the package carries skip-github-release so that android-release.yml can create the release itself
+# with the `Android <version>` title Obtainium filters on. force-tag-creation does not fill that gap
+# either, as it was assumed to: it forces the tag alongside a release it is creating, so skipping
+# the release skips the tag too. 0.2.2 bumped the manifest and shipped nothing because of that.
+#
+# So this creates the tag, and android-release.yml goes on being the one thing that builds and
+# publishes an APK, triggered exactly as it is by a tag pushed by hand.
+on:
+  push:
+    branches: [master]
+    # Only when the version file itself moves, which is what a merged release pull request does and
+    # what nothing else does.
+    paths: ['apps/android/package.json']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The tag is pushed back to this repository, and a push made with GITHUB_TOKEN does not
+          # trigger another workflow. That rule is the whole reason this file needs a PAT: without
+          # one the tag would appear and android-release.yml would never fire, which is the silent
+          # nothing-happened this exists to end. Failing loudly when the secret is absent is the
+          # point of the check below.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          fetch-depth: 0
+
+      - name: A token that can trigger a workflow
+        run: |
+          if [ -z "${{ secrets.RELEASE_PLEASE_TOKEN }}" ]; then
+            echo "::error::RELEASE_PLEASE_TOKEN is not set. A tag pushed with GITHUB_TOKEN does not"
+            echo "::error::trigger android-release.yml, so the tag would exist and no APK would be built."
+            exit 1
+          fi
+
+      - name: Read the version apps/android now carries
+        id: app
+        run: |
+          VERSION=$(node -p "require('./apps/android/package.json').version")
+          if [ -z "$VERSION" ]; then echo "::error::no version in apps/android/package.json"; exit 1; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=android-v$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Idempotent on purpose, and that is what makes this safe to re-run and safe to land while a
+      # version is already out: a tag pushed by hand, a re-run of this workflow, and a version that
+      # was released before this file existed all take the same branch and do nothing.
+      - name: Tag it, unless that tag is already there
+        env:
+          TAG: ${{ steps.app.outputs.tag }}
+          VERSION: ${{ steps.app.outputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists, nothing to do"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Annotated, because android-release.yml takes the release notes from the annotation:
+          # gh release create --notes-from-tag falls back to the commit message on a lightweight
+          # tag, and that commit is a release-please chore rather than anything a reader wants.
+          git tag -a "$TAG" -m "Hælan $VERSION for Android. See apps/android/CHANGELOG.md for what changed."
+          git push origin "$TAG"
