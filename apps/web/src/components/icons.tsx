@@ -149,7 +149,13 @@ export function Icon({ name }: { name: string }) {
   const path = PATHS[name]
   if (!path) return null
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    // width and height are a floor, not the size: every surface that renders an Icon sets its own
+    // in app.css, and a stylesheet rule beats a presentation attribute, so nothing that already
+    // sizes one changes. What they stop is the other case. An svg carrying a viewBox and no
+    // dimensions is sized by its container, so a surface that forgot the rule did not get a
+    // slightly wrong icon, it got one as tall as the card it sat in. That shipped on the settings
+    // Info tab, which the layout harness does not open.
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
          strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {path}
     </svg>
