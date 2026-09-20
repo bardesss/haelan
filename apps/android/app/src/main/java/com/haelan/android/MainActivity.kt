@@ -274,11 +274,25 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         return getString(R.string.status_at, base, SyncStatus.formatAt(last))
     }
 
+    /**
+     * Why a type failed, for the types that did, kept from the last paint.
+     *
+     * The status line has two writers, this screen's own tick and the run's paint, and before this
+     * they fought: paint set the reason, refreshSyncStatus overwrote the words from the prefs a
+     * moment later and left the colour behind, so a row ended up red and still saying "never
+     * synced". One writer now, and this is what it needs that the prefs cannot tell it.
+     */
+    private var failureReasons: Map<String, String> = emptyMap()
+
     private fun refreshSyncStatus() {
         if (rowStatus.isEmpty()) return
         val nowMs = System.currentTimeMillis()
         for ((key, view) in rowStatus) {
-            view.text = statusText(key, nowMs)
+            // A failure outranks the prefs sentence. The prefs know when a type last succeeded,
+            // which stays true and stays useless while the reason it is failing now goes unsaid.
+            val reason = failureReasons[key]
+            view.text = reason ?: statusText(key, nowMs)
+            view.setTextColor(getColor(if (reason != null) R.color.negative else R.color.text_secondary))
         }
     }
 
@@ -456,25 +470,17 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
      * created by a rotation shows the run that is still going instead of an idle button.
      */
     override fun paint(status: SyncRunState.Status) {
+        // Handed to the one writer of the status line rather than written here, so a tick landing
+        // a moment later cannot overwrite the words and leave the colour.
+        failureReasons = status.reasons
+        refreshSyncStatus()
         syncButton.isEnabled = !status.running
         syncButton.setText(if (status.running) R.string.sync_working else R.string.sync_action)
         for ((key, box) in rowStates) {
             when (status.marks[key]) {
                 SyncRunState.Mark.RUNNING -> box.running()
                 SyncRunState.Mark.SENT -> box.synced()
-                SyncRunState.Mark.FAILED -> {
-                    box.failed()
-                    // The red dot says something went wrong and cannot say what. The sentence
-                    // beneath it can, and the app has had it all along: it was going to logcat,
-                    // which is not a place anybody reads from the phone they are holding.
-                    // Diagnosing a type that would not send meant reading the source instead.
-                    status.reasons[key]?.let { reason ->
-                        rowStatus[key]?.apply {
-                            text = reason
-                            setTextColor(getColor(R.color.negative))
-                        }
-                    }
-                }
+                SyncRunState.Mark.FAILED -> box.failed()
                 // A type with nothing behind it and a type the run never reached show the same box:
                 // what keeps "nothing there" and "never ran" apart is the sentence below, and that
                 // sentence is read from the prefs rather than drawn from the mark.
