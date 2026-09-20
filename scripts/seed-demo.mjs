@@ -92,7 +92,14 @@ try {
   // from birth would have nothing for runRebuild to pick up.
   seedPerson(instance.db, PERSON_ID, { displayName: 'Demo' })
 
-  const seeded = seedArchive({ archive: instance.archive, personId: PERSON_ID, days, endMs })
+  // demoRoute: true is what makes this call different from every other caller of seedArchive,
+  // including packages/core/test/seed.test.ts's own "seeds no workout route". Task 7 proved a
+  // real GPS trace cannot reach the demo through the ordinary capture path; this is the other
+  // half of that finding - the demo should still show the route feature, on a route obviously
+  // fabricated for the purpose (seed.ts's syntheticRoute: a perfect circle over open ocean,
+  // nowhere near this household), rather than shipping a capability nobody can see without
+  // installing the app and going for a run.
+  const seeded = seedArchive({ archive: instance.archive, personId: PERSON_ID, days, endMs, demoRoute: true })
 
   const report = runRebuild({
     db: instance.db,

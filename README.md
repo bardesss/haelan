@@ -5,8 +5,9 @@
 *Hælan* is Old English for "to heal, to make whole" — the root of both *heal* and *health*. The
 package, the image and the command are all `haelan`.
 
-**A self-hosted dashboard and local mirror for your own health data, built on the Google Health
-API v4.** One household, one instance, no telemetry, no hosted offering.
+**A self-hosted dashboard and local mirror for your own health data, read from Google's Health API
+or, for an all-Android household, from a companion app that needs no Google Cloud project at
+all.** One household, one instance, no telemetry, no hosted offering.
 
 [![CI](https://github.com/bardesss/haelan/actions/workflows/ci.yml/badge.svg)](https://github.com/bardesss/haelan/actions/workflows/ci.yml)
 [![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
