@@ -46,10 +46,10 @@ jobs:
       # keeps a single implementation.
       #
       # scripts/print-android-release-version.mjs is a .mjs file importing the .ts module directly,
-      # the same shape as every other script here that reaches into TypeScript
-      # (check-enum-drift.mjs, seed-demo.mjs). `node -e` with a dynamic `import()` of a template
-      # string was tried first and dropped: it is not the route vitest or vite take to load a .ts
-      # file, and it was never proven against this Node version, only assumed.
+      # the same shape scripts/generate-tools-doc.mjs and package.json's "start" script already
+      # use to reach TypeScript from a raw node process. `node -e` with a dynamic `import()` of a
+      # template string was tried first and dropped: it is not the route vitest or vite take to
+      # load a .ts file, and it was never proven against this Node version, only assumed.
       - name: Read the version from the tag
         id: version
         run: node --experimental-strip-types scripts/print-android-release-version.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"

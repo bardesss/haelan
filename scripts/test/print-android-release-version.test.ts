@@ -9,9 +9,16 @@ import { spawnSync } from 'node:child_process'
 // `pnpm docs:tools` is a CI step -- so without this test the exact command the workflow depends on
 // has no coverage on any leg of the matrix.
 function run(args: string[]) {
-  return spawnSync('node', ['--experimental-strip-types', 'scripts/print-android-release-version.mjs', ...args], {
+  const result = spawnSync('node', ['--experimental-strip-types', 'scripts/print-android-release-version.mjs', ...args], {
     encoding: 'utf8',
   })
+  // spawnSync sets `status: null` when the process never ran at all -- node not found, or some
+  // other spawn failure -- and leaves `error` set instead. `not.toBe(0)` alone cannot tell that
+  // apart from "the script ran and refused the tag": null is not 0 either, so a failure case would
+  // pass here for the wrong reason. Asserting this first makes every case below actually about
+  // what the script printed and how it exited, not about whether it ran.
+  expect(result.error).toBeUndefined()
+  return result
 }
 
 describe('print-android-release-version.mjs, run the way the release workflow runs it', () => {
