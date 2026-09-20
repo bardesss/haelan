@@ -1,5 +1,7 @@
 import { parseDayMetricTarget } from '@haelan/core/target-key'
 import type { StoredOverride } from './useAnnotations.js'
+import type { SeriesPoint } from './useSeries.js'
+import type { Translate } from '../format.js'
 
 /**
  * What one metric's chart needs to draw the overrides that touch it: which days were excluded, and
@@ -85,4 +87,27 @@ export function overridesByMetric(items: readonly StoredOverride[]): Map<string,
 /** `byMetric`'s own entry for `metric`, or the shared empty pair when nothing targets it. */
 export function annotationsFor(byMetric: Map<string, MetricAnnotations>, metric: string): MetricAnnotations {
   return byMetric.get(metric) ?? NONE
+}
+
+// The same shared-empty-array device NONE above is, for the same reason: most calls carry no
+// filled day at all, and a fresh [] on every one of those would hand a chart's build callback a
+// new identity on a render that changed nothing (chart-lifecycle.test.tsx).
+const NO_FILLED: { date: string; text: string }[] = Object.freeze([]) as never[]
+
+/**
+ * One synthetic annotation per day `DailyPoint.filled` marked true (personQuery.ts): the daily
+ * name itself had no row that date, and the value drawn is DEVICE_ROLLED_EQUIVALENT's intraday
+ * mean standing in for it. A chart has no channel of its own for "this number is real but is not
+ * what you think it is" beyond the one an override reason already uses, so a filled day rides the
+ * same `{date, text}` shape into the same dashed mark and the same accessible table note a reason
+ * gets, rather than a second, unexplained visual language living beside it.
+ *
+ * Only `daily_hrv` and `daily_spo2` points can ever be filled (DEVICE_ROLLED_EQUIVALENT names no
+ * other metric), so this is safe to call for any metric's points: it answers the shared empty
+ * array for every one of them that never falls back.
+ */
+export function filledAnnotationsFrom(points: readonly SeriesPoint[], t: Translate): { date: string; text: string }[] {
+  const filled = points.filter((point) => point.filled)
+  if (filled.length === 0) return NO_FILLED
+  return filled.map((point) => ({ date: point.localDate, text: t('charts.filled.note') }))
 }

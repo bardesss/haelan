@@ -55,6 +55,11 @@ export const PROVIDER_METRICS = new Set(['floors', 'total_calories'])
  * (personQuery.ts: a row derived before M3b added the column, or one no rebuild has touched
  * since), so it stays overridable, but the ordinary row carries a number and a default that does
  * not is the same kind of unrepresentative stub this helper exists to stop.
+ *
+ * filled defaults to false, the ordinary row's own shape: DEVICE_ROLLED_EQUIVALENT
+ * (personQuery.ts) can only ever mark daily_hrv or daily_spo2 filled, so every other metric's stub
+ * is unrepresentative if it says otherwise, and a caller exercising the filled path passes
+ * `{ filled: true }` through overrides rather than this helper guessing at it from `metric`.
  */
 export function seriesPoint(
   metric: string, localDate: string, value: number, overrides: Partial<SeriesPoint> = {},
@@ -66,6 +71,7 @@ export function seriesPoint(
     source: 'merged',
     sourceMix: null,
     updatedAtMs: 1_755_000_000_000,
+    filled: false,
     ...overrides,
   }
 }

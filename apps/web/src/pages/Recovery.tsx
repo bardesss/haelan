@@ -22,7 +22,7 @@ import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
 import { useAnnotations } from '../data/useAnnotations.js'
-import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
@@ -197,6 +197,20 @@ export function Recovery() {
   const metricGroups = useMetricGroups(GROUPS, range)
   const lastSeries = metricGroups.queryForAgg('last')
 
+  // daily_hrv is the one metric card() below can ever draw a filled point for (DEVICE_ROLLED_EQUIVALENT
+  // names no other metric this page reads). Folded onto dayAnnotationsByMetric once here, the same
+  // place sparklines below is built, rather than inside card(): card() runs once per card, and a
+  // fresh concatenation there would hand every render a new annotations array identity for a range
+  // that did not change, which disposes and reinitialises the chart (chart-lifecycle.test.tsx).
+  const dayAnnotationsByMetricWithFilled = useMemo(() => {
+    const filled = filledAnnotationsFrom(metricGroups.pointsOf('daily_hrv'), t)
+    if (filled.length === 0) return dayAnnotationsByMetric
+    const merged = new Map(dayAnnotationsByMetric)
+    const base = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'daily_hrv')
+    merged.set('daily_hrv', [...base, ...filled])
+    return merged
+  }, [dayAnnotationsByMetric, dayAnnotations, metricGroups.pointsOf('daily_hrv'), t])
+
   // Which of the respiratory card's two names this render draws, decided from the data rather than
   // from a preference: the day's own series when it has a row in the range, the night's otherwise.
   // See RESPIRATORY_FALLBACK above for why the card is allowed to fall back at all and why the
@@ -308,7 +322,7 @@ export function Recovery() {
     const note = baselineNote(t, headline, baselineQuery, metric, i18n.language, controls.historicalTo)
     const spark = sparklines.get(metric)!
     const { excluded } = annotationsFor(overridesByMetricMap, metric)
-    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetricWithFilled, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={4} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         oneDayRange={controls.tab === 'day'}

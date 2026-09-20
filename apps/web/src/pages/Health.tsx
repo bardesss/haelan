@@ -22,7 +22,7 @@ import { useBaseline } from '../data/useBaseline.js'
 import type { Baseline } from '../data/useBaseline.js'
 import { useInsight } from '../data/useInsight.js'
 import { useAnnotations } from '../data/useAnnotations.js'
-import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
@@ -179,6 +179,20 @@ export function Health() {
   const dailySpo2Points = metricGroups.pointsOf('daily_spo2')
   const dailySpo2Overrides = annotationsFor(overridesByMetricMap, 'daily_spo2')
   const dailySpo2Annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'daily_spo2')
+  // daily_spo2 is the one metric on this page DEVICE_ROLLED_EQUIVALENT (personQuery.ts) can ever
+  // mark filled, so the merge is built here rather than as a second, generic helper this page has
+  // only one caller for. filledAnnotationsFrom already answers the same shared empty array by
+  // identity whenever nothing is filled, so the common case costs no new array either way, and
+  // this useMemo only allocates on a render that actually has a filled day to show.
+  const dailySpo2FilledAnnotations = useMemo(
+    () => filledAnnotationsFrom(dailySpo2Points, t), [dailySpo2Points, t],
+  )
+  const dailySpo2AnnotationsWithFilled = useMemo(
+    () => (dailySpo2FilledAnnotations.length === 0
+      ? dailySpo2Annotations
+      : [...dailySpo2Annotations, ...dailySpo2FilledAnnotations]),
+    [dailySpo2Annotations, dailySpo2FilledAnnotations],
+  )
   const dailySpo2Spark = useMemo(
     () => denseSeries(rangeDates, dailySpo2Points), [rangeDates, dailySpo2Points],
   )
@@ -279,7 +293,7 @@ export function Health() {
                 <Sparkline values={dailySpo2Spark.values} labels={dailySpo2Spark.labels} metric="daily_spo2"
                   label={t('health.dailySpo2.chartLabel', { period })} unit={t('health.units.percent')}
                   baseline={dailySpo2Band}
-                  annotations={dailySpo2Annotations} excluded={dailySpo2Overrides.excluded}
+                  annotations={dailySpo2AnnotationsWithFilled} excluded={dailySpo2Overrides.excluded}
                   onPointClick={(localDate) => setAnnotateTarget({ scope: 'day_metric', localDate, metric: 'daily_spo2' })} />
               )}
             </StatTile>

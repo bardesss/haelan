@@ -22,13 +22,23 @@ const DAILY_SOURCE = z.string().optional().describe(
   + 'provider row where there is not.',
 )
 
+// Shared by query_series and get_daily, the two tools that answer a raw daily reading rather than
+// a computed statistic (a baseline, a trend, a period comparison): those average or smooth across
+// many days, and which of the contributing days were filled is a different, harder question this
+// catalogue does not try to answer yet. A point-level reading has no such excuse.
+const FILLED_DESCRIPTION =
+  'True when the daily name itself had no row this date and this value is that day\'s intraday '
+  + 'average standing in for it, not the device\'s own daily summary. Say so in words when reporting '
+  + 'a filled reading; do not state it as a measurement.'
+
 export const querySeries = defineTool({
   name: 'query_series',
   description:
     'A daily metric over a date range, oldest first. Returns at most a few hundred points: a '
     + 'longer range is downsampled and `reduction` says so, so read `summary` for the true extremes '
     + 'rather than assuming the points are every day. Report findings with their coverage, and as '
-    + 'association rather than cause.',
+    + 'association rather than cause. Some readings are marked `filled`; see that field before '
+    + 'calling a filled day a measurement.',
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
@@ -41,6 +51,7 @@ export const querySeries = defineTool({
     points: z.array(z.object({
       localDate: z.string(), value: z.number(),
       coverage: z.number().nullable(), source: z.string(),
+      filled: z.boolean().describe(FILLED_DESCRIPTION),
     })),
     reduction: REDUCTION,
     summary: SUMMARY,
@@ -53,6 +64,7 @@ export const querySeries = defineTool({
     return {
       points: result.points.map((p) => ({
         localDate: p.localDate, value: p.value, coverage: p.coverage, source: p.source,
+        filled: p.filled,
       })),
       reduction: result.reduction,
       summary: summaryOf(result.points.map((p) => p.value)),
@@ -89,7 +101,8 @@ export const getDaily = defineTool({
     + 'naming that metric and that aggregate, rather than silently dropped from the answer. A metric '
     + 'with no row that day answers null rather than being left out, so a caller can tell "zero" '
     + 'from "not measured" — the same distinction a missing daily row always carries elsewhere on '
-    + 'this surface.',
+    + 'this surface. Some readings are marked `filled`; see that field before calling a filled day '
+    + 'a measurement.',
   inputSchema: {
     localDate: z.string().describe('YYYY-MM-DD'),
     metrics: z.array(z.string()).min(1),
@@ -108,6 +121,9 @@ export const getDaily = defineTool({
       value: z.number().nullable(),
       coverage: z.number().nullable(),
       source: z.string().nullable(),
+      // Null alongside value/coverage/source for the same reason those three are: nothing was
+      // measured that day, so whether it would have been filled is not a question with an answer.
+      filled: z.boolean().nullable().describe(FILLED_DESCRIPTION),
     })),
   },
   run: (q, args) => ({
@@ -127,6 +143,7 @@ export const getDaily = defineTool({
         value: point?.value ?? null,
         coverage: point?.coverage ?? null,
         source: point?.source ?? null,
+        filled: point?.filled ?? null,
       }
     }),
   }),

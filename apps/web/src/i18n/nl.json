@@ -582,6 +582,9 @@
       "none": "geen",
       "notStaged": "Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen."
     },
+    "filled": {
+      "note": "Geschat op basis van het gemiddelde over de dag, niet het eigen dagoverzicht van het apparaat"
+    },
     "hrTooltip": {
       "mean": "gemiddeld {{value}} {{unit}}",
       "range": "bereik {{min}} tot {{max}} {{unit}}"

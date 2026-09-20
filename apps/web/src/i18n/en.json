@@ -582,6 +582,9 @@
       "none": "none",
       "notStaged": "This night was not staged, so there is nothing to total."
     },
+    "filled": {
+      "note": "Estimated from the intraday average, not the device's own daily summary"
+    },
     "hrTooltip": {
       "mean": "mean {{value}} {{unit}}",
       "range": "range {{min}} to {{max}} {{unit}}"

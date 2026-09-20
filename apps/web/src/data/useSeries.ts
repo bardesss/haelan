@@ -17,6 +17,12 @@ export interface SeriesPoint {
   source: string
   sourceMix: string | null
   updatedAtMs: number | null
+  // True when the daily name itself had no row this date and the value is
+  // DEVICE_ROLLED_EQUIVALENT's intraday mean standing in for it (personQuery.ts's own comment on
+  // DailyPoint.filled). Required, not optional: an omitted field here would read as false through
+  // every `point.filled` check downstream, which is exactly the silent "measured" claim this field
+  // exists to rule out.
+  filled: boolean
 }
 
 export interface MetricSeries {

@@ -3,7 +3,7 @@ import { emptyStateFor, wornOn, coverageIsWearSignal, NOT_WORN_MAX_COVERAGE, hid
 import type { SeriesPoint } from '../src/data/useSeries.js'
 
 const point = (value: number | null, coverage: number | null): SeriesPoint =>
-  ({ localDate: '2026-08-01', source: 'test', value: value ?? 0, coverage, sourceMix: null, updatedAtMs: null })
+  ({ localDate: '2026-08-01', source: 'test', value: value ?? 0, coverage, sourceMix: null, updatedAtMs: null, filled: false })
 
 // A continuously sampled metric, so its coverage is a statement about wear.
 const WORN = 'steps'
