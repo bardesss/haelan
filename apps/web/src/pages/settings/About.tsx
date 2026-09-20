@@ -2,6 +2,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { Icon } from '../../components/icons.js'
 import { useSession } from '../../auth/session.js'
 import { useUpdateStatus, useSetUpdateCheck, isNewer } from '../../data/useUpdateCheck.js'
+import { useRouteBasemapStatus, useSetRouteBasemap } from '../../data/useRouteBasemap.js'
 
 /**
  * The project's own links, exported so the test can assert what they point at without scraping
@@ -54,6 +55,8 @@ export function About() {
   const session = useSession()
   const status = useUpdateStatus()
   const setEnabled = useSetUpdateCheck()
+  const basemap = useRouteBasemapStatus()
+  const setBasemap = useSetRouteBasemap()
   const isAdmin = session.data?.isAdmin === true
 
   return (
@@ -87,6 +90,20 @@ export function About() {
           decide against a sentence they only see after saying yes. */}
       {isAdmin && <p className="basis">{t('settings.about.update.sends')}</p>}
       {setEnabled.isError && <p className="form-error" role="alert">{setEnabled.error.message}</p>}
+      {/* The basemap switch: an admin's, for the same reason the update switch above is, and off
+          until the query answers for the same reason too. WorkoutRoute.tsx reads this setting for
+          every member's own workout pages, but only an admin decides it - a route's first and
+          last point is usually this household's own address, which is why the sentence below says
+          what a tile request costs rather than leaving that to a reader who has already said yes. */}
+      {isAdmin && basemap.data !== undefined && (
+        <label className="about-update-toggle">
+          <input type="checkbox" checked={basemap.data.enabled} disabled={setBasemap.isPending}
+                 onChange={(event) => setBasemap.mutate({ enabled: event.currentTarget.checked })} />
+          <span>{t('settings.about.routeBasemap.toggle')}</span>
+        </label>
+      )}
+      {isAdmin && <p className="basis">{t('settings.about.routeBasemap.sends')}</p>}
+      {setBasemap.isError && <p className="form-error" role="alert">{setBasemap.error.message}</p>}
       <ul className="about-links">
       {PROJECT_LINKS.map((link) => (
         <li key={link.href}>

@@ -7,6 +7,7 @@ import { checkForUpdate } from '../updates.ts'
 interface HorizonBody { days?: unknown }
 interface InstanceUrlBody { baseUrl?: unknown }
 interface UpdateCheckBody { enabled?: unknown }
+interface RouteBasemapBody { enabled?: unknown }
 
 // Post-setup routes: reachable once the wizard finishes and answered with setup_incomplete
 // before that, unlike /api/setup/*, which the gate closes the moment setup is done. The
@@ -133,5 +134,29 @@ export function registerSettings(app: FastifyInstance): void {
     if (!enabled) return reply.send({ enabled: false, latest: null, checkedAtMs: null, reachable: true })
     const result = await checkForUpdate(app.haelan.now())
     return reply.send({ enabled: true, ...result })
+  })
+
+  /**
+   * Whether a workout's route card may fetch map tiles from a third party to draw a basemap.
+   *
+   * requireSession for the GET, the same split updateCheckEnabled's own GET takes above: every
+   * member who opens a workout page needs this to decide what WorkoutRoute.tsx renders, not just
+   * an admin. Off by default answers here without touching the network - a route's first and last
+   * point is usually this household's own address, and there is nothing cached behind the flag
+   * from before it was turned off, the same honesty updateCheckEnabled's own comment argues for.
+   */
+  app.get('/api/settings/route-basemap', { preHandler: [app.requireSession] }, async (_request, reply) =>
+    reply.send({ enabled: stores().settings.routeBasemapEnabled() }))
+
+  // requireAdmin for the reason updateCheckEnabled's PUT gives, sharper here: this decides whether
+  // the instance talks to a third party at all, and what leaves is coordinates rather than a
+  // version string.
+  app.put<{ Body: RouteBasemapBody }>('/api/settings/route-basemap', { preHandler: [app.requireSession, app.requireAdmin] }, async (request, reply) => {
+    const { enabled } = request.body ?? {}
+    if (typeof enabled !== 'boolean') {
+      return reply.code(400).send(errorBody('config', 'config', 'enabled must be true or false'))
+    }
+    stores().settings.putRouteBasemapEnabled(enabled, app.haelan.now())
+    return reply.send({ enabled })
   })
 }

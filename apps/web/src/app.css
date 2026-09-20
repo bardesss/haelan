@@ -416,6 +416,13 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .workout-route-trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .workout-route-point { fill: var(--accent); }
 
+/* The basemap MapLibre draws into when the route-basemap setting (About.tsx) is on, in place of
+   the svg trace above. A fixed height rather than `height: auto`: there is no viewBox to size this
+   one from, and MapLibre itself needs the element to already have real pixel dimensions before it
+   reads them to size its own canvas. position: relative is MapLibre's own requirement - its
+   attribution and zoom controls are absolutely positioned children of this box. */
+.workout-route-map { width: 100%; height: 320px; position: relative; border-radius: var(--radius-md); overflow: hidden; }
+
 /* WorkoutComparison.tsx's own sentence list, one per compared facet - a plain list, not a table,
    since each row is a full sentence rather than a value under a column header. */
 .workout-comparison { margin: 0; padding-left: var(--space-4); }

@@ -1147,6 +1147,10 @@
         "toggle": "Controleer GitHub op nieuwe releases",
         "sends": "Als dit aanstaat, vraagt deze instantie elke zes uur bij GitHub naar de nieuwste release. GitHub ziet een verzoek vanaf het adres van deze instantie; er wordt niets over het huishouden, de gegevens of de versie meegestuurd."
       },
+      "routeBasemap": {
+        "toggle": "Toon een kaartondergrond onder de route van een training",
+        "sends": "Als dit aanstaat, haalt deze instantie kaarttegels op bij een externe kaartaanbieder om een kaartondergrond onder elke trainingsroute te tekenen. Die aanbieder ziet de coördinaten van elke getekende route, inclusief waar elke route begint en eindigt, meestal thuis."
+      },
       "documentation": "Documentatie",
       "changelog": "Wijzigingslogboek",
       "issues": "Problemen"

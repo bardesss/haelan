@@ -52,6 +52,9 @@ export interface InstanceSettingsRow {
   backupIntervalHours: number | null
   /** Whether this instance may ask GitHub about newer releases. False until an admin says so. */
   updateCheckEnabled: boolean
+  /** Whether a workout's route card may fetch map tiles from a third party. False until an admin
+   *  says so - see putRouteBasemapEnabled's own comment for why the default matters more here. */
+  routeBasemapEnabled: boolean
   companionMode: boolean
 }
 
@@ -82,6 +85,7 @@ export class SettingsStore {
       backupKeep: row.backupKeep ?? null,
       backupIntervalHours: row.backupIntervalHours ?? null,
       updateCheckEnabled: row.updateCheckEnabled,
+      routeBasemapEnabled: row.routeBasemapEnabled,
       companionMode: row.companionMode,
     }
   }
@@ -206,6 +210,24 @@ export class SettingsStore {
 
   putUpdateCheckEnabled(enabled: boolean, nowMs: number): void {
     this.#db.update(instanceSettings).set({ updateCheckEnabled: enabled, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  /**
+   * Whether a workout's route card may fetch map tiles from a third party to draw a basemap.
+   *
+   * Total, like updateCheckEnabled above and for the same reason: no row exists until the wizard
+   * writes one, and "no row" has to mean the default rather than a crash. The default matters more
+   * here than there - a route's first and last point is usually this household's own address, and
+   * a tile request is what tells the map provider where that is, on every workout, not once every
+   * six hours.
+   */
+  routeBasemapEnabled(): boolean {
+    return this.get()?.routeBasemapEnabled ?? false
+  }
+
+  putRouteBasemapEnabled(enabled: boolean, nowMs: number): void {
+    this.#db.update(instanceSettings).set({ routeBasemapEnabled: enabled, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 

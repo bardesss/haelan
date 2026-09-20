@@ -1,0 +1,1 @@
+ALTER TABLE `instance_settings` ADD `route_basemap_enabled` integer DEFAULT false NOT NULL;

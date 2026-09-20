@@ -1,7 +1,66 @@
+import { useEffect, useRef } from 'react'
+import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl'
 import { useTranslation } from '../../i18n/index.js'
 import { Card } from '../../components/Card.js'
 import { formatNumber } from '../../format.js'
+import { useRouteBasemapStatus } from '../../data/useRouteBasemap.js'
 import type { RoutePoint } from '../../data/useSessions.js'
+
+// `import type` only, above: erased entirely at compile time, so naming MapLibre's own type here
+// costs the off-by-default household nothing. The one place the library's *value* is named is the
+// dynamic import() inside the effect below, reached only when the setting this task adds is on -
+// see that effect's own comment for why a static import anywhere in this file would undo it.
+const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+
+/**
+ * The style handed to MapLibre when the basemap setting is on: one raster source, OpenStreetMap's
+ * own tile server, and one layer that draws it. A pure function and exported, not built inline in
+ * the effect, so a test can assert what a household that switches this on is actually pointed at
+ * without mounting a WebGL canvas to find out - this suite has no browser layout coverage able to
+ * do that (WorkoutRoute.tsx's own module comment, further down, names the same gap for the trace).
+ */
+export function basemapStyle(): StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: [TILE_URL],
+        tileSize: 256,
+        attribution: '© OpenStreetMap contributors',
+      },
+    },
+    layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+  }
+}
+
+/** The bounding box MapLibre fits the map to on load: every recorded point's own extremes, in the
+ *  [[west, south], [east, north]] shape its own `bounds` option takes. */
+export function routeBounds(points: readonly RoutePoint[]): [[number, number], [number, number]] {
+  const lons = points.map((point) => point.longitude)
+  const lats = points.map((point) => point.latitude)
+  return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]]
+}
+
+/** The one shape addSource's geojson data option needs, spelled out locally rather than pulled
+ *  from @types/geojson: that package sits nested under maplibre-gl's own dependency tree, not
+ *  hoisted anywhere this file's typeRoots would find it, and a LineString feature is small enough
+ *  to write once rather than fight the module graph for. */
+interface RouteLineFeature {
+  type: 'Feature'
+  properties: Record<string, never>
+  geometry: { type: 'LineString', coordinates: [number, number][] }
+}
+
+/** The route as one GeoJSON LineString feature, the shape a `geojson` source takes. Longitude
+ *  first, the same axis order projectRoute's own xs/ys keep, because GeoJSON's is [lon, lat]. */
+export function routeGeoJSON(points: readonly RoutePoint[]): RouteLineFeature {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'LineString', coordinates: points.map((point) => [point.longitude, point.latitude]) },
+  }
+}
 
 /** The longer side of the drawn box, in view units. The shorter side is whatever the route's own
  *  aspect ratio makes it - see projectRoute below. */
@@ -54,11 +113,14 @@ export function projectRoute(
  * reasons no reader could see, on the same page. One fact, one figure: the provider's, already on
  * the page, consistent with every other tile. This card draws where, not how far or how high.
  *
- * No basemap and no library - Task 6 adds MapLibre behind a setting, by dynamic import, so a
- * household that never turns a basemap on never downloads it; a static import here would ship it
- * to everyone regardless of the setting, which is the whole arrangement this card exists to
- * protect. This card fetches nothing of its own and imports nothing beyond what the page already
- * loaded with the session.
+ * A basemap under the trace, when the instance-wide setting below is on - off by default, because
+ * a route's first and last point is usually this household's own address, and a tile request is
+ * what tells a map provider where that is. See About.tsx's own sentence at the switch for what a
+ * tile request sends; this file's job is only to never send one when the setting is off, which is
+ * why MapLibre is reached exclusively through the dynamic import() inside the effect below rather
+ * than a static import at the top of this module - a static one would ship the library to every
+ * household that opens a workout page, on or off, undoing the whole point of Task 5 drawing the
+ * trace by hand so that a household which never turns this on never downloads it.
  *
  * `route` is typed as possibly undefined, not trusted as the always-present array
  * WorkoutSessionDetail declares it: WorkoutSplits.tsx's own comment on `autoSplits`/`laps` gives
@@ -75,6 +137,50 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
   const { t, i18n } = useTranslation()
   const language = i18n.language
   const recorded = route ?? []
+  const mapContainerRef = useRef<HTMLDivElement | null>(null)
+  // Undefined while the query is in flight, which reads as false below - the same "say nothing
+  // rather than guess" the off-by-default setting itself argues for: a card that assumed the
+  // basemap was on before the answer came back could start the very network request this design
+  // exists to gate.
+  const basemap = useRouteBasemapStatus()
+  const basemapEnabled = basemap.data?.enabled === true
+
+  // Every hook above the empty-route early return below, never the other way round: React calls
+  // hooks in the order a component declares them, on every render, and an early return ahead of
+  // one would call it on some renders and not others.
+  useEffect(() => {
+    if (!basemapEnabled || recorded.length === 0) return
+    let cancelled = false
+    let map: MapLibreMap | undefined
+    // The one place this file names MapLibre as a value rather than a type, and it is reached only
+    // once basemapEnabled is true - see the module comment above for why a static import anywhere
+    // else in this file would defeat the setting this effect exists to respect.
+    void import('maplibre-gl').then(({ Map }) => {
+      if (cancelled || mapContainerRef.current === null) return
+      const instance = new Map({
+        container: mapContainerRef.current,
+        style: basemapStyle(),
+        bounds: routeBounds(recorded),
+        fitBoundsOptions: { padding: 24 },
+      })
+      map = instance
+      // Added once the style's own tiles have somewhere to draw onto, not before - addSource on a
+      // map that has not fired 'load' throws.
+      instance.on('load', () => {
+        if (cancelled) return
+        instance.addSource('workout-route', { type: 'geojson', data: routeGeoJSON(recorded) })
+        instance.addLayer({
+          id: 'workout-route-line', type: 'line', source: 'workout-route',
+          paint: { 'line-color': '#2f6fed', 'line-width': 3 },
+        })
+      })
+    })
+    // cancelled guards the promise continuation above against a component that unmounted, or a
+    // setting that flipped off, before the import resolved; map?.remove() tears down the one that
+    // did finish constructing, on the same cleanup path.
+    return () => { cancelled = true; map?.remove() }
+  }, [basemapEnabled, recorded])
+
   if (recorded.length === 0) return null
 
   const n = (value: number, precision: number) => formatNumber(value, precision, language, '')
@@ -91,12 +197,19 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
   return (
     <Card span={12} label={t('activity.workout.route.label')}
       basis={t('activity.workout.route.basis', { count: n(recorded.length, 0) })}>
-      <svg className="workout-route-svg" viewBox={`0 0 ${viewWidth} ${viewHeight}`}
-        role="img" aria-label={description}>
-        {points.length === 1
-          ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
-          : <polyline className="workout-route-trace" points={linePoints} />}
-      </svg>
+      {basemapEnabled ? (
+        // The map itself is built imperatively by the effect above, onto this element once
+        // MapLibre resolves - nothing here names a tile URL or a source, so the off branch below
+        // renders no trace of either.
+        <div className="workout-route-map" ref={mapContainerRef} role="img" aria-label={description} />
+      ) : (
+        <svg className="workout-route-svg" viewBox={`0 0 ${viewWidth} ${viewHeight}`}
+          role="img" aria-label={description}>
+          {points.length === 1
+            ? <circle className="workout-route-point" cx={points[0]!.x} cy={points[0]!.y} r={POINT_RADIUS} />
+            : <polyline className="workout-route-trace" points={linePoints} />}
+        </svg>
+      )}
     </Card>
   )
 }

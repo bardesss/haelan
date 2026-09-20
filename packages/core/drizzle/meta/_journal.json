@@ -183,6 +183,13 @@
       "when": 1789927029994,
       "tag": "0025_shiny_blackheart",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1789931066709,
+      "tag": "0026_simple_proudstar",
+      "breakpoints": true
     }
   ]
 }

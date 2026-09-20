@@ -1147,6 +1147,10 @@
         "toggle": "Check GitHub for new releases",
         "sends": "Switched on, this instance asks GitHub for the newest release tag every six hours. GitHub sees a request from this instance's address; nothing about the household, its data or its version is sent."
       },
+      "routeBasemap": {
+        "toggle": "Show a basemap under a workout's route",
+        "sends": "Switched on, this instance fetches map tiles from a third-party map provider to draw a basemap under every workout route. That provider sees the coordinates of every route it draws, including where each one starts and ends, which is usually home."
+      },
       "documentation": "Documentation",
       "changelog": "Changelog",
       "issues": "Issues"

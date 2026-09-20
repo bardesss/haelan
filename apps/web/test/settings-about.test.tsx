@@ -10,6 +10,8 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { updateStatusKey, isNewer } from '../src/data/useUpdateCheck.js'
 import type { UpdateStatus } from '../src/data/useUpdateCheck.js'
+import { routeBasemapStatusKey } from '../src/data/useRouteBasemap.js'
+import type { RouteBasemapStatus } from '../src/data/useRouteBasemap.js'
 
 /**
  * Where the project's own links live.
@@ -32,6 +34,10 @@ const MEMBER: Session = {
  *  otherwise and so is the right default for a case that is not about the check. */
 const OFF: UpdateStatus = { enabled: false, latest: null, checkedAtMs: null, reachable: true }
 
+/** Same reasoning as OFF above, for the basemap switch beside it: every instance until an admin
+ *  turns it on, so it is the right default for a case that is not about the basemap itself. */
+const BASEMAP_OFF: RouteBasemapStatus = { enabled: false }
+
 /**
  * Renders with both answers this card reads already in the cache.
  *
@@ -39,10 +45,13 @@ const OFF: UpdateStatus = { enabled: false, latest: null, checkedAtMs: null, rea
  * render sees the state a case is about instead of the loading state every case would otherwise
  * share. An unseeded query would also reach the real network here.
  */
-function render(node: React.ReactNode, options: { lng?: string, status?: UpdateStatus, session?: Partial<Session> } = {}): string {
+function render(node: React.ReactNode, options: {
+  lng?: string, status?: UpdateStatus, basemap?: RouteBasemapStatus, session?: Partial<Session>
+} = {}): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
   client.setQueryData(queryKeys.session(), { ...MEMBER, ...options.session })
   client.setQueryData(updateStatusKey(), options.status ?? OFF)
+  client.setQueryData(routeBasemapStatusKey(), options.basemap ?? BASEMAP_OFF)
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <I18nProvider lng={options.lng ?? 'en'}>{node}</I18nProvider>
@@ -171,6 +180,47 @@ describe('what the card says about releases', () => {
   it('tells an admin what the check sends before they can switch it on', () => {
     const html = render(<About />, { session: { isAdmin: true } })
     expect(html).toContain('GitHub sees a request from this instance')
+  })
+})
+
+/**
+ * The route-basemap switch: this task's own reason to exist. Off by default, admin only, and the
+ * sentence at the switch says plainly what turning it on costs - the same three requirements the
+ * update check's own describe block above proves for its own switch, checked here against a
+ * different sentence and a different route.
+ */
+describe('what the card says about the route basemap', () => {
+  it('offers the switch to an admin and not to a member, both switches together', () => {
+    const admin = render(<About />, { session: { isAdmin: true } })
+    // Two admin-gated switches now share this page - the update check and this one - so the
+    // count is what actually tells them apart from a member's zero, not merely their presence.
+    expect(admin.match(/type="checkbox"/g)).toHaveLength(2)
+    expect(render(<About />)).not.toContain('type="checkbox"')
+  })
+
+  it('reflects the state the query answered, checked when the instance already has it on', () => {
+    // A checked boolean attribute renders as the bare attribute name in SSR markup, an unchecked
+    // one is left off the element entirely - the same shape React gives `disabled`, `readOnly` and
+    // every other boolean prop, so this counts occurrences of the attribute rather than parsing a
+    // value out of it.
+    expect(render(<About />, { session: { isAdmin: true }, basemap: { enabled: true } }).match(/checked=""/g))
+      .toHaveLength(1)
+    expect(render(<About />, { session: { isAdmin: true }, basemap: { enabled: false } }).match(/checked=""/g))
+      .toBeNull()
+  })
+
+  // Said in full, and said whether or not it is switched on, for the reason About.tsx's own
+  // comment on this block gives: a route's first and last point is usually this household's own
+  // address, and nobody can decide against a sentence they would only see after saying yes.
+  it('tells an admin what turning the basemap on costs, plainly, before they can switch it on', () => {
+    const html = render(<About />, { session: { isAdmin: true } })
+    expect(html).toContain('fetches map tiles from a third-party map provider')
+    expect(html).toContain('sees the coordinates of every route it draws')
+  })
+
+  it('says nothing about the basemap to a member, who has no switch to decide with', () => {
+    const html = render(<About />)
+    expect(html).not.toContain('map tiles')
   })
 })
 
