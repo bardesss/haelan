@@ -377,7 +377,13 @@ const ROUTES: readonly RouteCase[] = [
       body: JSON.stringify({ dataPoints: [], dataSource: {} }),
     }),
     ownNeedle: '1700000000000',
-    otherNeedle: '9999999999000',
+    // Not p2's windowStartMs. This route only ever reports a window start through
+    // historyStartMs, which is a minimum across every row it sees -- p1's own seed above is
+    // smaller, so p2's start could never surface here even with the person filter deleted
+    // outright. A leaked row instead lands in bySource under the same dataType:dataSource key
+    // as p1's own weight row (both requestParams omit dataSource, so both read as 'unknown'),
+    // and that merge takes the larger windowEndMs: p2's windowEndMs, one past its windowStartMs.
+    otherNeedle: '9999999999001',
   },
 ]
 

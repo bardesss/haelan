@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { sql, and, eq } from 'drizzle-orm'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sql } from 'drizzle-orm'
 import { openDatabase, closeDatabase } from '../src/db/open.ts'
 import { migrateToLatest } from '../src/db/migrate.ts'
 import { people, rawPayloads } from '../src/db/schema/index.ts'
@@ -356,19 +356,25 @@ describe('listForSource', () => {
   })
 
   it('asks SQL for the narrowed rows rather than narrowing afterwards', () => {
-    // The assertion is on the generated SQL because the property that matters is not visible in
-    // any answer: the same rows would come back either way, and the difference is a full walk of
-    // the largest table plus a JSON.parse per row, once an hour per open dashboard, on instances
-    // whose answer is null every time. Binding is asserted alongside it so a source cannot become
-    // a fragment of the statement it is tested against.
-    const built = db.select({ id: rawPayloads.id }).from(rawPayloads)
-      .where(and(
-        eq(rawPayloads.personId, 'p1'),
-        eq(rawPayloads.httpStatus, 200),
-        eq(sql`json_extract(${rawPayloads.requestParams}, '$.source')`, COMPANION_SOURCE),
-      )).toSQL()
+    // The assertion is on the statement listForSource itself sends to SQLite, not a hand built
+    // one beside it: a caller rewritten to select everything and filter in JS would return the
+    // same rows for this test's data, from a `prepare` call with no json_extract in it at all,
+    // and only inspecting what actually reached the client can tell those two apart. The
+    // property that matters -- a full walk of the largest table plus a JSON.parse per row, once
+    // an hour per open dashboard, on instances whose answer is null every time -- is not visible
+    // in any returned answer.
+    const prepareSpy = vi.spyOn(db.$client, 'prepare')
+    archive.put(phoneRow(1))
+    prepareSpy.mockClear()
 
-    expect(built.sql).toContain('json_extract')
-    expect(built.params).toContain(COMPANION_SOURCE)
+    const listed = archive.listForSource('p1', COMPANION_SOURCE)
+
+    expect(listed).toHaveLength(1)
+    const statements = prepareSpy.mock.calls.map(([text]) => text as string)
+    const narrowing = statements.find((text) => text.includes('json_extract'))
+    expect(narrowing).toBeDefined()
+    // Bound as a parameter rather than spliced into the text, so the source this is asked for
+    // can never become a fragment of the statement itself.
+    expect(narrowing).not.toContain(COMPANION_SOURCE)
   })
 })

@@ -81,8 +81,14 @@ describe('setupStep', () => {
     credentials.putRefreshToken({ personId: 'p1', refreshToken: 'r', scopes: ['a'], nowMs: 3 })
 
     // A member consenting later is what a mixed instance looks like, and it reopens nothing: the
-    // phone choice on people.companionPath survives beside the Google row.
+    // phone choice on people.companionPath survives beside the Google row. setupStep itself
+    // answers 'done' from the companionMode short-circuit alone, before it ever looks at either
+    // of these, so asserting only that would leave every line above unexercised - a client that
+    // silently failed to save, or a token nobody actually recorded, would say nothing here.
     people.setCompanionPath('p1', true)
+    expect(credentials.getClient()).not.toBeNull()
+    expect(credentials.listTokenPeople()).toContain('p1')
+    expect(people.list().find((p) => p.id === 'p1')?.companionPath).toBe(true)
     expect(setupStep({ accounts, settings, credentials, people })).toBe('done')
   })
 
@@ -94,6 +100,23 @@ describe('setupStep', () => {
     // fire on it - the step has to land somewhere the wizard can still finish from.
     fixture.db.$client.prepare('update instance_settings set companion_mode = 1').run()
     expect(setupStep({ accounts, settings, credentials, people })).toBe('google-client')
+  })
+
+  // The completion stamp alone is not enough once a client exists: markSetupComplete only ever
+  // records that the wizard was closed, and nothing stops a row from carrying that stamp with no
+  // path chosen at all - a restored backup taken mid consent, or a client pasted and the wizard
+  // abandoned right after. Both hasGoogle and hasPhone read false here, so this has to fall back
+  // to 'consent' rather than answer 'done' for an instance nobody has actually finished setting
+  // up for.
+  it('falls back to consent when setup is marked complete but nobody has connected a path', async () => {
+    await addAccount()
+    settings.put({ baseUrl: 'http://localhost:4235', consentPath: 'localhost', nowMs: 1 })
+    credentials.putClient({ clientId: 'id.apps.googleusercontent.com', clientSecret: 'secret', nowMs: 1 })
+    settings.markSetupComplete(2)
+
+    expect(credentials.listTokenPeople()).toEqual([])
+    expect(people.list().some((p) => p.companionPath)).toBe(false)
+    expect(setupStep({ accounts, settings, credentials, people })).toBe('consent')
   })
 
   // A backup restored without instance.key, at the point it is decided. The client secret is
