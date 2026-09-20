@@ -105,6 +105,11 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     // inside a companion payload describe where the phone read the value rather than a
     // source this instance could ever choose between. The archived body keeps them verbatim.
     const resolveSource = () => sources.resolve(personId, dataSource, nowMs)
+    // Resolved once, here, so the id below is a cache hit off the same registry the mapping
+    // step warms rather than a second write of its own. /companion/cursors reads this back out
+    // of requestParams to key its cursor on (type, source) instead of type alone -- the fix for
+    // a watch that syncs in late after the phone's own reading already moved a shared cursor.
+    const resolvedSourceId = resolveSource()
     const mapped = dataType.target === 'samples'
       ? {
         samples: mapWindowSamples({
@@ -170,7 +175,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       const { id, deduplicated } = archive.put({
         personId,
         dataType: dataType.id,
-        requestParams: { source: COMPANION_SOURCE, dataType: dataType.id },
+        requestParams: { source: COMPANION_SOURCE, dataType: dataType.id, dataSource: resolvedSourceId },
         fetchEpisodeId: randomUUID(),
         windowStartMs,
         windowEndMs,
