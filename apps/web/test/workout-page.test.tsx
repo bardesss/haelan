@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
-import type { WorkoutSession } from '../src/data/useSessions.js'
+import type { RoutePoint, WorkoutSession } from '../src/data/useSessions.js'
 import type { BanisterBasis } from '@haelan/core/cardio-load'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
@@ -60,6 +60,24 @@ export const RUN: WorkoutSession = {
 /** A session carrying nothing but its span: every optional card must be absent. */
 const BARE: WorkoutSession = {
   ...RUN, id: 'bare', attrs: { exerciseType: 'WALKING' },
+}
+
+/** A Google session that says plainly there was nothing to record - the one case with no sentence
+ *  at all, now that an absent exerciseMetadata means "unknown" rather than "false" (Task 7). */
+const NO_GPS: WorkoutSession = {
+  ...RUN, id: 'no-gps', attrs: { exerciseType: 'WALKING', exerciseMetadata: { hasGps: false } },
+}
+
+/** A companion session: no exerciseMetadata at all, the same shape SyncEngine.kt sends today
+ *  (task-3-report.md). Paired with a `route` below to cover both of its sentences: none when a
+ *  route has points, the "could not read" one when it has none. */
+const PHONE: WorkoutSession = {
+  ...RUN, id: 'phone', sourceId: 'phone', attrs: { exerciseType: 'RUNNING' },
+}
+
+const ROUTE_POINT: RoutePoint = {
+  atMs: Date.UTC(2026, 7, 3, 6, 10), latitude: 52.1, longitude: 4.3,
+  altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
 }
 
 const BASIS: BanisterBasis = {
@@ -175,7 +193,7 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
-  it('says a route was recorded only when the session says one was', async () => {
+  it('says a Google route was recorded and unreachable, when the provider flagged one and sent no points', async () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
@@ -186,13 +204,39 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
-  it('says nothing about a route when no GPS flag was recorded', async () => {
-    window.history.replaceState(null, '', '/activity/bare')
-    const restore = stub({ bare: BARE })
+  it('says nothing about a route when the provider said plainly there was nothing to record', async () => {
+    window.history.replaceState(null, '', '/activity/no-gps')
+    const restore = stub({ 'no-gps': NO_GPS })
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('says the route may be unreadable for a companion session with no exerciseMetadata and no points', async () => {
+    // PHONE carries no exerciseMetadata at all - the shape SyncEngine.kt sends today - so hasGps
+    // is null (this app has no metadata to speak from), not false. Task 7's third case.
+    window.history.replaceState(null, '', '/activity/phone')
+    const restore = stub({ phone: PHONE })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route may have been recorded for this workout. This app was not able to read it, so there is no map.',
+      )
+    } finally { restore() }
+  })
+
+  it('says the route is drawn below for a companion session that carried points, and drops the unreadable sentence', async () => {
+    window.history.replaceState(null, '', '/activity/phone')
+    const restore = stub({ phone: { ...PHONE, route: [ROUTE_POINT] } as WorkoutSession })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route was recorded for this workout, drawn below.',
+      )
     } finally { restore() }
   })
 

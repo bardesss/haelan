@@ -7,7 +7,7 @@ import { createTestDatabase, seedPerson } from '../src/testing/fixtures.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { seedArchive, localMidnightMs } from '../src/testing/seed.ts'
 import {
-  rawPayloads, samples, daily, sessions, sessionSegments, observations,
+  rawPayloads, samples, daily, sessions, sessionSegments, sessionRoutes, observations,
 } from '../src/db/schema/index.ts'
 import { openHaelan } from '../src/instance.ts'
 import { PeopleStore } from '../src/store/people.ts'
@@ -34,8 +34,42 @@ describe('seedArchive', () => {
       expect(test.db.select().from(daily).all()).toEqual([])
       expect(test.db.select().from(sessions).all()).toEqual([])
       expect(test.db.select().from(sessionSegments).all()).toEqual([])
+      expect(test.db.select().from(sessionRoutes).all()).toEqual([])
       expect(test.db.select().from(observations).all()).toEqual([])
     } finally { test.cleanup() }
+  })
+
+  // Task 7: the demo is built from this generator, and it is public and permanent, so a route
+  // reaching it would be a real coordinate published forever rather than a bug fixed on the next
+  // capture. Checked rather than assumed - exercisePoint (this file) never writes a `route` key, so
+  // mapSessions has nothing to read, but that is a fact about today's generator, not a guarantee
+  // this test would notice breaking on its own without asserting it after a real rebuild.
+  // openHaelan and runRebuild, not a raw payload check, for the same reason the anchor test above
+  // rebuilds rather than inspects: session_routes is tier 2, and a route only exists once the app
+  // has derived it, so asserting on the archive alone would prove nothing about what the demo's
+  // own workout page could ever draw.
+  it('seeds no workout route, even after the app rebuilds tier 2 from what it wrote', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'haelan-seed-demo-no-route-'))
+    const instance = openHaelan(dir)
+    try {
+      seedPerson(instance.db, 'p1')
+      seedArchive({ archive: instance.archive, personId: 'p1', days: 14, endMs: END })
+      const report = runRebuild({
+        db: instance.db,
+        archive: instance.archive,
+        peopleStore: new PeopleStore(instance.db),
+        priority: instance.sourcePriority,
+        overrides: instance.overrides,
+        settings: instance.settings,
+        nowMs: END,
+      })
+      expect(report.failures).toEqual([])
+      // At least one real exercise session exists to route through mapSessions at all - otherwise
+      // an empty session table would pass this test for the wrong reason.
+      expect(instance.db.select().from(sessions).where(eq(sessions.kind, 'exercise')).all().length)
+        .toBeGreaterThan(0)
+      expect(instance.db.select().from(sessionRoutes).all()).toEqual([])
+    } finally { instance.close(); rmSync(dir, { recursive: true, force: true }) }
   })
 
   it('gives the same bytes for the same seed, and different ones for a different seed', () => {

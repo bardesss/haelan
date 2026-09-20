@@ -129,6 +129,22 @@ describe('what the caller\'s SQL cannot reach', () => {
       await expect(run(`SELECT * FROM ${forbidden}`)).rejects.toThrow(/no such table/)
     }
   })
+
+  it('reaches no workout route, even for a session this same query can otherwise see', async () => {
+    // alice-run (seedToolData) is a real row in this projection's own `sessions` table - the
+    // point is not that the session is hidden, it is that `session_routes` never joins to it here.
+    // A route point is real data, not a fixture gap: insertRoutePoint's own home
+    // (packages/core/test/person-query.test.ts) shows the same shape reaching workoutRoute fine
+    // through the one door that is meant to open, which is what makes its absence through this
+    // one meaningful rather than accidental.
+    test.db.insert(schema.sessionRoutes).values({
+      id: 'alice-run-route-0', sessionId: 'alice-run', ordinal: 0, atMs: 0,
+      latitude: 52.1, longitude: 4.3, altitudeMetres: null,
+      horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }).run()
+    expect((await run('SELECT count(*) FROM sessions')).rows[0]?.[0]).toBeGreaterThan(0)
+    await expect(run('SELECT * FROM session_routes')).rejects.toThrow(/no such table/)
+  })
 })
 
 describe('the total size budget', () => {

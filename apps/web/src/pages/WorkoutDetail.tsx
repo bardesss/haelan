@@ -126,7 +126,7 @@ export function WorkoutDetail() {
 
   return (
     <>
-      <WorkoutHeader session={query.data} detail={detail} timezone={timezone} />
+      <WorkoutHeader session={query.data} detail={detail} timezone={timezone} route={query.data.route} />
       <div className="workout-actions">
         <button type="button" className="button" onClick={() => setAnnotating(true)}>
           {t('activity.workout.annotate')}

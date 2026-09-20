@@ -239,6 +239,12 @@ export function registerTier2Routes(app: FastifyInstance): void {
       ...personQuery.workoutSplits({ sessionId })!,
       // Same non-null reasoning: workoutRoute only answers null for an id sessionById would have
       // already refused, and this id was just resolved to a row by it.
+      //
+      // Coordinates included, on purpose and unlike every MCP tool this instance answers: this
+      // route is the household reading their own session, and an export that gave them less than
+      // they own would be wrong. get_workout and sql_query keep a route's points out for a reader
+      // that was never the household - workoutRoute's own module comment names that boundary and
+      // says it lives in the tool catalogue, not here.
       route: personQuery.workoutRoute({ sessionId })!,
     })
   })

@@ -2,7 +2,7 @@ import { useTranslation } from '../../i18n/index.js'
 import { formatSessionDateHeading } from '../../format.js'
 import { workoutSummary } from '@haelan/core/workout-summary'
 import type { WorkoutDetail } from '@haelan/core/workout-summary'
-import type { WorkoutSession } from '../../data/useSessions.js'
+import type { RoutePoint, WorkoutSession } from '../../data/useSessions.js'
 import { exerciseTypeLabel } from '../../data/exerciseTypeLabel.js'
 import { useSourceNames } from '../../data/useSourceNames.js'
 
@@ -15,16 +15,41 @@ function clock(utcMs: number, timeZone: string, language: string): string {
 }
 
 /**
- * displayName when present, the exercise type when it is not, the date and both clock times, the
- * source that recorded it, an excluded badge with its reason, and the one sentence about the
- * route this API does not return when the session says a GPS track exists. Everything else the
- * design's section 3 describes for this page (stat tiles, zones, the heart rate trace, splits, the
- * comparison card) is a later task's card, added inside WorkoutDetail's own `.grid` below this.
+ * Which of the three sentences about a route belongs under this workout's heading, or null for
+ * the fourth case that gets none at all: a provider that said plainly there was nothing to record.
+ *
+ * Points decide first, regardless of `hasGps`: a session that carried points needs no sourcing
+ * argument, the trace is drawn right below in WorkoutRoute.tsx, and a Google session can never
+ * reach this branch since the v4 API sends no route to carry (mapSessions.ts's own comment on
+ * `route` says so). Only once there are none does `hasGps` speak - true is Google's own claim of a
+ * route this API withholds, unchanged from what this sentence has always said; null is a companion
+ * session this app has no metadata for either way (workoutSummary.ts's own comment on
+ * `WorkoutDetail.hasGps` says why that is not the same claim as false); false is a provider saying
+ * plainly there was nothing to record, which is the one case with nothing worth printing.
  */
-export function WorkoutHeader({ session, detail, timezone }: {
+function gpsSentenceKey(hasGps: boolean | null, routePointCount: number): string | null {
+  if (routePointCount > 0) return 'activity.workout.gpsDrawn'
+  if (hasGps === true) return 'activity.workout.gps'
+  if (hasGps === null) return 'activity.workout.gpsUnreadable'
+  return null
+}
+
+/**
+ * displayName when present, the exercise type when it is not, the date and both clock times, the
+ * source that recorded it, an excluded badge with its reason, and one of three sentences about a
+ * route (gpsSentenceKey above says which, or none at all). Everything else the design's section 3
+ * describes for this page (stat tiles, zones, the heart rate trace, splits, the comparison card) is
+ * a later task's card, added inside WorkoutDetail's own `.grid` below this.
+ */
+export function WorkoutHeader({ session, detail, timezone, route }: {
   session: WorkoutSession
   detail: WorkoutDetail
   timezone: string
+  // Possibly undefined, not trusted as the always-present array WorkoutSessionDetail declares it:
+  // WorkoutRoute.tsx's own comment on its `route` prop gives the reason (an older cached response
+  // or any shape that predates this deploy can simply be missing the field), and it applies here
+  // unchanged - this component has no error boundary either.
+  route: readonly RoutePoint[] | undefined
 }) {
   const { t, i18n } = useTranslation()
   const language = i18n.language
@@ -34,6 +59,7 @@ export function WorkoutHeader({ session, detail, timezone }: {
   // name is what the person called this workout, and repeating the type beside it says the same
   // thing twice on the 197 of 197 sessions that carry a displayName.
   const title = detail.displayName ?? exerciseTypeLabel(t, summary.exerciseType)
+  const gpsKey = gpsSentenceKey(detail.hasGps, (route ?? []).length)
 
   return (
     <header className="workout-header">
@@ -56,8 +82,9 @@ export function WorkoutHeader({ session, detail, timezone }: {
       {/* `basis` alongside `workout-gps`: the design's own "Basis line" paragraph puts this
           sentence in the existing `.basis` style, the same treatment every stat tile's basis line
           gets, plus workout-gps's own margin reset since this line sits directly under the
-          excluded badge rather than under a tile's value. */}
-      {detail.hasGps && <p className="workout-gps basis">{t('activity.workout.gps')}</p>}
+          excluded badge rather than under a tile's value. Which of the three sentences (or none)
+          is gpsSentenceKey's own call, made once above rather than three times here. */}
+      {gpsKey !== null && <p className="workout-gps basis">{t(gpsKey)}</p>}
     </header>
   )
 }

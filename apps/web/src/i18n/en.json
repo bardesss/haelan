@@ -455,6 +455,8 @@
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
+      "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",
+      "gpsUnreadable": "A GPS route may have been recorded for this workout. This app was not able to read it, so there is no map.",
       "missingTitle": "No such workout",
       "missingDetail": "This link names a workout that is not in your data.",
       "tiles": {
