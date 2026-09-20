@@ -288,6 +288,35 @@ describe('GET /companion/cursors', () => {
     const legacy = body.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)
     expect(legacy?.lastWindowEndMs).toBe(Date.parse('2026-08-01T10:00:00Z') + 1)
   })
+
+  // The re-review's finding: ageing drops a source that has gone quiet, and dropping EVERY
+  // source of a type answered null, which startFor(null, ...) reads as "never sent" -- with the
+  // history permission granted that is EPOCH, so the app re-read its entire history every sync,
+  // forever, and never recovered (a deduplicated re-upload never refreshes lastIngestAtMs). The
+  // fix: when nothing is live, answer the newest cursor this instance has ever seen instead of
+  // nothing.
+  it('answers the newest known cursor when every source of a type has gone stale, not the oldest', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    // The watch's one upload, earliest.
+    expect((await ingest(token, 'weight', {
+      dataPoints: [weightPoint('2026-08-01T10:00:00Z')],
+      dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Galaxy Watch6' } },
+    })).statusCode).toBe(200)
+    harness.clock.nowMs += 60 * 60 * 1000
+    // The phone's one upload, an hour later and further ahead in the window it read.
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-05T10:00:00Z')] })).statusCode).toBe(200)
+
+    // Well past STALE_SOURCE_MS for both sources -- the watch's is even further behind, so a
+    // wrong answer here could be null (both dropped) or the watch's older cursor (the wrong
+    // direction), and this test catches either.
+    harness.clock.nowMs += STALE_SOURCE_MS + 24 * 60 * 60 * 1000
+
+    const body = (await cursors(token)).json() as { items: CursorItem[] }
+    const legacy = body.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)
+    expect(legacy?.lastWindowEndMs).toBe(Date.parse('2026-08-05T10:00:00Z') + 1)
+  })
 })
 
 /**
