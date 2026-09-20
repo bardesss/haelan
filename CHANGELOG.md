@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.0.4](https://github.com/bardesss/haelan/compare/v2.0.3...v2.0.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **ci:** create the app tag release-please skips, so an app release ships ([#317](https://github.com/bardesss/haelan/issues/317)) ([073140a](https://github.com/bardesss/haelan/commit/073140a9fe4495b38988413356a3b22f4f875a4f))
+
 ## [2.0.3](https://github.com/bardesss/haelan/compare/v2.0.2...v2.0.3) (2026-09-20)
 
 
