@@ -54,6 +54,32 @@ function withQuery(node: ReactNode, items: DataTypeChoice[] = []): ReactNode {
   return <QueryClientProvider client={client}>{node}</QueryClientProvider>
 }
 
+/**
+ * The same tree, with the data types query left deliberately UNSEEDED and its request hung, so
+ * `useDataTypes()` reports isPending the way it really does on a cold load.
+ *
+ * The session is still seeded, because that is what the real cold load looks like by the time a
+ * MetricCard can reach the exclusion question at all: useSeries carries the same
+ * `enabled: personId !== undefined` guard useDataTypes does, so a settled series query already
+ * implies a resolved session. Hanging rather than resolving, control-row.test.tsx's own reason
+ * inverted: an unseeded query would otherwise make a real network call in this environment, and
+ * a resolving one would settle before the assertion and prove nothing.
+ */
+function withDataTypesInFlight(node: ReactNode): ReactNode {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), PERSON)
+  const original = globalThis.fetch
+  globalThis.fetch = (async () => new Promise<Response>(() => {})) as typeof fetch
+  restoreFetch = () => { globalThis.fetch = original }
+  return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+}
+
+let restoreFetch: (() => void) | null = null
+afterEach(() => {
+  restoreFetch?.()
+  restoreFetch = null
+})
+
 const OK = { isError: false, isPending: false, refetch: () => {} }
 const point = (value: number, coverage: number | null): SeriesPoint =>
   ({ localDate: '2026-08-01', source: 'merged', value, coverage, sourceMix: null, updatedAtMs: null })
@@ -157,6 +183,33 @@ describe('MetricCard', () => {
       points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
     expect(container!.querySelectorAll('.card')).toHaveLength(0)
     expect(container!.textContent).toBe('')
+  })
+
+  // The cold-load race this gate exists for. useDataTypes answers `items: []` while its own
+  // request is still in flight, and an empty exclusion list is indistinguishable from "nothing is
+  // excluded" — so a metric the reader HAS turned off reads as no_data for that moment, and
+  // no_data hides. One card blinking would be bad enough; the page-level empty state is worse,
+  // because on a household that has excluded most of its types every card hides at once and the
+  // page says "Nothing recorded here. Try a wider range above", which is advice pointing at the
+  // wrong control entirely.
+  //
+  // Loading, not the drawn card and not nothing: the request that would settle this is in flight,
+  // so the honest answer is that nothing is known yet.
+  it('keeps the card while the exclusion list is still loading', () => {
+    mount(withDataTypesInFlight(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK}
+      points={[]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
+    expect(container!.querySelectorAll('.card')).toHaveLength(1)
+    expect(container!.textContent).toContain('common.loading')
+    expect(container!.textContent).not.toContain('drawn')
+  })
+
+  // The other side of that gate, and the reason it is scoped to the vanishing decision rather than
+  // applied to every render: a card with data to draw must not be made to wait on the exclusion
+  // list. Same in-flight query as the test above, so the only difference is that there are points.
+  it('draws data without waiting for the exclusion list', () => {
+    mount(withDataTypesInFlight(<MetricCard metric="steps" span={1} basisPlacement="body" query={OK}
+      points={[point(900, 0.9)]} basisKey="b" basisWornKey="bw">{() => <span>drawn</span>}</MetricCard>))
+    expect(container!.textContent).toContain('drawn')
   })
 
   // The half that must NOT hide: not_worn names a remedy (wear the device), so it keeps its card.

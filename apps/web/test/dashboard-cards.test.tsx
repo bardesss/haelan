@@ -74,7 +74,7 @@ type Baseline = { center: number, spread: number, n: number, thin: boolean } | n
  */
 function stubFetch(opts: {
   baseline: Baseline, hangBaselines?: boolean, excludedDataTypes?: string[],
-  emptyIntraday?: boolean, emptySeries?: boolean, suppressInsights?: boolean,
+  emptyIntraday?: boolean, emptySeries?: boolean, suppressInsights?: boolean, hangDataTypes?: boolean,
 }): () => void {
   const original = globalThis.fetch
   globalThis.fetch = (async (input: RequestInfo | URL) => {
@@ -118,6 +118,10 @@ function stubFetch(opts: {
       }), { status: 200, headers: { 'content-type': 'application/json' } })
     }
     if (url.includes('/data-types')) {
+      // Never resolving, the same technique and the same reason as hangBaselines above: the
+      // in-flight exclusion list is a state this page rests in on a cold load, not a moment a
+      // test has to catch it passing through.
+      if (opts.hangDataTypes === true) return new Promise<Response>(() => {})
       const excluded = new Set(opts.excludedDataTypes ?? [])
       // Only the one id these tests ever exclude: a real GET lists the whole catalogue, but
       // nothing here reads any id but heart-rate's own exclusion flag.
@@ -665,6 +669,30 @@ describe('the remaining Dashboard cards', () => {
   // The Day tab's own hand-rolled card. Its exclusion check runs first and keeps its card (the
   // existing "says the excluded heart rate type was never synced" test pins that); only a
   // genuinely empty day disappears.
+  // The same cold-load race MetricCard's own gate exists for, in the one card that hand rolls its
+  // exclusion check instead of going through it. excludedDataTypes is [] while /data-types is in
+  // flight, which reads as "heart rate is not excluded", so an empty day hid this card for that
+  // moment rather than saying it is not being synced. The day is deliberately empty here, because
+  // that is the only case the race could hide.
+  it('keeps the heart rate card while the exclusion list is still loading', async () => {
+    window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
+    const restore = stubFetch({ baseline: null, emptyIntraday: true, hangDataTypes: true })
+    const { client, tree } = withQuery(<Dashboard />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    // pumpUntil, not flush: flush waits for nothing to be in flight, and the whole point of this
+    // fixture is one request that never settles. The tiles' own value is the signal that the
+    // series round trip finished, which is as far as this page can get with /data-types hung.
+    await pumpUntil(
+      () => container!.querySelector('.value') !== null,
+      'the tiles to settle while the exclusion list hangs',
+    )
+    const card = [...container!.querySelectorAll('.card')]
+      .find((c) => c.querySelector('.label')?.textContent === 'Heart rate range')
+    expect(card).toBeDefined()
+    expect(card?.textContent).not.toContain('No data yet')
+    restore()
+  })
+
   it('renders no heart rate card on a Day tab with no intraday samples', async () => {
     window.history.replaceState(null, '', '/?range=day&on=2026-08-15')
     const restore = stubFetch({ baseline: null, emptyIntraday: true })

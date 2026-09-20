@@ -100,7 +100,7 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // (data-types.ts's dataTypesKey), shared by every MetricCard on the page and by DataTypePicker
   // itself, so mounting eight cards costs the one request their shared cache already pays for on
   // the page's first card, not eight.
-  const { items: dataTypes } = useDataTypes()
+  const { items: dataTypes, isPending: dataTypesPending } = useDataTypes()
 
   // A failed request is not an empty period, and it outranks the pending check even when both
   // flags are true at once: a composite query built by OR-ing several requests together (the
@@ -125,6 +125,26 @@ export function MetricCard({ metric, query, points, span, label, basisPlacement,
   // page claiming it has something to show. `after` goes with it — a card link like "View
   // activity" survives every other state on purpose, but there is nothing left here for it to sit
   // beside, and the sidebar still carries every page.
+  // The exclusion list has to have ARRIVED before its absence can be read as "nothing is
+  // excluded". useDataTypes answers `items: []` while its own request is still in flight
+  // (useDataTypes.ts returns `query.data?.items ?? []`), and an empty list is indistinguishable
+  // from a loaded one that excludes nothing — so for that moment a type the reader turned off
+  // computes as no_data instead of not_synced, and no_data is the kind that hides.
+  //
+  // One card blinking would be the small version. The real one is the page: on a household that
+  // excluded most of its data types every card takes this branch at once, the tally CardGrid reads
+  // reaches zero, and the page says "Nothing recorded here. Try a wider range above" — advice
+  // pointing at the wrong control, about a period that may be full of data the reader chose not to
+  // sync. Loading is the honest answer, since the request that settles it is in flight.
+  //
+  // Scoped to the vanishing decision rather than placed beside the two gates above, and that is
+  // deliberate: a card with something to draw must not be made to wait on this list, and the
+  // not_worn and not_synced branches below already keep their card either way. This only holds
+  // back the one answer that cannot be taken back once the reader has seen it — the card that
+  // simply is not there.
+  if (empty !== null && hidesWhenEmpty(empty) && dataTypesPending) {
+    return <Card span={span} label={label}><Loading />{after}</Card>
+  }
   if (empty !== null && hidesWhenEmpty(empty)) return null
   if (empty !== null) {
     return (

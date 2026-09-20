@@ -5,11 +5,17 @@ import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { startCaptureServer } from '../../../demo/capture/server.js'
 
+// Two names because they are two directories, and teardown needs the outer one. The seeder wants
+// a `data` child rather than the temp directory itself, so what mkdtempSync returns is the parent
+// of what the server is handed; removing only the child left the parent behind on every run, an
+// empty haelan-capture-* under %TEMP% that nothing ever collected.
+let root: string
 let dir: string
 let server: Awaited<ReturnType<typeof startCaptureServer>>
 
 beforeAll(async () => {
-  dir = join(mkdtempSync(join(tmpdir(), 'haelan-capture-')), 'data')
+  root = mkdtempSync(join(tmpdir(), 'haelan-capture-'))
+  dir = join(root, 'data')
   // Seven days rather than a year: this test is about the bridge, not the data.
   execFileSync('node', ['--experimental-strip-types', 'scripts/seed-demo.mjs', dir, '7'], { stdio: 'pipe' })
   server = await startCaptureServer(dir)
@@ -20,7 +26,7 @@ afterAll(() => {
   // Deliberately after close(): SQLite holds a file handle until then, and on Windows rmSync
   // throws EPERM against an open handle - which would replace any assertion error above with a
   // cleanup error and hide it.
-  rmSync(dir, { recursive: true, force: true })
+  rmSync(root, { recursive: true, force: true })
 })
 
 describe('the capture server', () => {
