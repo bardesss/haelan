@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { RawArchive, SCOPES, samplePoint } from '@haelan/core'
 import { withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
-import { companionIngestibleIds } from '../src/routes/v1/companion.ts'
+import { companionIngestibleIds, STALE_SOURCE_MS } from '../src/routes/v1/companion.ts'
 
 let harness: Harness | null = null
 afterEach(async () => { await harness?.cleanup(); harness = null })
@@ -228,6 +228,65 @@ describe('GET /companion/cursors', () => {
       if (dataTypeId === 'weight') continue
       expect(parsed.has(dataTypeId)).toBe(false)
     }
+  })
+
+  // Finding 1 from the follow-up review: the (type, source) minimum fixed a late writer going
+  // missing, and introduced the opposite problem -- nothing aged a source back out of it. A
+  // retired watch's frozen cursor would otherwise pin the whole type's read start open forever.
+  it('drops a source from the minimum once it has been silent past STALE_SOURCE_MS', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    // The watch's one and only upload, at the harness's starting clock.
+    expect((await ingest(token, 'weight', {
+      dataPoints: [weightPoint('2026-08-01T10:00:00Z')],
+      dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Galaxy Watch6' } },
+    })).statusCode).toBe(200)
+    // The phone syncs in a day later, and keeps syncing after that -- its lastIngestAtMs stays
+    // recent throughout the test, only the watch's goes stale.
+    harness.clock.nowMs += 24 * 60 * 60 * 1000
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-18T10:00:00Z')] })).statusCode).toBe(200)
+
+    // One day since the watch's last upload: still well under the threshold, so the watch is
+    // merely a laggard and still pulls the minimum back to its own frozen progress -- the
+    // behaviour the (type, source) fix exists to keep.
+    const beforeAgeing = (await cursors(token)).json() as { items: CursorItem[] }
+    const legacyBefore = beforeAgeing.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)
+    expect(legacyBefore?.lastWindowEndMs).toBe(Date.parse('2026-08-01T10:00:00Z') + 1)
+
+    // Push the clock so the watch's silence crosses STALE_SOURCE_MS while the phone's own last
+    // ingest, one day younger, stays just inside it.
+    harness.clock.nowMs += STALE_SOURCE_MS - 1
+
+    const afterAgeing = (await cursors(token)).json() as { items: CursorItem[] }
+    const legacyAfter = afterAgeing.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)
+    // The watch has aged out: the minimum is now the phone's own progress, not the watch's
+    // frozen one, so the read window stops growing a day a day for a source that is gone.
+    expect(legacyAfter?.lastWindowEndMs).toBe(Date.parse('2026-08-18T10:00:00Z') + 1)
+
+    // The watch itself is unaffected: its own per-source item still answers its true progress,
+    // so a phone that resumes writing under that identity picks up exactly where it left off.
+    const perSourceAfter = afterAgeing.items.filter((i) => i.dataTypeId === 'weight' && i.dataSource !== undefined)
+    const watchItem = perSourceAfter.find((i) => i.lastWindowEndMs === Date.parse('2026-08-01T10:00:00Z') + 1)
+    expect(watchItem).toBeDefined()
+  })
+
+  it('still holds the minimum back to a source silent for just under STALE_SOURCE_MS', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    expect((await ingest(token, 'weight', {
+      dataPoints: [weightPoint('2026-08-01T10:00:00Z')],
+      dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Galaxy Watch6' } },
+    })).statusCode).toBe(200)
+    expect((await ingest(token, 'weight', { dataPoints: [weightPoint('2026-08-18T10:00:00Z')] })).statusCode).toBe(200)
+
+    // One millisecond short of the threshold: a genuinely intermittent source, not a dead one.
+    harness.clock.nowMs += STALE_SOURCE_MS - 1
+
+    const body = (await cursors(token)).json() as { items: CursorItem[] }
+    const legacy = body.items.find((i) => i.dataTypeId === 'weight' && i.dataSource === undefined)
+    expect(legacy?.lastWindowEndMs).toBe(Date.parse('2026-08-01T10:00:00Z') + 1)
   })
 })
 

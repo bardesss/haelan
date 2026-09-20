@@ -70,7 +70,8 @@ class SyncCursorsTest {
             {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":1786953600000,"lastIngestAtMs":1769900000000}
             ],"historyStartMs":1786867200000}"""
         val bySource = SyncCursors.parseSourceCursorEnds(body)
-        assertEquals(mapOf("com.haelan.android" to 1787040000000L, "com.samsung.health" to 1786953600000L), bySource["steps"])
+        assertEquals(1787040000000L, bySource["steps"]?.get("com.haelan.android")?.lastWindowEndMs)
+        assertEquals(1786953600000L, bySource["steps"]?.get("com.samsung.health")?.lastWindowEndMs)
         // The legacy item's own lastWindowEndMs never leaks into a source's map: it has no
         // dataSource field for the pattern to capture.
         assertEquals(2, bySource["steps"]?.size)
@@ -100,20 +101,25 @@ class SyncCursorsTest {
         val phoneCursorMs = 1_787_040_000_000L
         val watchCursorMs = phoneCursorMs - 3 * SyncCursors.OVERLAP_MS
         val watchLateReadingMs = watchCursorMs + SyncCursors.OVERLAP_MS / 2
+        val nowMs = phoneCursorMs
 
+        // Both sources ingested at their own cursor, three days apart -- nowhere near
+        // STALE_SOURCE_MS, so the watch is merely a laggard here, not aged out. That is
+        // what distinguishes this test from the ageing ones below: three days is the kind
+        // of gap a real intermittent source produces, and it must still hold the minimum.
         val body = """{"items":[
-            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":$phoneCursorMs,"lastIngestAtMs":0},
-            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":$watchCursorMs,"lastIngestAtMs":0}
+            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":$phoneCursorMs,"lastIngestAtMs":$phoneCursorMs},
+            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":$watchCursorMs,"lastIngestAtMs":$watchCursorMs}
             ],"historyStartMs":0}"""
 
         assertEquals(
             "the type's cursor is the watch's own stale progress, not the phone's fresh one",
             watchCursorMs,
-            SyncCursors.cursorEndsFor(body)["steps"],
+            SyncCursors.cursorEndsFor(body, nowMs)["steps"],
         )
 
         val start = SyncCursors.startFor(
-            SyncCursors.cursorEndsFor(body)["steps"],
+            SyncCursors.cursorEndsFor(body, nowMs)["steps"],
             Instant.EPOCH,
             Instant.ofEpochMilli(phoneCursorMs).plus(1, ChronoUnit.DAYS),
         )
@@ -121,6 +127,50 @@ class SyncCursorsTest {
             "the watch's own pending reading at ${watchLateReadingMs}ms must still be inside " +
                 "the next delta, which starts at ${start?.toEpochMilli()}ms",
             start != null && !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
+        )
+    }
+
+    /**
+     * Finding 1 from the follow-up review: nothing aged a source out of the minimum, so a
+     * retired watch's frozen cursor pinned the whole type's read start open forever. These two
+     * cases are the proof STALE_SOURCE_MS closes that: a source silent longer than the threshold
+     * stops holding the minimum back, and one silent for less than it still does -- otherwise a
+     * watch worn only a couple of times a week would lose its next late reading exactly the way
+     * Finding A's laggard, tested above, must not.
+     */
+    @Test
+    fun `a source silent longer than STALE_SOURCE_MS stops holding the type's minimum back`() {
+        val phoneCursorMs = 1_787_040_000_000L
+        val watchCursorMs = phoneCursorMs - 60 * SyncCursors.OVERLAP_MS // two months stale
+        val nowMs = phoneCursorMs
+
+        val body = """{"items":[
+            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":$phoneCursorMs,"lastIngestAtMs":$phoneCursorMs},
+            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":$watchCursorMs,"lastIngestAtMs":$watchCursorMs}
+            ],"historyStartMs":0}"""
+
+        assertEquals(
+            "the retired watch no longer pins the type back once it has been silent past the threshold",
+            phoneCursorMs,
+            SyncCursors.cursorEndsFor(body, nowMs)["steps"],
+        )
+    }
+
+    @Test
+    fun `a source silent for just under STALE_SOURCE_MS still holds the type's minimum back`() {
+        val phoneCursorMs = 1_787_040_000_000L
+        val watchCursorMs = phoneCursorMs - (SyncCursors.STALE_SOURCE_MS - SyncCursors.OVERLAP_MS)
+        val nowMs = phoneCursorMs
+
+        val body = """{"items":[
+            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":$phoneCursorMs,"lastIngestAtMs":$phoneCursorMs},
+            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":$watchCursorMs,"lastIngestAtMs":$watchCursorMs}
+            ],"historyStartMs":0}"""
+
+        assertEquals(
+            "a source just inside the threshold is an intermittent one, not a dead one, and still pulls the minimum back to it",
+            watchCursorMs,
+            SyncCursors.cursorEndsFor(body, nowMs)["steps"],
         )
     }
 }
