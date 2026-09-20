@@ -215,6 +215,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         }
         refreshSyncStatus()
         refreshBatteryCard()
+        scope.launch { syncIfStale() }
         scope.launch {
             val client = healthClient(silent = true) ?: return@launch
             val granted = withContext(Dispatchers.IO) {
@@ -454,6 +455,39 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
      * The tap. The toggles say what travels, the run belongs to [SyncRun] - which no rotation
      * cancels - and this only refuses the taps that cannot start one.
      */
+    /**
+     * How long after the last successful type a reopened screen starts a run of its own.
+     *
+     * The background schedule is every two hours, which answers "later today" and does not answer
+     * "I just finished a run and want to see it". Opening the app is the clearest signal there is
+     * that somebody wants their data now, and it costs nothing when there is nothing new: the
+     * cursor says where to start, so a delta read finds nothing and posts nothing.
+     *
+     * Throttled, because onResume fires on every return to this screen: a permission dialog
+     * closing, a task switch, a notification pulled down. Without a gap the app would start a run
+     * each time somebody glanced at it.
+     */
+    private val onOpenGapMs = 15L * 60L * 1000L
+
+    /**
+     * A run when the screen comes back and nothing has synced for a while. Silent either way:
+     * this is not a tap, so a screen that decides against it says nothing, and one that decides
+     * for it draws the run it already knows how to draw.
+     */
+    private suspend fun syncIfStale() {
+        // No check for a run already going: SyncRun.start refuses a second one itself, because
+        // SyncRunState.begin owns that rule. Repeating it here would be a second place to get it
+        // wrong.
+        val sending = (activityOptions + bodyOptions + heartOptions).filter { isOn(it.key) }
+        if (sending.isEmpty()) return
+        // The newest across the types that travel, not the oldest: one type that has never had
+        // anything in Health Connect would otherwise hold the whole screen at zero for ever and
+        // start a run on every resume.
+        val newest = sending.maxOfOrNull { prefs().getLong(SyncStatus.lastKey(it.key), 0L) } ?: 0L
+        if (System.currentTimeMillis() - newest < onOpenGapMs) return
+        startSync()
+    }
+
     private suspend fun startSync() {
         val sending = (activityOptions + bodyOptions + heartOptions).filter { isOn(it.key) }
         if (sending.isEmpty()) {

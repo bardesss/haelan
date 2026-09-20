@@ -25,15 +25,28 @@ object SyncSchedule {
     const val UNIQUE_NAME = SyncWorker.PERIODIC_WORK_NAME
 
     /**
-     * Twice a day, only online, patient on failure. Online because the instance lives on the
+     * Every two hours, only online, patient on failure. Online because the instance lives on the
      * home LAN: waking with no network can only fail, and a failure off the LAN is weather
      * rather than news, so the run waits instead of burning battery to learn nothing.
-     * Twelve hours because health data goes stale by the day, not by the minute, and a missed
-     * window is picked up by the next: the window is trailing, so nothing is skipped, only late.
+     *
+     * Two rather than the twelve this started at. Twelve was chosen for data that goes stale by
+     * the day, and it is right for weight and wrong for a workout: somebody who has just finished
+     * a run wants to see it, and half a day is not an answer. A run with nothing new behind it
+     * costs a delta read that finds nothing and posts nothing, because the cursor already says
+     * where to start; the expensive sync was the first one, which read thirty days.
+     *
+     * Not the fifteen minute floor WorkManager allows. Health Connect has no push for third
+     * parties, so this is polling, and polling six times an hour to catch something that happens
+     * twice a week spends battery on the other three hundred and thirty runs. Two hours with the
+     * manual button and the sync on open below is the same freshness where it matters, without
+     * the phone waking for nothing all day.
+     *
+     * The window is trailing, so a missed one is picked up by the next: nothing is skipped, only
+     * late.
      */
     data class Policy(val repeatHours: Long, val requiresNetwork: Boolean, val backoffMinutes: Long)
 
-    fun policy(): Policy = Policy(repeatHours = 12, requiresNetwork = true, backoffMinutes = 10)
+    fun policy(): Policy = Policy(repeatHours = 2, requiresNetwork = true, backoffMinutes = 10)
 
     fun request(): PeriodicWorkRequest {
         val decided = policy()

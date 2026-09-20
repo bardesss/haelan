@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/bardesss/haelan/compare/android-v0.2.2...android-v0.3.0) (2026-09-20)
+
+
+### Features
+
+* **android:** sync every two hours, and when the screen comes back ([#318](https://github.com/bardesss/haelan/issues/318)) ([b987217](https://github.com/bardesss/haelan/commit/b987217580f83672080f8ab7aeaf6febfce10864))
+
+
+### Bug Fixes
+
+* **android:** one writer for the status line, so the reason survives ([#316](https://github.com/bardesss/haelan/issues/316)) ([6d63461](https://github.com/bardesss/haelan/commit/6d63461a8cea679a603b0566999b78db764d6df5))
+
 ## [0.2.2](https://github.com/bardesss/haelan/compare/android-v0.2.1...android-v0.2.2) (2026-09-20)
 
 
