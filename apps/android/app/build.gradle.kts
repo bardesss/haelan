@@ -162,6 +162,12 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     testImplementation("junit:junit:4.13.2")
+    // The platform's org.json is a stub under a JVM unit test (TypeChunkLimitTest's own comment:
+    // "Method put in org.json.JSONObject not mocked"), which is why no test before this one could
+    // call a mapper and read its JSONObject back. This is the real implementation, on the test
+    // classpath only, so a test can call toExercisePoints itself and assert the shape it returns
+    // instead of a literal string standing in for it - which is the whole point of Step 4.
+    testImplementation("org.json:json:20240303")
 }
 
 // afterEvaluate because preBuild is AGP's own task and may be registered after this script runs:
