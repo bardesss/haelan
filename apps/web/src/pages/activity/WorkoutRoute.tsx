@@ -34,6 +34,24 @@ export function basemapStyle(): StyleSpecification {
   }
 }
 
+/**
+ * The colour the route line is drawn in, read from the same `--accent` token the SVG trace below
+ * reaches through CSS.
+ *
+ * MapLibre parses colours itself and never resolves `var(--accent)`, so the token has to be read
+ * off the document and handed over already resolved. That indirection is worth more than pinning a
+ * copy here: packages/tokens emits a different `--accent` per theme, so any literal in this file is
+ * wrong in at least one of them, and the literal that shipped here first was a third blue that
+ * matched neither.
+ *
+ * An empty answer means no stylesheet has applied the token yet. The caller omits `line-color`
+ * altogether in that case rather than substituting something, so MapLibre's own default draws the
+ * line: a line in the wrong colour, which is still a route the household can see.
+ */
+export function routeLineColor(root: HTMLElement = document.documentElement): string {
+  return getComputedStyle(root).getPropertyValue('--accent').trim()
+}
+
 /** The bounding box MapLibre fits the map to on load: every recorded point's own extremes, in the
  *  [[west, south], [east, north]] shape its own `bounds` option takes. */
 export function routeBounds(points: readonly RoutePoint[]): [[number, number], [number, number]] {
@@ -169,9 +187,13 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
       instance.on('load', () => {
         if (cancelled) return
         instance.addSource('workout-route', { type: 'geojson', data: routeGeoJSON(recorded) })
+        const accent = routeLineColor()
         instance.addLayer({
           id: 'workout-route-line', type: 'line', source: 'workout-route',
-          paint: { 'line-color': '#2f6fed', 'line-width': 3 },
+          // Read at draw time, not captured when the module loaded: a household that switches
+          // theme with this card already open gets the new accent on the next map the effect
+          // builds. See routeLineColor for why the empty case drops the key instead of filling it.
+          paint: accent === '' ? { 'line-width': 3 } : { 'line-color': accent, 'line-width': 3 },
         })
       })
     })

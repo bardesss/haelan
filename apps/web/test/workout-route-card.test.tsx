@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
-import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON } from '../src/pages/activity/WorkoutRoute.js'
+import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON, routeLineColor } from '../src/pages/activity/WorkoutRoute.js'
 import { routeBasemapStatusKey } from '../src/data/useRouteBasemap.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
@@ -191,5 +191,29 @@ describe('basemapStyle, routeBounds and routeGeoJSON', () => {
     const feature = routeGeoJSON([NEAR, FAR])
     expect(feature.type).toBe('Feature')
     expect(feature.geometry.coordinates).toEqual([[5, 52], [5, 52.01]])
+  })
+})
+
+
+/**
+ * MapLibre cannot resolve `var(--accent)`, so the route line's colour is read off the document and
+ * handed over resolved. What is worth asserting is the reading, not a value: a test that pinned the
+ * blue would be a second copy of the token and would go green on exactly the drift it exists to
+ * catch, since the literal that shipped here first matched neither theme's accent.
+ */
+describe('routeLineColor', () => {
+  it('reads the accent token off the element it is given', () => {
+    const root = document.createElement('div')
+    root.style.setProperty('--accent', 'rgb(35, 118, 233)')
+    document.body.append(root)
+    expect(routeLineColor(root)).toBe('rgb(35, 118, 233)')
+    root.remove()
+  })
+
+  it('answers empty when no stylesheet has set the token, so the caller can omit the colour', () => {
+    const root = document.createElement('div')
+    document.body.append(root)
+    expect(routeLineColor(root)).toBe('')
+    root.remove()
   })
 })
