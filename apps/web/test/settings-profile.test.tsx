@@ -355,3 +355,59 @@ describe('where the card is mounted', () => {
     expect(container!.textContent).not.toContain('Instance address')
   })
 })
+
+/**
+ * The phone pairing instructions, which are the only place in the app that says the companion app
+ * exists. Everything the wizard says about it is seen once, by whoever set the instance up; a
+ * member who joined later, or an admin who took the Google path and now wants a phone as well, has
+ * never met that screen and has nowhere else to look.
+ *
+ * There is no pairing token to assert on because there is no pairing token: the phone signs in
+ * with the same username and password as the browser. So what these guard is that the two facts a
+ * reader cannot guess are present and correct, the address and the Android-only constraint.
+ */
+describe('pairing a phone', () => {
+  it('shows the address to type into the app, exactly as the session gives it', () => {
+    mountSection()
+    const address = container!.querySelector('.profile-phone .copy-value')
+    // The whole value, not a substring of it. A truncated or trailing-slashed address is the kind
+    // of thing somebody types in once, gets a connection error from, and blames the app for.
+    expect(address?.textContent).toBe('http://localhost:4235')
+  })
+
+  it('follows the address the session reports rather than a hardcoded one', () => {
+    mountSection({ baseUrl: 'https://haelan.example.net' })
+    expect(container!.querySelector('.profile-phone .copy-value')?.textContent)
+      .toBe('https://haelan.example.net')
+  })
+
+  it('says it is Android only, before the steps rather than after them', () => {
+    mountSection()
+    const section = container!.querySelector('.profile-phone')!
+    expect(section.textContent).toContain('Android')
+    // Somebody on an iPhone should learn this from the first sentence, not by working through
+    // four steps first. Asserting the order is what stops a later edit moving it into a footnote.
+    expect(section.textContent!.indexOf('Android'))
+      .toBeLessThan(section.textContent!.indexOf('Health Connect'))
+  })
+
+  it('links out to the install instructions', () => {
+    mountSection()
+    const link = container!.querySelector('.profile-phone a')
+    expect(link?.getAttribute('href')).toBe('https://github.com/bardesss/haelan#the-android-companion-app')
+  })
+
+  // Deliberately unconditional. Somebody already sending from a phone sees instructions they do
+  // not need, which costs them one scroll; somebody adding a second phone, or replacing a lost
+  // one, finds them where they left them. Hiding on lastIngestAtMs would trade the first cost for
+  // the second, and the second is the one that happens on a bad day.
+  it('is there for a member who has connected nothing at all', () => {
+    mountSection({ connected: false, isAdmin: false })
+    expect(container!.querySelector('.profile-phone')).not.toBe(null)
+  })
+
+  it('is there for an admin already syncing through Google', () => {
+    mountSection({ connected: true, isAdmin: true })
+    expect(container!.querySelector('.profile-phone')).not.toBe(null)
+  })
+})

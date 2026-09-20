@@ -1045,6 +1045,15 @@
         "changed": "Password changed. You are still signed in.",
         "wrong": "That is not your current password.",
         "failed": "The password was not changed: {{reason}}"
+      },
+      "phone": {
+        "title": "Send from an Android phone",
+        "intro": "The companion app reads Health Connect on your phone and sends readings here, alongside anything you already sync. Android only: Health Connect does not exist on iPhone.",
+        "step1": "Install the app.",
+        "step1Link": "Installation and updates",
+        "step2": "Open it and grant the Health Connect permissions it asks for.",
+        "step3": "Enter this address:",
+        "step4": "Sign in with the username and password you use here."
       }
     },
     "mcp": {

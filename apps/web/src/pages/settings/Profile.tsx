@@ -214,6 +214,37 @@ export function Profile() {
       {password.isSuccess && !password.isPending && (
         <p className="profile-result" role="status">{t('settings.profile.password.changed')}</p>
       )}
+
+      {/* The only place in the app that says the companion app exists. The wizard's companion step
+          is seen once, by whoever set the instance up, so a member who joined by invite and an
+          admin who took the Google path and later wants a phone have both never met it.
+
+          Unconditional on purpose. Hiding it once a phone has sent something would tidy it away
+          from the person who most needs it next: whoever is replacing a lost phone, or adding a
+          second one, on the day that happens.
+
+          The address comes off the session rather than the admin-only instance-url route, because
+          every member needs it and only an admin can read that one. The Android-only sentence is
+          first because it is the one fact that makes the four steps below irrelevant. */}
+      <section className="profile-phone">
+        <h3 className="profile-subhead">{t('settings.profile.phone.title')}</h3>
+        <p className="field-hint">{t('settings.profile.phone.intro')}</p>
+        <ol className="profile-phone-steps">
+          <li>
+            {t('settings.profile.phone.step1')}{' '}
+            <a href="https://github.com/bardesss/haelan#the-android-companion-app"
+              target="_blank" rel="noreferrer noopener">
+              {t('settings.profile.phone.step1Link')}
+            </a>
+          </li>
+          <li>{t('settings.profile.phone.step2')}</li>
+          <li>
+            {t('settings.profile.phone.step3')}{' '}
+            <code className="copy-value">{session.data.baseUrl}</code>
+          </li>
+          <li>{t('settings.profile.phone.step4')}</li>
+        </ol>
+      </section>
     </div>
   )
 }
