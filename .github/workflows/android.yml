@@ -1,9 +1,34 @@
 name: Android
 
+# Only when something this job actually compiles has moved. Without the filter every push rebuilt
+# the module: a JDK, an Android SDK download, licence acceptance and a Gradle assemble, around three
+# minutes, for a change to the README or a release commit that cannot affect an APK.
+#
+# packages/tokens is in the list because the palette this module compiles is generated from it
+# (`pnpm --filter @haelan/tokens build:android` below), so a token change really can break the
+# Android build while touching nothing under apps/android. The workflow file itself is in the list
+# so a change to these steps is tested by the steps it changes.
+#
+# pnpm-lock.yaml is deliberately not in the list. A dependency bump can in principle break the
+# tokens build, but every bump would then rebuild Android, which is most of what the filter exists
+# to stop; the next change under either path catches it. Safe to add if that trade ever turns out
+# to be the wrong way round.
+#
+# No skip job beside this one, because the repository's ruleset requires no status checks: a filter
+# that keeps this job from running cannot leave a pull request waiting on a check that never
+# arrives. That changes the day a required check is added here.
 on:
   push:
     branches: [master, main]
+    paths:
+      - 'apps/android/**'
+      - 'packages/tokens/**'
+      - '.github/workflows/android.yml'
   pull_request:
+    paths:
+      - 'apps/android/**'
+      - 'packages/tokens/**'
+      - '.github/workflows/android.yml'
 
 concurrency:
   group: android-${{ github.ref }}
