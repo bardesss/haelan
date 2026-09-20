@@ -127,6 +127,28 @@ export const sessionSegments = sqliteTable('session_segments', {
   endMs: integer('end_ms').notNull(),
 }, (t) => [index('session_segments_session').on(t.sessionId, t.startMs)])
 
+// Tier 2, like sessionSegments beside it, and cascaded the same way: a rebuild deletes and
+// regenerates a session, and a route row left behind would attach to nothing and be drawn for
+// nobody.
+export const sessionRoutes = sqliteTable('session_routes', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  // The point's place in the route as recorded. A route is an ordered path and time alone cannot
+  // order it: two readings can share a millisecond, and a rebuild must redraw the same line.
+  ordinal: integer('ordinal').notNull(),
+  atMs: integer('at_ms').notNull(),
+  latitude: real('latitude').notNull(),
+  longitude: real('longitude').notNull(),
+  // Optional because Health Connect's Location carries them optionally. A missing altitude is not
+  // a zero, and writing one would draw a climb to sea level that never happened.
+  altitudeMetres: real('altitude_metres'),
+  horizontalAccuracyMetres: real('horizontal_accuracy_metres'),
+  verticalAccuracyMetres: real('vertical_accuracy_metres'),
+}, (t) => [
+  unique('session_routes_natural').on(t.sessionId, t.ordinal),
+  index('session_routes_session').on(t.sessionId, t.ordinal),
+])
+
 // Tier 2, not events. events is tier 1, user-authored, and survives every rebuild; an
 // observation is machine-written and a rebuild deletes and regenerates it. One table holding
 // both would force a rebuild to delete some rows and keep others, let a person delete something
