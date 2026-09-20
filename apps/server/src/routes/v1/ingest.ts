@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import {
-  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, dataTypeById, localDateOf,
+  COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, localDateOf,
   mapSessions, mapWindowSamples, schema, supports,
 } from '@haelan/core'
 import type { DbOrTx, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
@@ -54,6 +54,18 @@ export function registerIngestRoutes(app: FastifyInstance): void {
   app.post<{ Params: IngestParams, Body: IngestBody }>('/p/:personId/ingest/:dataTypeId', {
     bodyLimit: MAX_BODY_BYTES,
   }, async (request, reply) => {
+    // The boot rebuild holds the write lock for its whole run (see ServerDeps.rebuildInFlight),
+    // and this route writes on the request path with nothing else guarding it: an upload landing
+    // mid rebuild would sit on the event loop until the lock clears and then fail anyway. Checked
+    // first, before any parsing or mapping, so a phone gets a prompt answer instead of paying for
+    // work this request cannot finish. TransientError renders as 503 (envelope.ts), which is the
+    // one status SyncEngine.kt's isWorthRetrying treats as weather rather than a permanent
+    // refusal - a 4xx here would read as "this data type is broken" and the phone would stop
+    // syncing it forever.
+    if (app.haelan.rebuildInFlight?.()) {
+      throw new TransientError('a rebuild is in progress, try again shortly')
+    }
+
     const personId = personIdOf(request)
     const dataType = dataTypeById(request.params.dataTypeId)
     if (!dataType) throw new ConfigError(`unknown data type '${request.params.dataTypeId}'`)
@@ -204,18 +216,34 @@ function writeSamples(
   // One per transaction, never hoisted: the same staleness runJob's own comment names,
   // a rolled back window leaving refs behind that the next write would trip over.
   const keys = new SampleKeys(tx)
+  // Prepared once for the whole upload rather than once per row - runJob.ts's identical statement
+  // and the comment on it (#275). This connection is the server's own and lives for the process,
+  // so a statement left per row is never reclaimed, and it is a phone's own upload, repeated,
+  // that would grow it: worse here than the rebuild that first found the shape, because that
+  // worker exited and took its statements with it.
+  const insertSample = tx.insert(schema.samples).values({
+    personRef: sql.placeholder('personRef'),
+    sourceRef: sql.placeholder('sourceRef'),
+    metricRef: sql.placeholder('metricRef'),
+    utcMs: sql.placeholder('utcMs'),
+    tzOffsetMinutes: sql.placeholder('tzOffsetMinutes'),
+    aggRef: sql.placeholder('aggRef'),
+    value: sql.placeholder('value'),
+    n: sql.placeholder('n'),
+    rawPayloadRef: sql.placeholder('rawPayloadRef'),
+  } as unknown as typeof schema.samples.$inferInsert).onConflictDoUpdate({
+    target: [schema.samples.personRef, schema.samples.sourceRef, schema.samples.metricRef, schema.samples.utcMs, schema.samples.aggRef],
+    set: {
+      value: sql.placeholder('value'),
+      n: sql.placeholder('n'),
+      tzOffsetMinutes: sql.placeholder('tzOffsetMinutes'),
+      rawPayloadRef: sql.placeholder('rawPayloadRef'),
+    } as unknown as Partial<typeof schema.samples.$inferInsert>,
+  }).prepare()
   let rowsWritten = 0
   for (const row of samples) {
     const stored = keys.sampleRefs({ ...row, rawPayloadId })
-    tx.insert(schema.samples).values(stored).onConflictDoUpdate({
-      target: [schema.samples.personRef, schema.samples.sourceRef, schema.samples.metricRef, schema.samples.utcMs, schema.samples.aggRef],
-      set: {
-        value: stored.value,
-        n: stored.n,
-        tzOffsetMinutes: stored.tzOffsetMinutes,
-        rawPayloadRef: stored.rawPayloadRef,
-      },
-    }).run()
+    insertSample.run(stored)
     rowsWritten++
     localDates.add(localDateOf(row.utcMs, row.tzOffsetMinutes))
   }
