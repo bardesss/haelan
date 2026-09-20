@@ -43,6 +43,26 @@ export function companionIngestibleIds(): string[] {
   ).map((t) => t.id).sort()
 }
 
+/**
+ * How long a source may sit silent before it stops holding a type's minimum back.
+ *
+ * The minimum across a type's sources fixed a late writer going missing, but nothing before this
+ * aged a source back out of it: a replaced phone, a retired watch, or one hand typed MANUAL entry
+ * keeps its cursor frozen at the day it stopped, and since the read start is the minimum across
+ * every source, that dead one pins the whole type's window open for good -- it grows by a day a
+ * day, and ingest.ts re-marks the whole re-read span dirty on every sync it does not need.
+ *
+ * The two ways to get this wrong cost differently. Too short and a source that is merely
+ * intermittent -- a watch worn a couple of times a week -- ages out between wearings, and its next
+ * late reading goes missing again: the exact loss the (type, source) minimum exists to prevent.
+ * Too long only leaves the window wider for longer before a truly dead source is finally dropped.
+ * Losing data is worse than a wide window, so this errs long: the app syncs roughly twice a day,
+ * so a silent source has already missed dozens of chances by the time two weeks pass, which is
+ * comfortably past the worst case for a watch worn twice a week (under ten days idle) and still
+ * short enough that a genuinely dead source does not pin the window open indefinitely.
+ */
+export const STALE_SOURCE_MS = 14 * 24 * 60 * 60 * 1000
+
 function normalizePlatform(value: string | string[] | undefined): void {
   if (value === undefined) return
   const raw = Array.isArray(value) ? value[0] : value
@@ -113,8 +133,13 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     // raw rows directly: "minimum across sources" and "minimum across every row" only agree when
     // each source has uploaded exactly once, and a source re-synced twice must not pull the
     // legacy cursor back to its own first upload once its second one has landed.
+    const nowMs = app.haelan.now()
     const byType = new Map<string, { minWindowEndMs: number, lastIngestAtMs: number }>()
     for (const cursor of bySource.values()) {
+      // Aged out: this source stays in bySource and perSourceItems below unchanged, so a phone
+      // that resumes writing under this identity just picks its progress back up. It only stops
+      // being counted toward the type's minimum -- see STALE_SOURCE_MS for the threshold.
+      if (nowMs - cursor.lastIngestAtMs > STALE_SOURCE_MS) continue
       const perType = byType.get(cursor.dataTypeId)
       if (perType) {
         if (cursor.lastWindowEndMs < perType.minWindowEndMs) perType.minWindowEndMs = cursor.lastWindowEndMs

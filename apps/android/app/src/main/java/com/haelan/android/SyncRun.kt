@@ -107,7 +107,7 @@ object SyncRun {
         // a sync failure: every type then keeps the full window instead of skipping.
         val cursors = withContext(Dispatchers.IO) {
             InstanceClient.get(session.server, SyncCursors.pathFor(session.personId), session.cookie) {
-                SyncCursors.cursorEndsFor(it.body)
+                SyncCursors.cursorEndsFor(it.body, runEnd.toEpochMilli())
             }
         }
         if (cursors is InstanceClient.Outcome.Failed) {

@@ -20,6 +20,17 @@ object SyncCursors {
     /** How far before the cursor a delta read starts, in milliseconds. */
     const val OVERLAP_MS: Long = 24L * 60L * 60L * 1000L
 
+    /**
+     * How long a source may sit silent before [cursorEndsFor] stops letting it hold a type's
+     * minimum back. Mirrors companion.ts's STALE_SOURCE_MS, which carries the full reasoning:
+     * too short ages out a watch worn only a couple of times a week between wearings, losing its
+     * next late reading again -- the exact bug the (type, source) minimum exists to prevent. Too
+     * long just leaves the window wider for longer before a truly dead source is dropped. Two
+     * weeks is many multiples of this app's twice a day sync, comfortably past the worst case for
+     * an intermittent watch, so it errs toward keeping a source rather than dropping one early.
+     */
+    const val STALE_SOURCE_MS: Long = 14L * 24L * 60L * 60L * 1000L
+
     /** The route below, spelled once so the screen and the worker ask the same thing. */
     fun pathFor(personId: String): String = "/api/v1/p/$personId/companion/cursors?platform=android"
 
@@ -40,39 +51,53 @@ object SyncCursors {
         return out
     }
 
-    // dataTypeId, then dataSource, then lastWindowEndMs: the placement that keeps a legacy
-    // reader from mistaking this for its own item, and keeps legacyItem above from matching
-    // this one either.
+    // dataTypeId, then dataSource, then lastWindowEndMs, then lastIngestAtMs: the placement
+    // that keeps a legacy reader from mistaking this for its own item, and keeps legacyItem
+    // above from matching this one either. lastIngestAtMs is captured too now, since
+    // cursorEndsFor needs it to tell a stale source from a live one.
     private val sourceItem = Regex(
-        "\"dataTypeId\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"dataSource\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"lastWindowEndMs\"\\s*:\\s*(null|\\d+)",
+        "\"dataTypeId\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"dataSource\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*" +
+            "\"lastWindowEndMs\"\\s*:\\s*(null|\\d+)\\s*,\\s*\"lastIngestAtMs\"\\s*:\\s*(null|\\d+)",
     )
 
-    /** dataTypeId to dataSource to that source's own lastWindowEndMs, nulls dropped. */
-    fun parseSourceCursorEnds(body: String): Map<String, Map<String, Long>> {
-        val out = mutableMapOf<String, MutableMap<String, Long>>()
+    /** One source's own progress: its newest window end, and when it last sent anything. */
+    data class SourceCursor(val lastWindowEndMs: Long, val lastIngestAtMs: Long?)
+
+    /** dataTypeId to dataSource to that source's own cursor, dropped when lastWindowEndMs is null. */
+    fun parseSourceCursorEnds(body: String): Map<String, Map<String, SourceCursor>> {
+        val out = mutableMapOf<String, MutableMap<String, SourceCursor>>()
         for (match in sourceItem.findAll(body)) {
             val dataTypeId = match.groupValues[1]
             val dataSource = match.groupValues[2]
-            val raw = match.groupValues[3]
-            if (raw == "null") continue
-            out.getOrPut(dataTypeId) { mutableMapOf() }[dataSource] = raw.toLong()
+            val rawEnd = match.groupValues[3]
+            val rawIngest = match.groupValues[4]
+            if (rawEnd == "null") continue
+            val lastIngestAtMs = if (rawIngest == "null") null else rawIngest.toLong()
+            out.getOrPut(dataTypeId) { mutableMapOf() }[dataSource] = SourceCursor(rawEnd.toLong(), lastIngestAtMs)
         }
         return out
     }
 
     /**
      * One cursor per type, read the way a shared cursor loses a late writer: the minimum
-     * across that type's known sources, not the maximum a single cursor shared between them
-     * used to answer. A source that lags pulls the whole type back to its own progress, and
-     * the archive deduplicates whatever overlap that reaches into what another source already
-     * carried. Computed from the per source items rather than trusted from the legacy field,
-     * so a source the legacy field has not folded in yet still pulls the type back; a type
-     * with no per source rows of its own falls back to the legacy field, which is null for a
-     * type nothing has sent, same as this answers by being absent.
+     * across that type's known LIVE sources, not the maximum a single cursor shared between
+     * them used to answer. A source that lags pulls the whole type back to its own progress,
+     * and the archive deduplicates whatever overlap that reaches into what another source
+     * already carried. Computed from the per source items rather than trusted from the legacy
+     * field, so a source the legacy field has not folded in yet still pulls the type back.
+     *
+     * "Live" excludes a source whose own lastIngestAtMs is older than [STALE_SOURCE_MS]: see
+     * that constant for why a dead source must not pin the type's minimum open forever. A type
+     * whose sources are all stale, same as one with no per source rows of its own, falls back
+     * to the legacy field -- which the instance has aged the same way, so the fallback cannot
+     * reintroduce the source this just excluded.
      */
-    fun cursorEndsFor(body: String): Map<String, Long> {
+    fun cursorEndsFor(body: String, nowMs: Long): Map<String, Long> {
         val bySource = parseSourceCursorEnds(body)
-        val fromSources = bySource.mapValues { (_, sources) -> sources.values.min() }
+        val fromSources = bySource.mapNotNull { (dataTypeId, sources) ->
+            val live = sources.values.filter { it.lastIngestAtMs == null || nowMs - it.lastIngestAtMs <= STALE_SOURCE_MS }
+            if (live.isEmpty()) null else dataTypeId to live.minOf { it.lastWindowEndMs }
+        }.toMap()
         return parseCursorEnds(body) + fromSources
     }
 
