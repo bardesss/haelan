@@ -24,8 +24,9 @@ function addressMismatch(baseUrl: string): boolean {
  * The control that closes the gap the whole milestone exists for: `/oauth/start` used to be
  * reachable from exactly one place in this app, the setup wizard, so an invited member who signs
  * in afterward - or anyone whose refresh token gets revoked later - had no way back to it. This
- * reads the session directly rather than taking props, so it drops into the Dashboard and Settings
- * alike with nothing threaded through either page.
+ * reads the session directly rather than taking props, so it drops into Settings with nothing
+ * threaded through the page. It stays out of the Dashboard on purpose: a phone-only member
+ * would read "connect your Google account" there seconds after choosing not to.
  *
  * Renders nothing once connected, but "not connected" is not one state to explain - it is two.
  * A revoked credential was refused by Google: the row on file is no good to anyone, and the

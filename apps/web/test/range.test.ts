@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { datesFor, stepAnchor, parseControls } from '../src/controls/range.js'
+import { datesFor, stepAnchor, parseControls, clampFromToHistory } from '../src/controls/range.js'
+import { normalizeHistoryStart, historyStartPath } from '../src/data/useHistoryStart.js'
 import { ALL_SOURCES } from '../src/controls/source.js'
 
 describe('datesFor', () => {
@@ -125,5 +126,64 @@ describe('parseControls', () => {
     it('leaves the anchor and the source alone', () => {
       expect(parseControls('', today, 'week')).toEqual({ tab: 'week', anchor: today, source: ALL_SOURCES })
     })
+  })
+})
+
+describe('clampFromToHistory', () => {
+  // A phone-only history starting 2026-09-13T10:00:00Z, read in the person's own zone.
+  const history = { historyStartMs: Date.parse('2026-09-13T10:00:00Z'), googleConnected: false }
+  const timezone = 'Europe/Amsterdam'
+
+  it('starts the range on the history start instead of the tab start', () => {
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', history, timezone)).toBe('2026-09-13')
+  })
+
+  it('leaves a range that starts after the history alone', () => {
+    expect(clampFromToHistory('2026-09-20', '2026-09-30', history, timezone)).toBe('2026-09-20')
+  })
+
+  it('leaves the range alone without a history start', () => {
+    const none = { historyStartMs: null as number | null, googleConnected: false }
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', none, timezone)).toBe('2026-09-01')
+  })
+
+  it('never clamps a person who also walks the Google path', () => {
+    const mixed = { ...history, googleConnected: true }
+    expect(clampFromToHistory('2026-09-01', '2026-09-30', mixed, timezone)).toBe('2026-09-01')
+  })
+
+  it('never inverts a range that ends before the history starts', () => {
+    expect(clampFromToHistory('2026-08-01', '2026-08-31', history, timezone)).toBe('2026-08-01')
+  })
+
+  it('reads a body with nothing numeric in it as no history', () => {
+    expect(normalizeHistoryStart({} as never))
+      .toEqual({ historyStartMs: null, googleConnected: false, lastIngestAtMs: null })
+    expect(normalizeHistoryStart({ historyStartMs: 'soon' as never, googleConnected: 0 as never }))
+      .toEqual({ historyStartMs: null, googleConnected: false, lastIngestAtMs: null })
+  })
+
+  it('takes the newest ingest across every type, ignoring the types that have none', () => {
+    // The question the staleness line asks is whether the phone is reaching this instance at all,
+    // so one type that arrived an hour ago answers it whatever the others say. A type that has
+    // never been sent carries null and must not read as an ingest at time zero.
+    expect(normalizeHistoryStart({
+      historyStartMs: 1000, googleConnected: false,
+      items: [
+        { dataTypeId: 'steps', lastWindowEndMs: 9, lastIngestAtMs: 500 },
+        { dataTypeId: 'weight', lastWindowEndMs: null, lastIngestAtMs: null },
+        { dataTypeId: 'heart-rate', lastWindowEndMs: 9, lastIngestAtMs: 900 },
+      ],
+    })).toEqual({ historyStartMs: 1000, googleConnected: false, lastIngestAtMs: 900 })
+  })
+
+  it('reads a body whose items are missing or not a list as no ingest', () => {
+    expect(normalizeHistoryStart({ historyStartMs: 1, googleConnected: true }).lastIngestAtMs).toBe(null)
+    expect(normalizeHistoryStart({ historyStartMs: 1, googleConnected: true, items: 'none' as never })
+      .lastIngestAtMs).toBe(null)
+  })
+
+  it('asks the companion cursors for this person as an Android client', () => {
+    expect(historyStartPath('p1')).toBe('/api/v1/p/p1/companion/cursors?platform=android')
   })
 })

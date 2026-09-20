@@ -26,6 +26,11 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  // Whoever is invited names their own path while redeeming instead of inheriting
+  // the admin's. Google is the default because it writes nothing, exactly what redeeming
+  // without this screen always did; picking the phone sends path companion, which is what
+  // records people.companion_path on their own row and nothing else.
+  const [path, setPath] = useState<'google' | 'companion'>('google')
 
   const invite = useQuery({
     queryKey: inviteInfoKey(token),
@@ -40,7 +45,7 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
   // queryClient.isMutating() the instant the click happens, which is what flush() in the test
   // suite watches for to know a page is still doing something.
   const redeem = useMutation({
-    mutationFn: () => apiSend<RedeemResult>('POST', `/api/invite/${encodeURIComponent(token)}`, { username, password }),
+    mutationFn: () => apiSend<RedeemResult>('POST', `/api/invite/${encodeURIComponent(token)}`, { username, password, path }),
     onSuccess: onJoined,
     retry: false,
   })
@@ -90,6 +95,28 @@ export function RedeemInvite({ token, onJoined }: { token: string, onJoined: () 
           <input className="input" type="password" autoComplete="new-password" value={password}
             onChange={(e) => setPassword(e.target.value)} />
         </label>
+
+        <fieldset className="field">
+          <legend className="label">{t('invite.pathTitle')}</legend>
+          {/* A hint under each label rather than the six costs the wizard's own step lists: a
+              member redeeming an invite gets a radio button and not a screen. The three named are
+              the ones that decide whether somebody can use the path at all, the platform, the depth
+              and the missing type; the rest are quality of life and live in the README. Three words
+              per option was the whole of this choice before, which is less than the admin gets for
+              the same decision. */}
+          <label>
+            <input type="radio" name="path" value="google" checked={path === 'google'}
+              onChange={() => setPath('google')} />
+            {t('invite.pathGoogle')}
+          </label>
+          <p className="field-hint">{t('invite.pathGoogleHint')}</p>
+          <label>
+            <input type="radio" name="path" value="companion" checked={path === 'companion'}
+              onChange={() => setPath('companion')} />
+            {t('invite.pathCompanion')}
+          </label>
+          <p className="field-hint">{t('invite.pathCompanionHint')}</p>
+        </fieldset>
 
         <div className="form-actions">
           <button type="submit" className="button button-primary" disabled={redeem.isPending}>

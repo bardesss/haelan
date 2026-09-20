@@ -8,7 +8,17 @@ import { errorBody } from '../api/envelope.ts'
 const ALWAYS_OPEN = new Set(['/api/health', '/api/setup/state'])
 
 export function registerSetupGate(app: FastifyInstance): void {
-  app.get('/api/setup/state', async () => ({ step: currentStep(app) }))
+  // The wizard's backfill step does not apply to a phone path, so the state names
+  // the mode next to the step: one fetch tells SetupApp whether to offer a horizon to
+  // walk or a history start that is a fact rather than a choice. The client flag beside
+  // them tells the connect control whether its button can work yet: pressing it with no
+  // household client saved answers wrong_step, which reads as broken rather than as
+  // "not yet", so the screen disables itself instead.
+  app.get('/api/setup/state', async () => ({
+    step: currentStep(app),
+    companionMode: app.haelan.stores.settings.get()?.companionMode ?? false,
+    googleClientConfigured: hasReadableClient(app),
+  }))
 
   app.addHook('preHandler', async (request, reply) => {
     const path = request.url.split('?')[0] ?? ''
@@ -50,6 +60,9 @@ export function registerSetupGate(app: FastifyInstance): void {
     // session, and /oauth/callback only accepts state this instance signed, for the person named
     // inside it.
     if (step === 'done' && isSetupRoute && !isConsentRoute) {
+      // Named exceptions, and only on the phone path: see opensForCompanion below. They are
+      // what keeps "no Google" a choice rather than a door that only closes.
+      if (opensForCompanion(app, path)) return
       // `setup_incomplete` as the kind for a refusal that means the opposite, because the kind is
       // the family a client branches on and both 409s here mean the same thing to it: this is a
       // wizard route and the wizard is not where you are. The code carries which of the two it was.
@@ -59,6 +72,55 @@ export function registerSetupGate(app: FastifyInstance): void {
 }
 
 function currentStep(app: FastifyInstance): SetupStep {
-  const { accounts, settings, credentials } = app.haelan.stores
-  return setupStep({ accounts, settings, credentials })
+  const { accounts, settings, credentials, people } = app.haelan.stores
+  return setupStep({ accounts, settings, credentials, people })
+}
+
+// Whether pressing connect can work right now. The same guard oauth.ts reads consent
+// through: an unreadable client opens nothing, so it counts as not configured here too
+// rather than as a flag the screen would enable itself on.
+function hasReadableClient(app: FastifyInstance): boolean {
+  const { credentials } = app.haelan.stores
+  return !credentials.isClientUnreadable() && credentials.getClient() !== null
+}
+
+/**
+ * The wizard routes the phone path still needs after it has finished, and the reason it needs
+ * them: closing without Google (POST /api/setup/companion) records companionMode and the completion
+ * stamp, which is exactly what makes setupStep answer 'done' - and at 'done' the branch above shuts
+ * every /api/setup/ route. POST /api/setup/google-client is the only writer of an OAuth client in
+ * the server (oauth.ts), and /oauth/start needs a readable one (it 409s wrong_step without it), so
+ * without this the phone choice could never be undone: no client was ever pasted, and pasting one
+ * was refused. That is a one-way door, and it was found as one.
+ *
+ * Two groups, on purpose, and both only on a completed companion instance:
+ *
+ * - the client itself, and only while nobody has connected Google here. That condition is what
+ *   keeps the refusal above alive on a mixed instance, where rewriting the client silently
+ *   repoints an existing grant and the admin walking this path is the one who would not notice.
+ *   listTokenPeople counts revoked rows too - "has anybody ever chosen the Google path" - which is
+ *   the reading that matters here, because a revoked grant's way back is reconsent through the
+ *   client it was granted against. The two read-only helpers the paste form is built from
+ *   (redirect-uris, scopes) ride the same condition: without them the form has no candidates and
+ *   no scope list, so the open writer would still be unreachable from any screen. They answer
+ *   nothing instance-specific - the scope list is this build's own, the candidates derive from
+ *   the request - and both keep their requireSession.
+ * - the last error, unconditionally. A failed callback redirects to /setup/google?error=<code> and
+ *   the screen fetches the reason from here (SetupApp.tsx), and on a mixed instance the condition
+ *   above has already turned the client's exemption off. The person who needs the message is the
+ *   invited member whose own consent just failed, and this route is a read-only GET over an
+ *   in-memory slot that rewrites nothing: refusing it protects nothing and costs the only
+ *   explanation of the failure.
+ *
+ * None of these exceptions is an unauthenticated door. Every route keeps its own requireSession,
+ * which this hook runs ahead of and does not replace; what opens here is the gate, not the guard.
+ */
+function opensForCompanion(app: FastifyInstance, path: string): boolean {
+  const settings = app.haelan.stores.settings.get()
+  if (settings?.companionMode !== true || settings.setupCompletedAtMs === null) return false
+  if (path === '/api/setup/last-error') return true
+  if (app.haelan.stores.credentials.listTokenPeople().length !== 0) return false
+  return path === '/api/setup/google-client'
+    || path === '/api/setup/scopes'
+    || path === '/api/setup/redirect-uris'
 }

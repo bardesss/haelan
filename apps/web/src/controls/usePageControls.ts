@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { useRoute, navigate, withQuery } from '../router.js'
 import { useSession } from '../auth/session.js'
-import { parseControls, datesFor, stepAnchor } from './range.js'
+import { useHistoryStart } from '../data/useHistoryStart.js'
+import { parseControls, datesFor, stepAnchor, clampFromToHistory } from './range.js'
 import type { RangeKey } from './range.js'
 import { readRange, writeRange } from '../ui/rangePreference.js'
 
@@ -71,7 +72,20 @@ export function usePageControls(): PageControlsState {
   // on a page with no query of its own should honour whatever the reader last chose, including a
   // choice made one route change ago.
   const controls = parseControls(search, today, readRange() ?? 'month')
-  const { from, to } = datesFor(controls.tab, controls.anchor)
+  const { from: tabFrom, to } = datesFor(controls.tab, controls.anchor)
+  // A phone-only history starts at the first sync, not at the tab start:
+  // every card on these pages reads from here, so one clamp honors the start in each
+  // query and each "reported of total" denominator at once. Pending or Google-backed
+  // histories leave the range alone, and the anchor, stepper and `to` never move.
+  //
+  // The clamp sits after the remembered range rather than before it: the range decides which
+  // window the reader asked for, and this decides how much of that window the data can honestly
+  // answer. Reversing them would clamp a window nobody had chosen yet.
+  const history = useHistoryStart()
+  const timezone = session.data?.timezone
+  const from = timezone === undefined
+    ? tabFrom
+    : clampFromToHistory(tabFrom, to, history.data, timezone)
 
   const go = (patch: Record<string, string | null>, replace: boolean) => {
     navigate(withQuery(route, patch), { replace })

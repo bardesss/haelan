@@ -136,7 +136,11 @@ describe('GET /export rounds the same way /series does', () => {
 
     const response = await get(harness, token, '/export?format=csv&metric=heart_rate&agg=mean&from=2026-08-01&to=2026-08-01')
     const [, first] = response.body.trim().split('\n')
-    expect(first).toBe('2026-08-01,heart_rate,mean,merged,90,,')
+    // The trailing `false` is the filled column: heart_rate has no DEVICE_ROLLED_EQUIVALENT entry,
+    // so it can never be filled from an intraday mean and always answers false here. Asserted as
+    // part of the whole row rather than ignored, because this row's exactness is the point of the
+    // test and a column appearing unannounced is what this assertion is for.
+    expect(first).toBe('2026-08-01,heart_rate,mean,merged,90,,,false')
   })
 
   it('rounds the value field in the json export', async () => {
@@ -173,7 +177,7 @@ describe('GET /export rounds the same way /series does', () => {
     const csv = await get(harness, token, '/export?format=csv&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const json = await get(harness, token, '/export?format=json&metric=steps&agg=sum&from=2026-08-01&to=2026-08-01')
     const [, first] = csv.body.trim().split('\n')
-    expect(first).toBe('2026-08-01,steps,sum,merged,900,0.9583333333333334,')
+    expect(first).toBe('2026-08-01,steps,sum,merged,900,0.9583333333333334,,false')
     expect(json.json().steps.points[0].coverage).toBe(23 / 24)
   })
 })

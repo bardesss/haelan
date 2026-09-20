@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { metricSpec } from '@haelan/core/metrics'
 import type { MetricSpec } from '@haelan/core/metrics'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
+import type { DailyPoint } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
@@ -22,13 +24,56 @@ const DAILY_SOURCE = z.string().optional().describe(
   + 'provider row where there is not.',
 )
 
+// Shared by query_series and get_daily, the two tools that answer a raw daily reading rather than
+// a computed statistic (a baseline, a trend, a period comparison): those average or smooth across
+// many days, and which of the contributing days were filled is a different, harder question this
+// catalogue does not try to answer yet. A point-level reading has no such excuse.
+const FILLED_DESCRIPTION =
+  'True when the daily name itself had no row this date and this value is that day\'s intraday '
+  + 'average standing in for it, not the device\'s own daily summary. Say so in words when reporting '
+  + 'a filled reading; do not state it as a measurement.'
+
+// Shared by get_baselines, compare_periods and trend, the three tools that blend many days into
+// one statistic - a boolean per day cannot ride along through that fold the way it does on
+// query_series and get_daily, but a count can, and does.
+const FILLED_DAYS_DESCRIPTION =
+  'How many of the days behind this answer were filled in from an intraday average rather than '
+  + 'the device\'s own daily summary, out of how many. State a nonzero count in words before '
+  + 'treating this answer as built entirely from measured days.'
+
+const FILLED_DAYS = z.object({
+  filled: z.number(),
+  of: z.number(),
+}).describe(FILLED_DAYS_DESCRIPTION)
+
+function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
+  return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
+
+/**
+ * `points` narrowed to the ones `PersonQuery.baseline()` actually averages, by the identical
+ * filter it applies itself (packages/core/src/query/personQuery.ts).
+ *
+ * Needed because a coverage judged metric (steps, heart rate, ...) drops a barely observed day
+ * before averaging, so counting filled over the raw fetch overstates `of` against `baseline.n` -
+ * a real defect the scoped re-review caught (seeded steps gave `n: 4` but `of: 6`). Mirroring the
+ * filter here, through the same exported `coverageIsMeaningful`/`INSIGHT_MIN_COVERAGE` baseline()
+ * itself uses rather than a second invented threshold, keeps `filledDays.of` equal to `n` instead
+ * of merely close to it.
+ */
+function baselineContributingPoints(points: readonly DailyPoint[], metric: string): readonly DailyPoint[] {
+  const judgeCoverage = coverageIsMeaningful(metric)
+  return points.filter((point) => !(judgeCoverage && point.coverage !== null && point.coverage < INSIGHT_MIN_COVERAGE))
+}
+
 export const querySeries = defineTool({
   name: 'query_series',
   description:
     'A daily metric over a date range, oldest first. Returns at most a few hundred points: a '
     + 'longer range is downsampled and `reduction` says so, so read `summary` for the true extremes '
     + 'rather than assuming the points are every day. Report findings with their coverage, and as '
-    + 'association rather than cause.',
+    + 'association rather than cause. Some readings are marked `filled`; see that field before '
+    + 'calling a filled day a measurement.',
   inputSchema: {
     metric: z.string(),
     agg: z.string(),
@@ -41,6 +86,7 @@ export const querySeries = defineTool({
     points: z.array(z.object({
       localDate: z.string(), value: z.number(),
       coverage: z.number().nullable(), source: z.string(),
+      filled: z.boolean().describe(FILLED_DESCRIPTION),
     })),
     reduction: REDUCTION,
     summary: SUMMARY,
@@ -53,6 +99,7 @@ export const querySeries = defineTool({
     return {
       points: result.points.map((p) => ({
         localDate: p.localDate, value: p.value, coverage: p.coverage, source: p.source,
+        filled: p.filled,
       })),
       reduction: result.reduction,
       summary: summaryOf(result.points.map((p) => p.value)),
@@ -89,7 +136,8 @@ export const getDaily = defineTool({
     + 'naming that metric and that aggregate, rather than silently dropped from the answer. A metric '
     + 'with no row that day answers null rather than being left out, so a caller can tell "zero" '
     + 'from "not measured" — the same distinction a missing daily row always carries elsewhere on '
-    + 'this surface.',
+    + 'this surface. Some readings are marked `filled`; see that field before calling a filled day '
+    + 'a measurement.',
   inputSchema: {
     localDate: z.string().describe('YYYY-MM-DD'),
     metrics: z.array(z.string()).min(1),
@@ -108,6 +156,9 @@ export const getDaily = defineTool({
       value: z.number().nullable(),
       coverage: z.number().nullable(),
       source: z.string().nullable(),
+      // Null alongside value/coverage/source for the same reason those three are: nothing was
+      // measured that day, so whether it would have been filled is not a question with an answer.
+      filled: z.boolean().nullable().describe(FILLED_DESCRIPTION),
     })),
   },
   run: (q, args) => ({
@@ -127,6 +178,7 @@ export const getDaily = defineTool({
         value: point?.value ?? null,
         coverage: point?.coverage ?? null,
         source: point?.source ?? null,
+        filled: point?.filled ?? null,
       }
     }),
   }),
@@ -153,12 +205,25 @@ export const getBaselines = defineTool({
       n: z.number(),
       thin: z.boolean(),
     }).nullable(),
+    filledDays: FILLED_DAYS,
   },
-  run: (q, args) => ({
-    baseline: q.baseline({
-      metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
-    }),
-  }),
+  run: (q, args) => {
+    // baseline() answers center, spread and n, none of which carries `filled`, so its own window
+    // (the same rule baselineWindow names, which baseline() calls too) is reopened here through a
+    // fresh series() call, then narrowed through baselineContributingPoints to the same days
+    // baseline() itself averaged, so filledDays.of equals baseline.n exactly rather than
+    // overcounting a day a coverage gate excluded.
+    const windowDays = args.windowDays ?? BASELINE_WINDOW_DAYS
+    const { from, to } = baselineWindow(args.on, windowDays)
+    const { points } = q.series({ metric: args.metric, agg: args.agg, from, to, source: args.source })
+    const contributing = baselineContributingPoints(points, args.metric)
+    return {
+      baseline: q.baseline({
+        metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
+      }),
+      filledDays: filledCountOf(contributing),
+    }
+  },
 })
 
 const DATE_RANGE = z.object({ from: z.string(), to: z.string() }).nullable()
@@ -191,10 +256,29 @@ export const comparePeriods = defineTool({
     previousRange: DATE_RANGE,
     suppressed: z.boolean(),
     reason: z.string().nullable(),
+    currentFilledDays: FILLED_DAYS,
+    previousFilledDays: FILLED_DAYS,
   },
-  run: (q, args) => q.comparePeriods({
-    metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
-  }),
+  run: (q, args) => {
+    const insight = q.comparePeriods({
+      metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
+    })
+    // comparePeriods() always fills currentRange/previousRange in from the arithmetic it already
+    // did, even when suppressed, so both windows are reopened straight off the response rather
+    // than redoing "the period before this one" math a second time - the same reasoning
+    // apps/server/src/routes/v1/series.ts's /insights route already applies.
+    const currentWindow = q.series({
+      metric: args.metric, agg: args.agg, from: insight.currentRange!.from, to: insight.currentRange!.to, source: args.source,
+    })
+    const previousWindow = q.series({
+      metric: args.metric, agg: args.agg, from: insight.previousRange!.from, to: insight.previousRange!.to, source: args.source,
+    })
+    return {
+      ...insight,
+      currentFilledDays: filledCountOf(currentWindow.points),
+      previousFilledDays: filledCountOf(previousWindow.points),
+    }
+  },
 })
 
 export const trend = defineTool({
@@ -215,12 +299,18 @@ export const trend = defineTool({
   outputSchema: {
     points: z.array(z.object({ localDate: z.string(), value: z.number() })),
     summary: SUMMARY,
+    filledDays: FILLED_DAYS,
   },
   run: (q, args) => {
     const points = q.trend({
       metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
     })
-    return { points, summary: summaryOf(points.map((p) => p.value)) }
+    // trend smooths the same series() this reads again, over the same from/to: no window math to
+    // redo here, only the read of `filled` the smoothed points themselves do not carry.
+    const raw = q.series({
+      metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
+    })
+    return { points, summary: summaryOf(points.map((p) => p.value)), filledDays: filledCountOf(raw.points) }
   },
 })
 

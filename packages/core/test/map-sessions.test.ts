@@ -52,6 +52,28 @@ const anExercise = {
 }
 
 describe('mapSessions', () => {
+  /**
+   * The same fallback the samples mapper needs, for the same reason: the companion route archives
+   * the request's identity beside the points, and a session replayed from the archive alone would
+   * otherwise land under `unknown`.
+   */
+  it('reads the source a page names for all of its sessions', () => {
+    const seen: unknown[] = []
+    const rows = mapSessions({
+      dataType: sleep, personId: 'p1', rawPayloadId: 'r1',
+      resolveSource: (dataSource) => { seen.push(dataSource); return 's1' },
+      body: JSON.stringify({
+        dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+        // The name and the per-point source are both dropped on purpose: this is the shape the
+        // companion app sends, where a point carries nothing but its reading.
+        dataPoints: [{ sleep: aNight.sleep }],
+      }),
+    })
+
+    expect(rows.sessions).toHaveLength(1)
+    expect(seen).toEqual([{ platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } }])
+  })
+
   it('maps one night to one session', () => {
     const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([aNight]) })
     expect(sessions).toHaveLength(1)
@@ -177,6 +199,62 @@ describe('mapSessions', () => {
   it('still refuses a foreign target with no alsoTargets naming this one, unchanged from before', () => {
     const spo2 = dataTypeById('oxygen-saturation')!
     expect(spo2.alsoTargets).toBeUndefined()
+  })
+
+  // Task 5, fix round 1. The `sleepPoint` helper above builds Google's shape, `name` as a sibling
+  // of `sleep` at the point level, which is where mapSessions actually reads it
+  // (`valueAt(point, 'name')`). That is also where core needs the app to put it, but it is NOT
+  // where `SyncEngine.kt` put it in round 1 (inside the `sleep` object, beside `interval`), so a
+  // fixture built with `sleepPoint` proved core prefers `name` where core looks for it and said
+  // nothing about whether the app's JSON puts it there. This fixture is instead a hand copy of
+  // `SyncEngine.kt`'s `toSleepPoints` structure and must move with it if that structure changes:
+  // `name` as a sibling of `sleep`, never a field inside it.
+  const companionSleepPoint = (o: { name?: string, startTime: string, endTime: string }) => ({
+    ...(o.name !== undefined ? { name: o.name } : {}),
+    dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+    sleep: {
+      interval: {
+        startTime: o.startTime, startUtcOffset: '7200s',
+        endTime: o.endTime, endUtcOffset: '7200s',
+      },
+      type: 'STAGES',
+      metadata: { mainSleep: true, processed: true, stagesStatus: 'SUCCEEDED' },
+      stages: [],
+    },
+  })
+
+  it('collapses a revised night to one session when both arrivals carry the same non-empty id', () => {
+    const recordId = 'health-connect-record-id-abc'
+    const original = companionSleepPoint({
+      name: recordId, startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z',
+    })
+    const revised = companionSleepPoint({
+      name: recordId,
+      // Same record, start moved five minutes once the algorithm settled.
+      startTime: '2026-08-17T21:35:00Z', endTime: '2026-08-18T05:15:00Z',
+    })
+    const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([original, revised]) })
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]?.startMs).toBe(Date.parse('2026-08-17T21:35:00Z'))
+  })
+
+  it('KNOWN OLD BEHAVIOUR: with no name field at all, the same revised night still doubles', () => {
+    // No `name` key at all, not an empty one: this is what a pre-fix app sent.
+    const original = companionSleepPoint({ startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z' })
+    const revised = companionSleepPoint({ startTime: '2026-08-17T21:35:00Z', endTime: '2026-08-18T05:15:00Z' })
+    const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([original, revised]) })
+    expect(sessions).toHaveLength(2)
+  })
+
+  // Round 1's blank-name gap: Health Connect's Metadata.id defaults to "" for a record the
+  // platform never assigned one to, and `typeof "" === 'string'` is true, so a naive fix would
+  // collapse every blank-id session of a source onto one row instead of doubling one night. Two
+  // is the documented old behaviour and the safe answer; one would be silent data loss.
+  it('treats a blank name the same as a missing one, rather than collapsing onto one row', () => {
+    const original = companionSleepPoint({ name: '', startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z' })
+    const revised = companionSleepPoint({ name: '', startTime: '2026-08-17T21:35:00Z', endTime: '2026-08-18T05:15:00Z' })
+    const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([original, revised]) })
+    expect(sessions).toHaveLength(2)
   })
 
   it('attributes each session to its own point source rather than one source for the whole body', () => {

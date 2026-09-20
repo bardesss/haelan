@@ -170,4 +170,53 @@ describe('the sync control', () => {
     globalThis.fetch = original
     expect(container!.textContent).toContain('A sync is already running.')
   })
+
+  /**
+   * The phone path, where this control used to lie.
+   *
+   * The sync runner only runs for people connected to Google, so a phone-only person's
+   * lastFinishedAtMs is null for ever and the line read "Never synced" while their phone had been
+   * uploading all week. The button beside it posts /api/sync/run, which starts that same runner and
+   * has nothing to fetch for them, so the click appeared to succeed and changed nothing.
+   */
+  function withPhone(
+    node: ReactNode,
+    phone: { googleConnected: boolean, lastIngestAtMs: number | null },
+    status: { running: boolean, lastFinishedAtMs: number | null } = { running: false, lastFinishedAtMs: null },
+  ): ReactNode {
+    const client = clientWith(status)
+    client.setQueryData(queryKeys.resource(PERSON.personId, 'history-start'), {
+      historyStartMs: Date.now() - 86_400_000, ...phone,
+    })
+    return <QueryClientProvider client={client}>{node}</QueryClientProvider>
+  }
+
+  it('says when the phone last sent instead of never synced, and offers no button', () => {
+    mount(withPhone(<SyncControl />, { googleConnected: false, lastIngestAtMs: Date.now() - 20 * 60_000 }))
+    expect(container!.textContent).toContain('Phone sent 20 min ago')
+    expect(container!.textContent).not.toContain('Never synced')
+    expect(container!.querySelector('.sync-button')).toBe(null)
+  })
+
+  it('keeps the button and says both when Google is connected as well', () => {
+    // The two stall independently: a mixed household's Google sync can be healthy while the phone
+    // has been asleep for a week, so one sentence carrying the newer of the two would hide it.
+    mount(withPhone(
+      <SyncControl />,
+      { googleConnected: true, lastIngestAtMs: Date.now() - 20 * 60_000 },
+      { running: false, lastFinishedAtMs: Date.now() - 5 * 60_000 },
+    ))
+    expect(container!.textContent).toContain('Synced 5 min ago')
+    expect(container!.textContent).toContain('Phone sent 20 min ago')
+    expect(container!.querySelector('.sync-button')).not.toBe(null)
+  })
+
+  it('still says never synced for somebody who has connected nothing at all', () => {
+    // No Google and no phone is not the phone path, it is a person who has not finished setting
+    // up. "Never synced" is the true answer for them and the button is the thing that helps.
+    mount(withPhone(<SyncControl />, { googleConnected: false, lastIngestAtMs: null }))
+    expect(container!.textContent).toContain('Never synced')
+    expect(container!.textContent).not.toContain('Phone sent')
+    expect(container!.querySelector('.sync-button')).not.toBe(null)
+  })
 })

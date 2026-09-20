@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The visible spelling is Hælan in every language. Everything that is typed,
+         package included, stays haelan. The app speaks English and Dutch (values-nl):
+         every translatable string lives in both, and MissingTranslation enforces it. -->
+    <string name="app_name" translatable="false">Hælan</string>
+
+    <!-- Login: same copy as the web (signIn.* + shell.sessionExpired). The brand mark is not a
+         string: it is the vector drawable, as on the web sign-in card. -->
+    <string name="login_title">Sign in</string>
+    <string name="login_server">Instance address</string>
+    <string name="login_server_hint">http://192.168.x.x:4235</string>
+    <string name="login_username">Username</string>
+    <string name="login_password">Password</string>
+    <string name="login_submit">Sign in</string>
+    <string name="login_working">Signing in</string>
+    <string name="login_failed">That username and password do not match an account on this instance.</string>
+    <string name="login_server_invalid">That is not an instance address. It looks like http://192.168.1.10:4235.</string>
+    <string name="login_expired">The session ended. Sign in again to continue.</string>
+    <string name="login_insecure">Secure storage is unavailable on this device, so settings are kept unencrypted.</string>
+
+    <!-- Why an exchange with the instance produced no answer. One sentence per reason, because a
+         typo in the address, a stopped instance, an untrusted certificate and a page that is not
+         haelan ask different things of the person, and every one of them used to read the same
+         "the instance did not answer" (A-18). -->
+    <string name="error_unknown_host">That address does not resolve. Check the name and that the phone is on the same network.</string>
+    <string name="error_refused">Nothing is listening at that address. Check that the instance is running and that the port is right.</string>
+    <string name="error_timeout">The instance did not answer in time.</string>
+    <string name="error_certificate">The phone refused the instance certificate, so nothing was sent. The instance has to be reached over http on the local network, or behind a certificate the phone trusts.</string>
+    <string name="error_not_instance">Something answered, and it is not a Hælan instance.</string>
+    <string name="error_broken">The connection to the instance broke before it answered.</string>
+    <string name="error_not_your_person">This sign-in cannot send data for that person. Sign in again.</string>
+    <string name="error_too_large">The instance refused the request for its size. The sync sends a type in blocks, so this is a point too large to send alone.</string>
+    <string name="error_instance">The instance answered %1$d.</string>
+
+    <!-- Main. -->
+    <string name="main_account">Signed in as %1$s</string>
+    <string name="main_sign_out">Sign out</string>
+
+    <string name="perm_title">Health Connect</string>
+    <string name="perm_body">Hælan reads activity, body measures and heart data from Health Connect to show them on your own dashboard. Nothing leaves your home network.</string>
+    <string name="perm_action">Request permissions</string>
+    <string name="perm_granted">All permissions granted.</string>
+    <string name="perm_already">All permissions are already granted.</string>
+    <string name="perm_missing">Still missing: %1$s</string>
+    <string name="perm_unavailable">Health Connect is not available here. Install it first.</string>
+
+    <string name="sync_title">Sync</string>
+    <string name="sync_body">Sends what is new since the last sync, or the last 30 days the first time.</string>
+    <string name="sync_action">Sync now</string>
+    <string name="sync_working">Syncing…</string>
+    <!-- The sync no longer writes a log: the three bars say how far along it is, and the two sentences that
+         remain are the ones that must reach whoever presses the button (nothing to send, and the
+         sync stopping). Every other reason goes to logcat. -->
+    <string name="sync_none">Switch on at least one data type.</string>
+    <string name="sync_failed">Sync stopped: %1$s</string>
+    <string name="type_failed">This type was not sent.</string>
+    <string name="type_sent">This type has been sent.</string>
+
+    <!-- A gap reads as a timestamp that stopped moving, not as a missing failure. Each
+         row names its last finished run, so a day without any run is visible there. -->
+    <string name="status_never">Never synced</string>
+    <!-- The absolute time beside the relative sentence, so today still says when. -->
+    <string name="status_at">%1$s (%2$s)</string>
+    <string name="status_sent_today">Last sent today</string>
+    <plurals name="status_sent_days">
+        <item quantity="one">Last sent %d day ago</item>
+        <item quantity="other">Last sent %d days ago</item>
+    </plurals>
+    <string name="status_empty_today">Checked today, no data in Health Connect</string>
+    <plurals name="status_empty_days">
+        <item quantity="one">No data, last checked %d day ago</item>
+        <item quantity="other">No data, last checked %d days ago</item>
+    </plurals>
+
+    <!-- Doze and the vendor battery savers stop the background run without a failure,
+         which is worse than an error because nothing looks wrong. The card says so and names
+         the one setting that keeps the twice daily run on schedule. -->
+    <string name="battery_title">Background sync</string>
+    <string name="battery_body">Android can pause Hælan to save battery, so the twice daily sync may not run for days. Turning off battery optimization for Hælan keeps it on schedule. Nothing else changes.</string>
+    <string name="battery_exempt">Battery optimization is off for Hælan, so the background sync can run.</string>
+    <string name="battery_action">Open battery settings</string>
+
+    <string name="section_activity">Activity</string>
+    <string name="section_body">Body</string>
+    <string name="section_heart">Heart and breathing</string>
+
+    <string name="src_health_connect">Health Connect</string>
+
+    <string name="type_steps">Steps</string>
+    <string name="type_distance">Distance</string>
+    <string name="type_elevation">Elevation gain</string>
+    <string name="type_active_energy">Active energy</string>
+    <string name="type_basal">Basal energy</string>
+    <string name="type_exercise">Workouts</string>
+    <string name="type_sleep">Sleep</string>
+
+    <string name="type_weight">Weight</string>
+    <string name="type_height">Height</string>
+    <string name="type_body_fat">Body fat</string>
+    <string name="type_body_temp">Body temperature</string>
+    <string name="type_glucose">Blood glucose</string>
+    <string name="type_hydration">Hydration</string>
+
+    <string name="type_heart_rate">Heart rate</string>
+    <string name="type_resting">Resting heart rate</string>
+    <string name="type_hrv">Heart rate variability</string>
+    <string name="type_spo2">Oxygen saturation</string>
+    <string name="type_breathing">Breathing</string>
+    <string name="type_vo2">VO2 max</string>
+
+    <string name="rationale_text">Hælan reads activity, body measures and heart data from Health Connect to show them on your own Hælan dashboard. Nothing leaves your home network.</string>
+    <string name="rationale_continue">Continue</string>
+</resources>

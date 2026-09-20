@@ -21,7 +21,15 @@ interface ExportQuery {
 // both state the basis of a merged number, and sourceMix is real JSON on every merged row (see
 // merge.ts's encodeMix), so it is what makes the quoting below load bearing on real data: none
 // of the other columns can ever hold a comma, a quote or a newline.
-const CSV_HEADER = 'localDate,metric,agg,source,value,coverage,sourceMix'
+//
+// filled (personQuery.ts's DailyPoint.filled) is last, not folded into source or dropped: a
+// spreadsheet has no tooltip and no dashed line, so the fact that a daily_hrv or daily_spo2 row
+// is an intraday mean standing in for a silent daily summary has to survive as its own column or
+// it does not survive the download at all. Written as the literal text 'true'/'false', the same
+// way every other boolean this project ever put in a CSV would be, never folded into `source`
+// (still 'merged' or 'provider' on a filled row, exactly as it is on a genuine one) or into a
+// sourceMix that a filled row does not carry.
+const CSV_HEADER = 'localDate,metric,agg,source,value,coverage,sourceMix,filled'
 
 /** RFC 4180: a field needing no quoting is written bare; one with a comma, a quote, a line feed
  *  or a carriage return is wrapped in double quotes, with an inner quote doubled. daily.source_mix
@@ -66,7 +74,7 @@ function toCsv(byMetric: Readonly<Record<string, SeriesResult>>, metrics: readon
     for (const point of byMetric[metric]!.points) {
       lines.push(csvRow([
         point.localDate, metric, agg, point.source,
-        orEmpty(point.value), orEmpty(point.coverage), orEmpty(point.sourceMix),
+        orEmpty(point.value), orEmpty(point.coverage), orEmpty(point.sourceMix), String(point.filled),
       ]))
     }
   }

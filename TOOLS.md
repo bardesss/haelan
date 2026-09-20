@@ -96,7 +96,7 @@ None.
 
 ### query_series
 
-A daily metric over a date range, oldest first. Returns at most a few hundred points: a longer range is downsampled and `reduction` says so, so read `summary` for the true extremes rather than assuming the points are every day. Report findings with their coverage, and as association rather than cause.
+A daily metric over a date range, oldest first. Returns at most a few hundred points: a longer range is downsampled and `reduction` says so, so read `summary` for the true extremes rather than assuming the points are every day. Report findings with their coverage, and as association rather than cause. Some readings are marked `filled`; see that field before calling a filled day a measurement.
 
 **Input**
 
@@ -114,6 +114,7 @@ A daily metric over a date range, oldest first. Returns at most a few hundred po
   - **value** (number)
   - **coverage** (number, nullable)
   - **source** (string)
+  - **filled** (boolean) — True when the daily name itself had no row this date and this value is that day's intraday average standing in for it, not the device's own daily summary. Say so in words when reporting a filled reading; do not state it as a measurement.
 - **reduction** (object, nullable)
   - **method** (string)
   - **from** (number)
@@ -129,7 +130,7 @@ A daily metric over a date range, oldest first. Returns at most a few hundred po
 
 ### get_daily
 
-Several metrics for a single day, one reading each, so an agent asking "what happened on this date" does not have to call query_series once per metric itself. Omit `agg` and each metric answers with its own natural aggregate — the reading each metric's own card shows elsewhere on this surface — named in that reading's own `agg` field, so metrics as different as heart rate and steps can be asked for together in one call. Name an `agg` and it applies to every metric in the list alike; a metric that does not support it is refused outright, naming that metric and that aggregate, rather than silently dropped from the answer. A metric with no row that day answers null rather than being left out, so a caller can tell "zero" from "not measured" — the same distinction a missing daily row always carries elsewhere on this surface.
+Several metrics for a single day, one reading each, so an agent asking "what happened on this date" does not have to call query_series once per metric itself. Omit `agg` and each metric answers with its own natural aggregate — the reading each metric's own card shows elsewhere on this surface — named in that reading's own `agg` field, so metrics as different as heart rate and steps can be asked for together in one call. Name an `agg` and it applies to every metric in the list alike; a metric that does not support it is refused outright, naming that metric and that aggregate, rather than silently dropped from the answer. A metric with no row that day answers null rather than being left out, so a caller can tell "zero" from "not measured" — the same distinction a missing daily row always carries elsewhere on this surface. Some readings are marked `filled`; see that field before calling a filled day a measurement.
 
 **Input**
 
@@ -147,6 +148,7 @@ Several metrics for a single day, one reading each, so an agent asking "what hap
   - **value** (number, nullable)
   - **coverage** (number, nullable)
   - **source** (string, nullable)
+  - **filled** (boolean, nullable) — True when the daily name itself had no row this date and this value is that day's intraday average standing in for it, not the device's own daily summary. Say so in words when reporting a filled reading; do not state it as a measurement.
 
 ### get_baselines
 
@@ -167,6 +169,9 @@ A person's own center and spread for a metric, computed from the `windowDays` be
   - **spread** (number)
   - **n** (number)
   - **thin** (boolean)
+- **filledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
 
 ### compare_periods
 
@@ -198,6 +203,12 @@ A date range's mean against the equal-length period immediately before it, with 
   - **to** (string)
 - **suppressed** (boolean)
 - **reason** (string, nullable)
+- **currentFilledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
+- **previousFilledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
 
 ### trend
 
@@ -224,6 +235,9 @@ A smoothed line over the daily series for one metric over a date range, oldest f
   - **median** (number, nullable)
   - **first** (number, nullable)
   - **last** (number, nullable)
+- **filledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
 
 ### get_intraday
 
@@ -495,7 +509,7 @@ Slower than the other tools - it builds a fresh database for each query - and it
 
 ### recovery_index
 
-The recovery index for each day in a date range, oldest first - the same number the app's own Recovery page shows when it is left on its default, all-sources view (a Recovery page narrowed to one source computes over that source alone and can disagree with this), built from heart rate variability, resting heart rate, respiratory rate and the past week's sleep duration and bedtime consistency, each read against this person's own 60-day baseline. `band` names five comparative bands around that baseline - low, below, usual, above, high - never a readiness verdict, only distance from a person's own normal. A day with `enough: false` could not be scored at all (see `missing`) and is not the same as a low score; only read `score` and `band` where `enough` is true. Each scored day's `inputs` shows how much of that day's movement each of the four inputs carried, scaled by how much every present input moved in total - on a day the inputs pulled in different directions, their points do not add up to the distance between `score` and 50, and none is reported as a total. Report a finding as association with how the day was lived, never as advice, risk or a clinical claim.
+The recovery index for each day in a date range, oldest first - the same number the app's own Recovery page shows when it is left on its default, all-sources view (a Recovery page narrowed to one source computes over that source alone and can disagree with this), built from heart rate variability, resting heart rate, respiratory rate and the past week's sleep duration and bedtime consistency, each read against this person's own 60-day baseline. `band` names five comparative bands around that baseline - low, below, usual, above, high - never a readiness verdict, only distance from a person's own normal. A day with `enough: false` could not be scored at all (see `missing`) and is not the same as a low score; only read `score` and `band` where `enough` is true. Each scored day's `inputs` shows how much of that day's movement each of the four inputs carried, scaled by how much every present input moved in total - on a day the inputs pulled in different directions, their points do not add up to the distance between `score` and 50, and none is reported as a total. `hrvFilled` says how many of the daily HRV readings behind every score in this answer were filled in from an intraday average rather than the device's own daily summary, out of how many were used - HRV is the only one of the four inputs this can ever happen to. A nonzero `filled` means some of the HRV behind these scores was estimated, not measured; say so in words rather than reporting the score as measurement throughout. Report a finding as association with how the day was lived, never as advice, risk or a clinical claim.
 
 **Input**
 
@@ -516,3 +530,6 @@ The recovery index for each day in a date range, oldest first - the same number 
     - **points** (number) — This input's share of the distance between score and 50, scaled by how much every present input moved in total - not by weight alone, so it can read smaller than weight would suggest on a day the inputs disagreed.
   - **degraded** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Null when `enough` is false. Otherwise the optional inputs that were entirely ABSENT this day; their weight was redistributed across the rest, which is why a present input's weight can read higher than its nominal share. Never includes an input listed in `reducedWeight` - that input was present, just on reduced evidence, not absent.
   - **reducedWeight** (array of 'hrv' | 'restingHeartRate' | 'sleep' | 'respiratoryRate', nullable) — Null when `enough` is false. Otherwise the optional inputs that WERE present this day but on less than their full evidence, and so carried less than their nominal weight rather than being dropped. Today this can only ever be `["sleep"]`, for a week with only duration or only bedtime consistency observed - never treat an input named here as absent the way one named in `degraded` is.
+- **hrvFilled** (object) — How many of the daily HRV readings behind these scores (each day's own reading plus its 60-day baseline) were filled in from an intraday average rather than measured, out of how many were used.
+  - **filled** (number)
+  - **of** (number)

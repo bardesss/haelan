@@ -46,5 +46,23 @@
  *    Sessions are a rounding error against `samples` - 434 of them against 2,138,327 sample rows
  *    on the same instance - so the disk cost is not measurable next to the rebuild the bump
  *    triggers.
+ * A sixth bump was proposed alongside the companion app: `mapSamples` and `mapSessions` now fall
+ * back to the request's own `dataSource` when a point names none, because the companion route
+ * archives one identity beside a whole page's points (ingest.ts) rather than inside each one.
+ * Measured rather than assumed, since this bump would cost every household a rebuild whether or
+ * not it uses a phone: the fallback only fires when the parsed body carries a top level
+ * `dataSource`, and `ingest.ts` is the only writer that ever puts one there. Every body the Google
+ * path archives is the response text Google sent back, verbatim (client.ts archives it before
+ * parsing), and that response carries only `dataPoints` and `nextPageToken` - never a top level
+ * `dataSource` (envelope.test.ts records the siblings Google's v4 API actually sends, and none of
+ * them is this). So for a Google body `pageSource` is always `undefined`, `valueAt(point,
+ * 'dataSource') ?? pageSource` is `valueAt(point, 'dataSource') ?? undefined`, and that is the
+ * same value the pre-bump mapper read, whether or not the point in hand happens to name its own
+ * source. The fallback cannot change a single Google replay, archived under any released version
+ * or not. Nor is there a companion body to worry about: the ingest route it depends on has never
+ * shipped in a release, so no household's archive holds one either. A rebuild under this code
+ * re-derives exactly what version 5 did, so the version stays 5 - packages/core/test/
+ * mapping-version.test.ts pins the equivalence with the same Google fixture shapes map-samples.
+ * test.ts and map-sessions.test.ts already use.
  */
 export const MAPPING_VERSION = 5

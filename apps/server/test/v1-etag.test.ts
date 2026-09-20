@@ -295,7 +295,10 @@ describe('conditional requests on the daily backed routes', () => {
   it('answers a stable ETag for a null /baselines, so a client with no history is not always miss', async () => {
     harness = await withServer(); const token = await harness.signIn()
     const first = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')
-    expect(first.json()).toEqual({ baseline: null })
+    // filledDays rides along even with no baseline to report, and stays 0 of 0 rather than being
+    // omitted: a shape that changes with the answer is a shape every consumer has to branch on,
+    // and the ETag this test exists to keep stable is computed over the whole body.
+    expect(first.json()).toEqual({ baseline: null, filledDays: { filled: 0, of: 0 } })
     const second = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')
     expect(second.headers.etag).toBe(first.headers.etag)
 

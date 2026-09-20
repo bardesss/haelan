@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest'
-import { DEFAULT_LIST, DERIVATION_VERSION, dayMetricTarget, insertSample, schema } from '@haelan/core'
+import { DEFAULT_LIST, DERIVATION_VERSION, RawArchive, dayMetricTarget, insertSample, schema } from '@haelan/core'
 import { registeredRoutes, withServer } from './harness.ts'
 import type { Harness } from './harness.ts'
 
@@ -356,6 +356,35 @@ const ROUTES: readonly RouteCase[] = [
       expect(items.find((i) => i.id === 'weight')?.excluded).toBe(false)
     },
   },
+  {
+    name: 'companion/cursors',
+    template: '/api/v1/p/:personId/companion/cursors',
+    // The markers ride on the cursor timestamps, not on the type ids: every person's
+    // answer lists every ingestible id, so the ids themselves cannot tell a leak apart.
+    path: (p) => `/api/v1/p/${p}/companion/cursors?platform=android`,
+    seedOwn: (h) => new RawArchive(h.app.haelan.instance.db).put({
+      personId: 'p1', dataType: 'weight',
+      requestParams: { source: 'companion', dataType: 'weight' },
+      windowStartMs: 1_700_000_000_000, windowEndMs: 1_700_000_000_001,
+      fetchedAtMs: 1_700_000_000_002, httpStatus: 200,
+      body: JSON.stringify({ dataPoints: [], dataSource: {} }),
+    }),
+    seedOther: (h, personId) => new RawArchive(h.app.haelan.instance.db).put({
+      personId, dataType: 'weight',
+      requestParams: { source: 'companion', dataType: 'weight' },
+      windowStartMs: 9_999_999_999_000, windowEndMs: 9_999_999_999_001,
+      fetchedAtMs: 9_999_999_999_002, httpStatus: 200,
+      body: JSON.stringify({ dataPoints: [], dataSource: {} }),
+    }),
+    ownNeedle: '1700000000000',
+    // Not p2's windowStartMs. This route only ever reports a window start through
+    // historyStartMs, which is a minimum across every row it sees -- p1's own seed above is
+    // smaller, so p2's start could never surface here even with the person filter deleted
+    // outright. A leaked row instead lands in bySource under the same dataType:dataSource key
+    // as p1's own weight row (both requestParams omit dataSource, so both read as 'unknown'),
+    // and that merge takes the larger windowEndMs: p2's windowEndMs, one past its windowStartMs.
+    otherNeedle: '9999999999001',
+  },
 ]
 
 describe.each(ROUTES)('the versioned surface is isolated per person: $name', (route) => {
@@ -484,6 +513,7 @@ describe('the versioned surface, beyond the per-route table', () => {
     'DELETE /api/v1/p/:personId/sources/:sourceId/alias',
     'PUT /api/v1/p/:personId/data-types',
     'PUT /api/v1/p/:personId/source-priority',
+    'POST /api/v1/p/:personId/ingest/:dataTypeId',
   ]
 
   // A mutating request is refused by the origin hook unless these two agree, so a write test that

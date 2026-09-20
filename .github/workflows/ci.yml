@@ -97,6 +97,16 @@ jobs:
             exit 1
           fi
 
+      # The Android palette is the second emitted target of @haelan/tokens, and the file it
+      # replaced is the one somebody would put back: a hand-written res/values/colors.xml is a
+      # second definition of the palette, which is what removed it.
+      - name: Check the Android palette is not committed
+        run: |
+          if git ls-files --error-unmatch apps/android/app/src/main/res/values/colors.xml > /dev/null 2>&1; then
+            echo "res/values/colors.xml is a build output and must not be tracked"
+            exit 1
+          fi
+
   # demo:capture seeds a year of generated data and reruns a rebuild over it, which costs minutes
   # rather than seconds - too much to pay on every push. So this rehearses the chain pages.yml
   # runs on every deploy (capture, then build, then site:build) only for a pull request whose diff

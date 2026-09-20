@@ -237,8 +237,13 @@ export async function withServer(options: WithServerOptions = {}): Promise<Harne
 
     // Every test file has been rolling its own cookie extraction. One helper instead, returning
     // the raw session id, which is what both transports carry.
+    //
+    // connectPerson, not completeSetup: a client with no token lands back at the connect step
+    // now that done needs a chosen path, so a sign-in helper that left the instance mid-wizard
+    // would 409 every authenticated call its callers make. Tests for the mid-wizard states call
+    // completeSetup directly instead.
     signIn: async (username = 'robin', password = 'a good long password') => {
-      await completeSetup()
+      await connectPerson()
       const response = await app.inject({
         method: 'POST', url: '/api/auth/login',
         headers: { origin: 'http://localhost:4235', host: 'localhost:4235' },

@@ -34,6 +34,7 @@ function seedDaily(input: {
   metric?: string
   agg?: string
   source?: string
+  coverage?: number | null
 }): void {
   test.db.insert(schema.daily).values({
     personId: 'robin',
@@ -42,7 +43,7 @@ function seedDaily(input: {
     agg: input.agg ?? 'sum',
     source: input.source ?? 'merged',
     value: input.value,
-    coverage: null,
+    coverage: input.coverage === undefined ? null : input.coverage,
     sourceMix: null,
     derivationVersion: DERIVATION_VERSION,
     updatedAtMs: null,
@@ -148,12 +149,31 @@ describe('query_series', () => {
     }
 
     expect(out.points).toEqual([
-      { localDate: '2026-08-01', value: 1000, coverage: null, source: 'merged' },
-      { localDate: '2026-08-02', value: 2000, coverage: null, source: 'merged' },
-      { localDate: '2026-08-03', value: 3000, coverage: null, source: 'merged' },
+      { localDate: '2026-08-01', value: 1000, coverage: null, source: 'merged', filled: false },
+      { localDate: '2026-08-02', value: 2000, coverage: null, source: 'merged', filled: false },
+      { localDate: '2026-08-03', value: 3000, coverage: null, source: 'merged', filled: false },
     ])
     expect(out.summary.n).toBe(3)
     expect(out.reduction).toBeNull()
+  })
+
+  // A language model cannot see the dashed line the web app draws for a filled point, so `filled`
+  // has to reach it as a field it can read and report in words rather than state as a measurement.
+  // Exercised through the real fallback (packages/core/src/query/personQuery.ts's
+  // DEVICE_ROLLED_EQUIVALENT), not a hand-built true, the same reason v1-export.test.ts's own
+  // filled case seeds hrv/mean rather than asserting the field in isolation.
+  it('marks a daily_hrv reading pulled from the intraday fallback as filled', () => {
+    seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 42 })
+    seedDaily({ localDate: '2026-08-02', metric: 'daily_hrv', agg: 'last', value: 55 })
+
+    const out = tool('query_series').run(q(), {
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-02',
+    }) as { points: { localDate: string, filled: boolean }[] }
+
+    expect(out.points.map((p) => ({ localDate: p.localDate, filled: p.filled }))).toEqual([
+      { localDate: '2026-08-01', filled: true },
+      { localDate: '2026-08-02', filled: false },
+    ])
   })
 
   it('caps a wide range to the requested budget and says it thinned', () => {
@@ -227,13 +247,29 @@ describe('get_daily', () => {
       localDate: '2026-08-10', metrics: ['distance', 'steps'], agg: 'sum',
     }) as {
       localDate: string
-      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null }[]
+      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null, filled: boolean | null }[]
     }
 
     expect(out.localDate).toBe('2026-08-10')
     expect(out.readings).toEqual([
-      { metric: 'distance', agg: 'sum', value: null, coverage: null, source: null },
-      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged' },
+      { metric: 'distance', agg: 'sum', value: null, coverage: null, source: null, filled: null },
+      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged', filled: false },
+    ])
+  })
+
+  // The same words-not-a-dashed-line reasoning query_series's own filled test gives: this tool's
+  // reading is the exact shape get_daily hands to an agent asking "what happened on this date",
+  // and daily_hrv is the one metric here DEVICE_ROLLED_EQUIVALENT can pull from the intraday
+  // fallback.
+  it('marks a daily_hrv reading pulled from the intraday fallback as filled', () => {
+    seedDaily({ localDate: '2026-08-10', metric: 'hrv', agg: 'mean', value: 42 })
+
+    const out = tool('get_daily').run(q(), {
+      localDate: '2026-08-10', metrics: ['daily_hrv'],
+    }) as { readings: { metric: string, filled: boolean | null }[] }
+
+    expect(out.readings.map((r) => ({ metric: r.metric, filled: r.filled }))).toEqual([
+      { metric: 'daily_hrv', filled: true },
     ])
   })
 
@@ -250,12 +286,12 @@ describe('get_daily', () => {
     const out = tool('get_daily').run(q(), {
       localDate: '2026-08-10', metrics: ['heart_rate', 'steps'],
     }) as {
-      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null }[]
+      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null, filled: boolean | null }[]
     }
 
     expect(out.readings).toEqual([
-      { metric: 'heart_rate', agg: 'mean', value: 62, coverage: null, source: 'merged' },
-      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged' },
+      { metric: 'heart_rate', agg: 'mean', value: 62, coverage: null, source: 'merged', filled: false },
+      { metric: 'steps', agg: 'sum', value: 8000, coverage: null, source: 'merged', filled: false },
     ])
   })
 
@@ -266,12 +302,12 @@ describe('get_daily', () => {
     const out = tool('get_daily').run(q(), {
       localDate: '2026-08-10', metrics: ['resting_heart_rate', 'weight'], agg: 'last',
     }) as {
-      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null }[]
+      readings: { metric: string, agg: string, value: number | null, coverage: number | null, source: string | null, filled: boolean | null }[]
     }
 
     expect(out.readings).toEqual([
-      { metric: 'resting_heart_rate', agg: 'last', value: 55, coverage: null, source: 'merged' },
-      { metric: 'weight', agg: 'last', value: 70000, coverage: null, source: 'merged' },
+      { metric: 'resting_heart_rate', agg: 'last', value: 55, coverage: null, source: 'merged', filled: false },
+      { metric: 'weight', agg: 'last', value: 70000, coverage: null, source: 'merged', filled: false },
     ])
   })
 
@@ -285,6 +321,78 @@ describe('get_daily', () => {
     expect(() => tool('get_daily').run(q(), {
       localDate: '2026-08-10', metrics: ['steps', 'resting_heart_rate'], agg: 'sum',
     })).toThrow("metric 'resting_heart_rate' has no 'sum' aggregate, only last")
+  })
+})
+
+// A language model reading get_baselines, compare_periods or trend cannot see the dashed line the
+// web app draws for a filled point either, and each of the three blends many days into one
+// statistic, so the per point `filled` boolean query_series and get_daily carry cannot ride along.
+// Each case is exercised through the real intraday fallback (hrv/mean seeded, daily_hrv absent),
+// the same reason v1-export.test.ts's and this file's own query_series/get_daily filled cases do.
+describe('get_baselines, filledDays', () => {
+  it('counts how many of the days behind a baseline were filled in, out of how many', () => {
+    seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 42 })
+    seedDaily({ localDate: '2026-08-02', metric: 'daily_hrv', agg: 'last', value: 55 })
+
+    const out = tool('get_baselines').run(q(), {
+      metric: 'daily_hrv', agg: 'last', on: '2026-08-03', windowDays: 5,
+    }) as { filledDays: { filled: number, of: number } }
+
+    expect(out.filledDays).toEqual({ filled: 1, of: 2 })
+  })
+
+  // The scoped re-review's own defect, reproduced: steps is coverage judged (an intraday tier
+  // metric), so baseline() drops a barely observed day before averaging. filledDays.of has to
+  // drop the same two days rather than counting all six fetched, or it overstates against
+  // baseline.n.
+  it('excludes a coverage gated day from filledDays.of the same way baseline.n excludes it', () => {
+    for (let day = 1; day <= 4; day += 1) {
+      seedDaily({ localDate: `2026-08-0${day}`, value: 1000, coverage: 0.9 })
+    }
+    seedDaily({ localDate: '2026-08-05', value: 1000, coverage: 0.1 })
+    seedDaily({ localDate: '2026-08-06', value: 1000, coverage: 0.1 })
+
+    const out = tool('get_baselines').run(q(), {
+      metric: 'steps', agg: 'sum', on: '2026-08-07', windowDays: 6,
+    }) as { baseline: { n: number } | null, filledDays: { filled: number, of: number } }
+
+    expect(out.baseline?.n).toBe(4)
+    expect(out.filledDays).toEqual({ filled: 0, of: 4 })
+  })
+})
+
+describe('compare_periods, filled days', () => {
+  it('counts filled days per period, since a comparison has two of them', () => {
+    for (let day = 1; day <= 7; day += 1) {
+      seedDaily({ localDate: `2026-08-0${day}`, metric: 'hrv', agg: 'mean', value: 40 })
+    }
+    for (let day = 8; day <= 14; day += 1) {
+      seedDaily({ localDate: `2026-08-${String(day).padStart(2, '0')}`, metric: 'daily_hrv', agg: 'last', value: 50 })
+    }
+
+    const out = tool('compare_periods').run(q(), {
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-08', to: '2026-08-14',
+    }) as {
+      currentFilledDays: { filled: number, of: number }
+      previousFilledDays: { filled: number, of: number }
+    }
+
+    expect(out.currentFilledDays).toEqual({ filled: 0, of: 7 })
+    expect(out.previousFilledDays).toEqual({ filled: 7, of: 7 })
+  })
+})
+
+describe('trend, filledDays', () => {
+  it('counts how many of the days behind the trend were filled in, out of how many', () => {
+    seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 40 })
+    seedDaily({ localDate: '2026-08-02', metric: 'hrv', agg: 'mean', value: 41 })
+    seedDaily({ localDate: '2026-08-03', metric: 'daily_hrv', agg: 'last', value: 50 })
+
+    const out = tool('trend').run(q(), {
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-03',
+    }) as { filledDays: { filled: number, of: number } }
+
+    expect(out.filledDays).toEqual({ filled: 2, of: 3 })
   })
 })
 

@@ -15,7 +15,12 @@
     "password": "Password",
     "submit": "Create my account",
     "invalid": "This invite is no longer valid",
-    "failed": "That did not work. Try again."
+    "failed": "That did not work. Try again.",
+    "pathTitle": "How will you connect?",
+    "pathGoogle": "With Google",
+    "pathCompanion": "With the Android app",
+    "pathGoogleHint": "Your household's Google client. Everything haelan can read.",
+    "pathCompanionHint": "No Google account. Android only, about 30 days of history, no ECG."
   },
   "shell": {
     "signOut": "Sign out",
@@ -55,7 +60,9 @@
     "neverShort": "–",
     "statusUnknownShort": "–",
     "alreadyRunning": "A sync is already running.",
-    "failed": "Sync did not start."
+    "failed": "Sync did not start.",
+    "phoneAgo": "Phone sent {{count}} min ago",
+    "phoneAgoShort": "{{count}}m phone"
   },
   "sidebar": {
     "sectionsLabel": "Sections",
@@ -245,6 +252,10 @@
       "label": "Respiratory rate",
       "basis": "mean, {{reported}} of {{total}} days; {{note}}",
       "chartLabel": "Daily respiratory rate through {{period}}"
+    },
+    "respiratoryRateSleep": {
+      "label": "Respiratory rate, during sleep",
+      "chartLabel": "Respiratory rate through {{period}}, measured during sleep"
     }
   },
   "health": {
@@ -571,6 +582,9 @@
       "none": "none",
       "notStaged": "This night was not staged, so there is nothing to total."
     },
+    "filled": {
+      "note": "Estimated from the intraday average, not the device's own daily summary"
+    },
     "hrTooltip": {
       "mean": "mean {{value}} {{unit}}",
       "range": "range {{min}} to {{max}} {{unit}}"
@@ -827,7 +841,18 @@
       "clientIdLabel": "Client ID",
       "clientSecretLabel": "Client secret",
       "saving": "Saving",
-      "submit": "Save and grant consent"
+      "submit": "Save and grant consent",
+      "withoutGoogle": "Continue without Google",
+      "withoutGoogleNote": "No Google Cloud project, no console steps, and no unverified app warning. The Android app reads Health Connect and sends readings here.",
+      "choiceTitle": "How will you connect?",
+      "companionTitle": "With the Android app",
+      "withoutGoogleCostsIntro": "This path is smaller. It cannot do these:",
+      "withoutGoogleCost1": "Android only. A member on an iPhone still needs a Google client.",
+      "withoutGoogleCost2": "No ECG and no irregular rhythm notifications. Health Connect has neither.",
+      "withoutGoogleCost3": "No daily summaries. Sleep temperature, zone minutes and the day's respiratory rate are computed on Google's servers. The night's respiratory rate still comes from the phone.",
+      "withoutGoogleCost4": "About 30 days of history, reaching back to before you install the app. Nothing further back than that.",
+      "withoutGoogleCost5": "Only what other apps have written to Health Connect.",
+      "withoutGoogleCost6": "Sync depends on the phone. Doze and battery saving cause gaps, and the gaps are silent."
     },
     "backfill": {
       "title": "Filling in your history",
@@ -844,6 +869,12 @@
         "twoYears": "2 years",
         "fiveYears": "5 years"
       }
+    },
+    "companionHistory": {
+      "title": "Your history starts here",
+      "intro": "There is nothing to fill in: on this path haelan reads nothing back. Your history starts with the first readings the phone sends. Open the companion app and press Sync.",
+      "startedOn": "Phone history since {{date}}.",
+      "toDashboard": "Go to the dashboard"
     },
     "dataTypes": {
       "title": "What to sync",
@@ -1017,6 +1048,15 @@
         "changed": "Password changed. You are still signed in.",
         "wrong": "That is not your current password.",
         "failed": "The password was not changed: {{reason}}"
+      },
+      "phone": {
+        "title": "Send from an Android phone",
+        "intro": "The companion app reads Health Connect on your phone and sends readings here, alongside anything you already sync. Android only: Health Connect does not exist on iPhone.",
+        "step1": "Install the app.",
+        "step1Link": "Installation and updates",
+        "step2": "Open it and grant the Health Connect permissions it asks for.",
+        "step3": "Enter this address:",
+        "step4": "Sign in with the username and password you use here."
       }
     },
     "mcp": {

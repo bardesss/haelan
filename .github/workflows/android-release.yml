@@ -1,0 +1,184 @@
+name: Android release
+
+# A tag, not a release-please release. The app carries its own version because release-please cuts
+# server releases often and almost none of them change the app: tying the two would tell every
+# installed phone it had an update whenever the server shipped, and hand it a byte identical APK.
+#
+# Its own file rather than a job inside release.yml, which is release-please driven off master
+# pushes. Folding them together would leave that workflow carrying a job that never fires for its
+# own releases.
+on:
+  push:
+    tags: ['android-v*']
+
+# Creating the release needs write access to contents. Nothing else here does.
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # A hang is a failure that never arrives, and the default is six hours of a runner sitting on
+    # one. This job downloads an Android SDK and runs Gradle, which is at least as hangable as the
+    # server release jobs that already carry a deadline.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      # actions/checkout fetches a tag push by commit sha, which lands a lightweight tag in the
+      # runner's clone and drops the tag object. gh release create --notes-from-tag then silently
+      # falls back to the commit message, which is not what the release notes are supposed to be.
+      # Fetching the tag ref itself brings the annotation back.
+      - name: Restore the tag annotation
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install the workspace
+        run: pnpm install --frozen-lockfile
+
+      # The palette this module compiles is generated from @haelan/tokens. The Gradle build does
+      # not run the generator: it fails with the command to run, because assembling an app should
+      # not need a Node toolchain.
+      - name: Generate the token palette
+        run: pnpm --filter @haelan/tokens build:android
+
+      # Both values from the tag, in one place, by the function that is tested. The workflow needs
+      # the name for the release title and the APK file, and Gradle needs both, so deriving it here
+      # keeps a single implementation.
+      #
+      # scripts/print-android-release-version.mjs is a .mjs file importing the .ts module directly,
+      # the same shape scripts/generate-tools-doc.mjs and package.json's "start" script already
+      # use to reach TypeScript from a raw node process. `node -e` with a dynamic `import()` of a
+      # template string was tried first and dropped: it is not the route vitest or vite take to
+      # load a .ts file, and it was never proven against this Node version, only assumed.
+      - name: Read the version from the tag
+        id: version
+        run: node --experimental-strip-types scripts/print-android-release-version.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      # signingVar in build.gradle.kts treats an empty string the same as an unset variable, so it
+      # is the right behaviour there and the wrong safety net here: HAELAN_APP_VERSION_CODE="" would
+      # read as absence and fall back to versionCode = 1 rather than throwing. A version step that
+      # ran green while writing nothing usable -- a misspelled output name, a redirect that missed
+      # $GITHUB_OUTPUT -- would sail through that fallback and assemble a correctly signed APK
+      # carrying versionCode 1, which every phone with a higher code already installed refuses as an
+      # update. Gradle cannot catch that; an empty variable looks exactly like no variable at all.
+      # This is the only place left that can.
+      - name: The version outputs are not empty
+        run: |
+          if [ -z "${{ steps.version.outputs.name }}" ]; then
+            echo "::error::the version step produced no name output"
+            exit 1
+          fi
+          if [ -z "${{ steps.version.outputs.code }}" ]; then
+            echo "::error::the version step produced no code output"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+        working-directory: apps/android
+
+      # android.yml triggers on branch pushes and pull requests, so it has not run on this tag. A
+      # release is rare and an APK that cannot be updated is expensive, so the module is re-proven
+      # at the commit being released rather than trusted from an earlier run.
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --console=plain
+        working-directory: apps/android
+
+      - name: Lint
+        run: ./gradlew lintDebug --console=plain
+        working-directory: apps/android
+
+      # build.gradle.kts throws if any of the four keystore values is missing, so this cannot
+      # silently produce an unsigned APK.
+      - name: Assemble the signed APK
+        run: ./gradlew assembleRelease --console=plain
+        working-directory: apps/android
+        env:
+          HAELAN_APP_VERSION: ${{ steps.version.outputs.name }}
+          HAELAN_APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          HAELAN_KEYSTORE_BASE64: ${{ secrets.HAELAN_KEYSTORE_BASE64 }}
+          HAELAN_KEYSTORE_PASSWORD: ${{ secrets.HAELAN_KEYSTORE_PASSWORD }}
+          HAELAN_KEY_ALIAS: ${{ secrets.HAELAN_KEY_ALIAS }}
+          HAELAN_KEY_PASSWORD: ${{ secrets.HAELAN_KEY_PASSWORD }}
+
+      # The Gradle guard proves the four inputs were present, not that signing worked. This is the
+      # last moment anyone can tell the difference, and it costs seconds.
+      #
+      # The build-tools path is captured into a variable and quoted at the point of use rather than
+      # expanded inline: `"$ANDROID_HOME"/build-tools/*/apksigner` globs unquoted, and a build-tools
+      # directory containing a space would split into two words and hand apksigner an argument it
+      # does not understand.
+      - name: Verify the APK is signed
+        run: |
+          APK=$(find apps/android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          if [ -z "$APK" ]; then echo "no release APK was produced"; exit 1; fi
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/apksigner
+          "$APKSIGNER" verify --verbose "$APK"
+          cp "$APK" "haelan-${{ steps.version.outputs.name }}.apk"
+
+      # apksigner proves the APK is signed, not that it carries the version the tag demanded. The
+      # Gradle guard above only proves the version step's own outputs were non-empty, which is a
+      # different fact than the env: binding on the assemble step naming them correctly -- a typo in
+      # either key resolves to null, Gradle's absence branch fills in versionCode 1, and every phone
+      # already past that number would refuse the result as an update, with no recovery but a higher
+      # version. This is the last point before the release exists that can tell the difference,
+      # because it is the only check anywhere in this pipeline that reads the irreversible value back
+      # out of the artifact instead of trusting the chain that produced it.
+      #
+      # It reads the copy the release step uploads rather than finding one in the build output
+      # again. Those are the same bytes today, but only the copy is the thing that reaches a phone,
+      # and a check that inspects a sibling of the artifact it is vouching for is a check that can
+      # drift away from its subject without anybody noticing.
+      - name: The APK carries the version from the tag
+        run: |
+          APK="haelan-${{ steps.version.outputs.name }}.apk"
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/aapt2
+          BADGING=$("$AAPT2" dump badging "$APK")
+          FOUND_CODE=$(echo "$BADGING" | grep -o "versionCode='[0-9]*'" | head -1 | sed "s/versionCode='//;s/'//")
+          FOUND_NAME=$(echo "$BADGING" | grep -o "versionName='[^']*'" | head -1 | sed "s/versionName='//;s/'//")
+          if [ "$FOUND_CODE" != "${{ steps.version.outputs.code }}" ]; then
+            echo "::error::the APK's versionCode does not match the tag: expected ${{ steps.version.outputs.code }}, found ${FOUND_CODE:-nothing}"
+            exit 1
+          fi
+          if [ "$FOUND_NAME" != "${{ steps.version.outputs.name }}" ]; then
+            echo "::error::the APK's versionName does not match the tag: expected ${{ steps.version.outputs.name }}, found ${FOUND_NAME:-nothing}"
+            exit 1
+          fi
+
+      # Last, and only once everything that can fail has. release.yml's own ordering test records
+      # why: a release that exists while its artifact does not looks like the tag succeeded and
+      # sends the first person following the README to a 404.
+      #
+      # make_latest=false keeps release-please's own releases as the repository's latest. The title
+      # starts with Android because Obtainium's filter matches the title rather than the tag.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Android ${{ steps.version.outputs.name }}" \
+            --notes-from-tag \
+            --latest=false \
+            "haelan-${{ steps.version.outputs.name }}.apk"

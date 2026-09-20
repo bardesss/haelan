@@ -5,6 +5,7 @@ import { AccountStep } from './AccountStep.js'
 import { InstanceUrlStep } from './InstanceUrlStep.js'
 import { GoogleStep } from './GoogleStep.js'
 import { BackfillStep } from './BackfillStep.js'
+import { CompanionHistoryStep } from './CompanionHistoryStep.js'
 import { DataTypeStep } from './DataTypeStep.js'
 import { SignIn } from '../auth/SignIn.js'
 import { BrandMark } from '../components/BrandMark.js'
@@ -60,6 +61,14 @@ export function SetupApp() {
   const { t } = useTranslation()
   const route = useRoute()
   const [step, setStep] = useState<string | null>(null)
+  // Whether the wizard was closed without Google: the backfill step asks how
+  // far back to read, which is meaningless on a path that reads nothing back, so this
+  // screen shows the history start instead. The data types step is skipped for the same
+  // reason: exclusions govern what the instance fetches from Google, and a
+  // phone-only history fetches nothing, so there is nothing to choose. Read once with
+  // the step, from the same response, so the three can never disagree about which
+  // wizard this is.
+  const [companionMode, setCompanionMode] = useState(false)
   const [candidates, setCandidates] = useState<RedirectCandidate[]>([])
   const [scopes, setScopes] = useState<string[]>([])
   const [callbackError, setCallbackError] = useState<SetupError | null>(null)
@@ -100,10 +109,17 @@ export function SetupApp() {
   // The server owns which step is due, so the browser asks rather than remembers. A reload
   // mid wizard, or a callback that landed on the wrong path, both resolve here.
   const refresh = () => {
-    void getSetupState().then(({ step: due }) => {
+    void getSetupState().then(({ step: due, companionMode: companion }) => {
       setStep(due)
+      setCompanionMode(companion)
+      // Done navigates too, to the backfill screen both finished paths share: the OAuth
+      // callback arrives there by redirect, and the companion exit lands on done while the
+      // browser still shows the Google step. Skipping the navigate there leaves the finished
+      // wizard on that step's working state, with the clicked button reading "saving" and
+      // no error to explain it. pathForStep falls through to backfill for done, which is
+      // where CompanionHistoryStep renders on a companion instance.
       const target = pathForStep(due)
-      if (due !== 'done' && !route.startsWith(target)) navigate(target)
+      if (!route.startsWith(target)) navigate(target)
     })
   }
   useEffect(refresh, [])
@@ -123,7 +139,7 @@ export function SetupApp() {
   // is preparation for BackfillStep specifically, and starting it while DataTypeStep is still on
   // screen would mean tearing an open EventSource down again the moment Continue is clicked,
   // for no reader-visible benefit.
-  const showBackfill = onBackfill && dataTypesDone
+  const showBackfill = onBackfill && dataTypesDone && !companionMode
   useEffect(() => {
     if (!showBackfill) return
     void getSyncStatus().then(setStatus)
@@ -165,12 +181,15 @@ export function SetupApp() {
                 scopes={scopes}
                 error={callbackError}
                 onDone={() => { window.location.assign('/oauth/start') }}
+                onCompanion={refresh}
               />
             )
             : onBackfill
-              ? (!dataTypesDone
+              ? (!dataTypesDone && !companionMode
                 ? <DataTypeStep onDone={() => setDataTypesDone(true)} />
-                : status
+                : companionMode
+                  ? <CompanionHistoryStep />
+                  : status
                   ? <BackfillStep
                       status={status}
                       nowMs={Date.now()}

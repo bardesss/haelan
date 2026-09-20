@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import { BASELINE_WINDOW_DAYS, baselineWindow } from '@haelan/core'
+import { BASELINE_WINDOW_DAYS, baselineWindow, coverageIsMeaningful, INSIGHT_MIN_COVERAGE } from '@haelan/core'
 import type { DailyPoint, SeriesResult } from '@haelan/core'
 import { notModified, stampEtag } from '../../api/etag.ts'
 import type { Stamp } from '../../api/etag.ts'
@@ -55,6 +55,36 @@ function stampOf(points: readonly DailyPoint[]): Stamp {
     if (point.updatedAtMs !== null && (newestMs === null || point.updatedAtMs > newestMs)) newestMs = point.updatedAtMs
   }
   return { newestMs, rows: points.length }
+}
+
+/**
+ * How many of `points` were filled in from an intraday mean rather than the device's own daily
+ * row, out of how many there were.
+ *
+ * A boolean per day cannot survive folding many days into one baseline, one period comparison or
+ * one smoothed trend - that is true, and it is not a reason to say nothing. A count is: it
+ * survives the fold, it costs no second query (every caller below already fetched `points` for
+ * `stampOf`), and it is honest about how much of the answer behind it was an estimate rather than
+ * a measurement.
+ */
+function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
+  return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
+
+/**
+ * `points` narrowed to the ones `PersonQuery.baseline()` actually averages, by the identical
+ * filter it applies itself (packages/core/src/query/personQuery.ts).
+ *
+ * Needed because a coverage judged metric (steps, heart rate, ...) drops a barely observed day
+ * before averaging, so counting filled over the raw fetch overstates `of` against `baseline.n` -
+ * a real defect the scoped re-review caught (seeded steps gave `n: 4` but `of: 6`). Mirroring the
+ * filter here, through the same exported `coverageIsMeaningful`/`INSIGHT_MIN_COVERAGE` baseline()
+ * itself uses rather than a second invented threshold, keeps `filledDays.of` equal to `n` instead
+ * of merely close to it.
+ */
+function baselineContributingPoints(points: readonly DailyPoint[], metric: string): readonly DailyPoint[] {
+  const judgeCoverage = coverageIsMeaningful(metric)
+  return points.filter((point) => !(judgeCoverage && point.coverage !== null && point.coverage < INSIGHT_MIN_COVERAGE))
 }
 
 /**
@@ -140,10 +170,14 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
 
     // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own
     // window (the same rule baselineWindow names, which baseline() now calls too) is reopened
-    // here through a fresh series() call, to read the one thing baseline()'s return value drops.
+    // here through a fresh series() call, to read the two things baseline()'s return value drops:
+    // updatedAtMs for the stamp, and filled for filledDays. Narrowed through
+    // baselineContributingPoints to the same days baseline() itself averaged, so filledDays.of
+    // equals baseline.n exactly rather than overcounting a day a coverage gate excluded.
     const { from, to } = baselineWindow(on, windowDays)
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, { baseline }, [stampOf(points)])
+    const contributing = baselineContributingPoints(points, metric)
+    return sendStamped(reply, request, { baseline, filledDays: filledCountOf(contributing) }, [stampOf(points)])
   })
 
   app.get<{ Params: PersonParams, Querystring: InsightsQuery }>('/p/:personId/insights', async (request, reply) => {
@@ -177,7 +211,18 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const current = roundMetricValueOrNull(metric, insight.current)
     const previous = roundMetricValueOrNull(metric, insight.previous)
     const delta = current === null || previous === null ? null : roundMetricValue(metric, current - previous)
-    const body = { ...insight, current, previous, delta }
+    // currentWindow and previousWindow are the exact rows comparePeriods averaged into current and
+    // previous respectively (fetched, never filtered further), so counting filled here is counting
+    // it over the days this insight actually drew on - named to match currentDays/previousDays,
+    // already on `insight`, rather than inventing a second naming shape for the same pairing.
+    const body = {
+      ...insight,
+      current,
+      previous,
+      delta,
+      currentFilledDays: filledCountOf(currentWindow.points),
+      previousFilledDays: filledCountOf(previousWindow.points),
+    }
     return sendStamped(reply, request, body, [stampOf(currentWindow.points), stampOf(previousWindow.points)])
   })
 
@@ -200,8 +245,9 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
       .map((point) => ({ ...point, value: roundMetricValue(metric, point.value) }))
 
     // trend smooths the same series() this reads again, over the same from/to: no window math to
-    // redo here, only the read of updatedAtMs the smoothed points themselves do not carry.
+    // redo here, only the read of updatedAtMs and filled the smoothed points themselves do not
+    // carry.
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, { points: smoothed }, [stampOf(points)])
+    return sendStamped(reply, request, { points: smoothed, filledDays: filledCountOf(points) }, [stampOf(points)])
   })
 }

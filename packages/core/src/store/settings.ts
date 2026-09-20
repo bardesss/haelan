@@ -1,10 +1,11 @@
-﻿import { eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
 import { instanceSettings } from '../db/schema/index.ts'
 import type { ConsentPath } from '../db/schema/accounts.ts'
 import { ConfigError } from '../errors.ts'
 import type { AccountStore } from './accounts.ts'
 import type { CredentialStore } from './credentials.ts'
+import type { PeopleStore } from './people.ts'
 
 const ROW_ID = 'default'
 
@@ -51,6 +52,7 @@ export interface InstanceSettingsRow {
   backupIntervalHours: number | null
   /** Whether this instance may ask GitHub about newer releases. False until an admin says so. */
   updateCheckEnabled: boolean
+  companionMode: boolean
 }
 
 export interface PutSettingsInput {
@@ -80,6 +82,7 @@ export class SettingsStore {
       backupKeep: row.backupKeep ?? null,
       backupIntervalHours: row.backupIntervalHours ?? null,
       updateCheckEnabled: row.updateCheckEnabled,
+      companionMode: row.companionMode,
     }
   }
 
@@ -115,6 +118,15 @@ export class SettingsStore {
 
   markSetupComplete(nowMs: number): void {
     this.#db.update(instanceSettings).set({ setupCompletedAtMs: nowMs, updatedAtMs: nowMs })
+      .where(eq(instanceSettings.id, ROW_ID)).run()
+  }
+
+  // The companion app's way past the wizard: one update sets the flag and the completion
+  // stamp together, so no reader ever sees a companion mode instance that is not finished.
+  // The OAuth client and the consent stay absent, which is what setupStep reads below.
+  completeCompanionSetup(nowMs: number): void {
+    this.#db.update(instanceSettings)
+      .set({ companionMode: true, setupCompletedAtMs: nowMs, updatedAtMs: nowMs })
       .where(eq(instanceSettings.id, ROW_ID)).run()
   }
 
@@ -225,6 +237,7 @@ export interface SetupDeps {
   accounts: AccountStore
   settings: SettingsStore
   credentials: CredentialStore
+  people: PeopleStore
 }
 
 // Derived from the database on every call rather than stored as a step counter, because a
@@ -233,6 +246,21 @@ export function setupStep(deps: SetupDeps): SetupStep {
   if (deps.accounts.count() === 0) return 'account'
   const settings = deps.settings.get()
   if (!settings) return 'instance-url'
+  // The instance flag says only that the wizard once closed without a client, never
+  // which member walks which path. A companion mode instance finished with its flag and stamp,
+  // so both steps are behind it rather than ahead of it. The completion stamp is checked
+  // alongside the flag so a row carrying the flag without it still lands on a step that can
+  // finish. Per-person phone choices live on people.companionPath; legacy companion rows predate
+  // the column and read as false, which is exactly why the instance flag stays sufficient rather
+  // than demanding a flag no legacy row could carry.
+  //
+  // No client is required for that 'done', and none may be: letting a phone-only instance fall
+  // through to the check below would answer 'google-client' instead, which shuts every route
+  // outside the wizard (setupGate.ts) and stops the phone syncing with no way back to done. This
+  // short-circuit closes no door of its own - the gate keeps /api/setup/google-client open on a
+  // completed companion instance while nobody has connected Google yet, so a client can still be
+  // pasted afterwards.
+  if (settings.companionMode && settings.setupCompletedAtMs !== null) return 'done'
   // Unreadable counts as not configured, and is asked first so this function stays total -
   // getClient throws on a secret this key cannot open, and setupStep runs in a preHandler on
   // every request. A client sealed with a key this instance no longer has is a client nobody can
@@ -242,5 +270,12 @@ export function setupStep(deps: SetupDeps): SetupStep {
   // the client from their Google console, then each person consents once.
   if (deps.credentials.isClientUnreadable() || !deps.credentials.getClient()) return 'google-client'
   if (settings.setupCompletedAtMs === null) return 'consent'
+  // Done needs at least one chosen path, not just a stamp. A Google choice is a
+  // credentials row for some person (revoked counts: its way back is reconsent, not a wizard
+  // that reopens); a phone choice is a per-person flag. No rows and no flags means nobody has
+  // connected anything yet, so the wizard is still at the connect step rather than finished.
+  const hasGoogle = deps.credentials.listTokenPeople().length > 0
+  const hasPhone = deps.people.list().some((p) => p.companionPath)
+  if (!hasGoogle && !hasPhone) return 'consent'
   return 'done'
 }

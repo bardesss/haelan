@@ -15,7 +15,12 @@
     "password": "Wachtwoord",
     "submit": "Mijn account aanmaken",
     "invalid": "Deze uitnodiging is niet meer geldig",
-    "failed": "Dat is niet gelukt. Probeer het opnieuw."
+    "failed": "Dat is niet gelukt. Probeer het opnieuw.",
+    "pathTitle": "Hoe verbind je?",
+    "pathGoogle": "Met Google",
+    "pathCompanion": "Met de Android-app",
+    "pathGoogleHint": "De Google-client van je huishouden. Alles wat haelan kan lezen.",
+    "pathCompanionHint": "Geen Google-account. Alleen Android, ongeveer 30 dagen geschiedenis, geen ECG."
   },
   "shell": {
     "signOut": "Uitloggen",
@@ -55,7 +60,9 @@
     "neverShort": "–",
     "statusUnknownShort": "–",
     "alreadyRunning": "Er loopt al een synchronisatie.",
-    "failed": "Synchroniseren is niet gestart."
+    "failed": "Synchroniseren is niet gestart.",
+    "phoneAgo": "Telefoon stuurde {{count}} min geleden",
+    "phoneAgoShort": "{{count}}m tel."
   },
   "sidebar": {
     "sectionsLabel": "Secties",
@@ -245,6 +252,10 @@
       "label": "Ademhalingsfrequentie",
       "basis": "gemiddelde, {{reported}} van {{total}} dagen; {{note}}",
       "chartLabel": "Dagelijkse ademhalingsfrequentie in {{period}}"
+    },
+    "respiratoryRateSleep": {
+      "label": "Ademhalingsfrequentie, tijdens slaap",
+      "chartLabel": "Ademhalingsfrequentie in {{period}}, gemeten tijdens slaap"
     }
   },
   "health": {
@@ -571,6 +582,9 @@
       "none": "geen",
       "notStaged": "Deze nacht is niet in fasen ingedeeld, dus is er niets te tellen."
     },
+    "filled": {
+      "note": "Geschat op basis van het gemiddelde over de dag, niet het eigen dagoverzicht van het apparaat"
+    },
     "hrTooltip": {
       "mean": "gemiddeld {{value}} {{unit}}",
       "range": "bereik {{min}} tot {{max}} {{unit}}"
@@ -827,7 +841,18 @@
       "clientIdLabel": "Client-ID",
       "clientSecretLabel": "Clientgeheim",
       "saving": "Bezig met opslaan",
-      "submit": "Opslaan en toestemming geven"
+      "submit": "Opslaan en toestemming geven",
+      "withoutGoogle": "Doorgaan zonder Google",
+      "withoutGoogleNote": "Geen Google Cloud-project, geen consolestappen, en geen waarschuwing over een niet-geverifieerde app. De Android-app leest Health Connect en stuurt metingen hierheen.",
+      "choiceTitle": "Hoe verbind je?",
+      "companionTitle": "Met de Android-app",
+      "withoutGoogleCostsIntro": "Dit pad is kleiner. Dit kan het niet:",
+      "withoutGoogleCost1": "Alleen Android. Een huisgenoot met een iPhone heeft nog steeds een Google-client nodig.",
+      "withoutGoogleCost2": "Geen ECG en geen meldingen voor onregelmatig hartritme. Health Connect kent ze allebei niet.",
+      "withoutGoogleCost3": "Geen dagoverzichten. Slaaptemperatuur, zoneminuten en de ademhalingsfrequentie overdag rekent Google op zijn eigen servers uit. 's Nachts komt die frequentie nog steeds van de telefoon.",
+      "withoutGoogleCost4": "Ongeveer 30 dagen geschiedenis, terug tot voordat je de app installeert. Niets van eerder dan dat.",
+      "withoutGoogleCost5": "Alleen wat andere apps naar Health Connect hebben geschreven.",
+      "withoutGoogleCost6": "Synchroniseren hangt af van de telefoon. Doze en batterijbesparing veroorzaken gaten, en die gaten zie je niet."
     },
     "backfill": {
       "title": "De geschiedenis wordt aangevuld",
@@ -844,6 +869,12 @@
         "twoYears": "2 jaar",
         "fiveYears": "5 jaar"
       }
+    },
+    "companionHistory": {
+      "title": "Je geschiedenis begint hier",
+      "intro": "Er valt niets in te vullen: op dit pad leest haelan niets terug. Je geschiedenis begint bij de eerste metingen die de telefoon verstuurt. Open de companion-app en druk op Sync.",
+      "startedOn": "Telefoongeschiedenis sinds {{date}}.",
+      "toDashboard": "Ga naar het dashboard"
     },
     "dataTypes": {
       "title": "Wat wordt gesynchroniseerd",
@@ -1017,6 +1048,15 @@
         "changed": "Wachtwoord gewijzigd. Je bent nog steeds ingelogd.",
         "wrong": "Dit is niet je huidige wachtwoord.",
         "failed": "Het wachtwoord is niet gewijzigd: {{reason}}"
+      },
+      "phone": {
+        "title": "Versturen vanaf een Android-telefoon",
+        "intro": "De companion-app leest Health Connect op je telefoon en stuurt metingen hierheen, naast alles wat je al synchroniseert. Alleen Android: Health Connect bestaat niet op de iPhone.",
+        "step1": "Installeer de app.",
+        "step1Link": "Installeren en bijwerken",
+        "step2": "Open de app en geef de Health Connect-rechten die hij vraagt.",
+        "step3": "Vul dit adres in:",
+        "step4": "Log in met de gebruikersnaam en het wachtwoord die je hier gebruikt."
       }
     },
     "mcp": {

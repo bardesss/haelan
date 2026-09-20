@@ -29,7 +29,6 @@ import { deepLink } from '../controls/deepLink.js'
 import { ALL_SOURCES, resolveSource } from '../controls/source.js'
 import { Link } from '../router.js'
 import { useSession } from '../auth/session.js'
-import { ConnectGoogle } from '../auth/ConnectGoogle.js'
 import { denseSeries, useSeries } from '../data/useSeries.js'
 import type { SeriesPoint } from '../data/useSeries.js'
 import { useBaseline } from '../data/useBaseline.js'
@@ -39,7 +38,7 @@ import type { Night } from '../data/useNights.js'
 import { oneNightPerDate, stageOf } from '../data/nights.js'
 import { useIntraday } from '../data/useIntraday.js'
 import { useAnnotations } from '../data/useAnnotations.js'
-import { overridesByMetric, annotationsFor } from '../data/chartAnnotations.js'
+import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../data/chartAnnotations.js'
 import { useDayAnnotations, annotationsWithDay } from '../data/dayAnnotations.js'
 import { useMetricGroups } from '../data/useMetricGroups.js'
 import type { MetricGroup } from '../data/useMetricGroups.js'
@@ -388,6 +387,21 @@ export function Dashboard() {
   // now, so this outer function is the only place left that can still hand the link the same span
   // as the card it sits beside, and after keeps it visible through every branch MetricCard renders,
   // not just the data one.
+
+  // daily_hrv is the one metric tile() below can ever draw a filled point for
+  // (DEVICE_ROLLED_EQUIVALENT in personQuery.ts names no other metric this page reads). Folded onto
+  // dayAnnotationsByMetric once here, not inside tile(): tile() runs once per card and a fresh
+  // concatenation there would hand every render a new annotations array identity for a range that
+  // did not change, which disposes and reinitialises the chart (chart-lifecycle.test.tsx).
+  const dayAnnotationsByMetricWithFilled = useMemo(() => {
+    const filled = filledAnnotationsFrom(metricGroups.pointsOf('daily_hrv'), t)
+    if (filled.length === 0) return dayAnnotationsByMetric
+    const merged = new Map(dayAnnotationsByMetric)
+    const base = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, 'daily_hrv')
+    merged.set('daily_hrv', [...base, ...filled])
+    return merged
+  }, [dayAnnotationsByMetric, dayAnnotations, metricGroups.pointsOf('daily_hrv'), t])
+
   const tile = (
     metric: string, span: number, labelKey: string, basisKey: string, basisWornKey: string,
     chartLabelKey: string, unitKey: string,
@@ -398,7 +412,7 @@ export function Dashboard() {
   ) => {
     const points = metricGroups.pointsOf(metric)
     const { excluded } = annotationsFor(overridesByMetricMap, metric)
-    const annotations = annotationsWithDay(dayAnnotationsByMetric, dayAnnotations, metric)
+    const annotations = annotationsWithDay(dayAnnotationsByMetricWithFilled, dayAnnotations, metric)
     return (
       <MetricCard metric={metric} span={span} basisPlacement="body" query={metricGroups.queryFor(metric)} points={points}
         basisKey={basisKey} basisWornKey={basisWornKey} basisValues={{ total: rangeDates.length }}
@@ -597,10 +611,12 @@ export function Dashboard() {
       <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
         stoppedSources={stoppedSources} />
       <CardGrid>
-        {/* Renders nothing once connected (ConnectGoogle.tsx's own doc comment), so a household
-            that finished setup sees no change here at all; this is only ever visible to a member
-            who still needs it, first in line above every card that has nothing to show them yet. */}
-        <ConnectGoogle />
+        {/* The invitation to connect a Google account deliberately does not appear on this page,
+            though it did before the companion app: a member who has just chosen the phone path
+            would read it seconds after choosing not to. It lives on Account instead, which is
+            where a member whose token was revoked goes to reconnect (Account.tsx's own comment).
+            connect-google.test.tsx pins the absence by scanning this file's text, so name the
+            component here and the guard fails on the comment that explains it. */}
         {/* First card on the page: the one number summarising the four signals underneath it.
             today comes from controls, not from a fresh Date() here - see usePageControls's own
             `today` field and RecoveryIndexTile's doc comment for why a second, UTC-based notion

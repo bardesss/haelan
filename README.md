@@ -115,6 +115,22 @@ ended, with no column for the arguments themselves; a call made over stdio is no
 fresh for the call and thrown away after, holding one person's rows in seven tables and none of
 the ones that could name a password or another member.
 
+## The Android companion app
+
+An instance reads a household's data through Google's Health API. A household where every member
+uses Android can skip that entirely: the companion app reads Health Connect on the phone and sends
+readings to the instance directly, with no Cloud project and no console.
+
+[![Add to Obtainium](https://img.shields.io/badge/Add%20to-Obtainium-1a7f37?style=flat)](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.haelan.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fbardesss%2Fhaelan%22%2C%22author%22%3A%22bardesss%22%2C%22name%22%3A%22H%C3%A6lan%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5EAndroid%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%7D%22%2C%22overrideSource%22%3A%22GitHub%22%7D)
+
+Releases tagged `android-v` carry a signed APK rather than a Google Play listing, so
+[Obtainium](https://github.com/ImranR98/Obtainium) is how updates arrive. The button carries the
+release filter it needs, because this repository publishes server releases and app releases into one
+stream.
+
+The Android path asks less of the person setting it up, and it gives some things up in exchange, which
+`apps/android/README.md` lists.
+
 ## Deploy
 
 [`compose.yaml`](compose.yaml) at the repository root is eight lines of YAML and carries no
@@ -489,12 +505,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 958 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 990 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 958 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 990 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

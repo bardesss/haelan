@@ -11,13 +11,16 @@ let expiredToken: string
 
 const peek = (t: string) => h.app.inject({ method: 'GET', url: `/api/invite/${t}` })
 
-const redeem = (t: string, username: string, password: string) => h.app.inject({
-  method: 'POST', url: `/api/invite/${t}`, payload: { username, password },
+const redeem = (t: string, username: string, password: string, extra: Record<string, unknown> = {}) => h.app.inject({
+  method: 'POST', url: `/api/invite/${t}`, payload: { username, password, ...extra },
 })
 
 beforeEach(async () => {
   h = await withServer()
-  await h.completeSetup()
+  // connectPerson, not completeSetup: master's harness split the two, and these tests were
+  // written against a finished instance (the old shortcut carried a token). A client with no
+  // token lands back at the connect step under the new setupStep.
+  await h.connectPerson()
 
   const person = h.app.haelan.stores.people.create({
     id: 'p-bob', displayName: 'Bob', timezone: 'Europe/Amsterdam', nowMs: h.clock.nowMs,
@@ -118,6 +121,34 @@ describe('POST /api/invite/:token', () => {
 
   it('refuses a password under eight characters, and leaves the invite usable', async () => {
     expect((await redeem(token, 'bob', 'short')).statusCode).toBe(400)
+    expect((await peek(token)).statusCode).toBe(200)
+  })
+
+  // Whoever is invited chooses their own path when redeeming instead of inheriting
+  // the admin's. A phone choice is recorded on their person row; anything else leaves it
+  // alone for a later consent or a later pairing, and no choice here ever touches the
+  // instance flag, which still says only how the wizard once closed.
+  it('records a phone choice on the invited person and nobody else', async () => {
+    const response = await redeem(token, 'bob', 'correct horse battery', { path: 'companion' })
+    expect(response.statusCode).toBe(201)
+    expect(h.app.haelan.stores.people.get(bobPersonId)?.companionPath).toBe(true)
+    expect(h.app.haelan.stores.people.get('p1')?.companionPath).toBe(false)
+    expect(h.app.haelan.stores.settings.get()?.companionMode).toBe(false)
+  })
+
+  it('redeeming without a choice leaves the phone path off', async () => {
+    expect((await redeem(token, 'bob', 'correct horse battery')).statusCode).toBe(201)
+    expect(h.app.haelan.stores.people.get(bobPersonId)?.companionPath).toBe(false)
+  })
+
+  it('redeeming with an explicit google choice leaves the phone path off', async () => {
+    expect((await redeem(token, 'bob', 'correct horse battery', { path: 'google' })).statusCode).toBe(201)
+    expect(h.app.haelan.stores.people.get(bobPersonId)?.companionPath).toBe(false)
+  })
+
+  it('refuses an unknown path, and leaves the invite usable', async () => {
+    const response = await redeem(token, 'bob', 'correct horse battery', { path: 'carrier-pigeon' })
+    expect(response.statusCode).toBe(400)
     expect((await peek(token)).statusCode).toBe(200)
   })
 })

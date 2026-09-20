@@ -554,10 +554,20 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .setup-rail li[data-state='done'] { color: var(--text-muted); border-top-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 
 .setup-step h1 { font-size: var(--font-size-lg); margin: 0 0 var(--space-2); letter-spacing: -.01em; }
+/* The two option headings on the connection choice: smaller than the page title, with
+   air above so the second reads as a second option rather than a continuation. */
+.setup-step h2 { font-size: var(--font-size-md); margin: var(--space-5) 0 var(--space-2); letter-spacing: -.01em; }
+.setup-step h2:first-of-type { margin-top: 0; }
 .setup-step > p { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); margin: 0 0 var(--space-4); }
-.setup-instructions { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
-.setup-instructions li { margin-bottom: var(--space-2); }
-.setup-instructions li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+/* .setup-costs reads identically and is a separate class on purpose: setup-screens.test.tsx pins
+   that the phone path's button sits above the console instructions by looking for
+   `setup-instructions` in the rendered markup, and a costs list sharing that class would be found
+   first and read as the instructions it is meant to sit above. Two lists on one screen that mean
+   different things, one to follow and one to weigh, and the guard can only tell them apart if the
+   class does. */
+.setup-instructions, .setup-costs { font-size: var(--font-size-sm); color: var(--text-secondary); line-height: var(--leading-relaxed); padding-left: var(--space-5); margin: 0 0 var(--space-4); }
+.setup-instructions li, .setup-costs li { margin-bottom: var(--space-2); }
+.setup-instructions li::marker, .setup-costs li::marker { color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .setup-note { font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-relaxed); background: var(--surface-inset); border-radius: var(--radius-md); padding: var(--space-3); margin: 0 0 var(--space-4); }
 .setup-uris { margin-bottom: var(--space-4); }
 .setup-scopes { list-style: none; padding: 0; margin: var(--space-2) 0; display: flex; flex-direction: column; gap: var(--space-1); }
@@ -1068,6 +1078,27 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 .profile-subhead {
   font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary);
   margin: 0 0 var(--space-2);
+}
+/* The phone pairing steps take the same hairline .profile-password does, because they are a third
+   thing in the same card and a reader needs to see where the password form stopped. Numbers stay
+   outside the text column so the four steps read as a sequence to work through rather than as
+   prose that happens to be listed. */
+.profile-phone {
+  margin-top: var(--space-4); padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.profile-phone-steps {
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
+  margin: var(--space-3) 0 0; padding-left: var(--space-4);
+}
+.profile-phone-steps li { margin-bottom: var(--space-2); }
+.profile-phone-steps li:last-child { margin-bottom: 0; }
+/* Its own line and a full 44px, rather than an inline link excused from the touch target rule.
+   layout-check.mjs counts those excusals and expects none: every control the app carries is a
+   discrete target, and the primary action of this card is not the place to start an exception. */
+.profile-phone-link {
+  display: flex; align-items: center; width: fit-content;
+  min-height: 44px; margin-top: var(--space-1);
 }
 .profile-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
