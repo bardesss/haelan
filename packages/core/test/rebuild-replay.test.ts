@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
-import { daily, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sessionRoutes, sources } from '../src/db/schema/index.ts'
 import { samplePoint, sleepPoint, dailyRollupBody, body } from '../src/testing/payloads.ts'
 
 import { createTestDatabase, readSamples, seedPerson } from '../src/testing/fixtures.ts'
@@ -93,6 +93,29 @@ function exerciseBody(): string {
         activeDuration: '379s', splitType: 'DISTANCE',
         metricsSummary: { distanceMillimeters: 1_000_000 },
       }],
+    },
+  }])
+}
+
+// exerciseBody's twin, carrying a route the way Task 2's mapper reads one: the `route` key sits
+// on the exercise payload object beside `interval` and `exerciseType`, not as a sibling of
+// `exercise` on the point itself. See mapSessions.ts's own comment at the point it reads this,
+// which is what an Android upload and this fixture both have to agree with.
+function exerciseBodyWithRoute(): string {
+  return body([{
+    name: 'users/me/dataTypes/exercise/dataPoints/run-with-route',
+    dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+    exercise: {
+      interval: {
+        startTime: '2026-08-18T06:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T06:30:00Z', endUtcOffset: '7200s',
+      },
+      exerciseType: 'RUNNING',
+      route: [
+        { time: '2026-08-18T06:00:00Z', latitude: 52.10, longitude: 4.30, altitudeMetres: 3.2 },
+        { time: '2026-08-18T06:05:00Z', latitude: 52.11, longitude: 4.31 },
+        { time: '2026-08-18T06:10:00Z', latitude: 52.12, longitude: 4.32, horizontalAccuracyMetres: 5 },
+      ],
     },
   }])
 }
@@ -447,6 +470,44 @@ describe('replayPerson', () => {
     expect(attrs.activeDuration).toBe('1680s')
     expect(attrs.splits).toHaveLength(1)
     expect((attrs.splits as Record<string, unknown>[])[0]?.splitType).toBe('DISTANCE')
+  })
+
+  // Task 4b: sessionRoutes cascades off sessions (its schema comment says so), so runRebuild
+  // emptying a person's tier 2 before replaying takes every route with it. mapSessions has
+  // returned routes since Task 2, and replay used to receive them and discard them, so a rebuild
+  // permanently lost a household's GPS tracks while the archive still held the points. This is
+  // the test that would have caught it: an archived route present before replay is asserted
+  // gone, exactly as a real rebuild leaves it, and replay alone has to put it back in order.
+  test('a rebuild regenerates a session route from the archive, in order', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'exercise', requestParams: listParams,
+      windowStartMs: Date.parse('2026-08-18T00:00:00Z'),
+      windowEndMs: Date.parse('2026-08-19T00:00:00Z'),
+      fetchedAtMs: 1, httpStatus: 200,
+      body: exerciseBodyWithRoute(),
+    })
+
+    // The state a person carrying an older mapping version is in when the rebuild starts:
+    // runRebuild has already emptied tier 2, sessionRoutes included, before replayPerson runs.
+    expect(db.select().from(sessionRoutes).all()).toHaveLength(0)
+
+    const counts = db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    expect(counts.routes).toBe(3)
+    const rows = db.select().from(sessionRoutes).orderBy(asc(sessionRoutes.ordinal)).all()
+    expect(rows.map((r) => [r.latitude, r.longitude])).toEqual([
+      [52.10, 4.30], [52.11, 4.31], [52.12, 4.32],
+    ])
+    expect(rows.map((r) => r.ordinal)).toEqual([0, 1, 2])
+    expect(rows[0]?.altitudeMetres).toBe(3.2)
+    expect(rows[1]?.altitudeMetres).toBeNull()
+    expect(rows[2]?.horizontalAccuracyMetres).toBe(5)
   })
 
   // The bug this pins: electrocardiogram declares target: 'sessions' with

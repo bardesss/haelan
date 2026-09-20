@@ -1,6 +1,6 @@
 import { and, eq, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily, observations, samples, sessions, sessionSegments } from '../db/schema/index.ts'
+import { daily, observations, samples, sessions, sessionSegments, sessionRoutes } from '../db/schema/index.ts'
 import { SampleKeys } from '../db/keys.ts'
 import { dataTypeById } from '../api/catalogue.ts'
 import { mapWindowSamples } from '../api/mapSamples.ts'
@@ -75,6 +75,7 @@ export interface ReplayCounts {
   samples: number
   sessions: number
   segments: number
+  routes: number
   providerDaily: number
   observations: number
   /** Payloads no current mapper claims. Reported rather than thrown, see below. */
@@ -122,7 +123,7 @@ export interface ReplayCounts {
  */
 export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   const counts: ReplayCounts = {
-    samples: 0, sessions: 0, segments: 0, providerDaily: 0, observations: 0,
+    samples: 0, sessions: 0, segments: 0, routes: 0, providerDaily: 0, observations: 0,
     unmappable: 0, localDates: [], droppedPages: 0, payloadsWithData: 0, drops: [],
   }
   // A dropped unit can leave its date in this set: the set is in memory and a savepoint rollback
@@ -194,8 +195,13 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   // 2.8 KB a row, which is what took a rebuild of a real archive past 5 GB and had the worker
   // OOM-killed on a memory capped host (#275). The same 400,000 rows through the statement below
   // hold flat. Samples get this treatment first because they are the overwhelming majority of the
-  // rows a replay writes; the other four loops in this function have the same shape and, on a
-  // household archive, a tiny fraction of the volume.
+  // rows a replay writes; the other loops in this function write few enough rows per unit that
+  // the leak never mattered for them. Routes are the one exception living inside a loop that
+  // otherwise writes little: one exercise session can carry an hour of GPS at 1Hz, close to
+  // 3,600 rows on its own, and a rebuild replays every workout a household owns. The insert
+  // below gets the same hoisting for that reason, prepared here beside sessions and segments
+  // rather than back where they are written, so every statement this function holds onto for
+  // its whole run is declared in the one place a reader would look for the memory fix.
   const insertSample = tx.insert(samples).values({
     personRef: sql.placeholder('personRef'),
     sourceRef: sql.placeholder('sourceRef'),
@@ -217,6 +223,21 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
       rawPayloadRef: sql.placeholder('rawPayloadRef'),
     } as unknown as Partial<typeof samples.$inferInsert>,
   }).prepare()
+
+  // No onConflictDoUpdate, unlike insertSample above: a route is replaced wholesale per session
+  // (the delete beside the sessions loop below), so every row this ever runs against is new,
+  // the same as sessionSegments' plain insert beside it.
+  const insertRoute = tx.insert(sessionRoutes).values({
+    id: sql.placeholder('id'),
+    sessionId: sql.placeholder('sessionId'),
+    ordinal: sql.placeholder('ordinal'),
+    atMs: sql.placeholder('atMs'),
+    latitude: sql.placeholder('latitude'),
+    longitude: sql.placeholder('longitude'),
+    altitudeMetres: sql.placeholder('altitudeMetres'),
+    horizontalAccuracyMetres: sql.placeholder('horizontalAccuracyMetres'),
+    verticalAccuracyMetres: sql.placeholder('verticalAccuracyMetres'),
+  } as unknown as typeof sessionRoutes.$inferInsert).prepare()
 
   for (const group of groupIntoWindows(input.payloads)) {
     const t = dataTypeById(group.dataType)
@@ -281,7 +302,7 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
           const unit = { dataType: group.dataType, pages: 1 }
           const committed = withPage(input.client, unit, collector, () => {
             const body = input.archive.getBody(input.personId, page.id)
-            const { sessions: rows, segments } = mapSessions({
+            const { sessions: rows, segments, routes } = mapSessions({
               dataType: t, personId: input.personId, resolveSource,
               body, rawPayloadId: page.id,
             })
@@ -305,12 +326,20 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
               localDates.add(row.localDate)
             }
             // Replaced wholesale for the sessions in this page, the same as ingest, a window
-            // fetched twice legitimately revises a night's stage timeline, and merging both
-            // versions of it would interleave them.
+            // fetched twice legitimately revises a night's stage timeline or a run's route, and
+            // merging both versions of either would interleave them. The route delete rides
+            // beside the segment delete for the reason ingest.ts's writeSessions gives for
+            // pairing them there too: a session whose route half survived a partial write and
+            // whose segments did not (or the other way round) is worse than a session with
+            // neither, and this whole unit is one savepoint, so nothing here can land half done.
             for (const row of rows) {
               tx.delete(sessionSegments).where(eq(sessionSegments.sessionId, row.id)).run()
+              tx.delete(sessionRoutes).where(eq(sessionRoutes.sessionId, row.id)).run()
             }
             for (const segment of segments) tx.insert(sessionSegments).values(segment).run()
+            for (const route of routes) {
+              insertRoute.run(route as unknown as typeof sessionRoutes.$inferInsert)
+            }
           })
           afterUnit(committed)
         }
@@ -471,6 +500,11 @@ export function replayPerson(tx: DbOrTx, input: ReplayInput): ReplayCounts {
   counts.segments = tx.select({ n: sql<number>`count(*)` })
     .from(sessionSegments)
     .innerJoin(sessions, eq(sessionSegments.sessionId, sessions.id))
+    .where(eq(sessions.personId, input.personId))
+    .get()?.n ?? 0
+  counts.routes = tx.select({ n: sql<number>`count(*)` })
+    .from(sessionRoutes)
+    .innerJoin(sessions, eq(sessionRoutes.sessionId, sessions.id))
     .where(eq(sessions.personId, input.personId))
     .get()?.n ?? 0
   counts.providerDaily = tx.select({ n: sql<number>`count(*)` })
