@@ -77,8 +77,15 @@ android {
         applicationId = "com.haelan.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        // Set by the release workflow from the tag, through the same helper the keystore values
+        // use: environment first, then apps/android/.env. A local or debug build sets neither and
+        // keeps the placeholder pair below, so nothing about building this module by hand changes.
+        //
+        // No parsing here. scripts/android-release-version.ts derives both from the tag and is
+        // tested, which a Gradle build script cannot be: it is not on the src/test classpath. This
+        // file therefore reads two finished values and has no opinion about their shape.
+        versionCode = signingVar("HAELAN_APP_VERSION_CODE")?.toIntOrNull() ?: 1
+        versionName = signingVar("HAELAN_APP_VERSION") ?: "0.1.0"
     }
 
     signingConfigs {
