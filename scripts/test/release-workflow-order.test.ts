@@ -58,7 +58,14 @@ const releasePleaseJob = (() => {
 
 const releaseConfig = JSON.parse(
   readFileSync(new URL('../../release-please-config.json', import.meta.url), 'utf8'),
-) as { packages: Record<string, { draft?: boolean; 'force-tag-creation'?: boolean }> }
+) as { packages: Record<string, {
+  draft?: boolean
+  'force-tag-creation'?: boolean
+  'skip-github-release'?: boolean
+  component?: string
+  'include-component-in-tag'?: boolean
+  'exclude-paths'?: string[]
+}> }
 
 describe('the release workflow', () => {
   it('parses out the publish job it is asserting against', () => {
@@ -279,6 +286,42 @@ describe('the release workflow', () => {
     // the pull request `autorelease: pending` and every later run tries to release it again.
     // 1.15.0 was released and then left pending exactly that way.
     expect(yaml).toContain('issues: write')
+  })
+
+  it('lets the app version itself, and keeps it out of the server version', () => {
+    // The app releases on its own cadence: a server release several times a day must not tell
+    // every installed phone it has an update and then hand it a byte identical APK. Without
+    // exclude-paths the root package claims every commit in the repository, so a change to the
+    // app alone would cut a server release too.
+    const root = releaseConfig.packages['.']
+    expect(root['exclude-paths']).toContain('apps/android')
+
+    const app = releaseConfig.packages['apps/android']
+    expect(app, 'apps/android is not a release-please package').toBeDefined()
+    // component plus include-component-in-tag is what produces `android-v0.2.2`, which is the
+    // pattern android-release.yml triggers on and the only thing that ships an APK.
+    expect(app.component).toBe('android')
+    expect(app['include-component-in-tag']).toBe(true)
+  })
+
+  it('has release-please tag the app but not release it', () => {
+    // These two are a pair, for a different reason than the root's draft pair above.
+    //
+    // android-release.yml creates the app's release itself, titled `Android <version>`, because
+    // Obtainium filters on the release TITLE rather than the tag and that title is the only thing
+    // keeping it from offering a server release as an app update. It also attaches the APK.
+    //
+    // So release-please must not create that release: two creators racing for one tag means
+    // whichever loses fails the job, and a release-please named one would not match `^Android`
+    // anyway. skip-github-release stops it.
+    //
+    // force-tag-creation is what makes the tag still appear. release-please normally creates a
+    // tag as part of creating a release; this option makes it create the ref explicitly and
+    // separately, which is the same mechanism the root package relies on and is what leaves a
+    // tag for android-release.yml to trigger on.
+    const app = releaseConfig.packages['apps/android']
+    expect(app['skip-github-release']).toBe(true)
+    expect(app['force-tag-creation']).toBe(true)
   })
 
   it('names the release by id rather than by tag when publishing it', () => {

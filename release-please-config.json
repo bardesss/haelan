@@ -8,6 +8,18 @@
       "include-component-in-tag": false,
       "prerelease": false,
       "draft": true,
+      "force-tag-creation": true,
+      "exclude-paths": [
+        "apps/android"
+      ]
+    },
+    "apps/android": {
+      "release-type": "node",
+      "package-name": "@haelan/android",
+      "component": "android",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG.md",
+      "skip-github-release": true,
       "force-tag-creation": true
     }
   }
