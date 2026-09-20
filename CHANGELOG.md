@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [1.40.2](https://github.com/bardesss/haelan/compare/v1.40.1...v1.40.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* **test:** close the databases two test files were abandoning ([#300](https://github.com/bardesss/haelan/issues/300)) ([821133a](https://github.com/bardesss/haelan/commit/821133adf79098882462bb917177f390bad2e6e4))
+
 ## [1.40.1](https://github.com/bardesss/haelan/compare/v1.40.0...v1.40.1) (2026-09-19)
 
 
