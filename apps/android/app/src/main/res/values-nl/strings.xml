@@ -24,7 +24,7 @@
     <string name="error_not_instance">Iets gaf antwoord, en het is geen Hælan-instantie.</string>
     <string name="error_broken">De verbinding met de instantie brak af voordat deze antwoordde.</string>
     <string name="error_not_your_person">Met deze login kunnen geen gegevens voor die persoon worden verstuurd. Log opnieuw in.</string>
-    <string name="error_too_large">De instantie weigerde het verzoek om zijn omvang. De sync stuurt een type in blokken, dus dit is een punt dat te groot is om alleen te versturen.</string>
+    <string name="error_too_large">De instantie weigerde het verzoek vanwege zijn omvang. De sync stuurt een type in blokken, dus dit is een punt dat te groot is om alleen te versturen.</string>
     <string name="error_instance">De instantie antwoordde %1$d.</string>
 
     <string name="main_account">Ingelogd als %1$s</string>
@@ -61,7 +61,7 @@
     </plurals>
 
     <string name="battery_title">Achtergrondsynchronisatie</string>
-    <string name="battery_body">Android kan Hælan pauzeren om batterij te besparen, waardoor de tweemaal daagse sync dagenlang niet loopt. Schakel batterijoptimalisatie voor Hælan uit om hem op schema te houden. Verder verandert er niets.</string>
+    <string name="battery_body">Android kan Hælan pauzeren om batterij te besparen, waardoor de tweemaaldaagse sync dagenlang niet loopt. Schakel batterijoptimalisatie voor Hælan uit om hem op schema te houden. Verder verandert er niets.</string>
     <string name="battery_exempt">Batterijoptimalisatie staat uit voor Hælan, dus de achtergrondsynchronisatie kan lopen.</string>
     <string name="battery_action">Batterijinstellingen openen</string>
 

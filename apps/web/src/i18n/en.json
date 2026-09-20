@@ -849,8 +849,8 @@
       "withoutGoogleCostsIntro": "This path is smaller. It cannot do these:",
       "withoutGoogleCost1": "Android only. A member on an iPhone still needs a Google client.",
       "withoutGoogleCost2": "No ECG and no irregular rhythm notifications. Health Connect has neither.",
-      "withoutGoogleCost3": "No daily summaries. Sleep temperature, zone minutes and respiratory rate are computed on Google's servers.",
-      "withoutGoogleCost4": "About 30 days of history, and nothing from before you install the app.",
+      "withoutGoogleCost3": "No daily summaries. Sleep temperature, zone minutes and the day's respiratory rate are computed on Google's servers. The night's respiratory rate still comes from the phone.",
+      "withoutGoogleCost4": "About 30 days of history, reaching back to before you install the app. Nothing further back than that.",
       "withoutGoogleCost5": "Only what other apps have written to Health Connect.",
       "withoutGoogleCost6": "Sync depends on the phone. Doze and battery saving cause gaps, and the gaps are silent."
     },

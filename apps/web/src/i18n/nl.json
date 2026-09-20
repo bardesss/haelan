@@ -19,8 +19,8 @@
     "pathTitle": "Hoe verbind je?",
     "pathGoogle": "Met Google",
     "pathCompanion": "Met de Android-app",
-    "pathGoogleHint": "De Google client van je huishouden. Alles wat haelan kan lezen.",
-    "pathCompanionHint": "Geen Google account. Alleen Android, ongeveer 30 dagen geschiedenis, geen ECG."
+    "pathGoogleHint": "De Google-client van je huishouden. Alles wat haelan kan lezen.",
+    "pathCompanionHint": "Geen Google-account. Alleen Android, ongeveer 30 dagen geschiedenis, geen ECG."
   },
   "shell": {
     "signOut": "Uitloggen",
@@ -843,14 +843,14 @@
       "saving": "Bezig met opslaan",
       "submit": "Opslaan en toestemming geven",
       "withoutGoogle": "Doorgaan zonder Google",
-      "withoutGoogleNote": "Geen Google Cloud project, geen console stappen, en geen waarschuwing over een niet geverifieerde app. De Android app leest Health Connect en stuurt metingen hierheen.",
+      "withoutGoogleNote": "Geen Google Cloud-project, geen consolestappen, en geen waarschuwing over een niet-geverifieerde app. De Android-app leest Health Connect en stuurt metingen hierheen.",
       "choiceTitle": "Hoe verbind je?",
       "companionTitle": "Met de Android-app",
       "withoutGoogleCostsIntro": "Dit pad is kleiner. Dit kan het niet:",
-      "withoutGoogleCost1": "Alleen Android. Een huisgenoot met een iPhone heeft nog steeds een Google client nodig.",
+      "withoutGoogleCost1": "Alleen Android. Een huisgenoot met een iPhone heeft nog steeds een Google-client nodig.",
       "withoutGoogleCost2": "Geen ECG en geen meldingen voor onregelmatig hartritme. Health Connect kent ze allebei niet.",
-      "withoutGoogleCost3": "Geen dagoverzichten. Slaaptemperatuur, zone minuten en ademhalingsfrequentie rekent Google op zijn eigen servers uit.",
-      "withoutGoogleCost4": "Ongeveer 30 dagen geschiedenis, en niets van voor je de app installeert.",
+      "withoutGoogleCost3": "Geen dagoverzichten. Slaaptemperatuur, zoneminuten en de ademhalingsfrequentie overdag rekent Google op zijn eigen servers uit. 's Nachts komt die frequentie nog steeds van de telefoon.",
+      "withoutGoogleCost4": "Ongeveer 30 dagen geschiedenis, terug tot voordat je de app installeert. Niets van eerder dan dat.",
       "withoutGoogleCost5": "Alleen wat andere apps naar Health Connect hebben geschreven.",
       "withoutGoogleCost6": "Synchroniseren hangt af van de telefoon. Doze en batterijbesparing veroorzaken gaten, en die gaten zie je niet."
     },
@@ -1050,11 +1050,11 @@
         "failed": "Het wachtwoord is niet gewijzigd: {{reason}}"
       },
       "phone": {
-        "title": "Versturen vanaf een Android telefoon",
-        "intro": "De companion app leest Health Connect op je telefoon en stuurt metingen hierheen, naast alles wat je al synchroniseert. Alleen Android: Health Connect bestaat niet op de iPhone.",
+        "title": "Versturen vanaf een Android-telefoon",
+        "intro": "De companion-app leest Health Connect op je telefoon en stuurt metingen hierheen, naast alles wat je al synchroniseert. Alleen Android: Health Connect bestaat niet op de iPhone.",
         "step1": "Installeer de app.",
         "step1Link": "Installeren en bijwerken",
-        "step2": "Open de app en geef de Health Connect rechten die hij vraagt.",
+        "step2": "Open de app en geef de Health Connect-rechten die hij vraagt.",
         "step3": "Vul dit adres in:",
         "step4": "Log in met de gebruikersnaam en het wachtwoord die je hier gebruikt."
       }
