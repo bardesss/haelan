@@ -35,7 +35,7 @@ export type { ListInput, ListResult, ClientDeps } from './api/client.ts'
 export { mapSamples, mapWindowSamples } from './api/mapSamples.ts'
 export type { SampleRow } from './api/mapSamples.ts'
 export { mapSessions } from './api/mapSessions.ts'
-export type { SessionRow, SegmentRow } from './api/mapSessions.ts'
+export type { SessionRow, SegmentRow, RouteRow } from './api/mapSessions.ts'
 export { mapObservations } from './api/mapObservations.ts'
 export type { MapObservationsInput } from './api/mapObservations.ts'
 export {

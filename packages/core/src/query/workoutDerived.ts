@@ -1,6 +1,6 @@
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import type { DbOrTx } from '../db/open.ts'
-import { daily, people } from '../db/schema/index.ts'
+import { daily, people, sessionRoutes } from '../db/schema/index.ts'
 import { MERGED_SOURCE, PROVIDER_SOURCE } from '../derive/rollup.ts'
 import { workoutDetail } from '../api/workoutSummary.ts'
 import { edwardsLoadFromSeconds, banisterLoad, coefficientFor, ageAt } from '../api/cardioLoad.ts'
@@ -90,6 +90,45 @@ export function readWorkoutSplits(db: DbOrTx, input: {
     autoSplits: fillSplitHeartRate(detail.autoSplits, minutes),
     laps: fillSplitHeartRate(detail.laps, minutes),
   }
+}
+
+export interface RoutePoint {
+  atMs: number
+  latitude: number
+  longitude: number
+  altitudeMetres: number | null
+  horizontalAccuracyMetres: number | null
+  verticalAccuracyMetres: number | null
+}
+
+/**
+ * A workout's GPS route, oldest point first.
+ *
+ * No personId in the input, unlike readWorkoutCardioLoad and readWorkoutSplits beside it: those
+ * two cross into `daily` and the heart rate trace, tables keyed on person, while `session_routes`
+ * is keyed on nothing but the session id, and the session handed in was already read scoped to a
+ * person by whoever called sessionById. A second scope here would check nothing a first one had
+ * not already checked.
+ *
+ * Empty for a sleep session and for an exercise session that carries no recorded route - both are
+ * the same true answer, a session with nothing to draw, and neither is the caller's job to tell
+ * apart from the other. Unlike readWorkoutCardioLoad and readWorkoutSplits, "no route" is not a
+ * property of the session's kind the way "no cardio load" is of a night; it only happens to be true
+ * for every sleep session too, since sleep never carries one.
+ */
+export function readWorkoutRoute(db: DbOrTx, input: {
+  session: WorkoutSession
+}): RoutePoint[] {
+  if (input.session.kind !== 'exercise') return []
+  return db.select({
+    atMs: sessionRoutes.atMs,
+    latitude: sessionRoutes.latitude,
+    longitude: sessionRoutes.longitude,
+    altitudeMetres: sessionRoutes.altitudeMetres,
+    horizontalAccuracyMetres: sessionRoutes.horizontalAccuracyMetres,
+    verticalAccuracyMetres: sessionRoutes.verticalAccuracyMetres,
+  }).from(sessionRoutes).where(eq(sessionRoutes.sessionId, input.session.id))
+    .orderBy(asc(sessionRoutes.ordinal)).all()
 }
 
 function readBanister(db: DbOrTx, input: { personId: string, session: WorkoutSession }) {
