@@ -230,9 +230,14 @@ export function Profile() {
         <h3 className="profile-subhead">{t('settings.profile.phone.title')}</h3>
         <p className="field-hint">{t('settings.profile.phone.intro')}</p>
         <ol className="profile-phone-steps">
+          {/* The link sits on its own line rather than trailing the sentence, and carries a real
+              touch target rather than being excused from the 44px rule as an inline link. It is
+              the one thing on this card somebody is meant to act on, and the rail this app holds
+              every other control to applies to it for the same reason. */}
           <li>
-            {t('settings.profile.phone.step1')}{' '}
-            <a href="https://github.com/bardesss/haelan#the-android-companion-app"
+            {t('settings.profile.phone.step1')}
+            <a className="profile-phone-link"
+              href="https://github.com/bardesss/haelan#the-android-companion-app"
               target="_blank" rel="noreferrer noopener">
               {t('settings.profile.phone.step1Link')}
             </a>

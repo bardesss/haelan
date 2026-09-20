@@ -1093,6 +1093,13 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 }
 .profile-phone-steps li { margin-bottom: var(--space-2); }
 .profile-phone-steps li:last-child { margin-bottom: 0; }
+/* Its own line and a full 44px, rather than an inline link excused from the touch target rule.
+   layout-check.mjs counts those excusals and expects none: every control the app carries is a
+   discrete target, and the primary action of this card is not the place to start an exception. */
+.profile-phone-link {
+  display: flex; align-items: center; width: fit-content;
+  min-height: 44px; margin-top: var(--space-1);
+}
 .profile-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
