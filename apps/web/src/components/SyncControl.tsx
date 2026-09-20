@@ -4,6 +4,7 @@ import { Icon } from './icons.js'
 import { apiSend, ApiError } from '../api/client.js'
 import { useSession } from '../auth/session.js'
 import { useSyncStatus, syncStatusKey } from '../data/useSyncStatus.js'
+import { useHistoryStart } from '../data/useHistoryStart.js'
 
 /**
  * Kicking off a sync, and saying how fresh the data is.
@@ -57,6 +58,20 @@ export function SyncControl({ compact = false }: {
     },
   })
 
+  // When this person's phone last delivered anything, and whether they are on the phone path at
+  // all. Both come off the cursors query the range clamp already runs, so this costs no request.
+  const phone = useHistoryStart()
+  const phoneMinutesAgo = phone.data?.lastIngestAtMs != null
+    ? Math.max(0, Math.round((Date.now() - phone.data.lastIngestAtMs) / 60_000))
+    : null
+
+  // A person whose data arrives from a phone and who has connected no Google account. The sync
+  // runner never runs for them, so lastFinishedAtMs is null forever and the sentence below would
+  // read "never synced" while their phone had been uploading all week. Both halves are required:
+  // no Google connection alone is also a person who has connected nothing yet, and "never synced"
+  // is the true answer for them.
+  const phoneOnly = phone.data?.googleConnected === false && phoneMinutesAgo !== null
+
   // Three different states, three different sentences. The status query answering nothing yet is
   // not the same as an instance that has never finished a run, and neither is a real time.
   const syncedLabel = status.data === undefined
@@ -90,13 +105,31 @@ export function SyncControl({ compact = false }: {
           phone spelling and the collapsed rail - where CSS hides that text entirely - both still
           have somewhere to say the whole sentence. aria-label carries both halves for the same
           reason: a screen reader on a collapsed rail would otherwise hear "Sync" and no status. */}
-      <button type="button" className="icon-button sync-button" title={syncedLabel}
-        aria-label={`${t('sync.run')} — ${syncedLabel}`}
-        disabled={personId === undefined || runSync.isPending || status.data?.running === true}
-        onClick={() => runSync.mutate()}>
-        <Icon name="sync" />
-      </button>
-      <span className="synced" aria-hidden="true">{compact ? shortLabel : syncedLabel}</span>
+      {/* No button on the phone path. It posts /api/sync/run, which starts the Google sync runner,
+          and for somebody with no Google account that run has nothing to fetch: the click appears
+          to succeed and changes nothing. Hidden rather than disabled because there is no state in
+          which it would become pressable for them, and a disabled control invites a reader to work
+          out what would enable it. What replaces it is the sentence beside it, which says where
+          their data does come from. */}
+      {!phoneOnly && (
+        <button type="button" className="icon-button sync-button" title={syncedLabel}
+          aria-label={`${t('sync.run')} ${syncedLabel}`}
+          disabled={personId === undefined || runSync.isPending || status.data?.running === true}
+          onClick={() => runSync.mutate()}>
+          <Icon name="sync" />
+        </button>
+      )}
+      {!phoneOnly && <span className="synced" aria-hidden="true">{compact ? shortLabel : syncedLabel}</span>}
+      {/* Its own line rather than folded into the one above, because the two can stall
+          independently: a mixed household's Google sync can be healthy while the phone has been
+          asleep for a week, and one sentence carrying the newer of the two would hide exactly that.
+          Not aria-hidden, unlike its neighbour: that one is spoken through the button's own
+          aria-label, and with no button here this is the only thing that would say it. */}
+      {phoneMinutesAgo !== null && (
+        <span className="synced">
+          {compact ? t('sync.phoneAgoShort', { count: phoneMinutesAgo }) : t('sync.phoneAgo', { count: phoneMinutesAgo })}
+        </span>
+      )}
       {runSync.isError && <span className="field-error" role="alert">{syncErrorLabel}</span>}
     </div>
   )

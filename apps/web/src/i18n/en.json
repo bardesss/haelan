@@ -60,7 +60,9 @@
     "neverShort": "–",
     "statusUnknownShort": "–",
     "alreadyRunning": "A sync is already running.",
-    "failed": "Sync did not start."
+    "failed": "Sync did not start.",
+    "phoneAgo": "Phone sent {{count}} min ago",
+    "phoneAgoShort": "{{count}}m phone"
   },
   "sidebar": {
     "sectionsLabel": "Sections",
