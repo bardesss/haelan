@@ -158,6 +158,24 @@ describe('GET /baselines', () => {
     const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06&windowDays=5')
     expect(response.json().filledDays).toEqual({ filled: 0, of: 5 })
   })
+
+  // The scoped re-review's own defect, reproduced: steps is coverage judged
+  // (coverageIsMeaningful, since it is an intraday tier metric), so baseline() drops a barely
+  // observed day before averaging. filledDays.of has to drop the same two days rather than
+  // counting all six fetched, or it overstates against baseline.n - a wording that says how many
+  // days a baseline is behind should mean the same thing baseline.n already means.
+  it('excludes a coverage gated day from filledDays.of the same way baseline.n excludes it', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 4; day += 1) {
+      seedDaily(harness, { localDate: `2026-08-0${day}`, value: 1000, coverage: 0.9 })
+    }
+    seedDaily(harness, { localDate: '2026-08-05', value: 1000, coverage: 0.1 })
+    seedDaily(harness, { localDate: '2026-08-06', value: 1000, coverage: 0.1 })
+    const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-07&windowDays=6')
+    expect(response.statusCode).toBe(200)
+    expect(response.json().baseline.n).toBe(4)
+    expect(response.json().filledDays).toEqual({ filled: 0, of: 4 })
+  })
 })
 
 describe('GET /insights', () => {
