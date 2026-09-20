@@ -58,7 +58,10 @@ const releasePleaseJob = (() => {
 
 const releaseConfig = JSON.parse(
   readFileSync(new URL('../../release-please-config.json', import.meta.url), 'utf8'),
-) as { packages: Record<string, {
+) as {
+  'separate-pull-requests'?: boolean
+  'pull-request-title-pattern'?: string
+  packages: Record<string, {
   draft?: boolean
   'force-tag-creation'?: boolean
   'skip-github-release'?: boolean
@@ -286,6 +289,23 @@ describe('the release workflow', () => {
     // the pull request `autorelease: pending` and every later run tries to release it again.
     // 1.15.0 was released and then left pending exactly that way.
     expect(yaml).toContain('issues: write')
+  })
+
+  it('keeps a version in every release pull request title', () => {
+    // release-please reads the version back OUT of the title it wrote, to match a merged release
+    // pull request to the release it should now tag. Adding apps/android as a second package made
+    // it write one combined pull request titled `chore: release master`, with no version in it at
+    // all. It merged, nothing could be parsed from the title, nothing was tagged, and every run
+    // after that aborted with "There are untagged, merged release PRs outstanding". 2.0.2 bumped
+    // the manifest and the package file and then shipped nothing: no tag, no release, and no image,
+    // because release.yml gates verify, image and publish on release-please having released.
+    //
+    // separate-pull-requests is the fix rather than the pattern alone: one pull request per package
+    // means each title carries exactly one version, which is the shape release-please's own default
+    // assumes. The explicit pattern is belt and braces so a later edit cannot drop ${version} again
+    // without this going red.
+    expect(releaseConfig['separate-pull-requests']).toBe(true)
+    expect(releaseConfig['pull-request-title-pattern']).toContain('${version}')
   })
 
   it('lets the app version itself, and keeps it out of the server version', () => {
