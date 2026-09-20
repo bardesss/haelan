@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import { metricSpec } from '@haelan/core/metrics'
 import type { MetricSpec } from '@haelan/core/metrics'
+import { BASELINE_WINDOW_DAYS, baselineWindow } from '@haelan/core'
+import type { DailyPoint } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { budgetFor, defineTool, summaryOf, DEFAULT_DAILY_POINTS, REDUCTION, SUMMARY } from '../contract.ts'
 
@@ -30,6 +32,23 @@ const FILLED_DESCRIPTION =
   'True when the daily name itself had no row this date and this value is that day\'s intraday '
   + 'average standing in for it, not the device\'s own daily summary. Say so in words when reporting '
   + 'a filled reading; do not state it as a measurement.'
+
+// Shared by get_baselines, compare_periods and trend, the three tools that blend many days into
+// one statistic - a boolean per day cannot ride along through that fold the way it does on
+// query_series and get_daily, but a count can, and does.
+const FILLED_DAYS_DESCRIPTION =
+  'How many of the days behind this answer were filled in from an intraday average rather than '
+  + 'the device\'s own daily summary, out of how many. State a nonzero count in words before '
+  + 'treating this answer as built entirely from measured days.'
+
+const FILLED_DAYS = z.object({
+  filled: z.number(),
+  of: z.number(),
+}).describe(FILLED_DAYS_DESCRIPTION)
+
+function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
+  return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
 
 export const querySeries = defineTool({
   name: 'query_series',
@@ -170,12 +189,24 @@ export const getBaselines = defineTool({
       n: z.number(),
       thin: z.boolean(),
     }).nullable(),
+    filledDays: FILLED_DAYS,
   },
-  run: (q, args) => ({
-    baseline: q.baseline({
-      metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
-    }),
-  }),
+  run: (q, args) => {
+    // baseline() answers center, spread and n, none of which carries `filled`, so its own window
+    // (the same rule baselineWindow names, which baseline() calls too) is reopened here through a
+    // fresh series() call - precise for exactly the metrics that can ever be filled (daily_hrv,
+    // daily_spo2): coverageIsMeaningful is false for both, so baseline()'s own coverage filter
+    // never drops a row for them and this `points` array is the same set baseline() averaged over.
+    const windowDays = args.windowDays ?? BASELINE_WINDOW_DAYS
+    const { from, to } = baselineWindow(args.on, windowDays)
+    const { points } = q.series({ metric: args.metric, agg: args.agg, from, to, source: args.source })
+    return {
+      baseline: q.baseline({
+        metric: args.metric, agg: args.agg, on: args.on, windowDays: args.windowDays, source: args.source,
+      }),
+      filledDays: filledCountOf(points),
+    }
+  },
 })
 
 const DATE_RANGE = z.object({ from: z.string(), to: z.string() }).nullable()
@@ -208,10 +239,29 @@ export const comparePeriods = defineTool({
     previousRange: DATE_RANGE,
     suppressed: z.boolean(),
     reason: z.string().nullable(),
+    currentFilledDays: FILLED_DAYS,
+    previousFilledDays: FILLED_DAYS,
   },
-  run: (q, args) => q.comparePeriods({
-    metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
-  }),
+  run: (q, args) => {
+    const insight = q.comparePeriods({
+      metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
+    })
+    // comparePeriods() always fills currentRange/previousRange in from the arithmetic it already
+    // did, even when suppressed, so both windows are reopened straight off the response rather
+    // than redoing "the period before this one" math a second time - the same reasoning
+    // apps/server/src/routes/v1/series.ts's /insights route already applies.
+    const currentWindow = q.series({
+      metric: args.metric, agg: args.agg, from: insight.currentRange!.from, to: insight.currentRange!.to, source: args.source,
+    })
+    const previousWindow = q.series({
+      metric: args.metric, agg: args.agg, from: insight.previousRange!.from, to: insight.previousRange!.to, source: args.source,
+    })
+    return {
+      ...insight,
+      currentFilledDays: filledCountOf(currentWindow.points),
+      previousFilledDays: filledCountOf(previousWindow.points),
+    }
+  },
 })
 
 export const trend = defineTool({
@@ -232,12 +282,18 @@ export const trend = defineTool({
   outputSchema: {
     points: z.array(z.object({ localDate: z.string(), value: z.number() })),
     summary: SUMMARY,
+    filledDays: FILLED_DAYS,
   },
   run: (q, args) => {
     const points = q.trend({
       metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
     })
-    return { points, summary: summaryOf(points.map((p) => p.value)) }
+    // trend smooths the same series() this reads again, over the same from/to: no window math to
+    // redo here, only the read of `filled` the smoothed points themselves do not carry.
+    const raw = q.series({
+      metric: args.metric, agg: args.agg, from: args.from, to: args.to, source: args.source,
+    })
+    return { points, summary: summaryOf(points.map((p) => p.value)), filledDays: filledCountOf(raw.points) }
   },
 })
 
