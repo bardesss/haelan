@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { samplePoint, schema } from '@haelan/core'
 import type { DbOrTx } from '@haelan/core'
 import { withServer } from './harness.ts'
@@ -153,5 +154,26 @@ describe('the ingest route during a rebuild', () => {
     })
     expect(response.statusCode).toBe(200)
     expect((response.json() as { rowsWritten: number }).rowsWritten).toBe(1)
+  })
+})
+
+describe('how much derivation an upload does before it answers', () => {
+  // A tripwire, not a behavioural proof, and it says so rather than pretending otherwise.
+  //
+  // What the batch size bounds is the OVERSHOOT: the drain's budget is only checked between
+  // batches, so the batch is how far past it one request can run. At the default of eight, a
+  // first sync of thirty days of heart rate put eight dense days into a single uninterruptible
+  // batch and outran the phone's 30 second read timeout. The phone abandoned a request this
+  // server then finished successfully, so nothing logged an error anywhere, the type read "never
+  // synced", and every type queued behind it in that run went unattempted. Density decided which
+  // ones broke, so the sparse types looked healthy throughout.
+  //
+  // Asserting that behaviour needs a clock: with cheap days a batch of one still drains the whole
+  // queue inside the budget, and only a dense enough day separates the two settings. A timing
+  // assertion on a shared runner measures the runner, which this repository keeps relearning. So
+  // this reads the call instead and exists to make a later edit meet the paragraph above.
+  it('asks for one day per batch on the ingest path', () => {
+    const source = readFileSync(new URL('../src/routes/v1/ingest.ts', import.meta.url), 'utf8')
+    expect(source).toContain("drainPersonDerivation(app, personId, 'ingest', 1)")
   })
 })

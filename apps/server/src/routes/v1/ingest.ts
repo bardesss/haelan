@@ -195,7 +195,18 @@ export function registerIngestRoutes(app: FastifyInstance): void {
 
     // The sync runner only derives people connected to Google, so a companion-only person
     // would sit queued forever without this. Bounded and person scoped, the shared helper.
-    drainPersonDerivation(app, personId, 'ingest')
+    //
+    // One day per batch rather than the default eight, because a phone is holding a socket open
+    // for this answer and its read timeout is 30 seconds. The budget is only checked BETWEEN
+    // batches, so the batch size is how far past it a request can run: eight dense days of heart
+    // rate outran that timeout on a first sync, and the phone abandoned a request this server then
+    // completed successfully. No error was logged anywhere, the type read "never synced", and the
+    // types queued behind it in the same run were never attempted.
+    //
+    // Whatever a single day does not finish stays queued, and drainLoop.ts takes it on its own
+    // tick. This path only needs to leave `applied` meaningful for the ordinary case of an upload
+    // covering one day, not to empty a thirty day backlog while a phone waits.
+    drainPersonDerivation(app, personId, 'ingest', 1)
     const applied = !written.localDates.some((localDate) => stillQueued(app, personId, localDate))
     const ordered = [...written.localDates].sort()
     return reply.send({
