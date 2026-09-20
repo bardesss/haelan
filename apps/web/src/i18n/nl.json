@@ -60,7 +60,9 @@
     "neverShort": "–",
     "statusUnknownShort": "–",
     "alreadyRunning": "Er loopt al een synchronisatie.",
-    "failed": "Synchroniseren is niet gestart."
+    "failed": "Synchroniseren is niet gestart.",
+    "phoneAgo": "Telefoon stuurde {{count}} min geleden",
+    "phoneAgoShort": "{{count}}m tel."
   },
   "sidebar": {
     "sectionsLabel": "Secties",

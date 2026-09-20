@@ -157,9 +157,30 @@ describe('clampFromToHistory', () => {
   })
 
   it('reads a body with nothing numeric in it as no history', () => {
-    expect(normalizeHistoryStart({} as never)).toEqual({ historyStartMs: null, googleConnected: false })
+    expect(normalizeHistoryStart({} as never))
+      .toEqual({ historyStartMs: null, googleConnected: false, lastIngestAtMs: null })
     expect(normalizeHistoryStart({ historyStartMs: 'soon' as never, googleConnected: 0 as never }))
-      .toEqual({ historyStartMs: null, googleConnected: false })
+      .toEqual({ historyStartMs: null, googleConnected: false, lastIngestAtMs: null })
+  })
+
+  it('takes the newest ingest across every type, ignoring the types that have none', () => {
+    // The question the staleness line asks is whether the phone is reaching this instance at all,
+    // so one type that arrived an hour ago answers it whatever the others say. A type that has
+    // never been sent carries null and must not read as an ingest at time zero.
+    expect(normalizeHistoryStart({
+      historyStartMs: 1000, googleConnected: false,
+      items: [
+        { dataTypeId: 'steps', lastWindowEndMs: 9, lastIngestAtMs: 500 },
+        { dataTypeId: 'weight', lastWindowEndMs: null, lastIngestAtMs: null },
+        { dataTypeId: 'heart-rate', lastWindowEndMs: 9, lastIngestAtMs: 900 },
+      ],
+    })).toEqual({ historyStartMs: 1000, googleConnected: false, lastIngestAtMs: 900 })
+  })
+
+  it('reads a body whose items are missing or not a list as no ingest', () => {
+    expect(normalizeHistoryStart({ historyStartMs: 1, googleConnected: true }).lastIngestAtMs).toBe(null)
+    expect(normalizeHistoryStart({ historyStartMs: 1, googleConnected: true, items: 'none' as never })
+      .lastIngestAtMs).toBe(null)
   })
 
   it('asks the companion cursors for this person as an Android client', () => {
