@@ -115,6 +115,21 @@ ended, with no column for the arguments themselves; a call made over stdio is no
 fresh for the call and thrown away after, holding one person's rows in seven tables and none of
 the ones that could name a password or another member.
 
+## The Android companion app
+
+An instance reads a household's data through Google's Health API. A household where every member
+uses Android can skip that entirely: the companion app reads Health Connect on the phone and sends
+readings to the instance directly, with no Cloud project and no console.
+
+[![Add to Obtainium](https://img.shields.io/badge/Add%20to-Obtainium-1a7f37?style=flat)](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.haelan.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fbardesss%2Fhaelan%22%2C%22author%22%3A%22bardesss%22%2C%22name%22%3A%22H%C3%A6lan%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5EAndroid%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%7D%22%2C%22overrideSource%22%3A%22GitHub%22%7D)
+
+The app is distributed as a signed APK on each `android-v` release rather than through Google Play,
+so [Obtainium](https://github.com/ImranR98/Obtainium) is how updates arrive. The button carries the
+release filter it needs, because this repository publishes server releases and app releases into one
+stream.
+
+That path is smaller than the Google one, and `apps/android/README.md` says what it gives up.
+
 ## Deploy
 
 [`compose.yaml`](compose.yaml) at the repository root is eight lines of YAML and carries no

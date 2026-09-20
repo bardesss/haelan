@@ -60,21 +60,25 @@ keeps locally.
 
 ## Distribution
 
-No Google Play listing. The app ships as a signed APK attached to a GitHub release, and
-Obtainium is the update path: point it at this repository and new releases arrive on their
-own. The release workflow does not attach one yet, so today the only installable build is
-the debug APK from a pull request check.
+No Google Play listing. Each release tagged `android-v<version>` carries a signed APK, and
+Obtainium is the update path: add this repository and new versions arrive on their own. The button
+in the repository's own README carries the right settings, including the release filter, so nothing
+has to be typed into a menu.
 
 Two costs come with this path, stated rather than glossed:
 
-- Installing the APK means installing from an unknown source, and Android asks for
-  confirmation before it proceeds.
-- Without Obtainium there are no automatic updates. A pull request build is not an update
-  channel either: workflow artifacts expire after 90 days and exist for review, while the
-  release attachment is the distribution.
+- Installing the APK means installing from an unknown source, and Android asks for confirmation
+  before it proceeds.
+- Without Obtainium there are no automatic updates. A pull request build is not an update channel
+  either: workflow artifacts expire after 90 days and exist for review, while the release
+  attachment is the distribution.
 
-No Play listing also means no health apps declaration and no review, which is part of what
-makes this path attractive.
+No Play listing also means no health apps declaration and no review, which is part of what makes
+this path attractive.
+
+The tag is the authority. Retagging or deleting an `android-v` tag lets a lower version code ship
+afterwards, and Android refuses that as a downgrade on every phone that already has the app. There
+is no recovery but a higher version.
 
 ## Pairing a phone to a person
 
