@@ -43,4 +43,21 @@ describe('androidReleaseVersion', () => {
       expect(() => androidReleaseVersion(bad)).toThrow()
     }
   })
+
+  it('refuses a major above the ceiling Android can represent', () => {
+    // The regex bounds major to four digits, which reaches versionCode 9999999999 at the top --
+    // comfortably past Android's 2100000000 limit. android-v2100.0.0 is the first tag the regex
+    // still accepts but the derived code cannot.
+    expect(() => androidReleaseVersion('android-v2100.0.0')).toThrow()
+  })
+
+  it('refuses a leading zero, because it would parse to a version the tag does not say', () => {
+    // android-v1.02.3 would otherwise derive versionName '1.2.3': the tag and the version it
+    // produces disagreeing silently, forever, since the tag is immutable once pushed.
+    expect(() => androidReleaseVersion('android-v1.02.3')).toThrow()
+    expect(() => androidReleaseVersion('android-v01.2.3')).toThrow()
+    expect(() => androidReleaseVersion('android-v1.2.03')).toThrow()
+    // A bare zero component is not a leading zero and stays legal.
+    expect(androidReleaseVersion('android-v1.0.0')).toEqual({ versionName: '1.0.0', versionCode: 1_000_000 })
+  })
 })
