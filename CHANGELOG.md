@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.0.2](https://github.com/bardesss/haelan/compare/v2.0.1...v2.0.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* **server:** an upload derives one day per batch, not eight ([#310](https://github.com/bardesss/haelan/issues/310)) ([cb2fd00](https://github.com/bardesss/haelan/commit/cb2fd0098892ddd82f5597a9609057cf897085e3))
+
 ## [2.0.1](https://github.com/bardesss/haelan/compare/v2.0.0...v2.0.1) (2026-09-20)
 
 
