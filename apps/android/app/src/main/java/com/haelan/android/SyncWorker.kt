@@ -48,7 +48,7 @@ class SyncWorker(appContext: Context, params: WorkerParameters) : CoroutineWorke
         // the full window rather than skipping, except on 401 which ends the session.
         val cursorEnds = withContext(Dispatchers.IO) {
             when (val fetched = InstanceClient.get(engineSession.server, SyncCursors.pathFor(engineSession.personId), engineSession.cookie) {
-                SyncCursors.parseCursorEnds(it.body)
+                SyncCursors.cursorEndsFor(it.body)
             }) {
                 is InstanceClient.Outcome.Ok -> fetched.value
                 is InstanceClient.Outcome.Failed -> {

@@ -177,8 +177,10 @@ object SyncEngine {
         end: Instant,
         post: suspend (path: String, payload: String) -> InstanceClient.Outcome<Unit>,
         report: Reporter,
-        // dataTypeId to the instance's last window end. Empty on a first sync or when the
-        // cursors fetch failed: every type then keeps the full window instead of skipping.
+        // dataTypeId to the instance's last window end, already the minimum across that
+        // type's own sources (SyncCursors.cursorEndsFor): a source that lags pulls the whole
+        // type's read back to it. Empty on a first sync or when the cursors fetch failed:
+        // every type then keeps the full window instead of skipping.
         cursorEnds: Map<String, Long> = emptyMap(),
     ) {
         // Read, not remembered: the permission can be granted or revoked between two syncs, and
@@ -193,6 +195,14 @@ object SyncEngine {
             // under what the instance files, so the lookup goes through the same knot.
             val dataTypeId = SyncTypes.forKey(key).dataTypeId
             val start = SyncCursors.startFor(cursorEnds[dataTypeId], fallbackStart, end)
+            // Null is a cursor ahead of the phone's own clock, not a failure: see
+            // SyncCursors.startFor. There is nothing to read yet, so the type is reported
+            // exactly as a read that found nothing would be, and Health Connect is never
+            // asked for a range that ends where it starts.
+            if (start == null) {
+                report.typeEmpty(key)
+                continue
+            }
             // Whatever the block threw - a Health Connect read, a socket - is this type's own
             // failure, and becomes an outcome here so there is one path below rather than two.
             val outcome = try {
