@@ -54,6 +54,14 @@ export interface DailyPoint {
    * drew on, and there was no reader over the column anywhere in core until now.
    */
   updatedAtMs: number | null
+  /**
+   * True when the daily name itself has no row for this date and the value shown is
+   * DEVICE_ROLLED_EQUIVALENT's intraday mean standing in for it. A household that never syncs
+   * the daily type, or a day the summary has not landed yet, gets a real number here rather than
+   * a gap -- but it is not the device's own daily reading, and every consumer that shows this
+   * point needs to say so rather than presenting it as one.
+   */
+  filled: boolean
 }
 
 export interface SeriesResult {
@@ -631,7 +639,7 @@ export class PersonQuery {
    * mean computed downstream. Nothing writes one today; this is the guard for later.
    */
   #rowsOf(metric: string, agg: string, from: string, to: string, source: string | undefined): DailyPoint[] {
-    return this.#db.select({
+    const rows = this.#db.select({
       localDate: daily.localDate,
       value: daily.value,
       coverage: daily.coverage,
@@ -648,7 +656,10 @@ export class PersonQuery {
       gte(daily.localDate, from),
       lte(daily.localDate, to),
       isNotNull(daily.value),
-    )).orderBy(asc(daily.localDate)).all() as DailyPoint[]
+    )).orderBy(asc(daily.localDate)).all() as Omit<DailyPoint, 'filled'>[]
+    // Every row read here is the requested name's own: merged, provider, or a specific device,
+    // never DEVICE_ROLLED_EQUIVALENT's stand-in. Only withFilledDays marks a row filled.
+    return rows.map((row) => ({ ...row, filled: false }))
   }
 }
 
@@ -660,6 +671,11 @@ export class PersonQuery {
  * device computed with a number we computed ourselves. `rolledByDate` is read for the dates the
  * requested name is silent about and for nothing else, and every row keeps its own `source`, so
  * which name a day came from stays visible in the answer rather than being flattened by the fill.
+ *
+ * A row pulled in from `rolledByDate` is marked `filled: true` before it goes in. Its `source`
+ * still says `merged` or `provider`, same as a genuine daily row, so `filled` is the only signal
+ * that survives to tell a reader, an export or a language model that this number is the day's
+ * intraday mean rather than the daily name's own measurement.
  */
 function withFilledDays(
   points: readonly DailyPoint[],
@@ -671,7 +687,7 @@ function withFilledDays(
   for (const [localDate, point] of rolledByDate) {
     // `points` is already in range and ordered; `rolledByDate` was read over the same range, so
     // this adds no date the caller did not ask for.
-    if (!answered.has(localDate)) filled.push(point)
+    if (!answered.has(localDate)) filled.push({ ...point, filled: true })
   }
   return filled.sort((a, b) => (a.localDate < b.localDate ? -1 : a.localDate > b.localDate ? 1 : 0))
 }

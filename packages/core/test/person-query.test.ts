@@ -252,23 +252,30 @@ describe('PersonQuery.series, the metric a phone rolls up instead of a daily typ
     expect(points.map((p) => p.source)).toEqual(['phone'])
   })
 
-  it('does not take the fallback when the daily row exists, so a Google instance is unchanged', () => {
+  it('does not take the fallback when the daily row exists for that date', () => {
     // The one that must not move. daily_hrv is the device's own summary, and a fallback that
-    // outranked it would answer a question about the watch with a number about the phone.
+    // outranked it would answer a question about the watch with a number about the phone. This
+    // says nothing about a Google instance in general: see the marking tests below for the day
+    // that does change, and DEVICE_ROLLED_EQUIVALENT's comment for why it changes on purpose.
     insertDaily({ localDate: '2026-08-01', value: 55, metric: 'daily_hrv', agg: 'last', source: 'provider' })
     insertDaily({ localDate: '2026-08-01', value: 42, metric: 'hrv', agg: 'mean', source: 'merged' })
 
     const { points } = query.series({ metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-01' })
     expect(points.map((p) => p.value)).toEqual([55])
     expect(points.map((p) => p.source)).toEqual(['provider'])
+    expect(points.map((p) => p.filled)).toEqual([false])
   })
 
-  it('keeps a day with a daily row and fills the day without one, in the same series', () => {
+  it('marks the filled day and leaves the answered day unmarked, in the same series', () => {
+    // The two shapes a reader has to be able to tell apart, from one query: a day the daily name
+    // answered itself, and a day only the rolled fallback did. Same call, same result array,
+    // `filled` is the one field a consumer can branch on to say which is which.
     insertDaily({ localDate: '2026-08-01', value: 55, metric: 'daily_spo2', agg: 'last', source: 'provider' })
     insertDaily({ localDate: '2026-08-02', value: 97, metric: 'spo2', agg: 'mean', source: 'merged' })
 
     const { points } = query.series({ metric: 'daily_spo2', agg: 'last', from: '2026-08-01', to: '2026-08-02' })
     expect(points.map((p) => p.value)).toEqual([55, 97])
+    expect(points.map((p) => p.filled)).toEqual([false, true])
   })
 
   it('answers nothing for respiratory_rate, because the phone only has the night', () => {
@@ -322,6 +329,24 @@ describe('PersonQuery.series with a point budget', () => {
     }
     const { reduction } = query.series({ metric: 'steps', agg: 'sum', from: '2026-08-01', to: '2026-08-05' })
     expect(reduction).toBeNull()
+  })
+
+  it('keeps the filled mark on a point that survives thinning', () => {
+    // thin() carries the same DailyPoint object through, so LTTB always keeping the first and
+    // last index is what makes this deterministic: day one has its own daily_hrv row, day twenty
+    // has only the rolled hrv fallback, and both are guaranteed to survive a budget of 5.
+    for (let day = 1; day <= 19; day += 1) {
+      insertDaily({ localDate: `2026-08-${String(day).padStart(2, '0')}`, value: day, metric: 'daily_hrv', agg: 'last' })
+    }
+    insertDaily({ localDate: '2026-08-20', value: 99, metric: 'hrv', agg: 'mean' })
+
+    const { points } = query.series({
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-20', points: 5,
+    })
+    expect(points[0]?.localDate).toBe('2026-08-01')
+    expect(points[0]?.filled).toBe(false)
+    expect(points.at(-1)?.localDate).toBe('2026-08-20')
+    expect(points.at(-1)?.filled).toBe(true)
   })
 })
 
