@@ -426,40 +426,16 @@ class UploadCursorHoleTest {
         )
     }
 
-    /**
-     * The same property, spaced wide enough to break the fixture instead of the engine. At 12 hours
-     * the phone's own last two readings sit together in the buffer and flush as a pair; at 72 hours
-     * they never share a buffer, so the very last reading is the whole tail and the cursor that
-     * matters for it is the phone's own, not the watch's.
-     *
-     * Reader 3 found this red against a cursor keyed on whichever source ran furthest: with 41
-     * readings the last one lands exactly on a page boundary, so the watch's cursor at the end of
-     * the run sits almost two days past it -- past the single day of overlap that is supposed to
-     * reach back for it. Watched failing (see the task report for the exact arithmetic and the
-     * failure message); it holds once the type's own next start is keyed on the minimum across its
-     * sources, which pulls the start back to the phone's own last landed reading instead.
-     */
-    @Test
-    fun `at 72 hours apart the last reading is still inside its own source's retry window`() {
-        val (pages, _) = twoSources(readings = 41, readingsStepMs = 72 * hourMs)
-
-        val shape = shapeOf(pages)
-        val upload = Upload(budget, spanCap)
-        upload.refuseFromPost = shape.posts.lastIndex
-        upload.refusalsAnswered = Int.MAX_VALUE
-        upload.run(pages)
-
-        val unposted = upload.unposted()["phone"].orEmpty()
-        val retryStartMs = retryStartFor(upload.landed).toEpochMilli()
-        val skipped = unposted.filter { it.atMs < retryStartMs }
-
-        assertFalse(
-            "${skipped.size} of the ${unposted.size} readings that never travelled are behind the "
-            + "retry window, which starts at ${retryStartMs}ms; the oldest is "
-            + "${(retryStartMs - unposted.first().atMs) / hourMs}h before it and is never read again",
-            skipped.isNotEmpty(),
-        )
-    }
+    // A 72 hour spaced case belongs to the cross source minimum, not to this file: retryStartFor
+    // above models "the minimum across sources" in the test's own Kotlin and never calls
+    // SyncCursors.cursorEndsFor, so no fixture built on top of it -- at 12 hours, 72 hours, or any
+    // other spacing -- can tell .min() from .max() in the production code. Tuning the reading
+    // count only found a spacing where this file's own arithmetic happened to agree with the fix;
+    // it proved nothing about the fix itself, which is what going red only for an even reading
+    // count turned out to mean. SyncCursorsTest's
+    // "a laggard's own late reading still falls inside the delta keyed on the minimum, not the
+    // maximum" builds the two-sources-diverge-by-more-than-the-overlap case directly against
+    // cursorEndsFor and startFor, which is the guard on this defect.
 
     // ---- 5. The case the app has always handled, kept as a floor ----
 

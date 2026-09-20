@@ -76,15 +76,51 @@ class SyncCursorsTest {
         assertEquals(2, bySource["steps"]?.size)
     }
 
+    /**
+     * Finding A's own scenario, built directly rather than derived from a buffering fixture: two
+     * sources for one type whose cursors are more than an overlap apart, and a reading the
+     * laggard has not sent yet, sitting between the laggard's own cursor and the leader's.
+     *
+     * The watch has not synced in three days; its own cursor, watchCursorMs, is stale. The phone
+     * synced moments ago; phoneCursorMs is current. A cursor keyed on whichever source is newest
+     * -- .max() -- reads the type's next delta starting one overlap behind the phone, which is
+     * long after the watch's own last known progress. watchLateReadingMs, timestamped shortly
+     * after the watch's stale cursor, then falls before that delta's start and the app never
+     * asks for it again: the exact loss Finding A names. Keyed on the minimum, the delta reaches
+     * back to the watch's own progress instead, comfortably inside where watchLateReadingMs sits.
+     *
+     * This lives here rather than in UploadCursorHoleTest because that file's retryStartFor
+     * models the minimum in the test's own Kotlin, never calling cursorEndsFor at all -- a
+     * fixture built on top of it cannot tell .min() from .max() no matter how it is tuned, which
+     * is exactly what going red only for an even reading count turned out to mean. This test
+     * calls the production parse and selection directly, the way SyncRun and SyncWorker do.
+     */
     @Test
-    fun `the type's cursor is the minimum across its sources, not the phone's own`() {
-        // The watch lags two days behind the phone: a cursor keyed on whichever source is
-        // busiest would hide exactly what Finding A describes, so the type reads from the
-        // watch's own progress instead.
+    fun `a laggard's own late reading still falls inside the delta keyed on the minimum, not the maximum`() {
+        val phoneCursorMs = 1_787_040_000_000L
+        val watchCursorMs = phoneCursorMs - 3 * SyncCursors.OVERLAP_MS
+        val watchLateReadingMs = watchCursorMs + SyncCursors.OVERLAP_MS / 2
+
         val body = """{"items":[
-            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":1787040000000,"lastIngestAtMs":0},
-            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":1786867200000,"lastIngestAtMs":0}
+            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":$phoneCursorMs,"lastIngestAtMs":0},
+            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":$watchCursorMs,"lastIngestAtMs":0}
             ],"historyStartMs":0}"""
-        assertEquals(1786867200000L, SyncCursors.cursorEndsFor(body)["steps"])
+
+        assertEquals(
+            "the type's cursor is the watch's own stale progress, not the phone's fresh one",
+            watchCursorMs,
+            SyncCursors.cursorEndsFor(body)["steps"],
+        )
+
+        val start = SyncCursors.startFor(
+            SyncCursors.cursorEndsFor(body)["steps"],
+            Instant.EPOCH,
+            Instant.ofEpochMilli(phoneCursorMs).plus(1, ChronoUnit.DAYS),
+        )
+        assertTrue(
+            "the watch's own pending reading at ${watchLateReadingMs}ms must still be inside " +
+                "the next delta, which starts at ${start?.toEpochMilli()}ms",
+            start != null && !start.isAfter(Instant.ofEpochMilli(watchLateReadingMs)),
+        )
     }
 }
