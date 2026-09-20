@@ -406,6 +406,26 @@ describe('the workout stat tiles', () => {
   })
 })
 
+// Same shape as the splits fix below: WorkoutRoute.tsx's own card-level tests (workout-route-
+// card.test.tsx) cover its rendering in isolation, but nothing there proves this page actually
+// hands it `query.data.route` rather than, say, `query.data.autoSplits` by a copy-paste mistake.
+// RUN itself carries no `route` field (a plain WorkoutSession, not a WorkoutSessionDetail), so the
+// absence case is already exercised by every other test in this file; this pins the presence case.
+describe('the route card', () => {
+  it('renders the route card when the session response carries recorded points', async () => {
+    const loaded = { ...RUN, route: [
+      { atMs: 0, latitude: 52.00, longitude: 5, altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+      { atMs: 1000, latitude: 52.01, longitude: 5, altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+    ] }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-route')).not.toBeNull()
+    } finally { restore() }
+  })
+})
+
 // Fix round 2: WorkoutSplits used to read autoSplits/laps off workoutDetail(session.attrs), which
 // workoutSummary.ts's splitsFrom always answers as an array, absent-or-not. Once the page started
 // passing the API response's own autoSplits/laps instead, that guarantee stopped being free: RUN

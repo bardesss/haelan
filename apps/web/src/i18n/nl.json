@@ -496,6 +496,12 @@
         "events": "Pauzes",
         "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
       },
+      "route": {
+        "label": "Route",
+        "basis": "elk punt dat de telefoon opnam, {{count}} in totaal",
+        "description": "De route getekend als lijn, {{distance}} km lang",
+        "descriptionWithElevation": "De route getekend als lijn, {{distance}} km lang, met {{elevation}} m klimmen"
+      },
       "splits": {
         "autoLabel": "Automatische tussentijden",
         "lapLabel": "Rondes",

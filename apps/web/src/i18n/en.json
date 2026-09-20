@@ -496,6 +496,12 @@
         "events": "Pauses",
         "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
       },
+      "route": {
+        "label": "Route",
+        "basis": "every point the phone recorded, {{count}} in total",
+        "description": "The route drawn as a line, {{distance}} km long",
+        "descriptionWithElevation": "The route drawn as a line, {{distance}} km long, with {{elevation}} m of climb"
+      },
       "splits": {
         "autoLabel": "Automatic splits",
         "lapLabel": "Laps",

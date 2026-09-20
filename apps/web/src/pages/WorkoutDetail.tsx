@@ -13,6 +13,7 @@ import { WorkoutHeader } from './activity/WorkoutHeader.js'
 import { WorkoutTiles } from './activity/WorkoutTiles.js'
 import { WorkoutZones } from './activity/WorkoutZones.js'
 import { WorkoutTrace } from './activity/WorkoutTrace.js'
+import { WorkoutRoute } from './activity/WorkoutRoute.js'
 import { WorkoutSplits } from './activity/WorkoutSplits.js'
 import { WorkoutDynamics } from './activity/WorkoutDynamics.js'
 import { WorkoutComparison } from './activity/WorkoutComparison.js'
@@ -43,8 +44,9 @@ import { EmptyState } from '../components/EmptyState.js'
  * a fragment, a heading - here, WorkoutHeader rather than a plain `<h1>`, since this page's heading
  * also carries the workout's clock times, its source and its excluded badge - followed by the
  * twelve-column `.grid` the design's cards land in: the stat tiles first, then the zone card, the
- * heart rate trace, the splits and running dynamics cards, then the comparison card last.
- * Notes.tsx is the shortest example of the same shape this page follows.
+ * heart rate trace, the route card (Task 5 of the workout routes plan), the splits and running
+ * dynamics cards, then the comparison card last. Notes.tsx is the shortest example of the same
+ * shape this page follows.
  *
  * The one-button `.workout-actions` row between the heading and the grid is this page's own
  * control, not ControlRow's: every other page that opens AnnotatePanel does it from a chart click
@@ -134,6 +136,7 @@ export function WorkoutDetail() {
         <WorkoutTiles session={query.data} detail={detail} cardioLoad={query.data.cardioLoad} />
         <WorkoutZones detail={detail} />
         <WorkoutTrace session={query.data} detail={detail} chosenSource={chosenSource} />
+        <WorkoutRoute route={query.data.route} />
         <WorkoutSplits autoSplits={query.data.autoSplits} laps={query.data.laps} />
         <WorkoutDynamics detail={detail} />
         <WorkoutComparison session={query.data} />
