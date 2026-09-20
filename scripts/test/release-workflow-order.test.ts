@@ -324,6 +324,27 @@ describe('the release workflow', () => {
     expect(app['include-component-in-tag']).toBe(true)
   })
 
+  it('creates the app tag that release-please does not, with a token that can trigger', () => {
+    // The gap this closes cost two orphaned versions. skip-github-release stops release-please
+    // creating the app's release, so android-release.yml can own the `Android <version>` title
+    // Obtainium filters on. force-tag-creation was assumed to still leave a tag behind; it does
+    // not, because it forces the tag alongside a release it is creating. Skipping the release
+    // skips the tag, so 0.2.2 bumped the manifest and shipped nothing at all.
+    //
+    // android-tag.yml creates that tag when apps/android/package.json moves, which is what a
+    // merged release pull request does and what nothing else does. It must use the PAT: a push
+    // made with GITHUB_TOKEN does not trigger another workflow, so the tag would appear and no
+    // APK would ever be built, which is the same silent nothing wearing a different hat.
+    const tagWorkflow = readFileSync(new URL('../../.github/workflows/android-tag.yml', import.meta.url), 'utf8')
+    expect(tagWorkflow).toContain("paths: ['apps/android/package.json']")
+    expect(tagWorkflow).toContain('secrets.RELEASE_PLEASE_TOKEN')
+    // No `|| secrets.GITHUB_TOKEN` fallback anywhere in it: falling back would push a tag that
+    // triggers nothing, which is worse than failing, because it looks like it worked.
+    expect(tagWorkflow).not.toContain('GITHUB_TOKEN }}')
+    // Annotated, because android-release.yml reads its notes from the annotation.
+    expect(tagWorkflow).toContain('git tag -a')
+  })
+
   it('has release-please tag the app but not release it', () => {
     // These two are a pair, for a different reason than the root's draft pair above.
     //
