@@ -166,6 +166,7 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
         SyncSchedule.enqueue(this)
 
         setContentView(R.layout.activity_main)
+        findViewById<android.view.View>(R.id.mainRoot).padForSystemBars()
         permCheck = findViewById(R.id.permCheck)
         permStatus = findViewById(R.id.permStatus)
         syncButton = findViewById(R.id.buttonSync)
