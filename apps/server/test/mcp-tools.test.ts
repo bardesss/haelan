@@ -323,6 +323,59 @@ describe('get_daily', () => {
   })
 })
 
+// A language model reading get_baselines, compare_periods or trend cannot see the dashed line the
+// web app draws for a filled point either, and each of the three blends many days into one
+// statistic, so the per point `filled` boolean query_series and get_daily carry cannot ride along.
+// Each case is exercised through the real intraday fallback (hrv/mean seeded, daily_hrv absent),
+// the same reason v1-export.test.ts's and this file's own query_series/get_daily filled cases do.
+describe('get_baselines, filledDays', () => {
+  it('counts how many of the days behind a baseline were filled in, out of how many', () => {
+    seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 42 })
+    seedDaily({ localDate: '2026-08-02', metric: 'daily_hrv', agg: 'last', value: 55 })
+
+    const out = tool('get_baselines').run(q(), {
+      metric: 'daily_hrv', agg: 'last', on: '2026-08-03', windowDays: 5,
+    }) as { filledDays: { filled: number, of: number } }
+
+    expect(out.filledDays).toEqual({ filled: 1, of: 2 })
+  })
+})
+
+describe('compare_periods, filled days', () => {
+  it('counts filled days per period, since a comparison has two of them', () => {
+    for (let day = 1; day <= 7; day += 1) {
+      seedDaily({ localDate: `2026-08-0${day}`, metric: 'hrv', agg: 'mean', value: 40 })
+    }
+    for (let day = 8; day <= 14; day += 1) {
+      seedDaily({ localDate: `2026-08-${String(day).padStart(2, '0')}`, metric: 'daily_hrv', agg: 'last', value: 50 })
+    }
+
+    const out = tool('compare_periods').run(q(), {
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-08', to: '2026-08-14',
+    }) as {
+      currentFilledDays: { filled: number, of: number }
+      previousFilledDays: { filled: number, of: number }
+    }
+
+    expect(out.currentFilledDays).toEqual({ filled: 0, of: 7 })
+    expect(out.previousFilledDays).toEqual({ filled: 7, of: 7 })
+  })
+})
+
+describe('trend, filledDays', () => {
+  it('counts how many of the days behind the trend were filled in, out of how many', () => {
+    seedDaily({ localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 40 })
+    seedDaily({ localDate: '2026-08-02', metric: 'hrv', agg: 'mean', value: 41 })
+    seedDaily({ localDate: '2026-08-03', metric: 'daily_hrv', agg: 'last', value: 50 })
+
+    const out = tool('trend').run(q(), {
+      metric: 'daily_hrv', agg: 'last', from: '2026-08-01', to: '2026-08-03',
+    }) as { filledDays: { filled: number, of: number } }
+
+    expect(out.filledDays).toEqual({ filled: 2, of: 3 })
+  })
+})
+
 describe('get_intraday', () => {
   it('returns a day of samples with a summary and no reduction at the default budget', () => {
     const nineAm = Date.UTC(2026, 7, 10, 7, 0) // 09:00 local at +120 on 2026-08-10.

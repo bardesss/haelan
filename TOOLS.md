@@ -169,6 +169,9 @@ A person's own center and spread for a metric, computed from the `windowDays` be
   - **spread** (number)
   - **n** (number)
   - **thin** (boolean)
+- **filledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
 
 ### compare_periods
 
@@ -200,6 +203,12 @@ A date range's mean against the equal-length period immediately before it, with 
   - **to** (string)
 - **suppressed** (boolean)
 - **reason** (string, nullable)
+- **currentFilledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
+- **previousFilledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
 
 ### trend
 
@@ -226,6 +235,9 @@ A smoothed line over the daily series for one metric over a date range, oldest f
   - **median** (number, nullable)
   - **first** (number, nullable)
   - **last** (number, nullable)
+- **filledDays** (object) — How many of the days behind this answer were filled in from an intraday average rather than the device's own daily summary, out of how many. State a nonzero count in words before treating this answer as built entirely from measured days.
+  - **filled** (number)
+  - **of** (number)
 
 ### get_intraday
 
