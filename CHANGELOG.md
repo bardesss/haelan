@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.0.1](https://github.com/bardesss/haelan/compare/v2.0.0...v2.0.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* **android:** system bar insets, a header, and Obtainium's own badge ([#307](https://github.com/bardesss/haelan/issues/307)) ([5145353](https://github.com/bardesss/haelan/commit/5145353d6b59dfeb5929b941a8ae39bd5abb1a26))
+
 ## [2.0.0](https://github.com/bardesss/haelan/compare/v1.40.2...v2.0.0) (2026-09-20)
 
 
