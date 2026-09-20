@@ -17,6 +17,13 @@
  */
 const TAG = /^android-v(\d{1,4})\.(\d{1,3})\.(\d{1,3})$/
 
+// Android refuses a versionCode at or above this. The regex above bounds major to four digits,
+// which reaches versionCode 9999999999 at the top -- comfortably past the limit -- so the ceiling
+// is enforced on the derived number instead of by narrowing the regex further. A regex tight
+// enough to reject every over-ceiling combination on its own would also have to know that minor
+// and patch matter to the total, which is arithmetic the regex has no business doing.
+const ANDROID_VERSION_CODE_CEILING = 2_100_000_000
+
 export function androidReleaseVersion(tag: string): { versionName: string, versionCode: number } {
   const found = TAG.exec(tag)
   if (!found) {
@@ -25,9 +32,37 @@ export function androidReleaseVersion(tag: string): { versionName: string, versi
       + 'with minor and patch under 1000 so the version code keeps its ordering.',
     )
   }
-  const [major, minor, patch] = [Number(found[1]), Number(found[2]), Number(found[3])]
+  const [rawMajor, rawMinor, rawPatch] = found.slice(1, 4) as [string, string, string]
+
+  // '02' parses to 2, so the regex alone would let android-v1.02.3 through as versionName
+  // '1.2.3': the tag and the version it produces would disagree, silently, forever, since the tag
+  // is immutable once pushed. Refusing the leading zero here keeps the tag the single source of
+  // truth the rest of this module already assumes it is.
+  for (const [label, raw] of [['major', rawMajor], ['minor', rawMinor], ['patch', rawPatch]] as const) {
+    if (raw.length > 1 && raw.startsWith('0')) {
+      throw new Error(
+        `'${tag}' has a leading zero in its ${label} component ('${raw}'). Android does not see `
+        + 'leading zeros, so the tag and the version it produces would disagree.',
+      )
+    }
+  }
+
+  const [major, minor, patch] = [Number(rawMajor), Number(rawMinor), Number(rawPatch)]
+  const versionCode = major * 1_000_000 + minor * 1_000 + patch
+
+  // Checked on the derived value rather than folded into the regex: this is the number Android
+  // actually compares an install against, and the regex's four-digit major already admits tags
+  // this rejects. A tag above the ceiling is a mistake somebody should see before a release
+  // exists, the same reasoning the unparseable-tag branch above already applies.
+  if (versionCode >= ANDROID_VERSION_CODE_CEILING) {
+    throw new Error(
+      `'${tag}' derives versionCode ${versionCode}, which is at or above Android's limit of `
+      + `${ANDROID_VERSION_CODE_CEILING}. Keep major at or under 2099.`,
+    )
+  }
+
   return {
     versionName: `${major}.${minor}.${patch}`,
-    versionCode: major * 1_000_000 + minor * 1_000 + patch,
+    versionCode,
   }
 }

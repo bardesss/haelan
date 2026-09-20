@@ -22,8 +22,19 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # A hang is a failure that never arrives, and the default is six hours of a runner sitting on
+    # one. This job downloads an Android SDK and runs Gradle, which is at least as hangable as the
+    # server release jobs that already carry a deadline.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+
+      # actions/checkout fetches a tag push by commit sha, which lands a lightweight tag in the
+      # runner's clone and drops the tag object. gh release create --notes-from-tag then silently
+      # falls back to the commit message, which is not what the release notes are supposed to be.
+      # Fetching the tag ref itself brings the annotation back.
+      - name: Restore the tag annotation
+        run: git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
 
       - uses: pnpm/action-setup@v6
 
@@ -114,12 +125,47 @@ jobs:
 
       # The Gradle guard proves the four inputs were present, not that signing worked. This is the
       # last moment anyone can tell the difference, and it costs seconds.
+      #
+      # The build-tools path is captured into a variable and quoted at the point of use rather than
+      # expanded inline: `"$ANDROID_HOME"/build-tools/*/apksigner` globs unquoted, and a build-tools
+      # directory containing a space would split into two words and hand apksigner an argument it
+      # does not understand.
       - name: Verify the APK is signed
         run: |
           APK=$(find apps/android/app/build/outputs/apk/release -name '*.apk' | head -1)
           if [ -z "$APK" ]; then echo "no release APK was produced"; exit 1; fi
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --verbose "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/apksigner
+          "$APKSIGNER" verify --verbose "$APK"
           cp "$APK" "haelan-${{ steps.version.outputs.name }}.apk"
+
+      # apksigner proves the APK is signed, not that it carries the version the tag demanded. The
+      # Gradle guard above only proves the version step's own outputs were non-empty, which is a
+      # different fact than the env: binding on the assemble step naming them correctly -- a typo in
+      # either key resolves to null, Gradle's absence branch fills in versionCode 1, and every phone
+      # already past that number would refuse the result as an update, with no recovery but a higher
+      # version. This is the last point before the release exists that can tell the difference,
+      # because it is the only check anywhere in this pipeline that reads the irreversible value back
+      # out of the artifact instead of trusting the chain that produced it.
+      #
+      # It reads the copy the release step uploads rather than finding one in the build output
+      # again. Those are the same bytes today, but only the copy is the thing that reaches a phone,
+      # and a check that inspects a sibling of the artifact it is vouching for is a check that can
+      # drift away from its subject without anybody noticing.
+      - name: The APK carries the version from the tag
+        run: |
+          APK="haelan-${{ steps.version.outputs.name }}.apk"
+          AAPT2=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)/aapt2
+          BADGING=$("$AAPT2" dump badging "$APK")
+          FOUND_CODE=$(echo "$BADGING" | grep -o "versionCode='[0-9]*'" | head -1 | sed "s/versionCode='//;s/'//")
+          FOUND_NAME=$(echo "$BADGING" | grep -o "versionName='[^']*'" | head -1 | sed "s/versionName='//;s/'//")
+          if [ "$FOUND_CODE" != "${{ steps.version.outputs.code }}" ]; then
+            echo "::error::the APK's versionCode does not match the tag: expected ${{ steps.version.outputs.code }}, found ${FOUND_CODE:-nothing}"
+            exit 1
+          fi
+          if [ "$FOUND_NAME" != "${{ steps.version.outputs.name }}" ]; then
+            echo "::error::the APK's versionName does not match the tag: expected ${{ steps.version.outputs.name }}, found ${FOUND_NAME:-nothing}"
+            exit 1
+          fi
 
       # Last, and only once everything that can fail has. release.yml's own ordering test records
       # why: a release that exists while its artifact does not looks like the tag succeeded and
