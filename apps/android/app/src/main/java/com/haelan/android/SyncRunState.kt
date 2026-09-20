@@ -36,6 +36,15 @@ class SyncRunState {
         val running: Boolean = false,
         val sending: Set<String> = emptySet(),
         val marks: Map<String, Mark> = emptyMap(),
+        /**
+         * Why a type failed, for the types that did, in the reader's own language.
+         *
+         * The mark alone said only that something went wrong, and the screen drew a red dot for
+         * it. A dot cannot be read: diagnosing a type that would not send meant reading the app's
+         * own logcat, which nobody has on the phone in their hand, so the answer the app already
+         * had went to a log line instead of to the person it concerned.
+         */
+        val reasons: Map<String, String> = emptyMap(),
     )
 
     /**
@@ -87,8 +96,11 @@ class SyncRunState {
     }
 
     /** One type's own answer, as the engine reports it. */
-    fun mark(key: String, mark: Mark) {
-        status = status.copy(marks = status.marks + (key to mark))
+    fun mark(key: String, mark: Mark, reason: String? = null) {
+        // A reason replaces whatever the last run left, and its absence clears it: a type that
+        // failed and then succeeded must not keep explaining a failure that is over.
+        val reasons = if (reason == null) status.reasons - key else status.reasons + (key to reason)
+        status = status.copy(marks = status.marks + (key to mark), reasons = reasons)
         publish()
     }
 

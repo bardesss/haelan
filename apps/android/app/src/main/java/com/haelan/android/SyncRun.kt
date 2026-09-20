@@ -95,8 +95,12 @@ object SyncRun {
             }
 
             override fun typeFailed(key: String, error: Throwable) {
-                Log.w(TAG, "${SyncTypes.forKey(key).dataTypeId} not sent: ${reasonFor(context, error)}")
-                state.mark(key, SyncRunState.Mark.FAILED)
+                // The same sentence to both places. It used to go only to logcat, which is not
+                // somewhere anybody reads from the phone in their hand: the screen drew a red dot
+                // and the reason the app already knew went nowhere a person could see it.
+                val reason = reasonFor(context, error)
+                Log.w(TAG, "${SyncTypes.forKey(key).dataTypeId} not sent: $reason")
+                state.mark(key, SyncRunState.Mark.FAILED, reason)
             }
 
             // The one answer that concerns every type: the cookie is dead and every later type
