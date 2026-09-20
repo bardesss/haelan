@@ -5,7 +5,7 @@ import {
   COMPANION_SOURCE, ConfigError, RawArchive, SampleKeys, TransientError, dataTypeById, localDateOf,
   mapSessions, mapWindowSamples, schema, supports,
 } from '@haelan/core'
-import type { DbOrTx, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
+import type { DbOrTx, RouteRow, SampleRow, SegmentRow, SessionRow } from '@haelan/core'
 import { drainPersonDerivation } from './annotations.ts'
 
 interface PersonParams { personId: string }
@@ -118,12 +118,13 @@ export function registerIngestRoutes(app: FastifyInstance): void {
         }),
         sessions: [] as SessionRow[],
         segments: [] as SegmentRow[],
+        routes: [] as RouteRow[],
       }
       : (() => {
-        const { sessions, segments } = mapSessions({
+        const { sessions, segments, routes } = mapSessions({
           dataType, personId, resolveSource, body: payload, rawPayloadId: 'pending',
         })
-        return { samples: [] as SampleRow[], sessions, segments }
+        return { samples: [] as SampleRow[], sessions, segments, routes }
       })()
 
     // A page nobody could map anything out of is archived by nobody, and the check is first
@@ -186,7 +187,7 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       const localDates = new Set<string>()
       const rowsWritten = dataType.target === 'samples'
         ? writeSamples(tx, mapped.samples, id, localDates)
-        : writeSessions(tx, mapped.sessions, mapped.segments, id, localDates)
+        : writeSessions(tx, mapped.sessions, mapped.segments, mapped.routes, id, localDates)
       for (const localDate of localDates) {
         instance.deriveQueue.markDirty({ personId, localDate, nowMs }, tx)
       }
@@ -267,13 +268,19 @@ function writeSamples(
 }
 
 // The runJob writer for sessions, minus the paging: one upload is one page, and the
-// segments of the sessions it names are replaced wholesale, because a re-upload after a
-// night's stages settled legitimately changes the timeline and merging two versions of
-// it would interleave them.
+// segments and route of the sessions it names are replaced wholesale, because a re-upload
+// after a night's stages settled, or a run's route finished writing to disk on the phone,
+// legitimately changes the timeline and merging two versions of it would interleave them.
+//
+// Routes are written in this same transaction, beside sessions and segments, for the reason
+// the call site above only opens one: a session whose route half landed and whose session
+// row did not (or the other way round) is worse than a session with no route at all, and a
+// transaction is what makes that impossible rather than merely unlikely.
 function writeSessions(
   tx: DbOrTx,
   sessions: SessionRow[],
   segments: SegmentRow[],
+  routes: RouteRow[],
   rawPayloadId: string,
   localDates: Set<string>,
 ): number {
@@ -302,8 +309,10 @@ function writeSessions(
   }
   for (const row of sessions) {
     tx.delete(schema.sessionSegments).where(eq(schema.sessionSegments.sessionId, row.id)).run()
+    tx.delete(schema.sessionRoutes).where(eq(schema.sessionRoutes.sessionId, row.id)).run()
   }
   for (const segment of segments) tx.insert(schema.sessionSegments).values(segment).run()
+  for (const route of routes) tx.insert(schema.sessionRoutes).values(route).run()
   return rowsWritten
 }
 

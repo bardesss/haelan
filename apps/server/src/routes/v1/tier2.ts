@@ -228,13 +228,18 @@ export function registerTier2Routes(app: FastifyInstance): void {
     // session in a range. The detail read has exactly one session and can afford exactly one.
     // workoutSplits carries the same reasoning - a per-row fill on the list route would open a
     // heart rate trace for every session in a date range - so it stays here beside cardioLoad,
-    // never on /sessions.
+    // never on /sessions. route joins them for the same reason and is the heaviest of the three:
+    // every recorded point of a run is far more than a handful of splits, so a per-row fill on
+    // the list route would be the worst version of this mistake, not a milder one.
     return sendHashed(reply, request, {
       ...session,
       cardioLoad: personQuery.cardioLoad({ sessionId }),
       // Never null here: `session` above already resolved this exact id, and workoutSplits cannot
       // answer null for an id sessionById just answered a row for.
       ...personQuery.workoutSplits({ sessionId })!,
+      // Same non-null reasoning: workoutRoute only answers null for an id sessionById would have
+      // already refused, and this id was just resolved to a row by it.
+      route: personQuery.workoutRoute({ sessionId })!,
     })
   })
 }
