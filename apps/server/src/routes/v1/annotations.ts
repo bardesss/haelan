@@ -332,7 +332,23 @@ function applyOverride(app: FastifyInstance, personId: string, localDate: string
  * whatever happens here, and a 500 over saved rows invites the caller to send them a
  * second time. What the caller gets instead is `applied: false`, which is true.
  */
-export function drainPersonDerivation(app: FastifyInstance, personId: string, source = 'overrides'): void {
+/**
+ * `batch` is the granularity the DRAIN_BUDGET_MS check can preempt at, so a caller whose client is
+ * holding a socket open should pass a smaller one than a caller whose is not.
+ *
+ * The companion ingest route learned this the expensive way. At the default of eight, a first sync
+ * of thirty days of heart rate put eight dense days into one uninterruptible batch, the response
+ * outran the phone's 30 second read timeout, and the app gave up on a request this server then
+ * finished successfully. Nothing logged an error: the type simply said "never synced", and the
+ * types queued behind it in that run were never attempted. Density decided which ones broke, so
+ * the sparse types looked healthy throughout.
+ */
+export function drainPersonDerivation(
+  app: FastifyInstance,
+  personId: string,
+  source = 'overrides',
+  batchDays: number = DRAIN_BATCH_DAYS,
+): void {
   const instance = app.haelan.instance
 
   // The gate SyncRunner#eligible puts in front of its own loop, and for the reason that method
@@ -354,7 +370,7 @@ export function drainPersonDerivation(app: FastifyInstance, personId: string, so
         overrides: instance.overrides,
         settings: instance.settings,
         nowMs: app.haelan.now(),
-        batch: DRAIN_BATCH_DAYS,
+        batch: batchDays,
         // Scoped to the writer's own person. An unscoped drain would derive other people's dirty
         // days inside this request: work this caller did not ask for and, on a shared instance,
         // work about somebody else's data.
