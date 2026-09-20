@@ -200,6 +200,26 @@ describe('the Health page', () => {
     restore()
   })
 
+  // Task 7's own deliverable: DailyPoint.filled (personQuery.ts) has to survive to a reader who
+  // never sees the dashed markLine the canvas draws for it, and the accessible table is that
+  // reader's only channel. Asserted through a real render of the whole page, not a call into
+  // filledAnnotationsFrom directly, because the point this pins is that the wiring between the
+  // wire field and the rendered note actually holds, which a unit test of the helper alone cannot
+  // show.
+  it('marks a filled daily_spo2 reading in its own accessible table note', async () => {
+    window.history.replaceState(null, '', '/health?range=week&on=2026-08-14')
+    const restore = stubHealth(
+      [],
+      [spo2Fixture('2026-08-14', 96.4, { min: 94, max: 99, count: 412 })],
+      [seriesPoint('daily_spo2', '2026-08-14', 96, { filled: true })],
+    )
+    const { client, tree } = withQuery(<Health />)
+    mount(<I18nProvider lng="en">{tree}</I18nProvider>)
+    await flush(client, () => container!.innerHTML)
+    expect(container!.innerHTML).toContain('Estimated from the intraday average')
+    restore()
+  })
+
   it('translates its labels and its wear clause into Dutch', async () => {
     const restore = stubHealth(
       [],

@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { dayMetricTarget, sampleTarget, sessionTarget } from '@haelan/core/target-key'
-import { overridesByMetric, annotationsFor } from '../src/data/chartAnnotations.js'
+import { overridesByMetric, annotationsFor, filledAnnotationsFrom } from '../src/data/chartAnnotations.js'
 import type { StoredOverride } from '../src/data/useAnnotations.js'
+import type { SeriesPoint } from '../src/data/useSeries.js'
+
+function seriesPoint(localDate: string, filled: boolean): SeriesPoint {
+  return { localDate, value: 42, coverage: null, source: 'merged', sourceMix: null, updatedAtMs: null, filled }
+}
 
 /**
  * Direct coverage of `overridesByMetric`'s branches, none of which a page's own real render
@@ -111,5 +116,28 @@ describe('annotationsFor', () => {
     // (chart-lifecycle.test.tsx guards the render side of this; this pins the source of the value).
     const map = overridesByMetric([])
     expect(annotationsFor(map, 'steps')).toBe(annotationsFor(map, 'heart_rate'))
+  })
+})
+
+describe('filledAnnotationsFrom', () => {
+  const t = (key: string) => key
+
+  it('answers one annotation per filled day, in the shape a chart already takes', () => {
+    const points = [
+      seriesPoint('2026-08-01', false),
+      seriesPoint('2026-08-02', true),
+      seriesPoint('2026-08-03', true),
+    ]
+    expect(filledAnnotationsFrom(points, t)).toEqual([
+      { date: '2026-08-02', text: 'charts.filled.note' },
+      { date: '2026-08-03', text: 'charts.filled.note' },
+    ])
+  })
+
+  it('answers the same empty array by identity when nothing is filled, the reason a fresh [] per call would dispose a chart', () => {
+    const a = filledAnnotationsFrom([seriesPoint('2026-08-01', false)], t)
+    const b = filledAnnotationsFrom([], t)
+    expect(a).toBe(b)
+    expect(a).toEqual([])
   })
 })

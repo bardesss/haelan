@@ -96,7 +96,7 @@ None.
 
 ### query_series
 
-A daily metric over a date range, oldest first. Returns at most a few hundred points: a longer range is downsampled and `reduction` says so, so read `summary` for the true extremes rather than assuming the points are every day. Report findings with their coverage, and as association rather than cause.
+A daily metric over a date range, oldest first. Returns at most a few hundred points: a longer range is downsampled and `reduction` says so, so read `summary` for the true extremes rather than assuming the points are every day. Report findings with their coverage, and as association rather than cause. Some readings are marked `filled`; see that field before calling a filled day a measurement.
 
 **Input**
 
@@ -114,6 +114,7 @@ A daily metric over a date range, oldest first. Returns at most a few hundred po
   - **value** (number)
   - **coverage** (number, nullable)
   - **source** (string)
+  - **filled** (boolean) — True when the daily name itself had no row this date and this value is that day's intraday average standing in for it, not the device's own daily summary. Say so in words when reporting a filled reading; do not state it as a measurement.
 - **reduction** (object, nullable)
   - **method** (string)
   - **from** (number)
@@ -129,7 +130,7 @@ A daily metric over a date range, oldest first. Returns at most a few hundred po
 
 ### get_daily
 
-Several metrics for a single day, one reading each, so an agent asking "what happened on this date" does not have to call query_series once per metric itself. Omit `agg` and each metric answers with its own natural aggregate — the reading each metric's own card shows elsewhere on this surface — named in that reading's own `agg` field, so metrics as different as heart rate and steps can be asked for together in one call. Name an `agg` and it applies to every metric in the list alike; a metric that does not support it is refused outright, naming that metric and that aggregate, rather than silently dropped from the answer. A metric with no row that day answers null rather than being left out, so a caller can tell "zero" from "not measured" — the same distinction a missing daily row always carries elsewhere on this surface.
+Several metrics for a single day, one reading each, so an agent asking "what happened on this date" does not have to call query_series once per metric itself. Omit `agg` and each metric answers with its own natural aggregate — the reading each metric's own card shows elsewhere on this surface — named in that reading's own `agg` field, so metrics as different as heart rate and steps can be asked for together in one call. Name an `agg` and it applies to every metric in the list alike; a metric that does not support it is refused outright, naming that metric and that aggregate, rather than silently dropped from the answer. A metric with no row that day answers null rather than being left out, so a caller can tell "zero" from "not measured" — the same distinction a missing daily row always carries elsewhere on this surface. Some readings are marked `filled`; see that field before calling a filled day a measurement.
 
 **Input**
 
@@ -147,6 +148,7 @@ Several metrics for a single day, one reading each, so an agent asking "what hap
   - **value** (number, nullable)
   - **coverage** (number, nullable)
   - **source** (string, nullable)
+  - **filled** (boolean, nullable) — True when the daily name itself had no row this date and this value is that day's intraday average standing in for it, not the device's own daily summary. Say so in words when reporting a filled reading; do not state it as a measurement.
 
 ### get_baselines
 
