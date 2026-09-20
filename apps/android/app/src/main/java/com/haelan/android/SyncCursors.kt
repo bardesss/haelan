@@ -28,6 +28,11 @@ object SyncCursors {
      * long just leaves the window wider for longer before a truly dead source is dropped. Two
      * weeks is many multiples of this app's twice a day sync, comfortably past the worst case for
      * an intermittent watch, so it errs toward keeping a source rather than dropping one early.
+     *
+     * Accepted cost, not a bug: the moment a type's minimum jumps from a stale source's frozen
+     * position to a live one's, further ahead, a backfill the stale source later reveals for a
+     * date in between that jump is never read. Bounded to that one jump, one time, which is the
+     * trade this constant makes on purpose against a window that would otherwise never close.
      */
     const val STALE_SOURCE_MS: Long = 14L * 24L * 60L * 60L * 1000L
 
@@ -87,17 +92,22 @@ object SyncCursors {
      * field, so a source the legacy field has not folded in yet still pulls the type back.
      *
      * "Live" excludes a source whose own lastIngestAtMs is older than [STALE_SOURCE_MS]: see
-     * that constant for why a dead source must not pin the type's minimum open forever. A type
-     * whose sources are all stale, same as one with no per source rows of its own, falls back
-     * to the legacy field -- which the instance has aged the same way, so the fallback cannot
-     * reintroduce the source this just excluded.
+     * that constant for why a dead source must not pin the type's minimum open forever. Ageing
+     * exists to stop a DEAD source holding a type back while LIVE ones carry it -- when NONE of
+     * a type's sources are live there is no one left to hold back, and answering nothing here
+     * would read as "never sent": with the history permission granted that reads the full window
+     * from EPOCH, forever, and a deduplicated re-upload never refreshes lastIngestAtMs, so the
+     * type would never recover. So an all-stale type answers its newest known cursor instead --
+     * the honest "here is the newest we have" rather than "we have nothing". A type with no per
+     * source rows of its own at all still falls back to the legacy field, which the instance has
+     * aged the same way.
      */
     fun cursorEndsFor(body: String, nowMs: Long): Map<String, Long> {
         val bySource = parseSourceCursorEnds(body)
-        val fromSources = bySource.mapNotNull { (dataTypeId, sources) ->
+        val fromSources = bySource.mapValues { (_, sources) ->
             val live = sources.values.filter { it.lastIngestAtMs == null || nowMs - it.lastIngestAtMs <= STALE_SOURCE_MS }
-            if (live.isEmpty()) null else dataTypeId to live.minOf { it.lastWindowEndMs }
-        }.toMap()
+            if (live.isNotEmpty()) live.minOf { it.lastWindowEndMs } else sources.values.maxOf { it.lastWindowEndMs }
+        }
         return parseCursorEnds(body) + fromSources
     }
 

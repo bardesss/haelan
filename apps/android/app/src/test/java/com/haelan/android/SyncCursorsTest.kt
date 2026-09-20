@@ -173,4 +173,31 @@ class SyncCursorsTest {
             SyncCursors.cursorEndsFor(body, nowMs)["steps"],
         )
     }
+
+    /**
+     * The re-review's finding: ageing every source of a type out answered null for it, and
+     * startFor(null, ...) reads that as "never sent" -- EPOCH with the history permission
+     * granted, so the app would read its entire history every sync, forever, and never recover
+     * (a deduplicated re-upload never refreshes lastIngestAtMs). Ageing exists to stop a DEAD
+     * source holding a type back while LIVE ones carry it; when none are live there is no one
+     * left to hold back, so the answer is the newest cursor this instance has ever seen, not
+     * nothing and not the oldest one either -- a wrong answer here could land on either.
+     */
+    @Test
+    fun `cursorEndsFor answers the newest known cursor when every source of a type has gone stale, not the oldest`() {
+        val newerCursorMs = 1_787_040_000_000L
+        val olderCursorMs = newerCursorMs - 4 * SyncCursors.OVERLAP_MS
+        val nowMs = newerCursorMs + SyncCursors.STALE_SOURCE_MS + SyncCursors.OVERLAP_MS
+
+        val body = """{"items":[
+            {"dataTypeId":"steps","dataSource":"com.haelan.android","lastWindowEndMs":$newerCursorMs,"lastIngestAtMs":$newerCursorMs},
+            {"dataTypeId":"steps","dataSource":"com.samsung.health","lastWindowEndMs":$olderCursorMs,"lastIngestAtMs":$olderCursorMs}
+            ],"historyStartMs":0}"""
+
+        assertEquals(
+            "both sources are stale, so the answer is the newest cursor this instance has seen, not null and not the older one",
+            newerCursorMs,
+            SyncCursors.cursorEndsFor(body, nowMs)["steps"],
+        )
+    }
 }

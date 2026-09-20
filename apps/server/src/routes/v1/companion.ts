@@ -60,6 +60,11 @@ export function companionIngestibleIds(): string[] {
  * so a silent source has already missed dozens of chances by the time two weeks pass, which is
  * comfortably past the worst case for a watch worn twice a week (under ten days idle) and still
  * short enough that a genuinely dead source does not pin the window open indefinitely.
+ *
+ * Accepted cost, not a bug: the moment a type's minimum jumps from a stale source's frozen
+ * position to a live one's, further ahead, a backfill the stale source later reveals for a date
+ * in between that jump is never read. It is bounded to that one jump and one-time, which is the
+ * trade this constant makes on purpose against a window that would otherwise never close.
  */
 export const STALE_SOURCE_MS = 14 * 24 * 60 * 60 * 1000
 
@@ -128,25 +133,38 @@ export function registerCompanionRoutes(app: FastifyInstance): void {
     }
 
     // Keyed on the type alone, for the shape 0.1.0 still reads: the MINIMUM, across the type's
-    // sources, of each source's own newest window end -- see the module comment for why that is
-    // the safe direction and the maximum was the bug. Derived from bySource rather than from the
-    // raw rows directly: "minimum across sources" and "minimum across every row" only agree when
-    // each source has uploaded exactly once, and a source re-synced twice must not pull the
-    // legacy cursor back to its own first upload once its second one has landed.
+    // LIVE sources, of each source's own newest window end -- see the module comment for why
+    // that is the safe direction and the maximum was the bug. Derived from bySource rather than
+    // from the raw rows directly: "minimum across sources" and "minimum across every row" only
+    // agree when each source has uploaded exactly once, and a source re-synced twice must not
+    // pull the legacy cursor back to its own first upload once its second one has landed.
+    //
+    // Grouped by type first, sources kept alongside their aged-out siblings rather than
+    // discarded, because a type where EVERY source has gone stale needs them: dropping all of
+    // them answered null, and startFor(null, ...) reads fallbackStart, EPOCH with the history
+    // permission granted -- the app then re-reads its entire history every sync, forever, and
+    // never recovers, because a deduplicated re-upload does not refresh lastIngestAtMs
+    // (rawArchive.ts), so the same quiet source ages right back out next time. Ageing exists to
+    // stop a DEAD source holding a type back while LIVE ones carry it; when nothing is live
+    // there is no one left to hold back, and the honest answer is the newest cursor this
+    // instance has ever seen for the type, not "we have nothing".
     const nowMs = app.haelan.now()
-    const byType = new Map<string, { minWindowEndMs: number, lastIngestAtMs: number }>()
+    const sourcesByType = new Map<string, Array<{ lastWindowEndMs: number, lastIngestAtMs: number }>>()
     for (const cursor of bySource.values()) {
-      // Aged out: this source stays in bySource and perSourceItems below unchanged, so a phone
-      // that resumes writing under this identity just picks its progress back up. It only stops
-      // being counted toward the type's minimum -- see STALE_SOURCE_MS for the threshold.
-      if (nowMs - cursor.lastIngestAtMs > STALE_SOURCE_MS) continue
-      const perType = byType.get(cursor.dataTypeId)
-      if (perType) {
-        if (cursor.lastWindowEndMs < perType.minWindowEndMs) perType.minWindowEndMs = cursor.lastWindowEndMs
-        if (cursor.lastIngestAtMs > perType.lastIngestAtMs) perType.lastIngestAtMs = cursor.lastIngestAtMs
-      } else {
-        byType.set(cursor.dataTypeId, { minWindowEndMs: cursor.lastWindowEndMs, lastIngestAtMs: cursor.lastIngestAtMs })
-      }
+      const list = sourcesByType.get(cursor.dataTypeId)
+      if (list) list.push(cursor)
+      else sourcesByType.set(cursor.dataTypeId, [cursor])
+    }
+    const byType = new Map<string, { minWindowEndMs: number, lastIngestAtMs: number }>()
+    for (const [dataTypeId, sources] of sourcesByType) {
+      // This source stays in bySource and perSourceItems below regardless of live or aged out,
+      // so a phone that resumes writing under an identity just picks its progress back up.
+      const live = sources.filter((s) => nowMs - s.lastIngestAtMs <= STALE_SOURCE_MS)
+      const windowEndMs = live.length > 0
+        ? Math.min(...live.map((s) => s.lastWindowEndMs))
+        : Math.max(...sources.map((s) => s.lastWindowEndMs))
+      const lastIngestAtMs = Math.max(...sources.map((s) => s.lastIngestAtMs))
+      byType.set(dataTypeId, { minWindowEndMs: windowEndMs, lastIngestAtMs })
     }
 
     // Field order matters here and nowhere else in this file: SyncCursors.parseCursorEnds on an
