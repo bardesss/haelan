@@ -886,6 +886,11 @@ object SyncEngine {
                         .put("mainSleep", true)
                         .put("processed", true)
                         .put("stagesStatus", "SUCCEEDED"))
+                    // Health Connect's own record id, so a night the wearable revises in place
+                    // (a later sync moving its start a few minutes once the algorithm settles)
+                    // upserts the same session instead of arriving as a second one under a new
+                    // start-time key. mapSessions.ts prefers `name` over its start-time fallback.
+                    .put("name", night.id)
                     .put("stages", JSONArray(night.stages.map { stage ->
                         JSONObject()
                             .put("type", stage.name)
@@ -904,6 +909,9 @@ object SyncEngine {
                     .put("startUtcOffset", WireTime.offsetSeconds(record.startZoneOffset))
                     .put("endTime", WireTime.atOffset(record.endTime, record.endZoneOffset))
                     .put("endUtcOffset", WireTime.offsetSeconds(record.endZoneOffset)))
+                // Same reasoning as the sleep mapper just above: the record's own id survives a
+                // revised start instead of minting a second session for it.
+                .put("name", record.metadata.id)
                 .put("exerciseType", ExerciseTypes.nameFor(record.exerciseType)))
     }
 

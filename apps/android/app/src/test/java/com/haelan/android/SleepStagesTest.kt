@@ -41,7 +41,7 @@ class SleepStagesTest {
         startZoneOffset = cest,
         endTime = at("2026-10-26T06:00:00Z"),
         endZoneOffset = cet,
-        metadata = Metadata.unknownRecordingMethod(),
+        metadata = Metadata.unknownRecordingMethodWithId("dst-night-record-id"),
         stages = listOf(
             stage("2026-10-25T21:30:00Z", "2026-10-25T21:45:00Z", SleepSessionRecord.STAGE_TYPE_AWAKE),
             stage("2026-10-25T21:45:00Z", "2026-10-26T00:45:00Z", SleepSessionRecord.STAGE_TYPE_LIGHT),
@@ -56,6 +56,11 @@ class SleepStagesTest {
         SleepSessionRecord.Stage(at(from), at(to), type)
 
     private val night = SleepStages.nights(listOf(dstNight)).single()
+
+    @Test
+    fun `carries the record's own id, so a revised start upserts rather than doubling the night`() {
+        assertEquals("dst-night-record-id", night.id)
+    }
 
     @Test
     fun `the session crosses at the two offsets its two ends happened at`() {
