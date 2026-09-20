@@ -462,7 +462,19 @@ class MainActivity : ComponentActivity(), SyncRunState.Screen {
             when (status.marks[key]) {
                 SyncRunState.Mark.RUNNING -> box.running()
                 SyncRunState.Mark.SENT -> box.synced()
-                SyncRunState.Mark.FAILED -> box.failed()
+                SyncRunState.Mark.FAILED -> {
+                    box.failed()
+                    // The red dot says something went wrong and cannot say what. The sentence
+                    // beneath it can, and the app has had it all along: it was going to logcat,
+                    // which is not a place anybody reads from the phone they are holding.
+                    // Diagnosing a type that would not send meant reading the source instead.
+                    status.reasons[key]?.let { reason ->
+                        rowStatus[key]?.apply {
+                            text = reason
+                            setTextColor(getColor(R.color.negative))
+                        }
+                    }
+                }
                 // A type with nothing behind it and a type the run never reached show the same box:
                 // what keeps "nothing there" and "never ran" apart is the sentence below, and that
                 // sentence is read from the prefs rather than drawn from the mark.
