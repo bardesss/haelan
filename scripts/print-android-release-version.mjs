@@ -1,11 +1,12 @@
 // Prints the version an android-v tag derives, as GitHub Actions step outputs.
 //
 // A .mjs entry point importing the .ts module directly, run with --experimental-strip-types, is
-// how every other script here reaches TypeScript (check-enum-drift.mjs, seed-demo.mjs, and the
-// rest). The alternative considered for the release workflow's version step was `node -e` with a
-// dynamic `import()` of a template string, and that was dropped unproven: `-e` does not go through
-// the module resolver the same way a real file does, and it is not the route vitest or vite take
-// to load a .ts file either. A file on disk is.
+// how this repo already reaches TypeScript from a raw node process: generate-tools-doc.mjs
+// statically imports three .ts modules the same way, and package.json's "start" script runs a
+// whole .ts entry point under the same flag. The alternative considered for the release
+// workflow's version step was `node -e` with a dynamic `import()` of a template string, and that
+// was dropped unproven: `-e` does not go through the module resolver the same way a real file
+// does, and it is not the route vitest or vite take to load a .ts file either. A file on disk is.
 //
 // Usage: node --experimental-strip-types scripts/print-android-release-version.mjs <tag>
 import { androidReleaseVersion } from './android-release-version.ts'
