@@ -33,7 +33,27 @@ async function cursors(token: string, query = '') {
   })
 }
 
-interface CursorItem { dataTypeId: string, lastWindowEndMs: number | null, lastIngestAtMs: number | null }
+interface CursorItem {
+  dataTypeId: string
+  dataSource?: string
+  lastWindowEndMs: number | null
+  lastIngestAtMs: number | null
+}
+
+// Copied verbatim from SyncCursors.kt's parseCursorEnds, not paraphrased: 0.1.0 is already
+// installed on a phone and reads the wire with this exact regex, not a JSON parser. If the
+// route's field order ever drifts (a new field landing between dataTypeId and lastWindowEndMs
+// in the legacy item, say), this is what catches it, the same way it would catch that phone.
+const PARSE_CURSOR_ENDS = /"dataTypeId"\s*:\s*"([^"]+)"\s*,\s*"lastWindowEndMs"\s*:\s*(null|\d+)/g
+function parseCursorEndsLikeThePhone(body: string): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const match of body.matchAll(PARSE_CURSOR_ENDS)) {
+    const id = match[1]
+    const raw = match[2]
+    if (id !== undefined && raw !== undefined && raw !== 'null') out.set(id, Number(raw))
+  }
+  return out
+}
 
 describe('GET /companion/cursors', () => {
   it('answers null for every ingestible type before the first sync', async () => {
@@ -159,6 +179,55 @@ describe('GET /companion/cursors', () => {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(response.statusCode).toBe(403)
+  })
+
+  it('keys the cursor on type and source, so a late source keeps its own progress', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    // The phone's own reading, early. No explicit dataSource, so ingest.ts resolves it to the
+    // companion app's default identity.
+    expect((await ingest(token, 'weight', {
+      dataPoints: [weightPoint('2026-08-18T10:00:00Z')],
+    })).statusCode).toBe(200)
+    // A second source for the same type, syncing in a week later -- the shape of the bug: a
+    // watch or a scale whose reading lands long after the phone's own reading already moved a
+    // shared cursor.
+    expect((await ingest(token, 'weight', {
+      dataPoints: [weightPoint('2026-08-25T10:00:00Z')],
+      dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Galaxy Watch6' } },
+    })).statusCode).toBe(200)
+
+    const response = await cursors(token)
+    const raw = response.payload
+    const body = response.json() as { items: CursorItem[] }
+    const weightItems = body.items.filter((i) => i.dataTypeId === 'weight')
+
+    // One item per source, each carrying only its own cursor.
+    const perSource = weightItems.filter((i) => i.dataSource !== undefined)
+    expect(perSource).toHaveLength(2)
+    const phoneItem = perSource.find((i) => i.lastWindowEndMs === Date.parse('2026-08-18T10:00:00Z') + 1)
+    const watchItem = perSource.find((i) => i.lastWindowEndMs === Date.parse('2026-08-25T10:00:00Z') + 1)
+    expect(phoneItem).toBeDefined()
+    expect(watchItem).toBeDefined()
+    expect(phoneItem?.dataSource).not.toBe(watchItem?.dataSource)
+
+    // The legacy item (no dataSource field) answers the MINIMUM across the type's sources, not
+    // the maximum a single shared cursor used to answer -- the maximum is what let the watch's
+    // late reading go missing silently, since re-asking from the phone's later cursor would
+    // never reach back to it.
+    const legacy = weightItems.find((i) => i.dataSource === undefined)
+    expect(legacy?.lastWindowEndMs).toBe(Date.parse('2026-08-18T10:00:00Z') + 1)
+
+    // An un-updated 0.1.0 phone, reading with its own regex rather than a JSON parser, still
+    // finds a value for every ingestible type and still lands on the safe minimum for weight,
+    // not the more advanced per-source items the new field order deliberately hides from it.
+    const parsed = parseCursorEndsLikeThePhone(raw)
+    expect(parsed.get('weight')).toBe(Date.parse('2026-08-18T10:00:00Z') + 1)
+    for (const dataTypeId of companionIngestibleIds()) {
+      if (dataTypeId === 'weight') continue
+      expect(parsed.has(dataTypeId)).toBe(false)
+    }
   })
 })
 
