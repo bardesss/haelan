@@ -69,6 +69,18 @@ fun releaseSigningError(): Nothing = throw GradleException(
         "Debug builds need none of this.",
 )
 
+// A value that is set but will not parse is never the same situation as no value at all, so this
+// throws instead of joining releaseSigningError() as a silent fallback would. versionCode is the
+// only thing Android consults when deciding whether an APK is an update: a release built with a
+// swallowed parse failure would be a correctly signed APK that every phone already past that
+// number refuses to install, and CI would report the build green.
+fun invalidVersionCodeError(raw: String): Nothing = throw GradleException(
+    "HAELAN_APP_VERSION_CODE is set to \"$raw\", which is not a whole number. Expected something " +
+        "like 2000, the versionCode scripts/android-release-version.ts derives from the release " +
+        "tag (major * 1000000 + minor * 1000 + patch). Unset the variable to build with the " +
+        "placeholder versionCode 1, or fix the value.",
+)
+
 android {
     namespace = "com.haelan.android"
     compileSdk = 36
@@ -79,12 +91,23 @@ android {
         targetSdk = 35
         // Set by the release workflow from the tag, through the same helper the keystore values
         // use: environment first, then apps/android/.env. A local or debug build sets neither and
-        // keeps the placeholder pair below, so nothing about building this module by hand changes.
+        // keeps the placeholders below, so nothing about building this module by hand changes.
         //
-        // No parsing here. scripts/android-release-version.ts derives both from the tag and is
-        // tested, which a Gradle build script cannot be: it is not on the src/test classpath. This
-        // file therefore reads two finished values and has no opinion about their shape.
-        versionCode = signingVar("HAELAN_APP_VERSION_CODE")?.toIntOrNull() ?: 1
+        // scripts/android-release-version.ts derives both values from the tag and is tested,
+        // which a Gradle build script cannot be: it is not on the src/test classpath. versionName
+        // is read with no further opinion, because any non-empty string is a legitimate one.
+        //
+        // versionCode gets the opinion versionName does not, because absence and malformation are
+        // different failures and must not collapse to the same value. Absence is every debug and
+        // local build and is normal, so it falls back to 1. Malformation, a value that is set but
+        // will not parse, is always a bug: a typo in a secret, a broken workflow expression, or a
+        // bad hand-run override. versionCode is the only thing Android consults when deciding
+        // whether an APK is an update, so a silent fallback to 1 here would ship a correctly
+        // signed APK that every phone already past that number refuses to install, with CI
+        // reporting the build green. invalidVersionCodeError() throws with the fix instead, the
+        // same shape releaseSigningError() uses a few lines above for the same reason.
+        val versionCodeRaw = signingVar("HAELAN_APP_VERSION_CODE")
+        versionCode = versionCodeRaw?.let { it.toIntOrNull() ?: invalidVersionCodeError(it) } ?: 1
         versionName = signingVar("HAELAN_APP_VERSION") ?: "0.1.0"
     }
 
