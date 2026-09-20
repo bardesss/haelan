@@ -48,6 +48,14 @@ object SleepStages {
         val stages: List<Stage>,
         /** How many stages the provider offered that [stages] had to leave out. */
         val leftOutStages: Int,
+        /**
+         * Health Connect's own id for the record, carried through so the instance can key the
+         * session on it rather than on a start time that a provider revises in place. Two uploads
+         * of the same night with the same id are one session to core (`mapSessions.ts`); two with
+         * different ids because the provider moved the start were a second row that never replaced
+         * the first, which is how a revised night doubled its own stage minutes.
+         */
+        val id: String,
     )
 
     fun nights(records: List<SleepSessionRecord>): List<Night> = records.map { record ->
@@ -61,6 +69,7 @@ object SleepStages {
                 Stage(name, stage.startTime, stage.endTime)
             },
             leftOutStages = record.stages.count { nameFor(it.stage) == null },
+            id = record.metadata.id,
         )
     }
 }

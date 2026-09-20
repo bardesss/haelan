@@ -201,6 +201,41 @@ describe('mapSessions', () => {
     expect(spo2.alsoTargets).toBeUndefined()
   })
 
+  // Task 5: the companion app sent no `name`, so a night Health Connect revised in place (the
+  // sleep algorithm moving the start a few minutes once it settles, same underlying record) fell
+  // back to `${type}:${startMs}` and minted a second session under the same source, doubling the
+  // night's stage minutes. The app now sends Health Connect's own record id as `name`; this test
+  // calls the real mapSessions, not a reimplementation of it, so it actually exercises the id path
+  // and the fallback it replaces.
+  it('collapses a revised night to one session when both arrivals carry the same id', () => {
+    const recordId = 'health-connect-record-id-abc'
+    const original = sleepPoint({
+      name: recordId,
+      startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z', stages: [],
+    })
+    const revised = sleepPoint({
+      name: recordId,
+      // Same record, start moved five minutes once the algorithm settled.
+      startTime: '2026-08-17T21:35:00Z', endTime: '2026-08-18T05:15:00Z', stages: [],
+    })
+    const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([original, revised]) })
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0]?.startMs).toBe(Date.parse('2026-08-17T21:35:00Z'))
+  })
+
+  it('KNOWN OLD BEHAVIOUR: with no name at all, the same revised night doubles instead of collapsing', () => {
+    // The exact bodies above, minus `name`: this is what the app sent before this fix. No `name`
+    // key at all, not an empty one, because sleepPoint would otherwise supply its own default.
+    const original = { dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' }, sleep: sleepPoint({
+      startTime: '2026-08-17T21:30:00Z', endTime: '2026-08-18T05:15:00Z', stages: [],
+    }).sleep }
+    const revised = { dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' }, sleep: sleepPoint({
+      startTime: '2026-08-17T21:35:00Z', endTime: '2026-08-18T05:15:00Z', stages: [],
+    }).sleep }
+    const { sessions } = mapSessions({ dataType: sleep, ...ctx, body: body([original, revised]) })
+    expect(sessions).toHaveLength(2)
+  })
+
   it('attributes each session to its own point source rather than one source for the whole body', () => {
     const fitbitNight = sleepPoint({
       name: 'users/me/dataTypes/sleep/dataPoints/fitbit',
