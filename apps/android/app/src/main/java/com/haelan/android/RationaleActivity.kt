@@ -14,6 +14,7 @@ class RationaleActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_rationale)
+        findViewById<android.view.View>(R.id.rationaleRoot).padForSystemBars()
         findViewById<MaterialButton>(R.id.buttonContinue).setOnClickListener {
             setResult(RESULT_OK)
             finish()

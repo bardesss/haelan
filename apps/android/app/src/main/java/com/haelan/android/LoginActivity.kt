@@ -53,6 +53,7 @@ class LoginActivity : ComponentActivity() {
         }
 
         setContentView(R.layout.activity_login)
+        findViewById<android.view.View>(R.id.loginRoot).padForSystemBars()
         val serverField = findViewById<TextInputEditText>(R.id.serverUrl)
         val usernameField = findViewById<TextInputEditText>(R.id.username)
         val passwordField = findViewById<TextInputEditText>(R.id.password)

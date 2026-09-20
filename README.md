@@ -13,6 +13,7 @@ API v4.** One household, one instance, no telemetry, no hosted offering.
 [![Release](https://img.shields.io/github/v/release/bardesss/haelan?sort=semver)](https://github.com/bardesss/haelan/releases)
 [![Container image](https://img.shields.io/badge/ghcr.io-haelan-blue?logo=docker)](https://github.com/bardesss/haelan/pkgs/container/haelan)
 [![Site](https://img.shields.io/badge/site-bardesss.github.io%2Fhaelan-blue)](https://bardesss.github.io/haelan/)
+[![Add to Obtainium](https://img.shields.io/badge/Add%20to-Obtainium-1a7f37?style=flat)](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.haelan.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fbardesss%2Fhaelan%22%2C%22author%22%3A%22bardesss%22%2C%22name%22%3A%22H%C3%A6lan%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5EAndroid%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%7D%22%2C%22overrideSource%22%3A%22GitHub%22%7D)
 
 The reason it is self-hosted is structural rather than ideological. Google caps an unverified
 OAuth client at 100 users, and clearing verification for health scopes needs a paid third-party
@@ -121,7 +122,10 @@ An instance reads a household's data through Google's Health API. A household wh
 uses Android can skip that entirely: the companion app reads Health Connect on the phone and sends
 readings to the instance directly, with no Cloud project and no console.
 
-[![Add to Obtainium](https://img.shields.io/badge/Add%20to-Obtainium-1a7f37?style=flat)](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.haelan.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fbardesss%2Fhaelan%22%2C%22author%22%3A%22bardesss%22%2C%22name%22%3A%22H%C3%A6lan%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5EAndroid%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%7D%22%2C%22overrideSource%22%3A%22GitHub%22%7D)
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%7B%22id%22%3A%22com.haelan.android%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fbardesss%2Fhaelan%22%2C%22author%22%3A%22bardesss%22%2C%22name%22%3A%22H%C3%A6lan%22%2C%22preferredApkIndex%22%3A0%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22fallbackToOlderReleases%5C%22%3Atrue%2C%5C%22filterReleaseTitlesByRegEx%5C%22%3A%5C%22%5EAndroid%5C%22%2C%5C%22verifyLatestTag%5C%22%3Afalse%7D%22%2C%22overrideSource%22%3A%22GitHub%22%7D">
+  <img src="https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png"
+    alt="Get it on Obtainium" height="54">
+</a>
 
 Releases tagged `android-v` carry a signed APK rather than a Google Play listing, so
 [Obtainium](https://github.com/ImranR98/Obtainium) is how updates arrive. The button carries the
