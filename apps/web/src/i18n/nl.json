@@ -1045,6 +1045,15 @@
         "changed": "Wachtwoord gewijzigd. Je bent nog steeds ingelogd.",
         "wrong": "Dit is niet je huidige wachtwoord.",
         "failed": "Het wachtwoord is niet gewijzigd: {{reason}}"
+      },
+      "phone": {
+        "title": "Versturen vanaf een Android telefoon",
+        "intro": "De companion app leest Health Connect op je telefoon en stuurt metingen hierheen, naast alles wat je al synchroniseert. Alleen Android: Health Connect bestaat niet op de iPhone.",
+        "step1": "Installeer de app.",
+        "step1Link": "Installeren en bijwerken",
+        "step2": "Open de app en geef de Health Connect rechten die hij vraagt.",
+        "step3": "Vul dit adres in:",
+        "step4": "Log in met de gebruikersnaam en het wachtwoord die je hier gebruikt."
       }
     },
     "mcp": {

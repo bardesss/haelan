@@ -1079,6 +1079,20 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
   font-size: var(--font-size-sm); font-weight: var(--weight-medium); color: var(--text-secondary);
   margin: 0 0 var(--space-2);
 }
+/* The phone pairing steps take the same hairline .profile-password does, because they are a third
+   thing in the same card and a reader needs to see where the password form stopped. Numbers stay
+   outside the text column so the four steps read as a sequence to work through rather than as
+   prose that happens to be listed. */
+.profile-phone {
+  margin-top: var(--space-4); padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.profile-phone-steps {
+  font-size: var(--font-size-xs); color: var(--text-muted); line-height: var(--leading-normal);
+  margin: var(--space-3) 0 0; padding-left: var(--space-4);
+}
+.profile-phone-steps li { margin-bottom: var(--space-2); }
+.profile-phone-steps li:last-child { margin-bottom: 0; }
 .profile-warning {
   font-size: var(--font-size-xs); color: var(--negative); line-height: var(--leading-normal);
   background: color-mix(in srgb, var(--negative) 10%, transparent);
