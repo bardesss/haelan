@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.0.0](https://github.com/bardesss/haelan/compare/v1.40.2...v2.0.0) (2026-09-20)
+
+
+### Features
+
+* a household can run haelan without a Google Cloud project ([#305](https://github.com/bardesss/haelan/issues/305)) ([ce82467](https://github.com/bardesss/haelan/commit/ce8246711a6ec27a5def3e4cb3b559a0d5ad8970))
+
 ## [1.40.2](https://github.com/bardesss/haelan/compare/v1.40.1...v1.40.2) (2026-09-20)
 
 
