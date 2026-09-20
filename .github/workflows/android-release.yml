@@ -1,0 +1,138 @@
+name: Android release
+
+# A tag, not a release-please release. The app carries its own version because release-please cuts
+# server releases often and almost none of them change the app: tying the two would tell every
+# installed phone it had an update whenever the server shipped, and hand it a byte identical APK.
+#
+# Its own file rather than a job inside release.yml, which is release-please driven off master
+# pushes. Folding them together would leave that workflow carrying a job that never fires for its
+# own releases.
+on:
+  push:
+    tags: ['android-v*']
+
+# Creating the release needs write access to contents. Nothing else here does.
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install the workspace
+        run: pnpm install --frozen-lockfile
+
+      # The palette this module compiles is generated from @haelan/tokens. The Gradle build does
+      # not run the generator: it fails with the command to run, because assembling an app should
+      # not need a Node toolchain.
+      - name: Generate the token palette
+        run: pnpm --filter @haelan/tokens build:android
+
+      # Both values from the tag, in one place, by the function that is tested. The workflow needs
+      # the name for the release title and the APK file, and Gradle needs both, so deriving it here
+      # keeps a single implementation.
+      #
+      # scripts/print-android-release-version.mjs is a .mjs file importing the .ts module directly,
+      # the same shape as every other script here that reaches into TypeScript
+      # (check-enum-drift.mjs, seed-demo.mjs). `node -e` with a dynamic `import()` of a template
+      # string was tried first and dropped: it is not the route vitest or vite take to load a .ts
+      # file, and it was never proven against this Node version, only assumed.
+      - name: Read the version from the tag
+        id: version
+        run: node --experimental-strip-types scripts/print-android-release-version.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      # signingVar in build.gradle.kts treats an empty string the same as an unset variable, so it
+      # is the right behaviour there and the wrong safety net here: HAELAN_APP_VERSION_CODE="" would
+      # read as absence and fall back to versionCode = 1 rather than throwing. A version step that
+      # ran green while writing nothing usable -- a misspelled output name, a redirect that missed
+      # $GITHUB_OUTPUT -- would sail through that fallback and assemble a correctly signed APK
+      # carrying versionCode 1, which every phone with a higher code already installed refuses as an
+      # update. Gradle cannot catch that; an empty variable looks exactly like no variable at all.
+      # This is the only place left that can.
+      - name: The version outputs are not empty
+        run: |
+          if [ -z "${{ steps.version.outputs.name }}" ]; then
+            echo "::error::the version step produced no name output"
+            exit 1
+          fi
+          if [ -z "${{ steps.version.outputs.code }}" ]; then
+            echo "::error::the version step produced no code output"
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+        working-directory: apps/android
+
+      # android.yml triggers on branch pushes and pull requests, so it has not run on this tag. A
+      # release is rare and an APK that cannot be updated is expensive, so the module is re-proven
+      # at the commit being released rather than trusted from an earlier run.
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --console=plain
+        working-directory: apps/android
+
+      - name: Lint
+        run: ./gradlew lintDebug --console=plain
+        working-directory: apps/android
+
+      # build.gradle.kts throws if any of the four keystore values is missing, so this cannot
+      # silently produce an unsigned APK.
+      - name: Assemble the signed APK
+        run: ./gradlew assembleRelease --console=plain
+        working-directory: apps/android
+        env:
+          HAELAN_APP_VERSION: ${{ steps.version.outputs.name }}
+          HAELAN_APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          HAELAN_KEYSTORE_BASE64: ${{ secrets.HAELAN_KEYSTORE_BASE64 }}
+          HAELAN_KEYSTORE_PASSWORD: ${{ secrets.HAELAN_KEYSTORE_PASSWORD }}
+          HAELAN_KEY_ALIAS: ${{ secrets.HAELAN_KEY_ALIAS }}
+          HAELAN_KEY_PASSWORD: ${{ secrets.HAELAN_KEY_PASSWORD }}
+
+      # The Gradle guard proves the four inputs were present, not that signing worked. This is the
+      # last moment anyone can tell the difference, and it costs seconds.
+      - name: Verify the APK is signed
+        run: |
+          APK=$(find apps/android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          if [ -z "$APK" ]; then echo "no release APK was produced"; exit 1; fi
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --verbose "$APK"
+          cp "$APK" "haelan-${{ steps.version.outputs.name }}.apk"
+
+      # Last, and only once everything that can fail has. release.yml's own ordering test records
+      # why: a release that exists while its artifact does not looks like the tag succeeded and
+      # sends the first person following the README to a 404.
+      #
+      # make_latest=false keeps release-please's own releases as the repository's latest. The title
+      # starts with Android because Obtainium's filter matches the title rather than the tag.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Android ${{ steps.version.outputs.name }}" \
+            --notes-from-tag \
+            --latest=false \
+            "haelan-${{ steps.version.outputs.name }}.apk"
