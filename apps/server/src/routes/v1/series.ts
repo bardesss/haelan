@@ -58,6 +58,20 @@ function stampOf(points: readonly DailyPoint[]): Stamp {
 }
 
 /**
+ * How many of `points` were filled in from an intraday mean rather than the device's own daily
+ * row, out of how many there were.
+ *
+ * A boolean per day cannot survive folding many days into one baseline, one period comparison or
+ * one smoothed trend - that is true, and it is not a reason to say nothing. A count is: it
+ * survives the fold, it costs no second query (every caller below already fetched `points` for
+ * `stampOf`), and it is honest about how much of the answer behind it was an estimate rather than
+ * a measurement.
+ */
+function filledCountOf(points: readonly DailyPoint[]): { filled: number, of: number } {
+  return { filled: points.filter((point) => point.filled).length, of: points.length }
+}
+
+/**
  * Sets the ETag, then either a 304 with no body or the answer itself, per `notModified`.
  *
  * Takes every window the answer drew on rather than one folded stamp: see stampEtag for why the
@@ -140,10 +154,14 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
 
     // baseline() answers center, spread and n, none of which carries updatedAtMs, so its own
     // window (the same rule baselineWindow names, which baseline() now calls too) is reopened
-    // here through a fresh series() call, to read the one thing baseline()'s return value drops.
+    // here through a fresh series() call, to read the two things baseline()'s return value drops:
+    // updatedAtMs for the stamp, and filled for filledDays. Precise for exactly the metrics that
+    // can ever be filled (daily_hrv, daily_spo2): coverageIsMeaningful is false for both, so
+    // baseline()'s own coverage filter never drops a row for them and this `points` array is the
+    // same set baseline() actually averaged over.
     const { from, to } = baselineWindow(on, windowDays)
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, { baseline }, [stampOf(points)])
+    return sendStamped(reply, request, { baseline, filledDays: filledCountOf(points) }, [stampOf(points)])
   })
 
   app.get<{ Params: PersonParams, Querystring: InsightsQuery }>('/p/:personId/insights', async (request, reply) => {
@@ -177,7 +195,18 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
     const current = roundMetricValueOrNull(metric, insight.current)
     const previous = roundMetricValueOrNull(metric, insight.previous)
     const delta = current === null || previous === null ? null : roundMetricValue(metric, current - previous)
-    const body = { ...insight, current, previous, delta }
+    // currentWindow and previousWindow are the exact rows comparePeriods averaged into current and
+    // previous respectively (fetched, never filtered further), so counting filled here is counting
+    // it over the days this insight actually drew on - named to match currentDays/previousDays,
+    // already on `insight`, rather than inventing a second naming shape for the same pairing.
+    const body = {
+      ...insight,
+      current,
+      previous,
+      delta,
+      currentFilledDays: filledCountOf(currentWindow.points),
+      previousFilledDays: filledCountOf(previousWindow.points),
+    }
     return sendStamped(reply, request, body, [stampOf(currentWindow.points), stampOf(previousWindow.points)])
   })
 
@@ -200,8 +229,9 @@ export function registerSeriesRoutes(app: FastifyInstance): void {
       .map((point) => ({ ...point, value: roundMetricValue(metric, point.value) }))
 
     // trend smooths the same series() this reads again, over the same from/to: no window math to
-    // redo here, only the read of updatedAtMs the smoothed points themselves do not carry.
+    // redo here, only the read of updatedAtMs and filled the smoothed points themselves do not
+    // carry.
     const { points } = personQuery.series({ metric, agg, from, to, source })
-    return sendStamped(reply, request, { points: smoothed }, [stampOf(points)])
+    return sendStamped(reply, request, { points: smoothed, filledDays: filledCountOf(points) }, [stampOf(points)])
   })
 }

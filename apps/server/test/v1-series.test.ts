@@ -123,7 +123,7 @@ describe('GET /baselines', () => {
     harness = await withServer(); const token = await harness.signIn()
     const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06')
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toEqual({ baseline: null })
+    expect(response.json()).toEqual({ baseline: null, filledDays: { filled: 0, of: 0 } })
   })
 
   it('answers 400 for a metric the catalogue does not declare', async () => {
@@ -131,6 +131,32 @@ describe('GET /baselines', () => {
     const response = await get(harness, token, '/baselines?metric=hart_rate&agg=mean&on=2026-08-06')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain('hart_rate')
+  })
+
+  // The fallback filledDays exists to count, exercised through the real fallback (daily_hrv has
+  // no row at all on 2026-08-01, only the intraday rolled up hrv/mean name,
+  // DEVICE_ROLLED_EQUIVALENT in packages/core/src/query/personQuery.ts) rather than a hardcoded
+  // count. A baseline blends many days into one number, so the per day `filled` boolean this
+  // route already carries on /series cannot ride along here - a count can, and does.
+  it('counts how many of the days behind a baseline were filled in, out of how many', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 42 })
+    seedDaily(harness, { localDate: '2026-08-02', metric: 'daily_hrv', agg: 'last', value: 55 })
+    const response = await get(
+      harness, token,
+      '/baselines?metric=daily_hrv&agg=last&on=2026-08-03&windowDays=5',
+    )
+    expect(response.statusCode).toBe(200)
+    expect(response.json().filledDays).toEqual({ filled: 1, of: 2 })
+  })
+
+  it('counts nothing filled for a metric that can never be filled', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 5; day += 1) {
+      seedDaily(harness, { localDate: `2026-08-0${day}`, value: 10 })
+    }
+    const response = await get(harness, token, '/baselines?metric=steps&agg=sum&on=2026-08-06&windowDays=5')
+    expect(response.json().filledDays).toEqual({ filled: 0, of: 5 })
   })
 })
 
@@ -165,6 +191,23 @@ describe('GET /insights', () => {
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
   })
+
+  // Two periods, two counts, named to match the currentDays/previousDays already on this body:
+  // the current period's one daily_hrv row is genuine, the previous period's is a fallback from
+  // the intraday hrv/mean row, so the two sides must disagree.
+  it('counts filled days per period, since a comparison has two of them', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    for (let day = 1; day <= 7; day += 1) {
+      seedDaily(harness, { localDate: `2026-08-0${day}`, metric: 'hrv', agg: 'mean', value: 40 })
+    }
+    for (let day = 8; day <= 14; day += 1) {
+      seedDaily(harness, { localDate: `2026-08-${String(day).padStart(2, '0')}`, metric: 'daily_hrv', agg: 'last', value: 50 })
+    }
+    const response = await get(harness, token, '/insights?metric=daily_hrv&agg=last&from=2026-08-08&to=2026-08-14')
+    expect(response.statusCode).toBe(200)
+    expect(response.json().currentFilledDays).toEqual({ filled: 0, of: 7 })
+    expect(response.json().previousFilledDays).toEqual({ filled: 7, of: 7 })
+  })
 })
 
 describe('GET /trend', () => {
@@ -198,6 +241,19 @@ describe('GET /trend', () => {
     const response = await get(harness, token, '/trend?metric=steps&agg=sum&from=1900-01-01&to=2100-01-01')
     expect(response.statusCode).toBe(400)
     expect(response.json().error.message).toContain(String(MAX_RANGE_DAYS))
+  })
+
+  // A trend line smooths many days into one shape, so the per day `filled` boolean /series
+  // carries cannot ride along - this counts instead, over the same window the smoothed points
+  // were read from.
+  it('counts how many of the days behind the trend were filled in, out of how many', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedDaily(harness, { localDate: '2026-08-01', metric: 'hrv', agg: 'mean', value: 40 })
+    seedDaily(harness, { localDate: '2026-08-02', metric: 'hrv', agg: 'mean', value: 41 })
+    seedDaily(harness, { localDate: '2026-08-03', metric: 'daily_hrv', agg: 'last', value: 50 })
+    const response = await get(harness, token, '/trend?metric=daily_hrv&agg=last&from=2026-08-01&to=2026-08-03')
+    expect(response.statusCode).toBe(200)
+    expect(response.json().filledDays).toEqual({ filled: 2, of: 3 })
   })
 
   // The ceiling is meant to be generous, not to get in the way: a decade wide "all time" view is

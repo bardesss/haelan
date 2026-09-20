@@ -67,12 +67,25 @@ const RECOVERY_DAY = z.object({
  * No `points` argument, anywhere in this file. A point budget is a display concern for a chart;
  * an index that moved with a chart's own budget would not be measuring anything.
  */
+/** How many of a fetched series' days were filled in from the intraday fallback, out of how many. */
+interface FilledCount {
+  filled: number
+  of: number
+}
+
+function filledCountOf(result: SeriesResult): FilledCount {
+  return { filled: result.points.filter((point) => point.filled).length, of: result.points.length }
+}
+
 function fetchRecoveryInput(q: PersonQuery, range: { from: string, to: string }): {
-  hrv: DayValue[]
-  restingHeartRate: DayValue[]
-  respiratoryRate: DayValue[]
-  asleepMinutes: DayValue[]
-  bedtimeMinutes: DayValue[]
+  input: {
+    hrv: DayValue[]
+    restingHeartRate: DayValue[]
+    respiratoryRate: DayValue[]
+    asleepMinutes: DayValue[]
+    bedtimeMinutes: DayValue[]
+  }
+  hrvFilled: FilledCount
 } {
   const from = recoveryWindowStart(range.from)
   const toDayValues = (result: SeriesResult): DayValue[] =>
@@ -80,18 +93,27 @@ function fetchRecoveryInput(q: PersonQuery, range: { from: string, to: string })
   // RECOVERY_METRIC_SOURCES (@haelan/core/recovery-index) is the one place that says which
   // /series metric and agg fill each of the five inputs - fetched here by `source.key` rather
   // than re-typing the pairing, so this can never drift from what the web hook and the probe read.
-  const fetch = (key: RecoveryMetricSource['key']): DayValue[] => {
+  const fetchSeries = (key: RecoveryMetricSource['key']): SeriesResult => {
     const source = RECOVERY_METRIC_SOURCES.find((s) => s.key === key)
     if (source === undefined) throw new Error(`no recovery metric source declared for '${key}'`)
-    return toDayValues(q.series({ metric: source.metric, agg: source.agg, from, to: range.to }))
+    return q.series({ metric: source.metric, agg: source.agg, from, to: range.to })
   }
 
+  // hrv is the only one of the five inputs `DailyPoint.filled` can ever be true for -
+  // DEVICE_ROLLED_EQUIVALENT (packages/core/src/query/personQuery.ts) maps a fallback only for
+  // daily_hrv and daily_spo2, and spo2 is not a recovery input. The other four fetches below never
+  // need this, so only hrv's raw SeriesResult is kept around long enough to count it.
+  const hrvResult = fetchSeries('hrv')
+
   return {
-    hrv: fetch('hrv'),
-    restingHeartRate: fetch('restingHeartRate'),
-    respiratoryRate: fetch('respiratoryRate'),
-    asleepMinutes: fetch('asleepMinutes'),
-    bedtimeMinutes: fetch('bedtimeMinutes'),
+    input: {
+      hrv: toDayValues(hrvResult),
+      restingHeartRate: toDayValues(fetchSeries('restingHeartRate')),
+      respiratoryRate: toDayValues(fetchSeries('respiratoryRate')),
+      asleepMinutes: toDayValues(fetchSeries('asleepMinutes')),
+      bedtimeMinutes: toDayValues(fetchSeries('bedtimeMinutes')),
+    },
+    hrvFilled: filledCountOf(hrvResult),
   }
 }
 
@@ -132,19 +154,32 @@ export const recoveryIndexTool = defineTool({
     + 'day\'s `inputs` shows how much of that day\'s movement each of the four inputs carried, '
     + 'scaled by how much every present input moved in total - on a day the inputs pulled in '
     + 'different directions, their points do not add up to the distance between `score` and 50, '
-    + 'and none is reported as a total. Report a finding as association with how the day was lived, '
-    + 'never as advice, risk or a clinical claim.',
+    + 'and none is reported as a total. `hrvFilled` says how many of the daily HRV readings behind '
+    + 'every score in this answer were filled in from an intraday average rather than the device\'s '
+    + 'own daily summary, out of how many were used - HRV is the only one of the four inputs this '
+    + 'can ever happen to. A nonzero `filled` means some of the HRV behind these scores was '
+    + 'estimated, not measured; say so in words rather than reporting the score as measurement '
+    + 'throughout. Report a finding as association with how the day was lived, never as advice, '
+    + 'risk or a clinical claim.',
   inputSchema: {
     from: z.string().describe('YYYY-MM-DD, inclusive'),
     to: z.string().describe('YYYY-MM-DD, inclusive'),
   },
   outputSchema: {
     days: z.array(RECOVERY_DAY),
+    hrvFilled: z.object({
+      filled: z.number(),
+      of: z.number(),
+    }).describe(
+      'How many of the daily HRV readings behind these scores (each day\'s own reading plus its '
+      + '60-day baseline) were filled in from an intraday average rather than measured, out of how '
+      + 'many were used.',
+    ),
   },
   run: (q, args) => {
-    const input = fetchRecoveryInput(q, { from: args.from, to: args.to })
+    const { input, hrvFilled } = fetchRecoveryInput(q, { from: args.from, to: args.to })
     const byDate = recoveryIndexSeries(input, { from: args.from, to: args.to })
-    return { days: [...byDate.entries()].map(([localDate, index]) => dayOf(localDate, index)) }
+    return { days: [...byDate.entries()].map(([localDate, index]) => dayOf(localDate, index)), hrvFilled }
   },
 })
 
