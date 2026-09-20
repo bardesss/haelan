@@ -875,6 +875,13 @@ object SyncEngine {
                 Log.w(TAG, "sleep from ${night.startTime}: ${night.leftOutStages} stage(s) of a type v4 cannot name, left out")
             }
             JSONObject()
+                // Health Connect's own record id, so a night the wearable revises in place
+                // (a later sync moving its start a few minutes once the algorithm settles)
+                // upserts the same session instead of arriving as a second one under a new
+                // start-time key. A sibling of "sleep", not a field inside it: mapSessions.ts
+                // reads `name` off the point itself (valueAt(point, 'name')), the same level
+                // Google's own payloads carry it at, and never looks inside the payload for it.
+                .put("name", night.id)
                 .put("sleep", JSONObject()
                     .put("interval", JSONObject()
                         .put("startTime", WireTime.atOffset(night.startTime, night.startZoneOffset))
@@ -886,11 +893,6 @@ object SyncEngine {
                         .put("mainSleep", true)
                         .put("processed", true)
                         .put("stagesStatus", "SUCCEEDED"))
-                    // Health Connect's own record id, so a night the wearable revises in place
-                    // (a later sync moving its start a few minutes once the algorithm settles)
-                    // upserts the same session instead of arriving as a second one under a new
-                    // start-time key. mapSessions.ts prefers `name` over its start-time fallback.
-                    .put("name", night.id)
                     .put("stages", JSONArray(night.stages.map { stage ->
                         JSONObject()
                             .put("type", stage.name)
@@ -903,15 +905,16 @@ object SyncEngine {
 
     private fun toExercisePoints(records: List<ExerciseSessionRecord>): List<JSONObject> = records.map { record ->
         JSONObject()
+            // Same reasoning as the sleep mapper just above, and the same sibling placement:
+            // the record's own id survives a revised start instead of minting a second session
+            // for it, and mapSessions.ts only reads `name` off the point, never off "exercise".
+            .put("name", record.metadata.id)
             .put("exercise", JSONObject()
                 .put("interval", JSONObject()
                     .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
                     .put("startUtcOffset", WireTime.offsetSeconds(record.startZoneOffset))
                     .put("endTime", WireTime.atOffset(record.endTime, record.endZoneOffset))
                     .put("endUtcOffset", WireTime.offsetSeconds(record.endZoneOffset)))
-                // Same reasoning as the sleep mapper just above: the record's own id survives a
-                // revised start instead of minting a second session for it.
-                .put("name", record.metadata.id)
                 .put("exerciseType", ExerciseTypes.nameFor(record.exerciseType)))
     }
 

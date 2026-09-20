@@ -99,8 +99,14 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     })
     if (!start || !end) continue
 
-    const externalId = typeof valueAt(point, 'name') === 'string'
-      ? String(valueAt(point, 'name'))
+    // A blank name falls back the same as a missing one. Health Connect's Metadata.id defaults
+    // to "" for a record the platform has not assigned an id to, and treating that as a real
+    // identity would collapse every such session of a source onto one row: worse than the
+    // duplicate-row bug this field exists to fix, because the collapse loses distinct nights
+    // instead of merely doubling one.
+    const rawName = valueAt(point, 'name')
+    const externalId = typeof rawName === 'string' && rawName !== ''
+      ? rawName
       : `${t.id}:${start.utcMs}`
     const sourceId = input.resolveSource(valueAt(point, 'dataSource') ?? pageSource)
     const id = stableId(input.personId, sourceId, t.id, externalId)
