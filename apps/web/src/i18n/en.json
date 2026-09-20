@@ -499,8 +499,7 @@
       "route": {
         "label": "Route",
         "basis": "every point the phone recorded, {{count}} in total",
-        "description": "The route drawn as a line, {{distance}} km long",
-        "descriptionWithElevation": "The route drawn as a line, {{distance}} km long, with {{elevation}} m of climb"
+        "description": "The route drawn as a line"
       },
       "splits": {
         "autoLabel": "Automatic splits",

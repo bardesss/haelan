@@ -6,9 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { I18nProvider } from '../src/i18n/index.js'
-import {
-  WorkoutRoute, projectRoute, routeDistanceMeters, routeElevationGainMeters,
-} from '../src/pages/activity/WorkoutRoute.js'
+import { WorkoutRoute, projectRoute } from '../src/pages/activity/WorkoutRoute.js'
 import type { RoutePoint } from '../src/data/useSessions.js'
 
 // This file is the boundary this task's brief names directly: the layout check that is this app's
@@ -16,9 +14,9 @@ import type { RoutePoint } from '../src/data/useSessions.js'
 // polyline even if it did - the same gap that shipped an unassertable filled-day marker and an icon
 // nobody caught rendering at the height of its card. What is asserted below is what a test actually
 // can reach: the accessible description text (the one thing a screen reader gets for the drawing),
-// the card's presence and absence, and the pure distance/elevation/projection maths in isolation.
-// The drawn shape's real look on a real screen, and the SVG's rendered size against a real card's
-// width, are not covered anywhere in this suite.
+// the card's presence and absence, and the pure projection maths in isolation. The drawn shape's
+// real look on a real screen, and the SVG's rendered size against a real card's width, are not
+// covered anywhere in this suite.
 
 function point(overrides: Partial<RoutePoint> = {}): RoutePoint {
   return {
@@ -28,9 +26,6 @@ function point(overrides: Partial<RoutePoint> = {}): RoutePoint {
   }
 }
 
-// A pure 0.01 degree step north, same longitude: distance is exactly R * dLat(radians), free of
-// the longitude cos() correction, so the expected figure below can be computed by hand rather than
-// copied from the function under test.
 const NEAR: RoutePoint = point({ latitude: 52.00 })
 const FAR: RoutePoint = point({ latitude: 52.01 })
 
@@ -52,36 +47,12 @@ describe('the route card', () => {
     expect(renderCard(undefined)).toBeNull()
   })
 
-  it('describes the drawing with the distance, when no altitude was recorded', () => {
+  it('gives the drawing an accessible description, with no distance or elevation figure in it', () => {
     const card = renderCard([NEAR, FAR])
     expect(card).not.toBeNull()
     const svg = card!.querySelector('svg')
     expect(svg?.getAttribute('role')).toBe('img')
-    // Whole string, not a substring: 1.1 km is exact for a 0.01 degree step (haversine's own R
-    // times the angle in radians is about 1111.95 m), so a format regression - three decimals, a
-    // missing unit, the wrong sentence entirely - has to fail this rather than slide through a
-    // toContain('1.1').
-    expect(svg?.getAttribute('aria-label')).toBe('The route drawn as a line, 1.1 km long')
-  })
-
-  it('adds the climb to the description, when altitude was recorded', () => {
-    const withAltitude = [{ ...NEAR, altitudeMetres: 100 }, { ...FAR, altitudeMetres: 125 }]
-    const card = renderCard(withAltitude)
-    const svg = card!.querySelector('svg')
-    expect(svg?.getAttribute('aria-label'))
-      .toBe('The route drawn as a line, 1.1 km long, with 25 m of climb')
-  })
-
-  it('shows a distance stat always, and an elevation stat only when altitude was recorded', () => {
-    const noAltitude = renderCard([NEAR, FAR])
-    const stats = noAltitude!.querySelectorAll('.workout-route-stat')
-    expect(stats.length).toBe(1)
-    expect(stats[0]!.querySelector('.label')?.textContent).toBe('Distance')
-
-    const withAltitude = renderCard([{ ...NEAR, altitudeMetres: 100 }, { ...FAR, altitudeMetres: 125 }])
-    const statsWithAltitude = withAltitude!.querySelectorAll('.workout-route-stat')
-    expect(statsWithAltitude.length).toBe(2)
-    expect(statsWithAltitude[1]!.querySelector('.label')?.textContent).toBe('Elevation gain')
+    expect(svg?.getAttribute('aria-label')).toBe('The route drawn as a line')
   })
 
   it('draws a single point as a dot, not an invisible one-point line', () => {
@@ -94,41 +65,15 @@ describe('the route card', () => {
     const card = renderCard([NEAR, FAR, point({ latitude: 52.02 })])
     expect(card!.querySelector('.basis')?.textContent).toBe('every point the phone recorded, 3 in total')
   })
-})
 
-describe('routeDistanceMeters', () => {
-  it('sums the great circle distance between consecutive points', () => {
-    // R (6,371,000 m) times 0.01 degrees in radians, the same figure the card-level test above
-    // depends on, checked here directly against the function rather than through formatNumber's
-    // own rounding.
-    expect(routeDistanceMeters([NEAR, FAR])).toBeCloseTo(1111.949, 0)
-  })
-
-  it('is zero for a single point, which has no pair to measure', () => {
-    expect(routeDistanceMeters([NEAR])).toBe(0)
-  })
-})
-
-describe('routeElevationGainMeters', () => {
-  it('sums only the upward steps, not the net change end to end', () => {
-    const points = [
-      point({ altitudeMetres: 100 }), point({ altitudeMetres: 90 }), point({ altitudeMetres: 110 }),
-    ]
-    // Down 10 then up 20: net change is +10, but gain counts only the climbs, so 20.
-    expect(routeElevationGainMeters(points)).toBe(20)
-  })
-
-  it('skips a step where either endpoint recorded no altitude, rather than inventing a slope', () => {
-    const points = [
-      point({ altitudeMetres: 100 }), point({ altitudeMetres: null }), point({ altitudeMetres: 90 }),
-    ]
-    // Both steps touch the null point, so neither contributes; not a null result, a slope was
-    // still recorded elsewhere, but a real zero climbed.
-    expect(routeElevationGainMeters(points)).toBe(0)
-  })
-
-  it('is null when the device recorded no altitude at all, not a false zero', () => {
-    expect(routeElevationGainMeters([point(), point()])).toBeNull()
+  // Fix round 1 on this task removed the card's own distance and elevation figures: WorkoutTiles
+  // already states both from the provider, and a second, independently computed number a few
+  // percent off it, labelled the same thing, on the same page, is worse than no second number at
+  // all. Pinned here rather than only in the removal itself, so a later change re-adding a stat
+  // tile to this card has to notice and decide again, not slide it back in unnoticed.
+  it('shows nothing numeric beside the drawing', () => {
+    const card = renderCard([NEAR, FAR])
+    expect(card!.querySelector('.value')).toBeNull()
   })
 })
 

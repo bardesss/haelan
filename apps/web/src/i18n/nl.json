@@ -499,8 +499,7 @@
       "route": {
         "label": "Route",
         "basis": "elk punt dat de telefoon opnam, {{count}} in totaal",
-        "description": "De route getekend als lijn, {{distance}} km lang",
-        "descriptionWithElevation": "De route getekend als lijn, {{distance}} km lang, met {{elevation}} m klimmen"
+        "description": "De route getekend als lijn"
       },
       "splits": {
         "autoLabel": "Automatische tussentijden",

@@ -421,7 +421,7 @@ describe('the route card', () => {
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
-      expect(container?.querySelector('.workout-route')).not.toBeNull()
+      expect(container?.querySelector('.workout-route-svg')).not.toBeNull()
     } finally { restore() }
   })
 })
