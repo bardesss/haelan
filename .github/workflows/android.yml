@@ -103,7 +103,7 @@ jobs:
       # the project's signing identity to whoever opens one. A review build is debug and installs
       # beside the real app, which is what a reviewer needs and all this job may produce.
       - name: Upload the review APK
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: haelan-android-debug-apk
           path: apps/android/app/build/outputs/apk/debug/*.apk
