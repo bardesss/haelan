@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/bardesss/haelan/compare/android-v0.3.0...android-v0.4.0) (2026-09-21)
+
+
+### Features
+
+* draw a workout's GPS route, read from Health Connect ([#328](https://github.com/bardesss/haelan/issues/328)) ([8c37bba](https://github.com/bardesss/haelan/commit/8c37bba74fdd55699375729230bcf0070518a09f))
+
 ## [0.3.0](https://github.com/bardesss/haelan/compare/android-v0.2.2...android-v0.3.0) (2026-09-20)
 
 
