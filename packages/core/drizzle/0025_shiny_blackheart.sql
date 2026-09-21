@@ -11,5 +11,4 @@ CREATE TABLE `session_routes` (
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `session_routes_session` ON `session_routes` (`session_id`,`ordinal`);--> statement-breakpoint
 CREATE UNIQUE INDEX `session_routes_natural` ON `session_routes` (`session_id`,`ordinal`);

@@ -22,6 +22,24 @@ export function routeBasemapStatusKey(): readonly unknown[] {
 }
 
 /**
+ * How fresh the answer has to be, overriding the query client's own defaults.
+ *
+ * Everything else in this app caches for a minute because derived data changes when a sync drains,
+ * not while somebody reads it. This is not derived data: it is the switch that decides whether a
+ * household's coordinates are sent to a third-party tile server, and a stale yes is a request that
+ * should not have been made. An admin turning the basemap off does not close anybody else's open
+ * tab, and under the shared default that tab would go on drawing tiles for up to a minute, for
+ * every route opened in it.
+ *
+ * Off is cheap to get wrong in the safe direction and expensive in the other, so this asks every
+ * time rather than trusting a cached yes.
+ */
+export const ROUTE_BASEMAP_FRESHNESS = {
+  staleTime: 0,
+  refetchOnMount: 'always',
+} as const
+
+/**
  * Whether this instance may draw a basemap under a route. Read by WorkoutRoute.tsx for every
  * member who opens a workout page, not just an admin - the same split useUpdateStatus takes.
  */
@@ -31,6 +49,7 @@ export function useRouteBasemapStatus(): UseQueryResult<RouteBasemapStatus, ApiE
     queryKey: routeBasemapStatusKey(),
     enabled: session.data !== undefined,
     queryFn: () => apiGet<RouteBasemapStatus>('/api/settings/route-basemap'),
+    ...ROUTE_BASEMAP_FRESHNESS,
   })
 }
 

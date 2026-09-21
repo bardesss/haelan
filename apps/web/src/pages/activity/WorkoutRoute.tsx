@@ -52,6 +52,23 @@ export function routeLineColor(root: HTMLElement = document.documentElement): st
   return getComputedStyle(root).getPropertyValue('--accent').trim()
 }
 
+/**
+ * Whether this render may draw a basemap, which is whether it may send coordinates to a tile
+ * server.
+ *
+ * `isFetching` is half the answer and the half that is easy to miss. react-query hands back cached
+ * data immediately and revalidates behind it, so a tab holding a cached `true` from before an
+ * admin switched the setting off would answer yes on the first render and request tiles before the
+ * refetch could say otherwise. Waiting for the fetch in flight costs a beat on a map that is off
+ * by default anyway; not waiting costs a request that cannot be taken back.
+ *
+ * Undefined reads as false for the same reason: the query being in flight for the first time is
+ * not a yes, and a card that guessed would start the very request this setting exists to gate.
+ */
+export function basemapAllowed(status: { data?: { enabled: boolean }, isFetching: boolean }): boolean {
+  return status.data?.enabled === true && !status.isFetching
+}
+
 /** The bounding box MapLibre fits the map to on load: every recorded point's own extremes, in the
  *  [[west, south], [east, north]] shape its own `bounds` option takes. */
 export function routeBounds(points: readonly RoutePoint[]): [[number, number], [number, number]] {
@@ -161,7 +178,7 @@ export function WorkoutRoute({ route }: { route: readonly RoutePoint[] | undefin
   // basemap was on before the answer came back could start the very network request this design
   // exists to gate.
   const basemap = useRouteBasemapStatus()
-  const basemapEnabled = basemap.data?.enabled === true
+  const basemapEnabled = basemapAllowed(basemap)
 
   // Every hook above the empty-route early return below, never the other way round: React calls
   // hooks in the order a component declares them, on every render, and an early return ahead of

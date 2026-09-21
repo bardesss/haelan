@@ -9,8 +9,9 @@ import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { I18nProvider } from '../src/i18n/index.js'
-import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON, routeLineColor } from '../src/pages/activity/WorkoutRoute.js'
-import { routeBasemapStatusKey } from '../src/data/useRouteBasemap.js'
+import { WorkoutRoute, projectRoute, basemapStyle, routeBounds, routeGeoJSON, routeLineColor, basemapAllowed } from '../src/pages/activity/WorkoutRoute.js'
+import { routeBasemapStatusKey, ROUTE_BASEMAP_FRESHNESS } from '../src/data/useRouteBasemap.js'
+import { createQueryClient } from '../src/api/queryClient.js'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import type { RoutePoint } from '../src/data/useSessions.js'
@@ -177,13 +178,27 @@ describe('the basemap setting', () => {
     expect(card!.innerHTML).not.toContain('maplibre')
   })
 
-  it('on: draws a map container instead of the trace, carrying the same accessible description', () => {
+  it('on: draws the trace first, and only reaches for a map once the setting is confirmed', () => {
+    // A cached yes is not acted on until it has been revalidated, so the FIRST paint of an
+    // instance that has the basemap on still shows the plain trace and nothing a tile request
+    // could come from. The map arrives a beat later, once the check settles.
+    //
+    // This is the behaviour that stops an open tab drawing tiles after an admin has switched the
+    // setting off: the tab holds the old yes, and without this it would act on it before the
+    // refetch could say otherwise. basemapAllowed's own tests below cover the settled case, which
+    // a static render cannot reach because it never runs the effect that resolves the query.
     const card = renderCard([NEAR, FAR], true)
-    expect(card!.querySelector('svg')).toBeNull()
-    const mapEl = card!.querySelector('.workout-route-map')
-    expect(mapEl).not.toBeNull()
-    expect(mapEl?.getAttribute('role')).toBe('img')
-    expect(mapEl?.getAttribute('aria-label')).toBe('The route drawn as a line')
+    expect(card!.querySelector('svg')).not.toBeNull()
+    expect(card!.querySelector('.workout-route-map')).toBeNull()
+    expect(card!.innerHTML).not.toContain('tile.openstreetmap.org')
+  })
+
+  it('carries the same accessible description whichever of the two it drew', () => {
+    // The description is the only thing a screen reader gets for either rendering, so it must not
+    // depend on which one won.
+    const off = renderCard([NEAR, FAR], false)
+    expect(off!.querySelector('svg')?.getAttribute('role')).toBe('img')
+    expect(off!.querySelector('svg')?.getAttribute('aria-label')).toBe('The route drawn as a line')
   })
 
   it('off stays off while the setting is still loading, not only once it answers false', () => {
@@ -249,5 +264,52 @@ describe('routeLineColor', () => {
     document.body.append(root)
     expect(routeLineColor(root)).toBe('')
     root.remove()
+  })
+})
+
+/**
+ * The gate in front of the one thing on this page that leaves the household's network.
+ *
+ * This is the whole effect's privacy decision, pulled out where a test can reach it: the effect
+ * itself never runs under renderToStaticMarkup, and it could be deleted entirely with every other
+ * test in this file still green.
+ */
+describe('basemapAllowed', () => {
+  it('draws when the instance says yes and the answer is settled', () => {
+    expect(basemapAllowed({ data: { enabled: true }, isFetching: false })).toBe(true)
+  })
+
+  it('does not draw on a cached yes that is being revalidated', () => {
+    // The case that matters. An admin switches the basemap off; another member's tab still holds
+    // the old yes and revalidates behind it. Acting on the cached value sends coordinates to a
+    // tile server after the household said to stop, and the request cannot be taken back.
+    expect(basemapAllowed({ data: { enabled: true }, isFetching: true })).toBe(false)
+  })
+
+  it('does not draw before the first answer arrives', () => {
+    expect(basemapAllowed({ isFetching: true })).toBe(false)
+    expect(basemapAllowed({ isFetching: false })).toBe(false)
+  })
+
+  it('does not draw when the instance says no', () => {
+    expect(basemapAllowed({ data: { enabled: false }, isFetching: false })).toBe(false)
+  })
+})
+
+/**
+ * The freshness override, asserted against the default it overrides rather than on its own. On its
+ * own it would be a test that a constant equals itself; against the default it says why the
+ * override exists, and goes red if someone deletes it and silently inherits a minute of caching
+ * for a privacy switch.
+ */
+describe('the basemap setting is not cached like derived data', () => {
+  it('asks every time, unlike everything else in this app', () => {
+    expect(ROUTE_BASEMAP_FRESHNESS.staleTime).toBe(0)
+    expect(ROUTE_BASEMAP_FRESHNESS.refetchOnMount).toBe('always')
+    // The floor: if the shared default were already zero the override would be pointless, and this
+    // pair of assertions would be pinning nothing.
+    const client = createQueryClient(() => {})
+    const shared = client.getDefaultOptions().queries?.staleTime
+    expect(shared, 'the shared default no longer caches, so this override may be redundant now').toBe(60_000)
   })
 })

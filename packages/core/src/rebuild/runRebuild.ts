@@ -242,10 +242,15 @@ export function runRebuild(input: RebuildInput): RebuildReport {
             .map((row) => [row.id, { kind: row.kind, externalId: row.externalId }]),
         )
 
-        // Segments go with their sessions by cascade: session_segments.session_id declares
-        // ON DELETE cascade and openDatabase sets PRAGMA foreign_keys = ON on every connection it
-        // makes, which is the only way this package opens one. Deleting them explicitly first
-        // would be a second statement doing what the first already does.
+        // Segments AND routes go with their sessions by cascade: session_segments.session_id and
+        // session_routes.session_id both declare ON DELETE cascade, and openDatabase sets
+        // PRAGMA foreign_keys = ON on every connection it makes, which is the only way this
+        // package opens one. Deleting either explicitly first would be a second statement doing
+        // what the first already does.
+        //
+        // Routes are named here because this delete is exactly what makes replay's own route
+        // write load-bearing: everything it takes has to be put back from the archive, and a
+        // rebuild that took routes without replaying them lost a household's tracks permanently.
         tx.delete(sessions).where(eq(sessions.personId, personId)).run()
         // One instance for this person's transaction, handed to the two helpers below that need
         // it. Not shared with the replay, which makes its own: two instances inside one

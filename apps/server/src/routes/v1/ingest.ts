@@ -276,6 +276,11 @@ function writeSamples(
 // the call site above only opens one: a session whose route half landed and whose session
 // row did not (or the other way round) is worse than a session with no route at all, and a
 // transaction is what makes that impossible rather than merely unlikely.
+//
+// The number returned counts SESSIONS, not rows in the database: neither the segments nor the route
+// points a session carries are added to it, the same way writeSamples counts samples. It answers
+// "how much of what you uploaded was written", which is the question the upload asked, and a
+// workout would otherwise report thousands for one run and drown every other number beside it.
 function writeSessions(
   tx: DbOrTx,
   sessions: SessionRow[],

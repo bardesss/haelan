@@ -136,6 +136,27 @@ stream.
 The Android path asks less of the person setting it up, and it gives some things up in exchange, which
 `apps/android/README.md` lists.
 
+### Workout routes
+
+The companion app is also the only way a route reaches an instance. Google's Health API returns no
+route points at all, so a workout synced from Google can say a GPS route was recorded and never show
+one; a workout synced from a phone carries the track itself, drawn on the workout's page as a line.
+
+Health Connect asks for route access separately from everything else, and a route nobody granted
+simply does not arrive. The workout page says nothing in that case rather than guessing why.
+
+Coordinates are the most identifying thing an instance stores, so they are treated as such. The
+line is drawn by the page itself, from the points, with no map library and no request leaving your
+network. No agent tool returns a route, and the demo below carries a synthetic one that closes on
+itself in the open ocean rather than anybody's real track.
+
+If you want streets under the line, **Settings -> Info -> "Show a basemap under a workout's
+route"** turns it on, and only an admin can. Switched on, the page fetches map tiles from
+OpenStreetMap. That provider then sees the coordinates of every route it draws, including where
+each one starts and ends, which is usually home. It is off by default, switching it back off stops
+it, and a tab left open on an instance where an admin has just switched it off checks again before
+it draws anything.
+
 ## Deploy
 
 [`compose.yaml`](compose.yaml) at the repository root is eight lines of YAML and carries no
@@ -433,9 +454,12 @@ the person stamped at the current version and starts normally.
 
 ### Knowing there is one
 
-Nothing tells you. That is deliberate: this program contacts Google on your behalf and nobody else,
-and a version check that phoned a third party without being asked would quietly end that property
-for every instance that upgraded into it.
+Nothing tells you. That is deliberate: left alone, this program contacts Google on your behalf and
+nobody else, and a version check that phoned a third party without being asked would quietly end
+that property for every instance that upgraded into it.
+
+Two settings can widen that, and both are off until an admin turns them on: this one, and the route
+basemap described above. Neither is on by default, and nothing turns either on for you.
 
 If you want it, **Settings -> Info -> "Check GitHub for new releases"** turns it on, and only an
 admin can. Switched on, the server asks `api.github.com` for this repository's newest release tag
@@ -510,12 +534,12 @@ documents for whoever is building, not part of what ships.
 
 ## Translations
 
-The app ships English and Dutch, both complete at 997 keys. Locales are plain JSON
+The app ships English and Dutch, both complete at 996 keys. Locales are plain JSON
 (`apps/web/src/i18n/en.json`, `apps/web/src/i18n/nl.json`), imported and registered in a
 `resources` map in `apps/web/src/i18n/index.tsx`; `fallbackLng` is `en`. The language is derived
 from the browser's `navigator.language` - there is no in-app language switch.
 
-Adding one is three steps: copy `en.json`, translate its 997 keys, then import and register it
+Adding one is three steps: copy `en.json`, translate its 996 keys, then import and register it
 beside `en` and `nl`. Translate all of them. i18next falls back per key rather than per file, so a
 half-finished locale does not show the fallback language throughout - it shows one screen carrying
 two languages at once, which is worse than shipping no locale at all.

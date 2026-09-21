@@ -145,8 +145,15 @@ export const sessionRoutes = sqliteTable('session_routes', {
   horizontalAccuracyMetres: real('horizontal_accuracy_metres'),
   verticalAccuracyMetres: real('vertical_accuracy_metres'),
 }, (t) => [
+  // One index, not two. The unique constraint below is itself an index on exactly these columns in
+  // exactly this order, so it already answers every lookup a separate `session_routes_session`
+  // index could - and that second index cost as much as the first. Measured with dbstat on
+  // synthetic data at the spec's own 720,000-row figure, the duplicate was 34 MB of a 180 MB
+  // table, serving nothing the natural key did not already serve.
+  //
+  // It reads as a mirror of sessionSegments above, which does carry a plain index, and that is why
+  // it was written. The difference is that segments has no unique constraint to piggyback on.
   unique('session_routes_natural').on(t.sessionId, t.ordinal),
-  index('session_routes_session').on(t.sessionId, t.ordinal),
 ])
 
 // Tier 2, not events. events is tier 1, user-authored, and survives every rebuild; an

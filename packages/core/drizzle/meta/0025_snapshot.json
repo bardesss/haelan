@@ -1912,14 +1912,6 @@
         }
       },
       "indexes": {
-        "session_routes_session": {
-          "name": "session_routes_session",
-          "columns": [
-            "session_id",
-            "ordinal"
-          ],
-          "isUnique": false
-        },
         "session_routes_natural": {
           "name": "session_routes_natural",
           "columns": [
