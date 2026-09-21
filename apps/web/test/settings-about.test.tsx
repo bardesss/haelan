@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { About, PROJECT_LINKS, APP_VERSION, updateState } from '../src/pages/settings/About.js'
+import { Icon } from '../src/components/icons.js'
 import { Sidebar } from '../src/components/Sidebar.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { queryKeys } from '../src/api/queryKeys.js'
@@ -198,5 +199,31 @@ describe('comparing two versions', () => {
     expect(isNewer('nightly', '1.33.0')).toBe(false)
     expect(isNewer(null, '1.33.0')).toBe(false)
     expect(isNewer('1.34.0', '__APP_VERSION__')).toBe(false)
+  })
+})
+
+/**
+ * The bug this file's own page shipped, and the two halves of not shipping it again.
+ *
+ * An svg carrying a viewBox and no dimensions is sized by its container. Every surface that
+ * renders an Icon sets its own size in app.css, which is the pattern .brand-mark's comment
+ * describes, and .about-link did not have one: the documentation glyph rendered at the height of
+ * the card. It reached a release because the layout harness does not open the settings Info tab,
+ * and nothing else looks at rendered size.
+ */
+describe('an icon cannot render unbounded', () => {
+  const css = readFileSync(fileURLToPath(new URL('../src/app.css', import.meta.url)), 'utf8')
+
+  it('is sized by the stylesheet on the surface that renders it', () => {
+    expect(css).toContain('.about-link svg')
+  })
+
+  // The floor, for the next surface that forgets. A stylesheet rule beats a presentation
+  // attribute, so this changes nothing that was already sized; what it changes is the failure
+  // mode of forgetting, from an icon as tall as its card to an icon slightly the wrong size.
+  it('carries its own width and height as well', () => {
+    const html = renderToStaticMarkup(<Icon name="docs" />)
+    expect(html).toContain('width="17"')
+    expect(html).toContain('height="17"')
   })
 })

@@ -102,6 +102,12 @@ body {
   display: flex; align-items: center; gap: var(--space-2); min-height: 44px;
   color: var(--text-secondary); text-decoration: none; font-size: var(--font-size-sm);
 }
+/* Every other surface that renders an Icon sizes it here, which is the pattern .brand-mark's own
+   comment describes. This one did not, and an svg carrying a viewBox and no width is sized by its
+   container: in a flex row with a link's worth of space to fill, the documentation glyph grew to
+   the height of the card. The layout harness never saw it, because it is on a settings tab the
+   harness does not open. */
+.about-link svg { width: 17px; height: 17px; flex: none; }
 .about-link:hover { color: var(--text-primary); text-decoration: underline; }
 .about-link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
 /* A link since the account page exists, so it takes the same text-decoration reset .rail-item
@@ -325,6 +331,14 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 /* The freshness has the rail's width to itself in the foot and wraps to a second line rather than
    being clipped; in the top bar it is the compact spelling, which fits on one. */
 .sync-control .synced { min-width: 0; }
+/* In the foot there are now TWO of these sentences, the Google one and the phone one, and they
+   stall independently so neither can be dropped. Three flex items in a 200px rail left each
+   sentence wrapping inside a column a few words wide, which read as one mangled paragraph rather
+   than two lines. Each takes the full width of the foot instead, stacked under the button.
+   Not applied in the top bar, where the compact spelling is a few characters and belongs on the
+   same row as the button. */
+.rail-foot .sync-control { flex-wrap: wrap; }
+.rail-foot .sync-control .synced { flex: 1 0 100%; }
 /* Collapsed, the rail is a 60px icon strip and the button is the whole of what a sighted reader
    gets. The sentence survives on the button's own title and accessible name, which is the same
    trade .rail-item makes with its sr-only label one rule group up. */
