@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.1.0](https://github.com/bardesss/haelan/compare/v2.0.4...v2.1.0) (2026-09-21)
+
+
+### Features
+
+* draw a workout's GPS route, read from Health Connect ([#328](https://github.com/bardesss/haelan/issues/328)) ([8c37bba](https://github.com/bardesss/haelan/commit/8c37bba74fdd55699375729230bcf0070518a09f))
+
+
+### Bug Fixes
+
+* **web:** the about icon has a size, and the rail foot fits two sentences ([#326](https://github.com/bardesss/haelan/issues/326)) ([39ecea6](https://github.com/bardesss/haelan/commit/39ecea61f992872d37e7e09ac8b302fd904ef96d))
+
 ## [2.0.4](https://github.com/bardesss/haelan/compare/v2.0.3...v2.0.4) (2026-09-20)
 
 
