@@ -137,6 +137,22 @@ object SyncEngine {
         prefs.getBoolean("sync_$key", true)
 
     /**
+     * A workout's GPS route, written out rather than derived from a record class.
+     *
+     * A route is not a record type of its own, so there is no `getReadPermission(X::class)` that
+     * yields it, and connect-client 1.1.0 exposes no constant for it either. The PLATFORM does:
+     * `android.health.connect.HealthPermissions.READ_EXERCISE_ROUTES` is a public constant on
+     * android-36 with exactly this value, and a permission string is requestable whether or not
+     * androidx happens to name it.
+     *
+     * An earlier reading of this concluded the permission could not be declared at all and left it
+     * out. It shipped a feature that did nothing: without this string every GPS workout answers
+     * `ConsentRequired`, routeJson returns null on its first line, and no route is ever sent, with
+     * every test green because they all build their own records.
+     */
+    const val READ_EXERCISE_ROUTES = "android.permission.health.READ_EXERCISE_ROUTES"
+
+    /**
      * Every Health Connect permission this app reads with, background included. One set, read by
      * the screen that asks and the worker that relies on the answer: a permission the set forgets
      * is a type the worker's reads are refused for, with no row on any screen saying so.
@@ -147,6 +163,8 @@ object SyncEngine {
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        // The route on those sessions. See the constant for why it is a literal.
+        READ_EXERCISE_ROUTES,
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(BasalMetabolicRateRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
@@ -932,18 +950,19 @@ object SyncEngine {
     /**
      * The route inside one exercise point, or null when there is none to send.
      *
-     * Step 1 of this task (see task-3-report.md) found that `READ_EXERCISE_ROUTE` is not a
-     * permission this app can declare or request at all on connect-client 1.1.0: HealthPermission
-     * carries no such constant, and a session's route is instead reached through
-     * `ExerciseSessionRecord.exerciseRouteResult`, sealed to `Data`, `ConsentRequired` and
-     * `NoData`. Consent for `ConsentRequired` is its own system intent
-     * (`android.health.connect.action.REQUEST_EXERCISE_ROUTE`, keyed on one session id at a
-     * time), which needs a foreground Activity to launch and a result to come back to - there is
-     * no such thing inside this headless sync, called from a background worker as often as from
-     * the screen's button. `ConsentRequired` and `NoData` are therefore read the same way any
+     * A session's route is reached through `ExerciseSessionRecord.exerciseRouteResult`, sealed to
+     * `Data`, `ConsentRequired` and `NoData`. The household grants it once, with the rest, through
+     * READ_EXERCISE_ROUTES above: an earlier comment here claimed that permission did not exist
+     * and could not be asked for, which was wrong and made this whole function unreachable in
+     * practice, since a reader without it is answered `ConsentRequired` for every GPS workout.
+     *
+     * `ConsentRequired` and `NoData` are still both read as nothing to send, the same way any
      * other type with nothing to send is read anywhere else in this file: a normal outcome, not a
      * refusal, and never a reason to fail the exercise type the way syncOne's first-refusal rule
-     * would stop a post the instance actually refused.
+     * would stop a post the instance actually refused. `ConsentRequired` survives the grant for a
+     * route recorded by an app that never shared it, and for the per-session consent intent
+     * (`android.health.connect.action.REQUEST_EXERCISE_ROUTE`) this headless sync has no
+     * foreground Activity to launch.
      */
     // internal for the same reason toExercisePoints is: ExerciseRouteResult.ConsentRequired is
     // public and constructible, but the ExerciseSessionRecord constructor that would carry one is
