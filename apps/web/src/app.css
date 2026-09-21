@@ -412,7 +412,15 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    that file's own comment on why). Sized by the viewBox drawn there, never by a fixed pixel box
    here: `height: auto` is what lets that viewBox's own aspect ratio, not this stylesheet, decide
    the drawn shape. */
-.workout-route-svg { display: block; width: 100%; height: auto; }
+/* max-height is what stops a tall route from taking over the page. `height: auto` sizes the
+   element from the viewBox's aspect ratio, and that ratio is the route's own shape: a run straight
+   up a coastline projects to something like 1:10, which across a full-width card computes to
+   several thousand pixels of card for one thin line. Clamping the height leaves the default
+   preserveAspectRatio to letterbox the trace inside the shorter box, so the shape stays honest and
+   only the empty space is lost. 320px matches .workout-route-map below, so switching the basemap
+   on and off does not resize the card. The layout check cannot see this: it never opens this
+   page's tabs, and apps/web/test/route-svg-height.test.ts is the guard instead. */
+.workout-route-svg { display: block; width: 100%; height: auto; max-height: 320px; }
 .workout-route-trace { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .workout-route-point { fill: var(--accent); }
 

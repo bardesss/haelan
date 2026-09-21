@@ -118,6 +118,40 @@ describe('projectRoute', () => {
     expect(projected.length).toBe(2)
   })
 
+  // The test above is exact BECAUSE it sits on the equator, where the cos() correction is 1 - so it
+  // cannot tell a correction from its absence. This one is the other half: away from the equator a
+  // degree of longitude covers less ground than a degree of latitude, and the drawing has to say
+  // so, or every route drawn at this household's latitude comes out stretched sideways.
+  it('squeezes longitude by cos(latitude), so a route away from the equator is not stretched', () => {
+    // One degree each way, centred on 60 north, where cos is exactly 0.5: a degree of longitude is
+    // half the ground distance of a degree of latitude there, so the drawn box has to be half as
+    // wide as it is tall. Without the correction the same points draw square.
+    const points = [point({ latitude: 59.5, longitude: 4 }), point({ latitude: 60.5, longitude: 5 })]
+    const { viewWidth, viewHeight } = projectRoute(points)
+    const contentWidth = viewWidth - 2 * 16
+    const contentHeight = viewHeight - 2 * 16
+    expect(
+      contentWidth / contentHeight,
+      'a one-degree-square route at 60 north drew square, which means longitude was not scaled by '
+      + 'cos(latitude) and every route is stretched east-west by the cosine of wherever it was run.',
+    ).toBeCloseTo(0.5, 5)
+  })
+
+  // Nothing else in this suite looks at which way up the drawing comes out. A route rendered
+  // upside-down is a correct-looking line of the right shape, in the wrong orientation, and it
+  // passed every test in this repository.
+  it('draws north as up, since latitude increases north and an svg y axis increases downward', () => {
+    const south = point({ latitude: 52.00, longitude: 4.3 })
+    const north = point({ latitude: 52.05, longitude: 4.3 })
+    const { points: projected } = projectRoute([south, north])
+    expect(
+      projected[1]!.y,
+      'the northern point drew BELOW the southern one, so the route is mirrored top to bottom: an '
+      + "svg's y axis increases downward while latitude increases north, and the negation in "
+      + 'projectRoute is what reconciles them.',
+    ).toBeLessThan(projected[0]!.y)
+  })
+
   it('draws a route with no span at all into a small fixed box, rather than dividing by zero', () => {
     const { points: projected, viewWidth, viewHeight } = projectRoute([NEAR, { ...NEAR }])
     expect(Number.isFinite(viewWidth)).toBe(true)

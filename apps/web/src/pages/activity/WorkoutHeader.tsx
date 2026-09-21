@@ -22,15 +22,24 @@ function clock(utcMs: number, timeZone: string, language: string): string {
  * argument, the trace is drawn right below in WorkoutRoute.tsx, and a Google session can never
  * reach this branch since the v4 API sends no route to carry (mapSessions.ts's own comment on
  * `route` says so). Only once there are none does `hasGps` speak - true is Google's own claim of a
- * route this API withholds, unchanged from what this sentence has always said; null is a companion
- * session this app has no metadata for either way (workoutSummary.ts's own comment on
- * `WorkoutDetail.hasGps` says why that is not the same claim as false); false is a provider saying
- * plainly there was nothing to record, which is the one case with nothing worth printing.
+ * route this API withholds, unchanged from what this sentence has always said.
+ *
+ * null says nothing, and used to say the wrong thing. `hasGps` is null for EVERY companion
+ * session - Health Connect carries no such field, so this is the normal state rather than a signal
+ * - which meant a sentence reading "a GPS route may have been recorded, this app was not able to
+ * read it" printed under every workout synced from a phone, an indoor yoga session as readily as a
+ * run. It was also false by then: the app could not read routes at all when that sentence was
+ * written, and now asks for the permission and reads them.
+ *
+ * What is left in the null case is a workout with no route points, which is overwhelmingly a
+ * workout that had no route. The two cases hiding inside it - a route recorded by another app that
+ * never shared it, and a household that refused route access - are indistinguishable here, because
+ * both reach the server as the same absence. Saying nothing is the honest answer to a question
+ * this surface cannot answer; a sentence about GPS under a yoga session is not.
  */
 function gpsSentenceKey(hasGps: boolean | null, routePointCount: number): string | null {
   if (routePointCount > 0) return 'activity.workout.gpsDrawn'
   if (hasGps === true) return 'activity.workout.gps'
-  if (hasGps === null) return 'activity.workout.gpsUnreadable'
   return null
 }
 

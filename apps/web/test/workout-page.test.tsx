@@ -214,16 +214,38 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
-  it('says the route may be unreadable for a companion session with no exerciseMetadata and no points', async () => {
-    // PHONE carries no exerciseMetadata at all - the shape SyncEngine.kt sends today - so hasGps
-    // is null (this app has no metadata to speak from), not false. Task 7's third case.
+  it('says nothing about GPS for a companion session with no exerciseMetadata and no points', async () => {
+    // PHONE carries no exerciseMetadata at all - the shape SyncEngine.kt sends - so hasGps is
+    // null, meaning this app has no metadata to speak from rather than a provider saying there was
+    // no route.
+    //
+    // This used to print "a GPS route may have been recorded, this app was not able to read it".
+    // hasGps is null for EVERY companion session, so that sentence appeared under every workout
+    // synced from a phone, an indoor yoga session as readily as a run, and it was false besides:
+    // the app now asks for READ_EXERCISE_ROUTES and reads routes. A workout that reaches here has
+    // no route points, which is overwhelmingly a workout that had no route, and the cases hiding
+    // inside that are indistinguishable from the server. Saying nothing is the honest answer.
     window.history.replaceState(null, '', '/activity/phone')
     const restore = stub({ phone: PHONE })
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
+      expect(container?.querySelector('.workout-gps')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('still says a route exists when the provider itself claims one', async () => {
+    // The floor under the test above: hasGps true is Google's own claim of a route its API will
+    // not send, and that sentence is the one case where this app knows more than it can draw. If
+    // dropping the null sentence had swallowed this one too, the test above would still pass while
+    // the page went silent about every Google workout that recorded a route.
+    window.history.replaceState(null, '', '/activity/run1')
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
       expect(container?.querySelector('.workout-gps')?.textContent).toBe(
-        'A GPS route may have been recorded for this workout. This app was not able to read it, so there is no map.',
+        'A GPS route was recorded for this workout. This API does not return route points, so there is no map.',
       )
     } finally { restore() }
   })
