@@ -312,7 +312,31 @@ function writeSessions(
     tx.delete(schema.sessionRoutes).where(eq(schema.sessionRoutes.sessionId, row.id)).run()
   }
   for (const segment of segments) tx.insert(schema.sessionSegments).values(segment).run()
-  for (const route of routes) tx.insert(schema.sessionRoutes).values(route).run()
+  // Hoisted, where segments above are not, because drizzle prepares a statement on every .run()
+  // and a route is the one thing here with an unbounded row count: a sleep night carries a
+  // handful of stages, while an hour of GPS at 1Hz is about 3,600 points and one upload may
+  // carry several workouts. Preparing per row retains kilobytes per row for the life of the
+  // process (this connection is the server's, and unlike the rebuild worker it never exits),
+  // which is the shape that caused the rebuild OOM. replay.ts hoists the same insert the same
+  // way; these two writers are mirrors and a route written differently in one of them is the
+  // drift that keeps producing defects here.
+  //
+  // No onConflictDoUpdate, exactly as in replay: the delete above replaces a session's route
+  // wholesale, so every row this runs against is new.
+  if (routes.length > 0) {
+    const insertRoute = tx.insert(schema.sessionRoutes).values({
+      id: sql.placeholder('id'),
+      sessionId: sql.placeholder('sessionId'),
+      ordinal: sql.placeholder('ordinal'),
+      atMs: sql.placeholder('atMs'),
+      latitude: sql.placeholder('latitude'),
+      longitude: sql.placeholder('longitude'),
+      altitudeMetres: sql.placeholder('altitudeMetres'),
+      horizontalAccuracyMetres: sql.placeholder('horizontalAccuracyMetres'),
+      verticalAccuracyMetres: sql.placeholder('verticalAccuracyMetres'),
+    } as unknown as typeof schema.sessionRoutes.$inferInsert).prepare()
+    for (const route of routes) insertRoute.run(route as unknown as typeof schema.sessionRoutes.$inferInsert)
+  }
   return rowsWritten
 }
 
