@@ -150,7 +150,7 @@ describe('the overnight traces', () => {
       // full sentence, the same idiom workout-trace-card.test.tsx's own ".basis" assertion uses,
       // is what actually pins the wording.
       const expected = 'watch recorded no heart rate for this night, so this is every other device '
-        + 'instead; these 1 points are the readings'
+        + 'instead; this 1 point is the reading'
       // All three metrics need the second, unpinned request here, which is exactly the shape the
       // previous test's own comment on Windows timer granularity describes - flush() can settle a
       // poll early on the cached "nothing in flight" state while the component's own re-render is

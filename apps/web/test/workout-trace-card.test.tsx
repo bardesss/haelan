@@ -200,7 +200,7 @@ describe('the workout trace card', () => {
       // actually answered.
       expect(container?.querySelector('.basis')?.textContent).toBe(
         'My Watch recorded no heart rate in this window, so this is every other device instead; '
-        + 'these 1 points are the readings',
+        + 'this 1 point is the reading',
       )
     } finally { restore() }
   })

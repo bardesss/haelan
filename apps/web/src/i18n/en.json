@@ -618,7 +618,8 @@
     },
     "intradayBasis": {
       "thinned": "{{from}} readings thinned to {{to}} points",
-      "full": "these {{count}} points are the readings"
+      "full_one": "this {{count}} point is the reading",
+      "full_other": "these {{count}} points are the readings"
     },
     "hypnogram": {
       "awakeNote": "Awake counts the awake stages drawn above and nothing else. The night's own awake minutes also count restless time and the gaps between the night's separate pieces, so that figure reads higher."
