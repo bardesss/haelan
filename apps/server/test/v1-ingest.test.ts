@@ -367,7 +367,19 @@ const sleepPointFor = () => sleepPoint({
   ],
 })
 
-const exercisePoint = () => ({
+// route, when passed, rides on the exercise payload object itself: a sibling of interval and
+// exerciseType, never on the point. mapSessions.ts's own wire-shape comment is what a level
+// mismatch here already cost this branch once, on `name` rather than `route`.
+interface RouteEntry {
+  time: string
+  latitude: number
+  longitude: number
+  altitudeMetres?: number
+  horizontalAccuracyMetres?: number
+  verticalAccuracyMetres?: number
+}
+
+const exercisePoint = (route?: RouteEntry[]) => ({
   name: 'users/me/dataTypes/exercise/dataPoints/run1',
   dataSource: { platform: 'HEALTH_CONNECT', recordingMethod: 'ACTIVELY_MEASURED' },
   exercise: {
@@ -376,6 +388,7 @@ const exercisePoint = () => ({
       endTime: '2026-08-18T06:30:00Z', endUtcOffset: '7200s',
     },
     exerciseType: 'RUNNING',
+    ...(route === undefined ? {} : { route }),
   },
 })
 
@@ -448,6 +461,53 @@ describe('the companion ingest route for sessions', () => {
     expect(items).toHaveLength(1)
     expect(items[0]?.localDate).toBe('2026-08-18')
     expect(items[0]?.attrs.exerciseType).toBe('RUNNING')
+  })
+
+  // The round trip Task 4 exists for: through the real ingest route, then the real detail route,
+  // never a hand built transaction and never a reimplementation of mapSessions. This branch has
+  // already shipped one test that reimplemented what it was meant to exercise and so could never
+  // fail; this one only calls the two handlers a phone and a browser actually call.
+  it('writes an uploaded route in the session transaction and serves it back in order', async () => {
+    harness = await withServer()
+    const token = await harness.signIn()
+
+    const response = await ingest(token, '/api/v1/p/p1/ingest/exercise', {
+      dataPoints: [exercisePoint([
+        { time: '2026-08-18T06:00:00Z', latitude: 52.10, longitude: 4.30, altitudeMetres: 3.2 },
+        { time: '2026-08-18T06:05:00Z', latitude: 52.11, longitude: 4.31 },
+        { time: '2026-08-18T06:10:00Z', latitude: 52.12, longitude: 4.32, horizontalAccuracyMetres: 5 },
+      ])],
+    })
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as { rowsWritten: number }).rowsWritten).toBe(1)
+
+    const list = await harness.app.inject({
+      method: 'GET', url: '/api/v1/p/p1/sessions?kind=exercise&from=2026-08-18&to=2026-08-18',
+      headers: { authorization: `Bearer ${token}` },
+    })
+    const items = (list.json() as { items: { id: string }[] }).items
+    expect(items).toHaveLength(1)
+    // The list route never carries a route: tier2.ts keeps it on the detail response only, the
+    // same rule cardioLoad and workoutSplits already follow.
+    expect(list.body).not.toContain('latitude')
+    const sessionId = items[0]!.id
+
+    const detail = await harness.app.inject({
+      method: 'GET', url: `/api/v1/p/p1/sessions/${sessionId}`,
+      headers: { authorization: `Bearer ${token}` },
+    })
+    expect(detail.statusCode).toBe(200)
+    const route = (detail.json() as {
+      route: { atMs: number, latitude: number, longitude: number, altitudeMetres: number | null, horizontalAccuracyMetres: number | null }[]
+    }).route
+    expect(route.map((p) => [p.latitude, p.longitude])).toEqual([
+      [52.10, 4.30], [52.11, 4.31], [52.12, 4.32],
+    ])
+    // Oldest point first, the order readWorkoutRoute promises.
+    expect(route.map((p) => p.atMs)).toEqual([...route.map((p) => p.atMs)].sort((a, b) => a - b))
+    expect(route[0]?.altitudeMetres).toBe(3.2)
+    expect(route[1]?.altitudeMetres).toBeNull()
+    expect(route[2]?.horizontalAccuracyMetres).toBe(5)
   })
 
   // The route's contract says ten thousand points, and ten thousand points do not fit the one

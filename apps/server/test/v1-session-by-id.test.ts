@@ -225,4 +225,26 @@ describe('GET /sessions/:sessionId', () => {
       error: { kind: 'not_found', code: 'no_such_session', message: "no session 'ecg1'" },
     })
   })
+
+  // Task 7: this route is the household's own read of their own session, the surface the export
+  // principle names - "an export is the household asking for their own data, and getting less
+  // than they own would be wrong" - unlike get_workout and sql_query, which keep coordinates out
+  // on purpose. A regression here would mean Step 2's tool-layer exclusion had leaked backwards
+  // into the one place coordinates belong.
+  it('carries a route\'s coordinates, the one surface that deliberately does', async () => {
+    harness = await withServer(); const token = await harness.signIn()
+    seedWorkout(harness, { id: 'run1' })
+    harness.app.haelan.instance.db.insert(schema.sessionRoutes).values({
+      id: 'run1-route-0', sessionId: 'run1', ordinal: 0,
+      atMs: Date.parse('2026-08-18T09:05:00Z'), latitude: 52.1, longitude: 4.3,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }).run()
+
+    const session = (await get(harness, token, '/sessions/run1')).json()
+
+    expect(session.route).toEqual([{
+      atMs: Date.parse('2026-08-18T09:05:00Z'), latitude: 52.1, longitude: 4.3,
+      altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
+    }])
+  })
 })

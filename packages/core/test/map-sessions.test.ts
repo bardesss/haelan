@@ -167,19 +167,19 @@ describe('mapSessions', () => {
 
   it('tolerates a body that parses to a JSON null rather than an object', () => {
     expect(() => mapSessions({ dataType: sleep, ...ctx, body: 'null' })).not.toThrow()
-    expect(mapSessions({ dataType: sleep, ...ctx, body: 'null' })).toEqual({ sessions: [], segments: [] })
+    expect(mapSessions({ dataType: sleep, ...ctx, body: 'null' })).toEqual({ sessions: [], segments: [], routes: [] })
   })
 
   it('tolerates a body that parses to a bare JSON number rather than an object', () => {
     expect(() => mapSessions({ dataType: sleep, ...ctx, body: '42' })).not.toThrow()
-    expect(mapSessions({ dataType: sleep, ...ctx, body: '42' })).toEqual({ sessions: [], segments: [] })
+    expect(mapSessions({ dataType: sleep, ...ctx, body: '42' })).toEqual({ sessions: [], segments: [], routes: [] })
   })
 
   it('tolerates dataPoints arriving as something other than an array', () => {
     const result = mapSessions({
       dataType: sleep, ...ctx, body: JSON.stringify({ dataPoints: { cursor1: aNight } }),
     })
-    expect(result).toEqual({ sessions: [], segments: [] })
+    expect(result).toEqual({ sessions: [], segments: [], routes: [] })
   })
 
   it('refuses a sample type, which needs the other mapper', () => {
@@ -276,6 +276,72 @@ describe('mapSessions', () => {
     expect(sessions).toHaveLength(2)
     expect(sessions.map((s) => s.sourceId)).toEqual(['FITBIT', 'HEALTH_CONNECT'])
     expect(sessions[0]?.id).not.toBe(sessions[1]?.id)
+  })
+})
+
+// Task 2. The wire shape lives as a comment inside mapSessions.ts, at the exact point the mapper
+// reads it, because that comment is what Task 3 builds the Android side against and nothing else
+// describes it. These fixtures are hand built at the level that comment names - `route` inside
+// the `exercise` payload object - rather than reimplementing the mapper's own logic, which is the
+// shape that already shipped a no-op on this branch once today.
+describe('mapSessions, a route riding inside an exercise point', () => {
+  const exerciseRoute = (route: unknown[]) => ({
+    name: 'users/me/dataTypes/exercise/dataPoints/route1',
+    dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+    exercise: {
+      interval: {
+        startTime: '2026-08-18T06:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T06:30:00Z', endUtcOffset: '7200s',
+      },
+      exerciseType: 'RUNNING',
+      route,
+    },
+  })
+
+  it('maps a route to points in order, attached to the session that carried it', () => {
+    const { sessions, routes } = mapSessions({
+      dataType: exercise, ...ctx, body: body([exerciseRoute([
+        { time: '2026-08-18T06:00:00Z', latitude: 10.1, longitude: 20.3, altitudeMetres: 5 },
+        { time: '2026-08-18T06:00:10Z', latitude: 10.2, longitude: 20.4 },
+      ])]),
+    })
+    expect(routes).toHaveLength(2)
+    expect(routes.map((r) => r.latitude)).toEqual([10.1, 10.2])
+    expect(routes.map((r) => r.ordinal)).toEqual([0, 1])
+    expect(routes.every((r) => r.sessionId === sessions[0]?.id)).toBe(true)
+    expect(routes[0]).toMatchObject({ altitudeMetres: 5, horizontalAccuracyMetres: null, verticalAccuracyMetres: null })
+  })
+
+  it('maps an exercise with no route to no route rows, which is not an error', () => {
+    expect(() => mapSessions({ dataType: exercise, ...ctx, body: body([anExercise]) })).not.toThrow()
+    const { routes } = mapSessions({ dataType: exercise, ...ctx, body: body([anExercise]) })
+    expect(routes).toEqual([])
+  })
+
+  it('drops a point missing a coordinate while its neighbours still map', () => {
+    const { routes } = mapSessions({
+      dataType: exercise, ...ctx, body: body([exerciseRoute([
+        { time: '2026-08-18T06:00:00Z', latitude: 10.1, longitude: 20.3 },
+        { time: '2026-08-18T06:00:10Z', longitude: 20.4 },
+        { time: '2026-08-18T06:00:20Z', latitude: 10.3, longitude: 20.5 },
+      ])]),
+    })
+    // The surviving ordinals are 0 and 2, not renumbered to 0 and 1: ordinal is the point's place
+    // in the route as recorded (session_routes' own schema comment), and a dropped entry must not
+    // shift its neighbours' positions.
+    expect(routes.map((r) => r.longitude)).toEqual([20.3, 20.5])
+    expect(routes.map((r) => r.ordinal)).toEqual([0, 2])
+  })
+
+  it('drops a point missing a readable time the same way', () => {
+    const { routes } = mapSessions({
+      dataType: exercise, ...ctx, body: body([exerciseRoute([
+        { latitude: 10.1, longitude: 20.3 },
+        { time: '2026-08-18T06:00:10Z', latitude: 10.2, longitude: 20.4 },
+      ])]),
+    })
+    expect(routes).toHaveLength(1)
+    expect(routes[0]?.latitude).toBe(10.2)
   })
 })
 

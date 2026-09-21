@@ -3,7 +3,7 @@ export { oauthClient, credentials } from './credentials.ts'
 export { notes, events, overrides } from './annotations.ts'
 export { rawPayloads } from './raw.ts'
 export {
-  samples, sessions, sessionSegments, daily, observations, metricDictionary,
+  samples, sessions, sessionSegments, sessionRoutes, daily, observations, metricDictionary,
   SAMPLE_AGGS, SAMPLE_AGG_REFS, sampleAggOf, SESSION_KINDS,
 } from './derived.ts'
 export type { SampleAgg, SessionKind } from './derived.ts'

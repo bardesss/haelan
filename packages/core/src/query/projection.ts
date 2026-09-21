@@ -9,6 +9,11 @@ import { ConfigError } from '../errors.ts'
  * Seven, and `samples` is deliberately not among them: 2.1 million rows, 85% of the database with
  * its indexes, and the one table whose integer-ref shape is actively hostile to hand-written SQL.
  * Intraday is what `get_intraday` and `get_workout` serve, at the resolution the data holds.
+ *
+ * `session_routes` is deliberately not among them either, for a different reason: a route is the
+ * most identifying data this database holds, usually somebody's own address at both ends, and an
+ * agent's SQL has no business reaching it - `sql_query`'s own description says so. Nothing here
+ * joins `sessions.id` to it, so there is no column, even a foreign key, for a query to follow.
  */
 export const PROJECTION_TABLES = [
   'daily', 'sessions', 'session_segments', 'notes', 'events', 'observations', 'sources',

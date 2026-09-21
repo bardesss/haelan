@@ -27,9 +27,10 @@ import { readSleepNights } from './sleepNights.ts'
 import type { Night } from './sleepNights.ts'
 import { readSessions, readSession } from './sessions.ts'
 import type { WorkoutSession } from './sessions.ts'
-import { readWorkoutCardioLoad, readWorkoutSplits } from './workoutDerived.ts'
+import { readWorkoutCardioLoad, readWorkoutSplits, readWorkoutRoute } from './workoutDerived.ts'
 import type { CardioLoad } from '../api/cardioLoad.ts'
 import type { FilledSplit } from '../api/splitHeartRate.ts'
+import type { RoutePoint } from './workoutDerived.ts'
 import { trendOf } from './trend.ts'
 import type { TrendPoint } from './trend.ts'
 import { readChanges } from './changes.ts'
@@ -474,6 +475,24 @@ export class PersonQuery {
     const session = this.sessionById(input)
     if (session === null) return null
     return readWorkoutSplits(this.#db, { personId: this.#personId, session })
+  }
+
+  /**
+   * A workout's GPS route, oldest point first. Empty, not null, for a session that carries no
+   * route - it exists and simply has nothing to draw, the same distinction workoutSplits draws
+   * between "no session" and "a session with nothing filled in". Null is reserved for the one
+   * case sessionById already reserves it for: an id naming nothing this person owns.
+   *
+   * A detail-route reader only, following workoutSplits' own comment on why a per row fill
+   * belongs there and never on the list - and a route is the strongest case of that rule in the
+   * codebase, since every recorded point of a run is far more than a handful of splits. Route
+   * points never reach an MCP tool response by default; that boundary lives in the tool
+   * catalogue, not here.
+   */
+  workoutRoute(input: { sessionId: string }): RoutePoint[] | null {
+    const session = this.sessionById(input)
+    if (session === null) return null
+    return readWorkoutRoute(this.#db, { session })
   }
 
   /**

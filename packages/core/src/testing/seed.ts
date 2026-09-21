@@ -247,16 +247,51 @@ function stagesFor(rand: () => number, startMs: number, endMs: number, restless:
 // carry. Shaped the same way sleepPoint shapes a night: name, dataSource, interval.
 function exercisePoint(o: {
   name: string, startTime: string, endTime: string, utcOffset?: string, exerciseType: string,
+  route?: ReadonlyArray<Record<string, unknown>>,
 }): Record<string, unknown> {
   const offset = o.utcOffset ?? '0s'
+  // A route rides on a companion dataSource, never a Fitbit one. The Google Health API has no
+  // route field to send at all (mapSessions.ts's own comment on `route`, and task-3-report.md's
+  // reading of the real Health Connect client), so a point carrying one has to wear the same
+  // dataSource shape a phone sync actually sends (SyncEngine.kt's dataSourceOf) - platform
+  // HEALTH_CONNECT, an application package, no recordingMethod claimed the real sync does not
+  // send either. Anything else would show a demo workout doing something no real provider can.
+  const dataSource = o.route
+    ? { platform: 'HEALTH_CONNECT', application: { packageName: 'com.haelan.android' }, device: { displayName: 'Phone' } }
+    : { platform: 'FITBIT', recordingMethod: 'DERIVED' }
   return {
     name: o.name,
-    dataSource: { platform: 'FITBIT', recordingMethod: 'DERIVED' },
+    dataSource,
     exercise: {
       interval: { startTime: o.startTime, startUtcOffset: offset, endTime: o.endTime, endUtcOffset: offset },
       exerciseType: o.exerciseType,
+      ...(o.route ? { route: o.route } : {}),
     },
   }
+}
+
+// The demo's one synthetic route (Task 8), opted into only by scripts/seed-demo.mjs via
+// SeedArchiveInput's `demoRoute` below - never by default, which is what
+// packages/core/test/seed.test.ts's "seeds no workout route" pins. A perfect circle, not a
+// captured trace: real GPS never closes on itself to the metre, so this shape could not be
+// mistaken for a walk anyone actually took. Centred on latitude zero, longitude zero - open ocean
+// off the coast of west Africa, nowhere near this household's Amsterdam offset and not a
+// neighbourhood a stranger could place - and built from trigonometry alone, with no draw from
+// `rand`: the shared PRNG sequence the ribbon and every other figure in this file are pinned
+// against has to land on the same bytes with or without this feature on.
+const ROUTE_POINT_COUNT = 40
+const ROUTE_RADIUS_DEGREES = 0.01 // roughly 1.1km across: long enough to read as a route on the card, small enough to stay a circle rather than a smear
+
+function syntheticRoute(startMs: number, endMs: number): Array<Record<string, unknown>> {
+  return Array.from({ length: ROUTE_POINT_COUNT }, (_, i) => {
+    const t = i / (ROUTE_POINT_COUNT - 1)
+    const angle = t * 2 * Math.PI
+    return {
+      time: new Date(startMs + t * (endMs - startMs)).toISOString(),
+      latitude: Number((ROUTE_RADIUS_DEGREES * Math.sin(angle)).toFixed(6)),
+      longitude: Number((ROUTE_RADIUS_DEGREES * Math.cos(angle)).toFixed(6)),
+    }
+  })
 }
 
 // moods carries an array leaf (moods[]), which samplePoint's value: string | number cannot hold,
@@ -319,6 +354,15 @@ export interface SeedArchiveInput {
   /** Exclusive, like dayWindows' own toMs: the last generated day ends here, never on it. */
   endMs: number
   seed?: number
+  /**
+   * Task 8, opt-in and false by default: attaches syntheticRoute (above) to the most recent
+   * workout in the span. Off by default so every other caller of this generator - including
+   * packages/core/test/seed.test.ts's own "seeds no workout route" - keeps proving what Task 7
+   * proved, that a real route cannot reach the demo through the ordinary capture path.
+   * scripts/seed-demo.mjs is the one caller that turns this on, because the demo is the one place
+   * a fabricated route belongs on purpose.
+   */
+  demoRoute?: boolean
 }
 
 export interface SeedArchiveResult { payloads: number }
@@ -430,6 +474,15 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
   // putRollups above has to see a whole span at once to chunk it against the type's own cap.
   const floorsWindows: RollupWindow[] = []
   const totalCaloriesWindows: RollupWindow[] = []
+
+  // The most recent workout day in the span, found by the same i % 3 === 1 schedule the day loop
+  // below decides a workout on - not a draw from `rand`, so finding it ahead of the loop costs
+  // nothing from the shared PRNG sequence. Task 8's demoRoute (if the caller asked for it) lands
+  // here: the most recent workout is the first one a stranger opening Activity actually sees.
+  let lastWorkoutDay = -1
+  for (let k = 0; k < input.days; k++) {
+    if (k % 3 === 1) lastWorkoutDay = k
+  }
 
   for (let i = 0; i < input.days; i++) {
     const dayStart = input.endMs - (input.days - i) * DAY_MS
@@ -624,6 +677,7 @@ export function seedArchive(input: SeedArchiveInput): SeedArchiveResult {
         endTime: new Date(workout.endMs).toISOString(),
         utcOffset: amsterdamOffset(workout.startMs),
         exerciseType: workout.exerciseType,
+        route: input.demoRoute && i === lastWorkoutDay ? syntheticRoute(workout.startMs, workout.endMs) : undefined,
       })])
     }
 

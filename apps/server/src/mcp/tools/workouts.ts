@@ -193,6 +193,10 @@ export const getWorkout = defineTool({
     + 'the API exposes no data type for it, so this is the same model family (TRIMP) computed from '
     + 'heart rate this instance already stores, on its own scale. It will not equal the number in '
     + 'their app, whose coefficients are unpublished - do not present it as theirs. '
+    + 'hasGps says whether a route exists - true or false from the provider, null when this app '
+    + 'has no metadata to say either way - but never the route itself: a run usually starts and '
+    + 'ends at home, so its coordinates never reach this answer, or any other tool response. Ask '
+    + 'the person directly if a route matters to what they asked. '
     + 'A `sessionId` naming no '
     + 'session, somebody else\'s session, or an ECG row all answer the same tool error rather than '
     + 'an empty object, because those are different statements about a health record and only the '
@@ -227,7 +231,10 @@ export const getWorkout = defineTool({
     displayName: UNTRUSTED,
     notes: UNTRUSTED,
     activeDurationSeconds: z.number().nullable(),
-    hasGps: z.boolean(),
+    // Tri-state, not a plain boolean: true or false is the provider's own claim, null is this
+    // app having no metadata to claim anything from - workoutSummary.ts's own comment on
+    // WorkoutDetail.hasGps says why null must not collapse into false here either.
+    hasGps: z.boolean().nullable(),
     poolLengthMeters: z.number().nullable(),
     runVo2Max: z.number().nullable(),
     averageSpeedMetersPerSecond: z.number().nullable(),

@@ -25,6 +25,19 @@ export interface WorkoutSession {
   excludeReason: string | null
 }
 
+/** One recorded GPS fix. Mirrors `RoutePoint` in packages/core/src/query/workoutDerived.ts field
+ *  for field rather than importing it: that module pulls in drizzle and better-sqlite3, which have
+ *  no business in a browser bundle, so this app defines its own wire-shape type for the response
+ *  the same way it already does for WorkoutSession itself, just below. */
+export interface RoutePoint {
+  atMs: number
+  latitude: number
+  longitude: number
+  altitudeMetres: number | null
+  horizontalAccuracyMetres: number | null
+  verticalAccuracyMetres: number | null
+}
+
 /** The by-id route (GET /p/:personId/sessions/:sessionId) carries these beside every other
  *  session field; the list route deliberately does not, which is why this extends WorkoutSession
  *  rather than being folded into it. `autoSplits` and `laps` are already filled from the
@@ -34,6 +47,7 @@ export interface WorkoutSessionDetail extends WorkoutSession {
   cardioLoad: CardioLoad | null
   autoSplits: FilledSplit[]
   laps: FilledSplit[]
+  route: RoutePoint[]
 }
 
 /**

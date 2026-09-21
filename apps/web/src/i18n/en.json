@@ -455,6 +455,7 @@
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "annotate": "Exclude or add a note",
       "gps": "A GPS route was recorded for this workout. This API does not return route points, so there is no map.",
+      "gpsDrawn": "A GPS route was recorded for this workout, drawn below.",
       "missingTitle": "No such workout",
       "missingDetail": "This link names a workout that is not in your data.",
       "tiles": {
@@ -495,6 +496,11 @@
         "label": "Heart rate through this workout",
         "events": "Pauses",
         "basisFellBack": "{{pinned}} recorded no heart rate in this window, so this is every other device instead; {{detail}}"
+      },
+      "route": {
+        "label": "Route",
+        "basis": "every point the phone recorded, {{count}} in total",
+        "description": "The route drawn as a line"
       },
       "splits": {
         "autoLabel": "Automatic splits",
@@ -1141,6 +1147,10 @@
         "available": "Version {{version}} is out. The changelog below says what changed.",
         "toggle": "Check GitHub for new releases",
         "sends": "Switched on, this instance asks GitHub for the newest release tag every six hours. GitHub sees a request from this instance's address; nothing about the household, its data or its version is sent."
+      },
+      "routeBasemap": {
+        "toggle": "Show a basemap under a workout's route",
+        "sends": "Switched on, this instance fetches map tiles from a third-party map provider to draw a basemap under every workout route. That provider sees the coordinates of every route it draws, including where each one starts and ends, which is usually home."
       },
       "documentation": "Documentation",
       "changelog": "Changelog",

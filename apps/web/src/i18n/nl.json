@@ -455,6 +455,7 @@
       "when": "{{date}}, {{start}}–{{end}} · {{source}}",
       "annotate": "Uitsluiten of een notitie toevoegen",
       "gps": "Er is een GPS-route opgenomen voor deze training. Deze API geeft geen routepunten terug, dus er is geen kaart.",
+      "gpsDrawn": "Er is een GPS-route opgenomen voor deze training, hieronder getekend.",
       "missingTitle": "Geen training gevonden",
       "missingDetail": "Deze link verwijst naar een training die niet in je gegevens staat.",
       "tiles": {
@@ -495,6 +496,11 @@
         "label": "Hartslag tijdens deze training",
         "events": "Pauzes",
         "basisFellBack": "{{pinned}} registreerde geen hartslag in dit venster, dus dit is in plaats daarvan elk ander apparaat; {{detail}}"
+      },
+      "route": {
+        "label": "Route",
+        "basis": "elk punt dat de telefoon opnam, {{count}} in totaal",
+        "description": "De route getekend als lijn"
       },
       "splits": {
         "autoLabel": "Automatische tussentijden",
@@ -1141,6 +1147,10 @@
         "available": "Versie {{version}} is uit. Het wijzigingslogboek hieronder vertelt wat er veranderd is.",
         "toggle": "Controleer GitHub op nieuwe releases",
         "sends": "Als dit aanstaat, vraagt deze instantie elke zes uur bij GitHub naar de nieuwste release. GitHub ziet een verzoek vanaf het adres van deze instantie; er wordt niets over het huishouden, de gegevens of de versie meegestuurd."
+      },
+      "routeBasemap": {
+        "toggle": "Toon een kaartondergrond onder de route van een training",
+        "sends": "Als dit aanstaat, haalt deze instantie kaarttegels op bij een externe kaartaanbieder om een kaartondergrond onder elke trainingsroute te tekenen. Die aanbieder ziet de coördinaten van elke getekende route, inclusief waar elke route begint en eindigt, meestal thuis."
       },
       "documentation": "Documentatie",
       "changelog": "Wijzigingslogboek",

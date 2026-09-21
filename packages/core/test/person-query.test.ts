@@ -3,7 +3,7 @@ import { createTestDatabase, insertSample, seedPerson } from '../src/testing/fix
 import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
 import { ConfigError } from '../src/errors.ts'
-import { daily, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sessionRoutes, sources } from '../src/db/schema/index.ts'
 import type { SessionKind } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 
@@ -466,6 +466,84 @@ describe('PersonQuery.sessions', () => {
     expect(() => query.sessions({
       kind: 'workout' as unknown as 'exercise', from: '2026-08-01', to: '2026-08-01',
     })).toThrow(ConfigError)
+  })
+})
+
+describe('PersonQuery.workoutRoute', () => {
+  const START = Date.UTC(2026, 7, 21, 17, 0)
+  const H = 3_600_000
+
+  const insertRoutePoint = (o: {
+    id: string, sessionId: string, ordinal: number, atMs: number,
+    latitude: number, longitude: number, altitudeMetres?: number | null,
+    horizontalAccuracyMetres?: number | null, verticalAccuracyMetres?: number | null,
+  }) =>
+    test.db.insert(sessionRoutes).values({
+      id: o.id, sessionId: o.sessionId, ordinal: o.ordinal, atMs: o.atMs,
+      latitude: o.latitude, longitude: o.longitude,
+      altitudeMetres: o.altitudeMetres ?? null,
+      horizontalAccuracyMetres: o.horizontalAccuracyMetres ?? null,
+      verticalAccuracyMetres: o.verticalAccuracyMetres ?? null,
+    }).run()
+
+  it("reads the person's own route, oldest point first regardless of insertion order", () => {
+    insertSource('p1-watch')
+    insertSession({
+      id: 'run', kind: 'exercise', startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+    insertRoutePoint({
+      id: 'run-1', sessionId: 'run', ordinal: 1, atMs: START + 60_000,
+      latitude: 10.2, longitude: 20.4,
+    })
+    insertRoutePoint({
+      id: 'run-0', sessionId: 'run', ordinal: 0, atMs: START,
+      latitude: 10.1, longitude: 20.3, altitudeMetres: 5, horizontalAccuracyMetres: 3, verticalAccuracyMetres: 4,
+    })
+
+    const out = query.workoutRoute({ sessionId: 'run' })
+    expect(out?.map((p) => p.latitude)).toEqual([10.1, 10.2])
+    expect(out?.[0]).toMatchObject({ altitudeMetres: 5, horizontalAccuracyMetres: 3, verticalAccuracyMetres: 4 })
+  })
+
+  it('answers an empty route, not null, for a session that recorded none', () => {
+    insertSource('p1-watch')
+    insertSession({
+      id: 'run', kind: 'exercise', startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+    expect(query.workoutRoute({ sessionId: 'run' })).toEqual([])
+  })
+
+  it('answers null for a session id naming nothing this person owns', () => {
+    expect(query.workoutRoute({ sessionId: 'missing' })).toBeNull()
+  })
+
+  // readSession serves sleep rows too, and a route left behind under one by a bad write must not
+  // surface: the same kind guard readWorkoutSplits and readWorkoutCardioLoad already state.
+  it('answers an empty route for a sleep session even if a route row exists under it', () => {
+    insertSource('p1-watch')
+    insertSession({
+      id: 'night', kind: 'sleep', startMs: START, endMs: START + 8 * H, localDate: '2026-08-21',
+    })
+    insertRoutePoint({ id: 'night-0', sessionId: 'night', ordinal: 0, atMs: START, latitude: 10.1, longitude: 20.3 })
+
+    expect(query.workoutRoute({ sessionId: 'night' })).toEqual([])
+  })
+
+  it('is bound to its own person rather than one exercising the same day', () => {
+    seedPerson(test.db, 'other')
+    insertSource('p1-watch', 'p1')
+    insertSource('other-watch', 'other')
+    insertSession({
+      id: 'run', kind: 'exercise', personId: 'p1', sourceId: 'p1-watch',
+      startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+    insertSession({
+      id: 'other-run', kind: 'exercise', personId: 'other', sourceId: 'other-watch',
+      startMs: START, endMs: START + H, localDate: '2026-08-21',
+    })
+    insertRoutePoint({ id: 'other-run-0', sessionId: 'other-run', ordinal: 0, atMs: START, latitude: 10.1, longitude: 20.3 })
+
+    expect(query.workoutRoute({ sessionId: 'other-run' })).toBeNull()
   })
 })
 

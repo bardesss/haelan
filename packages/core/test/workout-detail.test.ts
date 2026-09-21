@@ -18,12 +18,14 @@ describe('workoutDetail', () => {
     expect(d.poolLengthMeters).toBe(25)
   })
 
-  it('reports hasGps false rather than null when the metadata is absent', () => {
-    // A tri-state here would make every call site write the same three-way branch to render one
-    // sentence. False means "no reason to say a route was recorded", which is the only thing the
-    // page does with it.
-    expect(EMPTY.hasGps).toBe(false)
+  it('reports hasGps null rather than false when the metadata is absent, false when the provider said so itself', () => {
+    // Task 7: a companion session with no exerciseMetadata at all is not a session Google told us
+    // carried no route - it is a session this app has no metadata for, and false would claim the
+    // certainty null instead states honestly. A provider that sent an explicit false is a
+    // different fact and survives as one.
+    expect(EMPTY.hasGps).toBeNull()
     expect(workoutDetail({ exerciseMetadata: { hasGps: false } }).hasGps).toBe(false)
+    expect(workoutDetail({ exerciseMetadata: {} }).hasGps).toBeNull()
   })
 
   it('reads the four session zones, which are not the three intraday ones', () => {
@@ -248,7 +250,7 @@ describe('workoutDetail', () => {
       const d = workoutDetail(attrs)
       expect(d.displayName).toBeNull()
       expect(d.autoSplits).toEqual([])
-      expect(d.hasGps).toBe(false)
+      expect(d.hasGps).toBeNull()
     }
   })
 })

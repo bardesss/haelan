@@ -11,6 +11,7 @@ import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.BodyTemperatureRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ElevationGainedRecord
+import androidx.health.connect.client.records.ExerciseRouteResult
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
@@ -136,6 +137,22 @@ object SyncEngine {
         prefs.getBoolean("sync_$key", true)
 
     /**
+     * A workout's GPS route, written out rather than derived from a record class.
+     *
+     * A route is not a record type of its own, so there is no `getReadPermission(X::class)` that
+     * yields it, and connect-client 1.1.0 exposes no constant for it either. The PLATFORM does:
+     * `android.health.connect.HealthPermissions.READ_EXERCISE_ROUTES` is a public constant on
+     * android-36 with exactly this value, and a permission string is requestable whether or not
+     * androidx happens to name it.
+     *
+     * An earlier reading of this concluded the permission could not be declared at all and left it
+     * out. It shipped a feature that did nothing: without this string every GPS workout answers
+     * `ConsentRequired`, routeJson returns null on its first line, and no route is ever sent, with
+     * every test green because they all build their own records.
+     */
+    const val READ_EXERCISE_ROUTES = "android.permission.health.READ_EXERCISE_ROUTES"
+
+    /**
      * Every Health Connect permission this app reads with, background included. One set, read by
      * the screen that asks and the worker that relies on the answer: a permission the set forgets
      * is a type the worker's reads are refused for, with no row on any screen saying so.
@@ -146,6 +163,8 @@ object SyncEngine {
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(SleepSessionRecord::class),
         HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+        // The route on those sessions. See the constant for why it is a literal.
+        READ_EXERCISE_ROUTES,
         HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getReadPermission(BasalMetabolicRateRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
@@ -903,19 +922,66 @@ object SyncEngine {
                     })))
         }
 
-    private fun toExercisePoints(records: List<ExerciseSessionRecord>): List<JSONObject> = records.map { record ->
+    // internal rather than private so its test can assert the shape at the level mapSessions.ts
+    // reads it, the same reason chunkEnds and the other mappers' neighbours below are internal.
+    internal fun toExercisePoints(records: List<ExerciseSessionRecord>): List<JSONObject> = records.map { record ->
+        val exercise = JSONObject()
+            .put("interval", JSONObject()
+                .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
+                .put("startUtcOffset", WireTime.offsetSeconds(record.startZoneOffset))
+                .put("endTime", WireTime.atOffset(record.endTime, record.endZoneOffset))
+                .put("endUtcOffset", WireTime.offsetSeconds(record.endZoneOffset)))
+            .put("exerciseType", ExerciseTypes.nameFor(record.exerciseType))
+        // A sibling on the exercise payload itself, per wire-shape.txt (the comment mapSessions.ts
+        // carries, which is the only definition of this shape and the one this file builds
+        // against): not a sibling of "exercise" on the point, not nested under interval or
+        // exerciseType. routeJson answers null for every refusal shape, which folds the route in
+        // only when there is one to send and leaves every other point exactly as it was before
+        // this task touched it.
+        routeJson(record.exerciseRouteResult)?.let { exercise.put("route", it) }
         JSONObject()
             // Same reasoning as the sleep mapper just above, and the same sibling placement:
             // the record's own id survives a revised start instead of minting a second session
             // for it, and mapSessions.ts only reads `name` off the point, never off "exercise".
             .put("name", record.metadata.id)
-            .put("exercise", JSONObject()
-                .put("interval", JSONObject()
-                    .put("startTime", WireTime.atOffset(record.startTime, record.startZoneOffset))
-                    .put("startUtcOffset", WireTime.offsetSeconds(record.startZoneOffset))
-                    .put("endTime", WireTime.atOffset(record.endTime, record.endZoneOffset))
-                    .put("endUtcOffset", WireTime.offsetSeconds(record.endZoneOffset)))
-                .put("exerciseType", ExerciseTypes.nameFor(record.exerciseType)))
+            .put("exercise", exercise)
+    }
+
+    /**
+     * The route inside one exercise point, or null when there is none to send.
+     *
+     * A session's route is reached through `ExerciseSessionRecord.exerciseRouteResult`, sealed to
+     * `Data`, `ConsentRequired` and `NoData`. The household grants it once, with the rest, through
+     * READ_EXERCISE_ROUTES above: an earlier comment here claimed that permission did not exist
+     * and could not be asked for, which was wrong and made this whole function unreachable in
+     * practice, since a reader without it is answered `ConsentRequired` for every GPS workout.
+     *
+     * `ConsentRequired` and `NoData` are still both read as nothing to send, the same way any
+     * other type with nothing to send is read anywhere else in this file: a normal outcome, not a
+     * refusal, and never a reason to fail the exercise type the way syncOne's first-refusal rule
+     * would stop a post the instance actually refused. `ConsentRequired` survives the grant for a
+     * route recorded by an app that never shared it, and for the per-session consent intent
+     * (`android.health.connect.action.REQUEST_EXERCISE_ROUTE`) this headless sync has no
+     * foreground Activity to launch.
+     */
+    // internal for the same reason toExercisePoints is: ExerciseRouteResult.ConsentRequired is
+    // public and constructible, but the ExerciseSessionRecord constructor that would carry one is
+    // Kotlin-internal to connect-client, so this is the only way a test reaches that branch at all.
+    internal fun routeJson(result: ExerciseRouteResult): JSONArray? {
+        val points = (result as? ExerciseRouteResult.Data)?.exerciseRoute?.route ?: return null
+        if (points.isEmpty()) return null
+        return JSONArray(points.map { location ->
+            JSONObject()
+                .put("time", location.time.toString())
+                .put("latitude", location.latitude)
+                .put("longitude", location.longitude)
+                // Independently optional, and never defaulted to a fabricated 0: Health Connect's
+                // own Location leaves each of the three null when its provider did not carry it,
+                // and put() is only called when there is a real reading to put.
+                .apply { location.altitude?.let { put("altitudeMetres", it.inMeters) } }
+                .apply { location.horizontalAccuracy?.let { put("horizontalAccuracyMetres", it.inMeters) } }
+                .apply { location.verticalAccuracy?.let { put("verticalAccuracyMetres", it.inMeters) } }
+        })
     }
 
     private fun toCaloriesPoints(records: List<ActiveCaloriesBurnedRecord>): List<JSONObject> = records.map { record ->

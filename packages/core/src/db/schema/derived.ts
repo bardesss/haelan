@@ -127,6 +127,35 @@ export const sessionSegments = sqliteTable('session_segments', {
   endMs: integer('end_ms').notNull(),
 }, (t) => [index('session_segments_session').on(t.sessionId, t.startMs)])
 
+// Tier 2, like sessionSegments beside it, and cascaded the same way: a rebuild deletes and
+// regenerates a session, and a route row left behind would attach to nothing and be drawn for
+// nobody.
+export const sessionRoutes = sqliteTable('session_routes', {
+  id: text('id').primaryKey(),
+  sessionId: text('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  // The point's place in the route as recorded. A route is an ordered path and time alone cannot
+  // order it: two readings can share a millisecond, and a rebuild must redraw the same line.
+  ordinal: integer('ordinal').notNull(),
+  atMs: integer('at_ms').notNull(),
+  latitude: real('latitude').notNull(),
+  longitude: real('longitude').notNull(),
+  // Optional because Health Connect's Location carries them optionally. A missing altitude is not
+  // a zero, and writing one would draw a climb to sea level that never happened.
+  altitudeMetres: real('altitude_metres'),
+  horizontalAccuracyMetres: real('horizontal_accuracy_metres'),
+  verticalAccuracyMetres: real('vertical_accuracy_metres'),
+}, (t) => [
+  // One index, not two. The unique constraint below is itself an index on exactly these columns in
+  // exactly this order, so it already answers every lookup a separate `session_routes_session`
+  // index could - and that second index cost as much as the first. Measured with dbstat on
+  // synthetic data at the spec's own 720,000-row figure, the duplicate was 34 MB of a 180 MB
+  // table, serving nothing the natural key did not already serve.
+  //
+  // It reads as a mirror of sessionSegments above, which does carry a plain index, and that is why
+  // it was written. The difference is that segments has no unique constraint to piggyback on.
+  unique('session_routes_natural').on(t.sessionId, t.ordinal),
+])
+
 // Tier 2, not events. events is tier 1, user-authored, and survives every rebuild; an
 // observation is machine-written and a rebuild deletes and regenerates it. One table holding
 // both would force a rebuild to delete some rows and keep others, let a person delete something

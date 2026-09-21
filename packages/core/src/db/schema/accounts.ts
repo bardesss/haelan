@@ -106,6 +106,12 @@ export const instanceSettings = sqliteTable('instance_settings', {
   // request for one public release tag and nothing about this instance beyond the fact that it
   // asked. See apps/server/src/updates.ts for what goes over the wire.
   updateCheckEnabled: integer('update_check_enabled', { mode: 'boolean' }).notNull().default(false),
+  // Whether a workout's route card may fetch map tiles from a third party to draw a basemap under
+  // the trace. Off by default, for a sharper reason than updateCheckEnabled above: a route's first
+  // and last point is usually this household's own address, and a tile request is what tells the
+  // map provider where that is. See apps/web/src/pages/activity/WorkoutRoute.tsx for what a tile
+  // request sends and what stays local when this is off.
+  routeBasemapEnabled: integer('route_basemap_enabled', { mode: 'boolean' }).notNull().default(false),
   // True when the wizard was finished through the companion app instead of Google OAuth.
   // The step derivation reads it to skip the client and consent steps, and it stays readable
   // afterwards so the dashboard can say where this instance's data comes from.

@@ -166,6 +166,13 @@ const FLAT_ROUTES: readonly FlatRoute[] = [
   },
   { route: 'PUT /api/settings/update', auth: 'admin' },
 
+  {
+    route: 'GET /api/settings/route-basemap',
+    auth: 'session',
+    why: 'every member who opens a workout page needs this to know what the route card will draw, not just an admin',
+  },
+  { route: 'PUT /api/settings/route-basemap', auth: 'admin' },
+
   { route: 'GET /api/members', auth: 'admin' },
   { route: 'POST /api/members', auth: 'admin' },
   { route: 'POST /api/members/:accountId/disable', auth: 'admin' },

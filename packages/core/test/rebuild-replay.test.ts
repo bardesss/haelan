@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'vitest'
-import { and, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { replayPerson } from '../src/rebuild/replay.ts'
 import { RawArchive } from '../src/store/rawArchive.ts'
 import { SourceRegistry } from '../src/store/sources.ts'
-import { daily, sessions, sources } from '../src/db/schema/index.ts'
+import { daily, sessions, sessionRoutes, sources } from '../src/db/schema/index.ts'
 import { samplePoint, sleepPoint, dailyRollupBody, body } from '../src/testing/payloads.ts'
 
 import { createTestDatabase, readSamples, seedPerson } from '../src/testing/fixtures.ts'
@@ -93,6 +93,53 @@ function exerciseBody(): string {
         activeDuration: '379s', splitType: 'DISTANCE',
         metricsSummary: { distanceMillimeters: 1_000_000 },
       }],
+    },
+  }])
+}
+
+// exerciseBody's twin, carrying a route the way Task 2's mapper reads one: the `route` key sits
+// on the exercise payload object beside `interval` and `exerciseType`, not as a sibling of
+// `exercise` on the point itself. See mapSessions.ts's own comment at the point it reads this,
+// which is what an Android upload and this fixture both have to agree with.
+function exerciseBodyWithRoute(): string {
+  return body([{
+    name: 'users/me/dataTypes/exercise/dataPoints/run-with-route',
+    dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+    exercise: {
+      interval: {
+        startTime: '2026-08-18T06:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T06:30:00Z', endUtcOffset: '7200s',
+      },
+      exerciseType: 'RUNNING',
+      route: [
+        { time: '2026-08-18T06:00:00Z', latitude: 52.10, longitude: 4.30, altitudeMetres: 3.2 },
+        { time: '2026-08-18T06:05:00Z', latitude: 52.11, longitude: 4.31 },
+        { time: '2026-08-18T06:10:00Z', latitude: 52.12, longitude: 4.32, horizontalAccuracyMetres: 5 },
+      ],
+    },
+  }])
+}
+
+// The same workout as exerciseBodyWithRoute, at a chosen route length, so one session can be
+// archived twice the way a real archive holds it. SyncCursors.OVERLAP_MS makes the phone re-send a
+// window it has already sent, so two archived payloads carrying one workout is the normal state
+// rather than a contrived one, and the second copy is the longer or shorter trace the phone had
+// finished writing by then.
+function exerciseBodyWithRouteOfLength(points: number): string {
+  return body([{
+    name: 'users/me/dataTypes/exercise/dataPoints/run-with-route',
+    dataSource: { platform: 'HEALTH_CONNECT', device: { displayName: 'Pixel Watch 3' } },
+    exercise: {
+      interval: {
+        startTime: '2026-08-18T06:00:00Z', startUtcOffset: '7200s',
+        endTime: '2026-08-18T06:30:00Z', endUtcOffset: '7200s',
+      },
+      exerciseType: 'RUNNING',
+      route: Array.from({ length: points }, (_, index) => ({
+        time: new Date(Date.parse('2026-08-18T06:00:00Z') + index * 60_000).toISOString(),
+        latitude: Number((52.1 + index * 0.001).toFixed(6)),
+        longitude: Number((4.3 + index * 0.001).toFixed(6)),
+      })),
     },
   }])
 }
@@ -447,6 +494,86 @@ describe('replayPerson', () => {
     expect(attrs.activeDuration).toBe('1680s')
     expect(attrs.splits).toHaveLength(1)
     expect((attrs.splits as Record<string, unknown>[])[0]?.splitType).toBe('DISTANCE')
+  })
+
+  // Task 4b: sessionRoutes cascades off sessions (its schema comment says so), so runRebuild
+  // emptying a person's tier 2 before replaying takes every route with it. mapSessions has
+  // returned routes since Task 2, and replay used to receive them and discard them, so a rebuild
+  // permanently lost a household's GPS tracks while the archive still held the points. This is
+  // the test that would have caught it: an archived route present before replay is asserted
+  // gone, exactly as a real rebuild leaves it, and replay alone has to put it back in order.
+  test('a rebuild regenerates a session route from the archive, in order', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'exercise', requestParams: listParams,
+      windowStartMs: Date.parse('2026-08-18T00:00:00Z'),
+      windowEndMs: Date.parse('2026-08-19T00:00:00Z'),
+      fetchedAtMs: 1, httpStatus: 200,
+      body: exerciseBodyWithRoute(),
+    })
+
+    // The state a person carrying an older mapping version is in when the rebuild starts:
+    // runRebuild has already emptied tier 2, sessionRoutes included, before replayPerson runs.
+    expect(db.select().from(sessionRoutes).all()).toHaveLength(0)
+
+    const counts = db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    expect(counts.routes).toBe(3)
+    const rows = db.select().from(sessionRoutes).orderBy(asc(sessionRoutes.ordinal)).all()
+    expect(rows.map((r) => [r.latitude, r.longitude])).toEqual([
+      [52.10, 4.30], [52.11, 4.31], [52.12, 4.32],
+    ])
+    expect(rows.map((r) => r.ordinal)).toEqual([0, 1, 2])
+    expect(rows[0]?.altitudeMetres).toBe(3.2)
+    expect(rows[1]?.altitudeMetres).toBeNull()
+    expect(rows[2]?.horizontalAccuracyMetres).toBe(5)
+  })
+
+  // The delete the test above cannot see. Regenerating a route proves replay WRITES one; it does
+  // not prove replay REPLACES one, and the route delete beside the segments delete could be
+  // removed with every test in this file still green, which is how the gap was found.
+  //
+  // Finding the case that does discriminate took two attempts, and the first is worth recording
+  // because it looked right: archiving one workout in two overlapping windows, the state
+  // SyncCursors.OVERLAP_MS routinely produces. That test passed with the delete removed, because
+  // replay writes one session once per pass however many payloads carry it - measured, three route
+  // rows written, not eight. It asserted something true and proved nothing about the delete.
+  //
+  // What the delete actually guarantees is that replayPerson is idempotent: replaying an archive
+  // over tier 2 that already holds its own output. runRebuild empties tier 2 first, so the whole
+  // rebuild path hides this, but replayPerson is exported and a caller that skips the emptying is
+  // not doing anything the function forbids. Without the delete the second pass collides on the
+  // route id and the savepoint throws UNIQUE constraint failed, which is a silently dropped page
+  // (#274) rather than a loud failure.
+  test('replays an archive over its own output without stacking a second copy of the route', () => {
+    const db = freshDb()
+    seedPerson(db, 'p1')
+    const archive = new RawArchive(db)
+    archive.put({
+      personId: 'p1', dataType: 'exercise', requestParams: listParams,
+      windowStartMs: Date.parse('2026-08-18T00:00:00Z'),
+      windowEndMs: Date.parse('2026-08-19T00:00:00Z'),
+      fetchedAtMs: 1, httpStatus: 200,
+      body: exerciseBodyWithRouteOfLength(5),
+    })
+    const replay = () => db.transaction((tx) => replayPerson(tx, {
+      personId: 'p1', payloads: archive.listFor('p1'), archive,
+      sources: new SourceRegistry(db), nowMs: 1, client: db.$client,
+    }))
+
+    expect(replay().routes).toBe(5)
+    const second = replay()
+    expect(second.unmappable, 'the second pass dropped the page instead of replaying it').toBe(0)
+
+    const rows = db.select().from(sessionRoutes).orderBy(asc(sessionRoutes.ordinal)).all()
+    expect(rows, 'the second pass stacked another copy of the route').toHaveLength(5)
+    expect(new Set(rows.map((r) => r.sessionId)).size).toBe(1)
+    expect(rows.map((r) => r.ordinal)).toEqual([0, 1, 2, 3, 4])
   })
 
   // The bug this pins: electrocardiogram declares target: 'sessions' with

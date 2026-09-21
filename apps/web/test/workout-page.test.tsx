@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { I18nProvider } from '../src/i18n/index.js'
 import type { Session } from '../src/auth/session.js'
-import type { WorkoutSession } from '../src/data/useSessions.js'
+import type { RoutePoint, WorkoutSession } from '../src/data/useSessions.js'
 import type { BanisterBasis } from '@haelan/core/cardio-load'
 import type { FilledSplit } from '@haelan/core/split-heart-rate'
 import { WorkoutDetail } from '../src/pages/WorkoutDetail.js'
@@ -60,6 +60,24 @@ export const RUN: WorkoutSession = {
 /** A session carrying nothing but its span: every optional card must be absent. */
 const BARE: WorkoutSession = {
   ...RUN, id: 'bare', attrs: { exerciseType: 'WALKING' },
+}
+
+/** A Google session that says plainly there was nothing to record - the one case with no sentence
+ *  at all, now that an absent exerciseMetadata means "unknown" rather than "false" (Task 7). */
+const NO_GPS: WorkoutSession = {
+  ...RUN, id: 'no-gps', attrs: { exerciseType: 'WALKING', exerciseMetadata: { hasGps: false } },
+}
+
+/** A companion session: no exerciseMetadata at all, the same shape SyncEngine.kt sends today
+ *  (task-3-report.md). Paired with a `route` below to cover both of its sentences: none when a
+ *  route has points, the "could not read" one when it has none. */
+const PHONE: WorkoutSession = {
+  ...RUN, id: 'phone', sourceId: 'phone', attrs: { exerciseType: 'RUNNING' },
+}
+
+const ROUTE_POINT: RoutePoint = {
+  atMs: Date.UTC(2026, 7, 3, 6, 10), latitude: 52.1, longitude: 4.3,
+  altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null,
 }
 
 const BASIS: BanisterBasis = {
@@ -175,7 +193,7 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
-  it('says a route was recorded only when the session says one was', async () => {
+  it('says a Google route was recorded and unreachable, when the provider flagged one and sent no points', async () => {
     const restore = stub({ run1: RUN })
     try {
       const { client, html } = mount(<WorkoutDetail />)
@@ -186,13 +204,61 @@ describe('the workout page', () => {
     } finally { restore() }
   })
 
-  it('says nothing about a route when no GPS flag was recorded', async () => {
-    window.history.replaceState(null, '', '/activity/bare')
-    const restore = stub({ bare: BARE })
+  it('says nothing about a route when the provider said plainly there was nothing to record', async () => {
+    window.history.replaceState(null, '', '/activity/no-gps')
+    const restore = stub({ 'no-gps': NO_GPS })
     try {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('says nothing about GPS for a companion session with no exerciseMetadata and no points', async () => {
+    // PHONE carries no exerciseMetadata at all - the shape SyncEngine.kt sends - so hasGps is
+    // null, meaning this app has no metadata to speak from rather than a provider saying there was
+    // no route.
+    //
+    // This used to print "a GPS route may have been recorded, this app was not able to read it".
+    // hasGps is null for EVERY companion session, so that sentence appeared under every workout
+    // synced from a phone, an indoor yoga session as readily as a run, and it was false besides:
+    // the app now asks for READ_EXERCISE_ROUTES and reads routes. A workout that reaches here has
+    // no route points, which is overwhelmingly a workout that had no route, and the cases hiding
+    // inside that are indistinguishable from the server. Saying nothing is the honest answer.
+    window.history.replaceState(null, '', '/activity/phone')
+    const restore = stub({ phone: PHONE })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('still says a route exists when the provider itself claims one', async () => {
+    // The floor under the test above: hasGps true is Google's own claim of a route its API will
+    // not send, and that sentence is the one case where this app knows more than it can draw. If
+    // dropping the null sentence had swallowed this one too, the test above would still pass while
+    // the page went silent about every Google workout that recorded a route.
+    window.history.replaceState(null, '', '/activity/run1')
+    const restore = stub({ run1: RUN })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route was recorded for this workout. This API does not return route points, so there is no map.',
+      )
+    } finally { restore() }
+  })
+
+  it('says the route is drawn below for a companion session that carried points, and drops the unreadable sentence', async () => {
+    window.history.replaceState(null, '', '/activity/phone')
+    const restore = stub({ phone: { ...PHONE, route: [ROUTE_POINT] } as WorkoutSession })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route was recorded for this workout, drawn below.',
+      )
     } finally { restore() }
   })
 
@@ -402,6 +468,26 @@ describe('the workout stat tiles', () => {
       const tiles = [...(container?.querySelectorAll('.workout-tiles .card') ?? [])]
       const edwardsTile = tiles.find((tile) => tile.querySelector('.label')?.textContent === 'Cardio load (Edwards)')
       expect(edwardsTile?.querySelector('.value')?.textContent).toBe('0 TRIMP')
+    } finally { restore() }
+  })
+})
+
+// Same shape as the splits fix below: WorkoutRoute.tsx's own card-level tests (workout-route-
+// card.test.tsx) cover its rendering in isolation, but nothing there proves this page actually
+// hands it `query.data.route` rather than, say, `query.data.autoSplits` by a copy-paste mistake.
+// RUN itself carries no `route` field (a plain WorkoutSession, not a WorkoutSessionDetail), so the
+// absence case is already exercised by every other test in this file; this pins the presence case.
+describe('the route card', () => {
+  it('renders the route card when the session response carries recorded points', async () => {
+    const loaded = { ...RUN, route: [
+      { atMs: 0, latitude: 52.00, longitude: 5, altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+      { atMs: 1000, latitude: 52.01, longitude: 5, altitudeMetres: null, horizontalAccuracyMetres: null, verticalAccuracyMetres: null },
+    ] }
+    const restore = stub({ run1: loaded })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-route-svg')).not.toBeNull()
     } finally { restore() }
   })
 })
