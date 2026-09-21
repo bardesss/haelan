@@ -618,7 +618,8 @@
     },
     "intradayBasis": {
       "thinned": "{{from}} metingen teruggebracht tot {{to}} punten",
-      "full": "deze {{count}} punten zijn de metingen"
+      "full_one": "dit {{count}} punt is de meting",
+      "full_other": "deze {{count}} punten zijn de metingen"
     },
     "hypnogram": {
       "awakeNote": "Wakker telt alleen de wakkere fasen die hierboven getekend zijn. De wakkere minuten van de nacht tellen daarnaast onrustige tijd en de gaten tussen de losse delen van de nacht mee, dus dat getal ligt hoger."

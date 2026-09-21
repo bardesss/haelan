@@ -577,7 +577,7 @@ describe('the workout page\'s own ?source= parameter', () => {
       expect(traceCard, 'the trace card was absent').not.toBeUndefined()
       expect(traceCard?.querySelector('.basis')?.textContent).toBe(
         'Pixel Watch 4 recorded no heart rate in this window, so this is every other device instead; '
-        + 'these 1 points are the readings',
+        + 'this 1 point is the reading',
       )
     } finally { globalThis.fetch = original }
   })
