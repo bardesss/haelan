@@ -185,8 +185,12 @@ jobs:
     # The tag must move with the dependency. A container whose browsers are a different build from
     # the `playwright` package driving them is the one way this arrangement breaks, and it breaks
     # loudly at launch rather than quietly.
+    #
+    # scripts/test/playwright-pin-parity.test.ts holds the two in step, because a dependency bump
+    # cannot edit a workflow: the first one to arrive moved playwright to 1.63.0 and left this at
+    # 1.56.0, and the drift cost a CI round trip on this job to find.
     container:
-      image: mcr.microsoft.com/playwright:v1.56.0-noble
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     # A ceiling regardless. This job drives two real browsers and can wait on a network or on a page
     # that never settles, and without one it does not fail, it runs to the six hour default, which is
     # worse than a red check because nobody watches a job that is still running.
