@@ -31,15 +31,23 @@ function clock(utcMs: number, timeZone: string, language: string): string {
  * run. It was also false by then: the app could not read routes at all when that sentence was
  * written, and now asks for the permission and reads them.
  *
- * What is left in the null case is a workout with no route points, which is overwhelmingly a
- * workout that had no route. The two cases hiding inside it - a route recorded by another app that
- * never shared it, and a household that refused route access - are indistinguishable here, because
- * both reach the server as the same absence. Saying nothing is the honest answer to a question
- * this surface cannot answer; a sentence about GPS under a yoga session is not.
+ * `routeConsentRequired` is the one thing that can be said about a session with no points, and it
+ * is said before `hasGps` because it is the more specific claim. It means the phone found a track
+ * and Health Connect would not release it without a per-session confirmation the headless sync
+ * cannot ask for, which is a different answer from "there was no route" and the only one worth a
+ * sentence.
+ *
+ * Everything else with no points says nothing. That is deliberate and it replaced a sentence that
+ * said the wrong thing: `hasGps` is null for EVERY companion session, so "a GPS route may have
+ * been recorded, this app was not able to read it" used to print under every workout synced from a
+ * phone, an indoor yoga session as readily as a run. A workout that reaches the end of this
+ * function has no route points and nothing claiming one exists, which is overwhelmingly a workout
+ * that had no route.
  */
-function gpsSentenceKey(hasGps: boolean | null, routePointCount: number): string | null {
+function gpsSentenceKey(detail: WorkoutDetail, routePointCount: number): string | null {
   if (routePointCount > 0) return 'activity.workout.gpsDrawn'
-  if (hasGps === true) return 'activity.workout.gps'
+  if (detail.routeConsentRequired) return 'activity.workout.gpsConsentRequired'
+  if (detail.hasGps === true) return 'activity.workout.gps'
   return null
 }
 
@@ -68,7 +76,7 @@ export function WorkoutHeader({ session, detail, timezone, route }: {
   // name is what the person called this workout, and repeating the type beside it says the same
   // thing twice on the 197 of 197 sessions that carry a displayName.
   const title = detail.displayName ?? exerciseTypeLabel(t, summary.exerciseType)
-  const gpsKey = gpsSentenceKey(detail.hasGps, (route ?? []).length)
+  const gpsKey = gpsSentenceKey(detail, (route ?? []).length)
 
   return (
     <header className="workout-header">

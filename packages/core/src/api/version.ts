@@ -64,5 +64,18 @@
  * re-derives exactly what version 5 did, so the version stays 5 - packages/core/test/
  * mapping-version.test.ts pins the equivalence with the same Google fixture shapes map-samples.
  * test.ts and map-sessions.test.ts already use.
+ *
+ * A seventh was proposed for `routeConsentRequired`, and declined on the same test. mapSessions
+ * now carries that key from the exercise payload into a session's attrs, so a household can be
+ * told the difference between a workout with no route and a route Health Connect would not
+ * release. Only the companion app ever writes it, and only from the version that added it: no
+ * archived body predating that carries the key, so `valueAt(payload, 'routeConsentRequired')` is
+ * undefined for every one of them and the attr maps to the same null the pre-change mapper would
+ * have left there by not writing the field at all. A rebuild under this code re-derives exactly
+ * what version 5 did, for every payload any household actually holds, so the version stays 5.
+ *
+ * The distinction reaches a new upload without a rebuild, because ingest maps and writes it at the
+ * point it arrives. What a bump would buy is a re-map of history, and history has nothing to
+ * re-map: the field did not exist when those workouts were sent.
  */
 export const MAPPING_VERSION = 5

@@ -18,6 +18,22 @@ describe('workoutDetail', () => {
     expect(d.poolLengthMeters).toBe(25)
   })
 
+  it('reports a withheld route as true, and every silent session as false', () => {
+    // A boolean rather than a third null state, unlike hasGps: only the companion app can say this,
+    // and it only says it when Health Connect refused to release a track it has. Everything else -
+    // every Google session, every indoor workout - is a plain false, which the page reads as
+    // nothing worth a sentence.
+    expect(workoutDetail({ routeConsentRequired: true }).routeConsentRequired).toBe(true)
+    expect(workoutDetail({}).routeConsentRequired).toBe(false)
+  })
+
+  it('is not fooled by a value that merely looks true', () => {
+    // attrs is parsed from an archived body, so anything can be in this field. A truthy string
+    // would otherwise tell a household their route was withheld on the strength of a typo.
+    expect(workoutDetail({ routeConsentRequired: 'true' }).routeConsentRequired).toBe(false)
+    expect(workoutDetail({ routeConsentRequired: 1 }).routeConsentRequired).toBe(false)
+  })
+
   it('reports hasGps null rather than false when the metadata is absent, false when the provider said so itself', () => {
     // Task 7: a companion session with no exerciseMetadata at all is not a session Google told us
     // carried no route - it is a session this app has no metadata for, and false would claim the
