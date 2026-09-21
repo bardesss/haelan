@@ -168,6 +168,7 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
         displayName: valueAt(payload, 'displayName') ?? null,
         notes: valueAt(payload, 'notes') ?? null,
         exerciseMetadata: valueAt(payload, 'exerciseMetadata') ?? null,
+        routeConsentRequired: valueAt(payload, 'routeConsentRequired') ?? null,
       }),
       rawPayloadId: input.rawPayloadId,
     })
@@ -203,6 +204,11 @@ export function mapSessions(input: MapSessionsInput): { sessions: SessionRow[], 
     //     ]
     //   }
     // }
+    //
+    // `routeConsentRequired` is a sibling of `route` on that same object, sent as `true` and only
+    // when Health Connect is holding a route back rather than saying there is none. A workout with
+    // no route at all sends neither key, so the absence of both keeps meaning what it always meant.
+    // The two are never both meaningful: a route that arrived did not need consent.
     //
     // horizontalAccuracyMetres and verticalAccuracyMetres ride beside altitudeMetres in each route
     // entry, on the same footing: all three are independently optional, present only when Health

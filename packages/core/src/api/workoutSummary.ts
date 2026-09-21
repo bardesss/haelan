@@ -140,6 +140,18 @@ export interface WorkoutDetail {
    * old one-sentence copy did, and it was a lie about that exact session.
    */
   hasGps: boolean | null
+  /**
+   * A route that exists and was not released, as opposed to a workout that has none.
+   *
+   * `hasGps` cannot carry this. It is null for every companion session, because Health Connect has
+   * no such field, and that null is the ordinary state rather than a signal. This is the phone
+   * saying something specific: Health Connect answered ConsentRequired, so there IS a track and it
+   * is behind a per-session consent the headless sync cannot ask for.
+   *
+   * false is the answer for every session that did not say so, including every Google one, which
+   * is why it is a boolean rather than a third null: nothing else in the system can produce it.
+   */
+  routeConsentRequired: boolean
   poolLengthMeters: number | null
   runVo2Max: number | null
   averageSpeedMetersPerSecond: number | null
@@ -312,6 +324,9 @@ export function workoutDetail(attrs: unknown): WorkoutDetail {
     notes: typeof record.notes === 'string' ? record.notes : null,
     activeDurationSeconds: durationSecondsOrNull(record.activeDuration),
     hasGps: typeof metadata.hasGps === 'boolean' ? metadata.hasGps : null,
+    // Strictly true, never truthy: this is read straight off an archived body, so a string or a
+    // number that drifted into the field must not read as a household's route being withheld.
+    routeConsentRequired: record.routeConsentRequired === true,
     poolLengthMeters: poolLengthMillimeters === null
       ? null
       : poolLengthMillimeters / MILLIMETERS_PER_METER,

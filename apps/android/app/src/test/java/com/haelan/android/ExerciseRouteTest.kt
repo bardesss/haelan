@@ -127,4 +127,31 @@ class ExerciseRouteTest {
         assertNull(SyncEngine.routeJson(ExerciseRouteResult.NoData()))
         assertNull(SyncEngine.routeJson(ExerciseRouteResult.ConsentRequired()))
     }
+
+    @Test
+    fun `routeConsentRequired separates a withheld route from a workout that has none`() {
+        // The reason the field exists: routeJson answers null for both of these, and to somebody
+        // looking at a workout with no map they mean opposite things. NoData is a session with no
+        // track. ConsentRequired is a track that exists and was not released.
+        assertTrue(SyncEngine.routeConsentRequired(ExerciseRouteResult.ConsentRequired()))
+        assertFalse(SyncEngine.routeConsentRequired(ExerciseRouteResult.NoData()))
+    }
+
+    @Test
+    fun `a workout with no route sends neither the route nor the flag`() {
+        // The ordinary case, and the one that has to stay silent: this is what every indoor session
+        // sends, and the absence of both keys must keep meaning "nothing to say" rather than
+        // turning into a sentence under every workout synced from a phone.
+        //
+        // The other half of this pair - a ConsentRequired session putting the flag ON the exercise
+        // payload - cannot be written here at all: the ExerciseSessionRecord constructor that
+        // carries an ExerciseRouteResult is Kotlin-internal to connect-client, so no test in this
+        // file can build that record. The placement is guarded instead by reading the real Kotlin
+        // in scripts/test/android-session-name-placement.test.ts, the same way the session `name`
+        // beside it is.
+        val point = SyncEngine.toExercisePoints(listOf(session(null))).single()
+        val exercise = point.getJSONObject("exercise")
+        assertFalse(exercise.has("route"))
+        assertFalse(exercise.has("routeConsentRequired"))
+    }
 }

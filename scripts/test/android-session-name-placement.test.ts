@@ -113,3 +113,44 @@ describe('SyncEngine.kt: session name stays a sibling of its payload', () => {
     assertNameIsSiblingOfPayload('toExercisePoints', 'exercise')
   })
 })
+
+/**
+ * The two route keys go ON the exercise payload, and only source can say so.
+ *
+ * ExerciseRouteTest.kt cannot reach this: the ExerciseSessionRecord constructor that carries an
+ * ExerciseRouteResult is Kotlin-internal to connect-client, so no unit test can build a record
+ * whose route was withheld, and the branch that writes `routeConsentRequired` never runs in a
+ * test. What is left is the text, which is enough to catch the one mistake that matters - a key
+ * written onto the POINT instead of the payload.
+ *
+ * That mistake is not hypothetical here. The session `name` shipped one level too deep on this
+ * exact function, every test stayed green, and the core fixture agreed with the bug because it was
+ * a hand copy. mapSessions.ts reads both of these off the payload object, beside `interval` and
+ * `exerciseType`.
+ */
+describe('SyncEngine.kt: the route keys sit on the exercise payload', () => {
+  const body = functionBody('toExercisePoints')
+
+  it.each(['route', 'routeConsentRequired'])("puts %s on the payload, not on the point", (key) => {
+    expect(
+      body.includes(`exercise.put("${key}"`),
+      `${SYNC_ENGINE_PATH}: 'toExercisePoints' does not call 'exercise.put("${key}", ...)'. That `
+      + 'call is what puts the key on the exercise payload object, the level mapSessions.ts reads '
+      + 'it at. If it moved to the point-level chain it is now a sibling of "exercise" rather than '
+      + 'a field inside it, core will never look there, and nothing else in this repository would '
+      + 'go red - the Kotlin test cannot build a withheld route at all.',
+    ).toBe(true)
+  })
+
+  it('sends the flag only when a route was withheld, never unconditionally', () => {
+    // An unconditional put would print the sentence under every workout from a phone, which is the
+    // defect the removed "may have been unreadable" sentence already was.
+    expect(
+      /if \(routeConsentRequired\([^)]*\)\) exercise\.put\("routeConsentRequired", true\)/.test(body),
+      `${SYNC_ENGINE_PATH}: 'routeConsentRequired' is no longer put behind a routeConsentRequired() `
+      + 'check. Sent unconditionally it would claim every workout had a route withheld, including '
+      + 'every indoor session, which is the same wrong sentence under every workout that this '
+      + 'field exists to replace.',
+    ).toBe(true)
+  })
+})

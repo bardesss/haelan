@@ -939,6 +939,9 @@ object SyncEngine {
         // only when there is one to send and leaves every other point exactly as it was before
         // this task touched it.
         routeJson(record.exerciseRouteResult)?.let { exercise.put("route", it) }
+        // Only when Health Connect is holding a route back. A workout that simply has none sends
+        // nothing here, so the absence of this key keeps meaning what it already meant.
+        if (routeConsentRequired(record.exerciseRouteResult)) exercise.put("routeConsentRequired", true)
         JSONObject()
             // Same reasoning as the sleep mapper just above, and the same sibling placement:
             // the record's own id survives a revised start instead of minting a second session
@@ -967,6 +970,23 @@ object SyncEngine {
     // internal for the same reason toExercisePoints is: ExerciseRouteResult.ConsentRequired is
     // public and constructible, but the ExerciseSessionRecord constructor that would carry one is
     // Kotlin-internal to connect-client, so this is the only way a test reaches that branch at all.
+    /**
+     * Whether Health Connect is withholding a route rather than saying there is none.
+     *
+     * routeJson answers null for both, which is right for what gets sent and wrong for what gets
+     * said about it. `NoData` is a workout with no route: an indoor session, or one nobody
+     * recorded a track for, and there is nothing to tell the household. `ConsentRequired` is a
+     * route that EXISTS and was not released, because the app that recorded it keeps its routes
+     * behind Health Connect's own per-session consent - a separate system intent
+     * (`android.health.connect.action.REQUEST_EXERCISE_ROUTE`) keyed on one session at a time,
+     * which needs a foreground Activity this headless sync does not have.
+     *
+     * Those are opposite answers to "why is there no map", and collapsing them meant the page
+     * could only stay silent. This carries the difference far enough for it to be said.
+     */
+    internal fun routeConsentRequired(result: ExerciseRouteResult): Boolean =
+        result is ExerciseRouteResult.ConsentRequired
+
     internal fun routeJson(result: ExerciseRouteResult): JSONArray? {
         val points = (result as? ExerciseRouteResult.Data)?.exerciseRoute?.route ?: return null
         if (points.isEmpty()) return null

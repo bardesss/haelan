@@ -68,6 +68,13 @@ const NO_GPS: WorkoutSession = {
   ...RUN, id: 'no-gps', attrs: { exerciseType: 'WALKING', exerciseMetadata: { hasGps: false } },
 }
 
+/** A companion session whose route Health Connect would not release: no points, and a flag saying
+ *  a track exists behind a per-session consent the headless sync cannot ask for. The one case with
+ *  no points that still has something true to say. */
+const WITHHELD: WorkoutSession = {
+  ...RUN, id: 'withheld', attrs: { exerciseType: 'RUNNING', routeConsentRequired: true },
+}
+
 /** A companion session: no exerciseMetadata at all, the same shape SyncEngine.kt sends today
  *  (task-3-report.md). Paired with a `route` below to cover both of its sentences: none when a
  *  route has points, the "could not read" one when it has none. */
@@ -211,6 +218,36 @@ describe('the workout page', () => {
       const { client, html } = mount(<WorkoutDetail />)
       await settled(client, html)
       expect(container?.querySelector('.workout-gps')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('says a route was withheld, when the phone said so', async () => {
+    // The one thing that can honestly be said about a workout with no route drawn: the track
+    // exists and Health Connect did not release it. This is the sentence issue #330 asked for, and
+    // the reason the blanket "may have been unreadable" one was removed rather than kept.
+    window.history.replaceState(null, '', '/activity/withheld')
+    const restore = stub({ withheld: WITHHELD })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route was recorded for this workout. Health Connect only releases a route after a separate confirmation for that one workout, which the phone sync cannot ask for on its own, so there is no map.',
+      )
+    } finally { restore() }
+  })
+
+  it('draws the route instead of explaining itself, when the points did arrive', async () => {
+    // Consent granted since, or a different app: the flag can still be on the session while the
+    // points are there, and points always win. A page that showed both would tell a household its
+    // route was withheld directly above the route.
+    window.history.replaceState(null, '', '/activity/withheld')
+    const restore = stub({ withheld: { ...WITHHELD, route: [ROUTE_POINT] } as WorkoutSession })
+    try {
+      const { client, html } = mount(<WorkoutDetail />)
+      await settled(client, html)
+      expect(container?.querySelector('.workout-gps')?.textContent).toBe(
+        'A GPS route was recorded for this workout, drawn below.',
+      )
     } finally { restore() }
   })
 

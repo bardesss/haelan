@@ -67,6 +67,35 @@ const attrsOf = (point: unknown): Record<string, unknown> => {
   return JSON.parse(sessions[0]?.attrs ?? '{}') as Record<string, unknown>
 }
 
+describe('mapSessions carries a withheld route into attrs', () => {
+  // The companion app sends this beside `route` on the exercise payload when Health Connect
+  // answered ConsentRequired: a track that exists and was not released, as opposed to a workout
+  // with no track. Both arrive as no route points, which is why the flag has to be carried
+  // separately for anything downstream to tell them apart.
+  it('keeps the flag a workout sends when its route was withheld', () => {
+    const attrs = attrsOf({
+      ...aBareWorkout,
+      exercise: { ...aBareWorkout.exercise, routeConsentRequired: true },
+    })
+    expect(attrs.routeConsentRequired).toBe(true)
+  })
+
+  it('leaves it null for a workout that says nothing about a route', () => {
+    // Every Google session, and every companion session with nothing to withhold. Null rather than
+    // false, the same as every other unmapped field here: this is the mapper reporting the payload
+    // was silent, and workoutDetail is where that becomes a boolean.
+    expect(attrsOf(aBareWorkout).routeConsentRequired).toBeNull()
+  })
+
+  it('reads it off the payload, not off the point beside it', () => {
+    // The level mistake this wire shape has already made once, with `name`. A flag put on the point
+    // rather than inside `exercise` must not be picked up, or the guard in SyncEngine.kt that keeps
+    // the app writing it in the right place would be guarding nothing.
+    const attrs = attrsOf({ ...aBareWorkout, routeConsentRequired: true })
+    expect(attrs.routeConsentRequired).toBeNull()
+  })
+})
+
 describe('mapSessions carries the exercise detail fields into attrs', () => {
   it('keeps both split arrays, each entry whole', () => {
     const attrs = attrsOf(aRunWithEverything)

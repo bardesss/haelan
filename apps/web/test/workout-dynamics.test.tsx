@@ -16,7 +16,7 @@ import type { WorkoutDetail } from '@haelan/core/workout-summary'
  */
 
 const EMPTY: WorkoutDetail = {
-  displayName: null, notes: null, activeDurationSeconds: null, hasGps: false,
+  displayName: null, notes: null, activeDurationSeconds: null, hasGps: false, routeConsentRequired: false,
   poolLengthMeters: null, runVo2Max: null, averageSpeedMetersPerSecond: null,
   totalSwimLengths: null, zones: null, mobility: null, autoSplits: [], laps: [], events: [],
 }
