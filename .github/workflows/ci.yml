@@ -229,7 +229,7 @@ jobs:
       # writes, leaving nothing restored to survive into the build. That is the stale-fixture bug
       # review already closed once, left closed.
       - id: fixtures
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: demo/capture/out
           key: demo-fixtures-${{ hashFiles('demo/capture/**', 'scripts/capture-demo.mjs', 'scripts/seed-demo.mjs', 'apps/server/src/routes/v1/**', 'packages/core/src/**', 'apps/web/src/**') }}
