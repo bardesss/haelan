@@ -46,7 +46,7 @@ catching them is a standing part of how the project is built rather than a past 
      page is built from. Do not edit between the markers by hand: a test regenerates this and fails
      when it disagrees. -->
 <!-- screenshots:start -->
-![The Hælan dashboard: daily steps, resting heart rate, sleep and recovery, with charts for the month.](assets/screenshots/dashboard.png)
+![The Hælan dashboard: a recovery index, daily steps, resting heart rate, sleep and mean heart rate, each with a chart for the month and a comparison against the period before it.](assets/screenshots/dashboard.png)
 
 ![The Activity page: a year heatmap of daily movement above a list of workouts, each with its distance, duration and average heart rate.](assets/screenshots/activity.png)
 
