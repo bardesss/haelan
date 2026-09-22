@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import type { QueryClient, UseMutationResult, UseQueryResult } from '@tanstack/react-query'
 import type { OverrideScope } from '@haelan/core/target-key'
+import { RECOVERY_HARVEST_EVENT_KIND } from '@haelan/core/recovery-index'
 import { apiGet, apiSend, ApiError } from '../api/client.js'
 import { queryKeys } from '../api/queryKeys.js'
 import { useSession } from '../auth/session.js'
@@ -138,6 +139,39 @@ export function overridesPath(personId: string): string {
 }
 
 /**
+ * Every event except a harvested Google recovery score.
+ *
+ * `admin.ts harvest-recovery` stores one event per day, carrying the herstelscore read off Google's
+ * own app by hand - the only way to get it at all, since no API exposes it (not v4, not Health
+ * Connect, not the companion). They exist so probe-recovery-calibration.mjs can fit this app's
+ * recovery index against Google's, and they are instrumentation about the index, not something a
+ * person recorded about their day.
+ *
+ * Reading them as ordinary events made a household's twenty harvested days read as twenty flagged
+ * days on the Dashboard, put a marker on every one of them on every chart, and filled the Notes
+ * page with rows nobody wrote. All three are surfaces that mean "here is what you said about these
+ * days", and the answer they were giving was "you said the calibration ran".
+ *
+ * Filtered here rather than in each of the three, because three filters are three chances for one
+ * of them to drift, and this hook is the single read all of them go through. Not filtered on the
+ * server, which would take the rows out of the export as well: the archive should keep them, and
+ * `harvest-recovery` itself reads them back to decide what to replace.
+ *
+ * The correction path does not go through the UI and so loses nothing by this: re-running
+ * `harvest-recovery` replaces a date's score rather than duplicating it (admin.ts says so in as
+ * many words), which is what makes hiding the rows safe rather than a trap.
+ */
+/*
+ * `items` defensively, not `data.items`, and dashboard-cards.test.tsx is what insisted: a `select`
+ * that throws is an ERRORED query to react-query, not a query with odd data. Every reader here
+ * already writes `data?.items ?? []` because a response can arrive without the field, and a bare
+ * `data.items.filter` turned that tolerated case into "This did not load." on the flagged days
+ * card - a filter added to hide three rows, breaking the card it was added to fix.
+ */
+export const withoutHarvest = (data: { items?: StoredEvent[] }): { items: StoredEvent[] } =>
+  ({ items: (data?.items ?? []).filter((event) => event.kind !== RECOVERY_HARVEST_EVENT_KIND) })
+
+/**
  * The three list reads a panel or a management page needs for one range: notes and events scoped
  * to it, and every override regardless of it. personId comes from the session, never from a
  * parameter, the same guarantee useSeries makes and for the same reason: an account owns exactly
@@ -162,6 +196,7 @@ export function useAnnotations(range: AnnotationRange): {
     queryKey: queryKeys.resource(personId ?? '', 'events', { from: range.from, to: range.to }),
     enabled,
     queryFn: () => apiGet<{ items: StoredEvent[] }>(eventsPath(personId!, range)),
+    select: withoutHarvest,
   })
 
   const overrides = useQuery({
