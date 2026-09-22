@@ -75,3 +75,48 @@ jobs:
           # tag, and that commit is a release-please chore rather than anything a reader wants.
           git tag -a "$TAG" -m "Hælan $VERSION for Android. See apps/android/CHANGELOG.md for what changed."
           git push origin "$TAG"
+
+      # The other half of what skip-github-release leaves undone, and the more damaging half.
+      #
+      # release-please flips a merged release pull request from `autorelease: pending` to
+      # `autorelease: tagged` as part of cutting the GitHub release. apps/android sets
+      # skip-github-release (release-please-config.json says why: android-release.yml creates the
+      # release itself, with the `Android <version>` title Obtainium filters on), so that step
+      # never runs for this path and the pull request stays `pending` forever.
+      #
+      # That is not cosmetic and it is not confined to Android. A merged release pull request still
+      # marked pending is, to release-please, an untagged release outstanding - and it aborts the
+      # WHOLE run when it finds one, every path included:
+      #
+      #   ⚠ There are untagged, merged release PRs outstanding - aborting
+      #
+      # So one Android release silently stops every release pull request in the repository. It has
+      # happened three times: #315 and #319 were unstuck by stripping their labels by hand, and
+      # #329 was not, which left the root package unreleased across eight merges before anyone
+      # asked why. release.yml's own permissions block already warns about this failure mode from
+      # the other direction ("that is what happened to 1.15.0"); this closes the gap that the
+      # Android path opens by construction rather than by failure.
+      #
+      # Idempotent like the tagging above: no pending pull request is the normal state on a re-run,
+      # on a hand-pushed tag, and on a version released before this existed.
+      - name: Tell release-please this one is done with
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          VERSION: ${{ steps.app.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          # Matched on the exact title release-please builds from its own configured pattern
+          # ("chore${scope}: release${component} ${version}" with component `android`), not on a
+          # search for the version alone: a feature pull request mentioning the version in its
+          # title would otherwise be a candidate for relabelling.
+          TITLE="chore(master): release android $VERSION"
+          NUMBER=$(gh pr list --repo "$REPO" --state merged --limit 30 \
+            --json number,title,labels \
+            --jq "[.[] | select(.title == \"$TITLE\") | select(any(.labels[]; .name == \"autorelease: pending\")) | .number] | first // empty")
+          if [ -z "$NUMBER" ]; then
+            echo "no merged release pull request for $VERSION is still pending, nothing to do"
+            exit 0
+          fi
+          echo "marking #$NUMBER tagged, so release-please stops treating it as outstanding"
+          gh pr edit "$NUMBER" --repo "$REPO" \
+            --add-label "autorelease: tagged" --remove-label "autorelease: pending"
