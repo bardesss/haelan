@@ -403,6 +403,17 @@ export function Activity() {
         {card('active_energy', 4, 'activity.activeEnergy.label', 'activity.activeEnergy.basis', 'activity.activeEnergy.basisWorn',
           'activity.activeEnergy.chartLabel', 'activity.units.kcal', 'activity.units.kcalShort', 'higher-is-better')}
 
+        {/* Third in the row with total calories and active energy, which is where it belongs on
+            both counts. All three are what the effort cost, where the four tiles under them count
+            how the time was spent - and it closes that row exactly, leaving the three activity
+            levels a row of their own and the zone minutes card a row of its own. It sat last on
+            the page until this change, alone in a row at a third of the width.
+
+            `controls.to` rather than the whole range: this card is 7 days against 28 by the
+            metric's own definition, so the range picker moves only which day it is asked about,
+            never the width of either window. See useTrainingLoad for why that has to stay true. */}
+        <TrainingLoadCard on={controls.to} source={source} span={4} />
+
         {card('active_minutes_light', 4, 'activity.activeMinutesLight.label', 'activity.activeMinutesLight.basis', 'activity.activeMinutesLight.basis',
           'activity.activeMinutesLight.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_minutes_moderate', 4, 'activity.activeMinutesModerate.label', 'activity.activeMinutesModerate.basis', 'activity.activeMinutesModerate.basis',
@@ -410,15 +421,73 @@ export function Activity() {
         {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
           'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
 
-        {/* These three are labelled AZM rather than minutes, unlike the activity levels above,
-            because the number is a score: a cardio or peak minute is worth two. Measured in
-            probe/findings/activity-minute-overlap.md; see the note in metrics.ts. */}
-        {card('active_zone_minutes_fat_burn', 4, 'activity.activeZoneMinutesFatBurn.label', 'activity.activeZoneMinutesFatBurn.basis', 'activity.activeZoneMinutesFatBurn.basis',
-          'activity.activeZoneMinutesFatBurn.chartLabel', 'activity.units.activeZoneMinutes', 'activity.units.activeZoneMinutesShort', 'higher-is-better')}
-        {card('active_zone_minutes_cardio', 4, 'activity.activeZoneMinutesCardio.label', 'activity.activeZoneMinutesCardio.basis', 'activity.activeZoneMinutesCardio.basis',
-          'activity.activeZoneMinutesCardio.chartLabel', 'activity.units.activeZoneMinutes', 'activity.units.activeZoneMinutesShort', 'higher-is-better')}
-        {card('active_zone_minutes_peak', 4, 'activity.activeZoneMinutesPeak.label', 'activity.activeZoneMinutesPeak.basis', 'activity.activeZoneMinutesPeak.basis',
-          'activity.activeZoneMinutesPeak.chartLabel', 'activity.units.activeZoneMinutes', 'activity.units.activeZoneMinutesShort', 'higher-is-better')}
+        {/* One card for the three, where there used to be three cards.
+            They are labelled AZM rather than minutes, unlike the activity levels above, because
+            the number is a score: a cardio or peak minute is worth two. Measured in
+            probe/findings/activity-minute-overlap.md; see the note in metrics.ts.
+
+            The three are sub-dimensions of one quantity, and three separate cards said so nowhere
+            - each repeated "Active Zone Minutes" in its own label and its own basis line, and the
+            grid scattered them across two rows with unrelated tiles between. One card names the
+            quantity once, states the doubling once, and puts the three figures side by side where
+            they can be compared, which is the only way anybody reads them.
+
+            What this gives up, stated rather than glossed: each had a sparkline, so the daily
+            shape of peak minutes and the tap target that annotates a day are both gone for these
+            three. That is the trade for the density, and it is reversible - the metrics, their
+            series and their chart labels all still exist.
+
+            Gated by hand rather than through MetricCard, the same as the two chart cards above and
+            for the same reason: MetricCard gates one metric and its points, and this card holds
+            three. All three ride the one `sum` request, so one query answers for the card. */}
+        {(() => {
+          const azmQuery = metricGroups.queryFor('active_zone_minutes_fat_burn')
+          const zones = [
+            { metric: 'active_zone_minutes_fat_burn', nameKey: 'activity.activeZoneMinutes.fatBurn' },
+            { metric: 'active_zone_minutes_cardio', nameKey: 'activity.activeZoneMinutes.cardio' },
+            { metric: 'active_zone_minutes_peak', nameKey: 'activity.activeZoneMinutes.peak' },
+          ].map(({ metric, nameKey }) => {
+            const points = values(metricGroups.pointsOf(metric))
+            return { metric, nameKey, points, delta: deltaFor(t, metric, points, 'higher-is-better') }
+          })
+
+          // The delta sentence, said once for the card rather than once per tile.
+          //
+          // Three tiles each carrying their own delta put four basis lines in one card - the
+          // card's own, then the identical "change is the mean of the last N readings against the
+          // first N" under every figure. pages.test.tsx caught it, and it is the exact thing
+          // StatTile's own `basis` prop was added for: a card whose tiles share one sentence says
+          // it once, above them. So the deltas keep their badges (the arrow and the percentage,
+          // which differ per zone and are the point) and hand their basis up to the card.
+          const deltaBasis = zones.find((zone) => zone.delta?.basis !== undefined)?.delta?.basis
+          const azmBasis = [t('activity.activeZoneMinutes.basis', { total: rangeDates.length }), deltaBasis]
+            .filter((part): part is string => part !== undefined && part !== '')
+            .join('; ')
+
+          return (
+            <Card span={12} label={t('activity.activeZoneMinutes.label')} basis={azmBasis}>
+              {azmQuery.isError ? <ErrorState onRetry={() => void azmQuery.refetch()} error={azmQuery.error} />
+                : azmQuery.isPending ? <Loading /> : (
+                <div className="zone-tiles">
+                  {/* The wrapper is load bearing, exactly as WorkoutDynamics.tsx's own comment
+                      says: StatTile is a fragment - a header, a value and a basis as three
+                      siblings, with the box left to its caller - so three tiles dropped bare into
+                      a grid are nine grid items, and the browser lays label, value and label out
+                      across one row. Measured here before the wrapper went back in: the three
+                      figures came out as two rows of mismatched halves. */}
+                  {zones.map(({ metric, nameKey, points, delta }) => (
+                    <div key={metric} className="workout-dynamic-tile">
+                      <StatTile label={t(nameKey)}
+                        value={formatMetricValue(sum(points), metric, i18n.language, '')}
+                        unit={t('activity.units.activeZoneMinutesShort')}
+                        delta={delta === undefined ? undefined : { ...delta, basis: '' }} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )
+        })()}
 
         {card('workout_count', 4, 'activity.workoutCount.label', 'activity.workoutCount.basis', 'activity.workoutCount.basis',
           'activity.workoutCount.chartLabel', 'activity.units.workouts', 'activity.units.workoutsShort', 'neutral')}
@@ -437,11 +506,6 @@ export function Activity() {
             exact call InsightCard's own default makes without a formatValue override. */}
         <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
           label={t('activity.insights.steps')} />
-
-        {/* `controls.to` rather than the whole range: this card is 7 days against 28 by the
-            metric's own definition, so the range picker moves only which day it is asked about,
-            never the width of either window. See useTrainingLoad for why that has to stay true. */}
-        <TrainingLoadCard on={controls.to} source={source} span={4} />
 
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
