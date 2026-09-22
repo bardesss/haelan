@@ -497,17 +497,45 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
 
   // Gated the same way as the chart assertion above: Settings has no StatTile and so no delta at
   // all, and "at least one delta" would be a false claim about a page that draws none.
+  // Asked per card rather than as a count over the page, which is what it used to be.
+  //
+  // One sentence per badge was a proxy for the thing actually worth holding - that a reader
+  // looking at a delta can see what it compared - and it stopped being true the moment a card
+  // carried more than one tile. Activity's zone minutes card holds three, and StatTile's own
+  // `basis` prop exists for exactly that case: the shared sentence moves up to the card and is
+  // said once instead of three times, which pages.test.tsx's own "at most one basis line per card"
+  // requires in the same breath. The two assertions were in direct contradiction, and a count
+  // could not tell "three badges sharing one sentence" apart from "two badges whose sentence is
+  // missing".
+  //
+  // So: every card that draws a delta must state a window somewhere inside itself. That is
+  // stronger than the count in the way that matters (it checks the sentence is in the same card as
+  // the badge, which the page-wide count never did) and weaker only in allowing badges to share.
   it.skipIf(IS_CHART_PAGE[_name] === false)('states the window every delta compared', () => {
-    const deltas = [...html.matchAll(/class="delta"/g)].length
-    const windows = [...html.matchAll(/change is the mean of the last (\d+) readings against the first (\d+)/g)]
-    expect(deltas).toBeGreaterThan(0)
-    expect(windows).toHaveLength(deltas)
-    // A window comparing nothing against nothing is not a window. The old assertion counted these
-    // on a page where every one of them read "the last 0 readings against the first 0".
-    for (const window of windows) {
-      expect(Number(window[1])).toBeGreaterThan(0)
-      expect(Number(window[2])).toBeGreaterThan(0)
+    // Cards do not nest, so splitting on the opening tag gives one chunk per card.
+    const cards = html.split('<section class="card').slice(1)
+    const WINDOW = /change is the mean of the last (\d+) readings against the first (\d+)/g
+    let deltas = 0
+    let windows = 0
+    for (const card of cards) {
+      const badges = [...card.matchAll(/class="delta"/g)].length
+      const stated = [...card.matchAll(WINDOW)]
+      deltas += badges
+      windows += stated.length
+      if (badges > 0) {
+        expect(stated.length, `a card draws ${badges} delta(s) and states no window`).toBeGreaterThan(0)
+      }
+      // A window comparing nothing against nothing is not a window. The old assertion counted
+      // these on a page where every one of them read "the last 0 readings against the first 0".
+      for (const window of stated) {
+        expect(Number(window[1])).toBeGreaterThan(0)
+        expect(Number(window[2])).toBeGreaterThan(0)
+      }
     }
+    // Both kept, so a page that quietly stopped drawing deltas at all cannot pass by having no
+    // cards left to check.
+    expect(deltas, 'a chart page should draw at least one delta').toBeGreaterThan(0)
+    expect(windows, 'a chart page should state at least one window').toBeGreaterThan(0)
   })
 })
 
