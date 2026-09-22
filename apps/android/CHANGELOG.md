@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/bardesss/haelan/compare/android-v0.4.0...android-v0.5.0) (2026-09-22)
+
+
+### Features
+
+* say when a route exists and Health Connect would not release it ([#332](https://github.com/bardesss/haelan/issues/332)) ([170af16](https://github.com/bardesss/haelan/commit/170af16011a983e7697a6a773f5afc2280697619))
+
 ## [0.4.0](https://github.com/bardesss/haelan/compare/android-v0.3.0...android-v0.4.0) (2026-09-21)
 
 
