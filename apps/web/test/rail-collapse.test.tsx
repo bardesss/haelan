@@ -140,12 +140,16 @@ describe('the rail collapses to an icon strip', () => {
   // The project links used to be named here too. They have moved to Settings' About card, which is
   // why this list is two names rather than five: they were three rows of the rail foot that all
   // left the app, and collapsed they were three unlabelled glyphs pointing at github.com.
-  it('names the sign out button and the account, which lose their labels with the rest', () => {
+  // Sign out is no longer one of these. It was a permanently visible button in the foot, so
+  // collapsing the rail left it as an unlabelled glyph and it needed a title like everything else;
+  // it now lives in the menu behind the person's name, which only exists while it is open and
+  // carries its label in words when it is. So the name is the whole of what collapsing can strip
+  // here, and it is still the thing that has to survive - it is the trigger for that menu, and an
+  // unnameable trigger makes sign out unreachable rather than merely unlabelled.
+  it('names the person, whose menu is the only way into the account and out of the session', () => {
     const expanded = renderRailNamed()
     const collapsed = renderCollapsedNamed()
-    for (const name of ['Sign out', 'Robin']) {
-      expect(collapsed, name).toContain(`title="${name}"`)
-    }
+    expect(collapsed).toContain('title="Robin"')
     expect(expanded).not.toContain('title=')
   })
 

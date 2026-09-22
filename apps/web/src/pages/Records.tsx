@@ -75,8 +75,8 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
 
       <div className="grid">
         {all.records.length > 0 && (
-          <Card span={12} measured label={t('records.bests.label')} basis={t('records.bests.basis')}>
-            <ul className="record-list">
+          <Card span={12} label={t('records.bests.label')} basis={t('records.bests.basis')}>
+            <ul className="record-list list-measured">
               {all.records.map((record) => (
                 <RecordRow key={record.metric} record={record} t={t} language={language} />
               ))}
@@ -85,8 +85,8 @@ function AllTimeBody({ all, t, language }: { all: AllTime, t: Translate, languag
         )}
 
         {all.sessionRecords.length > 0 && (
-          <Card span={12} measured label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
-            <ul className="record-list">
+          <Card span={12} label={t('records.sessions.label')} basis={t('records.sessions.basis')}>
+            <ul className="record-list list-measured">
               {all.sessionRecords.map((record) => (
                 <SessionRecordRow key={record.kind} record={record} t={t} language={language} />
               ))}

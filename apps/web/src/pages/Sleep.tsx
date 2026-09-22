@@ -449,6 +449,21 @@ export function Sleep() {
           </Card>
         ) : null}
 
+        {/* Task 2 of M8c: a night list, mirroring Activity's own SessionList, with each row a link
+            into the night detail page tasks 4-7 build. Directly under the two charts rather than
+            at the foot of the page where it used to sit: the nights are the most specific thing
+            this page holds, and eleven aggregate tiles in front of them made a reader scroll past
+            every average to reach the individual nights those averages are made of. `resolved`,
+            not the raw `controls`: every other query on this page reads through `resolved` for the
+            reason stated where it is built above (a source named in the URL that this person's own
+            series responses have never reported has to fall back to the all sources sentinel), and
+            `Activity.tsx` mounts its own SessionList with `resolved` for that identical reason. A
+            night list built from the unresolved value would query a source the control row above
+            it is not showing, so the two would read as two different periods for the one page. */}
+        <Card span={12} label={t('sleep.nights.label')}>
+          <NightList controls={resolved} />
+        </Card>
+
         {tile('sleep_asleep_minutes', 4, t('sleep.asleepMinutes.label'), 'sleep.asleepMinutes.basis',
           'sleep.asleepMinutes.chartLabel', formatDuration(asleepMean), 'sleep.units.minutes', undefined,
           'higher-is-better', { note: asleepNote }, asleepBand)}
@@ -479,10 +494,10 @@ export function Sleep() {
           'sleep.waketimeMinutes.chartLabel', formatClock(waketimeMean), 'sleep.units.minutesFromMidnight', undefined,
           'neutral')}
 
-        {tile('sleep_nap_count', 6, t('sleep.napCount.label'), 'sleep.napCount.basis',
+        {tile('sleep_nap_count', 4, t('sleep.napCount.label'), 'sleep.napCount.basis',
           'sleep.napCount.chartLabel', formatMetricValue(napCountTotal, 'sleep_nap_count', i18n.language, ''),
           'sleep.units.naps', t('sleep.units.napsShort'), 'neutral', { count: napCountTotal })}
-        {tile('sleep_nap_minutes', 6, t('sleep.napMinutes.label'), 'sleep.napMinutes.basis',
+        {tile('sleep_nap_minutes', 4, t('sleep.napMinutes.label'), 'sleep.napMinutes.basis',
           'sleep.napMinutes.chartLabel', formatDuration(napMinutesTotal), 'sleep.units.minutes', undefined,
           'neutral')}
 
@@ -496,17 +511,6 @@ export function Sleep() {
             shared with Dashboard.tsx's own copy of this card rather than a second local closure. */}
         <InsightCard insight={asleepInsight.data} query={asleepInsight} metric="sleep_asleep_minutes" span={4}
           label={t('sleep.insights.asleepMinutes')} formatValue={formatSignedDuration} />
-        {/* Task 2 of M8c: a night list below the cards above, mirroring Activity's own SessionList,
-            with each row a link into the night detail page tasks 4-7 build. `resolved`, not the
-            raw `controls`: every other query on this page reads through `resolved` for the reason
-            stated where it is built above (a source named in the URL that this person's own
-            series responses have never reported has to fall back to the all sources sentinel), and
-            `Activity.tsx` mounts its own SessionList with `resolved` for that identical reason. A
-            night list built from the unresolved value would query a source the control row above
-            it is not showing, so the two would read as two different periods for the one page. */}
-        <Card span={12} measured label={t('sleep.nights.label')}>
-          <NightList controls={resolved} />
-        </Card>
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

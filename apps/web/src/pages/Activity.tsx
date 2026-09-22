@@ -357,6 +357,27 @@ export function Activity() {
           )}
         </Card>
 
+        <Card span={12} label={t('activity.activityBands.label')} basis={bandsBasis}>
+          <StackedDailyBars series={bands} labels={rangeDates} metric="active_minutes_light"
+            label={t('activity.activityBands.chartLabel', { period })}
+            unit={t('activity.units.minutes')} axisUnit={t('activity.units.min')} />
+        </Card>
+
+        {/* The two charts above, then the sessions, then the tiles. Reusing this same ControlRow
+            rather than a rail item of its own (nine unlabelled icons already proved to be too many
+            three days before this task started): the range and the source picker both apply to
+            this section without being rebuilt, since SessionList queries from the same `resolved`
+            the cards do. The export does not: exportPathFor builds a daily rollup download over
+            SUM_METRICS and knows nothing about sessions, so the link beside these controls will
+            not carry the rows below them.
+
+            It sat at the foot of the page until this change, behind fourteen aggregate tiles. The
+            workouts are what a reader came for, and three screens of active-zone-minute averages
+            in front of them is the wrong order to read this page in. */}
+        <Card span={12} label={t('activity.sessions.label')}>
+          <SessionList controls={resolved} />
+        </Card>
+
         {card('distance', 6, 'activity.distance.label', 'activity.distance.basis', 'activity.distance.basisWorn',
           'activity.distance.chartLabel', 'activity.units.distance', 'activity.units.km', 'higher-is-better',
           // distance is stored in millimeters (METRICS.distance, precision 0); this card displays
@@ -388,12 +409,6 @@ export function Activity() {
           'activity.activeMinutesModerate.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
         {card('active_minutes_vigorous', 4, 'activity.activeMinutesVigorous.label', 'activity.activeMinutesVigorous.basis', 'activity.activeMinutesVigorous.basis',
           'activity.activeMinutesVigorous.chartLabel', 'activity.units.minutes', 'activity.units.min', 'higher-is-better')}
-
-        <Card span={12} label={t('activity.activityBands.label')} basis={bandsBasis}>
-          <StackedDailyBars series={bands} labels={rangeDates} metric="active_minutes_light"
-            label={t('activity.activityBands.chartLabel', { period })}
-            unit={t('activity.units.minutes')} axisUnit={t('activity.units.min')} />
-        </Card>
 
         {/* These three are labelled AZM rather than minutes, unlike the activity levels above,
             because the number is a score: a cardio or peak minute is worth two. Measured in
@@ -428,16 +443,6 @@ export function Activity() {
             never the width of either window. See useTrainingLoad for why that has to stay true. */}
         <TrainingLoadCard on={controls.to} source={source} span={4} />
 
-        {/* Below the tiles and the heatmap, reusing this same ControlRow rather than a rail item
-            of its own (nine unlabelled icons already proved to be too many three days before this
-            task started): the range and the source picker both apply to this section without
-            being rebuilt, since SessionList queries from the same `resolved` the cards do. The
-            export does not: exportPathFor builds a daily rollup download over SUM_METRICS and
-            knows nothing about sessions, so the link beside these controls will not carry the
-            rows below them. */}
-        <Card span={12} measured label={t('activity.sessions.label')}>
-          <SessionList controls={resolved} />
-        </Card>
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

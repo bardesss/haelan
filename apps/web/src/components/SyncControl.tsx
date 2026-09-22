@@ -20,16 +20,16 @@ import { useHistoryStart } from '../data/useHistoryStart.js'
  * phone. Shell.tsx owns the element and hands it down, which also keeps the query hooks below out
  * of Sidebar and RailDrawer - both are rendered by several tests with no QueryClientProvider
  * above them, and a hook in there would put a client behind every one of those.
+ *
+ * It takes no props. `compact` was one, because the rail's foot had the width for a whole sentence
+ * and the top bar did not. It had the width only in the sense that the words fitted somewhere
+ * inside it: two sentences, each given the full 186px and each wrapping to two lines under the
+ * button, is five lines of muted grey for a housekeeping fact - and the phone sentence arrived
+ * after the Google one was designed, so nobody chose that shape, it accumulated. Both now sit on
+ * one line beside the icon, and freshnessLabel below decides how much of a sentence that leaves
+ * room for.
  */
-export function SyncControl({ compact = false }: {
-  /**
-   * True in the phone drawer's top bar, where the freshness sits beside a hamburger and a
-   * wordmark and has room for about three characters. The full sentence is still on the button's
-   * title and in the screen reader's label either way; what changes here is only how much of it
-   * is printed.
-   */
-  compact?: boolean
-}) {
+export function SyncControl() {
   const { t } = useTranslation()
   const session = useSession()
   const personId = session.data?.personId
@@ -88,6 +88,19 @@ export function SyncControl({ compact = false }: {
       ? t('sync.neverShort')
       : t('sync.agoShort', { count: syncedMinutesAgo })
 
+  // Short for a real time, the whole sentence for the two states that are not one.
+  //
+  // Not `shortLabel` outright, which is what a first pass at shortening this did: the never and
+  // unknown spellings are both a single dash, so a reader looking at the rail could not tell an
+  // instance that has never run from one whose status has not loaded yet - and those are the two
+  // states where knowing which is which is the entire point. They are also the two that never
+  // repeat: "6 min geleden" is what the rail says almost always and the only one worth shortening.
+  // The top bar accepted that collapse because it had room for three characters; the rail has
+  // room for a sentence, it just does not have room for two of them wrapped.
+  const freshnessLabel = syncedMinutesAgo === null || status.data === undefined
+    ? syncedLabel
+    : shortLabel
+
   // /api/sync/run answers 409 for both a run already going and the instance shutting down, kind
   // 'transient' either way, so the status is what tells this apart from every other error rather
   // than the kind. Without this a refused click did nothing and said nothing.
@@ -119,15 +132,20 @@ export function SyncControl({ compact = false }: {
           <Icon name="sync" />
         </button>
       )}
-      {!phoneOnly && <span className="synced" aria-hidden="true">{compact ? shortLabel : syncedLabel}</span>}
+      {!phoneOnly && <span className="synced" aria-hidden="true">{freshnessLabel}</span>}
       {/* Its own line rather than folded into the one above, because the two can stall
           independently: a mixed household's Google sync can be healthy while the phone has been
           asleep for a week, and one sentence carrying the newer of the two would hide exactly that.
           Not aria-hidden, unlike its neighbour: that one is spoken through the button's own
           aria-label, and with no button here this is the only thing that would say it. */}
       {phoneMinutesAgo !== null && (
-        <span className="synced">
-          {compact ? t('sync.phoneAgoShort', { count: phoneMinutesAgo }) : t('sync.phoneAgo', { count: phoneMinutesAgo })}
+        // The short spelling for the eye, the whole sentence for everything else. Its neighbour
+        // above can be aria-hidden outright because the button beside it speaks the same fact
+        // through its own aria-label; there is no button on this line, so the sentence has to live
+        // here or nowhere. title for a sighted reader who wants to know what "130m tel." was.
+        <span className="synced" title={t('sync.phoneAgo', { count: phoneMinutesAgo })}>
+          <span aria-hidden="true">{t('sync.phoneAgoShort', { count: phoneMinutesAgo })}</span>
+          <span className="sr-only">{t('sync.phoneAgo', { count: phoneMinutesAgo })}</span>
         </span>
       )}
       {runSync.isError && <span className="field-error" role="alert">{syncErrorLabel}</span>}

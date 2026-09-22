@@ -147,7 +147,7 @@ export function Shell() {
           // both rail components are mounted by tests that provide no client. Here a client is
           // guaranteed, and the control renders once for the whole app instead of once per page,
           // which is what it did until M10.
-          sync={<SyncControl compact={isPhone} />}
+          sync={<SyncControl />}
           onSignOut={() => {
             setSignOutError(null)
             // See signOutRequest.ts for why this resets rather than clears the cache: clearing

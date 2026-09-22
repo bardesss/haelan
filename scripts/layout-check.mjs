@@ -348,12 +348,55 @@ try {
     // total. Unparameterised routes only: a workout or a night has no rail link of its own (routes.tsx's
     // own `rail` field points a parameterised route back at '/activity' or '/sleep' instead), so
     // the drawer was never going to carry a literal `/activity/:sessionId` href to find.
-    const hrefs = await page.locator('dialog.rail-dialog a').evaluateAll(
+    const hrefsNow = () => page.locator('dialog.rail-dialog a').evaluateAll(
       (nodes) => nodes.map((node) => node.getAttribute('href')),
     )
+    const navHrefs = await hrefsNow()
+
+    // The reader's own page is not among them, and that is deliberate: /account left the nav for
+    // the menu behind the reader's own name, so the drawer reaches it in two taps and a sweep of
+    // the drawer as it opens cannot see it. Driving the menu is the only honest way to ask whether
+    // every page is still reachable from a phone - and it is also the only place anything
+    // exercises that menu in a real browser at phone width, where it is a layer inside a modal
+    // dialog, opens upward because the foot is pinned to the bottom, and has to stay inside a
+    // 280px drawer on a 375px screen.
+    const person = page.locator('dialog.rail-dialog .rail-person')
+    check(await person.isVisible().catch(() => false), 'no person control in the drawer')
+    await person.click()
+    await page.waitForTimeout(SETTLE_MS)
+    const menu = page.locator('dialog.rail-dialog .rail-menu')
+    check(await menu.isVisible().catch(() => false), 'the person menu did not open in the drawer')
+
+    const hrefs = await hrefsNow()
+    // Without this the loop below would pass on a menu that opened empty, or did not open at all,
+    // as long as the nav already carried every route - which is exactly the state this check was
+    // added for, read the other way round.
+    check(hrefs.length > navHrefs.length, 'the person menu added no destination to the drawer')
     for (const route of RAW_ROUTES.filter((r) => !r.includes(':'))) {
       check(hrefs.includes(`${DEMO_PREFIX}${route}`), `the drawer has no link to ${route}`)
     }
+
+    // A popover inside a 280px drawer is a new way to push something off screen, and the
+    // page-level scrollWidth sweep above cannot see it: the dialog clips, so a menu hanging out of
+    // the drawer never widens the document.
+    const menuBox = await menu.boundingBox()
+    const dialogBox = await dialog.boundingBox()
+    if (menuBox !== null && dialogBox !== null) {
+      check(
+        menuBox.x >= dialogBox.x - 1 && menuBox.x + menuBox.width <= dialogBox.x + dialogBox.width + 1,
+        `the person menu escapes the drawer: ${Math.round(menuBox.x)}..${Math.round(menuBox.x + menuBox.width)} outside ${Math.round(dialogBox.x)}..${Math.round(dialogBox.x + dialogBox.width)}`,
+      )
+      check(menuBox.y >= 0, `the person menu opens above the viewport (top ${Math.round(menuBox.y)})`)
+    }
+
+    // Escape closes the innermost thing that is open, and only that. The drawer leans on the
+    // browser's native Escape-to-close, so before Sidebar's own handler called preventDefault one
+    // press dismissed the menu AND the whole drawer underneath it. Nothing in the vitest suite can
+    // see this: happy-dom has no native dialog, and the drawer's own tests stub showModal/close.
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(SETTLE_MS)
+    check(!(await menu.isVisible().catch(() => false)), 'Escape did not close the person menu')
+    check(await dialog.isVisible(), 'Escape closed the drawer as well as the menu inside it')
 
     // <dialog> makes the page behind inert for focus and for pointer targeting, and does nothing
     // at all about scrolling. The drawer is 280px of a 375px screen, so the strip beside it is a

@@ -9,6 +9,20 @@ export const PHONE_MAX_WIDTH = 620
 // being derived from the other.
 export const GRID_STACK_WIDTH = 900
 
+// The top of the band where the grid is un-stacked but the window is still too narrow for twelve
+// columns to divide into anything readable. Measured on the demo: at a 901px window a span-4 tile
+// computed to 160px, and the delta badge beside its label wrapped onto a second line and crossed
+// the card's right padding. Inside this band app.css halves every ordinary span, so a run of equal
+// tiles lays out two to a row instead of three.
+//
+// A third named number rather than a second derived from GRID_STACK_WIDTH, for the same reason
+// that constant is not derived from PHONE_MAX_WIDTH: where the grid stops stacking and where it
+// has room for its full track count are different questions with different answers. The band's
+// lower edge IS derived - it is exactly where the collapse stops - so app.css spells it as
+// `width > GRID_STACK_WIDTH` rather than as the number one above it, which would put the same
+// breakpoint in the stylesheet twice under two spellings.
+export const MID_BAND_MAX_WIDTH = 1200
+
 export const PHONE_MEDIA_QUERY = `(max-width: ${PHONE_MAX_WIDTH}px)`
 
 function phoneNow(): boolean {

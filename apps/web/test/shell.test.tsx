@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Sidebar, RAIL_PATHS } from '../src/components/Sidebar.js'
+import { Sidebar, RAIL_PATHS, PERSON_MENU_PATHS } from '../src/components/Sidebar.js'
 import { ROUTES, NIGHT_ROUTE } from '../src/routes.js'
 import { Dashboard } from '../src/pages/Dashboard.js'
 import { Records } from '../src/pages/Records.js'
@@ -29,12 +29,18 @@ describe('the navigation rail', () => {
   })
 
   // The name in the rail foot was a plain div for as long as there was no account page to send it
-  // to, with a comment saying exactly that. Both halves are asserted: that it leads somewhere, and
-  // that it does not also claim to be the current page - the rail item for /account already does
-  // that, and two marks would be two current pages.
+  // to, then a Link for as long as the Settings group also listed Account. It is now the only way
+  // to /account, and a button rather than a link, because what a press does is open a menu.
+  //
+  // Static markup, so the menu is closed and /account is not in the DOM: what this can assert is
+  // the control, which is why it checks for the trigger and its aria-haspopup rather than for an
+  // anchor. The menu's own contents are covered where a click can happen - rail-menu.test.tsx.
   it('leads from the signed-in person to their own account page', () => {
     const html = renderToStaticMarkup(<Sidebar person="Robin" active="/sleep" onSignOut={() => {}} />)
-    expect(html).toMatch(/<a [^>]*href="\/account"[^>]*class="rail-person"/)
+    expect(html).toMatch(/<button [^>]*class="rail-person"/)
+    expect(html).toMatch(/<button [^>]*aria-haspopup="menu"/)
+    // The nav no longer carries it. A second route to the same page is the thing this removed.
+    expect(html).not.toContain('href="/account"')
   })
 
   it('marks the account page once when that is where you are, not twice', () => {
@@ -52,9 +58,23 @@ describe('the route table', () => {
   // /activity/:sessionId without inventing a session id. So the comparison is against the routes
   // with no `:` segment, which is a rule rather than an exception list that would need editing
   // again the next time a detail page lands.
+  // Both lists, because the rail now reaches its destinations two ways. /account left the nav for
+  // the menu under the reader's own name (Sidebar.tsx's PERSON_MENU_PATHS says why), and the
+  // question here has always been whether every unparameterised route is reachable from the rail
+  // at all - not whether it is reachable as a nav item specifically, which is what RAIL_PATHS
+  // alone would now be asking.
   it('agrees with the rail on exactly which unparameterised paths exist', () => {
     const railable = ROUTES.map((r) => r.path).filter((path) => !path.includes(':'))
-    expect(new Set(RAIL_PATHS)).toEqual(new Set(railable))
+    expect(new Set([...RAIL_PATHS, ...PERSON_MENU_PATHS])).toEqual(new Set(railable))
+  })
+
+  // The two lists are disjoint, which is the whole point of the change: a path in both would be
+  // the duplicate destination this removed, quietly restored, and the check above cannot see it
+  // because a set union swallows it.
+  it('does not reach one path from both the nav and the person menu', () => {
+    for (const path of PERSON_MENU_PATHS) {
+      expect(RAIL_PATHS, `${path} is in the nav AND the person menu`).not.toContain(path)
+    }
   })
 
   // And the parameterised ones still mark a rail item, rather than leaving a reader on a page with

@@ -116,7 +116,7 @@ export function Members() {
       {items.length === 0 ? (
         <EmptyState title={t('settings.members.empty.title')} detail={t('settings.members.empty.detail')} />
       ) : (
-        <ul className="member-list">
+        <ul className="member-list list-measured">
           {items.map((member) => (
             <MemberRowView
               key={member.personId}

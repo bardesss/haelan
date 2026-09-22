@@ -54,7 +54,7 @@ export function Settings() {
       {
         id: 'members',
         element: (
-          <Card span={12} measured label={t('settings.members.title')}>
+          <Card span={12} label={t('settings.members.title')}>
             <Members />
           </Card>
         ),
