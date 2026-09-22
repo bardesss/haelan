@@ -290,7 +290,14 @@ export function Weight() {
         {/* label is its own catalogue string, not weight.weight.label reused: a second card
             sharing "Weight" would make a label lookup by exact text ambiguous, the same collision
             Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
-        <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={12}
+        {/* span 6, the same as the two cards above it, because this page is one run of three equal
+            spans and that is the whole rule: three span-6 cards tile as a full row and a half one,
+            and either of the first two hiding still leaves a full row. Widening this to 12 (which
+            an earlier pass here did, reasoning that a trailing card alone in a row should take the
+            width) breaks that - on an archive with no body fat readings the page becomes a span-6
+            card beside nothing, then a span-12 card, which is worse than what it replaced and only
+            visible against data that has a gap in it. */}
+        <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
           label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
