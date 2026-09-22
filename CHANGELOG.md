@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.3.0](https://github.com/bardesss/haelan/compare/v2.2.0...v2.3.0) (2026-09-22)
+
+
+### Features
+
+* **web:** a recovery tile that fills its card, and one card for the zone minutes ([#338](https://github.com/bardesss/haelan/issues/338)) ([b5e7eb2](https://github.com/bardesss/haelan/commit/b5e7eb2ff5292e5c18892ec59b19fe03244bdda3))
+
 ## [2.2.0](https://github.com/bardesss/haelan/compare/v2.1.0...v2.2.0) (2026-09-22)
 
 
