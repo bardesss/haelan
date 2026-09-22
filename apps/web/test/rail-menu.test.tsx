@@ -90,8 +90,30 @@ describe('the person menu in the rail foot', () => {
   it('closes on Escape', () => {
     render()
     press(trigger())
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })) })
     expect(menu()).toBeNull()
+  })
+
+  // Inside the phone drawer this menu is a layer on top of a <dialog>, and Escape is that dialog's
+  // own native way out - so an open menu has to claim the key or one press dismisses both. What
+  // this can assert is that the press is claimed; that the drawer actually survives it is
+  // layout:check's, because happy-dom has no native dialog and RailDrawer's own tests stub
+  // showModal and close outright.
+  it('claims the Escape press, so the dialog underneath it does not also close', () => {
+    render()
+    press(trigger())
+    const event = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    act(() => { document.dispatchEvent(event) })
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  // The other half of it: with no menu open there is no listener, so Escape is the drawer's again.
+  // A handler that swallowed the key unconditionally would leave a phone reader with no way out.
+  it('leaves Escape alone when it is closed', () => {
+    render()
+    const event = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    act(() => { document.dispatchEvent(event) })
+    expect(event.defaultPrevented).toBe(false)
   })
 
   it('closes on a press outside it, and the second press on the name closes it too', () => {

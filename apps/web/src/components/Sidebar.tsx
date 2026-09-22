@@ -162,7 +162,19 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
   // control closes this menu AND reaches that control in the same gesture.
   useEffect(() => {
     if (!menuOpen) return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }
+    // preventDefault, because inside the phone drawer this menu is a layer on top of a <dialog>
+    // and Escape is that dialog's own way out. RailDrawer leans on the browser's native
+    // Escape-to-close (it only listens for the resulting `close` event to sync React), so without
+    // this one press dismissed both: the menu AND the whole drawer, measured in Chromium at 375px.
+    // Escape should close the innermost thing that is open, and nothing else. preventDefault on the
+    // keydown suppresses the dialog's close as that key's default action; stopPropagation as well,
+    // so nothing else on the way up treats this press as its own.
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setMenuOpen(false)
+    }
     const onDown = (event: PointerEvent) => {
       const target = event.target
       if (target instanceof Node && menuRef.current?.contains(target) === true) return
