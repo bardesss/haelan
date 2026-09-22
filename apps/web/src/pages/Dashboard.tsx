@@ -623,33 +623,57 @@ export function Dashboard() {
             of "today" would disagree with it for part of every day. */}
         <RecoveryIndexTile from={controls.from} to={controls.to} source={source}
           today={controls.today} span={4} />
-        {tile('steps', 3, 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
+        {tile('steps', 4, 'dashboard.steps.label', 'dashboard.steps.basis', 'dashboard.steps.basisWorn',
           'dashboard.steps.chartLabel', 'dashboard.units.steps',
           (p) => formatMetricValue(values(p).reduce((a, b) => a + b, 0), 'steps', i18n.language, ''), 'higher-is-better',
           <Link to={deepLink('/activity', resolved)} className="card-link">
             {t('dashboard.steps.viewAll')}
           </Link>)}
-        {tile('resting_heart_rate', 3, 'dashboard.restingHr.label', 'dashboard.restingHr.basis',
+        {tile('resting_heart_rate', 4, 'dashboard.restingHr.label', 'dashboard.restingHr.basis',
           'dashboard.restingHr.basisWorn', 'dashboard.restingHr.chartLabel',
           'dashboard.units.beatsPerMinute',
           (p) => formatMetricValue(mean(values(p)), 'resting_heart_rate', i18n.language, ''), 'lower-is-better',
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.restingHr.viewAll')}
           </Link>, t('dashboard.units.bpm'))}
-        {tile('sleep_asleep_minutes', 3, 'dashboard.sleep.label', 'dashboard.sleep.basis',
+        {tile('sleep_asleep_minutes', 4, 'dashboard.sleep.label', 'dashboard.sleep.basis',
           'dashboard.sleep.basisWorn', 'dashboard.sleep.chartLabel',
           'dashboard.units.minutesAsleep',
           (p) => formatDuration(mean(values(p))), 'higher-is-better',
           <Link to={deepLink('/sleep', resolved)} className="card-link">
             {t('dashboard.sleep.viewAll')}
           </Link>)}
-        {tile('heart_rate', 3, 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
+        {tile('heart_rate', 4, 'dashboard.meanHr.label', 'dashboard.meanHr.basis',
           'dashboard.meanHr.basisWorn', 'dashboard.meanHr.chartLabel',
           'dashboard.units.beatsPerMinute',
           (p) => formatMetricValue(mean(values(p)), 'heart_rate', i18n.language, ''), 'neutral',
           <Link to={deepLink('/recovery', resolved)} className="card-link">
             {t('dashboard.meanHr.viewAll')}
           </Link>, t('dashboard.units.bpm'))}
+
+        {/* Last of the five tiles, and the reason it sits here rather than at the foot of the page
+            where it used to: the five of them are one run of equal spans, so three tile a row
+            exactly and the run can only ever be short on its own last line. Alone at the bottom it
+            was a span-4 card in a row of its own, which is the shape this whole change exists to
+            stop.
+
+            The heatmap that used to sit at the foot moved to Activity.tsx in M3d2: the Dashboard
+            keeps its own steps tile above and loses the calendar drill-down, whose "View activity"
+            deep link now lands somewhere that adds something instead of returning to this same
+            page. This card used to be a hardcoded EmptyState claiming no source provides HRV;
+            daily_hrv has real rows and rides the same 'last' request resting_heart_rate above
+            already issues (REQUESTS.last), so tile() draws it the same way, at no extra request.
+            basisWornKey is handed the same string as basisKey, not a distinct wear-clause
+            template: daily_hrv carries no tier override in packages/core/src/api/catalogue.ts, so
+            it defaults to 'daily' rather than 'intraday' and coverageIsWearSignal reads it as no
+            wear signal, the same choice Weight.tsx's own card() and Recovery.tsx's card() already
+            make for the identical reason, so MetricCard's wear branch can never fire here. */}
+        {tile('daily_hrv', 4, 'dashboard.recovery.label', 'dashboard.recovery.basis', 'dashboard.recovery.basis',
+          'dashboard.recovery.chartLabel', 'dashboard.units.milliseconds',
+          (p) => formatMetricValue(mean(values(p)), 'daily_hrv', i18n.language, ''), 'higher-is-better',
+          <Link to={deepLink('/recovery', resolved)} className="card-link">
+            {t('dashboard.recovery.viewAll')}
+          </Link>, t('dashboard.units.ms'))}
 
         {/* The three insight cards: see INSIGHTS' own comment above for why these three and why
             one request each. label is its own catalogue string rather than the plain metric label
@@ -825,24 +849,6 @@ export function Dashboard() {
             ? <ChartNote />
             : <SleepSchedule nights={scheduleNights} showNaps={false} label={t('common.bedWakeChartLabel', { period })} />)}
         </MetricCard>
-
-        {/* The heatmap that used to sit here moved to Activity.tsx in M3d2: the Dashboard keeps
-            its own steps tile above and loses the calendar drill-down, whose "View activity" deep
-            link now lands somewhere that adds something instead of returning to this same page.
-            This card used to be a hardcoded EmptyState claiming no source provides HRV; daily_hrv
-            has real rows and rides the same 'last' request resting_heart_rate above already
-            issues (REQUESTS.last), so tile() below draws it the same way, at no extra request.
-            basisWornKey is handed the same string as basisKey, not a distinct wear-clause
-            template: daily_hrv carries no tier override in packages/core/src/api/catalogue.ts, so
-            it defaults to 'daily' rather than 'intraday' and coverageIsWearSignal reads it as no
-            wear signal, the same choice Weight.tsx's own card() and Recovery.tsx's card() already
-            make for the identical reason, so MetricCard's wear branch can never fire here. */}
-        {tile('daily_hrv', 4, 'dashboard.recovery.label', 'dashboard.recovery.basis', 'dashboard.recovery.basis',
-          'dashboard.recovery.chartLabel', 'dashboard.units.milliseconds',
-          (p) => formatMetricValue(mean(values(p)), 'daily_hrv', i18n.language, ''), 'higher-is-better',
-          <Link to={deepLink('/recovery', resolved)} className="card-link">
-            {t('dashboard.recovery.viewAll')}
-          </Link>, t('dashboard.units.ms'))}
 
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}

@@ -350,7 +350,12 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-.main { flex: 1; padding: var(--space-5); min-width: 0; }
+/* max-width, because nothing else in the app limited the content column: at a 1920px window the
+   grid computed to roughly 1700px, so a span-4 tile was 557px of frame around one figure, and the
+   cards that do stop at a measure sat beside cards that did not, which is what made a deliberate
+   measure read as a rendering fault. margin-inline centres what is left inside the space beside
+   the rail; border-box (set at the top of this file) means the padding is inside the figure. */
+.main { flex: 1; padding: var(--space-5); min-width: 0; max-width: 1500px; margin-inline: auto; }
 .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--space-3); }
 .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
 /* A card that holds reading matter rather than a chart stops at a measure.
@@ -360,8 +365,20 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    An absolute value rather than a smaller span, because a span is a fraction: `span={8}` is 930px
    here and 1700px on a 2560px monitor, which scales the problem instead of removing it. The span
    stays 12 so the 900px collapse rule and every phone width below it are untouched. Charts are
-   deliberately excluded - they earn their width. */
+   deliberately excluded - they earn their width.
+
+   Kept for prose - Settings' About and Rebuild cards, which are paragraphs. The row lists that
+   used to carry it have moved to .list-measured below, for the reason given there. */
 .card-measured { max-width: 46rem; }
+
+/* The same measure, on the list instead of the card around it.
+   The defect this fixes was visible on Records: `measured` on two of its four cards left those
+   two at 736px beside two full-width ones, so the same page drew two different content widths and
+   the narrower pair read as a rendering fault rather than as a measure. Capping the list and
+   leaving the card at its full span keeps the frame tiling with its neighbours while the rows
+   inside still stop where a reader's eye does - which is what the cap was always for. The columns
+   are what wanted the limit; the card was only ever where it was easiest to put it. */
+.list-measured { max-width: 46rem; }
 
 /* WorkoutDetail.tsx's own heading, above its `.grid` rather than one of the cards inside it - the
    same "heading, then grid" shape every sibling page's own `<h1>` sits in front of, just with more
@@ -697,6 +714,44 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    the wrappers out of this stylesheet and fails if one of them is missing from the list below,
    including the fourth nobody has written yet. */
 @media (max-width: 900px) { .grid > *, .workout-tiles > *, .night-tiles > *, .night-trace > * { grid-column: span 12 !important; } }
+
+/* The band between the collapse above and a window wide enough for twelve columns to mean
+   anything. Measured on the demo before this rule existed: at a 901px window the Dashboard's
+   span-4 tiles computed to 160px each, which is a card holding a five digit figure, a four line
+   basis and a sparkline in the width of the figure alone - and the delta badge beside the label
+   wrapped onto a second line and crossed the card's right padding by 15px. The grid un-stacks the
+   moment the rule above stops applying, so every width from 901px up drew a full twelve column
+   layout in a content column of roughly 660px.
+
+   Halving rather than introducing a third track count: a run of equal spans tiles three to a row
+   at full width and two to a row here, and every wide card (the charts, the lists) goes to the
+   full width it already takes below 900px. Keyed on data-span (Card.tsx sets it, and says why
+   there) because a media query cannot read an inline style, and the span has to exist as
+   something a selector can match.
+
+   `width > 900px` rather than `min-width: 901px`, and breakpoint.test.ts is what requires it: the
+   band's lower edge is exactly where the collapse above stops, so spelling it as the number one
+   higher would put one breakpoint in this file under two spellings, and moving GRID_STACK_WIDTH
+   would leave the second one behind. 1200 is its own named constant (MID_BAND_MAX_WIDTH), since
+   where the grid stops stacking and where it has room for twelve tracks are different questions.
+
+   Ordered after the collapse rule deliberately: grid-collapse.test.ts reads this stylesheet and
+   asks which media query carries the span-12 collapse. It now matches on the width rather than on
+   whichever rule comes first, so this block can sit either side of that one - but a reader moving
+   it should run that test rather than assume. */
+@media (width > 900px) and (max-width: 1200px) {
+  /* !important for the same reason the collapse rule above carries it, and it is not optional:
+     Card sets grid-column as an inline style, which outranks any stylesheet declaration that does
+     not say !important. Without it this whole block is inert and the 160px tiles come straight
+     back, with nothing failing to say so. */
+  .grid [data-span='3'], .grid [data-span='4'], .grid [data-span='5'], .grid [data-span='6'] {
+    grid-column: span 6 !important;
+  }
+  .grid [data-span='7'], .grid [data-span='8'], .grid [data-span='9'], .grid [data-span='10'],
+  .grid [data-span='11'] {
+    grid-column: span 12 !important;
+  }
+}
 
 /* The sign-in screen is the one place with no rail and no wizard rail either: it is the
    entire viewport before there is anything else to show. form-error is not redefined here,

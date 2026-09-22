@@ -290,7 +290,7 @@ export function Weight() {
         {/* label is its own catalogue string, not weight.weight.label reused: a second card
             sharing "Weight" would make a label lookup by exact text ambiguous, the same collision
             Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
-        <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={6}
+        <InsightCard insight={weightInsight.data} query={weightInsight} metric="weight" span={12}
           label={t('weight.insights.weight')} formatValue={weightInsightFormat} formatDelta={weightInsightFormatDelta} />
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}

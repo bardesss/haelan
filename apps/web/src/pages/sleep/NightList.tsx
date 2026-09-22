@@ -36,7 +36,7 @@ export function NightList({ controls }: { controls: PageControlsState }) {
   }
 
   return (
-    <div className="night-list">
+    <div className="night-list list-measured">
       <div className="night-list-header">
         <span className="night-list-count">{t('sleep.nights.count', { count: nights.length })}</span>
       </div>

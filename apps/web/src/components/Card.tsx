@@ -53,7 +53,13 @@ export function Card({ span, label, basis, measured = false, ambient, children }
   useCardPresence(ambient !== true)
   const basisId = useId()
   return (
-    <section className={measured ? 'card card-measured' : 'card'}
+    // data-span as well as the inline gridColumn, and the two never disagree because both read the
+    // same prop. The attribute is what the mid-band media query in app.css can select on: a media
+    // query cannot do arithmetic on an inline style, so halving a 12-column layout to 6 needs the
+    // span to exist as something a selector can match. The inline style stays because it is what
+    // sets the span at every other width, and deriving it from the attribute instead would put the
+    // whole grid behind a stylesheet rule that a missing class would silently drop.
+    <section className={measured ? 'card card-measured' : 'card'} data-span={span}
       style={{ gridColumn: `span ${span}` }}>
       {label && <span className="label">{label}</span>}
       {basis && <p className="basis" id={basisId}>{basis}</p>}

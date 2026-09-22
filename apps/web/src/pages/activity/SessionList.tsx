@@ -139,7 +139,7 @@ export function SessionList({ controls }: { controls: PageControlsState }) {
     : exerciseTypeLabel(t, selectedType === UNKNOWN_TYPE ? null : selectedType)
 
   return (
-    <div className="session-list">
+    <div className="session-list list-measured">
       <div className="session-list-header">
         {/* Unfiltered the count states the period, which is what "in this period" claims. A
             filter does not narrow that claim, it changes it: the shown figure alone would say a
