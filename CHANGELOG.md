@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.2.0](https://github.com/bardesss/haelan/compare/v2.1.0...v2.2.0) (2026-09-22)
+
+
+### Features
+
+* say when a route exists and Health Connect would not release it ([#332](https://github.com/bardesss/haelan/issues/332)) ([170af16](https://github.com/bardesss/haelan/commit/170af16011a983e7697a6a773f5afc2280697619))
+* **web:** rows that fill the width, and a rail foot with one way to your own page ([#334](https://github.com/bardesss/haelan/issues/334)) ([f4e840e](https://github.com/bardesss/haelan/commit/f4e840eb3b9f053733d64343a3e0df0faee20bd5))
+
 ## [2.1.0](https://github.com/bardesss/haelan/compare/v2.0.4...v2.1.0) (2026-09-21)
 
 
