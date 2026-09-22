@@ -77,7 +77,12 @@ describe('Shell, session expiry mid-visit', () => {
 
     expect(html).toContain('Wilma')
     expect(html).not.toContain('class="signin"')
-    expect(html).toContain('Sign out')
+    // The way out of the session, which used to be a button in the rail foot and is now the menu
+    // behind the reader's own name. Asserted as the trigger rather than as the words "Sign out":
+    // static markup renders the menu closed, and the point here is that the signed-in shell is
+    // what rendered, not the sign-in form - for which the control that leads to signing out is
+    // exactly as good a witness as the label inside it was.
+    expect(html).toMatch(/<button [^>]*class="rail-person"/)
   })
 })
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from '../i18n/index.js'
 import { BrandMark } from './BrandMark.js'
@@ -29,11 +29,28 @@ const GROUPS = [
   {
     labelKey: 'sidebar.groups.settings',
     items: [
-      { path: '/account', nameKey: 'sidebar.items.account' },
       { path: '/settings', nameKey: 'sidebar.items.settings' },
     ],
   },
 ] as const
+
+/**
+ * The paths the person menu at the foot of the rail leads to, rather than the nav above it.
+ *
+ * /account lived in the Settings group until this change, and the reader's own name at the foot
+ * was a Link to the same page. Two controls, one destination, and no way to tell from either that
+ * the other existed: the rail marked /account as the current page while the name beside it,
+ * pointing at the same place, deliberately carried no mark so the rail would not claim two current
+ * pages. That comment was the design admitting the duplication.
+ *
+ * Kept separate from RAIL_PATHS rather than folded into it, because the two are different claims
+ * and two test files depend on the difference. RAIL_PATHS means "a nav item with an icon, a name
+ * that survives collapse, and a hover title" - rail-collapse.test.ts asserts all three per path -
+ * and a menu item inside a popover is none of those things. What the shell test actually wants to
+ * know is whether every unparameterised route is reachable from the rail at all, so it asks about
+ * both lists together.
+ */
+export const PERSON_MENU_PATHS: readonly string[] = ['/account']
 
 // A hand-written literal, not derived from ROUTES: the two happen to list the same paths, and
 // nothing but the shell test comparing this against ROUTES keeps them that way. Exported so that
@@ -123,6 +140,42 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
   const [stored, setStored] = useState(() => readCollapsed())
   const collapsed = collapsible && stored
 
+  // The person menu at the foot, closed on mount.
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Navigating closes it. The rail is not unmounted by a route change and `Link` accepts no
+  // onClick of its own (router.tsx omits it from the props it forwards, deliberately), so without
+  // this the menu would still be hanging open over the page its own item just navigated to.
+  useEffect(() => { setMenuOpen(false) }, [active])
+
+  // Escape, and a press anywhere outside the menu. Registered only while it is open, so a closed
+  // rail costs nothing.
+  //
+  // The whole wrapper is the inside test, not just the button, and that distinction is load
+  // bearing: `pointerdown` fires before `click`, so a handler that closed the menu on a press
+  // inside it would unmount the sign-out button before the click it was waiting for could reach
+  // it, and pressing Sign out would do nothing at all. The wrapper covers the button (whose own
+  // onClick toggles) and both items (which close themselves, or navigate).
+  //
+  // `pointerdown` rather than `click` for the outside case, so a press that lands on some other
+  // control closes this menu AND reaches that control in the same gesture.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }
+    const onDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target) === true) return
+      setMenuOpen(false)
+    }
+    document.addEventListener('keydown', onKey)
+    document.addEventListener('pointerdown', onDown)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.removeEventListener('pointerdown', onDown)
+    }
+  }, [menuOpen])
+
   function toggle() {
     setStored((current) => {
       const next = !current
@@ -183,22 +236,44 @@ export function Sidebar({ active, person, onSignOut, signOutError, collapsible =
             rail by design and a housekeeping control should not come after a reader's own name.
             Absent entirely when no node is passed, which is every caller but the shell. */}
         {sync}
-        {/* A Link at last: this was a plain div for as long as the account page it wanted to
-            point at did not exist, and the comment here said so since M3e. It leads where a
-            reader expects their own name to lead - their profile, their data types, their tokens
-            - and the rail item above says the same thing in words for anyone who would not think
-            to click a name.
+        {/* The reader's own name, and now the only way to their own page.
+            It was a Link to /account while the Settings group above also listed Account, which is
+            one destination wearing two controls; the old comment here explained that the name
+            carried no aria-current because the rail item already did, which is the duplication
+            stated as a rule rather than removed. The nav keeps app-wide settings, the name keeps
+            what belongs to the person, and signing out moves in here with them: it was a
+            permanently visible full-width button for an action taken once a session, sitting
+            below the reader's own name in a rail that had already run out of room.
 
-            No aria-current of its own. The rail item is what marks /account as the page you are
-            on, and a second mark for the same destination would leave the rail claiming two
-            current pages. */}
-        <Link to="/account" className="rail-person" title={hoverName(person)}>
-          <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
-        </Link>
+            aria-current moves onto this button, since it is what leads to /account now. A button
+            rather than a Link even though one of its two items navigates: what it does on click is
+            open a menu. */}
+        <div className="rail-person-menu" ref={menuRef}>
+          <button type="button" className="rail-person"
+            aria-haspopup="menu" aria-expanded={menuOpen}
+            aria-current={active === '/account' ? 'page' : undefined}
+            title={hoverName(person)}
+            onClick={() => setMenuOpen((open) => !open)}>
+            <span className="avatar" aria-hidden="true">{person.slice(0, 1)}</span>{label(person)}
+          </button>
+          {menuOpen && (
+            <div className="rail-menu" role="menu">
+              {/* No onClick closing the menu: router.tsx's Link forwards no onClick, and it does
+                  not need to. The effect above closes on `active` changing, which is the same
+                  event by a more reliable route - it also fires for a navigation that started
+                  somewhere else entirely. */}
+              <Link to="/account" className="rail-menu-item" role="menuitem">
+                <Icon name="account" />{t('sidebar.items.account')}
+              </Link>
+              <button type="button" className="rail-menu-item" role="menuitem" onClick={onSignOut}>
+                <Icon name="signOut" />{t('shell.signOut')}
+              </button>
+            </div>
+          )}
+        </div>
+        {/* Outside the menu, so it survives the menu closing. onSignOut is what fails, and the
+            menu shuts on the click that called it. */}
         {signOutError && <p className="form-error" role="alert">{signOutError}</p>}
-        <button type="button" className="button" onClick={onSignOut} title={hoverName(t('shell.signOut'))}>
-          <Icon name="signOut" />{label(t('shell.signOut'))}
-        </button>
       </div>
     </nav>
   )

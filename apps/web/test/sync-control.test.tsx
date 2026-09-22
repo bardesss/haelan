@@ -90,9 +90,13 @@ describe('the sync control', () => {
     globalThis.fetch = original
   })
 
+  // The visible spelling is short everywhere now, so the sentence is asserted where it actually
+  // lives rather than in textContent, which reads no attributes and so would pass on an element
+  // that printed the words and named nothing.
   it('still reports a real time as one', () => {
     mount(withQuery(<SyncControl />, { running: false, lastFinishedAtMs: Date.now() - 7 * 60_000 }))
-    expect(container!.textContent).toContain('Synced 7 min ago')
+    expect(container!.querySelector('.synced')!.textContent).toBe('7m')
+    expect(container!.querySelector('.sync-button')!.getAttribute('title')).toBe('Synced 7 min ago')
   })
 
   // The freshness computation moved in here from all seven pages that render a control row, each
@@ -100,13 +104,14 @@ describe('the sync control', () => {
   // finish in the future; a negative "synced -3 min ago" is not a thing to print.
   it('never reports a negative age', () => {
     mount(withQuery(<SyncControl />, { running: false, lastFinishedAtMs: Date.now() + 5 * 60_000 }))
-    expect(container!.textContent).toContain('Synced 0 min ago')
+    expect(container!.querySelector('.synced')!.textContent).toBe('0m')
+    expect(container!.querySelector('.sync-button')!.getAttribute('title')).toBe('Synced 0 min ago')
   })
 
   // Three characters beside a hamburger and a wordmark. The whole sentence still has to be
   // reachable, which is what the title and the accessible name below are for.
   it('prints the age short in the phone top bar, with the sentence still on the button', () => {
-    mount(withQuery(<SyncControl compact />, { running: false, lastFinishedAtMs: Date.now() - 14 * 60_000 }))
+    mount(withQuery(<SyncControl />, { running: false, lastFinishedAtMs: Date.now() - 14 * 60_000 }))
     expect(container!.querySelector('.synced')!.textContent).toBe('14m')
     const button = container!.querySelector('.sync-button')!
     expect(button.getAttribute('title')).toBe('Synced 14 min ago')
@@ -206,8 +211,14 @@ describe('the sync control', () => {
       { googleConnected: true, lastIngestAtMs: Date.now() - 20 * 60_000 },
       { running: false, lastFinishedAtMs: Date.now() - 5 * 60_000 },
     ))
-    expect(container!.textContent).toContain('Synced 5 min ago')
+    // Each sentence asserted where that line keeps it, which is not the same place for the two.
+    // The Google line sits beside a button whose accessible name carries the whole sentence; the
+    // phone line has no button, so it carries its own in an sr-only span. Both are still stated,
+    // and neither is stated through the other.
+    expect(container!.querySelector('.sync-button')!.getAttribute('aria-label'))
+      .toContain('Synced 5 min ago')
     expect(container!.textContent).toContain('Phone sent 20 min ago')
+    expect(container!.textContent).toContain('20m phone')
     expect(container!.querySelector('.sync-button')).not.toBe(null)
   })
 

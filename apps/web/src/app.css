@@ -113,7 +113,44 @@ body {
 /* A link since the account page exists, so it takes the same text-decoration reset .rail-item
    does. No hover or current state, also like .rail-item: the rail has never drawn either, and the
    item for /account directly above this one is what says you are there. */
-.rail-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); color: var(--text-secondary); padding: 4px var(--space-3); text-decoration: none; }
+/* A button now rather than a Link, so the reset a .button would bring is not wanted here: this
+   should still read as the reader's name sitting in the rail, not as a control. width:100% and
+   text-align:left because a button does neither by default and the Link it replaces did both. */
+.rail-person {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left;
+  font-size: var(--font-size-sm); font-family: inherit; color: var(--text-secondary);
+  padding: 4px var(--space-3); text-decoration: none;
+  background: none; border: 0; border-radius: 7px; cursor: pointer;
+}
+.rail-person:hover { background: var(--surface-selected); color: var(--text-primary); }
+.rail-person[aria-current='page'] { background: var(--surface-selected); color: var(--accent-soft); }
+/* The menu is the reason this is positioned: it is absolute against this wrapper, so it opens
+   over the page rather than growing the sticky foot and pushing the rail's nav upward. */
+.rail-person-menu { position: relative; }
+/* Above the name, not below: the foot is pinned to the bottom of the viewport, so a menu opening
+   downward would open off screen. */
+.rail-menu {
+  position: absolute; bottom: calc(100% + var(--space-1)); left: 0; min-width: max(100%, 10rem);
+  display: flex; flex-direction: column; padding: var(--space-1);
+  /* A border and the card surface, and no shadow: there is not one box-shadow anywhere else in
+     this stylesheet, and a raised menu would be the only thing in the app casting one. The
+     surface change against the rail is what separates it. */
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  z-index: 2;
+}
+/* left: 0 would put the menu inside the 60px strip when the rail is collapsed, which is narrower
+   than the shortest of its two labels. Opening it to the right of the strip is the only direction
+   with room. */
+.rail-collapsed .rail-menu { left: calc(100% + var(--space-1)); bottom: 0; }
+.rail-menu-item {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left;
+  padding: 8px var(--space-2); border-radius: 5px;
+  font-size: var(--font-size-sm); font-family: inherit; color: var(--text-secondary);
+  background: none; border: 0; text-decoration: none; cursor: pointer;
+}
+.rail-menu-item:hover { background: var(--surface-selected); color: var(--text-primary); }
+.rail-menu-item svg { width: 17px; height: 17px; flex: none; opacity: .7; }
 .rail-foot .button { justify-content: center; }
 
 /* The drawer, below PHONE_MAX_WIDTH. The dialog is the container; the rail inside it keeps every
@@ -331,14 +368,14 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
 /* The freshness has the rail's width to itself in the foot and wraps to a second line rather than
    being clipped; in the top bar it is the compact spelling, which fits on one. */
 .sync-control .synced { min-width: 0; }
-/* In the foot there are now TWO of these sentences, the Google one and the phone one, and they
-   stall independently so neither can be dropped. Three flex items in a 200px rail left each
-   sentence wrapping inside a column a few words wide, which read as one mangled paragraph rather
-   than two lines. Each takes the full width of the foot instead, stacked under the button.
-   Not applied in the top bar, where the compact spelling is a few characters and belongs on the
-   same row as the button. */
-.rail-foot .sync-control { flex-wrap: wrap; }
-.rail-foot .sync-control .synced { flex: 1 0 100%; }
+/* Both sentences are the short spelling now (SyncControl's own comment says why), so the two of
+   them and the button fit on one row and the foot no longer stacks them. What this replaces was
+   `flex-wrap: wrap` with each sentence at `flex: 1 0 100%`: correct for two full sentences in a
+   186px rail, and five lines of muted grey once the phone line joined the Google one.
+   The separator is drawn rather than written, so neither catalogue has to carry a bullet. */
+.rail-foot .sync-control .synced + .synced::before {
+  content: '·'; color: var(--text-faint); margin-right: var(--space-1);
+}
 /* Collapsed, the rail is a 60px icon strip and the button is the whole of what a sighted reader
    gets. The sentence survives on the button's own title and accessible name, which is the same
    trade .rail-item makes with its sr-only label one rule group up. */
