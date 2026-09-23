@@ -9,6 +9,18 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.6.0](https://github.com/bardesss/haelan/compare/v2.5.0...v2.6.0) (2026-09-23)
+
+
+### Features
+
+* the glance payload (M9a) ([#350](https://github.com/bardesss/haelan/issues/350)) ([0fe0a4c](https://github.com/bardesss/haelan/commit/0fe0a4c8b351d44f45b67aded45a88bac2aaf930))
+
+
+### Bug Fixes
+
+* **mcp:** a refused client sees JSON and a reason, not the web shell ([#353](https://github.com/bardesss/haelan/issues/353)) ([4c4de63](https://github.com/bardesss/haelan/commit/4c4de63acc50317231a8051e31658726eb53d532))
+
 ## [2.5.0](https://github.com/bardesss/haelan/compare/v2.4.0...v2.5.0) (2026-09-23)
 
 
