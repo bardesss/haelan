@@ -11,7 +11,7 @@
 import { openHaelan } from '../../packages/core/src/instance.ts'
 import { buildServer } from '../../apps/server/src/app.ts'
 import { canonicalUrl } from '../../apps/web/src/demo/canonicalUrl.ts'
-import { DEMO_INSTANT_MS } from '../../apps/web/src/demo/instant.ts'
+import { DEMO_CLOCK_MS } from '../../apps/web/src/demo/instant.ts'
 
 // The seed's own credentials (scripts/seed-demo.mjs), printed by that script and repeated in the
 // README: correct for a throwaway directory that script just wrote, wrong for anything else.
@@ -31,8 +31,12 @@ export async function startCaptureServer(dataDir: string): Promise<CaptureServer
     instance,
     dataDir,
     // Pinned, never Date.now(): a live clock would make the capture - and so the demo it feeds -
-    // depend on the day it happened to run.
-    now: () => DEMO_INSTANT_MS,
+    // depend on the day it happened to run. DEMO_CLOCK_MS rather than DEMO_INSTANT_MS since M9b:
+    // the glance computes today from this clock, and the archive's exclusive close reads as a day
+    // nothing was seeded for, so the Dashboard would have been captured for an empty day. Midday on
+    // the last seeded day is the instant the demo browser runs at too, so server and page agree
+    // on which day it is.
+    now: () => DEMO_CLOCK_MS,
     // Nothing in a capture run may reach Google. The seeded refresh token is one Google never
     // issued (see seed-demo.mjs), so this turns an attempt into an immediate, loud failure rather
     // than a network call that might occasionally succeed against a stub.
