@@ -76,15 +76,45 @@ describe('dailyFigure', () => {
 })
 
 describe('staleness', () => {
-  it('names a stale source that fed the figure, and not one that is still reporting', () => {
+  const watchStale = { sourceId: 'watch', name: 'name:watch', lastReportedDate: '2026-07-31', medianGapDays: 1 }
+
+  /**
+   * The shape derivation actually writes when a device stops: the watch has device rows for 30
+   * days ending 20 days before TODAY, and the merged rows of those days name it in their mix;
+   * after it stops, the merged rows name only the phone, which keeps reporting through TODAY. So
+   * nothing in the last seven days mentions the watch at all, which is exactly why a figure has
+   * to look back further than its strip to notice it went quiet.
+   */
+  function seedWatchThenPhone(metric: string, agg: string) {
+    for (const date of datesEnding('2026-07-31', 30)) {
+      insert({ metric, agg, localDate: date, value: 1, source: 'watch', sourceMix: null })
+      insert({ metric, agg, localDate: date, value: 1, source: 'phone', sourceMix: null })
+      insert({ metric, agg, localDate: date, value: 1, sourceMix: mix('watch', 'phone') })
+    }
+    for (const date of datesEnding(TODAY, 20)) {
+      insert({ metric, agg, localDate: date, value: 1, source: 'phone', sourceMix: null })
+      insert({ metric, agg, localDate: date, value: 1, sourceMix: mix('phone') })
+    }
+  }
+
+  beforeEach(() => {
     test.db.insert(sources).values({ id: 'phone', personId: 'p1', externalId: 'phone', displayName: 'Phone', kind: 'device', createdAtMs: 0 }).run()
-    // The watch reported daily for 30 days and stopped 20 days ago: stale by its own cadence.
-    for (const date of datesEnding('2026-07-31', 30)) insert({ metric: 'steps', localDate: date, value: 1, source: 'watch', sourceMix: null })
-    // The phone reported every day up to today: still reporting.
-    for (const date of datesEnding(TODAY, 30)) insert({ metric: 'steps', localDate: date, value: 1, source: 'phone', sourceMix: null })
-    for (const date of datesEnding(TODAY, 7)) insert({ metric: 'steps', localDate: date, value: 5, sourceMix: mix('watch', 'phone') })
+  })
+
+  it('names a stale source that fed the figure before it went quiet, and not one that is still reporting', () => {
+    seedWatchThenPhone('steps', 'sum')
     const figure = dailyFigure(ctx(), { metric: 'steps', agg: 'sum', on: TODAY, partial: true, asOfMs: null })
-    expect(figure.staleSources).toEqual([{ sourceId: 'watch', name: 'name:watch', lastReportedDate: '2026-07-31', medianGapDays: 1 }])
+    expect(figure.staleSources).toEqual([watchStale])
+  })
+
+  it('names it on today\'s heart rate and on the recovery index when those were fed the same way', () => {
+    seedWatchThenPhone('heart_rate', 'mean')
+    seedWatchThenPhone('resting_heart_rate', 'last')
+    seedWatchThenPhone('daily_hrv', 'last')
+    expect(readDay(ctx()).heartRate.staleSources).toEqual([watchStale])
+    const recovery = readRecovery(ctx())
+    expect(recovery.restingHeartRate.staleSources).toEqual([watchStale])
+    expect(recovery.index.staleSources).toEqual([watchStale])
   })
 })
 
@@ -170,7 +200,7 @@ describe('readLastNight', () => {
 })
 
 describe('readRecovery', () => {
-  const seedBaselines = (o: { respiratory?: number } = {}) => {
+  const seedBaselines = (o: { respiratory?: number, today?: boolean } = {}) => {
     for (const date of datesEnding('2026-08-19', 60)) {
       insert({ metric: 'daily_hrv', agg: 'last', localDate: date, value: 40 + (Number(date.slice(8)) % 5) })
       insert({ metric: 'resting_heart_rate', agg: 'last', localDate: date, value: 55 + (Number(date.slice(8)) % 3) })
@@ -178,6 +208,7 @@ describe('readRecovery', () => {
       insert({ metric: 'sleep_asleep_minutes', localDate: date, value: 420 })
       insert({ metric: 'sleep_bedtime_minutes', agg: 'last', localDate: date, value: -30 })
     }
+    if (o.today === false) return
     insert({ metric: 'daily_hrv', agg: 'last', localDate: TODAY, value: 44 })
     insert({ metric: 'resting_heart_rate', agg: 'last', localDate: TODAY, value: 55 })
     insert({ metric: 'respiratory_rate', agg: 'last', localDate: TODAY, value: o.respiratory ?? 14.2 })
@@ -191,7 +222,28 @@ describe('readRecovery', () => {
     expect(recovery.missing).toBeNull()
     expect(recovery.hrv).toMatchObject({ value: 44, asOfDate: TODAY, partial: false })
     expect(recovery.restingHeartRate.value).toBe(55)
+    expect(recovery.index).toMatchObject({ asOfDate: TODAY, unit: 'score' })
     expect(recovery.index.strip).toHaveLength(7)
+  })
+
+  it('shows yesterday\'s HRV and resting heart rate, saying so, before today\'s have synced', () => {
+    seedBaselines({ today: false })
+    const recovery = readRecovery(ctx())
+    // 2026-08-19: 40 + 19 % 5 and 55 + 19 % 3, the values seedBaselines writes for that date.
+    expect(recovery.hrv).toMatchObject({ value: 44, asOfDate: '2026-08-19' })
+    expect(recovery.restingHeartRate).toMatchObject({ value: 56, asOfDate: '2026-08-19' })
+  })
+
+  it('shows yesterday\'s index, its band and no missing reasons, when today cannot be scored yet', () => {
+    seedBaselines({ today: false })
+    const recovery = readRecovery(ctx())
+    expect(recovery.index.value).not.toBeNull()
+    expect(recovery.index.asOfDate).toBe('2026-08-19')
+    expect(recovery.band).not.toBeNull()
+    expect(recovery.missing).toBeNull()
+    // The strip is the index's week, still ending on today, where today is a gap.
+    expect(recovery.index.strip.at(-1)).toEqual({ localDate: TODAY, value: null })
+    expect(recovery.index.strip.at(-2)!.value).toBe(recovery.index.value)
   })
 
   it('leaves respiratory rate out on an ordinary day', () => {
@@ -215,7 +267,9 @@ describe('readRecovery', () => {
 describe('readGlance', () => {
   it('answers a person with no data at all with every section present and empty, not an error', () => {
     const glance = readGlance(new PersonQuery(test.db, 'p1'), { today: TODAY, nowMs: NOW, nameOf: (id) => id })
-    expect(glance).toMatchObject({ today: TODAY, generatedAtMs: NOW, sleep: null })
+    expect(glance).toMatchObject({ today: TODAY, sleep: null })
+    // Nothing time-of-request in the body, or the route's content-hash ETag would never repeat.
+    expect(glance).not.toHaveProperty('generatedAtMs')
     expect(glance.recovery.index.value).toBeNull()
     expect(glance.day.steps.value).toBeNull()
   })

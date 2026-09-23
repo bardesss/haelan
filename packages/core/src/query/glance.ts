@@ -95,7 +95,28 @@ export function staleFeeding(ctx: GlanceContext, sourceIds: Iterable<string>): G
     if (stale === undefined) continue
     out.push({ sourceId, name: ctx.nameOf(sourceId), lastReportedDate: stale.lastReportedDate, medianGapDays: stale.medianGapDays })
   }
+  // Sorted by the name a person reads, so the list is stable across requests rather than in
+  // whatever order the rows happened to name the sources, which would also move the ETag.
   return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * How far back a figure looks for the sources that fed it: its baseline window and its own date,
+ * the 60 days before `on` through `on`.
+ *
+ * Not the seven-day strip. A source only counts as stale after STALE_FLOOR_DAYS (14) of silence
+ * (api/sourceCadence.ts), and a merged row's sourceMix names only the sources that reported that
+ * day, so a source quiet long enough to be stale is by definition absent from the last week's
+ * rows. Looking back over the baseline instead asks the question a person means: did something
+ * that used to feed this number stop?
+ */
+function lookBack(on: string): { from: string, to: string } {
+  return { from: baselineWindow(on).from, to: on }
+}
+
+/** A metric's daily points over its look-back, the one read both a figure and its stale sources draw on. */
+function lookBackPoints(ctx: GlanceContext, metric: string, agg: string, on: string): DailyPoint[] {
+  return ctx.q.series({ metric, agg, ...lookBack(on) }).points
 }
 
 export function stripDates(on: string): string[] {
@@ -113,7 +134,7 @@ export function dailyFigure(
   ctx: GlanceContext, o: { metric: string, agg: string, on: string, partial: boolean, asOfMs: number | null },
 ): GlanceFigure {
   const dates = stripDates(o.on)
-  const { points } = ctx.q.series({ metric: o.metric, agg: o.agg, from: dates[0]!, to: o.on })
+  const points = lookBackPoints(ctx, o.metric, o.agg, o.on)
   const byDate = new Map(points.map((point) => [point.localDate, point]))
   const onDay = byDate.get(o.on)
   const baseline = ctx.q.baseline({ metric: o.metric, agg: o.agg, on: o.on })
@@ -161,10 +182,9 @@ function activeMinutesFigure(ctx: GlanceContext): GlanceFigure {
   const sums = new Map<string, number>()
   const feeding: string[] = []
   for (const metric of ACTIVE_MINUTE_METRICS) {
-    const { points } = ctx.q.series({ metric, agg: 'sum', from: baselineFrom, to: ctx.today })
-    for (const point of points) {
+    for (const point of lookBackPoints(ctx, metric, 'sum', ctx.today)) {
       sums.set(point.localDate, (sums.get(point.localDate) ?? 0) + point.value)
-      if (point.localDate >= dates[0]!) feeding.push(...sourcesOf(point))
+      feeding.push(...sourcesOf(point))
     }
   }
   const baselineValues = [...sums].filter(([date]) => date >= baselineFrom && date <= baselineTo).map(([, value]) => value)
@@ -230,12 +250,18 @@ export function readLastNight(ctx: GlanceContext): GlanceSleep | null {
 }
 
 export interface GlanceRecovery {
-  /** The 0-100 index for today as a figure; `value` null when today could not be scored. */
+  /**
+   * The 0-100 index as a figure, for the latest of today and yesterday that scored, `asOfDate`
+   * naming which; `value` null when neither did. Its strip still ends on today.
+   */
   index: GlanceFigure
+  /** The band of the day `index.asOfDate` names. */
   band: RecoveryBand | null
-  /** Why today could not be scored, the index's own reasons; null when it was. */
+  /** Why today could not be scored, the index's own reasons; null when today or yesterday scored. */
   missing: string[] | null
+  /** Today's, or yesterday's while today has none yet; `asOfDate` says which. */
   restingHeartRate: GlanceFigure
+  /** Today's, or yesterday's while today has none yet; `asOfDate` says which. */
   hrv: GlanceFigure
   /** Present only on a day it sits above its baseline's high; never on a thin baseline. */
   respiratoryRate: GlanceFigure | null
@@ -256,12 +282,24 @@ export interface GlanceRecovery {
  */
 export function readRecovery(ctx: GlanceContext): GlanceRecovery {
   const dates = stripDates(ctx.today)
+  const yesterday = shiftLocalDate(ctx.today, -1)
   const { input } = readRecoveryInput(ctx.q, { from: dates[0]!, to: ctx.today })
   const series = recoveryIndexSeries(input, { from: dates[0]!, to: ctx.today })
   const today = series.get(ctx.today)
-  const scored = today !== undefined && today.enough ? today : null
+  const scoredOn = (localDate: string) => {
+    const day = series.get(localDate)
+    return day !== undefined && day.enough ? { localDate, score: day.score } : null
+  }
+  // Today's HRV and resting heart rate arrive only once the watch syncs the night, so every
+  // morning before that the section would be empty although yesterday's are sitting right there.
+  // Falling back one day, and only one, keeps the morning glance useful without passing off a
+  // stale week as current: `asOfDate` says which day each value is.
+  const scored = scoredOn(ctx.today) ?? scoredOn(yesterday)
 
-  const figure = (metric: string) => dailyFigure(ctx, { metric, agg: 'last', on: ctx.today, partial: false, asOfMs: null })
+  const figure = (metric: string) => {
+    const onToday = dailyFigure(ctx, { metric, agg: 'last', on: ctx.today, partial: false, asOfMs: null })
+    return onToday.value !== null ? onToday : dailyFigure(ctx, { metric, agg: 'last', on: yesterday, partial: false, asOfMs: null })
+  }
   const restingHeartRate = figure('resting_heart_rate')
   const hrv = figure('daily_hrv')
   const respiratory = figure('respiratory_rate')
@@ -272,9 +310,9 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
     index: {
       metric: 'recovery_index',
       value: scored?.score ?? null,
-      unit: '',
+      unit: 'score',
       baseline: null,
-      asOfDate: scored === null ? null : ctx.today,
+      asOfDate: scored?.localDate ?? null,
       asOfMs: null,
       partial: false,
       staleSources: staleFeeding(ctx, [...restingHeartRate.staleSources, ...hrv.staleSources].map((s) => s.sourceId)),
@@ -284,7 +322,9 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
       }),
     },
     band: scored === null ? null : bandOf(scored.score),
-    missing: today === undefined || today.enough ? null : [...today.missing],
+    // Reported only when neither day scored, and then with today's reasons: yesterday's score
+    // answers the section, and today's gaps are what the person can still do something about.
+    missing: scored !== null || today === undefined || today.enough ? null : [...today.missing],
     restingHeartRate,
     hrv,
     respiratoryRate: elevated ? respiratory : null,
@@ -294,17 +334,19 @@ export function readRecovery(ctx: GlanceContext): GlanceRecovery {
 export function readDay(ctx: GlanceContext): GlanceDay {
   const heart = ctx.q.intraday({ metric: 'heart_rate', localDate: ctx.today, points: HEART_RATE_POINTS })
   const heartAsOf = heart.points.reduce<number | null>((latest, p) => (latest === null || p.utcMs > latest ? p.utcMs : latest), null)
+  // Stale sources from heart rate's daily rows over the look-back, not from today's samples: a
+  // source with a sample today is reporting by definition, so today's samples could never name one.
+  const heartFeeding = lookBackPoints(ctx, 'heart_rate', 'mean', ctx.today).flatMap(sourcesOf)
   return {
     steps: dailyFigure(ctx, { metric: 'steps', agg: 'sum', on: ctx.today, partial: true, asOfMs: lastSampleMs(ctx, ['steps']) }),
     activeMinutes: activeMinutesFigure(ctx),
-    heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heart.points.map((p) => p.sourceId)) },
+    heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heartFeeding) },
   }
 }
 
 export interface Glance {
   /** The local date this was assembled for, in the person's own zone. */
   today: string
-  generatedAtMs: number
   sleep: GlanceSleep | null
   recovery: GlanceRecovery
   day: GlanceDay
@@ -314,5 +356,7 @@ export function readGlance(
   q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string },
 ): Glance {
   const ctx = contextFor(q, input)
-  return { today: input.today, generatedAtMs: input.nowMs, sleep: readLastNight(ctx), recovery: readRecovery(ctx), day: readDay(ctx) }
+  // No generation time in the body: /glance is hashed for its ETag, and a stamp of now would make
+  // every response differ, so no conditional request could ever answer 304.
+  return { today: input.today, sleep: readLastNight(ctx), recovery: readRecovery(ctx), day: readDay(ctx) }
 }
