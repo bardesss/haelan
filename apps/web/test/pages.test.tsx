@@ -22,10 +22,11 @@ import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
 import { I18nProvider } from '../src/i18n/index.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
+import { glanceBody } from './glanceFixture.js'
 import { flush } from './flush.js'
 
 // happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
-// this, the same reason dashboard-round-trip.test.tsx sets them.
+// this.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 /**
@@ -103,7 +104,8 @@ const PERSON: Session = {
   connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
 }
 
-const RANGE = '/dashboard?range=week&on=2026-08-12'
+// The glance Dashboard reads no range, so it is mounted on its own path with nothing to anchor.
+const DASHBOARD_ROUTE = '/'
 // Four of the week's seven days report, so the tables have absences to render and every basis
 // line has a denominator larger than its numerator. One heart rate day carries the smallest
 // coverage the derivation can write, so the range chart has a day it can honestly call unworn.
@@ -113,9 +115,10 @@ const UNWORN_DAY = '2026-08-11'
 // The Day tab, anchored on the last of DAYS' own four dates so the stub's /series (filtered to
 // the requested from/to, see stubFetch's own comment) answers with real data for it rather than
 // an empty range that would leave every assertion below indistinguishable from a genuinely quiet
-// day.
-const DAY_ROUTE = '/dashboard?range=day&on=2026-08-13'
-// Health's own Day tab, on the same anchor and for the same reason. Dashboard alone was mounted
+// day. Recovery since M9b: the Day tab cases below were the Dashboard's until the glance replaced
+// it, and Recovery is where the heart rate range card and its one-day trace moved.
+const DAY_ROUTE = '/recovery?range=day&on=2026-08-13'
+// Health's own Day tab, on the same anchor and for the same reason. One page alone was mounted
 // here while five other pages carried the same flag, which is how Health.tsx shipped without it:
 // a second page settled on this range is what makes the Day tab tests below a claim about the
 // app rather than about one file.
@@ -172,9 +175,11 @@ function stubFetch(
             .map(({ date, i }) => seriesPoint(
               metric, date, metric.startsWith('sleep_') ? 420 + i * 5 : 60 + i * 7,
               {
-                // The one day heart rate is at the derivation's coverage floor, which is what gives
-                // the wear clause a singular to render (see the unworn day assertions below).
-                ...(metric === 'heart_rate' && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
+                // The one day heart rate and steps are at the derivation's coverage floor, which is
+                // what gives the wear clause a singular to render (see the unworn day assertions
+                // below). Steps joined in M9b: the heart rate tile whose basis carried the clause
+                // left with the old Dashboard, and Activity's steps heatmap carries it now.
+                ...((metric === 'heart_rate' || metric === 'steps') && date === UNWORN_DAY ? { coverage: 1 / 24 } : {}),
                 sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
                 // Null is as real on the wire as a stamp is (personQuery.ts: a row derived before
                 // M3b added the column), and this is the one stub that exercises that half.
@@ -217,6 +222,9 @@ function stubFetch(
       })
     }
     if (url.includes('/insights')) return json(insightBody(url))
+    // The glance Dashboard's one read. Its own fixture rather than DAYS: the glance is today's, not
+    // a week's, and has no range for this stub's week to be scoped to.
+    if (url.includes('/glance')) return json(glanceBody())
     // Weight's own trend line only (Weight.tsx wires useTrend to the weight metric alone), same
     // DAYS-filtered-by-from/to shape as the /series branch above, so the two stay coherent: a day
     // /series answers for is a day /trend can smooth too. Values an order of magnitude away from
@@ -292,7 +300,6 @@ async function settledPage(Page: () => ReactNode, route: string, lng: string): P
   return html
 }
 
-const settledDashboard = (lng: string) => settledPage(Dashboard, RANGE, lng)
 const settledActivity = (lng: string) => settledPage(Activity, ACTIVITY_ROUTE, lng)
 const settledRecovery = (lng: string) => settledPage(Recovery, RECOVERY_ROUTE, lng)
 const settledSleep = (lng: string) => settledPage(Sleep, SLEEP_ROUTE, lng)
@@ -320,8 +327,11 @@ const restore = stubFetch()
 // resolves inside the act() that fired it. renderToStaticMarkup needs nothing settled, since
 // there is nothing for this page to load in the first place, only a translation table, and
 // I18nProvider is the only context Nutrition.tsx actually reads.
+//
+// The Dashboard left this battery in M9b, when it became the glance: it draws no delta and no
+// range-scoped chart, so half the assertions below would have to be excused by name for it. It is
+// settled on its own below (`glance`) and held to the assertions that do apply to it.
 const pages = {
-  Dashboard: await settledDashboard('en'),
   Activity: await settledActivity('en'),
   Recovery: await settledRecovery('en'),
   Sleep: await settledSleep('en'),
@@ -336,18 +346,24 @@ const pages = {
   // cards' worth of coverage.
   Account: await settledAccount('en'),
 }
-const dashboardNl = await settledDashboard('nl')
-// Settled inside the same stub window as `pages`/`dashboardNl` above, rather than inside an `it`
+// Recovery and Activity rather than the Dashboard this used to settle in Dutch: Recovery carries the
+// heart rate range chart whose table states absence (it moved there from the Dashboard), and
+// Activity the steps heatmap whose basis carries the wear clause in both its forms.
+const recoveryNl = await settledRecovery('nl')
+const activityNl = await settledActivity('nl')
+// Settled inside the same stub window as `pages`/`recoveryNl` above, rather than inside an `it`
 // after `restore()` runs below: every other settledPage call in this file happens while stubFetch
 // is installed, and the Day tab tests want the same real, resolved render those already get, not
 // a fresh mount racing the unstubbed global fetch.
-const dashboardDay = await settledPage(Dashboard, DAY_ROUTE, 'en')
+const recoveryDay = await settledPage(Recovery, DAY_ROUTE, 'en')
 const healthDay = await settledPage(Health, HEALTH_DAY_ROUTE, 'en')
+const glance = await settledPage(Dashboard, DASHBOARD_ROUTE, 'en')
 restore()
 
 // Whether a page carries at least one dense, by-position chart that draws an explicit absence
-// mark for a calendar day nothing answered (Dashboard's HeartRateRange, Activity's own steps
-// heatmap). An ordinary Sparkline, which is every per-metric tile chart on Recovery and Sleep,
+// mark for a calendar day nothing answered (Recovery's HeartRateRange, Activity's own steps
+// heatmap). Recovery is true since M9b, when the heart rate range card moved there from the
+// Dashboard; what follows about its Sparklines is still true of those three cards. An ordinary Sparkline, which is every per-metric tile chart on Recovery and Sleep,
 // builds its accessible table straight from the points a query actually returned (SeriesPoint.value
 // is never null, so there is no gap value to render a word for; see useSeries.ts's own comment),
 // not from a dense day-by-day array with a placeholder for the days it left out. Sleep's other two
@@ -388,7 +404,7 @@ restore()
 // same reason again, one level plainer still: its one Card holds a single static EmptyState
 // paragraph, no table of any kind.
 const HAS_ABSENCE_CHART: Record<string, boolean> = {
-  Dashboard: true, Activity: true, Recovery: false, Sleep: false, Health: true, Weight: false,
+  Activity: true, Recovery: true, Sleep: false, Health: true, Weight: false,
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
@@ -404,7 +420,7 @@ const HAS_ABSENCE_CHART: Record<string, boolean> = {
 // `=== false` at each call site, not `!value`, for the same reason HAS_ABSENCE_CHART is: an
 // unlisted page must run the assertion, not skip it by omission.
 const IS_CHART_PAGE: Record<string, boolean> = {
-  Dashboard: true, Activity: true, Recovery: true, Sleep: true, Health: true, Weight: true,
+  Activity: true, Recovery: true, Sleep: true, Health: true, Weight: true,
   Nutrition: false, Notes: false, Settings: false, Account: false,
 }
 
@@ -552,6 +568,42 @@ describe.each(Object.entries(pages))('%s', (_name, html) => {
   })
 })
 
+// The glance Dashboard under the same harness, held to the rules above that are about a page's
+// markup rather than about a range: it has charts (a hypnogram, a heart rate trace, a strip per
+// card) but no deltas and no range-scoped chart that could state an absence, which is why it is
+// out of the battery rather than in it with two exemptions. glance-page.test.tsx covers what it
+// shows; this is what the whole app is held to.
+describe('Dashboard (the glance)', () => {
+  it('names every chart and points it at a description, with a table alternative', () => {
+    const hosts = [...glance.matchAll(/<div[^>]*role="img"[^>]*>/g)].map((m) => m[0])
+    expect(hosts.length).toBeGreaterThan(0)
+    for (const host of hosts) {
+      expect(host, host).toMatch(/aria-label="[^"]+"/)
+      expect(host, host).toMatch(/aria-describedby="[^"]+"/)
+    }
+    for (const m of glance.matchAll(/aria-describedby="([^"]+)"/g)) {
+      expect(glance, `no element with id ${m[1]}`).toContain(`id="${m[1]}"`)
+    }
+    expect([...glance.matchAll(/<table class="sr-only">/g)].length).toBe(hosts.length)
+  })
+
+  it('never renders a null, undefined, NaN, raw key or absent zero', () => {
+    expect(glance).not.toMatch(/>(null|undefined|NaN)</)
+    expect(glance).not.toContain('NaN')
+    expect(glance).not.toMatch(/<div class="value">0(<|&nbsp;| )/)
+    expect(glance).not.toMatch(/\b(dashboard|glance|sleep|common|charts|activity|recovery|emptyState|errorState)\.[a-zA-Z0-9][a-zA-Z0-9.]*\b/)
+  })
+
+  it('draws at most one basis line per card, and no two labels alike', () => {
+    const cards = [...glance.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
+    expect(cards).toHaveLength(3)
+    for (const card of cards) expect([...card.matchAll(/<p class="basis"/g)].length, card).toBeLessThanOrEqual(1)
+    const labels = [...glance.matchAll(/<span class="label">([^<]+)<\/span>/g)].map((m) => m[1])
+    expect(labels.length).toBeGreaterThan(0)
+    expect(new Set(labels).size).toBe(labels.length)
+  })
+})
+
 describe('chart tables follow the active language', () => {
   // Every chart's accessible table used to be built from English literals regardless of the
   // active language, which meant a Dutch screen reader user got an English table on both pages.
@@ -559,10 +611,10 @@ describe('chart tables follow the active language', () => {
   // Weekday labels are not checked here any more: the only chart on either of these two pages
   // that carried a weekday column was the daily steps heatmap, and M3d2 moved it to Activity.tsx,
   // which this file's own round trip harness does not stub. Date and absence words still come
-  // through every ordinary Sparkline and the heart rate range chart, both of which stay on
-  // Dashboard, so they are still worth pinning here.
+  // through every ordinary Sparkline and the heart rate range chart, so they are still worth
+  // pinning here: on Recovery since M9b, where that chart moved from the Dashboard.
   it('translates column headers and absence words', () => {
-    const nlTables = tables(dashboardNl)
+    const nlTables = tables(recoveryNl)
     expect(nlTables).toContain('Datum')
     // In a chart table, not merely somewhere on the page: this used to be satisfied by a tile's
     // own basis line while every table below it stayed English.
@@ -578,13 +630,12 @@ describe('chart tables follow the active language', () => {
   // coverage, once Sleep left this file's static-render harness (see the comment above `pages`).
 })
 
-describe('Dashboard specifics', () => {
-  const html = pages.Dashboard
+// These ran against the old Dashboard's tiles until M9b. Activity carries the same shapes now: its
+// cards count against the same stubbed week, its steps heatmap's basis carries the wear clause over
+// a steps day at the coverage floor, and its other wear-signal cards carry the plural "0 days".
+describe('the wear clause', () => {
+  const html = pages.Activity
 
-  // The daily steps heatmap this used to check moved to Activity.tsx in M3d2, along with the
-  // colour domain and "stronger colour is more steps" copy it drew; activity.test.tsx covers its
-  // dense-denominator basis line directly rather than through this file's own round trip harness,
-  // which stubs only Dashboard and Sleep.
   it('counts the basis against every calendar day in the period, not the days that answered', () => {
     // The stubbed week is seven calendar days and DAYS answers four of them, so every card reads
     // "4 of 7": the denominator is the range and the numerator is the rows the headline figure was
@@ -614,9 +665,9 @@ describe('Dashboard specifics', () => {
   })
 
   it('picks the Dutch singular and plural too, not one form for both', () => {
-    expect(dashboardNl).toContain('1 dag niet gedragen')
-    expect(dashboardNl).not.toContain('1 dagen niet gedragen')
-    expect(dashboardNl).toContain('0 dagen niet gedragen')
+    expect(activityNl).toContain('1 dag niet gedragen')
+    expect(activityNl).not.toContain('1 dagen niet gedragen')
+    expect(activityNl).toContain('0 dagen niet gedragen')
   })
 
 })
@@ -627,18 +678,18 @@ describe('Dashboard specifics', () => {
 // assertion cannot be satisfied by whatever copy the new chart happens to get.
 describe('Day tab', () => {
   it('replaces the daily range chart on a one day range', () => {
-    expect(dashboardDay).not.toContain('Daily heart rate minimum, mean and maximum through')
+    expect(recoveryDay).not.toContain('Daily heart rate minimum, mean and maximum through')
   })
 
-  // Every other MetricCard on this range (the four stat tiles, the sleep schedule chart) still
-  // renders its StatTile, delta and basis line exactly as any other range does (see the next test);
-  // only the chart each would otherwise draw is swapped for ChartNote's own short line. Heart rate
-  // alone keeps an actual chart, because it alone has an intraday view to swap in instead. The
-  // figure count is the assertion because it is what a reader actually sees change: this page draws
-  // several fewer chart figures on the Day tab than it does on a week, the state this replaces.
+  // Every other MetricCard on this range still renders its StatTile, delta and basis line exactly
+  // as any other range does (see the next test); only the chart each would otherwise draw is
+  // swapped for ChartNote's own short line. Heart rate alone keeps an actual chart, because it alone
+  // has an intraday view to swap in instead. The figure count is the assertion because it is what a
+  // reader actually sees change: this page draws several fewer chart figures on the Day tab than it
+  // does on a week, the state this replaces.
   it('draws fewer chart figures on a one day range than on a week', () => {
-    const dayFigures = (dashboardDay.match(/<figure/g) ?? []).length
-    const weekFigures = (pages.Dashboard.match(/<figure/g) ?? []).length
+    const dayFigures = (recoveryDay.match(/<figure/g) ?? []).length
+    const weekFigures = (pages.Recovery.match(/<figure/g) ?? []).length
     expect(dayFigures).toBeLessThan(weekFigures)
   })
 
@@ -646,21 +697,22 @@ describe('Day tab', () => {
   // emptyStateFor's own gate, which meant MetricCard's existing early return fired for it exactly
   // as it does for no_data and not_worn, discarding the StatTile (the number, the delta and the
   // basis line) along with the chart on a range where none of the three were wrong. A reader on the
-  // Day tab lost every figure on the page, not only the meaningless one-point charts. Steps is the
-  // card under test because DAYS's own stubbed value for it is real and non-zero on 2026-08-13.
+  // Day tab lost every figure on the page, not only the meaningless one-point charts. Resting heart
+  // rate is the card under test because DAYS's own stubbed value for it is real and non-zero on
+  // 2026-08-13 (it was the Dashboard's steps tile until M9b).
   it('keeps a plain metric card\'s own number on a one day range, only its chart goes', () => {
-    const cards = [...dashboardDay.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
-    const steps = cards.find((c) => c.includes('>Steps<'))
-    if (!steps) throw new Error('no Steps card in the Day tab render')
-    expect(steps).toContain('<div class="value">')
-    expect(steps).not.toContain('<figure')
+    const cards = [...recoveryDay.matchAll(/<section class="card"[^>]*>[\s\S]*?<\/section>/g)].map((m) => m[0])
+    const resting = cards.find((c) => c.includes('>Resting heart rate<'))
+    if (!resting) throw new Error('no Resting heart rate card in the Day tab render')
+    expect(resting).toContain('<div class="value">')
+    expect(resting).not.toContain('<figure')
   })
 
   // The distinction that matters and the one most likely to be got wrong: a one day range with a
   // value is not missing data. Rendering the no-data copy would state something false, which is why
   // this needs its own reason rather than reusing no_data.
   it('does not claim a day with data has no data', () => {
-    expect(dashboardDay).not.toContain('No data yet')
+    expect(recoveryDay).not.toContain('No data yet')
   })
 
   // Health was the sixth page and the one this branch missed: both its cards passed no oneDayRange

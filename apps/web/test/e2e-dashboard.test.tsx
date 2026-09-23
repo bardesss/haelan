@@ -46,7 +46,16 @@ function mount(node: ReactNode): void {
 }
 
 const KNOWN_STEPS = 12_345
-const SEEDED_DATE = '2026-08-15'
+
+/**
+ * The person's today by the harness's own clock, which is what the glance route reads (it has no
+ * range parameter: the server decides the day in the person's zone from app.haelan.now()). The
+ * harness pins that clock and signs in a person in Europe/Amsterdam, so seeding this date is
+ * seeding "today" for the page, with nothing depending on when the suite runs.
+ */
+function todayOf(nowMs: number): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Amsterdam' }).format(new Date(nowMs))
+}
 
 const NO_BODY_STATUSES = new Set([101, 204, 205, 304])
 
@@ -126,7 +135,7 @@ describe('the end to end path: a real server behind a real render', () => {
       //
       // source: 'merged' is what personQuery.series's preferMerged prefers for a date when the
       // caller asks with no source filter (packages/core/src/query/personQuery.ts), which is what
-      // the Dashboard's steps tile does by default - the shape a real device reconciliation
+      // the glance's steps figure asks for - the shape a real device reconciliation
       // writes, not a raw per-device row.
       //
       // completeSetup() first: daily.person_id references people.id, and nothing has created 'p1'
@@ -134,7 +143,7 @@ describe('the end to end path: a real server behind a real render', () => {
       // has to run before that regardless, so it is named here rather than left implicit.
       await harness.completeSetup()
       harness.app.haelan.instance.db.insert(schema.daily).values({
-        personId: 'p1', localDate: SEEDED_DATE, metric: 'steps', agg: 'sum', source: 'merged',
+        personId: 'p1', localDate: todayOf(harness.clock.nowMs), metric: 'steps', agg: 'sum', source: 'merged',
         value: KNOWN_STEPS, coverage: 1, sourceMix: JSON.stringify([{ source: 'watch', hours: 24 }]),
         derivationVersion: DERIVATION_VERSION,
       }).run()
@@ -144,17 +153,13 @@ describe('the end to end path: a real server behind a real render', () => {
       const sessionCookie = await harness.signIn()
       globalThis.fetch = fetchThroughServer(harness.app, sessionCookie)
 
-      // The Dashboard route ('/'), with an explicit day range on the seeded date rather than the
-      // default month view. Two reasons: datesFor('day', anchor) sets from = to = anchor
-      // (controls/range.ts), the simplest range to seed exactly one row for, and a day range is
-      // also the one range where every card on this page swaps its chart for a plain ChartNote
-      // (Dashboard.tsx's tile() and its sleep schedule card both read oneDayRange) or, for the
-      // heart rate and sleep-stage cards, falls to an empty state with nothing seeded - so this
-      // render never has to reach echarts or set up its chart-token custom properties the way
-      // dashboard-round-trip.test.tsx's stubbed render does. useRoute reads window.location
+      // The Dashboard route ('/'), with no range parameter: since M9b it is the glance, which has
+      // no range to pick. One seeded row on today draws no chart either (the strip needs two days
+      // with values, and there is no night or heart rate trace), so this render never has to reach
+      // echarts or set up its chart-token custom properties. useRoute reads window.location
       // through useSyncExternalStore, independent of anything React controls yet, so this is set
       // before the first render rather than through a click.
-      window.history.replaceState(null, '', `/?range=day&on=${SEEDED_DATE}`)
+      window.history.replaceState(null, '', '/')
 
       const client = createBoundQueryClient()
       mount(
@@ -171,12 +176,12 @@ describe('the end to end path: a real server behind a real render', () => {
       await flush(client, () => container!.innerHTML)
 
       const cards = [...container!.querySelectorAll('.card')]
-      // 'Steps' names the tile card exactly; the insight card two slots over is labelled 'Steps,
-      // this period against the last' (dashboard.insights.steps in en.json) and would not match.
+      // The Today card, whose headline figure is labelled 'Steps'.
       const stepsCard = cards.find((card) => card.querySelector('.label')?.textContent === 'Steps')
       if (!stepsCard) {
         throw new Error(`no card labelled "Steps" among ${cards.length} rendered cards; got: ${container!.innerHTML}`)
       }
+      expect(stepsCard.querySelector('.glance-card-title strong')?.textContent).toBe('Today')
       const value = stepsCard.querySelector('.value')
       // The whole cell, not a substring: formatMetricValue rounds to steps' catalogue precision
       // (0 decimals, packages/core/src/derive/metrics.ts's TOTAL) and groups thousands for the

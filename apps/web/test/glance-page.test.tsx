@@ -1,9 +1,27 @@
-import { describe, it, expect } from 'vitest'
+// @vitest-environment happy-dom
+// happy-dom for the page-level cases at the foot of this file, which mount the Dashboard for real
+// and let its query settle; the card-level cases above them still render to static markup, which
+// needs no DOM and is unaffected by one being present.
+import { describe, it, expect, afterEach, beforeEach } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { ComponentProps } from 'react'
+import { createRoot } from 'react-dom/client'
+import type { Root } from 'react-dom/client'
+import { act } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { GlanceCard } from '../src/pages/dashboard/GlanceCard.js'
+import { Dashboard } from '../src/pages/Dashboard.js'
 import { I18nProvider } from '../src/i18n/index.js'
-import type { GlanceFigure, GlanceStaleSource } from '../src/data/useGlance.js'
+import { queryKeys } from '../src/api/queryKeys.js'
+import { CHART_VARS } from '../src/charts/tokens.js'
+import type { Session } from '../src/auth/session.js'
+import type { Glance, GlanceFigure, GlanceStaleSource } from '../src/data/useGlance.js'
+import { glanceBody, glanceFigure } from './glanceFixture.js'
+import { flush } from './flush.js'
+
+// happy-dom applies no stylesheet, so echarts.init's effect throws "missing chart token" without
+// this, the same setup every other file mounting a chart for real carries.
+for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
 
 const TODAY = '2026-09-23'
 
@@ -61,7 +79,10 @@ describe('GlanceCard', () => {
   it('prints the strip with its label and caption under a headline', () => {
     const html = render()
     expect(html).toContain('aria-label="Steps, last 7 days"')
-    expect(html).toContain('<p class="glance-asof">last 7 days</p>')
+    // The caption is also the strip's accessible description, so the chart host points at it.
+    const captionId = html.match(/<p class="glance-asof" id="([^"]+)">last 7 days<\/p>/)?.[1]
+    expect(captionId).toBeDefined()
+    expect(html).toContain(`aria-describedby="${captionId}"`)
   })
 
   it('prints the empty line and no strip for a null headline', () => {
@@ -131,5 +152,204 @@ describe('GlanceCard', () => {
     const html = render({ headline: { label: 'Steps', figure: figure({ value: 2100, partial: true }) } })
     expect(html).toContain('so far; your usual day 8,700')
     expect(html).not.toContain('below')
+  })
+})
+
+const PERSON: Session = {
+  personId: 'p1', displayName: 'Test', username: 'test', isAdmin: false, timezone: 'Europe/Amsterdam', birthDate: null, sex: null,
+  sleepTargetMinutes: 480, sleepUseBaseline: true,
+  connected: true, credentialsUnreadable: false, baseUrl: 'http://localhost:4235',
+}
+
+let container: HTMLDivElement | null = null
+let root: Root | null = null
+
+beforeEach(() => {
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  window.history.replaceState(null, '', '/')
+})
+
+afterEach(() => {
+  act(() => { root?.unmount() })
+  container?.remove()
+  container = null
+  root = null
+})
+
+/**
+ * Answers /glance with `body` (or a 500 when `status` says so), /sources with one named watch for
+ * the heart rate trace's legend, and records every URL asked for, so a test can hold the page to
+ * the one read it claims to make.
+ */
+function stubFetch(body: Glance, seen: string[], status = 200): () => void {
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input)
+    seen.push(url)
+    const json = (value: unknown, code = 200) =>
+      new Response(JSON.stringify(value), { status: code, headers: { 'content-type': 'application/json' } })
+    if (url.includes('/glance')) return status === 200 ? json(body) : json({ error: 'internal' }, status)
+    if (url.includes('/sources')) return json({ items: [] })
+    return json({})
+  }) as typeof fetch
+  return () => { globalThis.fetch = original }
+}
+
+async function mountPage(body: Glance = glanceBody(), o: { lng?: string, status?: number } = {}): Promise<{ seen: string[], client: QueryClient, restore: () => void }> {
+  const seen: string[] = []
+  const restore = stubFetch(body, seen, o.status)
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+  client.setQueryData(queryKeys.session(), PERSON)
+  const tree: ReactNode = (
+    <I18nProvider lng={o.lng ?? 'en'}><QueryClientProvider client={client}><Dashboard /></QueryClientProvider></I18nProvider>
+  )
+  act(() => { root!.render(tree) })
+  await flush(client, () => container!.innerHTML)
+  return { seen, client, restore }
+}
+
+const cards = (): Element[] => [...container!.querySelectorAll('.glance-card')]
+const titles = (): string[] => [...container!.querySelectorAll('.glance-card-title strong')].map((el) => el.textContent ?? '')
+
+describe('the glance Dashboard', () => {
+  it('draws three cards in order, one per question', async () => {
+    const { restore } = await mountPage()
+    try {
+      expect(titles()).toEqual(['Last night', 'Recovery', 'Today'])
+      expect(container!.querySelector('h1')?.textContent).toBe('Dashboard')
+    } finally { restore() }
+  })
+
+  it('has no control row', async () => {
+    const { restore } = await mountPage()
+    try {
+      expect(container!.querySelector('.controls')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('links the sleep card to the night it draws, and draws that night\'s hypnogram', async () => {
+    const { restore } = await mountPage()
+    try {
+      const sleep = cards()[0]!
+      expect(sleep.querySelector('a.card-link')?.getAttribute('href')).toBe('/sleep/night/2026-09-23')
+      const host = sleep.querySelector('[role="img"][aria-label^="Sleep stages through the night of"]')
+      expect(host).not.toBeNull()
+      // The bed label under the hypnogram is the night's own start in its own offset, 21:10 UTC + 2h.
+      expect(sleep.textContent).toContain('Bed 23:10')
+      // The night spans two dates, and the subtitle names both.
+      expect(sleep.querySelector('.glance-card-title span')?.textContent).toMatch(/22.*23/)
+    } finally { restore() }
+  })
+
+  it('collapses the sleep card to one line when there is no night, and links to Sleep instead', async () => {
+    const { restore } = await mountPage({ ...glanceBody(), sleep: null })
+    try {
+      const sleep = cards()[0]!
+      expect(sleep.querySelector('.glance-empty')?.textContent).toBe('No night recorded in the last day and a half.')
+      expect(sleep.querySelector('a.card-link')?.getAttribute('href')).toBe('/sleep')
+      expect(sleep.querySelector('[role="img"]')).toBeNull()
+    } finally { restore() }
+  })
+
+  it('shows the breathing rate note only on a day the payload carries one', async () => {
+    const plain = await mountPage()
+    try {
+      expect(cards()[1]!.querySelector('.glance-note')).toBeNull()
+    } finally { plain.restore() }
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+
+    const body = glanceBody()
+    body.recovery.respiratoryRate = glanceFigure({ metric: 'respiratory_rate', value: 17.2, unit: 'breaths_per_minute' })
+    const elevated = await mountPage(body)
+    try {
+      expect(cards()[1]!.querySelector('.glance-note')?.textContent).toMatch(/^Breathing rate 17\.2 .*, above your usual$/)
+    } finally { elevated.restore() }
+  })
+
+  it('says why recovery is unscored when the index has no value', async () => {
+    const body = glanceBody()
+    body.recovery.index = glanceFigure({ metric: 'recovery_index', value: null, unit: 'score', asOfDate: null })
+    const { restore } = await mountPage(body)
+    try {
+      expect(cards()[1]!.querySelector('.glance-note')?.textContent).toBe('Not enough readings to score yet.')
+    } finally { restore() }
+  })
+
+  it('puts a stale source on steps beside the Today card\'s title, and nowhere else', async () => {
+    const body = glanceBody()
+    body.day.steps = { ...body.day.steps, staleSources: [{ sourceId: 's1', name: 'My watch', lastReportedDate: '2026-09-10', medianGapDays: 1 }] }
+    const { restore } = await mountPage(body)
+    try {
+      const [sleep, recovery, today] = cards()
+      expect(sleep!.querySelector('.source-warning')).toBeNull()
+      expect(recovery!.querySelector('.source-warning')).toBeNull()
+      expect(today!.querySelector('.glance-card-title .source-warning')?.getAttribute('title'))
+        .toBe('My watch has not reported since Sep 10, 2026; it usually reports daily.')
+    } finally { restore() }
+  })
+
+  it('states its span from the heart rate\'s last reading, in the person\'s zone', async () => {
+    const { restore } = await mountPage()
+    try {
+      // 09:38 UTC is 11:38 in Amsterdam; the steps' own 09:32 must not be the one it reads.
+      expect(container!.querySelector('.all-time-span')?.textContent).toBe('Last night, and today until 11:38')
+    } finally { restore() }
+  })
+
+  it('falls back to the steps\' last reading, and to no time at all', async () => {
+    const body = glanceBody()
+    body.day.heartRate = { ...body.day.heartRate, asOfMs: null }
+    const stepsOnly = await mountPage(body)
+    try {
+      expect(container!.querySelector('.all-time-span')?.textContent).toBe('Last night, and today until 11:32')
+    } finally { stepsOnly.restore() }
+    act(() => { root!.unmount() })
+    root = createRoot(container!)
+
+    const none = glanceBody()
+    none.day.heartRate = { ...none.day.heartRate, asOfMs: null }
+    none.day.steps = { ...none.day.steps, asOfMs: null }
+    const neither = await mountPage(none)
+    try {
+      expect(container!.querySelector('.all-time-span')?.textContent).toBe('Last night, and today so far')
+    } finally { neither.restore() }
+  })
+
+  // The locale parity guard compares key sets and never renders, so the Dutch page is rendered
+  // once here to see that it reads as Dutch.
+  it('renders in Dutch', async () => {
+    const { restore } = await mountPage(glanceBody(), { lng: 'nl' })
+    try {
+      expect(titles()).toEqual(['Afgelopen nacht', 'Herstel', 'Vandaag'])
+      expect(container!.querySelector('.all-time-span')?.textContent).toBe('Afgelopen nacht, en vandaag tot 11:38')
+      expect(container!.textContent).toContain('Stappen')
+      expect(container!.textContent).not.toMatch(/\bglance\.[a-zA-Z]/)
+    } finally { restore() }
+  })
+
+  it('shows the error state with a retry that asks again', async () => {
+    const { seen, client, restore } = await mountPage(glanceBody(), { status: 500 })
+    try {
+      expect(cards()).toHaveLength(0)
+      const retry = container!.querySelector('button')
+      expect(retry?.textContent).toBe('Try again')
+      act(() => { retry!.click() })
+      await flush(client, () => container!.innerHTML)
+      expect(seen.filter((u) => u.includes('/glance'))).toHaveLength(2)
+    } finally { restore() }
+  })
+
+  // One read: the old Dashboard issued a dozen (series per agg, insights, nights, annotations).
+  // /sources is the heart rate trace's own legend lookup (IntradayHeartRate's useSourceNames), a
+  // name table rather than a read of anyone's data, so it is the one other request allowed.
+  it('makes exactly one data request, to /glance', async () => {
+    const { seen, restore } = await mountPage()
+    try {
+      const data = seen.filter((u) => !u.includes('/sources') && !u.includes('/api/auth/me'))
+      expect(data).toEqual(['/api/v1/p/p1/glance'])
+    } finally { restore() }
   })
 })

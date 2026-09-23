@@ -7,14 +7,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { queryKeys } from '../src/api/queryKeys.js'
 import type { Session } from '../src/auth/session.js'
-import { Dashboard } from '../src/pages/Dashboard.js'
+import { CARDIO_LOAD_METRIC } from '@haelan/core/cardio-load'
+import { Activity } from '../src/pages/Activity.js'
 import { CHART_VARS } from '../src/charts/tokens.js'
 import { flush } from './flush.js'
 import { seriesPoint, insightBody } from './metricCoverage.js'
 
 // The steps card draws a real Sparkline once it has a point, and echarts.init throws
-// without the chart tokens happy-dom never applies: same setup dashboard-round-trip uses.
+// without the chart tokens happy-dom never applies.
 for (const variable of CHART_VARS) document.documentElement.style.setProperty(variable, '#000000')
+
+// Activity rather than the Dashboard this file first mounted: the Dashboard became the glance in
+// M9b and reads one payload with no range at all, so the clamp has nothing to act on there. Activity
+// still reads /series through usePageControls, which is where the clamp lives.
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -23,7 +28,7 @@ beforeEach(() => {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  window.history.replaceState(null, '', '/dashboard?range=month&on=2026-09-15')
+  window.history.replaceState(null, '', '/activity?range=month&on=2026-09-15')
 })
 
 afterEach(() => {
@@ -92,17 +97,17 @@ function stubFetch(seen: string[], googleConnected: boolean): () => void {
 }
 
 /**
- * The series requests the page's own cards send, without the ones RecoveryIndexTile sends for
- * itself. That tile mounts its own useRecoveryIndex, which asks over a range shifted back by the
- * baseline window, so its `from` is deliberately not the tab start and deliberately not the history
- * start either. Both assertions below are about what the cards ask for, and a tile that asks for
- * something else is a separate, real cost rather than a clamp that failed.
+ * The series requests the page's own cards send, without the one TrainingLoadCard sends for
+ * itself. That card asks over a window fixed by the metric's own definition (useTrainingLoad's
+ * chronicWindowStart, 28 days back from `on`), so its `from` is deliberately neither the tab start
+ * nor the history start. Both assertions below are about what the range-following cards ask for,
+ * and a card that asks for something else is a separate, real cost rather than a clamp that failed.
+ * (The Dashboard this file used to mount had the same exception in its recovery index tile.)
  *
- * Filtered on the two metrics only it carries, which is the same seam recovery.test.tsx uses for
- * the same reason.
+ * Filtered on the one metric only that card carries.
  */
 const cardSeries = (seen: string[]): string[] => seen.filter((u) =>
-  u.includes('/series') && !u.includes('sleep_bedtime_minutes') && !u.includes('sleep_asleep_minutes'))
+  u.includes('/series') && !u.includes(`metric=${CARDIO_LOAD_METRIC}`))
 
 describe('a phone-only history start', () => {
   // An all time card on a phone-only instance must not show a 30 day
@@ -112,7 +117,7 @@ describe('a phone-only history start', () => {
   it('moves every card series request onto the history start', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen, false)
-    const { client, tree } = withQuery(<Dashboard />)
+    const { client, tree } = withQuery(<Activity />)
     act(() => { root?.render(tree) })
     await flush(client, () => container!.innerHTML)
 
@@ -132,7 +137,7 @@ describe('a phone-only history start', () => {
   it('leaves the tab window alone when Google is also connected', async () => {
     const seen: string[] = []
     const restore = stubFetch(seen, true)
-    const { client, tree } = withQuery(<Dashboard />)
+    const { client, tree } = withQuery(<Activity />)
     act(() => { root?.render(tree) })
     await flush(client, () => container!.innerHTML)
 

@@ -286,10 +286,10 @@ describe('every SleepSchedule caller goes through this module', () => {
       .filter((file) => file.endsWith('.tsx'))
       .map((file) => [file, readFileSync(`${dir}/${file}`, 'utf8')] as const)
     const callers = sources.filter(([, source]) => /<SleepSchedule[\s>]/.test(source))
-    // More than one, so the sweep cannot pass by matching nothing: the claim at the top of this
-    // file is about both callers, and a regex that stopped matching would otherwise look like
-    // agreement.
-    expect(callers.length).toBeGreaterThan(1)
+    // At least one, so the sweep cannot pass by matching nothing: a regex that stopped matching
+    // would otherwise look like agreement. It was more than one until M9b, when the Dashboard's
+    // copy of the sleep schedule card left with the old page and Sleep.tsx became the only caller.
+    expect(callers.length).toBeGreaterThanOrEqual(1)
     for (const [page, source] of callers) {
       expect(source, page).toMatch(/from '\.\.\/charts\/schedule\.js'/)
       // A local declaration of any of the three, not a mere mention: the names appear in prose in

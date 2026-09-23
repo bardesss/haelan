@@ -17,15 +17,9 @@ describe('the message catalogues', () => {
     expect(paths(nl).sort()).toEqual(paths(en).sort())
   })
 
-  // Dashboard and Sleep render the same hypnogram off the same query and the same night, so a
-  // reader moving between them should not be told two different things about which night it is.
-  // Dashboard said "last night" while Sleep said "most recent night"; Sleep's is the honest one,
-  // since the range end can be months ago, and only one of the two can be right for both pages.
-  it('word the sleep stages basis the same on both pages that render it', () => {
-    for (const [locale, catalogue] of [['en', en], ['nl', nl]] as const) {
-      expect(catalogue.dashboard.sleepStages.basis, locale).toBe(catalogue.sleep.sleepStages.basis)
-    }
-  })
+  // A pin comparing dashboard.sleepStages.basis with sleep.sleepStages.basis stood here. It went in
+  // M9b with the key itself: the glance draws its hypnogram with Sleep's own chart label and no basis
+  // line, so there is no second wording left to drift from Sleep's.
 
   // One Dutch word per concept, not three. The moment of waking appeared as "wektijd" on a tile
   // label, "waaktijd" in the schedule basis beside it and "Ontwaakt" in that chart's own column

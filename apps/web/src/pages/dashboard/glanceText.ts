@@ -73,7 +73,7 @@ export function usualLine(figure: GlanceFigure, t: Translate, language: string):
 // rather than subtracting 86_400_000 ms: the local dates this app hands around name a day, not an
 // instant, and formatLocalDate's own convention (anchor at UTC midnight, read back in UTC) is the
 // one this function has to agree with so "yesterday" names the same day that convention would.
-function yesterdayOf(today: string): string {
+export function yesterdayOf(today: string): string {
   const date = new Date(`${today}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() - 1)
   return date.toISOString().slice(0, 10)
@@ -87,7 +87,7 @@ function yesterdayOf(today: string): string {
 // an AM/PM suffix ("11:32 AM"), and every other clock time this app prints (formatClock, bed and
 // wake times) is 24-hour with no suffix - an as-of time in the other form beside them would read
 // as a different kind of fact.
-function formatTimeOfDay(atMs: number, language: string, timezone: string): string {
+export function formatTimeOfDay(atMs: number, language: string, timezone: string): string {
   return new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone }).format(new Date(atMs))
 }
 

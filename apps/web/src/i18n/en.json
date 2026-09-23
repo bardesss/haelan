@@ -167,68 +167,7 @@
     }
   },
   "dashboard": {
-    "title": "Dashboard",
-    "units": {
-      "steps": "Steps",
-      "beatsPerMinute": "Beats per minute",
-      "bpm": "bpm",
-      "minutesAsleep": "Minutes asleep",
-      "milliseconds": "Milliseconds",
-      "ms": "ms"
-    },
-    "steps": {
-      "label": "Steps",
-      "basis": "sum, {{reported}} of {{total}} days",
-      "basisWorn_one": "sum, {{reported}} of {{total}} days, {{count}} day not worn",
-      "basisWorn_other": "sum, {{reported}} of {{total}} days, {{count}} days not worn",
-      "chartLabel": "Daily steps through {{period}}",
-      "viewAll": "View activity"
-    },
-    "restingHr": {
-      "label": "Resting heart rate",
-      "basis": "mean, {{reported}} of {{total}} days",
-      "basisWorn_one": "mean, {{reported}} of {{total}} days, {{count}} day not worn",
-      "basisWorn_other": "mean, {{reported}} of {{total}} days, {{count}} days not worn",
-      "chartLabel": "Daily resting heart rate through {{period}}",
-      "viewAll": "View recovery"
-    },
-    "sleep": {
-      "label": "Sleep",
-      "basis": "mean, {{reported}} of {{total}} nights",
-      "basisWorn_one": "mean, {{reported}} of {{total}} nights, {{count}} night not worn",
-      "basisWorn_other": "mean, {{reported}} of {{total}} nights, {{count}} nights not worn",
-      "chartLabel": "Nightly sleep duration through {{period}}",
-      "viewAll": "View sleep"
-    },
-    "meanHr": {
-      "label": "Mean heart rate",
-      "basis": "mean, {{reported}} of {{total}} days",
-      "basisWorn_one": "mean, {{reported}} of {{total}} days, {{count}} day not worn",
-      "basisWorn_other": "mean, {{reported}} of {{total}} days, {{count}} days not worn",
-      "chartLabel": "Daily mean heart rate through {{period}}",
-      "viewAll": "View recovery"
-    },
-    "insights": {
-      "steps": "Steps, this period against the last",
-      "restingHr": "Resting heart rate, this period against the last",
-      "sleep": "Sleep, this period against the last"
-    },
-    "sleepStages": {
-      "label": "Sleep stages",
-      "basis": "most recent night, {{date}}",
-      "chartLabel": "Sleep stages through the night of {{date}}"
-    },
-    "sleepSchedule": {
-      "label": "Sleep schedule",
-      "basis_one": "bed and wake time, {{count}} night",
-      "basis_other": "bed and wake time, {{count}} nights"
-    },
-    "recovery": {
-      "label": "Recovery",
-      "basis": "mean, {{reported}} of {{total}} days",
-      "chartLabel": "Daily heart rate variability through {{period}}",
-      "viewAll": "View recovery"
-    }
+    "title": "Dashboard"
   },
   "recovery": {
     "title": "Recovery",
@@ -975,8 +914,7 @@
       "emptyTitle": "No flagged days in this period.",
       "emptyDetail": "No events have been logged for this period. Click any chart to add one.",
       "basis_one": "{{count}} day flagged in this period",
-      "basis_other": "{{count}} days flagged in this period",
-      "viewAll": "View notes"
+      "basis_other": "{{count}} days flagged in this period"
     },
     "empty": {
       "title": "No notes or events yet",
@@ -1419,6 +1357,8 @@
     "points": "{{points}} points"
   },
   "glance": {
+    "span": "Last night, and today until {{time}}",
+    "spanNoTime": "Last night, and today so far",
     "usual": {
       "within": "within your usual {{low}} – {{high}}",
       "above": "above your usual {{low}} – {{high}}",
@@ -1432,6 +1372,44 @@
       "yesterday": "yesterday",
       "night": "night of {{date}}"
     },
-    "noReading": "No reading yet"
+    "noReading": "No reading yet",
+    "sleep": {
+      "title": "Last night",
+      "empty": "No night recorded in the last day and a half.",
+      "asleep": "Time asleep",
+      "efficiency": "Efficiency",
+      "bed": "Bed",
+      "woke": "Woke",
+      "strip": "Time asleep, last 7 nights",
+      "caption": "last 7 nights",
+      "link": "View this night",
+      "viewSleep": "View sleep"
+    },
+    "recovery": {
+      "title": "Recovery",
+      "index": "Recovery index",
+      "rhr": "Resting HR",
+      "hrv": "HRV",
+      "respiratory": "Breathing rate {{value}}, above your usual",
+      "unscored": "Not enough readings to score yet.",
+      "strip": "Recovery index, last 7 days",
+      "caption": "last 7 days",
+      "link": "View recovery"
+    },
+    "today": {
+      "title": "Today",
+      "subtitle": "so far",
+      "steps": "Steps",
+      "activeMinutes": "Active minutes",
+      "heartRate": "Heart rate",
+      "heartRateChart": "Heart rate today",
+      "strip": "Steps, last 7 days",
+      "caption": "last 7 days",
+      "link": "View activity"
+    },
+    "subtitle": {
+      "today": "today",
+      "yesterday": "yesterday"
+    }
   }
 }

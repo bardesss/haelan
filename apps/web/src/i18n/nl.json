@@ -167,68 +167,7 @@
     }
   },
   "dashboard": {
-    "title": "Dashboard",
-    "units": {
-      "steps": "Stappen",
-      "beatsPerMinute": "Slagen per minuut",
-      "bpm": "bpm",
-      "minutesAsleep": "Minuten slaap",
-      "milliseconds": "Milliseconden",
-      "ms": "ms"
-    },
-    "steps": {
-      "label": "Stappen",
-      "basis": "som, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "som, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "som, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse stappen in {{period}}",
-      "viewAll": "Bekijk activiteit"
-    },
-    "restingHr": {
-      "label": "Rusthartslag",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse rusthartslag in {{period}}",
-      "viewAll": "Bekijk herstel"
-    },
-    "sleep": {
-      "label": "Slaap",
-      "basis": "gemiddelde, {{reported}} van {{total}} nachten",
-      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} nachten, {{count}} nacht niet gedragen",
-      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} nachten, {{count}} nachten niet gedragen",
-      "chartLabel": "Nachtelijke slaapduur in {{period}}",
-      "viewAll": "Bekijk slaap"
-    },
-    "meanHr": {
-      "label": "Gemiddelde hartslag",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "basisWorn_one": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dag niet gedragen",
-      "basisWorn_other": "gemiddelde, {{reported}} van {{total}} dagen, {{count}} dagen niet gedragen",
-      "chartLabel": "Dagelijkse gemiddelde hartslag in {{period}}",
-      "viewAll": "Bekijk herstel"
-    },
-    "insights": {
-      "steps": "Stappen, deze periode tegenover de vorige",
-      "restingHr": "Rusthartslag, deze periode tegenover de vorige",
-      "sleep": "Slaap, deze periode tegenover de vorige"
-    },
-    "sleepStages": {
-      "label": "Slaapfasen",
-      "basis": "meest recente nacht, {{date}}",
-      "chartLabel": "Slaapfasen tijdens de nacht van {{date}}"
-    },
-    "sleepSchedule": {
-      "label": "Slaapschema",
-      "basis_one": "bedtijd en wektijd, {{count}} nacht",
-      "basis_other": "bedtijd en wektijd, {{count}} nachten"
-    },
-    "recovery": {
-      "label": "Herstel",
-      "basis": "gemiddelde, {{reported}} van {{total}} dagen",
-      "chartLabel": "Dagelijkse hartslagvariabiliteit in {{period}}",
-      "viewAll": "Bekijk herstel"
-    }
+    "title": "Dashboard"
   },
   "recovery": {
     "title": "Herstel",
@@ -975,8 +914,7 @@
       "emptyTitle": "Geen gemarkeerde dagen in deze periode.",
       "emptyDetail": "Er zijn geen gebeurtenissen vastgelegd voor deze periode. Klik op een grafiek om er een toe te voegen.",
       "basis_one": "{{count}} dag gemarkeerd in deze periode",
-      "basis_other": "{{count}} dagen gemarkeerd in deze periode",
-      "viewAll": "Bekijk notities"
+      "basis_other": "{{count}} dagen gemarkeerd in deze periode"
     },
     "empty": {
       "title": "Nog geen notities of gebeurtenissen",
@@ -1419,6 +1357,8 @@
     "points": "{{points}} punten"
   },
   "glance": {
+    "span": "Afgelopen nacht, en vandaag tot {{time}}",
+    "spanNoTime": "Afgelopen nacht, en vandaag tot nu toe",
     "usual": {
       "within": "binnen je gebruikelijke {{low}} – {{high}}",
       "above": "boven je gebruikelijke {{low}} – {{high}}",
@@ -1432,6 +1372,44 @@
       "yesterday": "gisteren",
       "night": "nacht van {{date}}"
     },
-    "noReading": "Nog geen meting"
+    "noReading": "Nog geen meting",
+    "sleep": {
+      "title": "Afgelopen nacht",
+      "empty": "Geen nacht vastgelegd in de afgelopen anderhalve dag.",
+      "asleep": "Slaaptijd",
+      "efficiency": "Efficiëntie",
+      "bed": "Naar bed",
+      "woke": "Wakker",
+      "strip": "Tijd geslapen, laatste 7 nachten",
+      "caption": "laatste 7 nachten",
+      "link": "Bekijk deze nacht",
+      "viewSleep": "Bekijk slaap"
+    },
+    "recovery": {
+      "title": "Herstel",
+      "index": "Herstelindex",
+      "rhr": "Rusthartslag",
+      "hrv": "HRV",
+      "respiratory": "Ademhaling {{value}}, boven je gebruikelijke",
+      "unscored": "Nog niet genoeg metingen om te scoren.",
+      "strip": "Herstelindex, laatste 7 dagen",
+      "caption": "laatste 7 dagen",
+      "link": "Bekijk herstel"
+    },
+    "today": {
+      "title": "Vandaag",
+      "subtitle": "tot nu toe",
+      "steps": "Stappen",
+      "activeMinutes": "Actieve minuten",
+      "heartRate": "Hartslag",
+      "heartRateChart": "Hartslag vandaag",
+      "strip": "Stappen, laatste 7 dagen",
+      "caption": "laatste 7 dagen",
+      "link": "Bekijk activiteit"
+    },
+    "subtitle": {
+      "today": "vandaag",
+      "yesterday": "gisteren"
+    }
   }
 }

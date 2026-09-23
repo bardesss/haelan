@@ -44,9 +44,8 @@ the same one. Add to that layer rather than defining inputs a second time beside
 
 ## Pages
 
-- `Dashboard` (`src/pages/Dashboard.tsx`): month view, headline stat tiles, the heart rate
-  range chart with baseline band and event annotations, the hypnogram, sleep schedule and
-  activity heatmap, and two distinct empty states.
+- `Dashboard` (`src/pages/Dashboard.tsx`): the glance, three cards answering last night,
+  recovery and today so far from one read of `/glance`, with no control row.
 - `Sleep` (`src/pages/Sleep.tsx`): day view of last night plus the month's sleep schedule.
 
 Both are wired up behind the sidebar in `src/main.tsx`, with a theme switch left for manual

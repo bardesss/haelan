@@ -10,26 +10,21 @@ import { useTranslation } from '../../i18n/index.js'
 
 /**
  * The flagged days card: the reader's own count of distinct days carrying an event, moved verbatim
- * (JSX and the `flaggedDates` computation both) out of Dashboard.tsx into a component both
- * Dashboard and Notes can mount. Notes.tsx's own comment says why it has no write form of its own;
- * this card is what tells a reader how many days that write path has touched over the range they
- * are looking at.
+ * (JSX and the `flaggedDates` computation both) out of the old Dashboard.tsx in M9b, and mounted
+ * on Notes since the Dashboard became the glance. Notes.tsx's own comment says why it has no write
+ * form of its own; this card is what tells a reader how many days that write path has touched over
+ * the range they are looking at.
  *
  * Owns its own `useAnnotations(range)` call rather than taking events as a prop: NotesList.tsx
  * already calls `useAnnotations(range)` with the same key when this card sits on Notes, so the two
- * share one cache entry and mounting this card there costs the page no extra request. Dashboard
- * still pays its own overrides/notes/events query beside this one, one request no matter how many
- * of the three consumers on that page (chart annotations, this card, and previously nothing else)
- * end up reading from it.
+ * share one cache entry and mounting this card there costs the page no extra request.
  *
- * `link` is optional: Dashboard hands in a "View notes" link (this card's own deep link off the
- * page it lives on before M9b), and Notes passes none, since a reader is already on the page that
- * link would have sent them to.
+ * No "View notes" link any more: the old Dashboard handed one in, and on Notes a reader is already
+ * on the page that link would have sent them to.
  */
-export function FlaggedDaysCard({ range, span, link }: {
+export function FlaggedDaysCard({ range, span }: {
   range: AnnotationRange
   span: number
-  link?: ReactNode
 }): ReactNode {
   const { t } = useTranslation()
   const { events } = useAnnotations(range)
@@ -45,9 +40,9 @@ export function FlaggedDaysCard({ range, span, link }: {
   )
 
   // ambient: this card reads the reader's own annotations, not the period's data, so it renders on
-  // a day where nothing was synced at all. Counting like any other card, it alone would hold the
-  // Dashboard's tally above zero and make the page level empty state unreachable there, on the one
-  // page that prompted the whole change. See Card.tsx's own prop comment. Notes uses a plain
+  // a day where nothing was synced at all. Counting like any other card, it alone would hold a
+  // CardGrid's tally above zero and make the page level empty state unreachable, which is what it
+  // did on the old Dashboard that prompted the change. See Card.tsx's own prop comment. Notes uses a plain
   // `div.grid`, so `ambient` is irrelevant there, but it stays on unconditionally: it describes what
   // this card itself is, not which page happens to be counting cards around it.
   return (
@@ -64,7 +59,6 @@ export function FlaggedDaysCard({ range, span, link }: {
             </p>
           </>
         )}
-      {link}
     </Card>
   )
 }

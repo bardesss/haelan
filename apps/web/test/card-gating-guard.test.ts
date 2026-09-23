@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 // Keyed on ErrorState/Loading usage and a literal emptyState.<kind>.title/detail key rather than
 // on the name emptyStateFor: a card can gate on isError, isPending and its own emptiness test and
 // render ErrorState, Loading and a hardcoded empty state kind without ever calling emptyStateFor,
-// which is exactly what Dashboard.tsx's sleep stages card does. The first version of this file was
+// which is exactly what the old Dashboard.tsx's sleep stages card did. The first version of this file was
 // keyed on that one name, so a page that hand rolled every part of the pattern except that one
 // call passed it without the trigger ever firing. The \w+ requires a literal kind (no_data,
 // not_worn, not_synced), not the templated `emptyState.${empty}.title` MetricCard itself renders
@@ -35,14 +35,18 @@ const USES_METRIC_CARD = /<MetricCard[\s>]/
 // by address, because each is a route's own top-level page - routes.tsx names it directly, the same
 // as every other entry in pages/ - so it sits exactly where this guard looks and needs to be
 // excused by name instead.
-const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx'])
+//
+// Dashboard.tsx joined them in M9b, when it became the glance: its figures come from one payload,
+// not from series points, so there is no MetricCard to gate, and its gating is the page-level
+// error/loading branch around that one read.
+const NO_METRIC_TO_GATE = new Set(['WorkoutDetail.tsx', 'NightDetail.tsx', 'Records.tsx', 'Dashboard.tsx'])
 
 // What this actually checks, read honestly: not "no card hand rolls gating" (it is file
 // granularity, so a page hand rolling two of its eight cards and routing the other six through
 // MetricCard still passes), but "no page hand rolls every card and says nothing about the shared
-// component existing." Dashboard.tsx passes today only because its tile cards, heart rate range
-// and sleep schedule route through MetricCard; its still hand rolled sleep stages and daily steps
-// cards are not individually checked against it. A true per card guard needs to attribute a given
+// component existing." Sleep.tsx and Activity.tsx pass because most of their cards route through
+// MetricCard; the hand rolled cards beside those are not individually checked against it. A true
+// per card guard needs to attribute a given
 // ErrorState/Loading/emptyState occurrence to the JSX block it sits in, which needs more than a
 // whole file regex; this is the cheap version, and its name and this comment describe what it is.
 describe('pages are not entirely hand rolled and silent about MetricCard', () => {
@@ -66,8 +70,8 @@ describe('pages are not entirely hand rolled and silent about MetricCard', () =>
   // reports as passed without its own expect ever running, so a version of this file where the
   // trigger matched nothing on any real page would still show every case green. This is what
   // actually proves HAND_ROLLED_GATING fires on a real page rather than only in a regex someone
-  // wrote and never ran. Dashboard.tsx's sleep stages card, left outside MetricCard on purpose
-  // (see its own comment: it is gated on a night, not a metric and its points), is that page.
+  // wrote and never ran. The old Dashboard's sleep stages card was that page until M9b; Sleep.tsx
+  // and Activity.tsx, both checked above rather than excused, are it now.
   it('the gating trigger actually fires on at least one real page', () => {
     expect(withGating.length).toBeGreaterThan(0)
   })
