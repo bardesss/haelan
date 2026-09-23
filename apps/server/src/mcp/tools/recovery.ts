@@ -1,8 +1,7 @@
 import { z } from 'zod'
-import { recoveryIndexSeries, recoveryWindowStart, bandOf, RECOVERY_METRIC_SOURCES } from '@haelan/core/recovery-index'
-import type { DayValue, RecoveryIndex, RecoveryMetricSource } from '@haelan/core/recovery-index'
-import type { SeriesResult } from '@haelan/core'
-import type { PersonQuery } from '@haelan/core'
+import { recoveryIndexSeries, bandOf } from '@haelan/core/recovery-index'
+import type { RecoveryIndex } from '@haelan/core/recovery-index'
+import { readRecoveryInput } from '@haelan/core'
 import type { Tool } from '../contract.ts'
 import { defineTool } from '../contract.ts'
 
@@ -52,70 +51,6 @@ const RECOVERY_DAY = z.object({
     + 'named in `degraded` is.',
   ),
 })
-
-/**
- * The five daily series `recoveryIndexSeries` needs, fetched over the window every date in
- * `range` needs behind it.
- *
- * `from` is `recoveryWindowStart(range.from)`, never a window anchored on `range.to`: every date
- * between `range.from` and `range.to` gets scored against its OWN 60-day baseline plus its own
- * 6-day sleep week, and the earliest of those windows belongs to the range's earliest date, not
- * its latest. Getting this wrong scores the earliest requested days against a baseline that is
- * silently too thin, which reads as `missing` rather than as the bug it is - the same reasoning
- * `apps/web/src/data/useRecoveryIndex.ts`'s `recoveryFetchRange` documents for the web reader.
- *
- * No `points` argument, anywhere in this file. A point budget is a display concern for a chart;
- * an index that moved with a chart's own budget would not be measuring anything.
- */
-/** How many of a fetched series' days were filled in from the intraday fallback, out of how many. */
-interface FilledCount {
-  filled: number
-  of: number
-}
-
-function filledCountOf(result: SeriesResult): FilledCount {
-  return { filled: result.points.filter((point) => point.filled).length, of: result.points.length }
-}
-
-function fetchRecoveryInput(q: PersonQuery, range: { from: string, to: string }): {
-  input: {
-    hrv: DayValue[]
-    restingHeartRate: DayValue[]
-    respiratoryRate: DayValue[]
-    asleepMinutes: DayValue[]
-    bedtimeMinutes: DayValue[]
-  }
-  hrvFilled: FilledCount
-} {
-  const from = recoveryWindowStart(range.from)
-  const toDayValues = (result: SeriesResult): DayValue[] =>
-    result.points.map((point) => ({ localDate: point.localDate, value: point.value }))
-  // RECOVERY_METRIC_SOURCES (@haelan/core/recovery-index) is the one place that says which
-  // /series metric and agg fill each of the five inputs - fetched here by `source.key` rather
-  // than re-typing the pairing, so this can never drift from what the web hook and the probe read.
-  const fetchSeries = (key: RecoveryMetricSource['key']): SeriesResult => {
-    const source = RECOVERY_METRIC_SOURCES.find((s) => s.key === key)
-    if (source === undefined) throw new Error(`no recovery metric source declared for '${key}'`)
-    return q.series({ metric: source.metric, agg: source.agg, from, to: range.to })
-  }
-
-  // hrv is the only one of the five inputs `DailyPoint.filled` can ever be true for -
-  // DEVICE_ROLLED_EQUIVALENT (packages/core/src/query/personQuery.ts) maps a fallback only for
-  // daily_hrv and daily_spo2, and spo2 is not a recovery input. The other four fetches below never
-  // need this, so only hrv's raw SeriesResult is kept around long enough to count it.
-  const hrvResult = fetchSeries('hrv')
-
-  return {
-    input: {
-      hrv: toDayValues(hrvResult),
-      restingHeartRate: toDayValues(fetchSeries('restingHeartRate')),
-      respiratoryRate: toDayValues(fetchSeries('respiratoryRate')),
-      asleepMinutes: toDayValues(fetchSeries('asleepMinutes')),
-      bedtimeMinutes: toDayValues(fetchSeries('bedtimeMinutes')),
-    },
-    hrvFilled: filledCountOf(hrvResult),
-  }
-}
 
 // `RecoveryIndexUnavailable` carries no `localDate` of its own - the date is the map key
 // `recoveryIndexSeries` stores it under - so the caller's date loop hands it in here rather than
@@ -177,7 +112,7 @@ export const recoveryIndexTool = defineTool({
     ),
   },
   run: (q, args) => {
-    const { input, hrvFilled } = fetchRecoveryInput(q, { from: args.from, to: args.to })
+    const { input, hrvFilled } = readRecoveryInput(q, { from: args.from, to: args.to })
     const byDate = recoveryIndexSeries(input, { from: args.from, to: args.to })
     return { days: [...byDate.entries()].map(([localDate, index]) => dayOf(localDate, index)), hrvFilled }
   },
