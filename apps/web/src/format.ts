@@ -85,6 +85,17 @@ export function formatLocalDate(date: string, language: string): string {
 }
 
 /**
+ * Two local dates as one range, the way the reader's locale shortens one: "Aug 1 – 31, 2026",
+ * "1–31 aug 2026", with the month or year said once when both ends share it. formatLocalDate twice
+ * with a dash between said the year twice and wrapped a four-column card onto two lines. Same UTC
+ * anchoring as formatLocalDate, for the same reason.
+ */
+export function formatLocalDateRange(from: string, to: string, language: string): string {
+  return new Intl.DateTimeFormat(language, { dateStyle: 'medium', timeZone: 'UTC' })
+    .formatRange(new Date(`${from}T00:00:00Z`), new Date(`${to}T00:00:00Z`))
+}
+
+/**
  * The full weekday and date of a local calendar date, e.g. "donderdag 27 augustus" in Dutch. Two
  * call sites share this: SessionList's own heading above a run of same-day rows, and, hidden
  * under `sr-only`, SessionRow's per-row date now that the heading carries the visible one. Both
@@ -150,7 +161,11 @@ export function formatDuration(minutes: number): string {
  * a period where the mean fell, and formatDuration's own Math.floor(total / 60) paired with a
  * sign-carrying total % 60 (JavaScript's % keeps the dividend's sign) puts the minus on both
  * halves independently: -7 comes out "-1h -7m", not the single leading minus a duration reads as.
- * Negating before the call and reapplying the sign after prints "-0h 07m" for the same -7 instead.
+ * Negating before the call and reapplying the sign after gives one leading minus.
+ *
+ * Under an hour it drops the hours altogether: "-7m", not "-0h 07m". A delta is usually minutes,
+ * and "0h" read as a figure in its own right on a comparison card and on the sleep balance line
+ * ("-0h 23m a night"). A value that rounds to no minutes at all carries no sign.
  *
  * Takes `absent` directly, the exact `(value, absent) => string` shape `InsightCard`'s own
  * `formatValue` prop expects, so a caller with nothing more to add can pass this function itself
@@ -161,7 +176,9 @@ export function formatDuration(minutes: number): string {
  */
 export function formatSignedDuration(value: number | null, absent: string): string {
   if (value === null) return absent
-  return value < 0 ? `-${formatDuration(-value)}` : formatDuration(value)
+  const minutes = Math.round(Math.abs(value))
+  const sign = value < 0 && minutes > 0 ? '-' : ''
+  return minutes < 60 ? `${sign}${minutes}m` : `${sign}${formatDuration(minutes)}`
 }
 
 // Wrapped into the day before splitting, and wrapped in the direction that survives a negative.

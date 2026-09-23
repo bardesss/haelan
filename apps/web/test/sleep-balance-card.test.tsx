@@ -219,15 +219,15 @@ describe('the sleep balance card', () => {
     // The night count is the card's own basis, computed from the bars actually drawn rather than
     // from the seven days in the range: 6 of 7, and the zero line named because the card switches
     // between two of them. The per-night mean rides beside the count: -135 over those same six
-    // nights is -22.5, which formatSignedDuration rounds to -0h 23m.
+    // nights is -22.5, which formatSignedDuration rounds to -23m.
     expect(balanceCard()!.querySelector('.basis')!.textContent)
-      .toBe('6 of 7 nights, -0h 23m a night, against your 8h 00m target')
+      .toBe('6 of 7 nights, -23m a night, against your 8h 00m target')
   })
 
   // What the per-night figure is for: the headline grows by widening the picker alone, so the card
   // needs one number that does not. That only holds if it is a mean over the nights drawn rather
   // than over the days in the range, and on any week with a gap the two are a different sentence:
-  // -135 over six nights is -0h 23m, over seven days it is -0h 19m. Both read as plausible on
+  // -135 over six nights is -23m, over seven days it is -19m. Both read as plausible on
   // screen, which is why the wrong one is named here rather than left to a bare `toBe`.
   it('means the per-night figure over the nights drawn, not the days in the range', async () => {
     window.history.replaceState(null, '', WEEK_URL)
@@ -237,7 +237,7 @@ describe('the sleep balance card', () => {
     restore()
 
     const basis = balanceCard()!.querySelector('.basis')!.textContent
-    expect(basis).toBe('6 of 7 nights, -0h 23m a night, against your 8h 00m target')
+    expect(basis).toBe('6 of 7 nights, -23m a night, against your 8h 00m target')
     expect(basis).not.toContain('-0h 19m')
   })
 
@@ -253,7 +253,7 @@ describe('the sleep balance card', () => {
     restore()
 
     expect(balanceCard('Slaapbalans')!.querySelector('.basis')!.textContent)
-      .toBe('6 van 7 nachten, -0h 23m per nacht, tegen je doel van 8h 00m')
+      .toBe('6 van 7 nachten, -23m per nacht, tegen je doel van 8h 00m')
   })
 
   // Absent is never a zero. A night with no reading draws no bar and counts toward neither the
@@ -269,7 +269,7 @@ describe('the sleep balance card', () => {
     const row = rowFor('2026-08-13')
     expect(row).toBeDefined()
     expect(row![1]).toBe('no reading')
-    expect(row![1]).not.toBe('0h 00m')
+    expect(row![1]).not.toMatch(/^(0h 00m|0m)$/)
     // The null is still in the drawn array, at its own position, so the nights either side of it
     // did not shift a day to the left.
     expect(drawnValues('Nightly sleep balance through 2026-08-10 to 2026-08-16'))
@@ -327,8 +327,8 @@ describe('the sleep balance card', () => {
     // Counted against nothing, and over six nights rather than seven: the same claim the basis line
     // makes one line up, asserted on the number the excluded night would have moved.
     expect(balanceCard()!.querySelector('.basis')!.textContent)
-      .toBe('6 of 7 nights, 0h 00m a night, against your 8h 00m target')
-    expect(headline()).toBe('0h 00m')
+      .toBe('6 of 7 nights, 0m a night, against your 8h 00m target')
+    expect(headline()).toBe('0m')
     expect(headline()).not.toBe('-1h 30m')
   })
 
@@ -402,7 +402,7 @@ describe('the sleep balance card', () => {
 
     expect(balanceCard()!.querySelector('.label')!.textContent).toBe('Sleep Balance')
     expect(balanceCard()!.querySelector('.basis')!.textContent)
-      .toBe('6 of 7 nights, -0h 23m a night, against your 8h 00m target')
+      .toBe('6 of 7 nights, -23m a night, against your 8h 00m target')
     expect(headline()).toBe('-2h 15m')
   })
 
@@ -445,7 +445,7 @@ describe('the sleep balance card', () => {
     restore()
 
     expect(balanceCard()!.querySelector('.basis')!.textContent)
-      .toBe('6 of 7 nights, 0h 38m a night, against your 7h 00m target')
+      .toBe('6 of 7 nights, 38m a night, against your 7h 00m target')
     // Against 420: 0, +60, +120, absent, -30, +30, +45 sums to +225.
     expect(headline()).toBe('3h 45m')
   })
@@ -464,7 +464,7 @@ describe('the sleep balance card', () => {
 
     expect(balanceCard()!.querySelector('.label')!.textContent).toBe('Sleep Balance')
     expect(balanceCard()!.querySelector('.basis')!.textContent)
-      .toBe('6 of 7 nights, -0h 23m a night, against your 8h 00m target')
+      .toBe('6 of 7 nights, -23m a night, against your 8h 00m target')
     expect(headline()).toBe('-2h 15m')
   })
 

@@ -260,7 +260,7 @@ export function Weight() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('weight.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
       <CardGrid>
         {card('weight', 'weight.weight.label', 'weight.weight.basis', 'weight.weight.readings',

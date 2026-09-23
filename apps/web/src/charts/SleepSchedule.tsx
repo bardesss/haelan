@@ -3,7 +3,7 @@ import type { EChartsOption, CustomSeriesRenderItemAPI, CustomSeriesRenderItemPa
 import { useChart } from './useChart.js'
 import { chartBase, STROKE, SYMBOL } from './base.js'
 import type { ChartTokens } from './tokens.js'
-import { nightMark, noDataYFor, axisTickInterval, fitWindow, DEFAULT_WINDOW, type Night } from './schedule.js'
+import { nightMark, noDataYFor, axisTickInterval, fitWindow, type Night } from './schedule.js'
 import { ChartFigure } from './ChartFigure.js'
 import { formatClock } from '../format.js'
 import { useTranslation } from '../i18n/index.js'
@@ -22,15 +22,17 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
   // file does not use today but a future edit here easily might reach for without noticing the
   // shadow.
   //
-  // Optional, and what happens when it is left out depends on whether naps are drawn. A caller
-  // drawing naps gets DEFAULT_WINDOW, because fitWindow fits to the nights and knows nothing about
-  // where an afternoon nap lands - fitting to the nights alone would put a nap outside the axis
-  // that was built to contain it. A caller not drawing naps gets an axis fitted to its own nights,
-  // which is most of the height DEFAULT_WINDOW was spending on the naps it is not drawing.
+  // Optional, and left out by both pages today: the axis is fitted to what it draws - the nights,
+  // and the naps too when they are drawn. A fixed window wide enough for every night and every
+  // afternoon nap had to span 36 hours, and a 36 hour axis prints noon and midnight twice each,
+  // which read as a clock that had lost its place. Fitted, an ordinary range spans well under a
+  // day and no label repeats. The caller still places its nights in whatever frame it likes
+  // (Sleep.tsx uses WIDE_WINDOW, so nothing is refused); this only chooses how much of that frame
+  // to draw.
   axisWindow?: { min: number, max: number }
 }) {
   const { t } = useTranslation()
-  const resolvedWindow = axisWindow ?? (showNaps ? DEFAULT_WINDOW : fitWindow(nights))
+  const resolvedWindow = axisWindow ?? fitWindow(nights, { naps: showNaps })
 
   const build = useCallback((tokens: ChartTokens): EChartsOption => {
     const base = chartBase(tokens)
@@ -53,7 +55,10 @@ export function SleepSchedule({ nights, label, showNaps = true, axisWindow }: {
         // not know this axis wraps every 1440 minutes and picked an interval that left one tick,
         // and its label, off the evenly spaced grid the rest of the axis draws.
         interval: axisTickInterval(resolvedWindow),
-        axisLabel: { ...base.axisLabel, formatter: (v: number) => formatClock(v).slice(0, 2) + ':00' },
+        // A span of a day or more puts the same clock time at both ends; only the lower one is
+        // printed, so no label on the axis repeats another.
+        axisLabel: { ...base.axisLabel, showMaxLabel: resolvedWindow.max - resolvedWindow.min < 1440,
+          formatter: (v: number) => formatClock(v).slice(0, 2) + ':00' },
         splitLine: base.splitLine },
       series: [
         { type: 'custom' as const,

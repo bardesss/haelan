@@ -24,9 +24,25 @@ describe('StatTile', () => {
     expect(html).not.toContain('class="delta"')
   })
 
-  it('states the delta window alongside the tile basis', () => {
+  // The method sentence moved off the printed basis line and onto the badge it explains: the same
+  // sentence under every tile of a page, with only its numbers changing, was the noise. It must
+  // still be said wherever the percentage is - as the badge's tooltip, and inside the badge for a
+  // screen reader - and must not come back as a second clause of the printed line.
+  it('puts the delta window on the badge, not on the printed basis line', () => {
+    const window = 'change is the mean of the last 13 readings against the first 13'
     const html = render(<StatTile label="Steps" value="9,000" basis="sum, 27 of 31 days"
-      delta={{ text: '↑ 4%', dir: 'up', tone: 'good', basis: 'change is the mean of the last 13 readings against the first 13' }} />)
-    expect(html).toContain('sum, 27 of 31 days; change is the mean of the last 13 readings against the first 13')
+      delta={{ text: '↑ 4%', dir: 'up', tone: 'good', basis: window }} />)
+    const badge = html.match(/<span class="delta"[^>]*>.*?<\/span><\/span>/)
+    expect(badge, html).not.toBeNull()
+    expect(badge![0]).toContain(`title="${window}"`)
+    expect(badge![0]).toContain(`↑ 4%<span class="sr-only">; ${window}</span></span>`)
+    expect(html).toContain('<p class="basis" id="')
+    expect(html.match(/<p class="basis"[^>]*>(.*?)<\/p>/)![1]).toBe('sum, 27 of 31 days')
+  })
+
+  it('draws a badge with no tooltip when its delta states no window', () => {
+    const html = render(<StatTile label="Steps" value="9,000" delta={{ text: '↑ 4%', dir: 'up' }} />)
+    expect(html).not.toContain('title=')
+    expect(html).not.toContain('sr-only')
   })
 })

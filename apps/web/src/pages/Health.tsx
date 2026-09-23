@@ -242,7 +242,7 @@ export function Health() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('health.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
       <CardGrid>
         {/* basisPlacement 'header': the range chart carries no StatTile of its own to fold a basis
@@ -304,7 +304,7 @@ export function Health() {
             sharing "Daily oxygen saturation" would make a label lookup by exact text ambiguous,
             the same collision Dashboard.tsx's own comment on INSIGHTS explains at more length. */}
         <InsightCard insight={dailySpo2Insight.data} query={dailySpo2Insight} metric="daily_spo2" span={12}
-          label={t('health.insights.dailySpo2')} formatValue={dailySpo2InsightFormat} />
+          label={t('health.insights.dailySpo2')} formatValue={dailySpo2InsightFormat} polarity="higher-is-better" />
       </CardGrid>
       {annotateTarget && <AnnotatePanel target={annotateTarget} onClose={() => setAnnotateTarget(null)} />}
     </>

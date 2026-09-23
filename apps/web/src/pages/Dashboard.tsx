@@ -608,7 +608,7 @@ export function Dashboard() {
   return (
     <>
       <h1 style={{ fontSize: 'var(--font-size-lg)', margin: '0 0 var(--space-3)' }}>{t('dashboard.title')}</h1>
-      <ControlRow controls={resolved} sources={sources} exportPath={exportPath}
+      <ControlRow controls={resolved} sources={sources} exportPath={exportPath} trendNote
         stoppedSources={stoppedSources} />
       <CardGrid>
         {/* The invitation to connect a Google account deliberately does not appear on this page,
@@ -681,12 +681,12 @@ export function Dashboard() {
             a card by its exact label text, in a test that predates this task, and a second card
             sharing "Steps" made that lookup ambiguous between the tile and this card (caught by
             dashboard-cards.test.tsx's own "labels each insight card distinctly" test). */}
-        <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4}
+        <InsightCard insight={stepsInsight.data} query={stepsInsight} metric="steps" span={4} polarity="higher-is-better"
           label={t('dashboard.insights.steps')} />
         <InsightCard insight={restingHrInsight.data} query={restingHrInsight} metric="resting_heart_rate" span={4}
-          label={t('dashboard.insights.restingHr')} formatValue={restingHrFormat} />
+          label={t('dashboard.insights.restingHr')} formatValue={restingHrFormat} polarity="lower-is-better" />
         <InsightCard insight={sleepInsight.data} query={sleepInsight} metric="sleep_asleep_minutes" span={4}
-          label={t('dashboard.insights.sleep')} formatValue={formatSignedDuration} />
+          label={t('dashboard.insights.sleep')} formatValue={formatSignedDuration} polarity="higher-is-better" />
 
         {/* basisKey and basisWornKey are the same string here on purpose: this card's basis is a
             four way choice driven by the baseline's own validity (unknown, absent, thin, real),
@@ -819,7 +819,7 @@ export function Dashboard() {
               // is repeated here, right beside the read, for the narrowing itself.
               : nights.isPending ? <Loading /> : lastNight && (
               <>
-                <Hypnogram segments={hypnogramSegments} startLabel={startLabel}
+                <Hypnogram segments={hypnogramSegments} startLabel={startLabel} startClock={lastNightBedMinutes}
                   label={t('dashboard.sleepStages.chartLabel', { date: lastNight.localDate })} />
                 {/* Reused from Sleep.tsx rather than a second copy of this paragraph: both pages
                     build their hypnogram from the same useNights row, so a night an exclusion

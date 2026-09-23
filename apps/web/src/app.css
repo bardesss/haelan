@@ -237,6 +237,19 @@ a.segment { text-decoration: none; display: inline-block; }
 }
 .date-picker::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .55; }
 .date-picker:hover { color: var(--text-primary); }
+/* The desktop stepper's calendar: an icon with the date input laid transparent over it, so the
+   anchor is chosen without a second date printed beside the period's own label. */
+.date-pick {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; color: var(--text-secondary); border-radius: var(--radius-sm);
+}
+.date-pick:hover { color: var(--text-primary); }
+.date-pick:has(.date-pick-input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.date-pick-input {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+  border: 0; padding: 0; margin: 0; font: inherit;
+}
+.date-pick-input::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: auto; height: auto; cursor: pointer; }
 
 /* The phone control row, and the sheet behind it.
    ------------------------------------------------------------------
@@ -595,6 +608,26 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
    (muted, font-size-xs) this is the whole content of the card, so it reads at body size in the
    primary text colour rather than as a subordinate line under something else. */
 .insight-summary { font-size: var(--font-size-sm); color: var(--text-primary); line-height: var(--leading-normal); margin: var(--space-1) 0 0; }
+/* InsightCard: this period and the previous one side by side, the difference at the end of the
+   row, and two bars on one scale beneath. The previous period is quieter throughout, because it
+   is the reference, not the news. */
+.insight-compare {
+  display: grid; grid-template-columns: 1fr 1fr auto; align-items: start; gap: var(--space-3);
+  margin-top: var(--space-1);
+}
+.insight-period { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.insight-period-label { font-size: var(--font-size-xs); color: var(--text-muted); }
+.insight-value {
+  font-size: var(--font-size-lg); font-weight: var(--weight-semibold); color: var(--text-primary);
+  font-variant-numeric: tabular-nums; line-height: var(--leading-tight);
+}
+.insight-period-previous .insight-value { color: var(--text-secondary); }
+.insight-range { font-size: var(--font-size-xs); color: var(--text-faint); }
+.insight-delta { align-self: center; font-variant-numeric: tabular-nums; }
+.insight-bars { display: grid; gap: 4px; margin-top: var(--space-3); }
+.insight-bar { display: block; height: 6px; border-radius: 3px; background: var(--surface-inset); overflow: hidden; }
+.insight-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.insight-bar-previous > span { background: var(--text-faint); }
 
 /* A card's own entry point to its detail page, so the reader who wants more than the summary
    has somewhere to go without hunting the rail for it. */
@@ -970,6 +1003,15 @@ html:has(dialog.period-sheet[open]) { overflow: hidden; }
   margin: var(--space-2) 0 0; font-size: var(--font-size-sm); color: var(--text-muted);
   line-height: var(--leading-normal);
 }
+/* What every change badge on the page compares, said once instead of under every tile. A line of
+   its own, the full width of the wrapping row, and quieter than the stopped-source notice beside
+   it: this one is a method, that one is a warning. */
+.control-row-note {
+  flex-basis: 100%; margin: 0; font-size: var(--font-size-xs); color: var(--text-muted);
+  line-height: var(--leading-normal);
+}
+/* The badge now carries its own method sentence as a tooltip, and says so to a pointer. */
+.delta[title] { cursor: help; }
 /* The group, not a hiding place: these rows are rendered in full, with their inputs, because a
    household may still want to rename or prioritise a source that has stopped. */
 .source-names-dormant-heading {

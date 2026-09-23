@@ -4,16 +4,16 @@ import { Card } from './Card.js'
 import { ErrorState } from './ErrorState.js'
 import { Loading } from './Loading.js'
 import { EmptyState } from './EmptyState.js'
-import { formatMetricValue, formatLocalDate } from '../format.js'
+import { formatMetricValue, formatLocalDate, formatLocalDateRange, toneFor } from '../format.js'
+import type { Delta, Polarity } from '../format.js'
 import type { Insight } from '../data/useInsight.js'
 
 /**
- * A period against the one before it, read as a sentence rather than as the `.delta` chip a
- * metric card already carries beside it. The chip states the size of a change; this states what
- * the two numbers behind it actually were, "455 on average ... against 473 on average ...",
- * which a chip's "down 4%" cannot. Dropping the previous value here would leave nothing this card
- * says that the chip does not already say, so `previous` and both windows are never optional in
- * the rendered sentence.
+ * A period against the one before it: both figures, both windows, and the difference, where a
+ * metric card's own `.delta` chip states only the size of a change. The chip says "down 4%"; this
+ * says what the two numbers behind it actually were. Dropping the previous value would leave
+ * nothing this card says that the chip does not, so `previous` and both windows are never
+ * optional, either in the figures drawn or in the sentence a screen reader is given instead.
  *
  * `current`/`previous` are each a mean over the days in their window, never a period total, and
  * that is true regardless of which `agg` the caller passed to `useInsight`: `comparePeriods`
@@ -39,7 +39,7 @@ import type { Insight } from '../data/useInsight.js'
  * built by ORing several together can carry both `isError` and `isPending` at once, and a failed
  * request is never the same statement as an empty or thin period.
  */
-export function InsightCard({ insight, query, metric, span, label, formatValue, formatDelta }: {
+export function InsightCard({ insight, query, metric, span, label, formatValue, formatDelta, polarity = 'neutral' }: {
   insight: Insight | undefined
   // Optional, same reason MetricCard's own query prop carries it: only ErrorState's not_found
   // branch reads it.
@@ -63,6 +63,10 @@ export function InsightCard({ insight, query, metric, span, label, formatValue, 
   // returns the finished, unit-suffixed string, so the caller can run the route's own technique
   // again at the display precision rather than trust a delta computed at a different one.
   formatDelta?: (current: number, previous: number) => string
+  // Whether a rise is good news, for the badge's colour: the same polarity the metric's own tile
+  // passes to deltaFor. Neutral by default, so a caller that says nothing gets no colour rather
+  // than a guessed one.
+  polarity?: Polarity
 }): ReactNode {
   const { t, i18n } = useTranslation()
 
@@ -144,16 +148,49 @@ export function InsightCard({ insight, query, metric, span, label, formatValue, 
   const format = (value: number | null): string =>
     formatValue ? formatValue(value, '') : formatMetricValue(value, metric, i18n.language, '')
 
+  const current = format(insight.current)
+  const previous = format(insight.previous)
+  const delta = formatDelta ? formatDelta(insight.current, insight.previous) : format(insight.delta)
+  const currentFrom = formatLocalDate(insight.currentRange.from, i18n.language)
+  const currentTo = formatLocalDate(insight.currentRange.to, i18n.language)
+  const previousFrom = formatLocalDate(insight.previousRange.from, i18n.language)
+  const previousTo = formatLocalDate(insight.previousRange.to, i18n.language)
+
+  // Direction from the delta the card prints, so the badge's colour and its sign cannot disagree.
+  const dir: Delta['dir'] = insight.delta === 0 ? 'flat' : insight.delta > 0 ? 'up' : 'down'
+  // A plus on a rise, and a real minus sign on a fall. Formatters answer a hyphen-minus, which sits
+  // too low and too short beside digits to read as a sign at a glance.
+  const signed = dir === 'up' && !delta.startsWith('+') ? `+${delta}` : delta.replace(/^-/, '−')
+  // Two bars on one scale, the larger filling the track. Means of these metrics are never
+  // negative; a non-positive pair draws two empty tracks rather than a bar pointing the wrong way.
+  const top = Math.max(insight.current, insight.previous)
+  const share = (value: number): string => `${top > 0 ? Math.max(0, (value / top) * 100) : 0}%`
+
   return (
     <Card span={span} label={label}>
-      <p className="insight-summary">{t('insightCard.summary', {
-        current: format(insight.current),
-        previous: format(insight.previous),
-        delta: formatDelta ? formatDelta(insight.current, insight.previous) : format(insight.delta),
-        currentFrom: formatLocalDate(insight.currentRange.from, i18n.language),
-        currentTo: formatLocalDate(insight.currentRange.to, i18n.language),
-        previousFrom: formatLocalDate(insight.previousRange.from, i18n.language),
-        previousTo: formatLocalDate(insight.previousRange.to, i18n.language),
+      {/* Two figures and their difference, where this card used to print one long sentence that
+          left the comparison to the reader. The sentence is kept, word for word, as what a screen
+          reader hears: it says the same thing in the order a listener needs, and the figures
+          above it are marked hidden so nothing is read twice. */}
+      <div className="insight-compare" aria-hidden="true">
+        <div className="insight-period">
+          <span className="insight-period-label">{t('insightCard.current')}</span>
+          <span className="insight-value">{current}</span>
+          <span className="insight-range">{formatLocalDateRange(insight.currentRange.from, insight.currentRange.to, i18n.language)}</span>
+        </div>
+        <div className="insight-period insight-period-previous">
+          <span className="insight-period-label">{t('insightCard.previous')}</span>
+          <span className="insight-value">{previous}</span>
+          <span className="insight-range">{formatLocalDateRange(insight.previousRange.from, insight.previousRange.to, i18n.language)}</span>
+        </div>
+        <span className="delta insight-delta" data-dir={dir} data-tone={toneFor(dir, polarity)}>{signed}</span>
+      </div>
+      <div className="insight-bars" aria-hidden="true">
+        <span className="insight-bar"><span style={{ width: share(insight.current) }} /></span>
+        <span className="insight-bar insight-bar-previous"><span style={{ width: share(insight.previous) }} /></span>
+      </div>
+      <p className="insight-summary sr-only">{t('insightCard.summary', {
+        current, previous, delta, currentFrom, currentTo, previousFrom, previousTo,
       })}</p>
     </Card>
   )

@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react'
+import { useLayoutEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DEMO_CLOCK_MS } from './instant.js'
 import { detectDemoLang } from './lang.js'
@@ -46,8 +46,25 @@ const BANNER_TEXT: Record<DemoLang, (dateLabel: string) => string> = {
 // of that sentence isn't written in.
 const DATE_LOCALE: Record<DemoLang, string> = { en: 'en-US', nl: 'nl-NL' }
 
+const DISMISS_LABEL: Record<DemoLang, string> = { en: 'Dismiss the demo notice', nl: 'Demomelding sluiten' }
+
+// Per tab, not per browser: a visitor who closes the notice keeps it closed while they look
+// around, and a new tab - which is also where everything they wrote here is gone again - shows it
+// once more. Session storage can be missing or refuse (a private window, blocked site data), and
+// then the notice simply shows, which is the safe way for this to fail.
+const DISMISSED_KEY = 'haelan-demo-banner-dismissed'
+
+function readDismissed(): boolean {
+  try { return window.sessionStorage.getItem(DISMISSED_KEY) === '1' } catch { return false }
+}
+
+function rememberDismissed(): void {
+  try { window.sessionStorage.setItem(DISMISSED_KEY, '1') } catch { /* shows again next load */ }
+}
+
 export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   const lang = detectDemoLang()
+  const [dismissed, setDismissed] = useState(readDismissed)
   const dateLabel = new Date(DEMO_CLOCK_MS).toLocaleDateString(DATE_LOCALE[lang], {
     timeZone: 'Europe/Amsterdam',
     year: 'numeric',
@@ -59,16 +76,22 @@ export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
   // `root.render(...)` returns - see publishBannerHeight's doc comment for why that call site was
   // wrong. useLayoutEffect runs synchronously once this component's own output has actually been
   // written into `host`, so the very first measurement already sees the real, rendered height.
+  // `dismissed` is a dependency so the height is published again the moment the notice goes: the
+  // host is empty then, and --chrome-above has to fall to 0 in the same commit, or the rail would
+  // keep leaving room for a banner that is no longer there.
   useLayoutEffect(() => {
     if (!host) return undefined
     return publishBannerHeight(host)
-  }, [host])
+  }, [host, dismissed])
+
+  if (dismissed) return null
 
   return (
     <div
       role="note"
       lang={lang}
       style={{
+        position: 'relative',
         // Semantic tokens, not literal colours: apps/web/test/no-raw-color.test.ts enforces this
         // across apps/web/src with no carve-out for a demo-only element, and --surface-rail /
         // --text-primary already read as "chrome, not page content" everywhere else Sidebar.tsx
@@ -78,11 +101,31 @@ export function DemoBanner({ host }: { host?: HTMLElement } = {}) {
         borderBottom: '1px solid var(--border-subtle)',
         fontSize: 'var(--font-size-xs)',
         lineHeight: 1.5,
-        padding: '0.6rem 1rem',
+        // Room on the right for the close button, on both sides so the centred text stays centred.
+        padding: '0.6rem 2.75rem',
         textAlign: 'center',
       }}
     >
       <p style={{ margin: 0 }}>{BANNER_TEXT[lang](dateLabel)}</p>
+      <button
+        type="button"
+        aria-label={DISMISS_LABEL[lang]}
+        title={DISMISS_LABEL[lang]}
+        onClick={() => { rememberDismissed(); setDismissed(true) }}
+        style={{
+          position: 'absolute', top: '50%', right: '0.5rem', transform: 'translateY(-50%)',
+          // 44px square: the notice spans the page on a phone too, and a close target that small
+          // screen's thumb can miss is a banner nobody can get rid of there.
+          width: 44, height: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: 'none', border: 0, borderRadius: 'var(--radius-md)', cursor: 'pointer',
+          color: 'var(--text-secondary)', padding: 0,
+        }}
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M6 6l12 12M18 6 6 18" />
+        </svg>
+      </button>
     </div>
   )
 }

@@ -68,6 +68,12 @@ const PATHS: Record<string, React.ReactNode> = {
   chevronLeft: <path d="M14.5 5.5 8 12l6.5 6.5" />,
   chevronRight: <path d="M9.5 5.5 16 12l-6.5 6.5" />,
   chevronDown: <path d="M5.5 9.5 12 16l6.5-6.5" />,
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </>
+  ),
   // A person, for the reader's own account. Before settings in this file because that is where
   // the rail puts it: every entry here is in rail order rather than alphabetical.
   account: (
