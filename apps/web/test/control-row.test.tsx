@@ -152,6 +152,75 @@ describe('ControlRow', () => {
     expect(container!.querySelector('.control-row-note')).toBeNull()
   })
 
+  // One act() per key press, so each key's own effect is flushed and observed on its own.
+  describe('the period keys', () => {
+    const press = (key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body) => {
+      act(() => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })) })
+    }
+
+    it('steps the period on the arrow keys', () => {
+      const steps: number[] = []
+      mount(withQuery(<ControlRow controls={stubControls({ step: (d) => steps.push(d) })} sources={['merged']} />))
+      press('ArrowLeft')
+      press('ArrowRight')
+      expect(steps).toEqual([-1, 1])
+    })
+
+    it('picks the range on 1 to 5, in the order the buttons are drawn', () => {
+      const tabs: string[] = []
+      mount(withQuery(<ControlRow controls={stubControls({ setTab: (t) => tabs.push(t) })} sources={['merged']} />))
+      for (const key of ['1', '2', '3', '4', '5', '6', '0']) press(key)
+      expect(tabs).toEqual(['day', 'week', 'month', '3months', 'year'])
+    })
+
+    it('goes back to today on T', () => {
+      const anchors: string[] = []
+      mount(withQuery(<ControlRow controls={stubControls({ today: '2026-09-23', setAnchor: (a) => anchors.push(a) })} sources={['merged']} />))
+      press('t')
+      expect(anchors).toEqual(['2026-09-23'])
+    })
+
+    it('leaves a key alone while the reader is typing, holding a modifier, or looking at a dialog', () => {
+      const steps: number[] = []
+      mount(withQuery(<ControlRow controls={stubControls({ step: (d) => steps.push(d) })} sources={['merged']} />))
+      const field = document.createElement('input')
+      document.body.appendChild(field)
+      press('ArrowLeft', {}, field)
+      press('ArrowLeft', { ctrlKey: true })
+      press('ArrowLeft', { metaKey: true })
+      press('ArrowLeft', { altKey: true })
+      const dialog = document.createElement('dialog')
+      dialog.setAttribute('open', '')
+      document.body.appendChild(dialog)
+      press('ArrowLeft')
+      dialog.remove()
+      field.remove()
+      expect(steps).toEqual([])
+      // And still works once nothing is in the way, so the refusals above are not a dead listener.
+      press('ArrowLeft')
+      expect(steps).toEqual([-1])
+    })
+
+    it('names each key on the control it presses', () => {
+      mount(withQuery(<ControlRow controls={stubControls()} sources={['merged']} />))
+      const [previous, next] = [...container!.querySelectorAll('.stepper .icon-button')]
+      expect(previous!.getAttribute('title')).toBe('Previous period (←)')
+      expect(previous!.getAttribute('aria-keyshortcuts')).toBe('ArrowLeft')
+      expect(next!.getAttribute('title')).toBe('Next period (→)')
+      const segments = [...container!.querySelectorAll('.segment')]
+      expect(segments.map((s) => s.getAttribute('aria-keyshortcuts'))).toEqual(['1', '2', '3', '4', '5'])
+      expect(segments[2]!.getAttribute('title')).toBe('Month (3)')
+    })
+
+    it('stops listening once the row is gone', () => {
+      const steps: number[] = []
+      mount(withQuery(<ControlRow controls={stubControls({ step: (d) => steps.push(d) })} sources={['merged']} />))
+      act(() => { root?.render(<div />) })
+      press('ArrowLeft')
+      expect(steps).toEqual([])
+    })
+  })
+
   it('offers the all sources sentinel plus every source the person has, and marks the chosen one', () => {
     mount(withQuery(<ControlRow controls={stubControls({ source: 'watch' })} sources={['watch', 'phone']} />))
     const select = container!.querySelector('select') as HTMLSelectElement

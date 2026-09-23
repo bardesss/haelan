@@ -52,6 +52,24 @@
     "periodSheetTitle": "Period",
     "close": "Close"
   },
+  "shortcuts": {
+    "withKey": "{{label}} ({{key}})",
+    "goTo": {
+      "title": "Go to a page",
+      "placeholder": "Type a page name",
+      "none": "No page by that name."
+    },
+    "help": {
+      "title": "Keyboard shortcuts",
+      "step": "Previous or next period",
+      "today": "Back to today",
+      "ranges": "Day, week, month, 3 months, year",
+      "goTo": "Go to a page by name",
+      "help": "This list",
+      "close": "Close a dialog",
+      "note": "The period keys work on pages that have a period to step. None of these keys do anything while you are typing in a field."
+    }
+  },
   "sync": {
     "run": "Sync",
     "ago": "Synced {{count}} min ago",
