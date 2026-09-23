@@ -9,6 +9,16 @@ Versioning follows [Semantic Versioning](https://semver.org/); see
 
 Entries from 1.1.0 and earlier were written by hand and are kept as they were.
 
+## [2.5.0](https://github.com/bardesss/haelan/compare/v2.4.0...v2.5.0) (2026-09-23)
+
+
+### Features
+
+* **web:** a card says so when a source feeding it has gone quiet ([#348](https://github.com/bardesss/haelan/issues/348)) ([42d5f0c](https://github.com/bardesss/haelan/commit/42d5f0c9a7f3e22a80dc937fd5e764125bc4e68d))
+* **web:** cards that say their method once, comparisons you can read at a glance, charts on clock time ([#345](https://github.com/bardesss/haelan/issues/345)) ([65e6e5a](https://github.com/bardesss/haelan/commit/65e6e5a204c84644197e3e55df92e6944d0fa51d))
+* **web:** step, switch and jump without the mouse ([#347](https://github.com/bardesss/haelan/issues/347)) ([a05c79f](https://github.com/bardesss/haelan/commit/a05c79f681c5e96a4ce7a1e919d1bf5283d3be23))
+* **web:** the same days a year earlier, beside this year's ([#349](https://github.com/bardesss/haelan/issues/349)) ([eb035bd](https://github.com/bardesss/haelan/commit/eb035bde4f0ad2731c1fc16ccfba204d09aaa3d9))
+
 ## [2.4.0](https://github.com/bardesss/haelan/compare/v2.3.0...v2.4.0) (2026-09-23)
 
 
