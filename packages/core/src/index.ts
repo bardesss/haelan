@@ -242,3 +242,10 @@ export { EXERCISE_TYPES } from './api/enums.ts'
 // sources, in the shape PersonQuery.describe returns it. Same discipline as every bound reader
 // above — only the shape is exported, never a module level function taking a person id.
 export type { DescribedPerson } from './query/personQuery.ts'
+
+// M9a. The glance: last night, today's recovery and today so far, as one person bound read.
+// Only the shapes are exported, never readGlance itself: the same discipline as describe above,
+// reachable only through PersonQuery.glance.
+export type {
+  Glance, GlanceFigure, GlanceBaseline, GlanceStripDay, GlanceStaleSource, GlanceSleep, GlanceRecovery, GlanceDay, GlanceHeartRate,
+} from './query/glance.ts'

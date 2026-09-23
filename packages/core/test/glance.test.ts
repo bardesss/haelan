@@ -4,7 +4,7 @@ import type { TestDatabase } from '../src/testing/fixtures.ts'
 import { daily, sources, sessions } from '../src/db/schema/index.ts'
 import { DERIVATION_VERSION } from '../src/derive/version.ts'
 import { PersonQuery } from '../src/query/personQuery.ts'
-import { contextFor, dailyFigure, readDay, readLastNight, readRecovery } from '../src/query/glance.ts'
+import { contextFor, dailyFigure, readDay, readGlance, readLastNight, readRecovery } from '../src/query/glance.ts'
 
 const TODAY = '2026-08-20'
 const NOW = Date.parse('2026-08-20T10:00:00Z')
@@ -209,5 +209,19 @@ describe('readRecovery', () => {
     expect(recovery.index.value).toBeNull()
     expect(recovery.band).toBeNull()
     expect(recovery.missing).toEqual(expect.arrayContaining(['hrv', 'restingHeartRate']))
+  })
+})
+
+describe('readGlance', () => {
+  it('answers a person with no data at all with every section present and empty, not an error', () => {
+    const glance = readGlance(new PersonQuery(test.db, 'p1'), { today: TODAY, nowMs: NOW, nameOf: (id) => id })
+    expect(glance).toMatchObject({ today: TODAY, generatedAtMs: NOW, sleep: null })
+    expect(glance.recovery.index.value).toBeNull()
+    expect(glance.day.steps.value).toBeNull()
+  })
+
+  it('is what PersonQuery.glance returns', () => {
+    const q = new PersonQuery(test.db, 'p1')
+    expect(q.glance({ today: TODAY, nowMs: NOW })).toEqual(readGlance(q, { today: TODAY, nowMs: NOW, nameOf: (id) => id }))
   })
 })

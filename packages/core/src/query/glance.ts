@@ -300,3 +300,19 @@ export function readDay(ctx: GlanceContext): GlanceDay {
     heartRate: { points: heart.points, asOfMs: heartAsOf, staleSources: staleFeeding(ctx, heart.points.map((p) => p.sourceId)) },
   }
 }
+
+export interface Glance {
+  /** The local date this was assembled for, in the person's own zone. */
+  today: string
+  generatedAtMs: number
+  sleep: GlanceSleep | null
+  recovery: GlanceRecovery
+  day: GlanceDay
+}
+
+export function readGlance(
+  q: PersonQuery, input: { today: string, nowMs: number, nameOf: (id: string) => string },
+): Glance {
+  const ctx = contextFor(q, input)
+  return { today: input.today, generatedAtMs: input.nowMs, sleep: readLastNight(ctx), recovery: readRecovery(ctx), day: readDay(ctx) }
+}

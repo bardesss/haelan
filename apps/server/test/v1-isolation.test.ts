@@ -70,6 +70,26 @@ function seedSession(h: Harness, input: { personId: string, sourceId: string, ki
   }).run()
 }
 
+// glance's own seed, kept apart from seedSession above: that helper's session is a fixed one hour
+// on 2026-08-01, which readLastNight (glance.ts) would only show as last night if `nowMs` were
+// also moved there, and moving the shared harness's clock inside this table breaks every other
+// route case's session (created once, in beforeAll, before any seedOwn/seedOther runs). This ends
+// the night a few hours before the harness's own default `nowMs` instead, well inside the 36 hour
+// window, so glance's case needs no clock change at all. Eight hours, not seedSession's one, so the
+// night reads as a real one on any duration-based rule glance's own tests might one day add, not
+// merely as the sole group assembleNights had to pick from.
+function seedNight(h: Harness, input: { personId: string, sourceId: string }): void {
+  seedSource(h, input.personId, input.sourceId)
+  const id = `${input.personId}-glance-night`
+  const endMs = h.clock.nowMs - 3_600_000
+  const startMs = endMs - 8 * 3_600_000
+  h.app.haelan.instance.db.insert(schema.sessions).values({
+    id, personId: input.personId, sourceId: input.sourceId, kind: 'sleep', externalId: id,
+    startMs, startOffsetMinutes: OFFSET_MINUTES, endMs, endOffsetMinutes: OFFSET_MINUTES,
+    localDate: '2026-02-01', attrs: JSON.stringify({}), rawPayloadId: null,
+  }).run()
+}
+
 interface RouteCase {
   name: string
   // The literal path pattern fastify registers, prefix included: what the route-coverage guard
@@ -195,6 +215,22 @@ const ROUTES: readonly RouteCase[] = [
     template: '/api/v1/p/:personId/sleep/nights',
     path: (p) => `/api/v1/p/${p}/sleep/nights?from=2026-08-01&to=2026-08-01`,
     seedOwn: (h) => seedSession(h, { personId: 'p1', sourceId: 'own-source-ok', kind: 'sleep' }),
+    seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'sleep' }),
+    ownNeedle: 'own-source-ok',
+    otherNeedle: 'leaked-source-999999',
+  },
+  {
+    name: 'glance',
+    template: '/api/v1/p/:personId/glance',
+    path: (p) => `/api/v1/p/${p}/glance`,
+    // Not seedSession: its fixed 2026-08-01 date is months past this suite's default clock, and
+    // readLastNight only shows a night that ended within 36 hours of `nowMs` (see glance.ts).
+    // seedNight below ends the owner's night a few hours before the harness's default `nowMs`
+    // instead, so the row lands inside that window with no clock change - which matters here more
+    // than for any other route in this table, because moving the clock after beforeAll's signIn()
+    // would run every request in this block against a session already past its fixed 30 day expiry
+    // (SessionStore.resolve, sessions.ts).
+    seedOwn: (h) => seedNight(h, { personId: 'p1', sourceId: 'own-source-ok' }),
     seedOther: (h, personId) => seedSession(h, { personId, sourceId: 'leaked-source-999999', kind: 'sleep' }),
     ownNeedle: 'own-source-ok',
     otherNeedle: 'leaked-source-999999',
